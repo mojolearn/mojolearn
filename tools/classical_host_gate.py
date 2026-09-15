@@ -181,6 +181,33 @@ LANES = {
              'predict_proba': lambda e, X: e.predict_proba(X[:64, :4])}),
     'gmm-random-init': ('GaussianMixture', lambda e, X: (e.score_samples(X[:64, :4]),),
                         {'predict': lambda e, X: e.predict(X[:64, :4])}),
+    # GaussianMixture.sample (same lane, after main's gmm-sample lanes): the
+    # identity_break probe is sample(1024)'s (X, y) from the saved model; it
+    # reads no held-out rows.
+    'gmm-sample': ('GaussianMixture', lambda e, X: tuple(e.sample(1024)),
+                   {'sample_y': lambda e, X: e.sample(1024)[1]}),
+    'gmm-random-init-sample': ('GaussianMixture', lambda e, X: tuple(e.sample(1024)),
+                               {'sample_y': lambda e, X: e.sample(1024)[1]}),
+    # GaussianProcessRegressor (same lane), through the inference-only gp
+    # binding: the predictive mean and std of 64 held-out rows of four
+    # columns, as every GP lane asks, normalize_y's scale-back included.
+    'gp': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+          {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-matern12': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                   {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-matern32': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                   {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-matern52-ard': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                       {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-normalize-y': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                      {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    # GaussianProcessClassifier (same lane, after lane/gaussian-process-
+    # classifier merged): predict and predict_proba of 64 held-out rows of
+    # four columns, the pair both gpc lanes hash, through gpc_predict.
+    'gpc': ('GaussianProcessClassifier', lambda e, X: (e.predict(X[:64, :4]), e.predict_proba(X[:64, :4])),
+           {'predict_proba': lambda e, X: e.predict_proba(X[:64, :4])}),
+    'gpc-multiclass': ('GaussianProcessClassifier', lambda e, X: (e.predict(X[:64, :4]), e.predict_proba(X[:64, :4])),
+                      {'predict_proba': lambda e, X: e.predict_proba(X[:64, :4])}),
     # HDBSCAN (same lane): approximate_predict's labels and probabilities,
     # membership_vector on the first 256 held-out rows of four columns and
     # all_points_membership_vectors, the tuple both lanes hash.
@@ -264,7 +291,9 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
 PROBE_NAMES.update({lane: {'NearestNeighbors': 'kneighbors_distances', 'KNeighborsClassifier': 'predict',
                            'KNeighborsRegressor': 'predict', 'RadiusNeighbors': 'radius_neighbors_counts',
                            'KernelDensity': 'score_samples', 'IsolationForest': 'score_samples',
-                           'GaussianMixture': 'score_samples', 'HDBSCAN': 'approximate_predict_labels'}[spec[0]]
+                           'GaussianMixture': 'score_samples', 'HDBSCAN': 'approximate_predict_labels',
+                           'GaussianProcessRegressor': 'predict_mean',
+                           'GaussianProcessClassifier': 'predict'}[spec[0]]
                     for lane, spec in LANES.items() if lane not in PROBE_NAMES})
 
 

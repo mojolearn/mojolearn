@@ -129,6 +129,7 @@ def test_sabotage_define_reaches_each_binding():
 _FIT_NAMES = {
     "mixture_infer": ("gmmh_fit", "gmm_fit", "gmmh_m_step", "gmmh_initial_resp"),
     "hdbscan_infer": ("hdbh_fit", "hdbscan_fit", "generate_prediction_data"),
+    "gp_infer": ("gpr_host_fit", "gpr_fit", "gpc_host_fit", "gpc_fit", "chol_host_potrf", "cholesky_factor"),
 }
 
 
@@ -304,11 +305,11 @@ def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
             "_mojolearn_neural_host"} <= shipped
     assert set(host_surface.wheel_families()) == {
         "byte_lm", "forest", "tokenizer", "neural", "core", "linalg", "estimators", "metrics", "svm", "forecast",
-        "mixture_infer", "hdbscan_infer",
+        "mixture_infer", "hdbscan_infer", "gp_infer",
     }
     # The inference-only families ship; the reference families whose
     # scoring and prediction entries they carry do not.
-    for inference, reference in (("mixture_infer", "mixture"), ("hdbscan_infer", "hdbscan")):
+    for inference, reference in (("mixture_infer", "mixture"), ("hdbscan_infer", "hdbscan"), ("gp_infer", "gp")):
         assert host_surface.family(inference)["ships_in_wheel"] and host_surface.family(inference)["routes"] is None
         assert not host_surface.family(reference)["ships_in_wheel"]
         assert host_surface.family(inference)["training_lanes"] == ()

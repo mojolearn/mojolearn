@@ -63,6 +63,7 @@ from ._umap_impl import UMAP, _UMAP_FORMAT
 from .decomposition import PCA, TruncatedSVD, _PCA_FORMAT, _TSVD_FORMAT
 from ._hierarchy_impl import AgglomerativeClustering, _AGGLOMERATIVE_FORMAT
 from .density import DBSCAN, KernelDensity, _DBSCAN_FORMAT, _KDE_FORMAT
+from ._gp_impl import GaussianProcessRegressor, _GP_FORMAT
 from .hdbscan import HDBSCAN, _HDBSCAN_FORMAT
 from .mixture import GaussianMixture, _GMM_FORMAT
 from .kernel_methods import (
@@ -95,6 +96,7 @@ _HOST_BASENAMES = {
     # a GPU box checks the binary a CPU-only install runs.
     "_mojolearn_mixture": "_mojolearn_mixture_infer_host",
     "_mojolearn_hdbscan": "_mojolearn_hdbscan_infer_host",
+    "_mojolearn_gp": "_mojolearn_gp_infer_host",
     "_mojolearn_arima": "_mojolearn_forecast_host",
     "_mojolearn_metrics": "_mojolearn_metrics_host",
     "_mojolearn_preprocessing": _HOST_BASENAME,
@@ -243,6 +245,13 @@ class HostGaussianMixture(_HostBound, GaussianMixture):
     _HOST_ARRAYS = ("weights_", "means_", "covariances_", "precisions_cholesky_", "log_det_chol_")
 
 
+class HostGaussianProcessRegressor(_HostBound, GaussianProcessRegressor):
+    """The predictive mean and std of a saved GaussianProcessRegressor through
+    the inference-only gp binding; normalize_y's scale-back is the GPU
+    class's own `predict`."""
+    _HOST_ARRAYS = ("X_train_", "L_", "alpha_")
+
+
 class HostHDBSCAN(_HostBound, HDBSCAN):
     """A saved HDBSCAN that `mojolearn.hdbscan.approximate_predict` accepts,
     predicting through the inference-only hdbscan binding."""
@@ -380,6 +389,7 @@ _FORMATS = {
     _IFOREST_FORMAT: {"IsolationForest": HostIsolationForest},
     _GMM_FORMAT: {"GaussianMixture": HostGaussianMixture},
     _HDBSCAN_FORMAT: {"HDBSCAN": HostHDBSCAN},
+    _GP_FORMAT: {"GaussianProcessRegressor": HostGaussianProcessRegressor},
     _DBSCAN_FORMAT: {"DBSCAN": HostDBSCAN},
     _AGGLOMERATIVE_FORMAT: {"AgglomerativeClustering": HostAgglomerativeClustering},
     _KNN_FORMAT: {
@@ -392,7 +402,8 @@ _FORMATS = {
     # 2026-09-15): `HostCholesky` solves on `_mojolearn_linalg_host`.
     _CHOLESKY_FORMAT: {"Cholesky": HostCholesky},
     # A saved GaussianProcessClassifier (lane/gaussian-process-classifier,
-    # 2026-09-15): predicts on `_mojolearn_gp_host`.
+    # 2026-09-15): predicts on `_mojolearn_gp_infer_host` when it is built,
+    # else on `_mojolearn_gp_host`.
     _GPC_FORMAT: {"GaussianProcessClassifier": HostGaussianProcessClassifier},
 }
 CLASSICAL_FORMATS = tuple(_FORMATS)

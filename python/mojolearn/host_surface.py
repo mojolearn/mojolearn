@@ -192,6 +192,7 @@ FORECAST_RECORDED = (
 #: to its owner.
 INFERENCE_ONLY_RECORDED = (
     "bench/results/classical_host/2026-09-15-apple-m4-iforest-gmm-hdbscan",
+    "bench/results/classical_host/2026-09-15-apple-m4-gp-gmm-sample",
 )
 
 #: The forest inference recordings: every directory under this root whose
@@ -1393,13 +1394,14 @@ FAMILIES = (
         loaded_by="python/mojolearn/_classical_host.py (mojolearn.host_model)",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(),
-        inference_lanes=("gmm", "gmm-random-init"),
+        inference_lanes=("gmm", "gmm-random-init", "gmm-sample", "gmm-random-init-sample"),
         forest_kinds=(),
         classes=("GaussianMixture",),
-        display="the Gaussian mixture's scores, probabilities and labels",
+        display="the Gaussian mixture's scores, probabilities, labels and samples",
         host_modules=(
             "bindings/mixture_host_scoring.mojo",
             "mixture/host/gmm_host_oracle.mojo",
+            "mixture/checks/sample.mojo",
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
@@ -1407,7 +1409,7 @@ FAMILIES = (
             "mixture_infer_host_column", "mixture_infer_host_sabotage",
             "mixture_vendor", "mixture_numeric_mode",
             "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
-            "gmm_score_bic_aic",
+            "gmm_score_bic_aic", "gmm_sample",
         ),
         gate="tools/classical_host_gate.py",
         ships_in_wheel=True,
@@ -1447,6 +1449,38 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
+    ),
+    dict(
+        # The neighbors and density inference lane (2026-09-15): the
+        # INFERENCE-ONLY gp binding a wheel ships, gpr_predict from a saved
+        # model (bindings/gp_host_predict.mojo, the function the reference
+        # binding registers) and no fit, log marginal likelihood or Cholesky
+        # door. normalize_y's scale-back is host Python. Loaded like
+        # mixture_infer.
+        family="gp_infer",
+        binding="_mojolearn_gp_infer_host",
+        routes=None,
+        loaded_by="python/mojolearn/_classical_host.py (mojolearn.host_model)",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
+                         "gpc", "gpc-multiclass"),
+        forest_kinds=(),
+        classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
+        display="the Gaussian process regressor's predictive mean and std, normalized targets included, and the Gaussian process classifier's labels and probabilities",
+        host_modules=(
+            "bindings/gp_host_predict.mojo",
+            "gaussian_process/host/gpr_oracle.mojo",
+            "gaussian_process/host/gpc_oracle.mojo",
+            "gaussian_process/host/gpc_steps.mojo",
+        ),
+        exports=(
+            "gp_infer_host_numeric_mode", "gp_infer_host_vendor",
+            "gp_infer_host_column", "gp_infer_host_sabotage",
+            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict",
+        ),
+        gate="tools/classical_host_gate.py",
+        ships_in_wheel=True,
     ),
     dict(
         # The neighbors and density inference lane (2026-09-15): the

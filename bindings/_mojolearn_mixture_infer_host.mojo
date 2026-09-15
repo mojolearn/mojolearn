@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """INFERENCE-ONLY CPU binding for the `_mojolearn_mixture` family: a saved
-GaussianMixture's score_samples, predict_proba, predict, score, bic and aic
+GaussianMixture's score_samples, predict_proba, predict, score, bic, aic and
+sample
 on a CPU-only install (the neighbors and density inference lane,
 2026-09-15; docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
 
@@ -24,6 +25,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.mixture_host_scoring import (
+    gmm_sample_binding,
     gmm_predict_binding,
     gmm_predict_proba_binding,
     gmm_score_bic_aic_binding,
@@ -83,6 +85,7 @@ def PyInit__mojolearn_mixture_infer_host() abi("C") -> PythonObject:
         module.def_function[gmm_predict_proba_binding]("gmm_predict_proba")
         module.def_function[gmm_predict_binding]("gmm_predict")
         module.def_function[gmm_score_bic_aic_binding]("gmm_score_bic_aic")
+        module.def_function[gmm_sample_binding]("gmm_sample")
         return module.finalize()
     except e:
         abort(String("failed to create _mojolearn_mixture_infer_host: ", e))

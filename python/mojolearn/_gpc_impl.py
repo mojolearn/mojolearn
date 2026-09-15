@@ -89,6 +89,12 @@ from ._mode import NumericModeMixin
 _GPC_FORMAT = "mojolearn.gpc.v1"
 _ESTIMATOR = "GaussianProcessClassifier"
 _HOST_BASENAME = "_mojolearn_gp_host"
+#: The inference-only gp binding a wheel ships (the neighbors and density
+#: inference lane, 2026-09-15): `gpc_predict` with no Laplace fit. A saved
+#: classifier predicts through it when it is built (every wheel), and
+#: through the reference binding otherwise (a source build of the routed
+#: families, as the CPU identity gate makes).
+_HOST_INFERENCE_BASENAME = "_mojolearn_gp_infer_host"
 _NAME = "mojolearn GaussianProcessClassifier"
 
 
@@ -575,7 +581,8 @@ class GaussianProcessClassifier(NumericModeMixin):
 
 
 class HostGaussianProcessClassifier(GaussianProcessClassifier):
-    """`GaussianProcessClassifier` bound to `_mojolearn_gp_host` on any box,
+    """`GaussianProcessClassifier` bound to `_mojolearn_gp_infer_host` (or,
+    when only the reference set is built, `_mojolearn_gp_host`) on any box,
     a GPU box included, so a GPU fit and a CPU prediction compare in one
     process (`mojolearn.host_model` returns this for a saved classifier).
     IDENTICAL only; fit refuses outside `reference_training()`."""
@@ -594,6 +601,9 @@ class HostGaussianProcessClassifier(GaussianProcessClassifier):
                 f"mojolearn: {type(self).__name__} runs IDENTICAL only on the host; "
                 f"this model was saved {mode!r}"
             )
+        import os
+        if os.path.exists(_backend.host_module_path(_HOST_INFERENCE_BASENAME)):
+            return _backend.load_host_module(_HOST_INFERENCE_BASENAME)
         return _backend.load_host_module(_HOST_BASENAME)
 
     def _host_refusals(self):
