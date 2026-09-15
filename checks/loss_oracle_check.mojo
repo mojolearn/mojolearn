@@ -382,7 +382,7 @@ def load(path: String) raises -> Fixture:
 
 
 # ---------------------------------------------------------------------------
-# Their own Score, transcribed. `cuda/targets/kernel/pointwise_targets.cu`.
+# The reference Score, as a host oracle. `cuda/targets/kernel/pointwise_targets.cu`.
 #
 # This is the OBJECTIVE, not the reported metric, and the two differ:
 # `TMAPETarget::Score` (`:148`) divides by max(1, |target|) while their MAPE

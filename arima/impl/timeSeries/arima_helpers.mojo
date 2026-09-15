@@ -3,14 +3,14 @@
 """The ARIMA helpers: the reduced polynomials, undifferencing, the batched
 Jones transform with the sigma2 floor.
 
-FOLLOWS `cuml/cpp/src_prims/timeSeries/arima_helpers.cuh` at cuML 265b9da6
-(v26.08.00): `_param_to_poly` (:35-44), `_select_read` (:58-62),
+Reference: `cuml/cpp/src_prims/timeSeries/arima_helpers.cuh` (cuML 265b9da6,
+v26.08.00): `_param_to_poly` (:35-44), `_select_read` (:58-62),
 `_undiff_kernel` (:136-163), `reduced_polynomial` (:183-193),
 `finalize_forecast` (:321-350), `batched_jones_transform` (:358-379).
 `prepare_data` (:209-239) is imported from the tsa lane's implementation of the same
 file; `prepare_future_data` / `_future_diff_kernel` (exog only) are not
-reached (exog refused) and are in `arima/NOT_IMPLEMENTED.tsv`. COPY, DO NOT
-IMPROVE.
+reached (exog refused) and are in `arima/NOT_IMPLEMENTED.tsv`. Arithmetic
+order is pinned for identity; a change needs a DEVIATION.
 
 `reduced_polynomial<isAr>(bid, param, lags, sparam, slags, s, idx)` is
 `-coef0 * coef1` for AR and `coef0 * coef1` for MA, ONE product (exact sign);
@@ -22,12 +22,12 @@ seam. The undifferencing is `b_fc[i] += select(i - s0)` (one add) or
 `b_fc[i] += ((-x0 + x1) + x2)` (`:154-157`, left to right); the sigma2
 floor is `max(input, 1e-6)` -- value-first already (`:376`).
 
-ONE ADDITION TO THEIR FUNCTION, recorded because it is not in their body:
-`batched_jones_transform` here also COPIES `mu` into `t_params.mu`. Theirs
-cannot: `ARIMAParams` is a struct of raw pointers there, so the caller
+ONE ADDITION, recorded because it is not in the reference body:
+`batched_jones_transform` here also COPIES `mu` into `t_params.mu`. The
+reference cannot: `ARIMAParams` is a struct of raw pointers there, so the caller
 aliases `Tparams.mu = params.mu` in the aggregate initializer
-(`batched_arima.cu:419-425`) and the transform never touches it. Ours owns its
-buffers, so the same VALUE has to be moved rather than aliased. No
+(`batched_arima.cu:419-425`) and the transform never touches it. This
+implementation owns its buffers, so the same VALUE has to be moved rather than aliased. No
 arithmetic, and `_copy_params` in `batched_arima.mojo` does the identical
 thing on the `trans = false` arm where theirs assigns the other pointers.
 """

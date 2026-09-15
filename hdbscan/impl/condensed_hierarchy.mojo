@@ -2,12 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`CondensedHierarchy` and its `condense()`, the compaction and the sort.
 
-FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/condensed_hierarchy.cu`
+Reference: `cuml-v26.08.00/cpp/src/hdbscan/condensed_hierarchy.cu`
 (cuML `265b9da`): `TupleComp` (`:34-49`), the two constructors this lane
-reaches (`:51-102`) and `condense()` (`:133-187`). Followed statement for statement, their
-order.
+reaches (`:51-102`) and `condense()` (`:133-187`), in the reference order.
 
-WHERE IT LIVES. Theirs holds four `rmm::device_uvector`s; ours holds four
+WHERE IT LIVES. The reference holds four `rmm::device_uvector`s; this file holds four
 host `List`s. That is not a re-decision of the host/device split (rule 2)
 but a consequence of one their 26.08 tree already made: their BUILDER,
 `_build_condensed_hierarchy` (`detail/condense.cuh:92-212`), is a HOST
@@ -24,7 +23,7 @@ ONE parent, so `child` is unique across the whole array and `(parent,
 child)` already separates every pair of edges. Stability is therefore
 moot on their side as well as ours, and this is the one sort in the lane
 that needed no deviation. The third component (`size`) can never be
-reached; it is transcribed anyway, because their comparator is the
+reached; it is kept anyway, because the reference comparator is the
 algorithm and a reader diffing the two should see the same three clauses.
 
 ======================================================================

@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ComputeWeightedQuantile` and `ComputeExactApprox`: the Exact driver.
 
-FOLLOWS `catboost/cuda/methods/leaves_estimation/leaves_estimation_helper.h`
-at CatBoost `54a8143a` -- `ComputeWeightedQuantile` (`:64-146`) and
-`ComputeExactApprox` (`:148-185`). Followed statement for statement.
+Reference: `catboost/cuda/methods/leaves_estimation/leaves_estimation_helper.h`
+(CatBoost `54a8143a`), `ComputeWeightedQuantile` (`:64-146`) and
+`ComputeExactApprox` (`:148-185`).
 
 Only those two functions are implemented. The rest of their header is pairwise
 and groupwise machinery (`MakeSupportPairsMatrix`, `ReorderPairs`,

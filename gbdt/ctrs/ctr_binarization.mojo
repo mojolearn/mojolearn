@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Two grids a CTR needs, and NEITHER is the numeric feature grid.
 
-MIRRORS three of theirs, at CatBoost `54a8143a`:
+Reference: three CatBoost sources (CatBoost `54a8143a`):
 
 * `library/cpp/grid_creator/binarization.cpp:1262-1310`
   (`TUniformBinarizer::BestSplit`), the border rule a **Borders** CTR

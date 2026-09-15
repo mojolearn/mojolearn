@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Per-leaf totals of every stat column.
 
-MIRRORS `catboost/cuda/cuda_util/partitions_reduce.h`, whose
+Reference: `catboost/cuda/cuda_util/partitions_reduce.h`, whose
 `ComputePartitionStats` is called once per level from
 `split_properties_helper.cpp:1068`.
 

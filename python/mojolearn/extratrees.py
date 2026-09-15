@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Extremely Randomized Trees on the GPU, mirroring sklearn's surface.
 
-The learner is `extratrees/`: cuML's batched-levelalgo tree builder and
-random forest with sklearn's `RandomSplitter` semantics on top -- the
+The learner is `extratrees/`: a batched-levelalgo tree builder and
+random forest (reference: cuML) with sklearn's `RandomSplitter` semantics on top -- the
 histogram-free formulation (Geurts, Ernst & Wehenkel 2006) that neither cuML
 nor LightGBM ships on a GPU. The defaults are scikit-learn's
 `ExtraTreesClassifier` / `ExtraTreesRegressor` defaults, name for name.
@@ -13,7 +13,7 @@ accepted and ignored -- a silently dropped option is indistinguishable, from
 the caller's side, from one that works. Almost all refusals fire in the Mojo
 layer (`extratrees/estimator.mojo`), which is the single place both the host
 and device arms resolve their configuration; this wrapper refuses only what
-never crosses the boundary: the criteria this implementation has not transcribed
+never crosses the boundary: the criteria this implementation does not have
 (NOT_IMPLEMENTED.tsv rows 7 and 12-14; row 11, entropy, is IMPLEMENTED -- DEVIATION
 459) and the two forest-level knobs that do not exist here (`n_jobs`,
 `verbose`). The one time this sentence was false --
@@ -70,7 +70,7 @@ from cuML's gain as `(node_rows / tree_rows) * gain`, which is sklearn's
 Both are gated by `extratrees/checks/bestfirst_check.mojo`.
 
 X IS COPIED TWICE PER FIT: once on the host to column-major float32 (the
-builder's layout, cuML's own; `_buffer.as_f32_colmajor`, zero-copy for a
+builder's layout, the same as cuML's; `_buffer.as_f32_colmajor`, zero-copy for a
 float32 F-order input) and once across the boundary into Mojo. On large
 matrices that is the dominant cost of the CALL and is named here so nobody
 times it as the fit.

@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Choosing the differencing order `d` with the stationarity test.
 
-FOLLOWS the "Choose the hyper-parameter d" block of
-`python/cuml/cuml/tsa/auto_arima.pyx::AutoARIMA.search` at cuML 265b9da6
-(v26.08.00), lines 318-343 ONLY. That block is HOST Python over the device
+Reference: the "Choose the hyper-parameter d" block of
+`python/cuml/cuml/tsa/auto_arima.pyx::AutoARIMA.search` (cuML 265b9da6,
+v26.08.00), lines 318-343 ONLY. That block is HOST Python over the device
 `kpss_test`:
 
     for d_ in d_options[:-1]:                 # d_options = 0 .. 2 - D

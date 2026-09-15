@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The triangular and diagonal helpers of RAFT's dense matrix utilities.
 
-IMPLEMENTATION of `raft/matrix/detail/matrix.cuh` at RAFT `ebf9268`
-(`upstream/raft-v26.08.00`), the four kernels a Cholesky lane needs:
+Reference: `raft/matrix/detail/matrix.cuh` (RAFT `ebf9268`,
+`upstream/raft-v26.08.00`), the four kernels a Cholesky lane needs:
 `getUpperTriangular` / `copyUpperTriangular` (`:196-222`),
 `copyVectorToMatrixDiagonal` / `initializeDiagonalMatrix` (`:225-262`),
 `copyVectorFromMatrixDiagonal` / `getDiagonalMatrix` (`:240-273`) and
 `matrixDiagonalInverse` / `getDiagonalInverseMatrix` (`:277-294`).
-Followed statement for statement, with the two departures below.
+Two departures are recorded below.
 
 Nothing else from that header is here: `slice`, `columnWiseSort`, `gather`,
 `getL2Norm` and the print helpers belong to other sections or to nobody, and
@@ -28,8 +28,8 @@ invisible gap (ENGINEERING_RULES rule 3).
 # lower triangle in row-major storage occupies exactly the cells its upper
 # triangle occupies in column-major storage, which is the same identity
 # `gbdt/lapack/linear_system.mojo` already leans on when it factors a
-# row-major 'L' against CatBoost's column-major 'U' request. `theirs`
-# reads `getUpperTriangular` where ours reads `get_lower_triangular`, and
+# row-major 'L' against CatBoost's column-major 'U' request. The reference
+# reads `getUpperTriangular` where this file reads `get_lower_triangular`, and
 # the two write the same bytes for the same matrix.
 #
 # The `k = min(n_rows, n_cols)` generality is kept even though every caller
@@ -66,7 +66,7 @@ from checks.numerics import ftz, identical_div
 
 #: `dim3 block(64)` at `:218`, `:259`, `:270` and `:292`. SCHEDULING; every
 #: kernel here is one thread per cell with no fold, so the width reaches
-#: nothing numeric. Kept at their value because copying it costs nothing and
+#: nothing numeric. Kept at the reference value because matching it costs nothing and
 #: because a changed constant is a question a reader has to answer.
 comptime RAFT_MATRIX_TPB = 64
 

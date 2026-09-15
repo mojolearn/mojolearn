@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The four histogram bin types, and the atomics that fill them.
 
-MIRRORS `cpp/src/decisiontree/batched-levelalgo/bins.cuh` at
+Reference: `cpp/src/decisiontree/batched-levelalgo/bins.cuh` at
 rapidsai/cuml `v26.08.00` (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`),
 checked out read-only at `~/CascadeProjects/upstream/cuml-v26.08.00`.
 
-Their file is 189 lines and four structs. Every struct is the same shape:
+The reference file is 189 lines and four structs. Every struct is the same shape:
 some accumulators, a static `IncrementHistogram` that computes an offset
 and calls a static `AtomicAdd`, an `operator+=` / `operator+` pair for the
 warp and block reductions, and a pair of reduction-buffer converters. The
@@ -42,9 +42,9 @@ DEVIATION 101. `BinCountT` is 64 bits and the accumulators are `double`.
 Neither width exists on this device. Resolved per site.
 
 --- 101a. THE COUNTER: 64 -> 32 BITS, AND IT IS EXACT ---------------
-THEIRS: `BinCountT = unsigned long long int` (`bins.cuh:14`), incremented
+REFERENCE: `BinCountT = unsigned long long int` (`bins.cuh:14`), incremented
 by a 64-bit `atomicAdd` (`bins.cuh:31`).
-OURS: `UInt32`, incremented by a 32-bit integer atomic.
+HERE: `UInt32`, incremented by a 32-bit integer atomic.
 REASON, and it is a bound out of their own source rather than a hope: a
 bin count is a count of sampled rows, so it is bounded by
 `Dataset::n_sampled_rows`, which is declared `IdxT` (`dataset.h:32`), and
@@ -82,11 +82,11 @@ fixed-point machinery and no numeric mode. It is the cleanest identity
 column in this library.
 
 --- 101b. THE `double` ACCUMULATORS: FIXED-POINT Int32 ---------------
-THEIRS: `WeightedClassificationBin::weight`, `RegressionBin::label_sum`,
+REFERENCE: `WeightedClassificationBin::weight`, `RegressionBin::label_sum`,
 `WeightedRegressionBin::label_sum` and `::weight` are `double`
 (`bins.cuh:57, 101, 142, 144`), summed with `atomicAdd(double*)`
 (`bins.cuh:73-74, 114-115, 160-162`).
-OURS: each is an `Int32` FIXED-POINT raw slot, summed with a 32-bit
+HERE: each is an `Int32` FIXED-POINT raw slot, summed with a 32-bit
 integer atomic, dequantized on read by dividing by a scale the host
 chooses once per fit (`checks/fixed_point.mojo::choose_scale`, the
 accumulator this repository already built for `gbdt/` and transferred
@@ -397,10 +397,10 @@ struct ClassificationBin(Bin):
 
     @always_inline
     def __add__(self, b_in: Self) -> Self:
-        """`bins.cuh:48-52`. Theirs takes `b` BY VALUE and adds `*this`
+        """`bins.cuh:48-52`. The reference takes `b` BY VALUE and adds `*this`
         into it, so the surviving order is `b.count += this->count`.
         Integer addition is commutative and associative, so the order is
-        immaterial here -- transcribed anyway, because it is not
+        immaterial here -- kept anyway, because it is not
         immaterial in the three bins below."""
         var b = b_in
         b += self

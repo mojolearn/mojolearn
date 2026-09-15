@@ -26,7 +26,7 @@ sklearn `adjusted_rand_score`: `(n_classes == n_clusters == 1) or
 -> 1.0`, then `(tp*tn - fn*fp) / ((tp+fn)*(fn+tn) + (tp+fp)*(fp+tn))` from
 the pair confusion matrix -- algebraically the same ratio as RAFT's
 `(index - expected) / (max - expected)`, with the 0/0 case returning ... a
-NaN warning in sklearn where RAFT returns 0 (:188-191). Ours mirrors RAFT.
+NaN warning in sklearn where RAFT returns 0 (:188-191). This implementation matches RAFT.
 
 EVERYTHING BUT THE LAST FIVE HOST OPS IS INTEGER and exact; those five are
 Float64 multiplies, divisions and subtractions on the host, correctly

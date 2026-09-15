@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Border selection: turning a raw float column into split points.
 
-FOLLOWS `library/cpp/grid_creator/binarization.cpp` at CatBoost `54a8143a`,
+Reference: `library/cpp/grid_creator/binarization.cpp` (CatBoost `54a8143a`),
 the `GreedyLogSum` path, which is CatBoost's DEFAULT
 (`catboost/private/libs/options/data_processing_options.cpp:15`).
 

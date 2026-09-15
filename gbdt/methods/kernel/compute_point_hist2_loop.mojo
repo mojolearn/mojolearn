@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost's ONE pointwise histogram loop, written once and shared.
 
-FOLLOWS `catboost/cuda/methods/kernel/compute_point_hist2_loop.cuh` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/compute_point_hist2_loop.cuh`
+(CatBoost `54a8143a`).
 
 This is the spine of the pointwise family (`archive/reference/PORTING.md` 91 B, `archive/plans/NEXT_TWO.md`
 rung 1). Every one of their `pointwise_hist2*` kernels is this loop
@@ -58,7 +58,7 @@ GPU-AGNOSTIC
 Their `threadIdx.x & 31` / `threadIdx.x / 32` is a thread-to-column
 permutation, not a wavefront assumption: at `HIST_BLOCK_COUNT == 1` it is the
 identity for any block size, and at any wavefront width it is a bijection.
-It is transcribed with the pinned 32 rather than a queried lane width, which
+It is written with the pinned 32 rather than a queried lane width, which
 keeps the column each thread reads -- and therefore the order the additions
 land in -- the same on Apple, NVIDIA and AMD. There are no lane intrinsics in
 this file.
@@ -547,8 +547,8 @@ def compute_histogram_4[
     here (`:257`, `:282`), which is the one place the three entry points
     agree with each other rather than each choosing its own quanta.
 
-    Their extra `__syncthreads()` before the body (`:320`) has no
-    counterpart in the other two and is transcribed rather than tidied.
+    The reference's extra `__syncthreads()` before the body (`:320`) has no
+    counterpart in the other two and is kept rather than tidied.
     """
     var base = Int(offset_in)
     var ds_size = Int(ds_size_in)

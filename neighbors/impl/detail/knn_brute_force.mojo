@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Brute-force k-nearest-neighbors: their DISPATCH, and their FALLBACK.
 
-FOLLOWS `cuvs/src/neighbors/detail/knn_brute_force.cuh` at cuVS `94c2819`:
+Reference: `cuvs/src/neighbors/detail/knn_brute_force.cuh` (cuVS `94c2819`):
 `brute_force_knn_impl`'s dispatch (`:443-447`) and `tiled_brute_force_knn`
 (`:69-340`). Partial.
 
@@ -353,7 +353,7 @@ def compute_norms_for_metric(
 ) raises:
     """`knn_brute_force.cuh:117-140`: WHICH norm, decided by the metric.
 
-    Their branch, statement for statement:
+    The reference branch:
 
         if (metric == L2Expanded || L2SqrtExpanded || CosineExpanded) {
           if (metric == CosineExpanded) rowNorm<L2Norm,true>(..., sqrt_op{});
@@ -1166,7 +1166,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     comptime if knn_warpsort_select_for[TARGET_COLUMN, False]():
                         if k > 2 and k <= MAX_CAPACITY:
                             # `bound_by_power_of_two(k)` with a floor of 32;
-                            # the four instantiations mirror RAFT's template
+                            # the four instantiations match RAFT's template
                             # dispatch over capacities.
                             if k <= 32:
                                 _warpsort_select_tile[32](

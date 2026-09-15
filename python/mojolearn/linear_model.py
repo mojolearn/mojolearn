@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""GPU linear models, mirroring cuML's `LinearRegression(algorithm='eig')`,
+"""GPU linear models. Reference: cuML's `LinearRegression(algorithm='eig')`,
 `Ridge(solver='eig')` and `LogisticRegression(solver='qn')`.
 
 NUMPY-FREE SINCE DEVIATION 2360 (branch numpy-free-0.7). Inputs cross the
@@ -480,7 +480,7 @@ def _check_sample_weight(sample_weight, n_rows, estimator):
 class LinearRegression(NumericModeMixin):
     """Ordinary least squares through normal equations on the GPU.
 
-    This is cuML's `algorithm='eig'` arm (`lstsqEig`, RAFT), which forms
+    This is the eigendecomposition solver (reference: cuML's `algorithm='eig'`, `lstsqEig`, RAFT), which forms
     ``X.T @ X`` and so squares the condition number. It is less robust than
     an SVD-based solver and should not be used for badly conditioned
     designs; cuML's SVD and QR solvers (`lstsqSvdJacobi`, `lstsqSvdQR`,
@@ -674,7 +674,7 @@ class LinearRegression(NumericModeMixin):
 class Ridge(NumericModeMixin):
     """l2-regularized least squares on the GPU, cuML's `solver='eig'` arm.
 
-    Mirrors `cuml/python/cuml/linear_model/ridge.pyx` on top of
+    Reference: `cuml/python/cuml/linear_model/ridge.pyx` and
     `cuml/cpp/src/glm/ridge.cuh::ridgeFit` (DEVIATION 545; the Mojo implementation is
     `glm/impl/ridge.mojo` and the design note there is worth reading:
     their `eig` solver is an SVD through the eigendecomposition of `X.T @ X`
@@ -871,7 +871,7 @@ def _log_or_inf(p):
 class LogisticRegression(NumericModeMixin):
     """Binary logistic regression on the GPU, cuML's quasi-Newton solver.
 
-    Mirrors `cuml/python/cuml/linear_model/logistic_regression.py` on top of
+    Reference: `cuml/python/cuml/linear_model/logistic_regression.py`,
     `cuml/python/cuml/solvers/qn.pyx` and `cuml/cpp/src/glm/qn/` (DEVIATIONS
     546-549; the Mojo implementation is `glm/impl/qn/*.mojo`, one file per
     theirs). The objective is `mean_i logloss_i + (1/(2 C n)) ||w||^2`

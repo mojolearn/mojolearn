@@ -165,7 +165,7 @@ def node_salt(nid: Int) -> UInt32:
 
 
 def oracle_rank(tie_salt: UInt32, colid: Int32) -> UInt32:
-    """DEVIATION 463's rank, INDEPENDENTLY transcribed: one fnv1a32 round
+    """DEVIATION 463's rank, INDEPENDENTLY restated: one fnv1a32 round
     over the colid's four bytes and murmur3's fmix32, written out here rather
     than imported, so the kernel's `split_tie_rank` is checked against a
     second expression of the same arithmetic."""

@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The conflict-free shared-memory histogram accumulator.
 
-FOLLOWS `catboost/cuda/methods/greedy_subsets_searcher/kernel/
-point_hist_half_byte_template.cuh` at CatBoost `54a8143a`.
-Followed statement for statement.
+Reference: `catboost/cuda/methods/greedy_subsets_searcher/kernel/
+point_hist_half_byte_template.cuh` (CatBoost `54a8143a`).
 
 **This is the file the whole experiment is about.** It is how CatBoost
 accumulates a histogram on the GPU with NO ATOMICS in the inner loop, and it

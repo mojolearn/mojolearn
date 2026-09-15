@@ -10,7 +10,7 @@ there is no CPU path in this repository -- and the two are not expected to
 agree bit for bit.
 
 DOES NOT FOLLOW a file. cuML calls `raft::linalg::eigJacobi`, which is
-cuSOLVER's `syevj`, and cuSOLVER is closed with no source to follow statement for statement.
+cuSOLVER's `syevj`, and cuSOLVER is closed with no source to read.
 
 **Jacobi is NOT the arm cuML's dispatch takes, and the sentence that used to
 sit here saying it was "THEIR algorithm choice, not our substitute" is
