@@ -60,7 +60,13 @@ THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` shifts the slab
 tree's chunk boundaries by one value (the standard scaler's mean, variance
 and scale move where the column's sums are inexact) and turns the min-max
 offset's subtraction into an addition (`min_` and every min-max transform
-move). Read back by `preprocessing_host_sabotage`.
+move). Since lane/inference-linear-svm (2026-09-15) it also makes both
+transform kernels read the next column's statistics: saved-model inference
+(`mojolearn.host_model`, through the estimators host binding) runs the
+transforms alone with stored statistics, and the fit arms never reached it
+(measured: before this arm the saved-model check read EQUAL on all five
+scaler lanes under the sabotage build). Read back by
+`preprocessing_host_sabotage` and `estimators_host_sabotage`.
 
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the two scaler lanes is the measurement.
@@ -163,6 +169,13 @@ def host_standard_transform(
     var out = List[Float32](length=n * d, fill=Float32(0.0))
     for i in range(n * d):
         var c = i % d
+        comptime if SCALER_ORACLE_HOST_SABOTAGE:
+            # THE TRANSFORM SABOTAGE ARM (lane/inference-linear-svm,
+            # 2026-09-15): each element reads the NEXT column's statistics.
+            # The fit's arms above never reach this kernel, and saved-model
+            # inference runs this kernel alone. Wrong on purpose; see
+            # SCALER_ORACLE_HOST_SABOTAGE.
+            c = (c + 1) % d
         var value = x[i]
         if inverse != 0:
             if with_std != 0:
@@ -238,6 +251,11 @@ def host_minmax_transform(
     var out = List[Float32](length=n * d, fill=Float32(0.0))
     for i in range(n * d):
         var c = i % d
+        comptime if SCALER_ORACLE_HOST_SABOTAGE:
+            # THE TRANSFORM SABOTAGE ARM (lane/inference-linear-svm,
+            # 2026-09-15): each element reads the NEXT column's scale and
+            # offset. Wrong on purpose; see SCALER_ORACLE_HOST_SABOTAGE.
+            c = (c + 1) % d
         var value = ftz(x[i])
         if inverse != 0:
             value = ftz(identical_div(ftz(value - ftz(offset[c])), ftz(scale[c])))
