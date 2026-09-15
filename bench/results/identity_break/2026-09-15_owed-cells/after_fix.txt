@@ -1,0 +1,27 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 7 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host'] commit=115eb51ece64e6e18cebd4885b0a00cf03789e99
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| kmeans-sqrt/base             | IDENTICAL x4 | 8864be3c295d6c4a | 8864be3c295d6c4a | 8864be3c295d6c4a | 8864be3c295d6c4a |
+| kmeans-sqrt/odd              | IDENTICAL x4 | cd50fd82b95de87a | cd50fd82b95de87a | cd50fd82b95de87a | cd50fd82b95de87a |
+
+summary: IDENTICAL=2
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| kmeans-sqrt/base             | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 3b648e50c114da3c |
+| kmeans-sqrt/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/base             | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | a44ce4484c90c89d |
+| kmeans-sqrt/odd              | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | db19ea8a99baebc2 |
+| kmeans-sqrt/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/odd              | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 5d46fd602108b99c |
+
+summary (infer/model): N/A=2, OWED=2
+summary (batch): OWED=2
+summary (rlpair): 
+require-columns 4 over ['kmeans-sqrt']: OK (4 OWED)
+OWED kmeans-sqrt/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-sqrt/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-sqrt/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-sqrt/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+summary (owed): OWED=4; the next release record owes exactly these cell parts; wrote ../owed/owed_cells_fix.json
