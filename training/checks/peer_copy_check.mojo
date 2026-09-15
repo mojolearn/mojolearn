@@ -15,7 +15,7 @@ toward the host-staged form. Every variant's forward substitution is compared
 bit for bit with the one-device forward substitution of the same factor and
 right-hand sides. The variants are named in `variant_name`.
 """
-from std.os import getenv
+from std.os import getenv, setenv
 from std.memory import bitcast
 from std.time import perf_counter_ns
 from std.gpu import block_dim, block_idx, thread_idx
@@ -23,6 +23,8 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from core.multi_gpu import peer_clone
 from cholesky.checks.trsm import trsm_lower_kernel, CHOL_SOLVE_TPB
 from cholesky.multi_gpu import chol_gather_columns, chol_scatter_columns
+from cholesky.checks.potrf import chol_jitter_pinned
+from cholesky.estimator import cholesky_factor_host
 
 
 def copy_cells_kernel(dst: MutPointer[Float32, MutAnyOrigin], src: MutPointer[Float32, MutAnyOrigin], n_in: Int32):
@@ -98,13 +100,16 @@ comptime V_ROOT_RANK0 = 9   # rank 0 solves on the root context (no second devic
 comptime V_COPYK = 10       # V_OLD transport, then a copy kernel instead of the solve
 comptime V_DIRTY = 11       # V_OLD after a freed, filled factor-sized buffer on device 1
 comptime V_DIRTY_COPYK = 12 # V_COPYK after the same dirty buffer
-comptime V_COUNT = 13
+comptime V_HISTORY = 13     # V_OLD after a two-device Cholesky factorization in this process
+comptime V_HISTORY_COPYK = 14  # V_COPYK after the same factorization
+comptime V_COUNT = 15
 
 
 def variant_name(v: Int) -> String:
     var names: List[String] = [
         "old", "sleep", "readback", "l_host", "b_host", "back_host", "l_first",
         "serial", "prealloc", "root_rank0", "copyk", "dirty", "dirty_copyk",
+        "history", "history_copyk",
     ]
     return names[v]
 
@@ -205,6 +210,23 @@ def dirty_device_one(n: Int) raises:
     _ = dev^
 
 
+def factor_history(n: Int) raises:
+    """A two-device operation-level Cholesky factorization of a small SPD matrix, result discarded."""
+    var a = List[Float32]()
+    for i in range(n):
+        for j in range(n):
+            if i == j:
+                a.append(Float32(2.0))
+            else:
+                a.append(Float32(((i + j) % 13)) / Float32(Float64(n) * 64.0))
+    if not setenv("MOJOLEARN_CHOLESKY_DEVICE_COUNT", "2", True):
+        raise Error("setenv failed")
+    var f = cholesky_factor_host(a, n, chol_jitter_pinned())
+    if not setenv("MOJOLEARN_CHOLESKY_DEVICE_COUNT", "1", True):
+        raise Error("setenv failed")
+    print("PEERSOLVE history factor n", n, "info", f.info)
+
+
 @fieldwise_init
 struct Shard(Movable):
     var ctx: DeviceContext
@@ -241,6 +263,8 @@ def two_device_forward(lh: List[Float32], bh: List[Float32], n: Int, nrhs: Int, 
     """
     if v == V_DIRTY or v == V_DIRTY_COPYK:
         dirty_device_one(n)
+    if v == V_HISTORY or v == V_HISTORY_COPYK:
+        factor_history(n)
     var ctx = DeviceContext()
     var l = upload(ctx, lh)
     var b = upload(ctx, bh)
@@ -308,7 +332,7 @@ def two_device_forward(lh: List[Float32], bh: List[Float32], n: Int, nrhs: Int, 
         shards.append(Shard(device^, sl^, sb^, first, width))
     if v == V_SLEEP:
         wait_host(2)
-    if v == V_COPYK or v == V_DIRTY_COPYK:
+    if v == V_COPYK or v == V_DIRTY_COPYK or v == V_HISTORY_COPYK:
         for rank in range(active):
             ref s = shards[rank]
             var outl = s.ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -385,7 +409,7 @@ def peersolve(n: Int, nrhs: Int) raises -> Int:
     var failing = 0
     for v in range(V_COUNT):
         var got = two_device_forward(lh, bh, n, nrhs, v)
-        if v == V_COPYK or v == V_DIRTY_COPYK:
+        if v == V_COPYK or v == V_DIRTY_COPYK or v == V_HISTORY_COPYK:
             var line = "PEERSOLVE n " + String(n) + " nrhs " + String(nrhs) + " variant " + variant_name(v)
             var bad_any = False
             for rank in range(len(got) // 4):
