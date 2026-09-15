@@ -1,0 +1,14 @@
+started=2026-09-14T22:03:53Z commit=00037ee3781604afe9ba6f65df5bc13e60924791
+vendor=nvidia arch=sm_90a gpus=2 nproc=208
+pixi-warm exit=0 seconds=1
+build-gp exit=0 seconds=30
+build-base exit=0 seconds=42
+native exit=0 seconds=29
+native-sabotage exit=1 seconds=25
+public exit=0 seconds=25
+check-cholesky exit=0 seconds=30
+native: 40 PASS lines; last: PASS cholesky parallel gate
+native-sabotage (must FAIL): 1 PASS lines; /root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1|
+public: PASS 7 Cholesky configurations and 5 refusals
+check-cholesky: 12 pass-like lines; tail: check_cholesky_sabotages OK [IDENTICAL]: 10 arms driven at run time through the `sabotage` argument, no source edited; profile mojolearn.identical.cholesky.fp32.v1|== cholesky/checks/cholesky_check.mojo [IDENTICAL] ALL PASSED ==|
+finished=2026-09-14T22:06:26Z

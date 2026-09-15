@@ -84,11 +84,16 @@ BUILDER = "bindings/build_host_family.sh"
 #: (DigitalOcean, gfx942): the MI300X column of the same record is incomplete
 #: (the 60-minute Hot Aisle cap cut it before iforest, iforest-tuned and five
 #: par-* lanes), and iforest is a covered lane, so require-columns 4 could not
-#: hold against it.
+#: hold against it. Since 2026-09-14 night the 166-lane record at 1eea14f80
+#: (the batch part, fifteen more par-* lanes, every lane complete on all three
+#: columns, the AMD column MI325X again) is the one; it carries one DIVERGENT
+#: training cell, kmeans-sqrt/wide (the H100 inertia stands alone,
+#: docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md), on a lane no
+#: CPU column covers, and the workflow asserts that count exactly.
 TRAINING_GPU_COLUMNS = (
-    "bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json",
-    "bench/results/identity_break/2026-09-14_136-lanes/nvidia-h100-sm_90a.json",
-    "bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json",
+    "bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json",
+    "bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json",
+    "bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json",
 )
 
 #: The GPU columns the classical INFERENCE gate compares each host identity

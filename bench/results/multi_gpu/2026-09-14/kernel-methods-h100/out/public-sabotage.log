@@ -1,0 +1,25 @@
+8749 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12f100000000, nodemask=1)
+8928 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x715080000000, nodemask=1)
+9108 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x133d80000000, nodemask=1)
+PASS KernelRidge 1 3 1 linear
+9162 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30e380000000, nodemask=1)
+9162 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a3bc0000000, nodemask=2)
+9342 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x702b00000000, nodemask=1)
+PASS KernelRidge 1 3 1 rbf
+9396 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73e400000000, nodemask=1)
+9576 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70dec0000000, nodemask=1)
+PASS KernelRidge 1 3 1 poly
+9630 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50ca80000000, nodemask=1)
+9810 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x702240000000, nodemask=1)
+PASS KernelRidge 1 3 1 sigmoid
+9864 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1932c0000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_kernel_methods_check.py", line 120, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_kernel_methods_check.py", line 63, in main
+    assert outcomes[0] == outcomes[1] or (isinstance(outcomes[0], str) and isinstance(outcomes[1], str)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                          and outcomes[0].split('Exception: ')[-1] in outcomes[1]), \
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ('KernelRidge outcome differs', 37, 'linear', '<mojolearn.kernel_methods.KernelRidge object at 0x723cb4425c50>', 'Exception: kernel_ridge_fit_host: the ridged kernel matrix K + alpha I is NOT positive definite (info=35, the leading minor of order 35 failed). kernel=linear, n_samples=37. cuML catches this and sile')

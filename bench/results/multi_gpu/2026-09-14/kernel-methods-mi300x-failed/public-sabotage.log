@@ -1,0 +1,28 @@
+21787 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31e680000000, nodemask=1)
+22115 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x526c00000000, nodemask=1)
+22444 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73f900000000, nodemask=1)
+PASS KernelRidge 1 3 1 linear
+22649 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70f5c0000000, nodemask=1)
+22978 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50c640000000, nodemask=1)
+PASS KernelRidge 1 3 1 rbf
+23183 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3358c0000000, nodemask=1)
+23183 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5989c0000000, nodemask=2)
+23512 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7165c0000000, nodemask=1)
+23512 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18dc00000000, nodemask=2)
+PASS KernelRidge 1 3 1 poly
+23719 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x707b40000000, nodemask=1)
+23719 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a1a40000000, nodemask=2)
+24058 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50fb40000000, nodemask=1)
+PASS KernelRidge 1 3 1 sigmoid
+24263 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5057c0000000, nodemask=1)
+24263 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7aed40000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_kernel_methods_check.py", line 120, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_kernel_methods_check.py", line 63, in main
+    assert outcomes[0] == outcomes[1] or (isinstance(outcomes[0], str) and isinstance(outcomes[1], str)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                          and outcomes[0].split('Exception: ')[-1] in outcomes[1]), \
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ('KernelRidge outcome differs', 37, 'linear', '<mojolearn.kernel_methods.KernelRidge object at 0x7b7c37c39c50>', 'Exception: kernel_ridge_fit_host: the ridged kernel matrix K + alpha I is NOT positive definite (info=35, the leading minor of order 35 failed). kernel=linear, n_samples=37. cuML catches this and sile')
