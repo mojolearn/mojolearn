@@ -9,15 +9,15 @@ Reference: `catboost/cuda/methods/kernel/pointwise_scores.cu` (698 lines) and
 WHICH FAMILY THIS IS
 --------------------
 The POINTWISE family, the one BOTH of CatBoost's oblivious tree searchers
-share (`archive/reference/PORTING.md` 91 B): `TFeatureParallelObliviousTreeSearcher` and
+share: `TFeatureParallelObliviousTreeSearcher` and
 `TDocParallelObliviousTreeSearcher`. It reads the histograms that
 `pointwise_hist2*` produce and `split_properties_helpers.ScanHistogramsImpl`
 scans.
 
 It is NOT `greedy_subsets_searcher/kernel/compute_scores.cu`. Those are two
-separate upstream files with two separate histogram layouts, and this implementation
+separate reference files with two separate histogram layouts, and this implementation
 shares no line with the other one. Where they DO overlap is
-`score_calcers.cuh`, which upstream `#include`s into both
+`score_calcers.cuh`, which the reference `#include`s into both
 (`compute_scores.cu:9` and `pointwise_scores.cu:2`) -- so the calcer
 arithmetic below is the same arithmetic our greedy implementation inlined, and the
 two implements disagree on SIGN by design; see the next section.
@@ -58,7 +58,7 @@ was written against "larger is better". THIS FILE DOES NOT. It has no host
 side yet (see UNWIRED below), so there is nothing to accommodate, and
 ENGINEERING_RULES 0b says copy. **Whoever wires this up: the two files in this
 repository disagree about the sign of a score, on purpose, and the
-disagreement is upstream's own convention preserved here and inverted
+disagreement is the reference's own convention preserved here and inverted
 there.**
 
 TIE-BREAK. The block reduction is `gains[tid] > gains[tid + s] ||
@@ -213,7 +213,7 @@ Their `TScoreCalcer calcer` is also passed BY VALUE as a kernel argument
 calcer's CONFIGURATION crosses the launch boundary as scalars (`lambda_l2`,
 `meta_exponent`, `normalize`, `score_std_dev`, `global_seed`) and the
 calcer is constructed inside the kernel from them. Their host still makes
-every decision that was host-side upstream -- in particular the
+every decision that was host-side in the reference -- in particular the
 `MetaExponent` coin flip, which is `meta_exponent_draw` below and stays on
 the host exactly as `:507` has it.
 
@@ -1165,7 +1165,7 @@ def _block_argmin_and_store[
         }
 
     THE BARRIER IS OUTSIDE THE `if (tid < s)`, which is what makes it legal
-    and what makes it portable (`archive/reference/PORTING.md` 11 and 92: a threadgroup
+    and what makes it portable (a threadgroup
     barrier reached by only some threads is undefined, and on Metal it does
     not merely warn). The reference `ScanHistogramsImpl` in the same family gets
     this wrong; this loop gets it right, so it is kept unchanged.
@@ -1474,7 +1474,7 @@ def find_optimal_split_dynamic(
 
     SO THE ORDERED PATH SUPPORTS THREE OF THE SEVEN SCORE FUNCTIONS AND
     NOT THE OTHER FOUR. `L2`, `NewtonL2`, `SatL2` and `LOOL2` reach a
-    `throw` the moment `foldCount > 1`. That is upstream's own limit on
+    `throw` the moment `foldCount > 1`. That is the reference's own limit on
     ordered boosting and it is copied, not widened.
 
     `<<< resultSize, blockSize >>>`: `resultSize` BLOCKS, each producing one

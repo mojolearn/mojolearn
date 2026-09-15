@@ -113,7 +113,7 @@ def calc_one_dimensional_optimum_const_approx(
             calculate_weighted_target_average(target, weights, has_weights)
         )
         if best_probability <= 0.0 or best_probability >= 1.0:
-            # their Logit would return +-inf; CB_ENSUREs upstream keep a
+            # their Logit would return +-inf; CB_ENSUREs in the reference keep a
             # constant-label pool out of training before this is reached,
             # and an infinite cursor seed is a poisoned fit. Named here.
             raise Error(

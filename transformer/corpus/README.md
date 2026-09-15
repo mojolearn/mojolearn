@@ -135,7 +135,7 @@ Within `transformer/corpus/<case>/`:
 - `manifest.json`: shape, calibration, sensitivity, and provenance.
 
 The top-level manifest lists cases, seeds, tensor IDs, stage definitions,
-perturbations, precision rules, and the upstream commit.
+perturbations, precision rules, and the reference commit.
 
 ## Scope
 

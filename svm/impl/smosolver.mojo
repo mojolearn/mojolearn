@@ -381,7 +381,7 @@ struct SmoSolver(Movable):
     below reads it rather than the caller's `y`. For C_SVC it is a bitwise
     copy of `y` over `n_rows`, which costs one n-element device copy per fit
     and changes no number; for EPSILON_SVR it is `[+1]*n_rows ++ [-1]*n_rows`,
-    which is exactly what upstream's `y_label` holds at the same point. ONE
+    which is exactly what the reference's `y_label` holds at the same point. ONE
     code path, no branch at four call sites, and no way for one of those
     sites to be left reading the regression targets."""
     var C_vec: DeviceBuffer[DType.float32]
@@ -443,7 +443,7 @@ struct SmoSolver(Movable):
         # since DEVIATION 515 and the arm had never been reachable.
         self.n_train = n_rows * 2 if param.svmType == EPSILON_SVR else n_rows
         # `n_ws = min(1024, n_train)`, over the DOUBLED domain for SVR:
-        # upstream's SetSize takes n_train, not n_rows.
+        # the reference's SetSize takes n_train, not n_rows.
         var ws = SMO_WS_SIZE
         if ws > self.n_train:
             ws = self.n_train
@@ -540,7 +540,7 @@ struct SmoSolver(Movable):
 
         Both arms leave `self.y_train` holding the labels the REST OF THE
         SOLVER reads; see the field's own docstring for why that replaces
-        upstream's `*y = y_label.data()` pointer swap."""
+        the reference's `*y = y_label.data()` pointer swap."""
         var nt = self.n_train
         ctx.enqueue_function[fill_f32_kernel](
             self.alpha.unsafe_ptr(), Float32(0.0), Int32(nt),
@@ -568,7 +568,7 @@ struct SmoSolver(Movable):
                 grid_dim=_grid(self.n_rows), block_dim=SEL_TPB,
             )
         else:
-            # Upstream's own sentence, and upstream reaches it only for the
+            # The reference's own sentence, and the reference reaches it only for the
             # NU_* types (`smosolver.cuh:321`).
             raise Error(
                 "SMO initialization not implemented SvmType="

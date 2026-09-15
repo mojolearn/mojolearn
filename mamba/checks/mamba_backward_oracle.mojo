@@ -166,7 +166,7 @@ def mamba_backward_free_choices() -> String:
 
 
 struct MambaBackwardStages(Movable):
-    """Every recorded stage of one backward call, in the card's order. `dh` IS a card stage (`bwd.dh`, `[M, di, N]`, plan section 7); `h_ckpt` is T2's `[B, L+1, di, N]` checkpoint, which the DEVICE gets from the forward and which the host must rebuild, so a gate that wants to price MB9 (upstream's `h[t] - dbu[t]` recovery) has the numbers to price it with."""
+    """Every recorded stage of one backward call, in the card's order. `dh` IS a card stage (`bwd.dh`, `[M, di, N]`, plan section 7); `h_ckpt` is T2's `[B, L+1, di, N]` checkpoint, which the DEVICE gets from the forward and which the host must rebuild, so a gate that wants to price MB9 (the reference's `h[t] - dbu[t]` recovery) has the numbers to price it with."""
 
     var dres: List[Float32]  # [M, d_model]        B1
     var dg: List[Float32]  # [M, d_inner]          B2
@@ -282,7 +282,7 @@ def _forward_rstd(sumsq: Float32, dm: Int) -> Float32:
 
 
 def _forward_da(delta: Float32, a: Float32) -> Float32:
-    """`da[t,d,n] = exp(delta[t,d] * A[d,n])`, seams S5 and S6, RECOMPUTED. Upstream's forward and backward both use the exp2 substitution and are self-consistent; DEVIATION 722 already refused it as a different function with an extra rounding, and plan section 6 item 6 says the backward's recomputed `da` must be OUR forward's `da` or it is not a recomputation."""
+    """`da[t,d,n] = exp(delta[t,d] * A[d,n])`, seams S5 and S6, RECOMPUTED. The reference's forward and backward both use the exp2 substitution and are self-consistent; DEVIATION 722 already refused it as a different function with an extra rounding, and plan section 6 item 6 says the backward's recomputed `da` must be OUR forward's `da` or it is not a recomputation."""
     return ftz(identical_exp(ftz(pinned_mul(delta, a))))
 
 
@@ -303,7 +303,7 @@ def mamba_h_checkpoint_oracle(
     l: Int,
     d_inner: Int,
 ) -> List[Float32]:
-    """`h[t, d, n]` for every `t` in `[-1, L)`, into `[B, L+1, di, N]`. PINNED AS AN EXPLICIT CHECKPOINT.** The REFUSED alternative is upstream's `a = h[t] - dbu[t]` (`selective_scan_bwd_kernel.cuh:290`)."""
+    """`h[t, d, n]` for every `t` in `[-1, L)`, into `[B, L+1, di, N]`. PINNED AS AN EXPLICIT CHECKPOINT.** The REFUSED alternative is the reference's `a = h[t] - dbu[t]` (`selective_scan_bwd_kernel.cuh:290`)."""
     var out = _zeros(b * (l + 1) * d_inner * D_STATE)
     for bb in range(b):
         for d in range(d_inner):

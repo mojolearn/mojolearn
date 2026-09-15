@@ -10,7 +10,7 @@ mamba, copied VERBATIM below, citation at the copy) and the block order of
 HuggingFace `transformers/src/transformers/models/mamba/modeling_mamba.py`
 (`MambaMixer.forward`, `causal_conv1d_fn`, `mamba_selective_scan`,
 `MambaRMSNorm.forward`, `MambaBlock.forward`), re-implemented here in pure
-torch with every step cited by file and line. Neither upstream package is
+torch with every step cited by file and line. Neither reference package is
 imported; the mamba_ssm wheel does not build on a Mac and the transformers
 package would only add a dependency on its own kernel dispatch.
 
@@ -60,7 +60,7 @@ import tempfile
 from fractions import Fraction
 # `Optional` and `Tuple` exist ONLY because the verbatim mamba3 reference
 # copies below (`mamba3_siso_step_ref`, `mamba3_siso_fwd_ref`) carry them in
-# their signatures; the upstream test file imports them at its own top.
+# their signatures; the reference test file imports them at its own top.
 from typing import Optional, Tuple
 
 import numpy as np
@@ -797,7 +797,7 @@ def run_verify(out_root, all_meta):
 # discharges). Same discipline as the Mamba-1 half above: every input element
 # is a hashed value under mojolearn.mamba.corpus.hash.v1 -- NEW tensor names,
 # NEW ids, NEW seed base -- torch float64 per-stage references spelled by the
-# upstreams' OWN code (verbatim copies below, cited by line), float32 run
+# references' OWN code (verbatim copies below, cited by line), float32 run
 # informative only, nothing here a bitwise certificate of anything. Cases
 # land in mamba/corpus/mamba2/<case>/ with their own top-level manifest; the
 # Mamba-1 corpus above is byte-untouched.
@@ -1403,7 +1403,7 @@ def m2_forward(p, x, dtype, dt_limit=(0.0, M2_INF)):
 
 
 def m2_cross_checks(meta, r, p, dtype, dt_limit):
-    """The two verbatim upstream spellings run over the SAME staged front
+    """The two verbatim reference spellings run over the SAME staged front
     (norm/in_proj/conv/silu, read back from the staged run's own tensors):
     HF mamba2_chunk_scan (expected BIT-equal to the staged S9-S20) and
     mamba_ssm ssd_minimal_discrete composed discretize-first

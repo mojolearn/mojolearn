@@ -79,7 +79,7 @@ def combine_coefs_svr_kernel(
     `coef_i = y_i * alpha_i` for a classifier, and
     `coef_i = y_i * alpha_i + y_{i+n/2} * alpha_{i+n/2}` for a regressor.
     Since `y` is `[+1]*n ++ [-1]*n`, the second form is
-    `alpha_plus_i - alpha_minus_i`, which is why upstream can spell a
+    `alpha_plus_i - alpha_minus_i`, which is why the reference can spell a
     SUBTRACTION as an add.
 
     ONE ADDITION PER OUTPUT, no reduction and no tree, so this is exactly
@@ -124,7 +124,7 @@ struct Results(Movable):
 
         `get_dual_coefs`, `get_support_vector_indices` and
         `collect_support_vector_matrix` still select over `self.n_rows` and
-        that matches upstream: after `CombineCoefs` has folded the two
+        that matches the reference: after `CombineCoefs` has folded the two
         halves, only the first `n_rows` coefficients are the answer.
         """
         self.n_rows = n_rows

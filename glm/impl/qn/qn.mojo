@@ -27,7 +27,7 @@ objective divided by N, with the SAME minimizer. `glm_base.mojo`'s
 `qn_predict` (`:262-283`) for a binary classification: `z > 0 ? 1 : 0` on
 the decision function, which is `linearFwd` with the fitted `W`
 (`qn_decision_function`, `:216-228`). `predict_proba` is NOT in this file
-upstream -- cuML's Python layer computes `1 / (1 + exp(-z))` in cupy
+in the reference -- cuML's Python layer computes `1 / (1 + exp(-z))` in cupy
 (`logistic_regression.py:612-616`); ours is in `glm/estimator.mojo`.
 """
 
@@ -72,7 +72,7 @@ def qn_fit(
     mut trace: IdentityTrace,
 ) raises -> Int:
     """`qn_fit`, `qn.cuh:38-87`. `loss.l2` must already be the normalized
-    `l2` (this function is where it is computed upstream; `qn_fit_x` below
+    `l2` (this function is where it is computed in the reference; `qn_fit_x` below
     builds the objective with it, which is the one reordering here, because
     `GLMWithData` owns the scalar)."""
     var opt_param = LBFGSParam.from_params(pams)

@@ -234,7 +234,7 @@ def gbdt_fit_two_level_feature_freq(
     )
     return model_text(trained)
 
-#: `gbdt_predict_multi`'s transform, mirroring their `EPredictionType`
+#: `gbdt_predict_multi`'s transform, following their `EPredictionType`
 #: (`libs/model/eval_processing.h:186-226`). `RAW` is their `RawFormulaVal`,
 #: `SOFTMAX` their `Probability` for a multi-output model, `SIGMOID` their
 #: `MultiProbability`.
@@ -640,7 +640,7 @@ def gbdt_predict_multi(
 
     `out_preds` is ROW-MAJOR, `[row * width + k]`.
 
-    `mode` picks the transform, mirroring their `EPredictionType`:
+    `mode` picks the transform, following their `EPredictionType`:
 
       PREDICT_RAW      `dim` columns, the raw approxes -- their
                        `RawFormulaVal`, the contract every other predict

@@ -50,7 +50,7 @@ The contracts define the profile; executable checks are the status source.
 
 ## Independent gradient oracle
 
-`tools/mamba_gradient_oracle.py` differentiates the cited upstream PyTorch
+`tools/mamba_gradient_oracle.py` differentiates the cited reference PyTorch
 forward transcription in float64 and independently audits selected gradient
 cells with central finite differences. It covers all three families and emits
 portable `grad.<tensor>.f64` files plus a manifest:

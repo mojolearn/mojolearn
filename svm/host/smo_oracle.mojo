@@ -40,7 +40,7 @@ THE REGRESSION ARM (2026-08-31)
 -------------------------------
 `smo_oracle_fit` solves EPSILON_SVR through the SAME loop: only the domain
 size, the gradient init, the kernel-column projection and the coefficient
-fold differ, which is upstream's own claim (`smoblocksolve.cuh:99-101` takes
+fold differ, which is the reference's own claim (`smoblocksolve.cuh:99-101` takes
 `svmType` and never reads it). Under `param.svmType == EPSILON_SVR` the
 caller's `y` holds the REGRESSION TARGETS and the +-1 label vector is built
 here, exactly as `SvrInit` builds `y_label`.
@@ -576,7 +576,7 @@ def smo_oracle_fit[
     and `SvrInit` (`smosolver.cuh:395-411`) builds both the label vector and
     the gradient here. `res.y` is the LABEL vector in both problems, because
     that is what the working set, the block solve, `CombineCoefs` and `CalcB`
-    all read (upstream repoints the caller's pointer at `y_label`; this file
+    all read (the reference repoints the caller's pointer at `y_label`; this file
     and `smosolver.mojo` both keep it as a separate vector instead)."""
     var res = OracleResult[dt]()
     var is_svr = param.svmType == EPSILON_SVR
@@ -746,7 +746,7 @@ def smo_oracle_fit[
     # Results. `CombineCoefs` (`results.cuh:189-200`): coef = alpha * y over
     # n_train, then for EPSILON_SVR `raft::linalg::add(coef, coef, coef +
     # n_rows, n_rows)`. Since y is [+1]*n ++ [-1]*n that add is
-    # `alpha_i - alpha*_i`, which is why upstream can spell a subtraction as
+    # `alpha_i - alpha*_i`, which is why the reference can spell a subtraction as
     # an add. ONE addition per output, exactly rounded, nothing to pin.
     var coef = List[Scalar[dt]]()
     for i in range(n_train):

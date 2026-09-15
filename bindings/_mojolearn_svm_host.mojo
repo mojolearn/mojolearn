@@ -502,7 +502,7 @@ def svr_predict_binding(
 ) raises -> PythonObject:
     """`SVR.predict` on the host: `smo_oracle_decision` over the support
     matrix handed back in, `sum_j K(x, sv_j) dual_j + b`, the class
-    epilogue off (upstream's `svcPredict(..., predict_class = false)`).
+    epilogue off (the reference's `svcPredict(..., predict_class = false)`).
     Writes `n_rows` float32 to `out_addr` and returns `n_rows`.
 
     `params` is, in this exact order (the GPU binding's):

@@ -26,7 +26,7 @@ Brute-force Manhattan/L1 and cosine are also already public/native, alongside
 Chebyshev and Minkowski. `impl/distance/detail/distance_ops.mojo` documents
 their reduction and epilogue rules; `checks/metric_check.mojo` contains the
 existing oracle and sabotage checks. Cosine explicitly refuses zero-norm
-rows, uses pinned square roots, and preserves the upstream unclamped
+rows, uses pinned square roots, and preserves the reference's unclamped
 `1-dot/(norm_x*norm_y)` epilogue. Near-identical rows may produce slightly
 negative values from rounding; changing that to clamping or defining a
 zero-vector answer requires a new explicit profile and independent fixtures.
