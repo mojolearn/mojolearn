@@ -73,7 +73,7 @@ DEVIATION 795 -- THE TRANSFORMER SURFACE'S OWN DEPARTURES, IN ONE BLOCK.
   rotary table is `LlamaRopeTable(ctx, dims, ROPE_THETA, max_tokens)`,
   computed on-device per call exactly as the lane's own check driver
   builds it -- a caching layer would be state this surface deliberately
-  does not hold (upstream computes it once per config; recomputing is
+  does not hold (the reference computes it once per config; recomputing is
   bit-inert because S6-S8 are pure functions of (theta, head_dim,
   position)).
 
@@ -377,7 +377,7 @@ def _transformer_run[discard_cache: Bool = False](
     var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
     var tk = Int(perf_counter_ns())
     # Host weights THROUGH the lane's own struct (its length table is the
-    # upstream shape authority, and its constructor is where the weights
+    # reference shape authority, and its constructor is where the weights
     # are refused non-finite ONCE, DEVIATION 1875); values arrive as
     # given bits, unjudged.
     var w = _load_transformer_weights(ctx, dims, a)

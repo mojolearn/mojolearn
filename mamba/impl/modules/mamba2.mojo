@@ -16,7 +16,7 @@ RESUMPTION -- the call rebuilds the open chunk from the buffer and runs
 the chunked arithmetic; the carried state is the conv window, the
 boundary h and the intra-chunk buffer, contract section 5). ONE spelling
 for both paths is what makes gate (d) a theorem the gate verifies. The
-upstream per-token recurrence (mamba2.py:310-322 /
+reference per-token recurrence (mamba2.py:310-322 /
 `selective_state_update_ref`:277-282) rounds differently BY CONSTRUCTION
 and is kept in this file ONLY as the required-RED arm
 STEP_UPSTREAM_RECURRENCE.
@@ -171,7 +171,7 @@ def mamba2_sabotage_name() -> String:
 
 
 struct Mamba2DeviceWeights(Movable):
-    """One block's parameters on the device, upstream shapes
+    """One block's parameters on the device, reference shapes
     (`Mamba2Weights`'s table), row-major, contiguous. `weights_checked` is
     DEVIATION 1886's cache: the ten weight names are refusal-walked once,
     x and the state on every call."""
@@ -679,7 +679,7 @@ def m2_gate_kernel(
 
 # ===========================================================================
 # THE REQUIRED-RED ARM: STEP_UPSTREAM_RECURRENCE (mamba2.py:310-322 /
-# selective_state_update_ref:277-282). The upstream torch step's own
+# selective_state_update_ref:277-282). The reference torch step's own
 # rounding: dt WITHOUT the clamp, dA = exp(dt*A), dBx = (dt*B)*x pairing,
 # h = h*dA + dBx (unfused mul/add as torch rounds it), y = C.h_new,
 # y += D*x. One thread per (b, h, p); h updated IN PLACE. Exists to be
@@ -1015,7 +1015,7 @@ def mamba2_block_forward(
         ctx, trace, prefix + ".dt.out", stages.dt_work, b, l, q0, nh
     )
 
-    # THE REQUIRED-RED ARM (DEVIATION 786): the upstream step's own
+    # THE REQUIRED-RED ARM (DEVIATION 786): the reference step's own
     # per-token recurrence replaces the resumption for the new token --
     # AND IT ENGAGES ONLY AT l == 1. A decode gate legitimately runs a
     # PREFILL leg (l > 1) through this same entry point before its
@@ -1023,7 +1023,7 @@ def mamba2_block_forward(
     # (found at first arming: an unconditional raise here killed the armed
     # build inside its own reference prefill, before the arm's test was
     # ever reached). At l > 1 the armed build runs the profile path below,
-    # clean; at l == 1 it substitutes the upstream spelling and gate (d)
+    # clean; at l == 1 it substitutes the reference spelling and gate (d)
     # must FAIL on the decode token. `step_arm_engaged` is constant False
     # in every unarmed build and the branch compiles away.
     var step_arm_engaged = False

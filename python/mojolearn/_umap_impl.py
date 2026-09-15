@@ -60,7 +60,7 @@ class UMAP(NumericModeMixin):
     learning rate is learning_rate/4; repulsion_strength and
     negative_sample_rate apply to both fit and transform. Query batching
     can change results. This path has its own qualification requirements;
-    existing fit certificates do not certify transform or upstream RNG bits.
+    existing fit certificates do not certify transform or reference RNG bits.
     Supervised UMAP and alternate metrics/init are unsupported.
 
     `embedding_` and every returned embedding are `_array.Array`s of float32

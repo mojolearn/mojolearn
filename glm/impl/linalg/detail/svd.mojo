@@ -34,7 +34,7 @@ and for the same reason) applied on the device by `gather_columns_kernel`.
 For ridge the order is not even observable in exact arithmetic -- `w = V
 diag(.) V^T A^T b` is permutation-invariant -- but the final `w = V S_nnz`
 sums over columns IN INDEX ORDER, so the order is a rounding order, and
-mirroring theirs is how a cross-vendor card stays comparable stage for
+matching the reference is how a cross-vendor card stays comparable stage for
 stage.
 
 WHAT IS NOT IMPLEMENTED: `gen_left_vec == false` returns before `U`; both callers

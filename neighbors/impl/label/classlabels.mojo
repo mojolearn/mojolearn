@@ -15,7 +15,7 @@ is the same function ONLY under a precondition -- every label is an integer
 in `1..N` or `MAX_LABEL` -- which `weak_cc` guarantees and a CLASSIFICATION
 target does not: a caller's `y` may be `{-1, 7, 1000000}`. So the k-NN
 classifier needs the GENERAL route, which is what RAFT's header is, and
-this file is that route. The two files implementation the same upstream symbols at
+this file is that route. The two files implement the same reference symbols at
 the same pin and differ exactly where the DBSCAN file's DEVIATION 33 says
 it differs.
 

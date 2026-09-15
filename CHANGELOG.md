@@ -10,6 +10,14 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- Public CPU `Cholesky` inference. On a CPU-only install `Cholesky().fit(A)` factors a given
+  matrix and `solve` answers from it, and `Cholesky.save` / `Cholesky.load` (or
+  `mojolearn.host_model`, which returns a `HostCholesky`) carry a factor from a GPU box to a
+  CPU. The door moved into the linalg host binding, which ships in the inference wheel; the
+  `cholesky` identity lane is now the linalg family's and a public CPU reference probe. Apple
+  M4 CPU column: train, infer and batch IDENTICAL x4 against the 166-lane record, the new
+  saved-factor model cells OWED to the release record, the sabotage build DIVERGENT on every
+  train and owed cell.
 - New `GPT2Tokenizer.encode_batch(documents, allow_endoftext=False)`, `decode_batch` and
   `decode_bytes_batch`. `encode_batch` is one call into the tokenizer host binding
   (`gpt2_encode_batch`) that encodes each document alone, so every document's ids equal
@@ -29,7 +37,6 @@ Linux legs are OWED before this heading reads published.
   reads IDENTICAL (nine fixtures each), and a `-D MOJOLEARN_HOST_SABOTAGE=1` build of the new
   binding reads DIVERGENT on all 27 infer and 27 batch cells with every train cell unchanged.
   Training on the CPU stays internal to the verifier.
-
 - New `mojolearn.metrics.fowlkes_mallows_score`, mirroring scikit-learn's definition (cuML
   has none): the device integer contingency matrix, exact Int64 pair counts, then
   `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, 0.0 when `tk == 0` (no samples, one sample,

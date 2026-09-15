@@ -262,7 +262,7 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   sample_y's prior draws, and sample_y is
                                   unimplemented
         random_state    refused   anything but None; only sample_y draws
-                                  random numbers upstream, and sample_y is
+                                  random numbers in the reference, and sample_y is
                                   unimplemented
         sparse X        refused   dense row-major float32 only
                                   (_buffer.py::as_f32_c)

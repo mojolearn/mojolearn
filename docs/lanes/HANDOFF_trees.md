@@ -4,7 +4,7 @@ Current consolidated plan: [DECISION_TREE_ROADMAP.md](DECISION_TREE_ROADMAP.md).
 
 Current scope and persistent project decisions: [TREE_GROWTH_SCOPE.md](TREE_GROWTH_SCOPE.md).
 
-Symmetric GBDT (CatBoost mirror), RF (cuML mirror), ET. Our IDENTICAL arm
+Symmetric GBDT (CatBoost reference), RF (cuML reference), ET. Our IDENTICAL arm
 against each opponent's FAST arm on NVIDIA. Wind-down ordered by the
 orchestrator before tasks 4 and 5 were measured on the H100; everything
 below is either measured with a log path or marked not run.

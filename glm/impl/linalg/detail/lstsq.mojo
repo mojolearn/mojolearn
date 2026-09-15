@@ -56,7 +56,7 @@ comparison against scikit-learn, whose `LinearRegression` uses LAPACK
 
 STEP 6 IS ON THE VENDOR GEMV, AND THE SYMBOL IS `gemv_gpu` NOT `gemv`
 ---------------------------------------------------------------------
-Step 6 is `raft::linalg::gemv` upstream and now calls MAX's gemv here too,
+Step 6 is `raft::linalg::gemv` in the reference and now calls MAX's gemv here too,
 through `core/gemm.mojo::gemv_n`. Which symbol is not a detail. The obvious
 one is wrong: `linalg.gemv.gemv` takes no `DeviceContext` and no `target` and
 its own docstring opens "Computes a CPU matrix-vector product", so handing it
