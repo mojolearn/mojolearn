@@ -126,14 +126,14 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whole-batch answer (one ulp) and stamps `batch_sabotage: true`
             in the JSON.
 
-THE LANES, 176 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
+THE LANES, 177 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
 tokenizer the same day when those two got their doors, 16 `par-*` lanes that
 evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -189,6 +189,8 @@ sampler, a solver, a metric, a reduction).
       par-cholesky par-kernel-ridge par-nystroem par-rbf-sampler
     2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
       ivf embedding
+    2026-09-15 (lane/embedding-owed, PLAN_SORT through Embedding(plan="sort"))
+      embedding-sort
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -2277,6 +2279,37 @@ def _(ml, X, yc, yr, Xh=None):
                 e, lambda m: (np.asarray(m.forward(idh)),))
 
 
+@lane("embedding-sort")
+def _(ml, X, yc, yr, Xh=None):
+    """Embedding(plan="sort"), contract section 6.2's PLAN_SORT (the device
+    total-key bitonic sort) instead of PLAN_SCAN, on the `embedding` lane's
+    exact inputs: V=128, d=16, T=512, padding_idx=3, the same fold without a
+    padding row, and the carry split at t0=171. The plan is an execution plan
+    and not the specification, so the lane also runs plan="scan" in the same
+    process and the train cell reads REFUSED naming the pair unless every
+    sort gradient equals its scan twin byte for byte (contract 11(d)); the
+    recorded hashes are therefore the `embedding` lane's hashes too. The
+    probe gathers 512 held-out ids."""
+    V, Dm, T = 128, 16, 512
+    w = _hw((V, Dm), "emb:w", -0.25, 0.25)
+    ids = (_ids(X, 1, T).reshape(T) % V).astype(np.int32)
+    dy = np.ascontiguousarray(_seq(X, 1, T, Dm).reshape(T, Dm))
+    e = ml.Embedding(V, Dm, padding_idx=3, weight=w, plan="sort")
+    y = np.asarray(e.forward(ids))
+    dw = np.asarray(e.backward(ids, dy))
+    t0 = 171
+    g1 = e.backward(ids[:t0], dy[:t0])
+    g2 = np.asarray(e.backward(ids[t0:], dy[t0:], grad=g1))
+    _same_bytes("sort carried dW (t0=171)", g2, "sort unsplit dW", dw)
+    dw_nopad = np.asarray(ml.Embedding(V, Dm, weight=w, plan="sort").backward(ids, dy))
+    _same_bytes("sort dW", dw, "scan dW", np.asarray(ml.Embedding(V, Dm, padding_idx=3, weight=w).backward(ids, dy)))
+    _same_bytes("sort dW without padding", dw_nopad, "scan dW without padding",
+                np.asarray(ml.Embedding(V, Dm, weight=w).backward(ids, dy)))
+    idh = (_ids(Xh, 1, T).reshape(T) % V).astype(np.int32)
+    return _fit(dict(fwd=_h(y), dw=_h(dw), dw_nopad=_h(dw_nopad)),
+                e, lambda m: (np.asarray(m.forward(idh)),))
+
+
 @lane("kmeans-sqrt")
 def _(ml, X, yc, yr, Xh=None):
     """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken in
@@ -3593,7 +3626,7 @@ def _batch_embedding(ml, e, Xh):
 
 
 _batch_decl(_batch_ivf, "ivf")
-_batch_decl(_batch_embedding, "embedding")
+_batch_decl(_batch_embedding, "embedding", "embedding-sort")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
 _batch_decl(_batch_training_primitives, "training-primitives")
 _batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "mlp", "par-mlp")

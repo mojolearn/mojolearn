@@ -28,10 +28,16 @@
 # findings) and bench/results/embedding_sabotage_2026-09-14/ (after they
 # were resolved).
 #
-# THE ARMS AND THEIR WITNESS FIXTURES are embedding_check.mojo's: two of
-# the eighteen contract arms are not built (EMB_FOLD_VIA_GEMM_ONEHOT and
-# EMB_SORT_KEY_ID_ONLY_UNSTABLE), and the sort negative control has its own
-# script. Sixteen defines below.
+# THE ARMS AND THEIR WITNESS FIXTURES are embedding_check.mojo's: all
+# eighteen rows of contract 11.1 since 2026-09-15, when
+# EMB_FOLD_VIA_GEMM_ONEHOT (the backward through identical_gemm over a one-hot
+# matrix, checked cell by cell against the host GEMM oracle) and
+# EMB_SORT_KEY_ID_ONLY_UNSTABLE (PLAN_SORT's compare pass on the id half of
+# the key; clause (a) runs PLAN_SORT on that build) were built. The sort
+# negative control has its own script. Eighteen defines below.
+#
+# THE CLEAN RUN is every clause the check has: (a), (b), (c) and (f) always,
+# and (d) and (e) turned on here, so "clean: PASS" means all six passed.
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 out=${1:?usage: embedding_sabotage_arm.sh OUTPUT_DIRECTORY [ARM ...]}
@@ -44,7 +50,7 @@ jobs=${MOJOLEARN_COMPILE_JOBS:-2}
 # One line, on purpose: python/mojolearn/tests/test_expose_d_manifest.py
 # reads this string and holds it equal to the is_defined names in
 # embedding/checks/embedding_identical.mojo.
-ALL_ARMS="FOLD_DESCENDING FOLD_BALANCED_TREE SEED_SEEDLESS SINGLE_RUN_BYPASS EMPTY_ROW_SKIPPED EMPTY_ROW_NEG_ZERO FOLD_READS_LAUNCH RANK_BY_ARRIVAL SORT_TIE_REVERSED PAD_ROW_CONTRIBUTES PAD_ROW_NEG_ZERO NO_FLUSH_ACC GATHER_NO_FLUSH GATHER_CLAMP_OOR ACCUM_BY_ADD ACCUM_REFILLS"
+ALL_ARMS="FOLD_DESCENDING FOLD_BALANCED_TREE SEED_SEEDLESS SINGLE_RUN_BYPASS EMPTY_ROW_SKIPPED EMPTY_ROW_NEG_ZERO FOLD_READS_LAUNCH RANK_BY_ARRIVAL SORT_TIE_REVERSED PAD_ROW_CONTRIBUTES PAD_ROW_NEG_ZERO NO_FLUSH_ACC GATHER_NO_FLUSH GATHER_CLAMP_OOR ACCUM_BY_ADD ACCUM_REFILLS FOLD_VIA_GEMM_ONEHOT SORT_KEY_ID_ONLY_UNSTABLE"
 arms=${*:-$ALL_ARMS}
 
 build() {
@@ -57,12 +63,14 @@ build() {
 echo "== clean arm (must PASS)"
 build "$out/embedding-check-clean"
 if ! MOJOLEARN_EMB_EXPECT_SABOTAGE=none MOJOLEARN_IDENTITY_TRACE="$out/clean.card" \
-        "$out/embedding-check-clean" > "$out/clean.log" 2>&1; then
+        MOJOLEARN_EMB_CHECK_CLAUSE_D=1 MOJOLEARN_EMB_CHECK_CLAUSE_E=1 \
+        "$out/embedding-check-clean" > "$out/clean.log" 2>&1 \
+        || ! grep -q "^embedding_check: GREEN, clauses (a), (b), (c), (f), (d), (e) PASS" "$out/clean.log"; then
     echo "FAIL: the clean embedding check did not pass; nothing below means anything" >&2
     tail -20 "$out/clean.log" >&2
     exit 1
 fi
-echo "   clean: PASS ($(wc -l < "$out/clean.log") log lines)"
+echo "   clean: PASS, $(grep -m1 "^embedding_check: GREEN" "$out/clean.log")"
 
 # HOW A SABOTAGE BUILD REPORTS (read from the check, 2026-09-14 legs). Under a
 # sabotage build embedding_check.mojo INVERTS its own verdict: clause (g)
