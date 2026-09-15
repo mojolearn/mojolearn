@@ -1,0 +1,10 @@
+== gp
+== gp_infer
+== mixture
+      1 gmm_sample_host
+      1 gmmh_e_step
+      1 gmmh_m_step
+      1 gmmh_score_samples
+== mixture_infer
+      1 gmm_sample_host
+      1 gmmh_score_samples

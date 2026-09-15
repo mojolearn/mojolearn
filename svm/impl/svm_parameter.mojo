@@ -11,7 +11,7 @@ What the record carries that the brief's rung 1 does not use, and what
 happens to it:
 
     svmType                C_SVC and EPSILON_SVR are honored; NU_SVC and
-                           NU_SVR are raised by name, which is upstream's own
+                           NU_SVR are raised by name, which is the reference's own
                            boundary. This line read "SVR is rung 2" until
                            `fea6becc` (2026-08-31)
     epsilon                honored only as SVR's parameter: raised if non-zero
@@ -62,6 +62,11 @@ comptime KERNEL_POLYNOMIAL = 1
 comptime KERNEL_RBF = 2
 comptime KERNEL_TANH = 3
 comptime KERNEL_PRECOMPUTED = 4
+
+#: The POLYNOMIAL degree cap, DEVIATION 1663's: equal to
+#: `kernel_methods/impl/distance/kernel_matrices.mojo::KM_MAX_DEGREE`, whose
+#: `polynomial_epilogue_kernel` the SVM Gram matrix launches.
+comptime SVM_MAX_POLY_DEGREE = 32
 
 
 @fieldwise_init
@@ -145,7 +150,7 @@ def check_rung1_scope(
     # the two differ in the gradient initialization, the domain size and how
     # the coefficients are combined, not in the solver.
     #
-    # NU_SVC and NU_SVR stay refused, and that is upstream's own boundary
+    # NU_SVC and NU_SVR stay refused, and that is the reference's own boundary
     # rather than ours: `smosolver.cuh`'s Initialize has no arm for them
     # either.
     if param.svmType != C_SVC and param.svmType != EPSILON_SVR:
@@ -154,7 +159,7 @@ def check_rung1_scope(
             + " is not implemented (C_SVC and EPSILON_SVR are; NU_SVC/NU_SVR are"
             + " unimplemented upstream too)"
         )
-    # `epsilon` IS THE SVR PARAMETER AND ONLY THAT. C_SVC ignores it upstream,
+    # `epsilon` IS THE SVR PARAMETER AND ONLY THAT. C_SVC ignores it in the reference,
     # so a non-zero value on a classifier is still refused rather than
     # silently dropped; on a regressor it is required to be finite and
     # non-negative, which is DEVIATION 636's family (NaN fails `< 0.0` and
@@ -183,14 +188,31 @@ def check_rung1_scope(
             + " MiB: the raft::cache LRU is not implemented in rung 1; pass 0 (their"
             + " n_cache_sets == 0 path, taken exactly). See svm/NOT_IMPLEMENTED.tsv"
         )
-    if kp.kernel == KERNEL_POLYNOMIAL:
-        raise Error("svm: kernel=POLYNOMIAL is not implemented in rung 1 (degree, coef0 unused)")
     if kp.kernel == KERNEL_TANH:
         raise Error("svm: kernel=TANH is not implemented in rung 1 (coef0 unused)")
     if kp.kernel == KERNEL_PRECOMPUTED:
         raise Error("svm: kernel=PRECOMPUTED is not implemented in rung 1")
-    if kp.kernel != KERNEL_LINEAR and kp.kernel != KERNEL_RBF:
+    if kp.kernel != KERNEL_LINEAR and kp.kernel != KERNEL_RBF and kp.kernel != KERNEL_POLYNOMIAL:
         raise Error("svm: unknown kernel " + String(kp.kernel))
+    if kp.kernel == KERNEL_POLYNOMIAL:
+        # DEVIATION 1663 (kernel_methods): the power is an ascending repeated
+        # product, so the degree is a non-negative integer at or below the cap.
+        if kp.degree < 0 or kp.degree > SVM_MAX_POLY_DEGREE:
+            raise Error(
+                "svm: degree must be an integer in [0, " + String(SVM_MAX_POLY_DEGREE)
+                + "] for the POLYNOMIAL kernel, got " + String(kp.degree)
+                + " (DEVIATION 1663: an ascending repeated product)"
+            )
+        if not isfinite(kp.gamma) or kp.gamma < 0.0:
+            raise Error(
+                "svm: gamma must be finite and >= 0 for the POLYNOMIAL kernel, got "
+                + String(kp.gamma) + " (DEVIATION 636)"
+            )
+        if not isfinite(kp.coef0):
+            raise Error(
+                "svm: coef0 must be finite for the POLYNOMIAL kernel, got "
+                + String(kp.coef0) + " (DEVIATION 636)"
+            )
     if has_sample_weight:
         raise Error("svm: sample_weight is not implemented in rung 1 (InitPenalty's weighted arm)")
     # DEVIATION 636: NaN fails `<= 0.0` and would pass; ask for finite first.

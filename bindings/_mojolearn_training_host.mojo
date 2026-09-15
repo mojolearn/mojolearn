@@ -50,9 +50,19 @@ training-primitives lanes reach:
                   mojo` restated over the embedding and GEMM oracles and the
                   RMSNorm kernels' statements with the caller's eps.
 
-Every other entry of the GPU training binding (the Samba stack's own block
-operations, the neural RNG and the multi-GPU availability probes) is
-deliberately ABSENT, so those surfaces refuse BY NAME through `_HostBinding`.
+lane/cpu-training-samba (2026-09-15) adds the neural RNG the Samba stack's
+initializers and dropout draw from:
+
+  `neural_rng`    `core/philox_neural.mojo::neural_rng_host`, the device
+                  kernel over its launch grid as `tools/mamba_host_gen.py`
+                  writes it out for the host (`mamba/host/gen/philox_neural.
+                  mojo` over `mamba/host/gen/philox.mojo`): the same Philox
+                  block, layout, integer-to-float mapping and `identical_*`
+                  seams, one serial loop.
+
+Every other entry of the GPU training binding (the multi-GPU availability
+probes) is deliberately ABSENT, so those surfaces refuse BY NAME through
+`_HostBinding`.
 
 The sabotage arm (`training_host_sabotage`) is
 `training/host/mlp_oracle.mojo::MLP_ORACLE_HOST_SABOTAGE`: every row sum is
@@ -99,6 +109,8 @@ from training.host.samba_ops_oracle import (
     host_samba_rms_norm_backward,
     host_samba_rms_norm_forward,
 )
+from mamba.host.device_shim import DeviceContext as HostDeviceContext
+from mamba.host.gen.philox_neural import neural_rng_host
 from training.host.mlp_oracle import (
     MLP_ORACLE_HOST_SABOTAGE,
     host_mlp_bias_activation,
@@ -733,6 +745,35 @@ def accumulation_is_aligned_binding(params: PythonObject) raises -> PythonObject
     return PythonObject(0)
 
 
+def neural_rng_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`bindings/_mojolearn_training.mojo::neural_rng_binding`'s contract:
+    addresses = [out (n f32, written), inp (n f32 for the dropout kinds,
+    else a one-float placeholder)]; params = [n, offset, seed_lo, seed_hi,
+    stream_id, kind, a, b]. The draws are `core/philox_neural.mojo`'s
+    kernel over its launch grid, as tools/mamba_host_gen.py writes it out
+    for the host (lane/cpu-training-samba, 2026-09-15)."""
+    var a = _addrs(addresses, 2, "neural_rng")
+    _params(params, 8, "neural_rng")
+    var n = Int(py=params[0])
+    var offset = Int(py=params[1])
+    var seed_lo = Int(py=params[2])
+    var seed_hi = Int(py=params[3])
+    var stream_id = Int(py=params[4])
+    var kind = Int(py=params[5])
+    var pa = Float32(Float64(py=params[6]))
+    var pb = Float32(Float64(py=params[7]))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = HostDeviceContext()
+        count = neural_rng_host(
+            ctx, f32_ptr(a[0]), f32_ptr(a[1]), n, offset, seed_lo, seed_hi,
+            stream_id, kind, pa, pb,
+        )
+    return PythonObject(count)
+
+
 @export
 def PyInit__mojolearn_training_host() abi("C") -> PythonObject:
     try:
@@ -757,6 +798,7 @@ def PyInit__mojolearn_training_host() abi("C") -> PythonObject:
         module.def_function[rms_norm_backward_binding]("rms_norm_backward")
         module.def_function[linear_forward_binding]("linear_forward")
         module.def_function[linear_backward_binding]("linear_backward")
+        module.def_function[neural_rng_binding]("neural_rng")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_training_host: ", error))

@@ -86,6 +86,8 @@ from metrics.host.metrics_oracle import (
     host_adjusted_rand_score,
     host_entropy,
     host_fowlkes_mallows,
+    host_weighted_accuracy,
+    host_weighted_r2,
     host_homogeneity_score,
     host_mutual_info,
     host_r2_score,
@@ -185,7 +187,9 @@ def metrics_host_column_binding() raises -> PythonObject:
 def metrics_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary was built with -D MOJOLEARN_HOST_SABOTAGE=1 (the
     gate's negative control): every slab tree's chunk boundaries shifted by
-    one value, which moves r2 and the silhouette, and the spectral
+    one value, a perturbed value read by accuracy, the adjusted Rand index,
+    entropy, mutual information, r2 and the silhouette
+    (`metrics/host/metrics_oracle.mojo`, THE NEGATIVE CONTROL), and the spectral
     recluster seeded one draw off, and every UMAP negative draw keyed one
     epoch late; refused outside the gate as one set."""
     return PythonObject(
@@ -293,6 +297,43 @@ def mutual_info_score_binding(
         _check_range(lower, upper)
         out = host_mutual_info(yt, yp, n, lower, upper)
     return PythonObject(out)
+
+
+def accuracy_score_weighted_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    w_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Weighted accuracy on the host. `params`: `0 n`."""
+    _want(String("accuracy_score_weighted"), params, 1)
+    var n = _index(params[0])
+    var yt = read_i32(_index(y_true_addr), n)
+    var yp = read_i32(_index(y_pred_addr), n)
+    var w = read_f32(_index(w_addr), n)
+    var out = Float32(0.0)
+    with GILReleased(Python()):
+        _check_pair(yt, yp, n)
+        out = host_weighted_accuracy(yt, yp, w, n)
+    return PythonObject(Float64(out))
+
+
+def r2_score_weighted_binding(
+    y_addr: PythonObject,
+    y_hat_addr: PythonObject,
+    w_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Weighted R2 on the host (`force_finite=True`). `params`: `0 n`."""
+    _want(String("r2_score_weighted"), params, 1)
+    var n = _index(params[0])
+    var y = read_f32(_index(y_addr), n)
+    var yh = read_f32(_index(y_hat_addr), n)
+    var w = read_f32(_index(w_addr), n)
+    var out = Float32(0.0)
+    with GILReleased(Python()):
+        out = host_weighted_r2(y, yh, w, n)
+    return PythonObject(Float64(out))
 
 
 def fowlkes_mallows_score_binding(
@@ -969,6 +1010,8 @@ def PyInit__mojolearn_metrics_host() abi("C") -> PythonObject:
         module.def_function[entropy_binding]("entropy")
         module.def_function[mutual_info_score_binding]("mutual_info_score")
         module.def_function[fowlkes_mallows_score_binding]("fowlkes_mallows_score")
+        module.def_function[accuracy_score_weighted_binding]("accuracy_score_weighted")
+        module.def_function[r2_score_weighted_binding]("r2_score_weighted")
         module.def_function[homogeneity_score_binding]("homogeneity_score")
         module.def_function[completeness_score_binding]("completeness_score")
         module.def_function[v_measure_score_binding]("v_measure_score")

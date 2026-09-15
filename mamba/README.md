@@ -50,7 +50,7 @@ The contracts define the profile; executable checks are the status source.
 
 ## Independent gradient oracle
 
-`tools/mamba_gradient_oracle.py` differentiates the cited upstream PyTorch
+`tools/mamba_gradient_oracle.py` differentiates the cited reference PyTorch
 forward transcription in float64 and independently audits selected gradient
 cells with central finite differences. It covers all three families and emits
 portable `grad.<tensor>.f64` files plus a manifest:
@@ -64,8 +64,15 @@ pixi run -e skgpu mamba-grad-m3
 For an accelerator run, invoke the script through `pixi run -e skgpu python`
 and add `--device cuda`. The same spelling selects a ROCm device in a ROCm
 PyTorch build; the manifest records CUDA versus HIP. These are tolerance
-references. IDENTICAL validation still requires a Mojo device card to match
-the pinned Mojo host oracle bit for bit.
+references. IDENTICAL validation is bitwise and separate. The Mamba-1 host
+backward oracle (`checks/mamba_backward_oracle.mojo`) did NOT match the device
+VJP until 2026-09-15: three of its readings were ones the plan had rejected
+(B7's fused silu', B18's two folds, T1's stored seed); since the fix
+`checks/mamba_backward_host_oracle_check.mojo` holds it to the device pass bit
+for bit on all 16 corpus cases, on the host. Mamba 2 and Mamba 3 have no host
+backward oracle; their CPU backward is the device pass itself, generated for
+the host by `tools/mamba_host_gen.py`, and the CPU identity gate diffs it
+against the Apple, NVIDIA and AMD columns.
 
 Strict public-prefill gates are:
 

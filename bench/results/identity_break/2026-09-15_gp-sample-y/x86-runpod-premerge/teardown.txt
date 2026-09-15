@@ -1,0 +1,5 @@
+pod=x62duunyatwvfx
+name=mojolearn-cpu-gp-sample-y-20260915-174141
+terminated_verified=1
+exit=1
+at=2026-09-15T17:44:45Z

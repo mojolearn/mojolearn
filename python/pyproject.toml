@@ -230,6 +230,11 @@ mojolearn = [
     "reference_cards/*",
     "identity_columns/*/*.json",
     "identity_columns/COMMIT",
+    # `python -m mojolearn verify --all` (2026-09-15): the reference hash
+    # table generated from the committed identity_break records, and the
+    # portable GPU-trained models with their manifest (docs/VERIFY.md).
+    "verify_reference/*.json",
+    "verify_reference/models/*",
     "cuda/*.so", "cuda/identical/*.so", "cuda/deterministic/*.so", "cuda/.libs/*",
     "cuda/sm_*/*.so", "cuda/sm_*/identical/*.so", "cuda/sm_*/deterministic/*.so", "cuda/sm_*/.libs/*",
     "hip/*.so", "hip/identical/*.so", "hip/deterministic/*.so", "hip/.libs/*",

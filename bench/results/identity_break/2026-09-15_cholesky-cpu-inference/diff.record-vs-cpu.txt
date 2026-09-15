@@ -1,0 +1,60 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 165 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_linalg_host'] commit=0486e44ba86b4c95ca5c302c4fd4520792025ee1
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| cholesky/base                | IDENTICAL x4 | ce043656132b08b4 | ce043656132b08b4 | ce043656132b08b4 | ce043656132b08b4 |
+| cholesky/denormal            | IDENTICAL x4 | 1034aafd0276dd46 | 1034aafd0276dd46 | 1034aafd0276dd46 | 1034aafd0276dd46 |
+| cholesky/denormal_ftz        | IDENTICAL x4 | 1034aafd0276dd46 | 1034aafd0276dd46 | 1034aafd0276dd46 | 1034aafd0276dd46 |
+| cholesky/dupes               | IDENTICAL x4 | 6f1c8237b2b0fde3 | 6f1c8237b2b0fde3 | 6f1c8237b2b0fde3 | 6f1c8237b2b0fde3 |
+| cholesky/hashed              | IDENTICAL x4 | 5fb5c65c65498259 | 5fb5c65c65498259 | 5fb5c65c65498259 | 5fb5c65c65498259 |
+| cholesky/negative            | IDENTICAL x4 | 7e22ee0c08fc0bac | 7e22ee0c08fc0bac | 7e22ee0c08fc0bac | 7e22ee0c08fc0bac |
+| cholesky/odd                 | IDENTICAL x4 | f14ab646fe0965fd | f14ab646fe0965fd | f14ab646fe0965fd | f14ab646fe0965fd |
+| cholesky/ties                | IDENTICAL x4 | ab1c40c4c2552b74 | ab1c40c4c2552b74 | ab1c40c4c2552b74 | ab1c40c4c2552b74 |
+| cholesky/wide                | IDENTICAL x4 | d65809f907fe79c3 | d65809f907fe79c3 | d65809f907fe79c3 | d65809f907fe79c3 |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| cholesky/base                | infer  | IDENTICAL x4 | d2e567879951cd00 | d2e567879951cd00 | d2e567879951cd00 | d2e567879951cd00 |
+| cholesky/base                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 66612d6066e7c903 |
+| cholesky/base                | batch  | IDENTICAL x4 | 4f247a3c9540ed93 | 4f247a3c9540ed93 | 4f247a3c9540ed93 | 4f247a3c9540ed93 |
+| cholesky/denormal            | infer  | IDENTICAL x4 | 32f10944298bb446 | 32f10944298bb446 | 32f10944298bb446 | 32f10944298bb446 |
+| cholesky/denormal            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 7d9b733f5277afc0 |
+| cholesky/denormal            | batch  | IDENTICAL x4 | 6ac1ebde83b416fa | 6ac1ebde83b416fa | 6ac1ebde83b416fa | 6ac1ebde83b416fa |
+| cholesky/denormal_ftz        | infer  | IDENTICAL x4 | 32f10944298bb446 | 32f10944298bb446 | 32f10944298bb446 | 32f10944298bb446 |
+| cholesky/denormal_ftz        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 7d9b733f5277afc0 |
+| cholesky/denormal_ftz        | batch  | IDENTICAL x4 | 6ac1ebde83b416fa | 6ac1ebde83b416fa | 6ac1ebde83b416fa | 6ac1ebde83b416fa |
+| cholesky/dupes               | infer  | IDENTICAL x4 | d2e567879951cd00 | d2e567879951cd00 | d2e567879951cd00 | d2e567879951cd00 |
+| cholesky/dupes               | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 66612d6066e7c903 |
+| cholesky/dupes               | batch  | IDENTICAL x4 | 4f247a3c9540ed93 | 4f247a3c9540ed93 | 4f247a3c9540ed93 | 4f247a3c9540ed93 |
+| cholesky/hashed              | infer  | IDENTICAL x4 | 7883549fbd7cd9ac | 7883549fbd7cd9ac | 7883549fbd7cd9ac | 7883549fbd7cd9ac |
+| cholesky/hashed              | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | d2d35dd1c0e50dd7 |
+| cholesky/hashed              | batch  | IDENTICAL x4 | 7f5db9df49fa144b | 7f5db9df49fa144b | 7f5db9df49fa144b | 7f5db9df49fa144b |
+| cholesky/negative            | infer  | IDENTICAL x4 | b676d94cd17bc3f9 | b676d94cd17bc3f9 | b676d94cd17bc3f9 | b676d94cd17bc3f9 |
+| cholesky/negative            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | e2138cccbaa7ca3e |
+| cholesky/negative            | batch  | IDENTICAL x4 | f8023ba763c7a769 | f8023ba763c7a769 | f8023ba763c7a769 | f8023ba763c7a769 |
+| cholesky/odd                 | infer  | IDENTICAL x4 | 75d9bfac2c1c09d8 | 75d9bfac2c1c09d8 | 75d9bfac2c1c09d8 | 75d9bfac2c1c09d8 |
+| cholesky/odd                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | ca7267afcbdeaa17 |
+| cholesky/odd                 | batch  | IDENTICAL x4 | ff3b58dda958f58c | ff3b58dda958f58c | ff3b58dda958f58c | ff3b58dda958f58c |
+| cholesky/ties                | infer  | IDENTICAL x4 | 222d12985ad494e9 | 222d12985ad494e9 | 222d12985ad494e9 | 222d12985ad494e9 |
+| cholesky/ties                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 14c3d715c16b9864 |
+| cholesky/ties                | batch  | IDENTICAL x4 | 5d80a4c8eb280505 | 5d80a4c8eb280505 | 5d80a4c8eb280505 | 5d80a4c8eb280505 |
+| cholesky/wide                | infer  | IDENTICAL x4 | 4dacdc1854773af2 | 4dacdc1854773af2 | 4dacdc1854773af2 | 4dacdc1854773af2 |
+| cholesky/wide                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | a1df86c29534e4f5 |
+| cholesky/wide                | batch  | IDENTICAL x4 | 6728544ea8c96949 | 6728544ea8c96949 | 6728544ea8c96949 | 6728544ea8c96949 |
+
+summary (infer/model): IDENTICAL=9, OWED=9
+summary (batch): IDENTICAL=9
+summary (rlpair): 
+require-columns 4 over ['cholesky']: OK (9 OWED)
+OWED cholesky/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED cholesky/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED cholesky/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED cholesky/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED cholesky/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED cholesky/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED cholesky/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED cholesky/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED cholesky/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+summary (owed): OWED=9; the next release record owes exactly these cell parts; wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/ev0/owed.json

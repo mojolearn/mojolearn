@@ -17,8 +17,8 @@ so when more elements tie at the k-th distance than there are slots left,
 WHICH of them is returned is decided by atomic arrival order, and WHERE each
 returned element lands is decided by it too. Two runs on one device can
 return different neighbours; two vendors certainly can. That is a real
-property of the upstream, it is why IDENTITY_PATHS row 11 was a REFUSE, and
-the implemented file must keep it -- fixing a thing upstream does not do is an
+property of the reference, it is why IDENTITY_PATHS row 11 was a REFUSE, and
+the implemented file must keep it -- fixing a thing the reference does not do is an
 improvement, and improvements live outside `impl/` (ENGINEERING_RULES).
 
 This file is that improvement, reached only under `NUMERIC_IDENTICAL`.
@@ -32,7 +32,7 @@ The radix passes run over
 
 which is a TOTAL ORDER on (distance, index): equal distances are separated
 by the index, which is unique within a row by construction. The tie class
-the upstream resolves with an atomic therefore does not exist -- there is
+the reference resolves with an atomic therefore does not exist -- there is
 exactly one k-th element, `num_of_kth_needed` is exactly one, and the
 SELECTED SET is a pure function of the input. Eight passes of eight bits
 instead of four; the extra passes walk survivors, not the row, so the cost
@@ -103,7 +103,7 @@ def composite_key(value: Float32, index: UInt32, select_min: Bool) -> UInt64:
     """The total order: distance in the high half, index in the low half.
 
     `twiddle_in` is the implemented `cub::Traits<float>::TwiddleIn` -- the same
-    function the upstream selector uses -- so the high half orders exactly
+    function the reference selector uses -- so the high half orders exactly
     as RAFT's 32-bit key does and this key is a REFINEMENT of theirs, never
     a different ordering. The low half breaks what the high half leaves
     equal, always toward the LOWER INDEX, which is the tie-break

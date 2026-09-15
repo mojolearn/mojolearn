@@ -113,7 +113,7 @@ def fit_seconds_and_mse(scratch, prefix, border_count, trees, depth):
 
 def predict_prep(scratch, prefix, border_count, trees, depth):
     """Train once and cache (model, RAW pool) for `predict_seconds`. The
-    raw pool mirrors their model_evaluation_speed notebook: `cb.Pool(X)`
+    raw pool follows their model_evaluation_speed notebook: `cb.Pool(X)`
     built OUTSIDE the timed region, quantization inside `predict` against
     the model's own borders."""
     p = _pool(str(scratch), str(prefix), int(border_count))

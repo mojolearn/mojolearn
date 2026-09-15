@@ -296,13 +296,36 @@ def parse_model_text(text):
     )
 
 
+#: The `estimator` members a `mojolearn-gbdt-1` archive may carry, with the
+#: losses each class can save. `OrderedRMSE` and
+#: `ExperimentalTwoLevelFeatureFreq` subclass `GradientBoosting` and inherit
+#: its `save`, so their archives are the same format holding the same model
+#: text records (symmetric trees, float and one-hot `cat` features); the name
+#: is kept so a report says which class trained the file. A class whose model
+#: text carries CTR or tensor CTR records is still refused by the parser, by
+#: record name, whatever the class.
+GBDT_ESTIMATORS = {
+    'GradientBoosting': None,
+    'OrderedRMSE': ('RMSE',),
+    'ExperimentalTwoLevelFeatureFreq': ('RMSE',),
+}
+
+
 class HostGBDT:
-    """A saved GradientBoosting model that predicts on the CPU."""
+    """A saved GradientBoosting, OrderedRMSE or ExperimentalTwoLevelFeatureFreq
+    model that predicts on the CPU."""
 
     estimator = 'GradientBoosting'
 
     def __init__(self, *, loss, text, n_features_in, approx_dim, n_classes=None,
-                 numeric_mode=None, bias=None):
+                 numeric_mode=None, bias=None, estimator='GradientBoosting'):
+        if estimator not in GBDT_ESTIMATORS:
+            raise ValueError(f"mojolearn: {estimator!r} is not a gradient boosting class this loader reads")
+        losses = GBDT_ESTIMATORS[estimator]
+        if losses is not None and str(loss) not in losses:
+            raise ValueError(f"mojolearn: a {estimator} archive with loss {loss!r}; that class saves "
+                             f"{', '.join(losses)} only, the file is corrupt")
+        self.estimator = estimator
         self.loss = str(loss)
         self.numeric_mode = numeric_mode
         self.model_ = str(text)
@@ -330,11 +353,13 @@ class HostGBDT:
 
     @classmethod
     def from_file(cls, path):
-        """A model from a file written by `GradientBoosting.save`."""
+        """A model from a file written by `GradientBoosting.save` (or the
+        `OrderedRMSE` and `ExperimentalTwoLevelFeatureFreq` save it inherits)."""
         arrays = _serialize.read_npz(path, GBDT_FORMAT)
         saved_as = _serialize.scalar_str(arrays, 'estimator')
-        if saved_as != cls.estimator:
-            raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not {cls.estimator}")
+        if saved_as not in GBDT_ESTIMATORS:
+            raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not "
+                             f"{' or '.join(GBDT_ESTIMATORS)}")
         mode = None
         if 'numeric_mode' in arrays:
             mode = _serialize.scalar_str(arrays, 'numeric_mode')
@@ -350,7 +375,7 @@ class HostGBDT:
         return cls(loss=_serialize.scalar_str(arrays, 'loss'), text=text,
                    n_features_in=int(meta[0]), approx_dim=int(meta[1]),
                    n_classes=None if int(meta[2]) < 0 else int(meta[2]),
-                   numeric_mode=mode, bias=float(bias))
+                   numeric_mode=mode, bias=float(bias), estimator=saved_as)
 
     @property
     def n_trees(self):

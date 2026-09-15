@@ -33,7 +33,7 @@ chunk's working sequence (buffered rows ++ new rows), and runs the chunked
 SSD over it. A prefill is the same call with a fresh zero state. The padded
 folds a decode step runs over the open chunk are bitwise the folds a
 prefill ending at that token runs -- that is the construction gate D then
-verifies. The upstream per-token step recurrence
+verifies. The reference per-token step recurrence
 (`selective_state_update_ref`:277-282) is NOT here; it lives in the impl
 file as the required-RED arm STEP_UPSTREAM_RECURRENCE.
 
@@ -168,7 +168,7 @@ struct Mamba2State(Copyable, Movable):
     def set_initial_states(mut self, init: List[Float32]) raises:
         """`initial_states` in (ssd_minimal.py:64-66, prepended as chunk
         -1's state): legal only on a FRESH state -- handing a mid-chunk
-        state a new chunk -1 has no upstream meaning."""
+        state a new chunk -1 has no reference meaning."""
         if self.buf_len != 0:
             raise Error(
                 "Mamba2State.set_initial_states: the state is mid-chunk"
@@ -503,7 +503,7 @@ def ssd_core_oracle(
                     h_completed[i] = h_run[i]
 
         # h_last: the S17 value after the FINAL (padded) chunk -- the
-        # REPORT stage (upstream's final_state, ssd_minimal.py:69), not the
+        # REPORT stage (the reference's final_state, ssd_minimal.py:69), not the
         # resumption state.
         for i in range(nh * p_dim * n_state):
             st.h_last[bb * nh * p_dim * n_state + i] = h_run[i]

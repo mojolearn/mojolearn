@@ -7,7 +7,7 @@ Reference: `cuml/cpp/src/dbscan/dbscan.cuh::compute_batch_size` and
 `core_sample_indices`).
 
 `sample_weight` is plumbed since 2026-09-01 and `metric` carries an L1 arm
-that has no upstream (DEVIATION 27, `dbscan/impl/neighbors/
+that has no reference counterpart (DEVIATION 27, `dbscan/impl/neighbors/
 epsilon_neighborhood.mojo`). Neither changes the batch-size estimate:
 `compute_batch_size` is `dbscan.cuh:34` and their `est_mem_per_row` and
 `est_mem_fixed` count neither the weight array nor `wght_sum`, which is
@@ -83,7 +83,7 @@ def compute_batch_size(
     Their `estimated_memory` out-parameter (`:96`) feeds one debug log line
     (`dbscan.cuh:171-173`) and is not returned here.
 
-    DEVIATION 37 (archive/reference/PORTING.md): their `:66` computes
+    DEVIATION 37: their `:66` computes
     `max_mbytes_per_batch * 1000000 - est_mem_fixed` in `size_t`, so a
     nonzero budget smaller than the fixed cost WRAPS, and the `min` at `:69`
     turns the wrap into a full-size batch. Ours raises instead. Their
@@ -202,8 +202,15 @@ def dbscan_fit_impl_weighted(
     phase_timing: Bool = False,
     metric: Int = DBSCAN_METRIC_L2,
     has_weights: Bool = False,
+    out_core_addr: Int = 0,
 ) raises -> Int:
     """`dbscanFitImpl` (`dbscan.cuh:101`): size the batch, allocate, run.
+
+    `out_core_addr` (lane/inference-transductive-predict, 2026-09-15): when
+    nonzero, the address of `n_rows` host uint8 that receive a COPY of the
+    fit's core mask after the fit returns, for `DBSCAN(prediction_data=
+    True)`. The mask is the buffer `dbscan_fit` already computed; the copy
+    adds no arithmetic and runs after every recorded stage.
 
     Their memory estimate, copied from `dbscan.cuh:157-158` (the
     `max_mbytes_per_batch == 0` guard around it is `:147`):
@@ -231,7 +238,7 @@ def dbscan_fit_impl_weighted(
     which is also theirs.
 
     `phase_timing` prints `PHASE <name> batch <i>/<n> <ms>` per phase; see
-    `dbscan_fit` and archive/reference/PORTING.md 38. Off, nothing prints.
+    `dbscan_fit`. Off, nothing prints.
     """
     if n_rows <= 0:
         raise Error("No rows in the input array. DBSCAN cannot be fitted!")
@@ -268,7 +275,7 @@ def dbscan_fit_impl_weighted(
     )
     ctx.synchronize()
 
-    return dbscan_fit(
+    var passes = dbscan_fit(
         ctx,
         x,
         adj,
@@ -292,3 +299,16 @@ def dbscan_fit_impl_weighted(
         metric,
         has_weights,
     )
+    if out_core_addr != 0:
+        var hc = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=core)
+        ctx.synchronize()
+        var dst = MutPointer[UInt8, MutUntrackedOrigin](
+            unsafe_from_address=out_core_addr
+        )
+        for i in range(n_rows):
+            dst.unsafe_store(i, hc.unsafe_ptr().unsafe_load(i))
+        _ = hc^
+    _ = core^
+    return passes

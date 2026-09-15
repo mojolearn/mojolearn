@@ -8,9 +8,9 @@ Reference: `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}`
 `TSubsetsHelper<NCudaLib::TMirrorMapping>::Split`
 (`pointwise_optimization_subsets.h:74-93`).
 
-RUNG 2. `archive/plans/NEXT_TWO.md` and `archive/reference/PORTING.md` 119 both priced this as "the fold
-layout plus wiring, not a second searcher", on the strength of `archive/reference/PORTING.md`
-91 B. **THAT PRICING IS WRONG AND THIS FILE IS WHY.** The correction is
+RUNG 2. `archive/plans/NEXT_TWO.md` priced this as "the fold
+layout plus wiring, not a second searcher", on the strength of the claim
+that the two searchers share their entire stack. **THAT PRICING IS WRONG AND THIS FILE IS WHY.** The correction is
 below and it is the main result of this rung; the identity gate is the
 second.
 
@@ -306,7 +306,7 @@ def fit_feature_parallel_oblivious_tree_structure(
     defect, and a permanently wired defect selector is one. The reach
     evidence for this file is five defects planted by EDITING it and re-run,
     tabulated in `checks/feature_parallel_identity_check.mojo`'s
-    docstring and in `archive/reference/PORTING.md` 120.
+    docstring.
     """
     # `CB_ENSURE(FoldBasedTasks.size() || SingleTaskTarget);` (`:47`)
     if n_rows <= 0:

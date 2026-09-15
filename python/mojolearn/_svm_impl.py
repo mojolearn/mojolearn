@@ -50,6 +50,7 @@ import os
 import sys
 
 import math
+import numbers
 
 from . import _backend
 from . import _serialize
@@ -70,6 +71,8 @@ from .linear_model import (
 
 #: `SVC.save`'s format tag (the kde svc host lane, 2026-09-14).
 _SVC_FORMAT = "mojolearn-svc-1"
+#: `SVR.save`'s format tag (lane/inference-svm, 2026-09-15).
+_SVR_FORMAT = "mojolearn-svr-1"
 
 # cuML's `KernelType` values (kernel_params.hpp). Only two are implemented.
 _KERNEL_LINEAR = 0
@@ -79,6 +82,15 @@ _KERNEL_TANH = 3
 _KERNEL_PRECOMPUTED = 4
 
 _KERNELS = {"linear": _KERNEL_LINEAR, "rbf": _KERNEL_RBF}
+
+# SVC also carries POLYNOMIAL (lane/cpu-training-small-gaps, 2026-09-15): the
+# identical linear Gram, then kernel_methods' polynomial_epilogue_kernel
+# (DEVIATION 1663). SVR keeps _KERNELS and refuses 'poly' by name.
+_SVC_KERNELS = dict(_KERNELS, poly=_KERNEL_POLYNOMIAL)
+
+#: DEVIATION 1663's cap, kernel_methods/impl/distance/kernel_matrices.mojo::KM_MAX_DEGREE
+#: and svm/impl/svm_parameter.mojo::SVM_MAX_POLY_DEGREE.
+_MAX_POLY_DEGREE = 32
 
 # The names cuML accepts that this implementation does not, and the reason each is
 # refused. Refused BY NAME rather than silently downgraded to 'rbf'.
@@ -107,6 +119,12 @@ _REFUSED_KERNELS = {
         "predict arm are both unimplemented (svm/NOT_IMPLEMENTED.tsv)"
     ),
 }
+
+# SVC's refusals: the shared table less 'poly', which SVC implements.
+_SVC_REFUSED_KERNELS = {k: v for k, v in _REFUSED_KERNELS.items() if k != "poly"}
+_SVC_REFUSED_KERNELS["polynomial"] = (
+    "cuML and scikit-learn spell this kernel 'poly', which SVC implements"
+)
 
 _EXT_NAME = "_mojolearn_svm"
 _PKG = __name__.rsplit(".", 1)[0]
@@ -202,22 +220,30 @@ class SVC(NumericModeMixin):
         C               honored   the penalty. Must be finite and positive;
                                   a non-finite C is refused by name
                                   (DEVIATION 636)
-        kernel          honored   'linear' and 'rbf' only. 'poly',
-                                  'sigmoid' and 'precomputed' are cuML's
-                                  other three and each is REFUSED BY NAME
-                                  with what is missing
+        kernel          honored   'linear', 'rbf' and 'poly'. 'poly' is the
+                                  identical linear Gram then
+                                  `(gamma * K + coef0) ** degree` as
+                                  kernel_methods' DEVIATION 1663 epilogue
+                                  (one fused multiply-add, an ascending
+                                  repeated product). 'sigmoid' and
+                                  'precomputed' are REFUSED BY NAME with
+                                  what is missing
         gamma           honored   a finite float >= 0, or the string 'auto'
                                   (= 1 / n_features, cuML's `_get_gamma`).
                                   'scale' is REFUSED -- see DEVIATION 870
                                   below, and note it is cuML's default
-        degree          refused   read only by POLYNOMIAL, which is refused
-        coef0           refused   read only by POLYNOMIAL and TANH, both
-                                  refused
+        degree          honored   with kernel='poly': an integer in
+                                  [0, 32] (DEVIATION 1663). With any other
+                                  kernel only the default 3 is accepted,
+                                  since nothing would read it
+        coef0           honored   with kernel='poly': a finite float. With
+                                  any other kernel only the default 0.0
+                                  is accepted
         tol             honored   the stopping tolerance; must be finite and
                                   positive (DEVIATION 636)
         cache_size      honored   ONLY as the prediction buffer, see
                                   DEVIATION 871 below
-        class_weight    refused   upstream it becomes `sample_weight`, and
+        class_weight    refused   in the reference it becomes `sample_weight`, and
                                   `sample_weight` is not implemented: the
                                   weighted `InitPenalty` arm (C_vec = C * w)
                                   has no implementation (svm/NOT_IMPLEMENTED.tsv)
@@ -226,7 +252,7 @@ class SVC(NumericModeMixin):
         nochange_steps  honored   cuML's convergence rule, with
                                   its n_small_diff counter
         verbose         refused   anything truthy. It selects LOG LINES
-                                  upstream (CUML_LOG_DEBUG); this implementation
+                                  in the reference (CUML_LOG_DEBUG); this implementation
                                   prints none, so accepting it would be
                                   accepting-and-ignoring
         random_state    refused   anything but None. The binary C-SVC solver
@@ -265,7 +291,7 @@ class SVC(NumericModeMixin):
     'auto' is kept because `1 / n_features` is an integer reciprocal in
     float64 and is the same bits on every host.
 
-    DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT. Upstream it is
+    DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT. In the reference it is
     two things under one name: the training-time `raft::cache` LRU kernel
     cache, and the ceiling on the prediction kernel-tile buffer
     (`svm_base.pyx:554`, passed as `buffer_size` to `svcPredict`). The
@@ -274,8 +300,8 @@ class SVC(NumericModeMixin):
     holds the answer fixed over it from 0.001 MiB to 200 MiB. The training
     half is NOT implemented -- the solver always runs cuML's own
     `n_cache_sets == 0` path -- so `cache_size` does not affect training
-    time here the way it does upstream. It cannot affect training RESULTS
-    upstream either (`svm/NOT_IMPLEMENTED.tsv` carries that determinism
+    time here the way it does in the reference. It cannot affect training RESULTS
+    in the reference either (`svm/NOT_IMPLEMENTED.tsv` carries that determinism
     statement), so nothing numeric hangs on it.
 
     DEVIATION 873: the fitted model crosses back to the host and is
@@ -343,16 +369,16 @@ class SVC(NumericModeMixin):
         if not isinstance(kernel, str):
             raise ValueError("mojolearn SVC: kernel is a name")
         k = kernel.lower()
-        if k in _REFUSED_KERNELS:
+        if k in _SVC_REFUSED_KERNELS:
             raise NotImplementedError(
                 f"mojolearn SVC: kernel={kernel!r} is refused; "
-                + _REFUSED_KERNELS[k]
+                + _SVC_REFUSED_KERNELS[k]
             )
-        if k not in _KERNELS:
+        if k not in _SVC_KERNELS:
             raise ValueError(
                 f"mojolearn SVC: kernel={kernel!r} is not a kernel name; "
-                f"this implementation carries {sorted(_KERNELS)} and refuses cuML's "
-                f"other three by name ({sorted(_REFUSED_KERNELS)})"
+                f"this implementation carries {sorted(_SVC_KERNELS)} and refuses "
+                f"the others by name ({sorted(_SVC_REFUSED_KERNELS)})"
             )
         if isinstance(gamma, str):
             g = gamma.lower()
@@ -382,19 +408,36 @@ class SVC(NumericModeMixin):
                     f"kernel, got {gamma!r} (DEVIATION 636; scikit-learn's own "
                     "constraint is gamma >= 0)"
                 )
-        if degree != 3:
-            raise NotImplementedError(
-                f"mojolearn SVC: degree={degree!r} is refused; it is read only "
-                "by the POLYNOMIAL kernel, which is not implemented. Passing it "
-                "with a implemented kernel would be a parameter accepted and "
-                "ignored"
-            )
-        if coef0 != 0.0:
-            raise NotImplementedError(
-                f"mojolearn SVC: coef0={coef0!r} is refused; it is read only "
-                "by the POLYNOMIAL and TANH kernels, neither of which is "
-                "implemented"
-            )
+        if k == "poly":
+            if isinstance(degree, bool) or not isinstance(degree, numbers.Integral):
+                raise TypeError(
+                    f"mojolearn SVC: degree={degree!r} must be an integer; the "
+                    "polynomial power is an ascending repeated product (DEVIATION 1663)"
+                )
+            degree = int(degree)
+            if not 0 <= degree <= _MAX_POLY_DEGREE:
+                raise ValueError(
+                    f"mojolearn SVC: degree must be in [0, {_MAX_POLY_DEGREE}], got "
+                    f"{degree!r} (DEVIATION 1663)"
+                )
+            coef0 = float(coef0)
+            if not math.isfinite(coef0):
+                raise ValueError(
+                    f"mojolearn SVC: coef0 must be finite, got {coef0!r} (DEVIATION 636)"
+                )
+        else:
+            if degree != 3:
+                raise NotImplementedError(
+                    f"mojolearn SVC: degree={degree!r} is refused with kernel={k!r}; "
+                    "it is read only by kernel='poly'. Passing it with another kernel "
+                    "would be a parameter accepted and ignored"
+                )
+            if coef0 != 0.0:
+                raise NotImplementedError(
+                    f"mojolearn SVC: coef0={coef0!r} is refused with kernel={k!r}; it "
+                    "is read only by kernel='poly' (TANH, which also reads it, is not "
+                    "implemented)"
+                )
         C = float(C)
         if not math.isfinite(C):
             raise ValueError(
@@ -519,9 +562,9 @@ class SVC(NumericModeMixin):
             addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_fit_binding.
             # n_rows, n_features, kernel, gamma, C, tol, max_iter,
-            # nochange_steps
-            [n_rows, n_cols, _KERNELS[self.kernel], gamma, self.C, self.tol,
-             self.max_iter, self.nochange_steps],
+            # nochange_steps, degree, coef0
+            [n_rows, n_cols, _SVC_KERNELS[self.kernel], gamma, self.C, self.tol,
+             self.max_iter, self.nochange_steps, int(self.degree), float(self.coef0)],
         )
         n_support = int(n_support)
         # `np.float32(...)`: one rounding of the float64 slot to binary32.
@@ -591,11 +634,12 @@ class SVC(NumericModeMixin):
             addr(out, name="out"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_predict_binding.
             # n_rows, n_features, n_support, b, classes[0], classes[1],
-            # kernel, gamma, predict_class, cache_size_mib
+            # kernel, gamma, predict_class, cache_size_mib, degree, coef0
             [n_rows, self.n_features_in_, self.n_support_,
              float(self.intercept_[0]), float(self._label0),
-             float(self._label1), _KERNELS[self.kernel], self._gamma,
-             1 if predict_class else 0, self.cache_size],
+             float(self._label1), _SVC_KERNELS[self.kernel], self._gamma,
+             1 if predict_class else 0, self.cache_size,
+             int(self.degree), float(self.coef0)],
         )
         return out
 
@@ -659,6 +703,9 @@ class SVC(NumericModeMixin):
                 "<i8",
             ),
         }
+        if self.kernel == "poly":
+            # Only for poly, so every linear and rbf file keeps its bytes.
+            arrays["coef0"] = Array.from_list([float(self.coef0)], "<f8")
         return _serialize.write_npz(path, arrays)
 
     @classmethod
@@ -674,6 +721,13 @@ class SVC(NumericModeMixin):
         if hyper.size != 4:
             raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, 4 are needed")
         gamma_setting = _serialize.scalar_str(arrays, "gamma")
+        kernel_setting = _serialize.scalar_str(arrays, "kernel")
+        coef0 = 0.0
+        if kernel_setting == "poly":
+            coef0_arr = _serialize.exact(arrays, "coef0", "<f8")
+            if coef0_arr.size != 1:
+                raise ValueError(f"mojolearn: {path!r} coef0 must hold one float64")
+            coef0 = float(coef0_arr[0])
         obj = cls(
             C=float(hyper[0]),
             kernel=_serialize.scalar_str(arrays, "kernel"),
@@ -683,6 +737,7 @@ class SVC(NumericModeMixin):
             max_iter=int(meta[3]),
             nochange_steps=int(meta[4]),
             degree=int(meta[5]),
+            coef0=coef0,
         )
         _restore_mode(obj, arrays)
         nf, n_support = int(meta[0]), int(meta[1])
@@ -795,7 +850,7 @@ class SVR(NumericModeMixin):
                                   and `svm/impl/svm_parameter.mojo`
         cache_size      honored   ONLY as the prediction buffer, see
                                   DEVIATION 871 below. The TRAINING LRU it
-                                  also names upstream is unimplemented and
+                                  also names in the reference is unimplemented and
                                   `svm/impl/svm_parameter.mojo` refuses
                                   a non-zero one; `svm/estimator.mojo` pins
                                   the training value at 0 so that refusal
@@ -808,7 +863,7 @@ class SVR(NumericModeMixin):
                                   scikit-learn parameter; it is cuML's, and
                                   it is here because the solver reads it
         verbose         refused   `_svm_impl.py`, for anything truthy. It
-                                  selects LOG LINES upstream
+                                  selects LOG LINES in the reference
                                   (CUML_LOG_DEBUG); this implementation prints none,
                                   so accepting it would be
                                   accepting-and-ignoring
@@ -821,7 +876,7 @@ class SVR(NumericModeMixin):
                                   heuristic and cuML has no such thing:
                                   there is no row for it in
                                   `svm/NOT_IMPLEMENTED.tsv` because there is
-                                  nothing upstream of this implementation to leave
+                                  nothing in the reference to leave
                                   unimplemented. `SVC` omits it for the same
                                   reason
         sample_weight   refused   `_svm_impl.py`, in fit(). The weighted
@@ -908,6 +963,12 @@ class SVR(NumericModeMixin):
         raises AttributeError otherwise, as scikit-learn does.
     n_features_in_ : int
     """
+
+    #: This family's binding, for `NumericModeMixin._bind`
+    #: (lane/inference-svm, 2026-09-15): `predict` binds through
+    #: `self._bind`, which resolves what `_extension` resolves, so
+    #: `_classical_host.HostSVR` answers the CPU binding as `HostSVC` does.
+    _BINDING = _EXT_NAME
 
     def __init__(
         self,
@@ -1141,7 +1202,7 @@ class SVR(NumericModeMixin):
         # borrows these addresses and owns nothing (`_buffer.py`).
         dual = self.dual_coef_
         sv = self.support_vectors_
-        _extension(getattr(self, 'numeric_mode', None)).svr_predict(
+        self._bind(_EXT_NAME).svr_predict(
             addr_ro(q, name="q"),
             addr_ro(dual, name="dual") if self.n_support_ > 0 else 0,
             addr_ro(sv, name="sv") if self.n_support_ > 0 else 0,
@@ -1183,3 +1244,83 @@ class SVR(NumericModeMixin):
             # otherwise; the ratio is undefined and this is its convention.
             return 1.0 if ss_res == 0.0 else 0.0
         return 1.0 - ss_res / ss_tot
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: `dual_coef_`,
+        `support_vectors_`, `intercept_` as fitted (float32), `support_`
+        `<i4`, `hyper` `<f8` [C, epsilon, tol, cache_size, the gamma the FIT
+        resolved], `kernel` and `gamma` (the constructor's setting, 'auto'
+        or a number) as strings, `meta` `<i8` [n_features_in_, n_support_,
+        n_iter_, max_iter, nochange_steps] (lane/inference-svm, 2026-09-15).
+        `mojolearn.host_model(path)` predicts from it on a CPU with no GPU
+        through `_mojolearn_svm_host.svr_predict`."""
+        if not hasattr(self, "dual_coef_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        return _serialize.write_npz(path, {
+            "format": _SVR_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "kernel": str(self.kernel),
+            "gamma": str(self.gamma),
+            "dual_coef": self.dual_coef_,
+            "support_vectors": self.support_vectors_,
+            "support": self.support_,
+            "intercept": self.intercept_,
+            "hyper": Array.from_list(
+                [float(self.C), float(self.epsilon), float(self.tol),
+                 float(self.cache_size), float(self._gamma)],
+                "<f8",
+            ),
+            "meta": Array.from_list(
+                [int(self.n_features_in_), int(self.n_support_), int(self.n_iter_),
+                 int(self.max_iter), int(self.nochange_steps)],
+                "<i8",
+            ),
+        })
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts; every array
+        is read at its saved dtype and never cast."""
+        arrays = _serialize.read_npz(path, _SVR_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 5:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 5 are needed")
+        hyper = _serialize.exact(arrays, "hyper", "<f8")
+        if hyper.size != 5:
+            raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, 5 are needed")
+        gamma_setting = _serialize.scalar_str(arrays, "gamma")
+        obj = cls(
+            C=float(hyper[0]),
+            epsilon=float(hyper[1]),
+            kernel=_serialize.scalar_str(arrays, "kernel"),
+            gamma="auto" if gamma_setting == "auto" else float(gamma_setting),
+            tol=float(hyper[2]),
+            cache_size=float(hyper[3]),
+            max_iter=int(meta[3]),
+            nochange_steps=int(meta[4]),
+        )
+        _restore_mode(obj, arrays)
+        nf, n_support = int(meta[0]), int(meta[1])
+        dual = _serialize.exact(arrays, "dual_coef", "<f4")
+        if dual.ndim != 2 or tuple(dual.shape) != (1, n_support):
+            raise ValueError(f"mojolearn: {path!r} dual_coef shape {tuple(dual.shape)} is not (1, {n_support})")
+        sv = _serialize.exact(arrays, "support_vectors", "<f4")
+        if sv.ndim != 2 or tuple(sv.shape) != (n_support, nf):
+            raise ValueError(f"mojolearn: {path!r} support_vectors shape {tuple(sv.shape)} is not ({n_support}, {nf})")
+        support = _serialize.exact(arrays, "support", "<i4")
+        if support.ndim != 1 or support.size != n_support:
+            raise ValueError(f"mojolearn: {path!r} support does not match n_support_")
+        intercept = _serialize.exact(arrays, "intercept", "<f4")
+        if intercept.ndim != 1 or intercept.size != 1:
+            raise ValueError(f"mojolearn: {path!r} intercept must hold one float32")
+        obj.n_features_in_ = nf
+        obj.n_support_ = n_support
+        obj.n_iter_ = int(meta[2])
+        obj.intercept_ = intercept
+        obj.support_ = support
+        obj.support_vectors_ = sv
+        obj.dual_coef_ = dual
+        obj._gamma = float(hyper[4])
+        return obj

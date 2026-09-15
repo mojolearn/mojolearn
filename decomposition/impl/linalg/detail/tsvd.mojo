@@ -61,7 +61,7 @@ Set that beside `pca_fit` and the whole difference is visible: PCA subtracts
 the column means first and divides by `n_rows - 1`, truncated SVD does
 neither. Same product, same eigensolver, same truncation. **That is why this
 file is thirty lines and not three hundred**, and it is the payoff for having
-mirrored their structure rather than writing a PCA that happened to work.
+followed the reference structure rather than writing a PCA that happened to work.
 
 The consequence is the one that matters to a user: truncated SVD is NOT
 translation invariant. Shift a column and its first component swings onto the

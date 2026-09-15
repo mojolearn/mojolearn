@@ -1,0 +1,78 @@
+{
+  "commit": "c6c6f79b075f2c00544977a1e94d47fdcf89f711",
+  "estimator": "IVFIndex",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "base",
+  "lane": "ivf-extend",
+  "model_sha256": "6814e84fcb72ca37f7c0c425c26ec15f2906afc5ad946209438f5f369b641fcb",
+  "numeric_mode": "identical",
+  "predictions": {
+    "extend_list_indices": {
+      "dtype": "<i4",
+      "sha256": "da9e6eada470bb1297651fcd2e3b324622e5faa18d2100cedd265cdf7790c476",
+      "shape": [
+        4160
+      ]
+    },
+    "extend_lists": {
+      "dtype": "<i4",
+      "sha256": "a96a123491d3f6692323da7be2d4031821e8f280ac3bf4a54b56984afb7b90cf",
+      "shape": [
+        64
+      ]
+    },
+    "identity_hash": "21a84397fed9cb7b",
+    "list_data": {
+      "dtype": "<f4",
+      "sha256": "3d000e14e6d79cd69741a835a00e22c566c901c85fc23d1d8d94660d9b27e571",
+      "shape": [
+        4096,
+        16
+      ]
+    },
+    "list_indices": {
+      "dtype": "<i4",
+      "sha256": "e42c8937aed1c7b8cafc8d972aac2a45c541d4e05bc204afcbcf4dce1307d097",
+      "shape": [
+        4096
+      ]
+    },
+    "search_after_extend_ids": {
+      "dtype": "<i4",
+      "sha256": "0be8fa527cd1bb4067179021a05f355eb7ec07c10f2d459f6808ab3e871df93f",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_distances": {
+      "dtype": "<f4",
+      "sha256": "131eb9c72045323b38770555b92eb586406ea224a678c7a874da7936f928bb4c",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_second_batch_ids": {
+      "dtype": "<i4",
+      "sha256": "fdbaa7211077f2f8354d724686bc6b7ed1d956b55dd15f70220674c2eac6194e",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "seconds": 2.452333
+  },
+  "recorded_at": "2026-09-15T13:57:37-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "81b95ad35ae40207bf9d58c1ac22161034eab4823e33bc91bebee40ddda2ac8d"
+}

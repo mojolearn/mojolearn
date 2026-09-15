@@ -14,7 +14,7 @@ an `n_trials x n_samples` matrix; fusing them removes that buffer entirely,
 and cannot change the answer because the reduction consumes each element
 exactly once immediately after it is formed.
 
-**That fusion is a DEVIATION and it is recorded as one** (archive/reference/PORTING.md 16),
+**That fusion is a DEVIATION and it is recorded as one**,
 even though it is arithmetically identical, because it changes the summation
 ORDER over samples and therefore the last bits of `costPerCandidate`. When
 two candidates tie to the last bit, a different order picks a different

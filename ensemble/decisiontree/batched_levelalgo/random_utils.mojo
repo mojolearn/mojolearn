@@ -70,7 +70,7 @@ THE FIX, in `fnv1a32_hash_seed_tree` below: the high half is folded in
 one extra round, BUT ONLY WHEN IT IS NONZERO. The condition is what
 makes the fix free where cuML is not broken: for every seed below 2^32
 -- cuML's Python surface passes exactly these (`random_state` is hashed
-to 32 bits upstream, and `None` becomes 0), every committed oracle
+to 32 bits in the reference, and `None` becomes 0), every committed oracle
 fixture, and this repository's default 0 -- the extra round does not
 execute and the output is bit-for-bit the transcription's output. Seeds
 with high bits set (reachable through our own UInt64 `seed` parameter)

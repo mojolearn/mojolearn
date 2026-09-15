@@ -1,0 +1,159 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 162 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host'] commit=479a9575ec7fd79d2e86506fa88be2b02fe8ea91
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr/base    | IDENTICAL x4 | 3c492b90c998f095 | 3c492b90c998f095 | 3c492b90c998f095 | 3c492b90c998f095 |
+| gbdt-categorical-ctr/denormal | IDENTICAL x4 | 3c492b90c998f095 | 3c492b90c998f095 | 3c492b90c998f095 | 3c492b90c998f095 |
+| gbdt-categorical-ctr/denormal_ftz | IDENTICAL x4 | 3c492b90c998f095 | 3c492b90c998f095 | 3c492b90c998f095 | 3c492b90c998f095 |
+| gbdt-categorical-ctr/dupes   | IDENTICAL x4 | ee68c4c16449a9d5 | ee68c4c16449a9d5 | ee68c4c16449a9d5 | ee68c4c16449a9d5 |
+| gbdt-categorical-ctr/hashed  | IDENTICAL x4 | 107f80749876299b | 107f80749876299b | 107f80749876299b | 107f80749876299b |
+| gbdt-categorical-ctr/negative | IDENTICAL x4 | 8b6ff846e24d5317 | 8b6ff846e24d5317 | 8b6ff846e24d5317 | 8b6ff846e24d5317 |
+| gbdt-categorical-ctr/odd     | IDENTICAL x4 | 3f1f7468b711f825 | 3f1f7468b711f825 | 3f1f7468b711f825 | 3f1f7468b711f825 |
+| gbdt-categorical-ctr/ties    | IDENTICAL x4 | b19fd4bbd5430219 | b19fd4bbd5430219 | b19fd4bbd5430219 | b19fd4bbd5430219 |
+| gbdt-categorical-ctr/wide    | IDENTICAL x4 | d2746faae8d63897 | d2746faae8d63897 | d2746faae8d63897 | d2746faae8d63897 |
+| gbdt-feature-freq/base       | IDENTICAL x4 | 7d9c56b51213cb42 | 7d9c56b51213cb42 | 7d9c56b51213cb42 | 7d9c56b51213cb42 |
+| gbdt-feature-freq/denormal   | IDENTICAL x4 | e7f1da14d1a9794b | e7f1da14d1a9794b | e7f1da14d1a9794b | e7f1da14d1a9794b |
+| gbdt-feature-freq/denormal_ftz | IDENTICAL x4 | e7f1da14d1a9794b | e7f1da14d1a9794b | e7f1da14d1a9794b | e7f1da14d1a9794b |
+| gbdt-feature-freq/dupes      | IDENTICAL x4 | e8c61a9407503755 | e8c61a9407503755 | e8c61a9407503755 | e8c61a9407503755 |
+| gbdt-feature-freq/hashed     | IDENTICAL x4 | 9d97a55431b6f8e0 | 9d97a55431b6f8e0 | 9d97a55431b6f8e0 | 9d97a55431b6f8e0 |
+| gbdt-feature-freq/negative   | IDENTICAL x4 | 75028913a14bb938 | 75028913a14bb938 | 75028913a14bb938 | 75028913a14bb938 |
+| gbdt-feature-freq/odd        | IDENTICAL x4 | c481331145bfb998 | c481331145bfb998 | c481331145bfb998 | c481331145bfb998 |
+| gbdt-feature-freq/ties       | IDENTICAL x4 | 57ff9964d1af1d4a | 57ff9964d1af1d4a | 57ff9964d1af1d4a | 57ff9964d1af1d4a |
+| gbdt-feature-freq/wide       | IDENTICAL x4 | c6d7fccba2483372 | c6d7fccba2483372 | c6d7fccba2483372 | c6d7fccba2483372 |
+| gbdt-ordered-rmse/base       | IDENTICAL x4 | a6e77b5224108785 | a6e77b5224108785 | a6e77b5224108785 | a6e77b5224108785 |
+| gbdt-ordered-rmse/denormal   | IDENTICAL x4 | 67483c1b821234ac | 67483c1b821234ac | 67483c1b821234ac | 67483c1b821234ac |
+| gbdt-ordered-rmse/denormal_ftz | IDENTICAL x4 | 2a44bb38f86cd4ec | 2a44bb38f86cd4ec | 2a44bb38f86cd4ec | 2a44bb38f86cd4ec |
+| gbdt-ordered-rmse/dupes      | IDENTICAL x4 | 1e39bd4034194fb0 | 1e39bd4034194fb0 | 1e39bd4034194fb0 | 1e39bd4034194fb0 |
+| gbdt-ordered-rmse/hashed     | IDENTICAL x4 | 30d789002f114183 | 30d789002f114183 | 30d789002f114183 | 30d789002f114183 |
+| gbdt-ordered-rmse/negative   | IDENTICAL x4 | 50eaef5f0c669042 | 50eaef5f0c669042 | 50eaef5f0c669042 | 50eaef5f0c669042 |
+| gbdt-ordered-rmse/odd        | IDENTICAL x4 | d83c83930af5d802 | d83c83930af5d802 | d83c83930af5d802 | d83c83930af5d802 |
+| gbdt-ordered-rmse/ties       | IDENTICAL x4 | 563f339900c22c9d | 563f339900c22c9d | 563f339900c22c9d | 563f339900c22c9d |
+| gbdt-ordered-rmse/wide       | IDENTICAL x4 | 356a38c2904749c0 | 356a38c2904749c0 | 356a38c2904749c0 | 356a38c2904749c0 |
+| gbdt-pointwise-l2-bayesian-eval/base | IDENTICAL x4 | 2ac238ddce22e2ef | 2ac238ddce22e2ef | 2ac238ddce22e2ef | 2ac238ddce22e2ef |
+| gbdt-pointwise-l2-bayesian-eval/denormal | IDENTICAL x4 | 2ac238ddce22e2ef | 2ac238ddce22e2ef | 2ac238ddce22e2ef | 2ac238ddce22e2ef |
+| gbdt-pointwise-l2-bayesian-eval/denormal_ftz | IDENTICAL x4 | 2ac238ddce22e2ef | 2ac238ddce22e2ef | 2ac238ddce22e2ef | 2ac238ddce22e2ef |
+| gbdt-pointwise-l2-bayesian-eval/dupes | IDENTICAL x4 | 86fffcdb2023b393 | 86fffcdb2023b393 | 86fffcdb2023b393 | 86fffcdb2023b393 |
+| gbdt-pointwise-l2-bayesian-eval/hashed | IDENTICAL x4 | d9ff6008c1161f15 | d9ff6008c1161f15 | d9ff6008c1161f15 | d9ff6008c1161f15 |
+| gbdt-pointwise-l2-bayesian-eval/negative | IDENTICAL x4 | 4d75d6379c698eb9 | 4d75d6379c698eb9 | 4d75d6379c698eb9 | 4d75d6379c698eb9 |
+| gbdt-pointwise-l2-bayesian-eval/odd | IDENTICAL x4 | 59cf66d7ddc936b4 | 59cf66d7ddc936b4 | 59cf66d7ddc936b4 | 59cf66d7ddc936b4 |
+| gbdt-pointwise-l2-bayesian-eval/ties | IDENTICAL x4 | 84ba6825b4967e89 | 84ba6825b4967e89 | 84ba6825b4967e89 | 84ba6825b4967e89 |
+| gbdt-pointwise-l2-bayesian-eval/wide | IDENTICAL x4 | b677c76dcdb5e233 | b677c76dcdb5e233 | b677c76dcdb5e233 | b677c76dcdb5e233 |
+
+summary: IDENTICAL=36
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr/base    | infer  | IDENTICAL x4 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 |
+| gbdt-categorical-ctr/base    | model  | IDENTICAL x4 | d1bc6890d23ce613 | d1bc6890d23ce613 | d1bc6890d23ce613 | d1bc6890d23ce613 |
+| gbdt-categorical-ctr/base    | batch  | IDENTICAL x4 | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd |
+| gbdt-categorical-ctr/denormal | infer  | IDENTICAL x4 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 |
+| gbdt-categorical-ctr/denormal | model  | IDENTICAL x4 | cc6b3c93fed4b10a | cc6b3c93fed4b10a | cc6b3c93fed4b10a | cc6b3c93fed4b10a |
+| gbdt-categorical-ctr/denormal | batch  | IDENTICAL x4 | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd |
+| gbdt-categorical-ctr/denormal_ftz | infer  | IDENTICAL x4 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 |
+| gbdt-categorical-ctr/denormal_ftz | model  | IDENTICAL x4 | cc6b3c93fed4b10a | cc6b3c93fed4b10a | cc6b3c93fed4b10a | cc6b3c93fed4b10a |
+| gbdt-categorical-ctr/denormal_ftz | batch  | IDENTICAL x4 | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd |
+| gbdt-categorical-ctr/dupes   | infer  | IDENTICAL x4 | ebf616782020460e | ebf616782020460e | ebf616782020460e | ebf616782020460e |
+| gbdt-categorical-ctr/dupes   | model  | IDENTICAL x4 | a54a7179f5f55506 | a54a7179f5f55506 | a54a7179f5f55506 | a54a7179f5f55506 |
+| gbdt-categorical-ctr/dupes   | batch  | IDENTICAL x4 | 6c4abca5e06509e8 | 6c4abca5e06509e8 | 6c4abca5e06509e8 | 6c4abca5e06509e8 |
+| gbdt-categorical-ctr/hashed  | infer  | IDENTICAL x4 | 59ada771e335830b | 59ada771e335830b | 59ada771e335830b | 59ada771e335830b |
+| gbdt-categorical-ctr/hashed  | model  | IDENTICAL x4 | f9caff45f0d43d88 | f9caff45f0d43d88 | f9caff45f0d43d88 | f9caff45f0d43d88 |
+| gbdt-categorical-ctr/hashed  | batch  | IDENTICAL x4 | 8ec393a7a64c5a33 | 8ec393a7a64c5a33 | 8ec393a7a64c5a33 | 8ec393a7a64c5a33 |
+| gbdt-categorical-ctr/negative | infer  | IDENTICAL x4 | 9b0045ff2be0ff78 | 9b0045ff2be0ff78 | 9b0045ff2be0ff78 | 9b0045ff2be0ff78 |
+| gbdt-categorical-ctr/negative | model  | IDENTICAL x4 | 75733da36563fa3a | 75733da36563fa3a | 75733da36563fa3a | 75733da36563fa3a |
+| gbdt-categorical-ctr/negative | batch  | IDENTICAL x4 | d19606059eb16d0f | d19606059eb16d0f | d19606059eb16d0f | d19606059eb16d0f |
+| gbdt-categorical-ctr/odd     | infer  | IDENTICAL x4 | 6db4a8fb8ffcc4df | 6db4a8fb8ffcc4df | 6db4a8fb8ffcc4df | 6db4a8fb8ffcc4df |
+| gbdt-categorical-ctr/odd     | model  | IDENTICAL x4 | ca74bdd7ef688c0d | ca74bdd7ef688c0d | ca74bdd7ef688c0d | ca74bdd7ef688c0d |
+| gbdt-categorical-ctr/odd     | batch  | IDENTICAL x4 | ee6e7cfed828deb2 | ee6e7cfed828deb2 | ee6e7cfed828deb2 | ee6e7cfed828deb2 |
+| gbdt-categorical-ctr/ties    | infer  | IDENTICAL x4 | 7e2f6402af40601a | 7e2f6402af40601a | 7e2f6402af40601a | 7e2f6402af40601a |
+| gbdt-categorical-ctr/ties    | model  | IDENTICAL x4 | e65f09cb2a1e7754 | e65f09cb2a1e7754 | e65f09cb2a1e7754 | e65f09cb2a1e7754 |
+| gbdt-categorical-ctr/ties    | batch  | IDENTICAL x4 | 2adbd46492fefdf1 | 2adbd46492fefdf1 | 2adbd46492fefdf1 | 2adbd46492fefdf1 |
+| gbdt-categorical-ctr/wide    | infer  | IDENTICAL x4 | 4904fc9a408f2e1e | 4904fc9a408f2e1e | 4904fc9a408f2e1e | 4904fc9a408f2e1e |
+| gbdt-categorical-ctr/wide    | model  | IDENTICAL x4 | 192effc19beb0214 | 192effc19beb0214 | 192effc19beb0214 | 192effc19beb0214 |
+| gbdt-categorical-ctr/wide    | batch  | IDENTICAL x4 | c69fa1a241cda669 | c69fa1a241cda669 | c69fa1a241cda669 | c69fa1a241cda669 |
+| gbdt-feature-freq/base       | infer  | IDENTICAL x4 | 95b976d85efc7f2d | 95b976d85efc7f2d | 95b976d85efc7f2d | 95b976d85efc7f2d |
+| gbdt-feature-freq/base       | model  | IDENTICAL x4 | b2959e177eb6e088 | b2959e177eb6e088 | b2959e177eb6e088 | b2959e177eb6e088 |
+| gbdt-feature-freq/base       | batch  | IDENTICAL x4 | 272537bbe18b712b | 272537bbe18b712b | 272537bbe18b712b | 272537bbe18b712b |
+| gbdt-feature-freq/denormal   | infer  | IDENTICAL x4 | 973775798c10da25 | 973775798c10da25 | 973775798c10da25 | 973775798c10da25 |
+| gbdt-feature-freq/denormal   | model  | IDENTICAL x4 | d6c30648533bdf45 | d6c30648533bdf45 | d6c30648533bdf45 | d6c30648533bdf45 |
+| gbdt-feature-freq/denormal   | batch  | IDENTICAL x4 | ba9644901c99745d | ba9644901c99745d | ba9644901c99745d | ba9644901c99745d |
+| gbdt-feature-freq/denormal_ftz | infer  | IDENTICAL x4 | 973775798c10da25 | 973775798c10da25 | 973775798c10da25 | 973775798c10da25 |
+| gbdt-feature-freq/denormal_ftz | model  | IDENTICAL x4 | d6c30648533bdf45 | d6c30648533bdf45 | d6c30648533bdf45 | d6c30648533bdf45 |
+| gbdt-feature-freq/denormal_ftz | batch  | IDENTICAL x4 | ba9644901c99745d | ba9644901c99745d | ba9644901c99745d | ba9644901c99745d |
+| gbdt-feature-freq/dupes      | infer  | IDENTICAL x4 | 3a9423e4f0d23cad | 3a9423e4f0d23cad | 3a9423e4f0d23cad | 3a9423e4f0d23cad |
+| gbdt-feature-freq/dupes      | model  | IDENTICAL x4 | 531909ad2026b783 | 531909ad2026b783 | 531909ad2026b783 | 531909ad2026b783 |
+| gbdt-feature-freq/dupes      | batch  | IDENTICAL x4 | 47618d01ef0a41e1 | 47618d01ef0a41e1 | 47618d01ef0a41e1 | 47618d01ef0a41e1 |
+| gbdt-feature-freq/hashed     | infer  | IDENTICAL x4 | cf308a4c656bfbdc | cf308a4c656bfbdc | cf308a4c656bfbdc | cf308a4c656bfbdc |
+| gbdt-feature-freq/hashed     | model  | IDENTICAL x4 | bf3222bbcdf1f476 | bf3222bbcdf1f476 | bf3222bbcdf1f476 | bf3222bbcdf1f476 |
+| gbdt-feature-freq/hashed     | batch  | IDENTICAL x4 | 77ce3ccc6c9f7e94 | 77ce3ccc6c9f7e94 | 77ce3ccc6c9f7e94 | 77ce3ccc6c9f7e94 |
+| gbdt-feature-freq/negative   | infer  | IDENTICAL x4 | 5a5944c8b884be8c | 5a5944c8b884be8c | 5a5944c8b884be8c | 5a5944c8b884be8c |
+| gbdt-feature-freq/negative   | model  | IDENTICAL x4 | 0794be87633fd36b | 0794be87633fd36b | 0794be87633fd36b | 0794be87633fd36b |
+| gbdt-feature-freq/negative   | batch  | IDENTICAL x4 | d92c8eb873f86399 | d92c8eb873f86399 | d92c8eb873f86399 | d92c8eb873f86399 |
+| gbdt-feature-freq/odd        | infer  | IDENTICAL x4 | 711887d930537c47 | 711887d930537c47 | 711887d930537c47 | 711887d930537c47 |
+| gbdt-feature-freq/odd        | model  | IDENTICAL x4 | 53a4160101e38573 | 53a4160101e38573 | 53a4160101e38573 | 53a4160101e38573 |
+| gbdt-feature-freq/odd        | batch  | IDENTICAL x4 | bfe39e4c9f5bacc7 | bfe39e4c9f5bacc7 | bfe39e4c9f5bacc7 | bfe39e4c9f5bacc7 |
+| gbdt-feature-freq/ties       | infer  | IDENTICAL x4 | 41371bafcf6397a3 | 41371bafcf6397a3 | 41371bafcf6397a3 | 41371bafcf6397a3 |
+| gbdt-feature-freq/ties       | model  | IDENTICAL x4 | a7417c31e1b422b4 | a7417c31e1b422b4 | a7417c31e1b422b4 | a7417c31e1b422b4 |
+| gbdt-feature-freq/ties       | batch  | IDENTICAL x4 | 2de7d484a30cee05 | 2de7d484a30cee05 | 2de7d484a30cee05 | 2de7d484a30cee05 |
+| gbdt-feature-freq/wide       | infer  | IDENTICAL x4 | 2a4274996f907f13 | 2a4274996f907f13 | 2a4274996f907f13 | 2a4274996f907f13 |
+| gbdt-feature-freq/wide       | model  | IDENTICAL x4 | 6b7d9eddfa4b79b6 | 6b7d9eddfa4b79b6 | 6b7d9eddfa4b79b6 | 6b7d9eddfa4b79b6 |
+| gbdt-feature-freq/wide       | batch  | IDENTICAL x4 | 367ed0852797c66b | 367ed0852797c66b | 367ed0852797c66b | 367ed0852797c66b |
+| gbdt-ordered-rmse/base       | infer  | IDENTICAL x4 | 3113f83d552f6e3e | 3113f83d552f6e3e | 3113f83d552f6e3e | 3113f83d552f6e3e |
+| gbdt-ordered-rmse/base       | model  | IDENTICAL x4 | 43540d21322226ab | 43540d21322226ab | 43540d21322226ab | 43540d21322226ab |
+| gbdt-ordered-rmse/base       | batch  | IDENTICAL x4 | 5cd33ee932513206 | 5cd33ee932513206 | 5cd33ee932513206 | 5cd33ee932513206 |
+| gbdt-ordered-rmse/denormal   | infer  | IDENTICAL x4 | 52d52c2862c2d480 | 52d52c2862c2d480 | 52d52c2862c2d480 | 52d52c2862c2d480 |
+| gbdt-ordered-rmse/denormal   | model  | IDENTICAL x4 | ba60376e07b69433 | ba60376e07b69433 | ba60376e07b69433 | ba60376e07b69433 |
+| gbdt-ordered-rmse/denormal   | batch  | IDENTICAL x4 | 37faad1b0ae508e9 | 37faad1b0ae508e9 | 37faad1b0ae508e9 | 37faad1b0ae508e9 |
+| gbdt-ordered-rmse/denormal_ftz | infer  | IDENTICAL x4 | 9f09dbf44c4ea866 | 9f09dbf44c4ea866 | 9f09dbf44c4ea866 | 9f09dbf44c4ea866 |
+| gbdt-ordered-rmse/denormal_ftz | model  | IDENTICAL x4 | 7997d9773285efc3 | 7997d9773285efc3 | 7997d9773285efc3 | 7997d9773285efc3 |
+| gbdt-ordered-rmse/denormal_ftz | batch  | IDENTICAL x4 | ccafd9d9faa33059 | ccafd9d9faa33059 | ccafd9d9faa33059 | ccafd9d9faa33059 |
+| gbdt-ordered-rmse/dupes      | infer  | IDENTICAL x4 | 957a66a8423c3f6d | 957a66a8423c3f6d | 957a66a8423c3f6d | 957a66a8423c3f6d |
+| gbdt-ordered-rmse/dupes      | model  | IDENTICAL x4 | c73190381d66d9bf | c73190381d66d9bf | c73190381d66d9bf | c73190381d66d9bf |
+| gbdt-ordered-rmse/dupes      | batch  | IDENTICAL x4 | 0526edd73c9b9280 | 0526edd73c9b9280 | 0526edd73c9b9280 | 0526edd73c9b9280 |
+| gbdt-ordered-rmse/hashed     | infer  | IDENTICAL x4 | 405de4dd63f5341a | 405de4dd63f5341a | 405de4dd63f5341a | 405de4dd63f5341a |
+| gbdt-ordered-rmse/hashed     | model  | IDENTICAL x4 | e3e28f37057e2029 | e3e28f37057e2029 | e3e28f37057e2029 | e3e28f37057e2029 |
+| gbdt-ordered-rmse/hashed     | batch  | IDENTICAL x4 | c24af09f63a1ff94 | c24af09f63a1ff94 | c24af09f63a1ff94 | c24af09f63a1ff94 |
+| gbdt-ordered-rmse/negative   | infer  | IDENTICAL x4 | 82e128c769eb2778 | 82e128c769eb2778 | 82e128c769eb2778 | 82e128c769eb2778 |
+| gbdt-ordered-rmse/negative   | model  | IDENTICAL x4 | 91ecd6c2cdf861d2 | 91ecd6c2cdf861d2 | 91ecd6c2cdf861d2 | 91ecd6c2cdf861d2 |
+| gbdt-ordered-rmse/negative   | batch  | IDENTICAL x4 | c325266510844f36 | c325266510844f36 | c325266510844f36 | c325266510844f36 |
+| gbdt-ordered-rmse/odd        | infer  | IDENTICAL x4 | c7f0cb99b920a716 | c7f0cb99b920a716 | c7f0cb99b920a716 | c7f0cb99b920a716 |
+| gbdt-ordered-rmse/odd        | model  | IDENTICAL x4 | 4d02412a6fa569f9 | 4d02412a6fa569f9 | 4d02412a6fa569f9 | 4d02412a6fa569f9 |
+| gbdt-ordered-rmse/odd        | batch  | IDENTICAL x4 | c05993b79c89e09a | c05993b79c89e09a | c05993b79c89e09a | c05993b79c89e09a |
+| gbdt-ordered-rmse/ties       | infer  | IDENTICAL x4 | ca0189610e51bc17 | ca0189610e51bc17 | ca0189610e51bc17 | ca0189610e51bc17 |
+| gbdt-ordered-rmse/ties       | model  | IDENTICAL x4 | f9192cb03ecc6ece | f9192cb03ecc6ece | f9192cb03ecc6ece | f9192cb03ecc6ece |
+| gbdt-ordered-rmse/ties       | batch  | IDENTICAL x4 | 7fa28c2d36832787 | 7fa28c2d36832787 | 7fa28c2d36832787 | 7fa28c2d36832787 |
+| gbdt-ordered-rmse/wide       | infer  | IDENTICAL x4 | 7172e83c3f745933 | 7172e83c3f745933 | 7172e83c3f745933 | 7172e83c3f745933 |
+| gbdt-ordered-rmse/wide       | model  | IDENTICAL x4 | a9b709a9373fae6f | a9b709a9373fae6f | a9b709a9373fae6f | a9b709a9373fae6f |
+| gbdt-ordered-rmse/wide       | batch  | IDENTICAL x4 | 6b8ccb2798f6e41f | 6b8ccb2798f6e41f | 6b8ccb2798f6e41f | 6b8ccb2798f6e41f |
+| gbdt-pointwise-l2-bayesian-eval/base | infer  | IDENTICAL x4 | 2754757c200872f3 | 2754757c200872f3 | 2754757c200872f3 | 2754757c200872f3 |
+| gbdt-pointwise-l2-bayesian-eval/base | model  | IDENTICAL x4 | c29dddb945d072a8 | c29dddb945d072a8 | c29dddb945d072a8 | c29dddb945d072a8 |
+| gbdt-pointwise-l2-bayesian-eval/base | batch  | IDENTICAL x4 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | 3fd0fe4443273a54 |
+| gbdt-pointwise-l2-bayesian-eval/denormal | infer  | IDENTICAL x4 | 2754757c200872f3 | 2754757c200872f3 | 2754757c200872f3 | 2754757c200872f3 |
+| gbdt-pointwise-l2-bayesian-eval/denormal | model  | IDENTICAL x4 | cc76fd996e83a163 | cc76fd996e83a163 | cc76fd996e83a163 | cc76fd996e83a163 |
+| gbdt-pointwise-l2-bayesian-eval/denormal | batch  | IDENTICAL x4 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | 3fd0fe4443273a54 |
+| gbdt-pointwise-l2-bayesian-eval/denormal_ftz | infer  | IDENTICAL x4 | 2754757c200872f3 | 2754757c200872f3 | 2754757c200872f3 | 2754757c200872f3 |
+| gbdt-pointwise-l2-bayesian-eval/denormal_ftz | model  | IDENTICAL x4 | cc76fd996e83a163 | cc76fd996e83a163 | cc76fd996e83a163 | cc76fd996e83a163 |
+| gbdt-pointwise-l2-bayesian-eval/denormal_ftz | batch  | IDENTICAL x4 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | 3fd0fe4443273a54 |
+| gbdt-pointwise-l2-bayesian-eval/dupes | infer  | IDENTICAL x4 | 9c447c2e24529fa4 | 9c447c2e24529fa4 | 9c447c2e24529fa4 | 9c447c2e24529fa4 |
+| gbdt-pointwise-l2-bayesian-eval/dupes | model  | IDENTICAL x4 | fee0ed429e482b4f | fee0ed429e482b4f | fee0ed429e482b4f | fee0ed429e482b4f |
+| gbdt-pointwise-l2-bayesian-eval/dupes | batch  | IDENTICAL x4 | 6e7098112cfe3ef6 | 6e7098112cfe3ef6 | 6e7098112cfe3ef6 | 6e7098112cfe3ef6 |
+| gbdt-pointwise-l2-bayesian-eval/hashed | infer  | IDENTICAL x4 | c873cc2813bbb900 | c873cc2813bbb900 | c873cc2813bbb900 | c873cc2813bbb900 |
+| gbdt-pointwise-l2-bayesian-eval/hashed | model  | IDENTICAL x4 | bc91bc55d5b974b4 | bc91bc55d5b974b4 | bc91bc55d5b974b4 | bc91bc55d5b974b4 |
+| gbdt-pointwise-l2-bayesian-eval/hashed | batch  | IDENTICAL x4 | aaa3c0c9e9ff0239 | aaa3c0c9e9ff0239 | aaa3c0c9e9ff0239 | aaa3c0c9e9ff0239 |
+| gbdt-pointwise-l2-bayesian-eval/negative | infer  | IDENTICAL x4 | 69fe3fa629a1097d | 69fe3fa629a1097d | 69fe3fa629a1097d | 69fe3fa629a1097d |
+| gbdt-pointwise-l2-bayesian-eval/negative | model  | IDENTICAL x4 | f98af47bb5375e00 | f98af47bb5375e00 | f98af47bb5375e00 | f98af47bb5375e00 |
+| gbdt-pointwise-l2-bayesian-eval/negative | batch  | IDENTICAL x4 | dee639c44dd07990 | dee639c44dd07990 | dee639c44dd07990 | dee639c44dd07990 |
+| gbdt-pointwise-l2-bayesian-eval/odd | infer  | IDENTICAL x4 | e1aec5dad8dc37f0 | e1aec5dad8dc37f0 | e1aec5dad8dc37f0 | e1aec5dad8dc37f0 |
+| gbdt-pointwise-l2-bayesian-eval/odd | model  | IDENTICAL x4 | 6ea8282d329c6c7e | 6ea8282d329c6c7e | 6ea8282d329c6c7e | 6ea8282d329c6c7e |
+| gbdt-pointwise-l2-bayesian-eval/odd | batch  | IDENTICAL x4 | 149b530e8adbf44b | 149b530e8adbf44b | 149b530e8adbf44b | 149b530e8adbf44b |
+| gbdt-pointwise-l2-bayesian-eval/ties | infer  | IDENTICAL x4 | 92b20ebae1dabad7 | 92b20ebae1dabad7 | 92b20ebae1dabad7 | 92b20ebae1dabad7 |
+| gbdt-pointwise-l2-bayesian-eval/ties | model  | IDENTICAL x4 | 293e124b96e008e4 | 293e124b96e008e4 | 293e124b96e008e4 | 293e124b96e008e4 |
+| gbdt-pointwise-l2-bayesian-eval/ties | batch  | IDENTICAL x4 | 405d98bc60e93077 | 405d98bc60e93077 | 405d98bc60e93077 | 405d98bc60e93077 |
+| gbdt-pointwise-l2-bayesian-eval/wide | infer  | IDENTICAL x4 | 194456fd0ea51325 | 194456fd0ea51325 | 194456fd0ea51325 | 194456fd0ea51325 |
+| gbdt-pointwise-l2-bayesian-eval/wide | model  | IDENTICAL x4 | 9ca08d3b891657ed | 9ca08d3b891657ed | 9ca08d3b891657ed | 9ca08d3b891657ed |
+| gbdt-pointwise-l2-bayesian-eval/wide | batch  | IDENTICAL x4 | 86f88156299d777e | 86f88156299d777e | 86f88156299d777e | 86f88156299d777e |
+
+summary (infer/model): IDENTICAL=72
+summary (batch): IDENTICAL=36
+summary (rlpair): 
+require-columns 4 over ['gbdt-categorical-ctr', 'gbdt-feature-freq', 'gbdt-ordered-rmse', 'gbdt-pointwise-l2-bayesian-eval']: OK (0 OWED)
+summary (owed): OWED=0; the next release record owes exactly these cell parts; wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/inf-gbdt/owed-run1.json

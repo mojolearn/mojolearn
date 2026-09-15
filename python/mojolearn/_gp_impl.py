@@ -72,11 +72,15 @@ the Apple M4, an NVIDIA H100 and an AMD MI325X under IDENTICAL. The gp SPEED lad
 speed claim.
 """
 
+import math
+import numbers
+
 from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
-from .linear_model import _flatten, _r2_sums, _shape_of
+from .linear_model import _flatten, _r2_sums, _round_f32, _shape_of
+from .preprocessing import StandardScaler
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose, for `_arima_impl.py`'s reason: the read-back must not share a
@@ -110,6 +114,18 @@ def _as_length_scale(length_scale, what):
             "scalar (isotropic) or n_features values (ARD)"
         )
     return ls
+
+
+#: FLT_MIN, the smallest normal binary32; `_ftz` flushes anything below it.
+_FLT_MIN = 1.1754943508222875e-38
+
+
+def _ftz(x):
+    """`checks/numerics.mojo::ftz` on a binary32 value held in a Python
+    float: a subnormal becomes a zero of the same sign."""
+    if x != 0.0 and abs(x) < _FLT_MIN:
+        return math.copysign(0.0, x)
+    return x
 
 
 class Kernel:
@@ -211,6 +227,34 @@ class _Combined(Kernel):
         return f"({self.a._name()} {self.sym} {self.b._name()})"
 
 
+class _SavedKernel(Kernel):
+    """A kernel read back from a saved model: its postfix `(kind, param,
+    length_scales)` nodes exactly as `_nodes()` produced them at save time,
+    so `_kernel_arrays()` hands the binding the same four arrays the fit
+    handed it (the neighbors and density inference lane, 2026-09-15)."""
+
+    def __init__(self, nodes):
+        self.__nodes = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]
+
+    def _nodes(self):
+        return [(k, p, list(ls)) for k, p, ls in self.__nodes]
+
+    def _name(self):
+        return f"_SavedKernel({len(self.__nodes)} nodes)"
+
+
+#: The model file (the neighbors and density inference lane, 2026-09-15):
+#: `X_train` `<f4` (n, d), `L` `<f4` (n, n), `alpha` `<f4` (n) as fitted; the
+#: kernel's postfix spec as `kinds` `<i4`, `params` `<f8`, `ls_len` `<i4` and the
+#: `ls` table `<f8` (the Python floats `_nodes()` held, so the binary32 arrays
+#: predict builds are the fit's); `ints` `<i8` [n_features_in_, info_,
+#: normalize_y_, n_ls]; `reals` `<f8` [alpha, _y_train_mean, _y_train_std,
+#: log_marginal_likelihood_value_]. `mojolearn.host_model(path)` predicts the
+#: mean and std from it on a CPU through the inference-only gp binding, with
+#: normalize_y's scale-back in `predict` as on the GPU.
+_GP_FORMAT = "mojolearn-gp-1"
+
+
 class GaussianProcessRegressor(NumericModeMixin):
     """Exact dense GP regression on the GPU, the scikit-learn surface over
     `gaussian_process/estimator.mojo` (DEVIATIONS 1750-1771 are the
@@ -249,21 +293,31 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   kernel_ is therefore the kernel you passed
         n_restarts_     refused   anything but 0; it exists to serve the
           optimizer               refused optimizer
-        normalize_y     refused   anything truthy. NOT IMPLEMENTED: it centers
-                                  and scales y with host reductions whose
-                                  last bits would sit inside a cross-vendor
-                                  identity claim (DEVIATION 1764 names it)
+        normalize_y     honored   scikit-learn's `_gpr.py:275-285`: y is
+                                  centered and scaled by its mean and
+                                  standard deviation before the fit, and
+                                  the predictive mean and std are scaled
+                                  back. The two folds are StandardScaler's
+                                  pinned Float32 reductions in this
+                                  estimator's tier (a zero std scales by
+                                  one, scikit-learn's 1-D arm); the
+                                  un-normalization is `std * mean + y_mean`
+                                  and `sqrt(var * std**2)`, each one
+                                  correctly rounded binary32 operation on
+                                  the host, flushed like `ftz`. y_train_ is
+                                  the normalized y, as scikit-learn stores
+                                  it
         copy_X_train    refused   anything but True. This surface ALWAYS
                                   copies: X crosses to float32 C-order host
                                   memory and then to the device, so the
                                   False spelling ("store a reference") has
                                   nothing it could mean here
-        n_targets       refused   anything but None; it exists to shape
-                                  sample_y's prior draws, and sample_y is
-                                  unimplemented
-        random_state    refused   anything but None; only sample_y draws
-                                  random numbers upstream, and sample_y is
-                                  unimplemented
+        n_targets       refused   anything but None; it shapes sample_y's
+                                  draws from the unfitted prior, and that
+                                  arm is not implemented
+        random_state    refused   anything but None; fit and predict draw
+                                  no random numbers, and sample_y takes its
+                                  own random_state argument (DEVIATION 2793)
         sparse X        refused   dense row-major float32 only
                                   (_buffer.py::as_f32_c)
         2-D y           refused   by name; multi-target GP fits are not
@@ -298,12 +352,12 @@ class GaussianProcessRegressor(NumericModeMixin):
     `predict(X, return_std=True)` is honored; `return_cov=True` is REFUSED:
     the lane computes only the DIAGONAL of the posterior covariance -- a
     full `V^T V` would be an `n_star x n_star` product of which `n_star`
-    cells are wanted (DEVIATION 1759). `sample_y` is refused for the same
-    reason plus a normal stream inside a reproducibility claim
-    (`gaussian_process/estimator.mojo::gpr_sample_y_host` carries the
-    closure condition). GP CLASSIFICATION is a different algorithm (a
-    Laplace approximation with a data-dependent Newton iteration) and is
-    not here at all (DEVIATION 1766).
+    cells are wanted (DEVIATION 1759). `sample_y(X, n_samples, random_state)`
+    is honored on a fitted model: it builds and factors that full matrix
+    inside its own call (DEVIATION 2793). GP CLASSIFICATION is a different algorithm (a
+    Laplace approximation with a Newton iteration) and lives in
+    `_gpc_impl.py` as `GaussianProcessClassifier` (DEVIATION 2830 closes
+    DEVIATION 1766).
 
     CROSS-VENDOR STANDING: the IDENTICAL card is byte-identical Apple M4
     against AMD MI325X on every shipped-path line (the 8-line divergence
@@ -389,14 +443,10 @@ class GaussianProcessRegressor(NumericModeMixin):
                 f"{n_restarts_optimizer!r} is refused; it restarts the "
                 "optimizer, and the optimizer is refused (DEVIATION 1761)"
             )
-        if normalize_y:
-            raise NotImplementedError(
-                "mojolearn GaussianProcessRegressor: normalize_y=True is "
-                "refused; NOT IMPLEMENTED (DEVIATION 1764). It centers and "
-                "scales y with host reductions whose last bits would sit "
-                "inside a cross-vendor identity claim. Normalize y yourself "
-                "and pass the result, so the numbers that ran are numbers "
-                "you made"
+        if not isinstance(normalize_y, (bool, int)) or normalize_y not in (0, 1):
+            raise TypeError(
+                "mojolearn GaussianProcessRegressor: normalize_y must be a bool, "
+                f"got {normalize_y!r}"
             )
         if not copy_X_train:
             raise NotImplementedError(
@@ -410,16 +460,14 @@ class GaussianProcessRegressor(NumericModeMixin):
         if n_targets is not None:
             raise NotImplementedError(
                 "mojolearn GaussianProcessRegressor: n_targets is refused; "
-                "it shapes sample_y's prior draws, and sample_y is not "
-                "implemented (gaussian_process/estimator.mojo::gpr_sample_y_host "
-                "carries the closure condition). y is single-target here"
+                "it shapes sample_y's draws from the unfitted prior, which is "
+                "not implemented. y is single-target here"
             )
         if random_state is not None:
             raise NotImplementedError(
                 "mojolearn GaussianProcessRegressor: random_state is "
-                "refused; the only consumer of randomness upstream is "
-                "sample_y, which is not implemented. fit and predict draw no "
-                "random numbers"
+                "refused; fit and predict draw no random numbers, and "
+                "sample_y takes its own random_state argument (DEVIATION 2793)"
             )
         self.kernel = kernel
         # CONVERSION, NOT POLICY (the SVR epsilon rule): a non-number still
@@ -429,7 +477,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         self.alpha = float(alpha)
         self.optimizer = None
         self.n_restarts_optimizer = 0
-        self.normalize_y = False
+        self.normalize_y = bool(normalize_y)
         self.copy_X_train = True
         self.n_targets = None
         self.random_state = None
@@ -504,6 +552,18 @@ class GaussianProcessRegressor(NumericModeMixin):
                 f"mojolearn GaussianProcessRegressor: y has {targets.shape[0]} "
                 f"entries, X has {n_rows} rows"
             )
+        if self.normalize_y:
+            # sklearn `_gpr.py:275-280`. StandardScaler's pinned folds in
+            # this estimator's tier; for 1-D y scikit-learn's
+            # `_handle_zeros_in_scale` takes its scalar arm (`std == 0 -> 1`),
+            # StandardScaler's exact-zero rule.
+            column = targets.reshape((n_rows, 1))
+            scaler = StandardScaler(numeric_mode=self.numeric_mode_used()).fit(column)
+            y_mean = float(scaler.mean_[0])
+            y_std = float(scaler.scale_[0])
+            targets = scaler.transform(column).reshape((n_rows,))
+        else:
+            y_mean, y_std = 0.0, 1.0
         kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays()
 
         # EVERY SIZE IS A FUNCTION OF (n_rows, n_cols) ALONE; nothing here
@@ -537,6 +597,9 @@ class GaussianProcessRegressor(NumericModeMixin):
         )
         self.X_train_ = x
         self.y_train_ = targets
+        self._y_train_mean = y_mean
+        self._y_train_std = y_std
+        self.normalize_y_ = bool(self.normalize_y)
         self.kernel_ = self.kernel
         self.n_features_in_ = n_cols
         self.L_ = l_out.reshape((n_rows, n_rows))
@@ -570,8 +633,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         if not hasattr(self, "alpha_"):
             raise ValueError(
                 "mojolearn GaussianProcessRegressor: call fit() first (the "
-                "unfitted-prior arm of sklearn's predict is not implemented: it "
-                "exists to serve sample_y, which is refused)"
+                "unfitted-prior arm of sklearn's predict is not implemented)"
             )
         q, _ = as_f32_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
@@ -617,11 +679,105 @@ class GaussianProcessRegressor(NumericModeMixin):
             [n_train, self.n_features_in_, n_star, int(kinds.shape[0]),
              n_ls, 1 if return_std else 0, self.info_],
         )
+        if getattr(self, "normalize_y_", False):
+            # sklearn `_gpr.py:450` and `:494`: y_mean = std * y_mean + mean;
+            # y_var = y_var * std**2, then sqrt. Each is ONE correctly
+            # rounded binary32 operation on the host (the product or sum of
+            # two binary32 values is exact in a Python float before its one
+            # rounding, and the binary32 square root is correctly rounded
+            # through the binary64 one), flushed like `ftz`, so every column
+            # computes the same bits.
+            s_ = self._y_train_std
+            mu = self._y_train_mean
+            mean = Array.from_list(
+                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in mean.tolist()], "<f4")
+            if return_std:
+                s2 = _ftz(_round_f32(s_ * s_))
+                std = Array.from_list(
+                    [_ftz(_round_f32(math.sqrt(_ftz(_round_f32(v * s2))))) for v in var.tolist()],
+                    "<f4")
         if return_std:
             self.clamped_ = clamped
             self.n_clamped_ = int(n_clamped)
             return mean, std
         return mean
+
+    # -- saved models -----------------------------------------------------------
+
+    def save(self, path):
+        """Write what `predict` reads to `path` as an npz (`_GP_FORMAT`)."""
+        if not hasattr(self, "alpha_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        from . import _serialize
+        from .linear_model import _saved_mode
+        nodes = self.kernel._nodes()
+        table = [float(v) for _, _, ls in nodes for v in ls]
+        n = int(self.X_train_.shape[0])
+        return _serialize.write_npz(path, {
+            "format": _GP_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "X_train": self.X_train_,
+            "L": self.L_.reshape((n * n,)),
+            "alpha": self.alpha_,
+            "kinds": Array.from_list([int(k) for k, _, _ in nodes], "<i4"),
+            "params": Array.from_list([float(p) for _, p, _ in nodes], "<f8"),
+            "ls_len": Array.from_list([len(ls) for _, _, ls in nodes], "<i4"),
+            "ls": Array.from_list(table if table else [1.0], "<f8"),
+            "ints": Array.from_list([int(self.n_features_in_), int(self.info_),
+                                     1 if getattr(self, "normalize_y_", False) else 0, len(table)], "<i8"),
+            "reals": Array.from_list([float(self.alpha), float(getattr(self, "_y_train_mean", 0.0)),
+                                      float(getattr(self, "_y_train_std", 1.0)),
+                                      float(self.log_marginal_likelihood_value_)], "<f8"),
+        })
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`; `predict` (mean and std) answers from
+        it. Every array is read at its saved dtype and never cast."""
+        from . import _serialize
+        from .linear_model import _check_saved_by, _restore_mode
+        arrays = _serialize.read_npz(path, _GP_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        ints = _serialize.exact(arrays, "ints", "<i8")
+        reals = _serialize.exact(arrays, "reals", "<f8")
+        if ints.size != 4 or reals.size != 4:
+            raise ValueError(f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, 4 and 4 are needed")
+        d, info, norm, n_ls = (int(ints[i]) for i in range(4))
+        x = _serialize.exact(arrays, "X_train", "<f4")
+        if x.ndim != 2 or x.shape[1] != d or x.shape[0] < 1:
+            raise ValueError(f"mojolearn: {path!r} X_train has shape {tuple(x.shape)}, ints say {d} features")
+        n = int(x.shape[0])
+        l_flat = _serialize.exact(arrays, "L", "<f4")
+        dual = _serialize.exact(arrays, "alpha", "<f4")
+        if l_flat.size != n * n or dual.ndim != 1 or dual.size != n:
+            raise ValueError(f"mojolearn: {path!r} L or alpha does not match {n} training rows")
+        kinds = _serialize.exact(arrays, "kinds", "<i4")
+        params = _serialize.exact(arrays, "params", "<f8")
+        ls_len = _serialize.exact(arrays, "ls_len", "<i4")
+        ls = _serialize.exact(arrays, "ls", "<f8")
+        if not (kinds.size == params.size == ls_len.size) or kinds.size < 1:
+            raise ValueError(f"mojolearn: {path!r} carries a malformed kernel spec")
+        lens = [int(ls_len[i]) for i in range(ls_len.size)]
+        if sum(lens) != n_ls or ls.size != max(n_ls, 1):
+            raise ValueError(f"mojolearn: {path!r} length scale table does not match its node lengths")
+        nodes, off = [], 0
+        for i in range(kinds.size):
+            nodes.append((int(kinds[i]), float(params[i]), [float(ls[off + j]) for j in range(lens[i])]))
+            off += lens[i]
+        obj = cls(kernel=_SavedKernel(nodes), alpha=float(reals[0]), normalize_y=bool(norm))
+        _restore_mode(obj, arrays)
+        obj.X_train_ = x
+        obj.kernel_ = obj.kernel
+        obj.n_features_in_ = d
+        obj.L_ = l_flat.reshape((n, n))
+        obj.alpha_ = dual
+        obj.info_ = info
+        obj.normalize_y_ = bool(norm)
+        obj._y_train_mean = float(reals[1])
+        obj._y_train_std = float(reals[2])
+        obj.log_marginal_likelihood_value_ = float(reals[3])
+        return obj
 
     # -- the rest of sklearn's surface, honored or refused by name ----------
 
@@ -663,15 +819,82 @@ class GaussianProcessRegressor(NumericModeMixin):
         return self.log_marginal_likelihood_value_
 
     def sample_y(self, X, n_samples=1, random_state=0):
-        raise NotImplementedError(
-            "mojolearn GaussianProcessRegressor: sample_y is NOT IMPLEMENTED "
-            "(gaussian_process/NOT_IMPLEMENTED.tsv). It draws from the full "
-            "posterior COVARIANCE, and this lane computes only its DIAGONAL "
-            "(DEVIATION 1759); it also needs a second Cholesky and a normal "
-            "random stream inside a reproducibility claim. "
-            "gaussian_process/estimator.mojo::gpr_sample_y_host names the "
-            "closure condition"
+        """Draws from the posterior at `X`: float32 `(n_rows, n_samples)`,
+        column `s` one joint draw over the rows.
+
+        scikit-learn's `GaussianProcessRegressor.sample_y` is the reference:
+        the mean plus a factor of the predictive covariance times standard
+        normals, un-normalized under `normalize_y`. DEVIATION 2793
+        (`gaussian_process/checks/sample_y.mojo`) names the stream, the jitter
+        and the order: the covariance `k(X, X) - V^T V` is factored by the
+        repository's identical Cholesky with its pinned `2^-20` jitter, the
+        normals are position-mapped Philox keyed by `random_state` (DEVIATION
+        2791's construction, tag "GPSY"), and the product is the identical
+        GEMM. The same model, `X`, `n_samples` and `random_state` give the
+        same bits on every vendor and on every call; they are not
+        scikit-learn's bits. `random_state` must be an int in `[0, 2**64)`
+        (None and a RandomState are refused: the key is the int). A covariance
+        that does not factor is refused by name. The unfitted-prior arm and
+        multi-target draws are not implemented.
+        """
+        if not hasattr(self, "alpha_"):
+            raise ValueError(
+                "mojolearn GaussianProcessRegressor: call fit() first (sampling "
+                "the unfitted prior is not implemented)"
+            )
+        if isinstance(n_samples, bool) or not isinstance(n_samples, numbers.Integral):
+            raise TypeError("mojolearn GaussianProcessRegressor: n_samples must be an int")
+        seed = random_state
+        if (isinstance(seed, bool) or not isinstance(seed, numbers.Integral)
+                or not 0 <= int(seed) < 2 ** 64):
+            raise ValueError(
+                "mojolearn GaussianProcessRegressor: sample_y needs random_state to "
+                f"be an int in [0, 2**64), got {seed!r}; it is the key of every "
+                "draw (DEVIATION 2793)"
+            )
+        seed = int(seed)
+        n = int(n_samples)
+        q, _ = as_f32_c(X, ndim=2, name="X")
+        if q.shape[1] != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn GaussianProcessRegressor: X has {q.shape[1]} "
+                f"features, fit saw {self.n_features_in_}"
+            )
+        n_star = q.shape[0]
+        n_train = self.X_train_.shape[0]
+        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays()
+        # Never a zero-length buffer: a refused n still addresses real memory.
+        out = empty((max(n_star * n, 1),), "<f4")
+        xt = self.X_train_
+        lf = self.L_
+        dual = self.alpha_
+        self._extension().gpr_sample_y(
+            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_sample_y_binding.
+            # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, y_out
+            [
+                addr_ro(xt, name="xt"),
+                addr_ro(lf, name="lf"),
+                addr_ro(dual, name="dual"),
+                addr_ro(q, name="q"),
+                addr_ro(kinds, name="kinds"),
+                addr_ro(kparams, name="kparams"),
+                addr_ro(ls_len, name="ls_len"),
+                addr_ro(ls, name="ls"),
+                addr(out, name="y_out"),
+            ],
+            # n_train, n_features, n_star, n_nodes, n_ls, info, n_samples,
+            # random_state low 32 bits, random_state high 32 bits
+            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls,
+             self.info_, n, seed & 0xFFFFFFFF, seed >> 32],
         )
+        if getattr(self, "normalize_y_", False):
+            # predict's un-normalization of the mean, applied to every draw:
+            # std * (mean + L z) + y_mean, so the covariance is std**2 C.
+            s_ = self._y_train_std
+            mu = self._y_train_mean
+            out = Array.from_list(
+                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in out.tolist()], "<f4")
+        return out.reshape((n_star, n))
 
     def score(self, X, y):
         """R^2, scikit-learn's definition, accumulated in FLOAT64 from

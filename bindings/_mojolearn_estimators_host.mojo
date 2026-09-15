@@ -65,7 +65,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_name,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, ftz
 from core.classical_host_predict import (
     CLASSICAL_HOST_SABOTAGE,
     host_ols_predict,
@@ -77,6 +77,12 @@ from core.classical_host_predict import (
     host_qn_sigmoid,
     host_qn_softmax,
     host_tsvd_transform,
+)
+from core.labeled_reference_host_predict import (
+    LABELED_PREDICT_HOST_SABOTAGE,
+    host_labeled_reference_predict,
+    labeled_reference_threshold,
+    labeled_reference_validate,
 )
 from dbscan.host.dbscan_oracle import (
     DBSCAN_ORACLE_HOST_SABOTAGE,
@@ -92,6 +98,7 @@ from decomposition.host.pca_full_oracle import (
     host_pca_fit_full,
     host_pca_full_validate,
 )
+from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE, OP_TN, gemm_oracle
 from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
 from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples
@@ -100,6 +107,16 @@ from kde.impl.neighbors.kernel_density import (
     kde_validate_data_ptr,
     kernel_from_name,
     metric_from_name,
+)
+from kernel_methods.host.km_host_oracle import (
+    kmh_kernel_ridge_predict,
+    kmh_nystroem_transform,
+    kmh_rbf_sampler_transform,
+)
+from preprocessing.host.scaler_oracle import (
+    SCALER_ORACLE_HOST_SABOTAGE,
+    host_minmax_transform,
+    host_standard_transform,
 )
 
 
@@ -149,6 +166,9 @@ def estimators_host_sabotage_binding() raises -> PythonObject:
         or PCA_ORACLE_HOST_SABOTAGE
         or DBSCAN_ORACLE_HOST_SABOTAGE
         or QN_ORACLE_HOST_SABOTAGE
+        or LABELED_PREDICT_HOST_SABOTAGE
+        or SCALER_ORACLE_HOST_SABOTAGE
+        or GEMM_ORACLE_HOST_SABOTAGE
     )
 
 
@@ -489,6 +509,85 @@ def dbscan_fit_binding(
     reads `n_rows` float32 weights and takes the weighted core test
     (`host_weighted_degree`, lane/cpu-training-batch3). `budget_mb != 0` is
     refused BY NAME: the device-sized batch has no host restatement."""
+    return _dbscan_fit_run(x_addr, labels_addr, weight_addr, 0, params)
+
+
+def dbscan_fit_core_binding(
+    x_addr: PythonObject,
+    labels_addr: PythonObject,
+    weight_addr: PythonObject,
+    core_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`dbscan_fit` with the fit's core mask written to `core_addr`
+    (`n_rows` uint8, `DBSCANHostFit.core`), the GPU binding's contract
+    (lane/inference-transductive-predict, 2026-09-15)."""
+    var ca = _index(core_addr)
+    if ca == 0:
+        raise Error("dbscan_fit_core: core_addr must be an array address, got 0")
+    return _dbscan_fit_run(x_addr, labels_addr, weight_addr, ca, params)
+
+
+def labeled_reference_predict_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """Out-of-sample labels for DBSCAN and AgglomerativeClustering on the
+    host by `host_labeled_reference_predict`, the GPU binding's contract
+    (addrs refs, keys, ref_labels, queries, out_labels, out_refs; params
+    n_refs, n_queries, n_features, metric, eps, has_thresh). Returns 0."""
+    if len(addrs) != 6:
+        raise Error(
+            "labeled_reference_predict: addrs must contain 6 addresses, got "
+            + String(len(addrs))
+        )
+    if len(params) != 6:
+        raise Error(
+            "labeled_reference_predict: params must contain 6 values, got "
+            + String(len(params))
+        )
+    var refs_address = _index(addrs[0])
+    var keys_address = _index(addrs[1])
+    var labels_address = _index(addrs[2])
+    var queries_address = _index(addrs[3])
+    var olp = i32_ptr(_index(addrs[4]))
+    var orp = i32_ptr(_index(addrs[5]))
+    var n_refs = _index(params[0])
+    var n_queries = _index(params[1])
+    var n_features = _index(params[2])
+    var metric = _index(params[3])
+    var eps = Float64(py=params[4])
+    var has_thresh = _index(params[5]) != 0
+    with GILReleased(Python()):
+        labeled_reference_validate(n_refs, n_queries, n_features, metric)
+        var refs = read_f32(refs_address, n_refs * n_features)
+        var queries = read_f32(queries_address, n_queries * n_features)
+        var kp = i32_ptr(keys_address)
+        var lp = i32_ptr(labels_address)
+        var keys = List[Int32](capacity=n_refs)
+        var ref_labels = List[Int32](capacity=n_refs)
+        for i in range(n_refs):
+            keys.append(kp[i])
+            ref_labels.append(lp[i])
+        var thresh = Float32(0.0)
+        if has_thresh:
+            thresh = labeled_reference_threshold(metric, eps)
+        var out = host_labeled_reference_predict(
+            refs, n_refs, keys, ref_labels, queries, n_queries, n_features,
+            metric, thresh, has_thresh,
+        )
+        for i in range(n_queries):
+            olp[i] = out.labels[i]
+            orp[i] = out.refs[i]
+    return PythonObject(0)
+
+
+def _dbscan_fit_run(
+    x_addr: PythonObject,
+    labels_addr: PythonObject,
+    weight_addr: PythonObject,
+    core_address: Int,
+    params: PythonObject,
+) raises -> PythonObject:
     if len(params) != 8:
         raise Error(
             "dbscan_fit: params must contain 8 values, got "
@@ -530,6 +629,12 @@ def dbscan_fit_binding(
         )
         for i in range(nr):
             lp[i] = fit.labels[i]
+        if core_address != 0:
+            var cp = MutPointer[UInt8, MutUntrackedOrigin](
+                unsafe_from_address=core_address
+            )
+            for i in range(nr):
+                cp.unsafe_store(i, fit.core[i])
         passes = fit.passes
     return PythonObject(passes)
 
@@ -832,6 +937,295 @@ def qn_sigmoid_binding(
     return PythonObject(0)
 
 
+# ===========================================================================
+# SAVED-MODEL INFERENCE FOR THE SCALERS, COORDINATE DESCENT AND THE KERNEL
+# METHODS (lane/inference-linear-svm, 2026-09-15). Their training bindings
+# (preprocessing, solver, kernel_methods) are reference-only and do not ship
+# in a wheel, so the transform and predict entries a saved model needs are
+# served from this shipped binding under the GPU bindings' names and
+# contracts. Each entry below repeats the reference host binding's guards
+# and calls the same host restatement:
+#   standard_transform, minmax_transform  bindings/_mojolearn_preprocessing_host.mojo
+#                                         over preprocessing/host/scaler_oracle.mojo
+#   cd_predict                            bindings/_mojolearn_solver_host.mojo
+#                                         (gemm_oracle at OP_TN, then ftz(v + intercept))
+#   kernel_ridge_predict, nystroem_transform, rbf_sampler_transform
+#                                         bindings/_mojolearn_kernel_methods_host.mojo
+#                                         over kernel_methods/host/km_host_oracle.mojo
+# No fit entry of those families is compiled here; the fits stay in the
+# reference bindings.
+# ===========================================================================
+
+
+def _pp_load(addr: Int, n: Int) raises -> List[Float32]:
+    if addr == 0:
+        raise Error("preprocessing: null Float32 pointer")
+    return read_f32(addr, max(0, n))
+
+
+def _pp_out(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+    if addr == 0:
+        raise Error("preprocessing: null Float32 pointer")
+    return f32_ptr(addr)
+
+
+def _pp_minmax_finite(values: List[Float32]) raises:
+    for value in values:
+        if not isfinite(value):
+            raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+
+
+def _pp_standard_finite(values: List[Float32]) raises:
+    for value in values:
+        if not isfinite(value):
+            raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
+
+
+def standard_transform_binding(
+    x_addr: PythonObject, mean_addr: PythonObject, scale_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`standard_transform`, the preprocessing host binding's entry and
+    contract: params=[n,d,inverse,with_mean,with_std]; output n*d row-major
+    by `host_standard_transform`. Returns n*d."""
+    if len(params) != 5:
+        raise Error("standard_transform: requires 5 parameters")
+    var n = _index(params[0])
+    var d = _index(params[1])
+    var inverse = _index(params[2])
+    var with_mean = _index(params[3])
+    var with_std = _index(params[4])
+    if n <= 0 or d <= 0 or d > 2147483647 or n > 2147483647 // d:
+        raise Error("StandardScaler: positive dimensions with n*d<=Int32.max required")
+    if with_mean < 0 or with_mean > 1 or with_std < 0 or with_std > 1:
+        raise Error("StandardScaler: flags must be 0 or 1")
+    var x = _pp_load(_index(x_addr), n * d)
+    var mean = _pp_load(_index(mean_addr), d)
+    var scale = _pp_load(_index(scale_addr), d)
+    var output = _pp_out(_index(out_addr))
+    with GILReleased(Python()):
+        if len(x) < n * d or len(mean) < d or len(scale) < d or inverse < 0 or inverse > 1:
+            raise Error("StandardScaler: invalid transform parameters")
+        _pp_standard_finite(x)
+        if with_mean != 0:
+            _pp_standard_finite(mean)
+        if with_std != 0:
+            _pp_standard_finite(scale)
+            for c in range(d):
+                if scale[c] <= 0:
+                    raise Error("StandardScaler: scale must be positive")
+        var result = host_standard_transform(x, mean, scale, n, d, inverse, with_mean, with_std)
+        _pp_standard_finite(result)
+        for i in range(n * d):
+            output[i] = result[i]
+    return PythonObject(n * d)
+
+
+def minmax_transform_binding(
+    x_addr: PythonObject, scale_addr: PythonObject, min_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`minmax_transform`, the preprocessing host binding's entry and
+    contract: params=[n,d,inverse,clip,feature_min,feature_max]; output n*d
+    row-major by `host_minmax_transform`. Returns n*d."""
+    if len(params) != 6:
+        raise Error("minmax_transform: requires 6 parameters")
+    var n = _index(params[0])
+    var d = _index(params[1])
+    var inverse = _index(params[2])
+    var clip = _index(params[3])
+    var lower = Float32(Float64(py=params[4]))
+    var upper = Float32(Float64(py=params[5]))
+    if n <= 0 or d <= 0 or d > 2147483647 or n > 2147483647 // d:
+        raise Error("MinMaxScaler: positive dimensions with n*d<=Int32.max required")
+    if not isfinite(lower) or not isfinite(upper) or lower >= upper:
+        raise Error("MinMaxScaler: finite increasing Float32 feature range required")
+    var x = _pp_load(_index(x_addr), n * d)
+    var scale = _pp_load(_index(scale_addr), d)
+    var offset = _pp_load(_index(min_addr), d)
+    var output = _pp_out(_index(out_addr))
+    with GILReleased(Python()):
+        if len(x) < n * d or len(scale) < d or len(offset) < d or inverse < 0 or inverse > 1 or clip < 0 or clip > 1:
+            raise Error("MinMaxScaler: invalid transform parameters")
+        _pp_minmax_finite(x)
+        _pp_minmax_finite(scale)
+        _pp_minmax_finite(offset)
+        for c in range(d):
+            if scale[c] <= 0:
+                raise Error("MinMaxScaler: scale must be positive")
+        var result = host_minmax_transform(x, scale, offset, n, d, inverse, clip, lower, upper)
+        _pp_minmax_finite(result)
+        for i in range(n * d):
+            output[i] = result[i]
+    return PythonObject(n * d)
+
+
+def cd_predict_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`cd_predict`, the solver host binding's entry and contract: `x_addr`
+    COLUMN-MAJOR `n_rows x n_cols`, params [n_rows, n_cols, intercept],
+    `pred = gemm_oracle(x, coef, OP_TN, n_rows, 1, n_cols)` then
+    `ftz(v + intercept)` when the intercept is not zero. Returns 0."""
+    if len(params) != 3:
+        raise Error(
+            "cd_predict: params must contain n_rows, n_cols, intercept"
+        )
+    var x_address = _index(x_addr)
+    var coef_address = _index(coef_addr)
+    var op = f32_ptr(_index(out_addr))
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var intercept = Float32(Float64(py=params[2]))
+    with GILReleased(Python()):
+        if n_rows < 1 or n_cols < 1:
+            raise Error(
+                "cd_predict_host needs n_rows and n_cols >= 1: got "
+                + String(n_rows) + ", " + String(n_cols)
+            )
+        if n_cols <= 0:
+            raise Error(
+                "Parameter n_cols: number of columns cannot be less than one"
+            )
+        if n_rows <= 1:
+            raise Error("Parameter n_rows: number of rows cannot be less than two")
+        var x = read_f32(x_address, n_rows * n_cols)
+        var coef = read_f32(coef_address, n_cols)
+        var pred = gemm_oracle(x, coef, OP_TN, n_rows, 1, n_cols)
+        for i in range(n_rows):
+            var v = pred[i]
+            if intercept != Float32(0.0):
+                v = ftz(v + intercept)
+            op[i] = v
+    return PythonObject(0)
+
+
+def kernel_ridge_predict_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`kernel_ridge_predict`, the kernel_methods host binding's entry and
+    contract. `addrs`: 0 x_fit, 1 dual, 2 x_new, 3 out. `params`: 0 n, 1 d,
+    2 t, 3 kernel, 4 degree, 5 gamma, 6 coef0, 7 alpha, 8 info, 9 q.
+    Returns 0."""
+    if len(addrs) != 4:
+        raise Error(
+            "kernel_ridge_predict: addrs must contain 4 addresses (x_fit,"
+            " dual, x_new, out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 10:
+        raise Error(
+            "kernel_ridge_predict: params must contain 10 values (n, d, t,"
+            " kernel, degree, gamma, coef0, alpha, info, q), got "
+            + String(len(params))
+        )
+    var op = f32_ptr(Int(py=addrs[3]))
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var t = Int(py=params[2])
+    var kernel = Int(py=params[3])
+    var gamma = Float64(py=params[5])
+    var coef0 = Float64(py=params[6])
+    var q = Int(py=params[9])
+    var x_fit = read_f32(Int(py=addrs[0]), max(0, n * d))
+    var dual = read_f32(Int(py=addrs[1]), max(0, n * t))
+    var x_new = read_f32(Int(py=addrs[2]), max(0, q * d))
+    with GILReleased(Python()):
+        var out = kmh_kernel_ridge_predict(
+            x_fit, dual, n, d, t, kernel, gamma, coef0, x_new, q
+        )
+        for i in range(q * t):
+            op.unsafe_store(i, out[i])
+        _ = out^
+    _ = x_fit^
+    _ = dual^
+    _ = x_new^
+    return PythonObject(0)
+
+
+def nystroem_transform_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`nystroem_transform`, the kernel_methods host binding's entry and
+    contract. `addrs`: 0 components, 1 indices, 2 normalization,
+    3 eigenvalues, 4 eigenvectors, 5 x, 6 out. `params`: 0 q, 1 d, 2 kernel,
+    3 degree, 4 gamma, 5 coef0, 6 seed, 7 sweeps, 8 m. Returns 0."""
+    if len(addrs) != 7:
+        raise Error(
+            "nystroem_transform: addrs must contain 7 addresses (components,"
+            " indices, normalization, eigenvalues, eigenvectors, x, out),"
+            " got "
+            + String(len(addrs))
+        )
+    if len(params) != 9:
+        raise Error(
+            "nystroem_transform: params must contain 9 values (q, d, kernel,"
+            " degree, gamma, coef0, seed, sweeps, m), got "
+            + String(len(params))
+        )
+    var q = Int(py=params[0])
+    var d = Int(py=params[1])
+    var kernel = Int(py=params[2])
+    var gamma = Float64(py=params[4])
+    var coef0 = Float64(py=params[5])
+    var m = Int(py=params[8])
+    var components = read_f32(Int(py=addrs[0]), max(0, q * d))
+    var normalization = read_f32(Int(py=addrs[2]), max(0, q * q))
+    var x = read_f32(Int(py=addrs[5]), max(0, m * d))
+    var op = f32_ptr(Int(py=addrs[6]))
+    with GILReleased(Python()):
+        var out = kmh_nystroem_transform(
+            components, normalization, q, d, kernel, gamma, coef0, x, m
+        )
+        for i in range(m * q):
+            op.unsafe_store(i, out[i])
+        _ = out^
+    _ = components^
+    _ = normalization^
+    _ = x^
+    return PythonObject(0)
+
+
+def rbf_sampler_transform_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`rbf_sampler_transform`, the kernel_methods host binding's entry and
+    contract. `addrs`: 0 weights, 1 offset, 2 x, 3 out. `params`: 0 d, 1 q,
+    2 gamma, 3 seed, 4 sigma, 5 scale, 6 m. Returns 0."""
+    if len(addrs) != 4:
+        raise Error(
+            "rbf_sampler_transform: addrs must contain 4 addresses (weights,"
+            " offset, x, out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 7:
+        raise Error(
+            "rbf_sampler_transform: params must contain 7 values (d, q,"
+            " gamma, seed, sigma, scale, m), got "
+            + String(len(params))
+        )
+    var d = Int(py=params[0])
+    var q = Int(py=params[1])
+    var scale = Float32(Float64(py=params[5]))
+    var m = Int(py=params[6])
+    var weights = read_f32(Int(py=addrs[0]), max(0, d * q))
+    var offset = read_f32(Int(py=addrs[1]), max(0, q))
+    var x = read_f32(Int(py=addrs[2]), max(0, m * d))
+    var op = f32_ptr(Int(py=addrs[3]))
+    with GILReleased(Python()):
+        var out = kmh_rbf_sampler_transform(weights, offset, d, q, scale, x, m)
+        for i in range(m * q):
+            op.unsafe_store(i, out[i])
+        _ = out^
+    _ = weights^
+    _ = offset^
+    _ = x^
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
     try:
@@ -849,6 +1243,8 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[ols_fit_binding]("ols_fit")
         module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[dbscan_fit_binding]("dbscan_fit")
+        module.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
+        module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[ols_predict_binding]("ols_predict")
         module.def_function[tsvd_transform_binding]("tsvd_transform")
@@ -858,6 +1254,12 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[qn_decision_function_binding]("qn_decision_function")
         module.def_function[qn_sigmoid_binding]("qn_sigmoid")
         module.def_function[qn_softmax_binding]("qn_softmax")
+        module.def_function[standard_transform_binding]("standard_transform")
+        module.def_function[minmax_transform_binding]("minmax_transform")
+        module.def_function[cd_predict_binding]("cd_predict")
+        module.def_function[kernel_ridge_predict_binding]("kernel_ridge_predict")
+        module.def_function[nystroem_transform_binding]("nystroem_transform")
+        module.def_function[rbf_sampler_transform_binding]("rbf_sampler_transform")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_estimators_host: ", error))

@@ -1,0 +1,738 @@
+NOTE: --lanes scopes this diff to 10 lane(s); 16 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+| lane/fixture                 | verdict    | apple-m4         | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| byte-lm-resident/base        | IDENTICAL x4 | 4094f29d7499d189 | 4094f29d7499d189 | 4094f29d7499d189 | 4094f29d7499d189 |
+| byte-lm-resident/denormal    | IDENTICAL x4 | f433ba682ec9d3a3 | f433ba682ec9d3a3 | f433ba682ec9d3a3 | f433ba682ec9d3a3 |
+| byte-lm-resident/denormal_ftz | IDENTICAL x4 | 724fd18c8144f388 | 724fd18c8144f388 | 724fd18c8144f388 | 724fd18c8144f388 |
+| byte-lm-resident/dupes       | IDENTICAL x4 | 960769cfbcc39557 | 960769cfbcc39557 | 960769cfbcc39557 | 960769cfbcc39557 |
+| byte-lm-resident/hashed      | IDENTICAL x4 | 88e68038f4c71cb4 | 88e68038f4c71cb4 | 88e68038f4c71cb4 | 88e68038f4c71cb4 |
+| byte-lm-resident/negative    | IDENTICAL x4 | 85edbd989ddbfed0 | 85edbd989ddbfed0 | 85edbd989ddbfed0 | 85edbd989ddbfed0 |
+| byte-lm-resident/odd         | IDENTICAL x4 | 4094f29d7499d189 | 4094f29d7499d189 | 4094f29d7499d189 | 4094f29d7499d189 |
+| byte-lm-resident/ties        | IDENTICAL x4 | f52820f3ff7cdeb1 | f52820f3ff7cdeb1 | f52820f3ff7cdeb1 | f52820f3ff7cdeb1 |
+| byte-lm-resident/wide        | IDENTICAL x4 | 95b8d710bed9afe5 | 95b8d710bed9afe5 | 95b8d710bed9afe5 | 95b8d710bed9afe5 |
+| byte-lm/base                 | IDENTICAL x4 | f9a8d760f503f795 | f9a8d760f503f795 | f9a8d760f503f795 | f9a8d760f503f795 |
+| byte-lm/denormal             | IDENTICAL x4 | 9f7725f93b3c2400 | 9f7725f93b3c2400 | 9f7725f93b3c2400 | 9f7725f93b3c2400 |
+| byte-lm/denormal_ftz         | IDENTICAL x4 | 65bde5a2fb67dfdb | 65bde5a2fb67dfdb | 65bde5a2fb67dfdb | 65bde5a2fb67dfdb |
+| byte-lm/dupes                | IDENTICAL x4 | 9d9fe9205064bac3 | 9d9fe9205064bac3 | 9d9fe9205064bac3 | 9d9fe9205064bac3 |
+| byte-lm/hashed               | IDENTICAL x4 | e1937509a223711e | e1937509a223711e | e1937509a223711e | e1937509a223711e |
+| byte-lm/negative             | IDENTICAL x4 | 2ac343da560e4d31 | 2ac343da560e4d31 | 2ac343da560e4d31 | 2ac343da560e4d31 |
+| byte-lm/odd                  | IDENTICAL x4 | f9a8d760f503f795 | f9a8d760f503f795 | f9a8d760f503f795 | f9a8d760f503f795 |
+| byte-lm/ties                 | IDENTICAL x4 | b6939352795ff292 | b6939352795ff292 | b6939352795ff292 | b6939352795ff292 |
+| byte-lm/wide                 | IDENTICAL x4 | f06570ace1982aab | f06570ace1982aab | f06570ace1982aab | f06570ace1982aab |
+| mamba1/base                  | IDENTICAL x4 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 |
+| mamba1/denormal              | IDENTICAL x4 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 |
+| mamba1/denormal_ftz          | IDENTICAL x4 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 |
+| mamba1/dupes                 | IDENTICAL x4 | 2ac98fad7386a721 | 2ac98fad7386a721 | 2ac98fad7386a721 | 2ac98fad7386a721 |
+| mamba1/hashed                | IDENTICAL x4 | 062931419c55ee5a | 062931419c55ee5a | 062931419c55ee5a | 062931419c55ee5a |
+| mamba1/negative              | IDENTICAL x4 | 0a83c66670f92b55 | 0a83c66670f92b55 | 0a83c66670f92b55 | 0a83c66670f92b55 |
+| mamba1/odd                   | IDENTICAL x4 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 |
+| mamba1/ties                  | IDENTICAL x4 | c821893bfb5ba46c | c821893bfb5ba46c | c821893bfb5ba46c | c821893bfb5ba46c |
+| mamba1/wide                  | IDENTICAL x4 | 0e7b2cee60a53003 | 0e7b2cee60a53003 | 0e7b2cee60a53003 | 0e7b2cee60a53003 |
+| mamba2-dtlimit/base          | IDENTICAL x4 | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf |
+| mamba2-dtlimit/denormal      | IDENTICAL x4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 |
+| mamba2-dtlimit/denormal_ftz  | IDENTICAL x4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 |
+| mamba2-dtlimit/dupes         | IDENTICAL x4 | 04cf69094de5328f | 04cf69094de5328f | 04cf69094de5328f | 04cf69094de5328f |
+| mamba2-dtlimit/hashed        | IDENTICAL x4 | 6cff59b5b34681ab | 6cff59b5b34681ab | 6cff59b5b34681ab | 6cff59b5b34681ab |
+| mamba2-dtlimit/negative      | IDENTICAL x4 | caba9face6653ba0 | caba9face6653ba0 | caba9face6653ba0 | caba9face6653ba0 |
+| mamba2-dtlimit/odd           | IDENTICAL x4 | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf |
+| mamba2-dtlimit/ties          | IDENTICAL x4 | 70a5916600842982 | 70a5916600842982 | 70a5916600842982 | 70a5916600842982 |
+| mamba2-dtlimit/wide          | IDENTICAL x4 | 911465156f47fed2 | 911465156f47fed2 | 911465156f47fed2 | 911465156f47fed2 |
+| mamba2/base                  | IDENTICAL x4 | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e |
+| mamba2/denormal              | IDENTICAL x4 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 |
+| mamba2/denormal_ftz          | IDENTICAL x4 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 |
+| mamba2/dupes                 | IDENTICAL x4 | c565acd587b39ab2 | c565acd587b39ab2 | c565acd587b39ab2 | c565acd587b39ab2 |
+| mamba2/hashed                | IDENTICAL x4 | 2689cc3187df61fd | 2689cc3187df61fd | 2689cc3187df61fd | 2689cc3187df61fd |
+| mamba2/negative              | IDENTICAL x4 | 3506202ab66d8a1f | 3506202ab66d8a1f | 3506202ab66d8a1f | 3506202ab66d8a1f |
+| mamba2/odd                   | IDENTICAL x4 | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e |
+| mamba2/ties                  | IDENTICAL x4 | 48a4bec7b6f6e4f6 | 48a4bec7b6f6e4f6 | 48a4bec7b6f6e4f6 | 48a4bec7b6f6e4f6 |
+| mamba2/wide                  | IDENTICAL x4 | 0d1022f692c144dd | 0d1022f692c144dd | 0d1022f692c144dd | 0d1022f692c144dd |
+| mamba3/base                  | IDENTICAL x4 | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a |
+| mamba3/denormal              | IDENTICAL x4 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 |
+| mamba3/denormal_ftz          | IDENTICAL x4 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 |
+| mamba3/dupes                 | IDENTICAL x4 | 59a1567b027ac450 | 59a1567b027ac450 | 59a1567b027ac450 | 59a1567b027ac450 |
+| mamba3/hashed                | IDENTICAL x4 | 6535988e7df6b7c8 | 6535988e7df6b7c8 | 6535988e7df6b7c8 | 6535988e7df6b7c8 |
+| mamba3/negative              | IDENTICAL x4 | 467cfdf1eeb3a1c6 | 467cfdf1eeb3a1c6 | 467cfdf1eeb3a1c6 | 467cfdf1eeb3a1c6 |
+| mamba3/odd                   | IDENTICAL x4 | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a |
+| mamba3/ties                  | IDENTICAL x4 | 4bad5909ae635933 | 4bad5909ae635933 | 4bad5909ae635933 | 4bad5909ae635933 |
+| mamba3/wide                  | IDENTICAL x4 | 07f2064c0243e8c2 | 07f2064c0243e8c2 | 07f2064c0243e8c2 | 07f2064c0243e8c2 |
+| samba-untied-dropout-accum/base | IDENTICAL x4 | 4610c84719bc1a25 | 4610c84719bc1a25 | 4610c84719bc1a25 | 4610c84719bc1a25 |
+| samba-untied-dropout-accum/denormal | IDENTICAL x4 | 70a608ce179e03dd | 70a608ce179e03dd | 70a608ce179e03dd | 70a608ce179e03dd |
+| samba-untied-dropout-accum/denormal_ftz | IDENTICAL x4 | eb0dc6c31a737411 | eb0dc6c31a737411 | eb0dc6c31a737411 | eb0dc6c31a737411 |
+| samba-untied-dropout-accum/dupes | IDENTICAL x4 | 9a7b9c31419aa4b9 | 9a7b9c31419aa4b9 | 9a7b9c31419aa4b9 | 9a7b9c31419aa4b9 |
+| samba-untied-dropout-accum/hashed | IDENTICAL x4 | 18a317bc4260eb9a | 18a317bc4260eb9a | 18a317bc4260eb9a | 18a317bc4260eb9a |
+| samba-untied-dropout-accum/negative | IDENTICAL x4 | 42e27eabc8c4706f | 42e27eabc8c4706f | 42e27eabc8c4706f | 42e27eabc8c4706f |
+| samba-untied-dropout-accum/odd | IDENTICAL x4 | 4610c84719bc1a25 | 4610c84719bc1a25 | 4610c84719bc1a25 | 4610c84719bc1a25 |
+| samba-untied-dropout-accum/ties | IDENTICAL x4 | 603f4c03dcbe47c9 | 603f4c03dcbe47c9 | 603f4c03dcbe47c9 | 603f4c03dcbe47c9 |
+| samba-untied-dropout-accum/wide | IDENTICAL x4 | 70d8b0c335b40464 | 70d8b0c335b40464 | 70d8b0c335b40464 | 70d8b0c335b40464 |
+| samba/base                   | IDENTICAL x4 | 037e7701daa7fc7c | 037e7701daa7fc7c | 037e7701daa7fc7c | 037e7701daa7fc7c |
+| samba/denormal               | IDENTICAL x4 | 97c929c9824ede42 | 97c929c9824ede42 | 97c929c9824ede42 | 97c929c9824ede42 |
+| samba/denormal_ftz           | IDENTICAL x4 | 2dc833bbce3de194 | 2dc833bbce3de194 | 2dc833bbce3de194 | 2dc833bbce3de194 |
+| samba/dupes                  | IDENTICAL x4 | daa904c0d89aefde | daa904c0d89aefde | daa904c0d89aefde | daa904c0d89aefde |
+| samba/hashed                 | IDENTICAL x4 | 0fb42364f4c84411 | 0fb42364f4c84411 | 0fb42364f4c84411 | 0fb42364f4c84411 |
+| samba/negative               | IDENTICAL x4 | 8c6bfc3b26396833 | 8c6bfc3b26396833 | 8c6bfc3b26396833 | 8c6bfc3b26396833 |
+| samba/odd                    | IDENTICAL x4 | 037e7701daa7fc7c | 037e7701daa7fc7c | 037e7701daa7fc7c | 037e7701daa7fc7c |
+| samba/ties                   | IDENTICAL x4 | e02c7412e926a415 | e02c7412e926a415 | e02c7412e926a415 | e02c7412e926a415 |
+| samba/wide                   | IDENTICAL x4 | 68e2e32002737938 | 68e2e32002737938 | 68e2e32002737938 | 68e2e32002737938 |
+| transformer-window/base      | IDENTICAL x4 | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d |
+| transformer-window/denormal  | IDENTICAL x4 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 |
+| transformer-window/denormal_ftz | IDENTICAL x4 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 |
+| transformer-window/dupes     | IDENTICAL x4 | 44fa7ec52d690ee9 | 44fa7ec52d690ee9 | 44fa7ec52d690ee9 | 44fa7ec52d690ee9 |
+| transformer-window/hashed    | IDENTICAL x4 | af2bffef90669cb5 | af2bffef90669cb5 | af2bffef90669cb5 | af2bffef90669cb5 |
+| transformer-window/negative  | IDENTICAL x4 | e1f21e879b6d8fa9 | e1f21e879b6d8fa9 | e1f21e879b6d8fa9 | e1f21e879b6d8fa9 |
+| transformer-window/odd       | IDENTICAL x4 | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d |
+| transformer-window/ties      | IDENTICAL x4 | 4cc1690c572f7931 | 4cc1690c572f7931 | 4cc1690c572f7931 | 4cc1690c572f7931 |
+| transformer-window/wide      | IDENTICAL x4 | 44a2b49da1619c85 | 44a2b49da1619c85 | 44a2b49da1619c85 | 44a2b49da1619c85 |
+| transformer/base             | IDENTICAL x4 | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 295d4e62d4c78b14 |
+| transformer/denormal         | IDENTICAL x4 | da87cbc4fb93d086 | da87cbc4fb93d086 | da87cbc4fb93d086 | da87cbc4fb93d086 |
+| transformer/denormal_ftz     | IDENTICAL x4 | da87cbc4fb93d086 | da87cbc4fb93d086 | da87cbc4fb93d086 | da87cbc4fb93d086 |
+| transformer/dupes            | IDENTICAL x4 | e48bc0a8545b1a29 | e48bc0a8545b1a29 | e48bc0a8545b1a29 | e48bc0a8545b1a29 |
+| transformer/hashed           | IDENTICAL x4 | 7d565e3a35324caa | 7d565e3a35324caa | 7d565e3a35324caa | 7d565e3a35324caa |
+| transformer/negative         | IDENTICAL x4 | 79d66e219ac996a9 | 79d66e219ac996a9 | 79d66e219ac996a9 | 79d66e219ac996a9 |
+| transformer/odd              | IDENTICAL x4 | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 295d4e62d4c78b14 |
+| transformer/ties             | IDENTICAL x4 | 251eb6369ef11d70 | 251eb6369ef11d70 | 251eb6369ef11d70 | 251eb6369ef11d70 |
+| transformer/wide             | IDENTICAL x4 | ecbe59229197362b | ecbe59229197362b | ecbe59229197362b | ecbe59229197362b |
+
+summary: IDENTICAL=90
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| byte-lm-resident/base        | infer  | IDENTICAL x4 | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f |
+| byte-lm-resident/base        | model  | IDENTICAL x4 | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 |
+| byte-lm-resident/base        | batch  | IDENTICAL x4 | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d |
+| byte-lm-resident/base        | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 75d10aa264b7a173 |
+| byte-lm-resident/base        | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/base        | batchscale | IDENTICAL x4 | d5797719799d871d | d5797719799d871d | d5797719799d871d | d5797719799d871d |
+| byte-lm-resident/base        | ragged | IDENTICAL x4 | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 |
+| byte-lm-resident/denormal    | infer  | IDENTICAL x4 | 16c555cc1776f127 | 16c555cc1776f127 | 16c555cc1776f127 | 16c555cc1776f127 |
+| byte-lm-resident/denormal    | model  | IDENTICAL x4 | 90d95bea0a099246 | 90d95bea0a099246 | 90d95bea0a099246 | 90d95bea0a099246 |
+| byte-lm-resident/denormal    | batch  | IDENTICAL x4 | 9a4f9d37b38b6127 | 9a4f9d37b38b6127 | 9a4f9d37b38b6127 | 9a4f9d37b38b6127 |
+| byte-lm-resident/denormal    | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8ab8f644645ef801 |
+| byte-lm-resident/denormal    | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/denormal    | batchscale | IDENTICAL x4 | 193793e4ae0cab88 | 193793e4ae0cab88 | 193793e4ae0cab88 | 193793e4ae0cab88 |
+| byte-lm-resident/denormal    | ragged | IDENTICAL x4 | 397cbe2d51703d59 | 397cbe2d51703d59 | 397cbe2d51703d59 | 397cbe2d51703d59 |
+| byte-lm-resident/denormal_ftz | infer  | IDENTICAL x4 | 21c7e2e9e4e3c163 | 21c7e2e9e4e3c163 | 21c7e2e9e4e3c163 | 21c7e2e9e4e3c163 |
+| byte-lm-resident/denormal_ftz | model  | IDENTICAL x4 | ff9e808d37f12ae2 | ff9e808d37f12ae2 | ff9e808d37f12ae2 | ff9e808d37f12ae2 |
+| byte-lm-resident/denormal_ftz | batch  | IDENTICAL x4 | 3e3cfcb8788e7cf3 | 3e3cfcb8788e7cf3 | 3e3cfcb8788e7cf3 | 3e3cfcb8788e7cf3 |
+| byte-lm-resident/denormal_ftz | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 9898acc0a6d417c0 |
+| byte-lm-resident/denormal_ftz | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/denormal_ftz | batchscale | IDENTICAL x4 | c72376fe922328df | c72376fe922328df | c72376fe922328df | c72376fe922328df |
+| byte-lm-resident/denormal_ftz | ragged | IDENTICAL x4 | a6550ba7ad3bd554 | a6550ba7ad3bd554 | a6550ba7ad3bd554 | a6550ba7ad3bd554 |
+| byte-lm-resident/dupes       | infer  | IDENTICAL x4 | a76dcc66f0b0b3d6 | a76dcc66f0b0b3d6 | a76dcc66f0b0b3d6 | a76dcc66f0b0b3d6 |
+| byte-lm-resident/dupes       | model  | IDENTICAL x4 | 78870cb1fb90caf6 | 78870cb1fb90caf6 | 78870cb1fb90caf6 | 78870cb1fb90caf6 |
+| byte-lm-resident/dupes       | batch  | IDENTICAL x4 | ad53b8960db92852 | ad53b8960db92852 | ad53b8960db92852 | ad53b8960db92852 |
+| byte-lm-resident/dupes       | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 6bf12066f8169234 |
+| byte-lm-resident/dupes       | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/dupes       | batchscale | IDENTICAL x4 | 37ef89fa03fe5f1a | 37ef89fa03fe5f1a | 37ef89fa03fe5f1a | 37ef89fa03fe5f1a |
+| byte-lm-resident/dupes       | ragged | IDENTICAL x4 | 723c9f8de59b128d | 723c9f8de59b128d | 723c9f8de59b128d | 723c9f8de59b128d |
+| byte-lm-resident/hashed      | infer  | IDENTICAL x4 | d9a8ae1211de63a8 | d9a8ae1211de63a8 | d9a8ae1211de63a8 | d9a8ae1211de63a8 |
+| byte-lm-resident/hashed      | model  | IDENTICAL x4 | 0fa0ffc6bdf7e8da | 0fa0ffc6bdf7e8da | 0fa0ffc6bdf7e8da | 0fa0ffc6bdf7e8da |
+| byte-lm-resident/hashed      | batch  | IDENTICAL x4 | 2a8fad887169cf0e | 2a8fad887169cf0e | 2a8fad887169cf0e | 2a8fad887169cf0e |
+| byte-lm-resident/hashed      | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | fa10ffc49616575d |
+| byte-lm-resident/hashed      | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/hashed      | batchscale | IDENTICAL x4 | d0aa913541fabd9a | d0aa913541fabd9a | d0aa913541fabd9a | d0aa913541fabd9a |
+| byte-lm-resident/hashed      | ragged | IDENTICAL x4 | bca6020717597afa | bca6020717597afa | bca6020717597afa | bca6020717597afa |
+| byte-lm-resident/negative    | infer  | IDENTICAL x4 | feaf17f14d1fa224 | feaf17f14d1fa224 | feaf17f14d1fa224 | feaf17f14d1fa224 |
+| byte-lm-resident/negative    | model  | IDENTICAL x4 | a6aa56e3723d26e7 | a6aa56e3723d26e7 | a6aa56e3723d26e7 | a6aa56e3723d26e7 |
+| byte-lm-resident/negative    | batch  | IDENTICAL x4 | 6daa8fd7fe40b602 | 6daa8fd7fe40b602 | 6daa8fd7fe40b602 | 6daa8fd7fe40b602 |
+| byte-lm-resident/negative    | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 54680d0fdf3ebf0a |
+| byte-lm-resident/negative    | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/negative    | batchscale | IDENTICAL x4 | 21f9d38b29563d9e | 21f9d38b29563d9e | 21f9d38b29563d9e | 21f9d38b29563d9e |
+| byte-lm-resident/negative    | ragged | IDENTICAL x4 | 820dbda443e05239 | 820dbda443e05239 | 820dbda443e05239 | 820dbda443e05239 |
+| byte-lm-resident/odd         | infer  | IDENTICAL x4 | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f |
+| byte-lm-resident/odd         | model  | IDENTICAL x4 | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 |
+| byte-lm-resident/odd         | batch  | IDENTICAL x4 | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d |
+| byte-lm-resident/odd         | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 75d10aa264b7a173 |
+| byte-lm-resident/odd         | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/odd         | batchscale | IDENTICAL x4 | 51efa1a6bad70fd4 | 51efa1a6bad70fd4 | 51efa1a6bad70fd4 | 51efa1a6bad70fd4 |
+| byte-lm-resident/odd         | ragged | IDENTICAL x4 | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 |
+| byte-lm-resident/ties        | infer  | IDENTICAL x4 | efab6527ef0195aa | efab6527ef0195aa | efab6527ef0195aa | efab6527ef0195aa |
+| byte-lm-resident/ties        | model  | IDENTICAL x4 | 947981070e61e180 | 947981070e61e180 | 947981070e61e180 | 947981070e61e180 |
+| byte-lm-resident/ties        | batch  | IDENTICAL x4 | 4178e56fb2b92328 | 4178e56fb2b92328 | 4178e56fb2b92328 | 4178e56fb2b92328 |
+| byte-lm-resident/ties        | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 5ab9db09132a0874 |
+| byte-lm-resident/ties        | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/ties        | batchscale | IDENTICAL x4 | ec3a490b2ab22890 | ec3a490b2ab22890 | ec3a490b2ab22890 | ec3a490b2ab22890 |
+| byte-lm-resident/ties        | ragged | IDENTICAL x4 | 6646c27bf26cff39 | 6646c27bf26cff39 | 6646c27bf26cff39 | 6646c27bf26cff39 |
+| byte-lm-resident/wide        | infer  | IDENTICAL x4 | d9cdc033be91d67a | d9cdc033be91d67a | d9cdc033be91d67a | d9cdc033be91d67a |
+| byte-lm-resident/wide        | model  | IDENTICAL x4 | 24cbda1caad25158 | 24cbda1caad25158 | 24cbda1caad25158 | 24cbda1caad25158 |
+| byte-lm-resident/wide        | batch  | IDENTICAL x4 | 6d2986674bd92c94 | 6d2986674bd92c94 | 6d2986674bd92c94 | 6d2986674bd92c94 |
+| byte-lm-resident/wide        | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | b2d04e8471f8694e |
+| byte-lm-resident/wide        | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/wide        | batchscale | IDENTICAL x4 | 145f7e4820523fac | 145f7e4820523fac | 145f7e4820523fac | 145f7e4820523fac |
+| byte-lm-resident/wide        | ragged | IDENTICAL x4 | 44b32eafb5d4fc26 | 44b32eafb5d4fc26 | 44b32eafb5d4fc26 | 44b32eafb5d4fc26 |
+| byte-lm/base                 | infer  | IDENTICAL x4 | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f |
+| byte-lm/base                 | model  | IDENTICAL x4 | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 |
+| byte-lm/base                 | batch  | IDENTICAL x4 | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d |
+| byte-lm/base                 | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 75d10aa264b7a173 |
+| byte-lm/base                 | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/base                 | batchscale | IDENTICAL x4 | d5797719799d871d | d5797719799d871d | d5797719799d871d | d5797719799d871d |
+| byte-lm/base                 | ragged | IDENTICAL x4 | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 |
+| byte-lm/denormal             | infer  | IDENTICAL x4 | 16c555cc1776f127 | 16c555cc1776f127 | 16c555cc1776f127 | 16c555cc1776f127 |
+| byte-lm/denormal             | model  | IDENTICAL x4 | 90d95bea0a099246 | 90d95bea0a099246 | 90d95bea0a099246 | 90d95bea0a099246 |
+| byte-lm/denormal             | batch  | IDENTICAL x4 | 9a4f9d37b38b6127 | 9a4f9d37b38b6127 | 9a4f9d37b38b6127 | 9a4f9d37b38b6127 |
+| byte-lm/denormal             | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8ab8f644645ef801 |
+| byte-lm/denormal             | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/denormal             | batchscale | IDENTICAL x4 | 193793e4ae0cab88 | 193793e4ae0cab88 | 193793e4ae0cab88 | 193793e4ae0cab88 |
+| byte-lm/denormal             | ragged | IDENTICAL x4 | 397cbe2d51703d59 | 397cbe2d51703d59 | 397cbe2d51703d59 | 397cbe2d51703d59 |
+| byte-lm/denormal_ftz         | infer  | IDENTICAL x4 | 21c7e2e9e4e3c163 | 21c7e2e9e4e3c163 | 21c7e2e9e4e3c163 | 21c7e2e9e4e3c163 |
+| byte-lm/denormal_ftz         | model  | IDENTICAL x4 | ff9e808d37f12ae2 | ff9e808d37f12ae2 | ff9e808d37f12ae2 | ff9e808d37f12ae2 |
+| byte-lm/denormal_ftz         | batch  | IDENTICAL x4 | 3e3cfcb8788e7cf3 | 3e3cfcb8788e7cf3 | 3e3cfcb8788e7cf3 | 3e3cfcb8788e7cf3 |
+| byte-lm/denormal_ftz         | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 9898acc0a6d417c0 |
+| byte-lm/denormal_ftz         | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/denormal_ftz         | batchscale | IDENTICAL x4 | c72376fe922328df | c72376fe922328df | c72376fe922328df | c72376fe922328df |
+| byte-lm/denormal_ftz         | ragged | IDENTICAL x4 | a6550ba7ad3bd554 | a6550ba7ad3bd554 | a6550ba7ad3bd554 | a6550ba7ad3bd554 |
+| byte-lm/dupes                | infer  | IDENTICAL x4 | a76dcc66f0b0b3d6 | a76dcc66f0b0b3d6 | a76dcc66f0b0b3d6 | a76dcc66f0b0b3d6 |
+| byte-lm/dupes                | model  | IDENTICAL x4 | 78870cb1fb90caf6 | 78870cb1fb90caf6 | 78870cb1fb90caf6 | 78870cb1fb90caf6 |
+| byte-lm/dupes                | batch  | IDENTICAL x4 | ad53b8960db92852 | ad53b8960db92852 | ad53b8960db92852 | ad53b8960db92852 |
+| byte-lm/dupes                | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 6bf12066f8169234 |
+| byte-lm/dupes                | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/dupes                | batchscale | IDENTICAL x4 | 37ef89fa03fe5f1a | 37ef89fa03fe5f1a | 37ef89fa03fe5f1a | 37ef89fa03fe5f1a |
+| byte-lm/dupes                | ragged | IDENTICAL x4 | 723c9f8de59b128d | 723c9f8de59b128d | 723c9f8de59b128d | 723c9f8de59b128d |
+| byte-lm/hashed               | infer  | IDENTICAL x4 | d9a8ae1211de63a8 | d9a8ae1211de63a8 | d9a8ae1211de63a8 | d9a8ae1211de63a8 |
+| byte-lm/hashed               | model  | IDENTICAL x4 | 0fa0ffc6bdf7e8da | 0fa0ffc6bdf7e8da | 0fa0ffc6bdf7e8da | 0fa0ffc6bdf7e8da |
+| byte-lm/hashed               | batch  | IDENTICAL x4 | 2a8fad887169cf0e | 2a8fad887169cf0e | 2a8fad887169cf0e | 2a8fad887169cf0e |
+| byte-lm/hashed               | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | fa10ffc49616575d |
+| byte-lm/hashed               | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/hashed               | batchscale | IDENTICAL x4 | d0aa913541fabd9a | d0aa913541fabd9a | d0aa913541fabd9a | d0aa913541fabd9a |
+| byte-lm/hashed               | ragged | IDENTICAL x4 | bca6020717597afa | bca6020717597afa | bca6020717597afa | bca6020717597afa |
+| byte-lm/negative             | infer  | IDENTICAL x4 | feaf17f14d1fa224 | feaf17f14d1fa224 | feaf17f14d1fa224 | feaf17f14d1fa224 |
+| byte-lm/negative             | model  | IDENTICAL x4 | a6aa56e3723d26e7 | a6aa56e3723d26e7 | a6aa56e3723d26e7 | a6aa56e3723d26e7 |
+| byte-lm/negative             | batch  | IDENTICAL x4 | 6daa8fd7fe40b602 | 6daa8fd7fe40b602 | 6daa8fd7fe40b602 | 6daa8fd7fe40b602 |
+| byte-lm/negative             | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 54680d0fdf3ebf0a |
+| byte-lm/negative             | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/negative             | batchscale | IDENTICAL x4 | 21f9d38b29563d9e | 21f9d38b29563d9e | 21f9d38b29563d9e | 21f9d38b29563d9e |
+| byte-lm/negative             | ragged | IDENTICAL x4 | 820dbda443e05239 | 820dbda443e05239 | 820dbda443e05239 | 820dbda443e05239 |
+| byte-lm/odd                  | infer  | IDENTICAL x4 | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f |
+| byte-lm/odd                  | model  | IDENTICAL x4 | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 |
+| byte-lm/odd                  | batch  | IDENTICAL x4 | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d |
+| byte-lm/odd                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 75d10aa264b7a173 |
+| byte-lm/odd                  | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/odd                  | batchscale | IDENTICAL x4 | 51efa1a6bad70fd4 | 51efa1a6bad70fd4 | 51efa1a6bad70fd4 | 51efa1a6bad70fd4 |
+| byte-lm/odd                  | ragged | IDENTICAL x4 | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 |
+| byte-lm/ties                 | infer  | IDENTICAL x4 | efab6527ef0195aa | efab6527ef0195aa | efab6527ef0195aa | efab6527ef0195aa |
+| byte-lm/ties                 | model  | IDENTICAL x4 | 947981070e61e180 | 947981070e61e180 | 947981070e61e180 | 947981070e61e180 |
+| byte-lm/ties                 | batch  | IDENTICAL x4 | 4178e56fb2b92328 | 4178e56fb2b92328 | 4178e56fb2b92328 | 4178e56fb2b92328 |
+| byte-lm/ties                 | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 5ab9db09132a0874 |
+| byte-lm/ties                 | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/ties                 | batchscale | IDENTICAL x4 | ec3a490b2ab22890 | ec3a490b2ab22890 | ec3a490b2ab22890 | ec3a490b2ab22890 |
+| byte-lm/ties                 | ragged | IDENTICAL x4 | 6646c27bf26cff39 | 6646c27bf26cff39 | 6646c27bf26cff39 | 6646c27bf26cff39 |
+| byte-lm/wide                 | infer  | IDENTICAL x4 | d9cdc033be91d67a | d9cdc033be91d67a | d9cdc033be91d67a | d9cdc033be91d67a |
+| byte-lm/wide                 | model  | IDENTICAL x4 | 24cbda1caad25158 | 24cbda1caad25158 | 24cbda1caad25158 | 24cbda1caad25158 |
+| byte-lm/wide                 | batch  | IDENTICAL x4 | 6d2986674bd92c94 | 6d2986674bd92c94 | 6d2986674bd92c94 | 6d2986674bd92c94 |
+| byte-lm/wide                 | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | b2d04e8471f8694e |
+| byte-lm/wide                 | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/wide                 | batchscale | IDENTICAL x4 | 145f7e4820523fac | 145f7e4820523fac | 145f7e4820523fac | 145f7e4820523fac |
+| byte-lm/wide                 | ragged | IDENTICAL x4 | 44b32eafb5d4fc26 | 44b32eafb5d4fc26 | 44b32eafb5d4fc26 | 44b32eafb5d4fc26 |
+| mamba1/base                  | infer  | IDENTICAL x4 | 97e86b9db80719a7 | 97e86b9db80719a7 | 97e86b9db80719a7 | 97e86b9db80719a7 |
+| mamba1/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/base                  | batch  | IDENTICAL x4 | fbb1f3233000006e | fbb1f3233000006e | fbb1f3233000006e | fbb1f3233000006e |
+| mamba1/base                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 3fd0b9d19f53c9c1 |
+| mamba1/base                  | batchgrad | IDENTICAL x4 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 |
+| mamba1/base                  | batchscale | IDENTICAL x4 | 5481e0dff3303591 | 5481e0dff3303591 | 5481e0dff3303591 | 5481e0dff3303591 |
+| mamba1/base                  | ragged | IDENTICAL x4 | e560b542fc558190 | e560b542fc558190 | e560b542fc558190 | e560b542fc558190 |
+| mamba1/denormal              | infer  | IDENTICAL x4 | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 79e0f910c5525ef7 |
+| mamba1/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/denormal              | batch  | IDENTICAL x4 | a17b09e0f608dab7 | a17b09e0f608dab7 | a17b09e0f608dab7 | a17b09e0f608dab7 |
+| mamba1/denormal              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 7b0bbb310451668a |
+| mamba1/denormal              | batchgrad | IDENTICAL x4 | 6a7023d45d75092c | 6a7023d45d75092c | 6a7023d45d75092c | 6a7023d45d75092c |
+| mamba1/denormal              | batchscale | IDENTICAL x4 | 6cefa2fe4b8e937a | 6cefa2fe4b8e937a | 6cefa2fe4b8e937a | 6cefa2fe4b8e937a |
+| mamba1/denormal              | ragged | IDENTICAL x4 | 820e4e6bfba11c24 | 820e4e6bfba11c24 | 820e4e6bfba11c24 | 820e4e6bfba11c24 |
+| mamba1/denormal_ftz          | infer  | IDENTICAL x4 | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 79e0f910c5525ef7 |
+| mamba1/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/denormal_ftz          | batch  | IDENTICAL x4 | a17b09e0f608dab7 | a17b09e0f608dab7 | a17b09e0f608dab7 | a17b09e0f608dab7 |
+| mamba1/denormal_ftz          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | deb7fd8a06a24ed9 |
+| mamba1/denormal_ftz          | batchgrad | IDENTICAL x4 | 6a7023d45d75092c | 6a7023d45d75092c | 6a7023d45d75092c | 6a7023d45d75092c |
+| mamba1/denormal_ftz          | batchscale | IDENTICAL x4 | 6cefa2fe4b8e937a | 6cefa2fe4b8e937a | 6cefa2fe4b8e937a | 6cefa2fe4b8e937a |
+| mamba1/denormal_ftz          | ragged | IDENTICAL x4 | 820e4e6bfba11c24 | 820e4e6bfba11c24 | 820e4e6bfba11c24 | 820e4e6bfba11c24 |
+| mamba1/dupes                 | infer  | IDENTICAL x4 | 4f1ca2b3595ec583 | 4f1ca2b3595ec583 | 4f1ca2b3595ec583 | 4f1ca2b3595ec583 |
+| mamba1/dupes                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/dupes                 | batch  | IDENTICAL x4 | 7eb2c68796e0f91a | 7eb2c68796e0f91a | 7eb2c68796e0f91a | 7eb2c68796e0f91a |
+| mamba1/dupes                 | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 3fd0b9d19f53c9c1 |
+| mamba1/dupes                 | batchgrad | IDENTICAL x4 | d3d5d8870262f8b6 | d3d5d8870262f8b6 | d3d5d8870262f8b6 | d3d5d8870262f8b6 |
+| mamba1/dupes                 | batchscale | IDENTICAL x4 | b8fa64bb560de88e | b8fa64bb560de88e | b8fa64bb560de88e | b8fa64bb560de88e |
+| mamba1/dupes                 | ragged | IDENTICAL x4 | 5a07ad1dafb81fb1 | 5a07ad1dafb81fb1 | 5a07ad1dafb81fb1 | 5a07ad1dafb81fb1 |
+| mamba1/hashed                | infer  | IDENTICAL x4 | b2e6c1006bf3a5ce | b2e6c1006bf3a5ce | b2e6c1006bf3a5ce | b2e6c1006bf3a5ce |
+| mamba1/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/hashed                | batch  | IDENTICAL x4 | 29fc3810bca1e78a | 29fc3810bca1e78a | 29fc3810bca1e78a | 29fc3810bca1e78a |
+| mamba1/hashed                | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 08398a6bfcc8570a |
+| mamba1/hashed                | batchgrad | IDENTICAL x4 | 02307cd514fceb2d | 02307cd514fceb2d | 02307cd514fceb2d | 02307cd514fceb2d |
+| mamba1/hashed                | batchscale | IDENTICAL x4 | d44c4d814a35d216 | d44c4d814a35d216 | d44c4d814a35d216 | d44c4d814a35d216 |
+| mamba1/hashed                | ragged | IDENTICAL x4 | 8fbfb081c0991539 | 8fbfb081c0991539 | 8fbfb081c0991539 | 8fbfb081c0991539 |
+| mamba1/negative              | infer  | IDENTICAL x4 | c0e8d2045bc0faf6 | c0e8d2045bc0faf6 | c0e8d2045bc0faf6 | c0e8d2045bc0faf6 |
+| mamba1/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/negative              | batch  | IDENTICAL x4 | a48d8850d38c0e4c | a48d8850d38c0e4c | a48d8850d38c0e4c | a48d8850d38c0e4c |
+| mamba1/negative              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 0f0f848b5a1a12e3 |
+| mamba1/negative              | batchgrad | IDENTICAL x4 | d337c6414d0c6b88 | d337c6414d0c6b88 | d337c6414d0c6b88 | d337c6414d0c6b88 |
+| mamba1/negative              | batchscale | IDENTICAL x4 | f1f293536dd10853 | f1f293536dd10853 | f1f293536dd10853 | f1f293536dd10853 |
+| mamba1/negative              | ragged | IDENTICAL x4 | 71baa8846a0294d9 | 71baa8846a0294d9 | 71baa8846a0294d9 | 71baa8846a0294d9 |
+| mamba1/odd                   | infer  | IDENTICAL x4 | 97e86b9db80719a7 | 97e86b9db80719a7 | 97e86b9db80719a7 | 97e86b9db80719a7 |
+| mamba1/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/odd                   | batch  | IDENTICAL x4 | fbb1f3233000006e | fbb1f3233000006e | fbb1f3233000006e | fbb1f3233000006e |
+| mamba1/odd                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 3fd0b9d19f53c9c1 |
+| mamba1/odd                   | batchgrad | IDENTICAL x4 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 |
+| mamba1/odd                   | batchscale | IDENTICAL x4 | 8f97528deb8aa655 | 8f97528deb8aa655 | 8f97528deb8aa655 | 8f97528deb8aa655 |
+| mamba1/odd                   | ragged | IDENTICAL x4 | e560b542fc558190 | e560b542fc558190 | e560b542fc558190 | e560b542fc558190 |
+| mamba1/ties                  | infer  | IDENTICAL x4 | 13aed38cf2e3c341 | 13aed38cf2e3c341 | 13aed38cf2e3c341 | 13aed38cf2e3c341 |
+| mamba1/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/ties                  | batch  | IDENTICAL x4 | 23b7f12c8a228592 | 23b7f12c8a228592 | 23b7f12c8a228592 | 23b7f12c8a228592 |
+| mamba1/ties                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 29e18589720b7474 |
+| mamba1/ties                  | batchgrad | IDENTICAL x4 | 606a5724ab5c0f41 | 606a5724ab5c0f41 | 606a5724ab5c0f41 | 606a5724ab5c0f41 |
+| mamba1/ties                  | batchscale | IDENTICAL x4 | dcb2a540e0d72eac | dcb2a540e0d72eac | dcb2a540e0d72eac | dcb2a540e0d72eac |
+| mamba1/ties                  | ragged | IDENTICAL x4 | 5abcb0b09ea615e3 | 5abcb0b09ea615e3 | 5abcb0b09ea615e3 | 5abcb0b09ea615e3 |
+| mamba1/wide                  | infer  | IDENTICAL x4 | 905c98cf2a276d1d | 905c98cf2a276d1d | 905c98cf2a276d1d | 905c98cf2a276d1d |
+| mamba1/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/wide                  | batch  | IDENTICAL x4 | e83173af858d8291 | e83173af858d8291 | e83173af858d8291 | e83173af858d8291 |
+| mamba1/wide                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8a4cd7a1b49c65a8 |
+| mamba1/wide                  | batchgrad | IDENTICAL x4 | 44ae6f0520c58bb3 | 44ae6f0520c58bb3 | 44ae6f0520c58bb3 | 44ae6f0520c58bb3 |
+| mamba1/wide                  | batchscale | IDENTICAL x4 | 54da89a0749a8c64 | 54da89a0749a8c64 | 54da89a0749a8c64 | 54da89a0749a8c64 |
+| mamba1/wide                  | ragged | IDENTICAL x4 | 93bf5f8aa3430649 | 93bf5f8aa3430649 | 93bf5f8aa3430649 | 93bf5f8aa3430649 |
+| mamba2-dtlimit/base          | infer  | IDENTICAL x4 | 574842725ea2d43f | 574842725ea2d43f | 574842725ea2d43f | 574842725ea2d43f |
+| mamba2-dtlimit/base          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/base          | batch  | IDENTICAL x4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 |
+| mamba2-dtlimit/base          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | fc40c30a5ef759e1 |
+| mamba2-dtlimit/base          | batchgrad | IDENTICAL x4 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 |
+| mamba2-dtlimit/base          | batchscale | IDENTICAL x4 | e2f29cd647bd434e | e2f29cd647bd434e | e2f29cd647bd434e | e2f29cd647bd434e |
+| mamba2-dtlimit/base          | ragged | IDENTICAL x4 | 0fe25a2632347e16 | 0fe25a2632347e16 | 0fe25a2632347e16 | 0fe25a2632347e16 |
+| mamba2-dtlimit/denormal      | infer  | IDENTICAL x4 | a88b2984e2b61ecc | a88b2984e2b61ecc | a88b2984e2b61ecc | a88b2984e2b61ecc |
+| mamba2-dtlimit/denormal      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/denormal      | batch  | IDENTICAL x4 | fc87c19f72f968a4 | fc87c19f72f968a4 | fc87c19f72f968a4 | fc87c19f72f968a4 |
+| mamba2-dtlimit/denormal      | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f8759cd70e5a991b |
+| mamba2-dtlimit/denormal      | batchgrad | IDENTICAL x4 | 6301d0357ff4a866 | 6301d0357ff4a866 | 6301d0357ff4a866 | 6301d0357ff4a866 |
+| mamba2-dtlimit/denormal      | batchscale | IDENTICAL x4 | 129e8ba500105487 | 129e8ba500105487 | 129e8ba500105487 | 129e8ba500105487 |
+| mamba2-dtlimit/denormal      | ragged | IDENTICAL x4 | 6c5dd05bef2b93a6 | 6c5dd05bef2b93a6 | 6c5dd05bef2b93a6 | 6c5dd05bef2b93a6 |
+| mamba2-dtlimit/denormal_ftz  | infer  | IDENTICAL x4 | a88b2984e2b61ecc | a88b2984e2b61ecc | a88b2984e2b61ecc | a88b2984e2b61ecc |
+| mamba2-dtlimit/denormal_ftz  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/denormal_ftz  | batch  | IDENTICAL x4 | fc87c19f72f968a4 | fc87c19f72f968a4 | fc87c19f72f968a4 | fc87c19f72f968a4 |
+| mamba2-dtlimit/denormal_ftz  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 14b7680b4a85314e |
+| mamba2-dtlimit/denormal_ftz  | batchgrad | IDENTICAL x4 | 6301d0357ff4a866 | 6301d0357ff4a866 | 6301d0357ff4a866 | 6301d0357ff4a866 |
+| mamba2-dtlimit/denormal_ftz  | batchscale | IDENTICAL x4 | 129e8ba500105487 | 129e8ba500105487 | 129e8ba500105487 | 129e8ba500105487 |
+| mamba2-dtlimit/denormal_ftz  | ragged | IDENTICAL x4 | 6c5dd05bef2b93a6 | 6c5dd05bef2b93a6 | 6c5dd05bef2b93a6 | 6c5dd05bef2b93a6 |
+| mamba2-dtlimit/dupes         | infer  | IDENTICAL x4 | ce418d3c6ca799ae | ce418d3c6ca799ae | ce418d3c6ca799ae | ce418d3c6ca799ae |
+| mamba2-dtlimit/dupes         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/dupes         | batch  | IDENTICAL x4 | 14ae83f5c3e1998f | 14ae83f5c3e1998f | 14ae83f5c3e1998f | 14ae83f5c3e1998f |
+| mamba2-dtlimit/dupes         | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | fc40c30a5ef759e1 |
+| mamba2-dtlimit/dupes         | batchgrad | IDENTICAL x4 | 3282e2d8d4f91249 | 3282e2d8d4f91249 | 3282e2d8d4f91249 | 3282e2d8d4f91249 |
+| mamba2-dtlimit/dupes         | batchscale | IDENTICAL x4 | 8fc7b3cccce77c49 | 8fc7b3cccce77c49 | 8fc7b3cccce77c49 | 8fc7b3cccce77c49 |
+| mamba2-dtlimit/dupes         | ragged | IDENTICAL x4 | d8399deb8feb945d | d8399deb8feb945d | d8399deb8feb945d | d8399deb8feb945d |
+| mamba2-dtlimit/hashed        | infer  | IDENTICAL x4 | f9184585ded42cc8 | f9184585ded42cc8 | f9184585ded42cc8 | f9184585ded42cc8 |
+| mamba2-dtlimit/hashed        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/hashed        | batch  | IDENTICAL x4 | 6251ed997aa6e1ff | 6251ed997aa6e1ff | 6251ed997aa6e1ff | 6251ed997aa6e1ff |
+| mamba2-dtlimit/hashed        | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | d9aa90106508c6f4 |
+| mamba2-dtlimit/hashed        | batchgrad | IDENTICAL x4 | 7c7e39f70c6a2340 | 7c7e39f70c6a2340 | 7c7e39f70c6a2340 | 7c7e39f70c6a2340 |
+| mamba2-dtlimit/hashed        | batchscale | IDENTICAL x4 | 6587794eb21492f5 | 6587794eb21492f5 | 6587794eb21492f5 | 6587794eb21492f5 |
+| mamba2-dtlimit/hashed        | ragged | IDENTICAL x4 | 44933e25e57279d7 | 44933e25e57279d7 | 44933e25e57279d7 | 44933e25e57279d7 |
+| mamba2-dtlimit/negative      | infer  | IDENTICAL x4 | e71489aec1499756 | e71489aec1499756 | e71489aec1499756 | e71489aec1499756 |
+| mamba2-dtlimit/negative      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/negative      | batch  | IDENTICAL x4 | 822a574e48d23549 | 822a574e48d23549 | 822a574e48d23549 | 822a574e48d23549 |
+| mamba2-dtlimit/negative      | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 835884c3c2618c53 |
+| mamba2-dtlimit/negative      | batchgrad | IDENTICAL x4 | 5e6136ab5ecd7e55 | 5e6136ab5ecd7e55 | 5e6136ab5ecd7e55 | 5e6136ab5ecd7e55 |
+| mamba2-dtlimit/negative      | batchscale | IDENTICAL x4 | 41a7fd6cd3fc1a1d | 41a7fd6cd3fc1a1d | 41a7fd6cd3fc1a1d | 41a7fd6cd3fc1a1d |
+| mamba2-dtlimit/negative      | ragged | IDENTICAL x4 | 986898fbf71488b1 | 986898fbf71488b1 | 986898fbf71488b1 | 986898fbf71488b1 |
+| mamba2-dtlimit/odd           | infer  | IDENTICAL x4 | 574842725ea2d43f | 574842725ea2d43f | 574842725ea2d43f | 574842725ea2d43f |
+| mamba2-dtlimit/odd           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/odd           | batch  | IDENTICAL x4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 |
+| mamba2-dtlimit/odd           | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | fc40c30a5ef759e1 |
+| mamba2-dtlimit/odd           | batchgrad | IDENTICAL x4 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 |
+| mamba2-dtlimit/odd           | batchscale | IDENTICAL x4 | b8715636bb190b5d | b8715636bb190b5d | b8715636bb190b5d | b8715636bb190b5d |
+| mamba2-dtlimit/odd           | ragged | IDENTICAL x4 | 0fe25a2632347e16 | 0fe25a2632347e16 | 0fe25a2632347e16 | 0fe25a2632347e16 |
+| mamba2-dtlimit/ties          | infer  | IDENTICAL x4 | 6961b92c3565ded6 | 6961b92c3565ded6 | 6961b92c3565ded6 | 6961b92c3565ded6 |
+| mamba2-dtlimit/ties          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/ties          | batch  | IDENTICAL x4 | af6fcf1e9222cb76 | af6fcf1e9222cb76 | af6fcf1e9222cb76 | af6fcf1e9222cb76 |
+| mamba2-dtlimit/ties          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | d17cd4c49bbf55b4 |
+| mamba2-dtlimit/ties          | batchgrad | IDENTICAL x4 | 1561179a532a5697 | 1561179a532a5697 | 1561179a532a5697 | 1561179a532a5697 |
+| mamba2-dtlimit/ties          | batchscale | IDENTICAL x4 | 82db40d087dd1829 | 82db40d087dd1829 | 82db40d087dd1829 | 82db40d087dd1829 |
+| mamba2-dtlimit/ties          | ragged | IDENTICAL x4 | f7efc342921c1098 | f7efc342921c1098 | f7efc342921c1098 | f7efc342921c1098 |
+| mamba2-dtlimit/wide          | infer  | IDENTICAL x4 | c8604d7add29e134 | c8604d7add29e134 | c8604d7add29e134 | c8604d7add29e134 |
+| mamba2-dtlimit/wide          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/wide          | batch  | IDENTICAL x4 | 93f22fa95029c3d8 | 93f22fa95029c3d8 | 93f22fa95029c3d8 | 93f22fa95029c3d8 |
+| mamba2-dtlimit/wide          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | b96eaa63de60edcd |
+| mamba2-dtlimit/wide          | batchgrad | IDENTICAL x4 | 7b66b1a3a14acfb8 | 7b66b1a3a14acfb8 | 7b66b1a3a14acfb8 | 7b66b1a3a14acfb8 |
+| mamba2-dtlimit/wide          | batchscale | IDENTICAL x4 | ed66d3b94742f0fd | ed66d3b94742f0fd | ed66d3b94742f0fd | ed66d3b94742f0fd |
+| mamba2-dtlimit/wide          | ragged | IDENTICAL x4 | de5bdde294971ec3 | de5bdde294971ec3 | de5bdde294971ec3 | de5bdde294971ec3 |
+| mamba2/base                  | infer  | IDENTICAL x4 | b0084ee171c0720f | b0084ee171c0720f | b0084ee171c0720f | b0084ee171c0720f |
+| mamba2/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/base                  | batch  | IDENTICAL x4 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d21a83ab6b3ce297 |
+| mamba2/base                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f4abbd5451ff5172 |
+| mamba2/base                  | batchgrad | IDENTICAL x4 | 99cad63be0fb7239 | 99cad63be0fb7239 | 99cad63be0fb7239 | 99cad63be0fb7239 |
+| mamba2/base                  | batchscale | IDENTICAL x4 | f5c6c5c02917a956 | f5c6c5c02917a956 | f5c6c5c02917a956 | f5c6c5c02917a956 |
+| mamba2/base                  | ragged | IDENTICAL x4 | f1f44805dc9171e8 | f1f44805dc9171e8 | f1f44805dc9171e8 | f1f44805dc9171e8 |
+| mamba2/denormal              | infer  | IDENTICAL x4 | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 715e3b3d9ee219ba |
+| mamba2/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/denormal              | batch  | IDENTICAL x4 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | ce1a26dfa4587c15 |
+| mamba2/denormal              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | c43d27b4d3607e26 |
+| mamba2/denormal              | batchgrad | IDENTICAL x4 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 |
+| mamba2/denormal              | batchscale | IDENTICAL x4 | a8a0984b5804dde6 | a8a0984b5804dde6 | a8a0984b5804dde6 | a8a0984b5804dde6 |
+| mamba2/denormal              | ragged | IDENTICAL x4 | c6cfc709454fd6a4 | c6cfc709454fd6a4 | c6cfc709454fd6a4 | c6cfc709454fd6a4 |
+| mamba2/denormal_ftz          | infer  | IDENTICAL x4 | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 715e3b3d9ee219ba |
+| mamba2/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/denormal_ftz          | batch  | IDENTICAL x4 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | ce1a26dfa4587c15 |
+| mamba2/denormal_ftz          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 85aeeec8c5a056a1 |
+| mamba2/denormal_ftz          | batchgrad | IDENTICAL x4 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 |
+| mamba2/denormal_ftz          | batchscale | IDENTICAL x4 | a8a0984b5804dde6 | a8a0984b5804dde6 | a8a0984b5804dde6 | a8a0984b5804dde6 |
+| mamba2/denormal_ftz          | ragged | IDENTICAL x4 | c6cfc709454fd6a4 | c6cfc709454fd6a4 | c6cfc709454fd6a4 | c6cfc709454fd6a4 |
+| mamba2/dupes                 | infer  | IDENTICAL x4 | bc19a007224d9860 | bc19a007224d9860 | bc19a007224d9860 | bc19a007224d9860 |
+| mamba2/dupes                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/dupes                 | batch  | IDENTICAL x4 | 82b6615b36847109 | 82b6615b36847109 | 82b6615b36847109 | 82b6615b36847109 |
+| mamba2/dupes                 | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f4abbd5451ff5172 |
+| mamba2/dupes                 | batchgrad | IDENTICAL x4 | 30287f3369d63e43 | 30287f3369d63e43 | 30287f3369d63e43 | 30287f3369d63e43 |
+| mamba2/dupes                 | batchscale | IDENTICAL x4 | 8b9801efe8170524 | 8b9801efe8170524 | 8b9801efe8170524 | 8b9801efe8170524 |
+| mamba2/dupes                 | ragged | IDENTICAL x4 | c6240fc848bde00d | c6240fc848bde00d | c6240fc848bde00d | c6240fc848bde00d |
+| mamba2/hashed                | infer  | IDENTICAL x4 | fa5cdfa7a8028ea4 | fa5cdfa7a8028ea4 | fa5cdfa7a8028ea4 | fa5cdfa7a8028ea4 |
+| mamba2/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/hashed                | batch  | IDENTICAL x4 | a824974d95e976a1 | a824974d95e976a1 | a824974d95e976a1 | a824974d95e976a1 |
+| mamba2/hashed                | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | ebd9a6af0f062bee |
+| mamba2/hashed                | batchgrad | IDENTICAL x4 | cc350cb47739345e | cc350cb47739345e | cc350cb47739345e | cc350cb47739345e |
+| mamba2/hashed                | batchscale | IDENTICAL x4 | 492b5c7545648f34 | 492b5c7545648f34 | 492b5c7545648f34 | 492b5c7545648f34 |
+| mamba2/hashed                | ragged | IDENTICAL x4 | 758a09358b4de751 | 758a09358b4de751 | 758a09358b4de751 | 758a09358b4de751 |
+| mamba2/negative              | infer  | IDENTICAL x4 | e47047c1022164fb | e47047c1022164fb | e47047c1022164fb | e47047c1022164fb |
+| mamba2/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/negative              | batch  | IDENTICAL x4 | 5e4dc2619d55149f | 5e4dc2619d55149f | 5e4dc2619d55149f | 5e4dc2619d55149f |
+| mamba2/negative              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 08cdec93b208dfcc |
+| mamba2/negative              | batchgrad | IDENTICAL x4 | 2992677ebe413db5 | 2992677ebe413db5 | 2992677ebe413db5 | 2992677ebe413db5 |
+| mamba2/negative              | batchscale | IDENTICAL x4 | 9c78b8aeea6269b2 | 9c78b8aeea6269b2 | 9c78b8aeea6269b2 | 9c78b8aeea6269b2 |
+| mamba2/negative              | ragged | IDENTICAL x4 | 2586664048028a83 | 2586664048028a83 | 2586664048028a83 | 2586664048028a83 |
+| mamba2/odd                   | infer  | IDENTICAL x4 | b0084ee171c0720f | b0084ee171c0720f | b0084ee171c0720f | b0084ee171c0720f |
+| mamba2/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/odd                   | batch  | IDENTICAL x4 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d21a83ab6b3ce297 |
+| mamba2/odd                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f4abbd5451ff5172 |
+| mamba2/odd                   | batchgrad | IDENTICAL x4 | 99cad63be0fb7239 | 99cad63be0fb7239 | 99cad63be0fb7239 | 99cad63be0fb7239 |
+| mamba2/odd                   | batchscale | IDENTICAL x4 | 71e5ec10135b32fb | 71e5ec10135b32fb | 71e5ec10135b32fb | 71e5ec10135b32fb |
+| mamba2/odd                   | ragged | IDENTICAL x4 | f1f44805dc9171e8 | f1f44805dc9171e8 | f1f44805dc9171e8 | f1f44805dc9171e8 |
+| mamba2/ties                  | infer  | IDENTICAL x4 | bbd1634ec2e78ddf | bbd1634ec2e78ddf | bbd1634ec2e78ddf | bbd1634ec2e78ddf |
+| mamba2/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/ties                  | batch  | IDENTICAL x4 | 4b2801f8f573c8c8 | 4b2801f8f573c8c8 | 4b2801f8f573c8c8 | 4b2801f8f573c8c8 |
+| mamba2/ties                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f899efc2a35ec48a |
+| mamba2/ties                  | batchgrad | IDENTICAL x4 | d662c396d92de418 | d662c396d92de418 | d662c396d92de418 | d662c396d92de418 |
+| mamba2/ties                  | batchscale | IDENTICAL x4 | 9febb4c33c9d4b48 | 9febb4c33c9d4b48 | 9febb4c33c9d4b48 | 9febb4c33c9d4b48 |
+| mamba2/ties                  | ragged | IDENTICAL x4 | 8f0119a70131adcb | 8f0119a70131adcb | 8f0119a70131adcb | 8f0119a70131adcb |
+| mamba2/wide                  | infer  | IDENTICAL x4 | b67647742c88aaf1 | b67647742c88aaf1 | b67647742c88aaf1 | b67647742c88aaf1 |
+| mamba2/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/wide                  | batch  | IDENTICAL x4 | 0a20d6f3d8237f24 | 0a20d6f3d8237f24 | 0a20d6f3d8237f24 | 0a20d6f3d8237f24 |
+| mamba2/wide                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 47957b59ac09a5d8 |
+| mamba2/wide                  | batchgrad | IDENTICAL x4 | 3151cfcc25d5c776 | 3151cfcc25d5c776 | 3151cfcc25d5c776 | 3151cfcc25d5c776 |
+| mamba2/wide                  | batchscale | IDENTICAL x4 | ff5f412bb3fd5328 | ff5f412bb3fd5328 | ff5f412bb3fd5328 | ff5f412bb3fd5328 |
+| mamba2/wide                  | ragged | IDENTICAL x4 | 9c1bcc53c4f2905a | 9c1bcc53c4f2905a | 9c1bcc53c4f2905a | 9c1bcc53c4f2905a |
+| mamba3/base                  | infer  | IDENTICAL x4 | 6d73873ffe222457 | 6d73873ffe222457 | 6d73873ffe222457 | 6d73873ffe222457 |
+| mamba3/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/base                  | batch  | IDENTICAL x4 | a59631110897fda3 | a59631110897fda3 | a59631110897fda3 | a59631110897fda3 |
+| mamba3/base                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8335131b23bae55d |
+| mamba3/base                  | batchgrad | IDENTICAL x4 | 292bbf6a571391a3 | 292bbf6a571391a3 | 292bbf6a571391a3 | 292bbf6a571391a3 |
+| mamba3/base                  | batchscale | IDENTICAL x4 | 509739cc35c73cb0 | 509739cc35c73cb0 | 509739cc35c73cb0 | 509739cc35c73cb0 |
+| mamba3/base                  | ragged | IDENTICAL x4 | aa2a093f3670c2de | aa2a093f3670c2de | aa2a093f3670c2de | aa2a093f3670c2de |
+| mamba3/denormal              | infer  | IDENTICAL x4 | 2092a683dc18e94b | 2092a683dc18e94b | 2092a683dc18e94b | 2092a683dc18e94b |
+| mamba3/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/denormal              | batch  | IDENTICAL x4 | 4182cf2b203fedea | 4182cf2b203fedea | 4182cf2b203fedea | 4182cf2b203fedea |
+| mamba3/denormal              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 4c9c87c7c49eccbd |
+| mamba3/denormal              | batchgrad | IDENTICAL x4 | 78db7df43245f472 | 78db7df43245f472 | 78db7df43245f472 | 78db7df43245f472 |
+| mamba3/denormal              | batchscale | IDENTICAL x4 | 89e5e31a5ebbe5fb | 89e5e31a5ebbe5fb | 89e5e31a5ebbe5fb | 89e5e31a5ebbe5fb |
+| mamba3/denormal              | ragged | IDENTICAL x4 | 4ed7e9d569e75a4f | 4ed7e9d569e75a4f | 4ed7e9d569e75a4f | 4ed7e9d569e75a4f |
+| mamba3/denormal_ftz          | infer  | IDENTICAL x4 | 2092a683dc18e94b | 2092a683dc18e94b | 2092a683dc18e94b | 2092a683dc18e94b |
+| mamba3/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/denormal_ftz          | batch  | IDENTICAL x4 | 4182cf2b203fedea | 4182cf2b203fedea | 4182cf2b203fedea | 4182cf2b203fedea |
+| mamba3/denormal_ftz          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | ee432f5df351f529 |
+| mamba3/denormal_ftz          | batchgrad | IDENTICAL x4 | 78db7df43245f472 | 78db7df43245f472 | 78db7df43245f472 | 78db7df43245f472 |
+| mamba3/denormal_ftz          | batchscale | IDENTICAL x4 | 89e5e31a5ebbe5fb | 89e5e31a5ebbe5fb | 89e5e31a5ebbe5fb | 89e5e31a5ebbe5fb |
+| mamba3/denormal_ftz          | ragged | IDENTICAL x4 | 4ed7e9d569e75a4f | 4ed7e9d569e75a4f | 4ed7e9d569e75a4f | 4ed7e9d569e75a4f |
+| mamba3/dupes                 | infer  | IDENTICAL x4 | 572e878fb8e538ce | 572e878fb8e538ce | 572e878fb8e538ce | 572e878fb8e538ce |
+| mamba3/dupes                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/dupes                 | batch  | IDENTICAL x4 | 605d8473f84fd235 | 605d8473f84fd235 | 605d8473f84fd235 | 605d8473f84fd235 |
+| mamba3/dupes                 | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8335131b23bae55d |
+| mamba3/dupes                 | batchgrad | IDENTICAL x4 | 050c6b60f15665f4 | 050c6b60f15665f4 | 050c6b60f15665f4 | 050c6b60f15665f4 |
+| mamba3/dupes                 | batchscale | IDENTICAL x4 | 1db7c3474dfd5d6c | 1db7c3474dfd5d6c | 1db7c3474dfd5d6c | 1db7c3474dfd5d6c |
+| mamba3/dupes                 | ragged | IDENTICAL x4 | 46052e7560b7203a | 46052e7560b7203a | 46052e7560b7203a | 46052e7560b7203a |
+| mamba3/hashed                | infer  | IDENTICAL x4 | c1862ccad54884ed | c1862ccad54884ed | c1862ccad54884ed | c1862ccad54884ed |
+| mamba3/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/hashed                | batch  | IDENTICAL x4 | b922b29fdddfc3d6 | b922b29fdddfc3d6 | b922b29fdddfc3d6 | b922b29fdddfc3d6 |
+| mamba3/hashed                | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 54338d80374d4535 |
+| mamba3/hashed                | batchgrad | IDENTICAL x4 | e5f2eacc692aa8dc | e5f2eacc692aa8dc | e5f2eacc692aa8dc | e5f2eacc692aa8dc |
+| mamba3/hashed                | batchscale | IDENTICAL x4 | 8a2a3cd88f6fcfbf | 8a2a3cd88f6fcfbf | 8a2a3cd88f6fcfbf | 8a2a3cd88f6fcfbf |
+| mamba3/hashed                | ragged | IDENTICAL x4 | 2a3da811e51ed911 | 2a3da811e51ed911 | 2a3da811e51ed911 | 2a3da811e51ed911 |
+| mamba3/negative              | infer  | IDENTICAL x4 | 27f5cfbb4648281d | 27f5cfbb4648281d | 27f5cfbb4648281d | 27f5cfbb4648281d |
+| mamba3/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/negative              | batch  | IDENTICAL x4 | da761d278ab6655a | da761d278ab6655a | da761d278ab6655a | da761d278ab6655a |
+| mamba3/negative              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 21d8a2cbf5d39256 |
+| mamba3/negative              | batchgrad | IDENTICAL x4 | c4695e3042bc5e5e | c4695e3042bc5e5e | c4695e3042bc5e5e | c4695e3042bc5e5e |
+| mamba3/negative              | batchscale | IDENTICAL x4 | d98940ae9f08f6ed | d98940ae9f08f6ed | d98940ae9f08f6ed | d98940ae9f08f6ed |
+| mamba3/negative              | ragged | IDENTICAL x4 | 79b1eae4fb165f88 | 79b1eae4fb165f88 | 79b1eae4fb165f88 | 79b1eae4fb165f88 |
+| mamba3/odd                   | infer  | IDENTICAL x4 | 6d73873ffe222457 | 6d73873ffe222457 | 6d73873ffe222457 | 6d73873ffe222457 |
+| mamba3/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/odd                   | batch  | IDENTICAL x4 | a59631110897fda3 | a59631110897fda3 | a59631110897fda3 | a59631110897fda3 |
+| mamba3/odd                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8335131b23bae55d |
+| mamba3/odd                   | batchgrad | IDENTICAL x4 | 292bbf6a571391a3 | 292bbf6a571391a3 | 292bbf6a571391a3 | 292bbf6a571391a3 |
+| mamba3/odd                   | batchscale | IDENTICAL x4 | 02d53e8b250733f1 | 02d53e8b250733f1 | 02d53e8b250733f1 | 02d53e8b250733f1 |
+| mamba3/odd                   | ragged | IDENTICAL x4 | aa2a093f3670c2de | aa2a093f3670c2de | aa2a093f3670c2de | aa2a093f3670c2de |
+| mamba3/ties                  | infer  | IDENTICAL x4 | 1b23621d97f54640 | 1b23621d97f54640 | 1b23621d97f54640 | 1b23621d97f54640 |
+| mamba3/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/ties                  | batch  | IDENTICAL x4 | a93eb5738c206655 | a93eb5738c206655 | a93eb5738c206655 | a93eb5738c206655 |
+| mamba3/ties                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | cd68b3cf1d7e2468 |
+| mamba3/ties                  | batchgrad | IDENTICAL x4 | f3bd46f553f22909 | f3bd46f553f22909 | f3bd46f553f22909 | f3bd46f553f22909 |
+| mamba3/ties                  | batchscale | IDENTICAL x4 | 51be49b4805d5896 | 51be49b4805d5896 | 51be49b4805d5896 | 51be49b4805d5896 |
+| mamba3/ties                  | ragged | IDENTICAL x4 | 8e058cc2a6b89c46 | 8e058cc2a6b89c46 | 8e058cc2a6b89c46 | 8e058cc2a6b89c46 |
+| mamba3/wide                  | infer  | IDENTICAL x4 | 229127d013a0eeb7 | 229127d013a0eeb7 | 229127d013a0eeb7 | 229127d013a0eeb7 |
+| mamba3/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/wide                  | batch  | IDENTICAL x4 | ac07fbd366e6fce2 | ac07fbd366e6fce2 | ac07fbd366e6fce2 | ac07fbd366e6fce2 |
+| mamba3/wide                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f71f944d03be5153 |
+| mamba3/wide                  | batchgrad | IDENTICAL x4 | be0084453f949005 | be0084453f949005 | be0084453f949005 | be0084453f949005 |
+| mamba3/wide                  | batchscale | IDENTICAL x4 | 83ffd63d3622750f | 83ffd63d3622750f | 83ffd63d3622750f | 83ffd63d3622750f |
+| mamba3/wide                  | ragged | IDENTICAL x4 | f6867acb0aad7f0e | f6867acb0aad7f0e | f6867acb0aad7f0e | f6867acb0aad7f0e |
+| samba-untied-dropout-accum/base | infer  | IDENTICAL x4 | 43f7860a7ff7a633 | 43f7860a7ff7a633 | 43f7860a7ff7a633 | 43f7860a7ff7a633 |
+| samba-untied-dropout-accum/base | model  | IDENTICAL x4 | 4c6bb23f04af6858 | 4c6bb23f04af6858 | 4c6bb23f04af6858 | 4c6bb23f04af6858 |
+| samba-untied-dropout-accum/base | batch  | IDENTICAL x4 | 94c79045f8d92d80 | 94c79045f8d92d80 | 94c79045f8d92d80 | 94c79045f8d92d80 |
+| samba-untied-dropout-accum/base | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | a14b4cd9184a5a34 |
+| samba-untied-dropout-accum/base | batchgrad | IDENTICAL x4 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 |
+| samba-untied-dropout-accum/base | batchscale | IDENTICAL x4 | 9b780937c00cda02 | 9b780937c00cda02 | 9b780937c00cda02 | 9b780937c00cda02 |
+| samba-untied-dropout-accum/base | ragged | IDENTICAL x4 | 5266053152ec7003 | 5266053152ec7003 | 5266053152ec7003 | 5266053152ec7003 |
+| samba-untied-dropout-accum/denormal | infer  | IDENTICAL x4 | 24c7e0e923e369e0 | 24c7e0e923e369e0 | 24c7e0e923e369e0 | 24c7e0e923e369e0 |
+| samba-untied-dropout-accum/denormal | model  | IDENTICAL x4 | 10a8d940bbce9051 | 10a8d940bbce9051 | 10a8d940bbce9051 | 10a8d940bbce9051 |
+| samba-untied-dropout-accum/denormal | batch  | IDENTICAL x4 | 52f4c864f4e177ed | 52f4c864f4e177ed | 52f4c864f4e177ed | 52f4c864f4e177ed |
+| samba-untied-dropout-accum/denormal | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 557fcb8ac104b01a |
+| samba-untied-dropout-accum/denormal | batchgrad | IDENTICAL x4 | dd94d6ce0f01b073 | dd94d6ce0f01b073 | dd94d6ce0f01b073 | dd94d6ce0f01b073 |
+| samba-untied-dropout-accum/denormal | batchscale | IDENTICAL x4 | e09efb4fd5971a12 | e09efb4fd5971a12 | e09efb4fd5971a12 | e09efb4fd5971a12 |
+| samba-untied-dropout-accum/denormal | ragged | IDENTICAL x4 | 1c4331af10529d7f | 1c4331af10529d7f | 1c4331af10529d7f | 1c4331af10529d7f |
+| samba-untied-dropout-accum/denormal_ftz | infer  | IDENTICAL x4 | d815951934e104a6 | d815951934e104a6 | d815951934e104a6 | d815951934e104a6 |
+| samba-untied-dropout-accum/denormal_ftz | model  | IDENTICAL x4 | 35a817ce8929a5d6 | 35a817ce8929a5d6 | 35a817ce8929a5d6 | 35a817ce8929a5d6 |
+| samba-untied-dropout-accum/denormal_ftz | batch  | IDENTICAL x4 | eb52194ccef805e4 | eb52194ccef805e4 | eb52194ccef805e4 | eb52194ccef805e4 |
+| samba-untied-dropout-accum/denormal_ftz | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 743c668e023e6740 |
+| samba-untied-dropout-accum/denormal_ftz | batchgrad | IDENTICAL x4 | 49f70c4b208aded0 | 49f70c4b208aded0 | 49f70c4b208aded0 | 49f70c4b208aded0 |
+| samba-untied-dropout-accum/denormal_ftz | batchscale | IDENTICAL x4 | dc5f0c82e7ee9978 | dc5f0c82e7ee9978 | dc5f0c82e7ee9978 | dc5f0c82e7ee9978 |
+| samba-untied-dropout-accum/denormal_ftz | ragged | IDENTICAL x4 | 4aab3884613c0b41 | 4aab3884613c0b41 | 4aab3884613c0b41 | 4aab3884613c0b41 |
+| samba-untied-dropout-accum/dupes | infer  | IDENTICAL x4 | 3ca26c5ae1819ebc | 3ca26c5ae1819ebc | 3ca26c5ae1819ebc | 3ca26c5ae1819ebc |
+| samba-untied-dropout-accum/dupes | model  | IDENTICAL x4 | 4bea33bdf66a23bc | 4bea33bdf66a23bc | 4bea33bdf66a23bc | 4bea33bdf66a23bc |
+| samba-untied-dropout-accum/dupes | batch  | IDENTICAL x4 | 95236c32031b7ace | 95236c32031b7ace | 95236c32031b7ace | 95236c32031b7ace |
+| samba-untied-dropout-accum/dupes | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 7f85526ff9bb0a7e |
+| samba-untied-dropout-accum/dupes | batchgrad | IDENTICAL x4 | 110dcd9ce98a7c10 | 110dcd9ce98a7c10 | 110dcd9ce98a7c10 | 110dcd9ce98a7c10 |
+| samba-untied-dropout-accum/dupes | batchscale | IDENTICAL x4 | d331883a71ba5ba7 | d331883a71ba5ba7 | d331883a71ba5ba7 | d331883a71ba5ba7 |
+| samba-untied-dropout-accum/dupes | ragged | IDENTICAL x4 | 63801d92a23251a1 | 63801d92a23251a1 | 63801d92a23251a1 | 63801d92a23251a1 |
+| samba-untied-dropout-accum/hashed | infer  | IDENTICAL x4 | 87796cb8024bd934 | 87796cb8024bd934 | 87796cb8024bd934 | 87796cb8024bd934 |
+| samba-untied-dropout-accum/hashed | model  | IDENTICAL x4 | 148bfe51d04c1d98 | 148bfe51d04c1d98 | 148bfe51d04c1d98 | 148bfe51d04c1d98 |
+| samba-untied-dropout-accum/hashed | batch  | IDENTICAL x4 | 9e101ad04c649179 | 9e101ad04c649179 | 9e101ad04c649179 | 9e101ad04c649179 |
+| samba-untied-dropout-accum/hashed | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 935b160b9a5d1ae1 |
+| samba-untied-dropout-accum/hashed | batchgrad | IDENTICAL x4 | 99a88af5db3ba4c4 | 99a88af5db3ba4c4 | 99a88af5db3ba4c4 | 99a88af5db3ba4c4 |
+| samba-untied-dropout-accum/hashed | batchscale | IDENTICAL x4 | a9d10a15a11cfd5a | a9d10a15a11cfd5a | a9d10a15a11cfd5a | a9d10a15a11cfd5a |
+| samba-untied-dropout-accum/hashed | ragged | IDENTICAL x4 | 8f1fa87643603034 | 8f1fa87643603034 | 8f1fa87643603034 | 8f1fa87643603034 |
+| samba-untied-dropout-accum/negative | infer  | IDENTICAL x4 | 55ec2d1c5eccef2d | 55ec2d1c5eccef2d | 55ec2d1c5eccef2d | 55ec2d1c5eccef2d |
+| samba-untied-dropout-accum/negative | model  | IDENTICAL x4 | ecaf3ac775bac83b | ecaf3ac775bac83b | ecaf3ac775bac83b | ecaf3ac775bac83b |
+| samba-untied-dropout-accum/negative | batch  | IDENTICAL x4 | dcc15ae7885b0699 | dcc15ae7885b0699 | dcc15ae7885b0699 | dcc15ae7885b0699 |
+| samba-untied-dropout-accum/negative | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | bd86f42f23ab1765 |
+| samba-untied-dropout-accum/negative | batchgrad | IDENTICAL x4 | 2a46376740cf4f17 | 2a46376740cf4f17 | 2a46376740cf4f17 | 2a46376740cf4f17 |
+| samba-untied-dropout-accum/negative | batchscale | IDENTICAL x4 | c4f69db31e4918fc | c4f69db31e4918fc | c4f69db31e4918fc | c4f69db31e4918fc |
+| samba-untied-dropout-accum/negative | ragged | IDENTICAL x4 | 00673227cddf155d | 00673227cddf155d | 00673227cddf155d | 00673227cddf155d |
+| samba-untied-dropout-accum/odd | infer  | IDENTICAL x4 | 43f7860a7ff7a633 | 43f7860a7ff7a633 | 43f7860a7ff7a633 | 43f7860a7ff7a633 |
+| samba-untied-dropout-accum/odd | model  | IDENTICAL x4 | 4c6bb23f04af6858 | 4c6bb23f04af6858 | 4c6bb23f04af6858 | 4c6bb23f04af6858 |
+| samba-untied-dropout-accum/odd | batch  | IDENTICAL x4 | 94c79045f8d92d80 | 94c79045f8d92d80 | 94c79045f8d92d80 | 94c79045f8d92d80 |
+| samba-untied-dropout-accum/odd | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | a14b4cd9184a5a34 |
+| samba-untied-dropout-accum/odd | batchgrad | IDENTICAL x4 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 |
+| samba-untied-dropout-accum/odd | batchscale | IDENTICAL x4 | dde1e26eb972c8d8 | dde1e26eb972c8d8 | dde1e26eb972c8d8 | dde1e26eb972c8d8 |
+| samba-untied-dropout-accum/odd | ragged | IDENTICAL x4 | 5266053152ec7003 | 5266053152ec7003 | 5266053152ec7003 | 5266053152ec7003 |
+| samba-untied-dropout-accum/ties | infer  | IDENTICAL x4 | bb32b8aebf4dc90e | bb32b8aebf4dc90e | bb32b8aebf4dc90e | bb32b8aebf4dc90e |
+| samba-untied-dropout-accum/ties | model  | IDENTICAL x4 | 9818c749c2dfc7ea | 9818c749c2dfc7ea | 9818c749c2dfc7ea | 9818c749c2dfc7ea |
+| samba-untied-dropout-accum/ties | batch  | IDENTICAL x4 | 4130d70c2c138b0e | 4130d70c2c138b0e | 4130d70c2c138b0e | 4130d70c2c138b0e |
+| samba-untied-dropout-accum/ties | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 9f6648df433827af |
+| samba-untied-dropout-accum/ties | batchgrad | IDENTICAL x4 | 80ecfdf5e1fd7965 | 80ecfdf5e1fd7965 | 80ecfdf5e1fd7965 | 80ecfdf5e1fd7965 |
+| samba-untied-dropout-accum/ties | batchscale | IDENTICAL x4 | cb351616dbbc93b2 | cb351616dbbc93b2 | cb351616dbbc93b2 | cb351616dbbc93b2 |
+| samba-untied-dropout-accum/ties | ragged | IDENTICAL x4 | ff6d591eb1482891 | ff6d591eb1482891 | ff6d591eb1482891 | ff6d591eb1482891 |
+| samba-untied-dropout-accum/wide | infer  | IDENTICAL x4 | 21601e087bd7d274 | 21601e087bd7d274 | 21601e087bd7d274 | 21601e087bd7d274 |
+| samba-untied-dropout-accum/wide | model  | IDENTICAL x4 | 98b807c41ebff82a | 98b807c41ebff82a | 98b807c41ebff82a | 98b807c41ebff82a |
+| samba-untied-dropout-accum/wide | batch  | IDENTICAL x4 | fb9e91204daaf37e | fb9e91204daaf37e | fb9e91204daaf37e | fb9e91204daaf37e |
+| samba-untied-dropout-accum/wide | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | b1543091f6ddb627 |
+| samba-untied-dropout-accum/wide | batchgrad | IDENTICAL x4 | 3271e56a56b048ee | 3271e56a56b048ee | 3271e56a56b048ee | 3271e56a56b048ee |
+| samba-untied-dropout-accum/wide | batchscale | IDENTICAL x4 | 286affb39e9299ae | 286affb39e9299ae | 286affb39e9299ae | 286affb39e9299ae |
+| samba-untied-dropout-accum/wide | ragged | IDENTICAL x4 | d88b904b4d7a835b | d88b904b4d7a835b | d88b904b4d7a835b | d88b904b4d7a835b |
+| samba/base                   | infer  | IDENTICAL x4 | 77db10c414ebd846 | 77db10c414ebd846 | 77db10c414ebd846 | 77db10c414ebd846 |
+| samba/base                   | model  | IDENTICAL x4 | 674582804fcf1a50 | 674582804fcf1a50 | 674582804fcf1a50 | 674582804fcf1a50 |
+| samba/base                   | batch  | IDENTICAL x4 | aacbe0585755bc0f | aacbe0585755bc0f | aacbe0585755bc0f | aacbe0585755bc0f |
+| samba/base                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8ae8dda8ba22a4aa |
+| samba/base                   | batchgrad | IDENTICAL x4 | 6eafd29a27e3b376 | 6eafd29a27e3b376 | 6eafd29a27e3b376 | 6eafd29a27e3b376 |
+| samba/base                   | batchscale | IDENTICAL x4 | 0872a6f17bb82169 | 0872a6f17bb82169 | 0872a6f17bb82169 | 0872a6f17bb82169 |
+| samba/base                   | ragged | IDENTICAL x4 | eb391546ac70ae0c | eb391546ac70ae0c | eb391546ac70ae0c | eb391546ac70ae0c |
+| samba/denormal               | infer  | IDENTICAL x4 | ca618a38cf786fa4 | ca618a38cf786fa4 | ca618a38cf786fa4 | ca618a38cf786fa4 |
+| samba/denormal               | model  | IDENTICAL x4 | f7f05521e7cdfec7 | f7f05521e7cdfec7 | f7f05521e7cdfec7 | f7f05521e7cdfec7 |
+| samba/denormal               | batch  | IDENTICAL x4 | f5880effe032ad0f | f5880effe032ad0f | f5880effe032ad0f | f5880effe032ad0f |
+| samba/denormal               | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 87af7af2b081fddc |
+| samba/denormal               | batchgrad | IDENTICAL x4 | 66825be665b22b30 | 66825be665b22b30 | 66825be665b22b30 | 66825be665b22b30 |
+| samba/denormal               | batchscale | IDENTICAL x4 | 9c14caa774e24955 | 9c14caa774e24955 | 9c14caa774e24955 | 9c14caa774e24955 |
+| samba/denormal               | ragged | IDENTICAL x4 | c6310b93e035d00e | c6310b93e035d00e | c6310b93e035d00e | c6310b93e035d00e |
+| samba/denormal_ftz           | infer  | IDENTICAL x4 | b728af86ccc442fb | b728af86ccc442fb | b728af86ccc442fb | b728af86ccc442fb |
+| samba/denormal_ftz           | model  | IDENTICAL x4 | f34e7e4227d3ab4b | f34e7e4227d3ab4b | f34e7e4227d3ab4b | f34e7e4227d3ab4b |
+| samba/denormal_ftz           | batch  | IDENTICAL x4 | d765507d7d144423 | d765507d7d144423 | d765507d7d144423 | d765507d7d144423 |
+| samba/denormal_ftz           | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | ee2093efea1daf9e |
+| samba/denormal_ftz           | batchgrad | IDENTICAL x4 | 17d748d11f46ed94 | 17d748d11f46ed94 | 17d748d11f46ed94 | 17d748d11f46ed94 |
+| samba/denormal_ftz           | batchscale | IDENTICAL x4 | aaa0373e794e177b | aaa0373e794e177b | aaa0373e794e177b | aaa0373e794e177b |
+| samba/denormal_ftz           | ragged | IDENTICAL x4 | af5e79e7727ed342 | af5e79e7727ed342 | af5e79e7727ed342 | af5e79e7727ed342 |
+| samba/dupes                  | infer  | IDENTICAL x4 | 3bb2585d8a536f77 | 3bb2585d8a536f77 | 3bb2585d8a536f77 | 3bb2585d8a536f77 |
+| samba/dupes                  | model  | IDENTICAL x4 | 5113ff087cd1d774 | 5113ff087cd1d774 | 5113ff087cd1d774 | 5113ff087cd1d774 |
+| samba/dupes                  | batch  | IDENTICAL x4 | a77ce9563430eca6 | a77ce9563430eca6 | a77ce9563430eca6 | a77ce9563430eca6 |
+| samba/dupes                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 2f241faee9373acb |
+| samba/dupes                  | batchgrad | IDENTICAL x4 | 327d0bfd2395a506 | 327d0bfd2395a506 | 327d0bfd2395a506 | 327d0bfd2395a506 |
+| samba/dupes                  | batchscale | IDENTICAL x4 | f8b3ff80eb16cf92 | f8b3ff80eb16cf92 | f8b3ff80eb16cf92 | f8b3ff80eb16cf92 |
+| samba/dupes                  | ragged | IDENTICAL x4 | f5f3982764f18c9b | f5f3982764f18c9b | f5f3982764f18c9b | f5f3982764f18c9b |
+| samba/hashed                 | infer  | IDENTICAL x4 | b0b897d724d5a625 | b0b897d724d5a625 | b0b897d724d5a625 | b0b897d724d5a625 |
+| samba/hashed                 | model  | IDENTICAL x4 | 284aef669039f101 | 284aef669039f101 | 284aef669039f101 | 284aef669039f101 |
+| samba/hashed                 | batch  | IDENTICAL x4 | 685cfa1d3a50b038 | 685cfa1d3a50b038 | 685cfa1d3a50b038 | 685cfa1d3a50b038 |
+| samba/hashed                 | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | af0e02cacfad8270 |
+| samba/hashed                 | batchgrad | IDENTICAL x4 | 3868e1890bf25d35 | 3868e1890bf25d35 | 3868e1890bf25d35 | 3868e1890bf25d35 |
+| samba/hashed                 | batchscale | IDENTICAL x4 | 30ffca4eef8cfbbe | 30ffca4eef8cfbbe | 30ffca4eef8cfbbe | 30ffca4eef8cfbbe |
+| samba/hashed                 | ragged | IDENTICAL x4 | aa231cea2adacc40 | aa231cea2adacc40 | aa231cea2adacc40 | aa231cea2adacc40 |
+| samba/negative               | infer  | IDENTICAL x4 | 3a11eda41792501b | 3a11eda41792501b | 3a11eda41792501b | 3a11eda41792501b |
+| samba/negative               | model  | IDENTICAL x4 | bf0a203a904b24cf | bf0a203a904b24cf | bf0a203a904b24cf | bf0a203a904b24cf |
+| samba/negative               | batch  | IDENTICAL x4 | 87de84abeab25d86 | 87de84abeab25d86 | 87de84abeab25d86 | 87de84abeab25d86 |
+| samba/negative               | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 1af4d714620deaf5 |
+| samba/negative               | batchgrad | IDENTICAL x4 | 6dc47e85c06129c7 | 6dc47e85c06129c7 | 6dc47e85c06129c7 | 6dc47e85c06129c7 |
+| samba/negative               | batchscale | IDENTICAL x4 | bb6fcbdc0822016b | bb6fcbdc0822016b | bb6fcbdc0822016b | bb6fcbdc0822016b |
+| samba/negative               | ragged | IDENTICAL x4 | f0b62c34b66da60f | f0b62c34b66da60f | f0b62c34b66da60f | f0b62c34b66da60f |
+| samba/odd                    | infer  | IDENTICAL x4 | 77db10c414ebd846 | 77db10c414ebd846 | 77db10c414ebd846 | 77db10c414ebd846 |
+| samba/odd                    | model  | IDENTICAL x4 | 674582804fcf1a50 | 674582804fcf1a50 | 674582804fcf1a50 | 674582804fcf1a50 |
+| samba/odd                    | batch  | IDENTICAL x4 | aacbe0585755bc0f | aacbe0585755bc0f | aacbe0585755bc0f | aacbe0585755bc0f |
+| samba/odd                    | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8ae8dda8ba22a4aa |
+| samba/odd                    | batchgrad | IDENTICAL x4 | 6eafd29a27e3b376 | 6eafd29a27e3b376 | 6eafd29a27e3b376 | 6eafd29a27e3b376 |
+| samba/odd                    | batchscale | IDENTICAL x4 | 0fc187985877bd57 | 0fc187985877bd57 | 0fc187985877bd57 | 0fc187985877bd57 |
+| samba/odd                    | ragged | IDENTICAL x4 | eb391546ac70ae0c | eb391546ac70ae0c | eb391546ac70ae0c | eb391546ac70ae0c |
+| samba/ties                   | infer  | IDENTICAL x4 | a777e99f0a27b647 | a777e99f0a27b647 | a777e99f0a27b647 | a777e99f0a27b647 |
+| samba/ties                   | model  | IDENTICAL x4 | 1e49500f833e02a1 | 1e49500f833e02a1 | 1e49500f833e02a1 | 1e49500f833e02a1 |
+| samba/ties                   | batch  | IDENTICAL x4 | ca83b11a24eb8695 | ca83b11a24eb8695 | ca83b11a24eb8695 | ca83b11a24eb8695 |
+| samba/ties                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | e4e74a603305d265 |
+| samba/ties                   | batchgrad | IDENTICAL x4 | 7da094a4bce624b4 | 7da094a4bce624b4 | 7da094a4bce624b4 | 7da094a4bce624b4 |
+| samba/ties                   | batchscale | IDENTICAL x4 | 4f412d22d8dd4784 | 4f412d22d8dd4784 | 4f412d22d8dd4784 | 4f412d22d8dd4784 |
+| samba/ties                   | ragged | IDENTICAL x4 | 343d0e7ac3063750 | 343d0e7ac3063750 | 343d0e7ac3063750 | 343d0e7ac3063750 |
+| samba/wide                   | infer  | IDENTICAL x4 | a9c9aafd145646b1 | a9c9aafd145646b1 | a9c9aafd145646b1 | a9c9aafd145646b1 |
+| samba/wide                   | model  | IDENTICAL x4 | 6adcd1530cd32c5e | 6adcd1530cd32c5e | 6adcd1530cd32c5e | 6adcd1530cd32c5e |
+| samba/wide                   | batch  | IDENTICAL x4 | 609a185bf1638192 | 609a185bf1638192 | 609a185bf1638192 | 609a185bf1638192 |
+| samba/wide                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | cb7ed4b4430e1283 |
+| samba/wide                   | batchgrad | IDENTICAL x4 | 87bfd07b0b3cb13d | 87bfd07b0b3cb13d | 87bfd07b0b3cb13d | 87bfd07b0b3cb13d |
+| samba/wide                   | batchscale | IDENTICAL x4 | b68a9569d43a4580 | b68a9569d43a4580 | b68a9569d43a4580 | b68a9569d43a4580 |
+| samba/wide                   | ragged | IDENTICAL x4 | a4753a0b93544243 | a4753a0b93544243 | a4753a0b93544243 | a4753a0b93544243 |
+| transformer-window/base      | infer  | IDENTICAL x4 | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 |
+| transformer-window/base      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/base      | batch  | IDENTICAL x4 | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 |
+| transformer-window/base      | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | c6f0e94cbc9ade59 |
+| transformer-window/base      | batchgrad | IDENTICAL x4 | 212351f26cf2ea25 | 212351f26cf2ea25 | 212351f26cf2ea25 | 212351f26cf2ea25 |
+| transformer-window/base      | batchscale | IDENTICAL x4 | 2792496c71904df4 | 2792496c71904df4 | 2792496c71904df4 | 2792496c71904df4 |
+| transformer-window/base      | ragged | IDENTICAL x4 | cc1926bc76441b0f | cc1926bc76441b0f | cc1926bc76441b0f | cc1926bc76441b0f |
+| transformer-window/denormal  | infer  | IDENTICAL x4 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 |
+| transformer-window/denormal  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/denormal  | batch  | IDENTICAL x4 | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 |
+| transformer-window/denormal  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | e6e8d4b4b5b5e46a |
+| transformer-window/denormal  | batchgrad | IDENTICAL x4 | 5f70e6d27d39b5de | 5f70e6d27d39b5de | 5f70e6d27d39b5de | 5f70e6d27d39b5de |
+| transformer-window/denormal  | batchscale | IDENTICAL x4 | bdf2f3c4ae71fd74 | bdf2f3c4ae71fd74 | bdf2f3c4ae71fd74 | bdf2f3c4ae71fd74 |
+| transformer-window/denormal  | ragged | IDENTICAL x4 | 2b7e40b86782cb9c | 2b7e40b86782cb9c | 2b7e40b86782cb9c | 2b7e40b86782cb9c |
+| transformer-window/denormal_ftz | infer  | IDENTICAL x4 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 |
+| transformer-window/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/denormal_ftz | batch  | IDENTICAL x4 | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 |
+| transformer-window/denormal_ftz | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f27349ced3ee6254 |
+| transformer-window/denormal_ftz | batchgrad | IDENTICAL x4 | 5f70e6d27d39b5de | 5f70e6d27d39b5de | 5f70e6d27d39b5de | 5f70e6d27d39b5de |
+| transformer-window/denormal_ftz | batchscale | IDENTICAL x4 | bdf2f3c4ae71fd74 | bdf2f3c4ae71fd74 | bdf2f3c4ae71fd74 | bdf2f3c4ae71fd74 |
+| transformer-window/denormal_ftz | ragged | IDENTICAL x4 | 2b7e40b86782cb9c | 2b7e40b86782cb9c | 2b7e40b86782cb9c | 2b7e40b86782cb9c |
+| transformer-window/dupes     | infer  | IDENTICAL x4 | c8727f6975c294a0 | c8727f6975c294a0 | c8727f6975c294a0 | c8727f6975c294a0 |
+| transformer-window/dupes     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/dupes     | batch  | IDENTICAL x4 | 2609e898b7c93177 | 2609e898b7c93177 | 2609e898b7c93177 | 2609e898b7c93177 |
+| transformer-window/dupes     | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | c6f0e94cbc9ade59 |
+| transformer-window/dupes     | batchgrad | IDENTICAL x4 | 6a7752a8ad2e7e49 | 6a7752a8ad2e7e49 | 6a7752a8ad2e7e49 | 6a7752a8ad2e7e49 |
+| transformer-window/dupes     | batchscale | IDENTICAL x4 | c7ed428af4f7e6bf | c7ed428af4f7e6bf | c7ed428af4f7e6bf | c7ed428af4f7e6bf |
+| transformer-window/dupes     | ragged | IDENTICAL x4 | c70bb87ba0b79ee3 | c70bb87ba0b79ee3 | c70bb87ba0b79ee3 | c70bb87ba0b79ee3 |
+| transformer-window/hashed    | infer  | IDENTICAL x4 | 980b88a5ef026b11 | 980b88a5ef026b11 | 980b88a5ef026b11 | 980b88a5ef026b11 |
+| transformer-window/hashed    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/hashed    | batch  | IDENTICAL x4 | 235440a27bc0150e | 235440a27bc0150e | 235440a27bc0150e | 235440a27bc0150e |
+| transformer-window/hashed    | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 3ed927cc1a04c983 |
+| transformer-window/hashed    | batchgrad | IDENTICAL x4 | e1e96857e9c912a4 | e1e96857e9c912a4 | e1e96857e9c912a4 | e1e96857e9c912a4 |
+| transformer-window/hashed    | batchscale | IDENTICAL x4 | 3db9693cdc916f29 | 3db9693cdc916f29 | 3db9693cdc916f29 | 3db9693cdc916f29 |
+| transformer-window/hashed    | ragged | IDENTICAL x4 | 04e41ddf58d11495 | 04e41ddf58d11495 | 04e41ddf58d11495 | 04e41ddf58d11495 |
+| transformer-window/negative  | infer  | IDENTICAL x4 | 4d10337584b45e49 | 4d10337584b45e49 | 4d10337584b45e49 | 4d10337584b45e49 |
+| transformer-window/negative  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/negative  | batch  | IDENTICAL x4 | bda185330c5accc5 | bda185330c5accc5 | bda185330c5accc5 | bda185330c5accc5 |
+| transformer-window/negative  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 756fe43411985468 |
+| transformer-window/negative  | batchgrad | IDENTICAL x4 | 36281f513ad8f76b | 36281f513ad8f76b | 36281f513ad8f76b | 36281f513ad8f76b |
+| transformer-window/negative  | batchscale | IDENTICAL x4 | 56b9a0bce1fab958 | 56b9a0bce1fab958 | 56b9a0bce1fab958 | 56b9a0bce1fab958 |
+| transformer-window/negative  | ragged | IDENTICAL x4 | ebcab46b3bf9fb43 | ebcab46b3bf9fb43 | ebcab46b3bf9fb43 | ebcab46b3bf9fb43 |
+| transformer-window/odd       | infer  | IDENTICAL x4 | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 |
+| transformer-window/odd       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/odd       | batch  | IDENTICAL x4 | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 |
+| transformer-window/odd       | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | c6f0e94cbc9ade59 |
+| transformer-window/odd       | batchgrad | IDENTICAL x4 | 212351f26cf2ea25 | 212351f26cf2ea25 | 212351f26cf2ea25 | 212351f26cf2ea25 |
+| transformer-window/odd       | batchscale | IDENTICAL x4 | b852899e3e7c4b9d | b852899e3e7c4b9d | b852899e3e7c4b9d | b852899e3e7c4b9d |
+| transformer-window/odd       | ragged | IDENTICAL x4 | cc1926bc76441b0f | cc1926bc76441b0f | cc1926bc76441b0f | cc1926bc76441b0f |
+| transformer-window/ties      | infer  | IDENTICAL x4 | 22a7a20579fe94db | 22a7a20579fe94db | 22a7a20579fe94db | 22a7a20579fe94db |
+| transformer-window/ties      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/ties      | batch  | IDENTICAL x4 | 27cdeafedfb90f1a | 27cdeafedfb90f1a | 27cdeafedfb90f1a | 27cdeafedfb90f1a |
+| transformer-window/ties      | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | cebcb9e7e839c5fd |
+| transformer-window/ties      | batchgrad | IDENTICAL x4 | eace7960b014bd0a | eace7960b014bd0a | eace7960b014bd0a | eace7960b014bd0a |
+| transformer-window/ties      | batchscale | IDENTICAL x4 | 4f8657e490d55da3 | 4f8657e490d55da3 | 4f8657e490d55da3 | 4f8657e490d55da3 |
+| transformer-window/ties      | ragged | IDENTICAL x4 | a857139f896612a9 | a857139f896612a9 | a857139f896612a9 | a857139f896612a9 |
+| transformer-window/wide      | infer  | IDENTICAL x4 | 75cf7df2cce4aea9 | 75cf7df2cce4aea9 | 75cf7df2cce4aea9 | 75cf7df2cce4aea9 |
+| transformer-window/wide      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/wide      | batch  | IDENTICAL x4 | 68798687c33a64ff | 68798687c33a64ff | 68798687c33a64ff | 68798687c33a64ff |
+| transformer-window/wide      | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | ec1cc10a6b0298e7 |
+| transformer-window/wide      | batchgrad | IDENTICAL x4 | 052d53c67d5977f0 | 052d53c67d5977f0 | 052d53c67d5977f0 | 052d53c67d5977f0 |
+| transformer-window/wide      | batchscale | IDENTICAL x4 | 40c125fc58bef4dd | 40c125fc58bef4dd | 40c125fc58bef4dd | 40c125fc58bef4dd |
+| transformer-window/wide      | ragged | IDENTICAL x4 | 132703047789a4ae | 132703047789a4ae | 132703047789a4ae | 132703047789a4ae |
+| transformer/base             | infer  | IDENTICAL x4 | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 |
+| transformer/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/base             | batch  | IDENTICAL x4 | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 |
+| transformer/base             | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 41c065998015307c |
+| transformer/base             | batchgrad | IDENTICAL x4 | 5185ee1be0a72be5 | 5185ee1be0a72be5 | 5185ee1be0a72be5 | 5185ee1be0a72be5 |
+| transformer/base             | batchscale | IDENTICAL x4 | dd733dfdaf480743 | dd733dfdaf480743 | dd733dfdaf480743 | dd733dfdaf480743 |
+| transformer/base             | ragged | IDENTICAL x4 | bb97a92d33f296c6 | bb97a92d33f296c6 | bb97a92d33f296c6 | bb97a92d33f296c6 |
+| transformer/denormal         | infer  | IDENTICAL x4 | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be |
+| transformer/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/denormal         | batch  | IDENTICAL x4 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 |
+| transformer/denormal         | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 174e6a3a08b33eab |
+| transformer/denormal         | batchgrad | IDENTICAL x4 | c47919c0f5c78ce2 | c47919c0f5c78ce2 | c47919c0f5c78ce2 | c47919c0f5c78ce2 |
+| transformer/denormal         | batchscale | IDENTICAL x4 | 74eb2208c18d07ab | 74eb2208c18d07ab | 74eb2208c18d07ab | 74eb2208c18d07ab |
+| transformer/denormal         | ragged | IDENTICAL x4 | c640b8d2f2a2db5b | c640b8d2f2a2db5b | c640b8d2f2a2db5b | c640b8d2f2a2db5b |
+| transformer/denormal_ftz     | infer  | IDENTICAL x4 | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be |
+| transformer/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/denormal_ftz     | batch  | IDENTICAL x4 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 |
+| transformer/denormal_ftz     | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 3e90019a6be2628a |
+| transformer/denormal_ftz     | batchgrad | IDENTICAL x4 | c47919c0f5c78ce2 | c47919c0f5c78ce2 | c47919c0f5c78ce2 | c47919c0f5c78ce2 |
+| transformer/denormal_ftz     | batchscale | IDENTICAL x4 | 74eb2208c18d07ab | 74eb2208c18d07ab | 74eb2208c18d07ab | 74eb2208c18d07ab |
+| transformer/denormal_ftz     | ragged | IDENTICAL x4 | c640b8d2f2a2db5b | c640b8d2f2a2db5b | c640b8d2f2a2db5b | c640b8d2f2a2db5b |
+| transformer/dupes            | infer  | IDENTICAL x4 | cc0485bd3463891b | cc0485bd3463891b | cc0485bd3463891b | cc0485bd3463891b |
+| transformer/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/dupes            | batch  | IDENTICAL x4 | 4b51e3c2db7f9667 | 4b51e3c2db7f9667 | 4b51e3c2db7f9667 | 4b51e3c2db7f9667 |
+| transformer/dupes            | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 41c065998015307c |
+| transformer/dupes            | batchgrad | IDENTICAL x4 | 95f387677893408d | 95f387677893408d | 95f387677893408d | 95f387677893408d |
+| transformer/dupes            | batchscale | IDENTICAL x4 | edf21e57a13d856f | edf21e57a13d856f | edf21e57a13d856f | edf21e57a13d856f |
+| transformer/dupes            | ragged | IDENTICAL x4 | 67919ad5d9cf64ef | 67919ad5d9cf64ef | 67919ad5d9cf64ef | 67919ad5d9cf64ef |
+| transformer/hashed           | infer  | IDENTICAL x4 | 33aa6df81aac0bcd | 33aa6df81aac0bcd | 33aa6df81aac0bcd | 33aa6df81aac0bcd |
+| transformer/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/hashed           | batch  | IDENTICAL x4 | 10988a93701693a8 | 10988a93701693a8 | 10988a93701693a8 | 10988a93701693a8 |
+| transformer/hashed           | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | d64e16e9457f1512 |
+| transformer/hashed           | batchgrad | IDENTICAL x4 | 0e60acf19fba3e74 | 0e60acf19fba3e74 | 0e60acf19fba3e74 | 0e60acf19fba3e74 |
+| transformer/hashed           | batchscale | IDENTICAL x4 | 1a444c7d5b568c7b | 1a444c7d5b568c7b | 1a444c7d5b568c7b | 1a444c7d5b568c7b |
+| transformer/hashed           | ragged | IDENTICAL x4 | 0f50152a3d44f8bf | 0f50152a3d44f8bf | 0f50152a3d44f8bf | 0f50152a3d44f8bf |
+| transformer/negative         | infer  | IDENTICAL x4 | 0804b57610d9b1f5 | 0804b57610d9b1f5 | 0804b57610d9b1f5 | 0804b57610d9b1f5 |
+| transformer/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/negative         | batch  | IDENTICAL x4 | 55ca8b3a54e10ffa | 55ca8b3a54e10ffa | 55ca8b3a54e10ffa | 55ca8b3a54e10ffa |
+| transformer/negative         | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 0b99fe53b0eaa46a |
+| transformer/negative         | batchgrad | IDENTICAL x4 | d2c6b30184854635 | d2c6b30184854635 | d2c6b30184854635 | d2c6b30184854635 |
+| transformer/negative         | batchscale | IDENTICAL x4 | 9f25cf7e36c84094 | 9f25cf7e36c84094 | 9f25cf7e36c84094 | 9f25cf7e36c84094 |
+| transformer/negative         | ragged | IDENTICAL x4 | d1381c4d94345cfb | d1381c4d94345cfb | d1381c4d94345cfb | d1381c4d94345cfb |
+| transformer/odd              | infer  | IDENTICAL x4 | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 |
+| transformer/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/odd              | batch  | IDENTICAL x4 | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 |
+| transformer/odd              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 41c065998015307c |
+| transformer/odd              | batchgrad | IDENTICAL x4 | 5185ee1be0a72be5 | 5185ee1be0a72be5 | 5185ee1be0a72be5 | 5185ee1be0a72be5 |
+| transformer/odd              | batchscale | IDENTICAL x4 | 55dc41466bacdf0d | 55dc41466bacdf0d | 55dc41466bacdf0d | 55dc41466bacdf0d |
+| transformer/odd              | ragged | IDENTICAL x4 | bb97a92d33f296c6 | bb97a92d33f296c6 | bb97a92d33f296c6 | bb97a92d33f296c6 |
+| transformer/ties             | infer  | IDENTICAL x4 | f222fca146b15f94 | f222fca146b15f94 | f222fca146b15f94 | f222fca146b15f94 |
+| transformer/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/ties             | batch  | IDENTICAL x4 | 8548d6f52de06b7b | 8548d6f52de06b7b | 8548d6f52de06b7b | 8548d6f52de06b7b |
+| transformer/ties             | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 88f6733750d71307 |
+| transformer/ties             | batchgrad | IDENTICAL x4 | 5480cd2fd1ec39e3 | 5480cd2fd1ec39e3 | 5480cd2fd1ec39e3 | 5480cd2fd1ec39e3 |
+| transformer/ties             | batchscale | IDENTICAL x4 | 6a4dbc3b09de1c75 | 6a4dbc3b09de1c75 | 6a4dbc3b09de1c75 | 6a4dbc3b09de1c75 |
+| transformer/ties             | ragged | IDENTICAL x4 | 44e9b3e1e14edfb7 | 44e9b3e1e14edfb7 | 44e9b3e1e14edfb7 | 44e9b3e1e14edfb7 |
+| transformer/wide             | infer  | IDENTICAL x4 | 976e818c75ac481c | 976e818c75ac481c | 976e818c75ac481c | 976e818c75ac481c |
+| transformer/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/wide             | batch  | IDENTICAL x4 | a487428103ce49a8 | a487428103ce49a8 | a487428103ce49a8 | a487428103ce49a8 |
+| transformer/wide             | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f7b820c4caf9e16d |
+| transformer/wide             | batchgrad | IDENTICAL x4 | f7322716ad07daec | f7322716ad07daec | f7322716ad07daec | f7322716ad07daec |
+| transformer/wide             | batchscale | IDENTICAL x4 | 10f7d48195d8481a | 10f7d48195d8481a | 10f7d48195d8481a | 10f7d48195d8481a |
+| transformer/wide             | ragged | IDENTICAL x4 | 75e48e29d314a73b | 75e48e29d314a73b | 75e48e29d314a73b | 75e48e29d314a73b |
+
+summary (infer/model): IDENTICAL=126, N/A=54
+summary (batch): IDENTICAL=90
+summary (rlpair): NOT-COMPARED=90
+summary (batchgrad): IDENTICAL=72, N/A=18
+summary (batchscale): IDENTICAL=90
+summary (ragged): IDENTICAL=90
+require-columns 4 over ['byte-lm', 'byte-lm-resident', 'mamba1', 'mamba2', 'mamba2-dtlimit', 'mamba3', 'samba', 'samba-untied-dropout-accum', 'transformer', 'transformer-window']: OK (0 OWED)
+summary (owed): OWED=0; the next release record owes exactly these cell parts; wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/infn2/diffs2/owed.json

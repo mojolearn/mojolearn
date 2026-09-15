@@ -158,7 +158,7 @@ deviation and can now cite this block instead of a wall.
 **DEVIATION BLOCK 3 - single-buffered shared pages.** Their
 `Policy::SmemSize` is `2 * SmemPage` because `Contractions_NT` is DOUBLE
 BUFFERED. Two pages at Policy2x8 is 36,992 bytes against Metal's 32 KB
-threadgroup limit (`archive/reference/PORTING.md 1`), so this implementation is single-buffered exactly
+threadgroup limit, so this implementation is single-buffered exactly
 as `core/gemm.mojo` is. With the selector now in registers the kernel's
 shared footprint is one page, 18,496 bytes, and nothing else -- so the
 ceiling that forces this is Apple's alone and the double buffer would fit on
@@ -839,7 +839,7 @@ def fused_l2_knn(
     `fusedL2ExpKnnImpl:776-800` only computes them when they were not passed
     and every caller in this tree already has them from `compute_norms`.
 
-    `L2Unexpanded` / `L2SqrtUnexpanded` route to `fusedL2UnexpKnn` upstream
+    `L2Unexpanded` / `L2SqrtUnexpanded` route to `fusedL2UnexpKnn` in the reference
     and are NOT implemented; see `neighbors/NOT_IMPLEMENTED.tsv` in the lane file.
     """
     # `ASSERT(k > 0)`, `ASSERT(D > 0)`, `ASSERT(n_index_rows > 0)`,

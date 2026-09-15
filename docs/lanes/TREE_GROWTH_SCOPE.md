@@ -108,7 +108,7 @@ Before adding tree functionality, audit existing shared primitives and both
 callers. Share identical data structures, arithmetic helpers, RNG primitives,
 validation/packing and orchestration when contracts match. Retain explicit
 algorithm differences: RF binned threshold search, ET random thresholds and
-GBDT gradient/Hessian scoring are not interchangeable. Keep borrowed upstream
+GBDT gradient/Hessian scoring are not interchangeable. Keep reference
 provenance and numeric schedules when extracting helpers. Similar filenames
 alone are not evidence that entire builders should be merged.
 

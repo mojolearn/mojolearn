@@ -55,8 +55,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = 'splitmix64-uniform-f32-v1'
 MASK64 = (1 << 64) - 1
+#: The classes whose saves are `mojolearn-gbdt-1` archives (`_gbdt_host.GBDT_ESTIMATORS`).
+GBDT_ESTIMATORS = ('GradientBoosting', 'OrderedRMSE', 'ExperimentalTwoLevelFeatureFreq')
 ESTIMATORS = ('RandomForestClassifier', 'RandomForestRegressor',
-              'ExtraTreesClassifier', 'ExtraTreesRegressor', 'GradientBoosting')
+              'ExtraTreesClassifier', 'ExtraTreesRegressor') + GBDT_ESTIMATORS
+#: `transform` of a fixture whose first two columns are categorical codes
+#: (FeatureFreq sources, a one-hot categorical column): column 0 becomes
+#: `x2 > 0.5` and column 1 `2 * (x3 > 0.5) + (x4 > 0.5)`, as float32 codes,
+#: applied to the regenerated rows in `make`, `record` and `check` alike.
+CODED = 'coded-2-4-v1'
 FOREST_FORMATS = ('mojolearn-randomforest-1', 'mojolearn-extratrees-1',
                   'mojolearn-randomforest-1-parallel-groves-1', 'mojolearn-extratrees-1-parallel-groves-1')
 GBDT_FORMAT = 'mojolearn-gbdt-1'
@@ -73,15 +80,40 @@ KINDS = {
     'gbdt_depthwise': dict(estimator='GradientBoosting', classes=2, loss='Logloss', grow_policy='Depthwise'),
     'gbdt_lossguide': dict(estimator='GradientBoosting', classes=2, loss='Logloss', grow_policy='Lossguide'),
     'gbdt_rmse': dict(estimator='GradientBoosting', classes=0, loss='RMSE', grow_policy='SymmetricTree'),
+    # lane/inference-gbdt-modes (2026-09-15); no recording yet, OWED
+    'gbdt_ordered_rmse': dict(estimator='OrderedRMSE', classes=0, loss='RMSE', grow_policy='SymmetricTree'),
+    'gbdt_feature_freq': dict(estimator='ExperimentalTwoLevelFeatureFreq', classes=0, loss='RMSE',
+                              grow_policy='SymmetricTree', transform=CODED),
+    'gbdt_pointwise_bayesian_eval': dict(estimator='GradientBoosting', classes=2, loss='Logloss',
+                                         grow_policy='SymmetricTree', pointwise=True),
+    'gbdt_categorical_onehot': dict(estimator='GradientBoosting', classes=2, loss='Logloss',
+                                    grow_policy='SymmetricTree', transform=CODED),
 }
 
 
 def proba_wanted(name, loss):
     """Whether `predict_proba` is part of the recording: forest classifiers
-    always, GradientBoosting when its loss has the sigmoid link."""
-    if name == 'GradientBoosting':
+    always, a gradient boosting class when its loss has the sigmoid link."""
+    if name in GBDT_ESTIMATORS:
         return loss in ('Logloss', 'CrossEntropy')
     return name.endswith('Classifier')
+
+
+def apply_transform(raw, rows, features, transform):
+    """The fixture rows after `transform` (None or CODED), float32 row-major bytes."""
+    if not transform:
+        return raw
+    if transform != CODED:
+        raise SystemExit(f'gate: unknown fixture transform {transform!r}')
+    if features < 5:
+        raise SystemExit(f'gate: transform {CODED} needs at least 5 features')
+    xs = list(struct.unpack(f'<{rows * features}f', raw))
+    for r in range(rows):
+        b = r * features
+        c0 = 1.0 if xs[b + 2] > 0.5 else 0.0
+        c1 = (2.0 if xs[b + 3] > 0.5 else 0.0) + (1.0 if xs[b + 4] > 0.5 else 0.0)
+        xs[b], xs[b + 1] = c0, c1
+    return struct.pack(f'<{len(xs)}f', *xs)
 
 
 def sha256_bytes(data):
@@ -187,7 +219,7 @@ def estimator_of(model_path):
     if fmt.endswith('-parallel-groves-1'):
         raise SystemExit(f'gate: {model_path} is a parallel_groves archive; the host engine is sequential')
     name = _serialize.scalar_str(arrays, 'estimator')
-    if name not in ESTIMATORS or (name == 'GradientBoosting') != (fmt == GBDT_FORMAT):
+    if name not in ESTIMATORS or (name in GBDT_ESTIMATORS) != (fmt == GBDT_FORMAT):
         raise SystemExit(f'gate: {model_path} was saved by {name}, not an estimator this gate reads')
     loss = _serialize.scalar_str(arrays, 'loss') if fmt == GBDT_FORMAT else None
     return name, loss
@@ -218,27 +250,49 @@ def do_make(args):
     rows, features = int(args.rows), int(args.features)
     train_raw, _, _ = fixture_bytes(dict(rows=rows, features=features, seed=int(args.train_seed),
                                          generator=GENERATOR))
-    Xt = frombytes(train_raw, '<f4', (rows, features))
+    # the labels read the untransformed rows, so a coded kind keeps the
+    # label rule of every other kind
     xs = struct.unpack(f'<{rows * features}f', train_raw)
+    train_raw = apply_transform(train_raw, rows, features, kind.get('transform'))
+    Xt = frombytes(train_raw, '<f4', (rows, features))
     x = lambda r, c: xs[r * features + c]
     if kind['classes']:
         y = Array.from_list([int((x(r, 0) * 7 + x(r, 1) * 13) * 3) % kind['classes'] for r in range(rows)], '<i8')
     else:
         y = Array.from_list([x(r, 1) * 2 + x(r, 2) for r in range(rows)], '<f8')
     cls = getattr(mojolearn, kind['estimator'])
-    if kind['estimator'] == 'GradientBoosting':
+    fit_kw = {}
+    if kind['estimator'] == 'OrderedRMSE':
+        params = dict(n_estimators=8, max_depth=4)
+        # a fixed bijection with no RNG: rows in reverse
+        fit_kw['permutation'] = Array.from_list(list(range(rows - 1, -1, -1)), '<i8')
+    elif kind['estimator'] == 'ExperimentalTwoLevelFeatureFreq':
+        params = dict(sources=[0, 1], random_state=7)
+    elif kind['estimator'] == 'GradientBoosting':
         params = dict(n_estimators=8, max_depth=4, random_state=7, loss=kind['loss'],
                       grow_policy=kind['grow_policy'], numeric_mode='identical')
         if kind['grow_policy'] == 'Lossguide':
             params['max_leaves'] = 16
+        if kind.get('transform') == CODED:
+            params.update(cat_features=[0], one_hot_features=[1], permutation_count=2,
+                          ctr_estimation_permutation_id=0)
+        if kind.get('pointwise'):
+            params.update(score_function='L2', use_pointwise_searcher=True, bootstrap_type='Bayesian',
+                          bagging_temperature=0.5, boost_from_average=True)
+            fit_kw['sample_weight'] = Array.from_list([0.5 + (r % 11) / 10.0 for r in range(rows)], '<f4')
     else:
         params = dict(n_estimators=8, max_depth=6, random_state=7, numeric_mode='identical',
                       inference_engine='sequential')
-    model = cls(**params).fit(Xt, y)
+    model = cls(**params)
+    if 'numeric_mode' not in params and hasattr(model, 'numeric_mode'):
+        model.numeric_mode = 'identical'
+    model = model.fit(Xt, y, **fit_kw)
     model.save(str(directory / 'model.npz'))
     spec = dict(rows=rows, features=features, seed=int(args.seed), generator=GENERATOR)
     raw, _, _ = fixture_bytes(spec)
     spec['x_sha256'] = sha256_bytes(raw)
+    if kind.get('transform'):
+        spec['transform'] = kind['transform']
     (directory / 'fixture.json').write_text(json.dumps(spec, indent=2, sort_keys=True) + '\n')
     (directory / 'expected.json').write_text(json.dumps(dict(
         status='OWED', kind=args.kind, estimator=kind['estimator'],
@@ -272,7 +326,7 @@ def do_record(args):
         return 2
     directory = args.fixture_dir
     spec, raw, rows, features = load_fixture(directory)
-    X = frombytes(raw, '<f4', (rows, features))
+    X = frombytes(apply_transform(raw, rows, features, spec.get('transform')), '<f4', (rows, features))
     name, loss = estimator_of(directory / 'model.npz')
     cls = getattr(mojolearn, name)
     model = cls.load(str(directory / 'model.npz'))
@@ -346,7 +400,11 @@ def do_check(args):
             print(f'gate: {model_path} hashes {model_sha}, expected.json records '
                   f'{expected.get("model_sha256")}', file=sys.stderr)
             return 2
-        X = frombytes(raw, '<f4', (rows, features))
+        try:
+            X = frombytes(apply_transform(raw, rows, features, spec.get('transform')), '<f4', (rows, features))
+        except SystemExit as exc:
+            print(exc, file=sys.stderr)
+            return 2
         try:
             model = host_model(str(model_path))
             got = digests_for(model, X, proba_wanted(model.estimator, getattr(model, 'loss', None)))

@@ -161,6 +161,10 @@ from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
 from . import tokenizer
 from .tokenizer import GPT2Tokenizer
+# Public neural inference on the CPU from GPU-trained weights (2026-09-15),
+# host/_mojolearn_neural_host.so resolved on first use.
+from .neural_inference import (MLPInference, TransformerBlockInference, Mamba1BlockInference,
+                               Mamba2BlockInference, Mamba3BlockInference, SambaInference)
 
 # Workstream D, 2026-09-14: the door-less families of the claim-surface
 # census (docs/lanes/BRIEF_claim_surface_census_2026-09-14.md section 4)
@@ -213,6 +217,11 @@ from ._gp_impl import (
     RBF,
     WhiteKernel,
 )
+# `GaussianProcessClassifier` JOINED 2026-09-15 (lane/gaussian-process-
+# classifier): scikit-learn `_gpc.py`'s Laplace approximation on the same
+# binding, one-vs-rest past two classes, `optimizer=None` only (DEVIATIONS
+# 2830-2833 close DEVIATION 1766).
+from ._gpc_impl import GaussianProcessClassifier
 
 # `Mamba1Block` / `Mamba2Block` JOINED 2026-09-01 (later the same day
 # again), closing `archive/evidence/mamba/FEATURE_PARITY.md`'s "PyPI surface: NONE
@@ -312,6 +321,7 @@ __all__ = [
     "resample",
     "ConstantKernel",
     "DBSCAN",
+    "GaussianProcessClassifier",
     "GaussianProcessRegressor",
     "KernelDensity",
     "Matern",
@@ -327,6 +337,12 @@ __all__ = [
     "OrderedRMSE",
     "ExponentialSmoothing",
     "GPT2Tokenizer",
+    "MLPInference",
+    "TransformerBlockInference",
+    "Mamba1BlockInference",
+    "Mamba2BlockInference",
+    "Mamba3BlockInference",
+    "SambaInference",
     "IsolationForest",
     "KMeans",
     "KNeighborsClassifier",

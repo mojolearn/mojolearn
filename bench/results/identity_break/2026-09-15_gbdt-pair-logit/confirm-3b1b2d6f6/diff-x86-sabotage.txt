@@ -1,0 +1,36 @@
+NOTE: column cpu-x86-64-runpod is a CPU column: cpu_model='AMD EPYC 7702P 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=3b1b2d6f6f584aee208f7b4ac8de305b4c86608c
+| lane/fixture                 | verdict    | apple-m4         | apple-m4         | cpu-x86-64-runpod |
+|------------------------------|------------|------------------|------------------|------------------|
+| gbdt-pair-logit/base         | DIVERGENT  | parts differ: predict,loss_curve,explicit_predict,explicit_loss_curve; agree: - | (not run)        | f3313e468f445d9a |
+| gbdt-pair-logit/odd          | DIVERGENT  | parts differ: predict,loss_curve,explicit_predict,explicit_loss_curve; agree: - | (not run)        | 2b08df62402403f5 |
+| gbdt-pair-logit/ties         | DIVERGENT  | parts differ: predict,loss_curve,explicit_predict,explicit_loss_curve; agree: - | (not run)        | cdfb3b971aac1432 |
+| gbdt-query-rmse/base         | DIVERGENT  | parts differ: predict,loss_curve; agree: - | b3f448427d6e764f | 90743a601c4ddf74 |
+| gbdt-query-rmse/odd          | DIVERGENT  | parts differ: predict,loss_curve; agree: - | 13b70161e523142f | 839e219d35e2cb5b |
+| gbdt-query-rmse/ties         | DIVERGENT  | parts differ: predict,loss_curve; agree: - | 40a5b5333f0a32ef | 6106db7f212331c3 |
+
+summary: DIVERGENT=6
+
+| lane/fixture                 | column | verdict      | apple-m4         | apple-m4         | cpu-x86-64-runpod |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| gbdt-pair-logit/base         | infer  | DIVERGENT    | 916d4f0f79d1277f | (not run)        | ec48d7b3692e11b8 |
+| gbdt-pair-logit/base         | model  | DIVERGENT    | cfcb870dc3b7d6fa | (not run)        | d33724d86ec558bc |
+| gbdt-pair-logit/base         | batch  | DIVERGENT    | c459fa28e16a0794 | (not run)        | 5a8783dfd14fab93 |
+| gbdt-pair-logit/odd          | infer  | DIVERGENT    | ad7b849614270d86 | (not run)        | 2e02b8c6073cd029 |
+| gbdt-pair-logit/odd          | model  | DIVERGENT    | f4bccde2bdc33c91 | (not run)        | 3a737b0d05a2e0fb |
+| gbdt-pair-logit/odd          | batch  | DIVERGENT    | b3a226552e3f3ce8 | (not run)        | aee7dc5267e9532d |
+| gbdt-pair-logit/ties         | infer  | DIVERGENT    | 09f9cf51864eb743 | (not run)        | 2d2135f1b0d71d92 |
+| gbdt-pair-logit/ties         | model  | DIVERGENT    | 11730346a61ad6dd | (not run)        | cd4bd3f9b09a9974 |
+| gbdt-pair-logit/ties         | batch  | DIVERGENT    | 748df688cc3a6a55 | (not run)        | 1d61924a2979b0ab |
+| gbdt-query-rmse/base         | infer  | DIVERGENT    | (not run)        | c5dd11cce5027431 | 3185dee88c2060e4 |
+| gbdt-query-rmse/base         | model  | DIVERGENT    | (not run)        | 773082ee900f4629 | e83083e0db84ceb1 |
+| gbdt-query-rmse/base         | batch  | DIVERGENT    | (not run)        | 2f9ae940636f0782 | 47efa1d9a17e9185 |
+| gbdt-query-rmse/odd          | infer  | DIVERGENT    | (not run)        | 66a562a9f1518dd7 | 8ac9fa458624cc85 |
+| gbdt-query-rmse/odd          | model  | DIVERGENT    | (not run)        | 850fcd0f8a7c5a1a | a2c574b840ee0663 |
+| gbdt-query-rmse/odd          | batch  | DIVERGENT    | (not run)        | 8990d2af358d0692 | 5d662f5d45c3bb55 |
+| gbdt-query-rmse/ties         | infer  | DIVERGENT    | (not run)        | 82656b1f96479524 | a45bb66940742356 |
+| gbdt-query-rmse/ties         | model  | DIVERGENT    | (not run)        | a00477457a3f0913 | 80df406b70bd1dda |
+| gbdt-query-rmse/ties         | batch  | DIVERGENT    | (not run)        | 348dc9138ec69402 | 6196212c3a82e7ad |
+
+summary (infer/model): DIVERGENT=12
+summary (batch): DIVERGENT=6
+summary (rlpair): 

@@ -1,0 +1,447 @@
+NOTE: --lanes scopes this diff to 8 lane(s); 158 other lane(s) the JSONs carry are not compared
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    nvidia-h100-sm_90a: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    amd-mi325x-gfx942: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    apple-m4: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    apple-m4: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    apple-m4: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    nvidia-h100-sm_90a: {'X': 'e4b16c115962dfcd'}
+    amd-mi325x-gfx942: {'X': 'e4b16c115962dfcd'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    apple-m4: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| kmeans-array/base            | IDENTICAL x4 | 37ab2f0355ef716a | 37ab2f0355ef716a | 37ab2f0355ef716a | 37ab2f0355ef716a |
+| kmeans-array/denormal        | IDENTICAL x4 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 |
+| kmeans-array/denormal_ftz    | IDENTICAL x3 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 | (not run)        |
+| kmeans-array/dupes           | IDENTICAL x3 | a71e34a5786a472e | a71e34a5786a472e | a71e34a5786a472e | (not run)        |
+| kmeans-array/hashed          | IDENTICAL x3 | a960d6d68f5c8665 | a960d6d68f5c8665 | a960d6d68f5c8665 | (not run)        |
+| kmeans-array/negative        | IDENTICAL x3 | 64223107950d714a | 64223107950d714a | 64223107950d714a | (not run)        |
+| kmeans-array/odd             | IDENTICAL x4 | 5b347e0f29ddb844 | 5b347e0f29ddb844 | 5b347e0f29ddb844 | 5b347e0f29ddb844 |
+| kmeans-array/ties            | IDENTICAL x4 | f7e7677d5ae7597f | f7e7677d5ae7597f | f7e7677d5ae7597f | f7e7677d5ae7597f |
+| kmeans-array/wide            | IDENTICAL x3 | ac99cd5354363ce1 | ac99cd5354363ce1 | ac99cd5354363ce1 | (not run)        |
+| kmeans-classic-pp/base       | IDENTICAL x4 | e6648c8209c562ac | e6648c8209c562ac | e6648c8209c562ac | e6648c8209c562ac |
+| kmeans-classic-pp/denormal   | IDENTICAL x4 | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e |
+| kmeans-classic-pp/denormal_ftz | IDENTICAL x3 | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e | (not run)        |
+| kmeans-classic-pp/dupes      | IDENTICAL x3 | a0389077dee20809 | a0389077dee20809 | a0389077dee20809 | (not run)        |
+| kmeans-classic-pp/hashed     | IDENTICAL x3 | 8aec37d06d525fce | 8aec37d06d525fce | 8aec37d06d525fce | (not run)        |
+| kmeans-classic-pp/negative   | IDENTICAL x3 | 644cff6572372f33 | 644cff6572372f33 | 644cff6572372f33 | (not run)        |
+| kmeans-classic-pp/odd        | IDENTICAL x4 | a47bec6025e076d8 | a47bec6025e076d8 | a47bec6025e076d8 | a47bec6025e076d8 |
+| kmeans-classic-pp/ties       | IDENTICAL x4 | b0f1aa9e9e7adf6f | b0f1aa9e9e7adf6f | b0f1aa9e9e7adf6f | b0f1aa9e9e7adf6f |
+| kmeans-classic-pp/wide       | IDENTICAL x3 | 51beac4d46f297db | 51beac4d46f297db | 51beac4d46f297db | (not run)        |
+| kmeans-cosine/base           | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/denormal       | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/denormal_ftz   | IDENTICAL x3 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | (not run)        |
+| kmeans-cosine/dupes          | IDENTICAL x3 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | (not run)        |
+| kmeans-cosine/hashed         | IDENTICAL x3 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | (not run)        |
+| kmeans-cosine/negative       | IDENTICAL x3 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | (not run)        |
+| kmeans-cosine/odd            | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/ties           | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/wide           | IDENTICAL x3 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | (not run)        |
+| kmeans-random/base           | IDENTICAL x4 | 2bab0cda9f319dbb | 2bab0cda9f319dbb | 2bab0cda9f319dbb | 2bab0cda9f319dbb |
+| kmeans-random/denormal       | IDENTICAL x4 | ddb08cf02222e6a3 | ddb08cf02222e6a3 | ddb08cf02222e6a3 | ddb08cf02222e6a3 |
+| kmeans-random/denormal_ftz   | IDENTICAL x3 | ddb08cf02222e6a3 | ddb08cf02222e6a3 | ddb08cf02222e6a3 | (not run)        |
+| kmeans-random/dupes          | IDENTICAL x3 | b8953eb119af6144 | b8953eb119af6144 | b8953eb119af6144 | (not run)        |
+| kmeans-random/hashed         | IDENTICAL x3 | 0b375d0049c4c87b | 0b375d0049c4c87b | 0b375d0049c4c87b | (not run)        |
+| kmeans-random/negative       | IDENTICAL x3 | 23ce9524cf23e596 | 23ce9524cf23e596 | 23ce9524cf23e596 | (not run)        |
+| kmeans-random/odd            | IDENTICAL x4 | f22e6751eeedc598 | f22e6751eeedc598 | f22e6751eeedc598 | f22e6751eeedc598 |
+| kmeans-random/ties           | IDENTICAL x4 | 9f90e48e2d5a4ce4 | 9f90e48e2d5a4ce4 | 9f90e48e2d5a4ce4 | 9f90e48e2d5a4ce4 |
+| kmeans-random/wide           | IDENTICAL x3 | 2b64e3f5f82a82d8 | 2b64e3f5f82a82d8 | 2b64e3f5f82a82d8 | (not run)        |
+| kmeans-sqrt/base             | DIVERGENT  | parts differ: labels; agree: centers,inertia,scales | 961a4ac1fc219750 | 961a4ac1fc219750 | 8864be3c295d6c4a |
+| kmeans-sqrt/denormal         | DIVERGENT  | parts differ: labels; agree: centers,inertia,scales | a5bb4d058f6890f9 | a5bb4d058f6890f9 | c2486d60db950886 |
+| kmeans-sqrt/denormal_ftz     | IDENTICAL x3 | a5bb4d058f6890f9 | a5bb4d058f6890f9 | a5bb4d058f6890f9 | (not run)        |
+| kmeans-sqrt/dupes            | IDENTICAL x3 | dc76e2a953a5f8f9 | dc76e2a953a5f8f9 | dc76e2a953a5f8f9 | (not run)        |
+| kmeans-sqrt/hashed           | IDENTICAL x3 | 452b7908b692b238 | 452b7908b692b238 | 452b7908b692b238 | (not run)        |
+| kmeans-sqrt/negative         | IDENTICAL x3 | 1f638840b30ec449 | 1f638840b30ec449 | 1f638840b30ec449 | (not run)        |
+| kmeans-sqrt/odd              | DIVERGENT  | parts differ: labels; agree: centers,inertia,scales | f352d565acba8219 | f352d565acba8219 | cd50fd82b95de87a |
+| kmeans-sqrt/ties             | DIVERGENT  | parts differ: labels; agree: centers,inertia,scales | d3feb924d2221a46 | d3feb924d2221a46 | 07a5cce02a00bdae |
+| kmeans-sqrt/wide             | DIVERGENT  | parts differ: inertia; agree: centers,labels,scales | 152655441c24b80a | 8c66b352864fd354 | (not run)        |
+| kmeans-weighted/base         | IDENTICAL x4 | 5080fbf55610f54e | 5080fbf55610f54e | 5080fbf55610f54e | 5080fbf55610f54e |
+| kmeans-weighted/denormal     | IDENTICAL x4 | c3613adfb9158691 | c3613adfb9158691 | c3613adfb9158691 | c3613adfb9158691 |
+| kmeans-weighted/denormal_ftz | IDENTICAL x3 | c3613adfb9158691 | c3613adfb9158691 | c3613adfb9158691 | (not run)        |
+| kmeans-weighted/dupes        | IDENTICAL x3 | a530038afd2318d6 | a530038afd2318d6 | a530038afd2318d6 | (not run)        |
+| kmeans-weighted/hashed       | IDENTICAL x3 | eded8c9746d545c7 | eded8c9746d545c7 | eded8c9746d545c7 | (not run)        |
+| kmeans-weighted/negative     | IDENTICAL x3 | 3bf996834a2fd658 | 3bf996834a2fd658 | 3bf996834a2fd658 | (not run)        |
+| kmeans-weighted/odd          | IDENTICAL x4 | fc6107e901e7d7be | fc6107e901e7d7be | fc6107e901e7d7be | fc6107e901e7d7be |
+| kmeans-weighted/ties         | IDENTICAL x4 | a7070391c3cc52fb | a7070391c3cc52fb | a7070391c3cc52fb | a7070391c3cc52fb |
+| kmeans-weighted/wide         | IDENTICAL x3 | 5e333d411cffbf33 | 5e333d411cffbf33 | 5e333d411cffbf33 | (not run)        |
+| kmeans/base                  | IDENTICAL x4 | 5aa44cc11034dec9 | 5aa44cc11034dec9 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+| kmeans/denormal              | IDENTICAL x4 | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c |
+| kmeans/denormal_ftz          | IDENTICAL x3 | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c | (not run)        |
+| kmeans/dupes                 | IDENTICAL x3 | 2ae942d45a51757a | 2ae942d45a51757a | 2ae942d45a51757a | (not run)        |
+| kmeans/hashed                | IDENTICAL x3 | 0a570e84b0002723 | 0a570e84b0002723 | 0a570e84b0002723 | (not run)        |
+| kmeans/negative              | IDENTICAL x3 | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 | (not run)        |
+| kmeans/odd                   | IDENTICAL x4 | 43d8a3d3859f4143 | 43d8a3d3859f4143 | 43d8a3d3859f4143 | 43d8a3d3859f4143 |
+| kmeans/ties                  | IDENTICAL x4 | 3de3e103006de69c | 3de3e103006de69c | 3de3e103006de69c | 3de3e103006de69c |
+| kmeans/wide                  | IDENTICAL x3 | 6f0529fcb3d60536 | 6f0529fcb3d60536 | 6f0529fcb3d60536 | (not run)        |
+| par-kmeans/base              | IDENTICAL x4 | 5aa44cc11034dec9 | 5aa44cc11034dec9 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+| par-kmeans/denormal          | IDENTICAL x4 | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c |
+| par-kmeans/denormal_ftz      | IDENTICAL x3 | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c | (not run)        |
+| par-kmeans/dupes             | IDENTICAL x3 | 2ae942d45a51757a | 2ae942d45a51757a | 2ae942d45a51757a | (not run)        |
+| par-kmeans/hashed            | IDENTICAL x3 | 0a570e84b0002723 | 0a570e84b0002723 | 0a570e84b0002723 | (not run)        |
+| par-kmeans/negative          | IDENTICAL x3 | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 | (not run)        |
+| par-kmeans/odd               | IDENTICAL x4 | 43d8a3d3859f4143 | 43d8a3d3859f4143 | 43d8a3d3859f4143 | 43d8a3d3859f4143 |
+| par-kmeans/ties              | IDENTICAL x4 | 3de3e103006de69c | 3de3e103006de69c | 3de3e103006de69c | 3de3e103006de69c |
+| par-kmeans/wide              | IDENTICAL x3 | 6f0529fcb3d60536 | 6f0529fcb3d60536 | 6f0529fcb3d60536 | (not run)        |
+
+summary: DIVERGENT=5, IDENTICAL=67
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| kmeans-array/base            | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | ae9509c50c75d2bc |
+| kmeans-array/base            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/base            | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 4b1022a4b98908d1 |
+| kmeans-array/denormal        | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | c7e58f1805e93798 |
+| kmeans-array/denormal        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/denormal        | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 8aaa92c6db31897f |
+| kmeans-array/denormal_ftz    | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-array/denormal_ftz    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-array/denormal_ftz    | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-array/dupes           | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-array/dupes           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-array/dupes           | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-array/hashed          | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-array/hashed          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-array/hashed          | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-array/negative        | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-array/negative        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-array/negative        | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-array/odd             | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | cb0a1ae7215c27aa |
+| kmeans-array/odd             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/odd             | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 21e79ca2282ddc5f |
+| kmeans-array/ties            | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 5f64992d5da78b8f |
+| kmeans-array/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/ties            | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 3d1ce5fa3f9e09c4 |
+| kmeans-array/wide            | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-array/wide            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-array/wide            | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-classic-pp/base       | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | e44226a81eebb7a8 |
+| kmeans-classic-pp/base       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/base       | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | a710fad38f112c1c |
+| kmeans-classic-pp/denormal   | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | f86f206425b73e29 |
+| kmeans-classic-pp/denormal   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/denormal   | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 15dec882e28b9589 |
+| kmeans-classic-pp/denormal_ftz | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-classic-pp/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-classic-pp/denormal_ftz | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-classic-pp/dupes      | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-classic-pp/dupes      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-classic-pp/dupes      | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-classic-pp/hashed     | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-classic-pp/hashed     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-classic-pp/hashed     | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-classic-pp/negative   | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-classic-pp/negative   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-classic-pp/negative   | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-classic-pp/odd        | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 3b0d31ba504ffc5b |
+| kmeans-classic-pp/odd        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/odd        | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 192831cf947aa32b |
+| kmeans-classic-pp/ties       | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 83ac9df1fe7b737d |
+| kmeans-classic-pp/ties       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/ties       | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | ff31663995ac52c6 |
+| kmeans-classic-pp/wide       | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-classic-pp/wide       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-classic-pp/wide       | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-cosine/base           | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/base           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/base           | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:fit-refused  |
+| kmeans-cosine/denormal       | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/denormal       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/denormal       | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:fit-refused  |
+| kmeans-cosine/denormal_ftz   | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | (not run)        |
+| kmeans-cosine/denormal_ftz   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-cosine/denormal_ftz   | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-cosine/dupes          | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | (not run)        |
+| kmeans-cosine/dupes          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-cosine/dupes          | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-cosine/hashed         | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | (not run)        |
+| kmeans-cosine/hashed         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-cosine/hashed         | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-cosine/negative       | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | (not run)        |
+| kmeans-cosine/negative       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-cosine/negative       | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-cosine/odd            | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/odd            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/odd            | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:fit-refused  |
+| kmeans-cosine/ties           | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/ties           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/ties           | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:fit-refused  |
+| kmeans-cosine/wide           | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | (not run)        |
+| kmeans-cosine/wide           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-cosine/wide           | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-random/base           | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 45d941e241fdba4f |
+| kmeans-random/base           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/base           | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 41f3015cf8e0680a |
+| kmeans-random/denormal       | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | f1b6a290aca7f88d |
+| kmeans-random/denormal       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/denormal       | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 88799e781dfe5a5b |
+| kmeans-random/denormal_ftz   | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-random/denormal_ftz   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-random/denormal_ftz   | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-random/dupes          | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-random/dupes          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-random/dupes          | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-random/hashed         | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-random/hashed         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-random/hashed         | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-random/negative       | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-random/negative       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-random/negative       | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-random/odd            | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | df29a616a051e530 |
+| kmeans-random/odd            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/odd            | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 53b58fa53fc8a4c3 |
+| kmeans-random/ties           | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 6698384517f202cd |
+| kmeans-random/ties           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/ties           | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 9dba3245a60df276 |
+| kmeans-random/wide           | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-random/wide           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-random/wide           | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-sqrt/base             | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 58a73ee6f884f892 |
+| kmeans-sqrt/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/base             | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 50d831d9342c295e |
+| kmeans-sqrt/denormal         | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 5613aee8380a3878 |
+| kmeans-sqrt/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/denormal         | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 79378a3a1acbc98e |
+| kmeans-sqrt/denormal_ftz     | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-sqrt/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-sqrt/denormal_ftz     | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-sqrt/dupes            | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-sqrt/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-sqrt/dupes            | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-sqrt/hashed           | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-sqrt/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-sqrt/hashed           | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-sqrt/negative         | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-sqrt/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-sqrt/negative         | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-sqrt/odd              | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | d57783b77ce4e554 |
+| kmeans-sqrt/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/odd              | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 308b44148cf1b4d5 |
+| kmeans-sqrt/ties             | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 11403f38e806a8a7 |
+| kmeans-sqrt/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/ties             | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 59f927df98783136 |
+| kmeans-sqrt/wide             | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-sqrt/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-sqrt/wide             | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-weighted/base         | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 33403bafb4259ce4 |
+| kmeans-weighted/base         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/base         | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | bd21da2a20bcf33f |
+| kmeans-weighted/denormal     | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 03780e8f5ba1bb21 |
+| kmeans-weighted/denormal     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/denormal     | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | d4c912e6b87b383e |
+| kmeans-weighted/denormal_ftz | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-weighted/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-weighted/denormal_ftz | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-weighted/dupes        | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-weighted/dupes        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-weighted/dupes        | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-weighted/hashed       | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-weighted/hashed       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-weighted/hashed       | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-weighted/negative     | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-weighted/negative     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-weighted/negative     | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-weighted/odd          | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 86bea24bd326b655 |
+| kmeans-weighted/odd          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/odd          | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 2ac9fe78151082ea |
+| kmeans-weighted/ties         | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | f1a40d6c9595a677 |
+| kmeans-weighted/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/ties         | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 797f19f2820413c0 |
+| kmeans-weighted/wide         | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans-weighted/wide         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans-weighted/wide         | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans/base                  | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 3d50c4c50bf078b2 |
+| kmeans/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/base                  | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | ce34789a012168b5 |
+| kmeans/denormal              | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 9b15ee1cac8ce636 |
+| kmeans/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/denormal              | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | cd11da38d7d996eb |
+| kmeans/denormal_ftz          | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans/denormal_ftz          | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans/dupes                 | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans/dupes                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans/dupes                 | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans/hashed                | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans/hashed                | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans/negative              | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans/negative              | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans/odd                   | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 191287260610940c |
+| kmeans/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/odd                   | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 06c7a23bc000d13d |
+| kmeans/ties                  | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 0e9dcaedec0fcadc |
+| kmeans/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/ties                  | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | ff636ffbdf6153fe |
+| kmeans/wide                  | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| kmeans/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| kmeans/wide                  | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| par-kmeans/base              | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 3d50c4c50bf078b2 |
+| par-kmeans/base              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-kmeans/base              | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | ce34789a012168b5 |
+| par-kmeans/denormal          | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 9b15ee1cac8ce636 |
+| par-kmeans/denormal          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-kmeans/denormal          | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | cd11da38d7d996eb |
+| par-kmeans/denormal_ftz      | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| par-kmeans/denormal_ftz      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-kmeans/denormal_ftz      | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| par-kmeans/dupes             | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| par-kmeans/dupes             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-kmeans/dupes             | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| par-kmeans/hashed            | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| par-kmeans/hashed            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-kmeans/hashed            | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| par-kmeans/negative          | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| par-kmeans/negative          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-kmeans/negative          | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| par-kmeans/odd               | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 191287260610940c |
+| par-kmeans/odd               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-kmeans/odd               | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 06c7a23bc000d13d |
+| par-kmeans/ties              | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 0e9dcaedec0fcadc |
+| par-kmeans/ties              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-kmeans/ties              | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | ff636ffbdf6153fe |
+| par-kmeans/wide              | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+| par-kmeans/wide              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-kmeans/wide              | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | (not run)        |
+
+summary (infer/model): N/A=116, ONE-COLUMN=28
+summary (batch): N/A=44, ONE-COLUMN=28
+summary (rlpair): 
+REQUIRE FAIL kmeans-array/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-cosine/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-cosine/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-cosine/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-cosine/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-cosine/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-array/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-classic-pp/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-random/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-sqrt/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans-weighted/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL kmeans/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL par-kmeans/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+require-columns 4 over ['kmeans', 'kmeans-array', 'kmeans-classic-pp', 'kmeans-cosine', 'kmeans-random', 'kmeans-sqrt', 'kmeans-weighted', 'par-kmeans']: 95 short (0 OWED)
+summary (owed): OWED=0; the next release record owes exactly these cell parts; wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nm/out/s1/owed_metal.json

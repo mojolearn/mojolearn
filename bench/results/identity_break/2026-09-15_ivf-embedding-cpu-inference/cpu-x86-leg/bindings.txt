@@ -1,0 +1,25 @@
+python/mojolearn/host:
+total 1032
+drwxr-xr-x 2 root root    151 Sep 15 17:40 .
+drwxr-xr-x 6 root root   4096 Sep 15 17:40 ..
+-rwxr-xr-x 1 root root 207400 Sep 15 17:40 _mojolearn_embedding_host.so
+-rwxr-xr-x 1 root root 183248 Sep 15 17:40 _mojolearn_embedding_infer_host.so
+-rwxr-xr-x 1 root root 409032 Sep 15 17:40 _mojolearn_ivf_host.so
+-rwxr-xr-x 1 root root 248640 Sep 15 17:40 _mojolearn_ivf_search_host.so
+
+python/mojolearn/host-sabotage:
+total 1032
+drwxr-xr-x 2 root root    171 Sep 15 17:40 .
+drwxr-xr-x 6 root root   4096 Sep 15 17:40 ..
+-rwxr-xr-x 1 root root 207400 Sep 15 17:40 _mojolearn_embedding_host.so
+-rwxr-xr-x 1 root root 183248 Sep 15 17:40 _mojolearn_embedding_infer_host.so
+-rwxr-xr-x 1 root root 409032 Sep 15 17:40 _mojolearn_ivf_host.so
+-rwxr-xr-x 1 root root 248640 Sep 15 17:40 _mojolearn_ivf_search_host.so
+d0fd6ba4c06229e4e08c8f10eb6ceafd8a716b1276d6da73b061c520a96b4a1a  python/mojolearn/host/_mojolearn_embedding_host.so
+f9bf25888fe41e04095bc6b6f5ed26e9a8ece1e8a246f5cd8822fc426a0b5bc0  python/mojolearn/host/_mojolearn_embedding_infer_host.so
+cf56cc1071242e79e83f323c4b9002d9f756e77cd22382c578fe3127d3eb64ce  python/mojolearn/host/_mojolearn_ivf_host.so
+0e0badce65bcfa401617668b7a21491924dcc58a5b3b4bfb8b50902febeeb8a2  python/mojolearn/host/_mojolearn_ivf_search_host.so
+facd8322ec4ae56f881a76437f7d91f75b5d0721606ad65a3d45fb2bebd49085  python/mojolearn/host-sabotage/_mojolearn_embedding_host.so
+1b121f1822f7b15c37117b7fee2de44f7cfd90e1774f7a4e66084f2655d4840c  python/mojolearn/host-sabotage/_mojolearn_embedding_infer_host.so
+7356b8eb74e87eefe85c0d26f6a5f1fec0094d642e11357cf106edf92d7ddfd0  python/mojolearn/host-sabotage/_mojolearn_ivf_host.so
+93859a8ef294ef2afa69286b4461267f804f90ddef4e133268c52c0468e8c193  python/mojolearn/host-sabotage/_mojolearn_ivf_search_host.so

@@ -28,7 +28,7 @@ so: "High performance comes at the cost of non-deterministic output: the
 column indices are not guaranteed to be stored in order"
 (`raft/sparse/convert/detail/adj_to_csr.cuh`). Multiple blocks cooperate on
 one row through an atomic counter. That is the THIRD documented source of
-run-to-run nondeterminism found in these upstreams, after CatBoost's float
+run-to-run nondeterminism found in these references, after CatBoost's float
 atomics and RAFT's radix-select tie handling. It does not change DBSCAN's
 answer, because label propagation converges to the same fixed point whatever
 order the edges are visited in.
@@ -51,7 +51,7 @@ from std.memory import stack_allocation
 comptime SCAN_TPB = 256
 # Elements one block of the first scan pass owns. `SCAN_TPB` threads times
 # eight elements each, which is the shape `cub::BlockScan` is used in
-# throughout these upstreams.
+# throughout these references.
 comptime SCAN_ITEMS_PER_TH = 8
 comptime SCAN_ELEMS_PER_BLOCK = SCAN_TPB * SCAN_ITEMS_PER_TH
 

@@ -1,0 +1,6 @@
+lane=leg-proof
+commit=7b76dd4a4e045cadd69ed4495493c96bf46b570a
+dirty_tracked=0
+worktree=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-runpod-cpu
+source=2510	17084564	f4b480d0f2407558dfa693f4eed56eb9068d8e6f53339d8f10a5bc090027e854
+box_clock_minus_mac=0

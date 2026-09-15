@@ -73,9 +73,10 @@ HOST_LITERAL = re.compile(
     r"^\s*HOST_NAMES?\s*=\s*[\"\x27(\[{]\s*[\"\x27]?_mojolearn_[a-z_]+_host"
     r"|[\"\x27]_mojolearn_[a-z_]+_host[\"\x27]\s*,\s*[\"\x27]_mojolearn_[a-z_]+_host[\"\x27]",
     re.M)
-#: The three host bindings loaded by path rather than routed through
+#: The four host bindings loaded by path rather than routed through
 #: `_backend._HOST_MODULES`; the manifest must ship them too.
-HOST_BY_PATH = ("_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host")
+HOST_BY_PATH = ("_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host",
+                "_mojolearn_neural_host")
 
 
 def _manifest():

@@ -24,7 +24,7 @@ clusters, each blob whole, twelve points labelled noise.
 section put points at a spacing of 100 and the expanded identity's float32
 cancellation destroyed it: norms about 1e10 against distances about 1e3.
 Here the largest coordinate is 540, so the largest norm is about 3e5 and the
-float32 ulp there is 0.03, against an `eps^2` of 4. See `archive/reference/PORTING.md 21`.
+float32 ulp there is 0.03, against an `eps^2` of 4.
 
 WHAT IS COMPARED
 ----------------
@@ -1034,7 +1034,7 @@ def _run_two_loop_arm(
 
 
 def check_dbscan_rbc_two_loop_arms() raises:
-    """BOTH upstream arms of loop 2's RBC dispatch, one named fixture each.
+    """BOTH reference arms of loop 2's RBC dispatch, one named fixture each.
 
     ENGINEERING_RULES 8: a switch is exercised on both sides or one side is
     unchecked, and the RBC arm's loop 2 now has a switch --
@@ -1043,7 +1043,7 @@ def check_dbscan_rbc_two_loop_arms() raises:
     otherwise. The DBSCAN runner currently disables the one-pass composition
     on Metal because its separately compiled distance loop disagreed at an
     epsilon boundary; the standalone max-k kernel stays checked. The guard is
-    data-derived, not a parameter, so each fixture PINS the arm upstream would
+    data-derived, not a parameter, so each fixture PINS the arm the reference would
     select and the check proves the pin with the runner's own
     `rbc_take_one_pass` on host-recomputed degrees before trusting the
     labels.

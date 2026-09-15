@@ -1,0 +1,7 @@
+ok test_binding_registers_the_gpu_names
+ok test_gaussian_process_fits_on_the_host_when_built
+ok test_manifest_declares_the_gp_family
+ok test_oracles_import_no_gpu_and_no_device_module
+ok test_oracles_spell_the_bit_carrying_constructs
+ok test_sabotage_define_moves_the_distance
+6 passed

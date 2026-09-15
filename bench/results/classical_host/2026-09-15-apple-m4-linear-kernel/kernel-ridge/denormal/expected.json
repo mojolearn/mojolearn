@@ -1,0 +1,32 @@
+{
+  "commit": "59cbcedd2b3c7bb809ffd3b28dc26a2d7791c8fa",
+  "estimator": "KernelRidge",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.6",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "denormal",
+  "lane": "kernel-ridge",
+  "model_sha256": "ed24c9b21502288604f1a50d25d2f31aedb9aa4ef173b5b2277cd8069d294af7",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "1d93958dfff6ae9c",
+    "predict": {
+      "dtype": "<f4",
+      "sha256": "d1b3b19dad3ec132a847f65be20f1a280bd605dac9c8e9a3de9924fccc76bc10",
+      "shape": [
+        64
+      ]
+    },
+    "seconds": 0.002725
+  },
+  "recorded_at": "2026-09-15T12:47:51-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "a67775cb50fa4e97d03889cd219ee75e0b531598a6674bd6ab4ad2e2d51ed998"
+}

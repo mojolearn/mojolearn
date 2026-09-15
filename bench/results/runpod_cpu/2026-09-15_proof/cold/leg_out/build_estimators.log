@@ -1,0 +1,147 @@
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:232:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = stages.scores[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:179:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with ':'
+    """KernelDensity.score_samples on the host: log density of each query
+       ^
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:278:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[i] = Float32(fit.result.components[i])
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:280:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ep[i] = Float32(fit.result.explained_var[i])
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:281:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            rp[i] = Float32(fit.result.explained_var_ratio[i])
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:282:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sp[i] = Float32(fit.result.singular_vals[i])
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:284:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            mp[i] = fit.mean[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:321:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[i] = Float32(fit.result.components[i])
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:323:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ep[i] = Float32(fit.result.explained_var[i])
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:324:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            rp[i] = Float32(fit.result.explained_var_ratio[i])
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:325:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sp[i] = Float32(fit.result.singular_vals[i])
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:327:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            mp[i] = fit.mean[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:360:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[i] = Float32(result.components[i])
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:362:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sp[i] = Float32(result.singular_vals[i])
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:390:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wp[i] = w[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:418:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wp[i] = w[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:471:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wp[i] = coef[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:472:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ip[0] = r.fx
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:473:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ip[1] = Float32(r.retcode)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:532:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            lp[i] = fit.labels[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:571:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = out[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:600:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = out[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:633:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = out[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:720:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = out[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:779:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                op[i] = outm[i]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:784:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                op[i] = out[i]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:810:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = out[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:831:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = out[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_estimators_host.mojo:62:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:272:24: warning: assignment to 'noise' was never used; assign to '_' instead?
+    var noise = Float64(0.0)
+                       ^
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:316:24: warning: assignment to 'noise' was never used; assign to '_' instead?
+    var noise = Float64(0.0)
+                       ^
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:459:17: warning: assignment to 'iters' was never used; assign to '_' instead?
+    var iters = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_estimators_host.mojo:514:18: warning: assignment to 'passes' was never used; assign to '_' instead?
+    var passes = 0
+                 ^
+Included from /root/mojolearn/bindings/_mojolearn_estimators_host.mojo:96:
+./glm/host/qn_oracle.mojo:754:15: warning: assignment to 'fxp' was never used; assign to '_' instead?
+    var fxp = fx
+              ^
+Included from /root/mojolearn/bindings/_mojolearn_estimators_host.mojo:96:
+./glm/host/qn_oracle.mojo:760:17: warning: assignment to 'lsret' was never used; assign to '_' instead?
+    var lsret = LS_SUCCESS
+                ^
+Included from /root/mojolearn/bindings/_mojolearn_estimators_host.mojo:96:
+./glm/host/qn_oracle.mojo:943:15: warning: assignment to 'fxp' was never used; assign to '_' instead?
+    var fxp = fx
+              ^
+Included from /root/mojolearn/bindings/_mojolearn_estimators_host.mojo:96:
+./glm/host/qn_oracle.mojo:949:17: warning: assignment to 'lsret' was never used; assign to '_' instead?
+    var lsret = LS_SUCCESS
+                ^
+built python/mojolearn/host/_mojolearn_estimators_host.so
+BINCACHE miss+built-uploaded bindings/build_estimators_host.sh key=53c1fd95f83ce670 seconds=40.8

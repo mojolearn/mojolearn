@@ -1,0 +1,96 @@
+Context leak detected, CoreAnalytics returned false
+# vendor=apple-m4 commit=607d797940e9318f5f8f2072a4c373102f452c46 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 13:50:51  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gp                     | ea70c56b99a74791 | c92496318cb78403 | f01c58a79fb1af27 | ca779c84b786d493 | f0986dd9686ae3c2 | MOVED f0986dd9   | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 |
+| gp infer               | 1e032c58b3e9cd14 | 22b0b528124de8d0 | 6eec04108625b28e | 890cda1ff831faab | 353cd97119d0e754 | MOVED 353cd971   | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 |
+| gp batch               | 305bfd4eaf79a5fa | 42c01186900b0c68 | f18ced6112fb55e8 | d3e6783a8a000e56 | 9305dbeb22908e4a | BATCH_MOVED      | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc |
+| gp-normalize-y         | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-normalize-y infer   | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-normalize-y model   | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-normalize-y batch   | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-sample-y            | eaff6a93fa6bc01d | eaff6a93fa6bc01d | eaff6a93fa6bc01d | eaff6a93fa6bc01d | eaff6a93fa6bc01d | eaff6a93fa6bc01d | eaff6a93fa6bc01d | eaff6a93fa6bc01d | eaff6a93fa6bc01d |
+| gp-sample-y infer      | 03750c611431c01d | 03750c611431c01d | 03750c611431c01d | 03750c611431c01d | 03750c611431c01d | 03750c611431c01d | 03750c611431c01d | 03750c611431c01d | 03750c611431c01d |
+Context leak detected, CoreAnalytics returned false
+| gp-sample-y-normalize  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize infer | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize model | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize batch | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-matern12            | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 |
+| gp-matern12 infer      | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 |
+| gp-matern12 batch      | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-matern32            | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 |
+| gp-matern32 infer      | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 |
+| gp-matern32 batch      | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-matern52-ard        | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 |
+| gp-matern52-ard infer  | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 |
+| gp-matern52-ard batch  | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc |
+
+cells=63 stable=44 moved=1 refused=18
+infer: stable=44 moved=1
+model: n/a=45
+batch: stable=35 batch_moved=1 n/a=9
+n/a: gp model n/a:no-save, gp-matern12 model n/a:no-save, gp-matern32 model n/a:no-save, gp-matern52-ard model n/a:no-save, gp-sample-y batch n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior), gp-sample-y model n/a:no-save
+MOVED   gp/denormal_ftz: ['f0986dd9686ae3c2', '96ec7127b1bf9354']
+MOVED   gp/denormal_ftz: infer=MOVED ['353cd97119d0e754', '2b3b47d75d0729c6'] model=N/A ['n/a:no-save', 'n/a:no-save']
+REFUSED gp-normalize-y/base: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-normalize-y/ties: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-normalize-y/hashed: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-normalize-y/wide: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-normalize-y/denormal: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-normalize-y/denormal_ftz: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-normalize-y/dupes: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-normalize-y/odd: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-normalize-y/negative: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/base: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/ties: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/hashed: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/wide: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/denormal: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/denormal_ftz: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/dupes: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/odd: Exception: StandardScaler: invalid variance or scale
+REFUSED gp-sample-y-normalize/negative: Exception: StandardScaler: invalid variance or scale
+BATCH_MOVED gp/denormal_ftz: BATCH_MOVED:predict(return_std=True):row 13 of 64 alone:output 0 element 0: whole 0x3f97c3c0 vs alone 0x00000000
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/gpsy_ev2/apple-m4.rerun2.json

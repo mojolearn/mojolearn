@@ -273,7 +273,7 @@ def _svc_fit_staged(
 # ---------------------------------------------------------------------------
 # DEVIATION 2493 (2026-09-10): THE FUSED FAST DECISION PASS
 # ---------------------------------------------------------------------------
-# `svc_predict` below is upstream's shape: a `[batch x n_support]` kernel
+# `svc_predict` below is the reference's shape: a `[batch x n_support]` kernel
 # tile per batch (`kernel_op`), then `decision_kernel` folding each row of
 # the tile against the dual coefficients, batches sized by `cache_size`.
 # The fold reads the tile with a stride of `n_support` between neighbouring

@@ -181,7 +181,16 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_LOGLOSS,
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
+    OBJECTIVE_PAIR_LOGIT,
+    OBJECTIVE_QUERY_RMSE,
     OBJECTIVE_RMSE,
+    objective_from_name,
+)
+from gbdt.data.pairs import (
+    PairList,
+    generate_pairs,
+    order_pairs_by_winner,
+    prepare_pairs,
 )
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_IS,
@@ -617,7 +626,7 @@ def sample_indices_for_borders(
     `TRestorableFastRng64` and ours is `TRandom`, so the SET drawn is not
     theirs at the same seed -- only the SEMANTICS (size, no repetition,
     shared across features) match. The rejection branch returns hash
-    order upstream and insertion order here, which is order-equivalent
+    order in the reference and insertion order here, which is order-equivalent
     because the sample is sorted before borders are built.
 
     MODULE LEVEL ON PURPOSE. It used to be inline in `train()`, which
@@ -766,6 +775,19 @@ def train(
     # default (`-D MOJOLEARN_2550_HOST_COPY=1` opts out); every other
     # caller passes the List.
     x_borrow: Optional[MutPointer[Float32, MutUntrackedOrigin]] = None,
+    # THE POOL'S GROUPING, their `TQueriesGrouping` sizes in row order: one
+    # entry per query, each the number of CONSECUTIVE rows carrying that
+    # `group_id` (`libs/data/objects.cpp:60-87` builds the groups from runs
+    # and refuses a repeated id as "group Ids are not consecutive"; the
+    # Python wrapper applies that rule before the sizes cross). Empty means
+    # no grouping, which is every existing caller.
+    group_sizes: List[UInt32] = List[UInt32](),
+    # the caller's PairLogit pairs (the Pool's `pairs` and `pairs_weight`):
+    # winner row, loser row and weight per pair, all empty to generate them
+    # from `group_sizes` and `y` (`gbdt/data/pairs.mojo::generate_pairs`)
+    pair_winners: List[UInt32] = List[UInt32](),
+    pair_losers: List[UInt32] = List[UInt32](),
+    pair_weights: List[Float32] = List[Float32](),
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -852,7 +874,7 @@ def train(
 
     **ALL `permutation_count` COLUMN SETS ARE BUILT** as of 2026-08-21, one
     compressed index each (DEVIATION 89), where this used to build only the
-    estimation permutation's -- the sentence archive/reference/PORTING.md 55 recorded, now
+    estimation permutation's, which is now
     false. `permutation_count` resolves the way `UpdateGpuSpecificDefaults`
     resolves it (`cuda/train_lib/train.cpp:99-108`): their default of 4,
     ASSIGNED down to 1 when no categorical feature feeds a CTR -- an
@@ -1005,9 +1027,128 @@ def train(
         )
     if len(y) != n_rows:
         raise Error("y size mismatch")
+    # ---- the pool grouping (`group_sizes`) and the querywise gate ----
+    # QueryRMSE is the one loss here that reads the grouping; CatBoost's
+    # other readers (the pairwise and the remaining querywise targets,
+    # `cuda/targets/querywise_targets_impl.h`, `pair_logit_pairwise.h`) are
+    # not implemented, so a grouping arriving with any other loss is refused
+    # rather than carried and ignored. Everything here is decided before a
+    # border is computed.
+    var objective_code = objective_from_name(loss)
+    var is_pair_logit = objective_code == OBJECTIVE_PAIR_LOGIT
+    var is_querywise = objective_code == OBJECTIVE_QUERY_RMSE or is_pair_logit
+    if len(group_sizes) > 0:
+        var covered = 0
+        for g in range(len(group_sizes)):
+            if group_sizes[g] == UInt32(0):
+                raise Error(
+                    "group_id: group " + String(g) + " has no rows"
+                )
+            covered += Int(group_sizes[g])
+        if covered != n_rows:
+            raise Error(
+                "group_id: the group sizes cover " + String(covered)
+                + " rows of " + String(n_rows)
+            )
+        if not is_querywise:
+            raise Error(
+                "group_id is read only by the querywise and pairwise losses"
+                " (QueryRMSE and PairLogit are trained here; YetiRank,"
+                " QuerySoftMax and QueryCrossEntropy are not implemented);"
+                " loss='" + loss + "' does not use it, so it is refused by"
+                " name rather than carried and ignored"
+            )
+    # `TDocParallelSplit` (`gpu_data/doc_parallel_dataset.h:26-38`): the
+    # pool's queries only when it has group ids AND fewer groups than rows;
+    # otherwise `TWithoutQueriesGrouping` (`gpu_data/samples_grouping.h:
+    # 28-54`), every row a query of one. A QueryRMSE fit on that grouping
+    # has every query mean equal to its row's residual, so every derivative
+    # is zero and the trees carry zero leaves: the reference's behavior for
+    # a groupwise loss given no groups, kept as it is.
+    var query_sizes = List[UInt32]()
+    if is_querywise:
+        if len(group_sizes) > 0 and len(group_sizes) < n_rows:
+            query_sizes = group_sizes.copy()
+        else:
+            query_sizes.resize(n_rows, UInt32(1))
+        # what the querywise arm of this implementation does not restate yet,
+        # refused by name
+        if policy != GROW_SYMMETRIC:
+            raise Error(
+                "loss='" + loss + "' is implemented on SymmetricTree only here;"
+                " grow_policy=" + grow_policy_name(policy) + " is refused"
+                " (the reference registers it, querywise_non_symmetric.cpp:5-14)"
+            )
+        if use_pointwise_searcher:
+            raise Error(
+                "loss='" + loss + "' with use_pointwise_searcher is not"
+                " implemented here; the greedy subsets searcher only"
+            )
+        for f in range(len(cat_features)):
+            if cat_features[f]:
+                raise Error(
+                    "loss='" + loss + "' with cat_features is not implemented"
+                    " here: the reference shuffles whole queries for its CTR"
+                    " permutations (permutation.cpp:9-11,"
+                    " GenerateQueryDocsOrder), which this implementation does"
+                    " not restate"
+                )
+        for f in range(len(one_hot)):
+            if one_hot[f]:
+                raise Error(
+                    "loss='" + loss + "' with one_hot_features is not implemented"
+                    " here"
+                )
+        if len(eval_y) > 0 or len(eval_x_colmajor) > 0:
+            raise Error(
+                "loss='" + loss + "' with eval_set is not implemented here: the"
+                " held-out loss needs the eval pool's own grouping"
+            )
+        if len(class_weights) > 0:
+            raise Error("class_weights do not apply to loss='" + loss + "'")
+        if bootstrap_bayesian or (
+            bootstrap_type != String("") and bootstrap_type != String("No")
+        ):
+            raise Error(
+                "loss='" + loss + "' with a bootstrap is not implemented here:"
+                " the reference samples whole queries for querywise targets,"
+                " which this implementation does not restate; use"
+                " bootstrap_type='No'"
+            )
+    # ---- the PairLogit pairs (`gbdt/data/pairs.mojo`) ----
+    # Generated from the groups and grades unless the caller passed them;
+    # either way put in the order the reference's device grouping flattens
+    # them, winner row by winner row, and checked to stay inside one query.
+    var pair_list = PairList(List[UInt32](), List[UInt32](), List[Float32]())
+    if len(pair_winners) > 0 and not is_pair_logit:
+        raise Error(
+            "pairs are read only by loss='PairLogit' here; loss='" + loss
+            + "' does not use them"
+        )
+    if is_pair_logit:
+        if len(group_sizes) == 0:
+            if len(pair_winners) > 0:
+                raise Error(
+                    "pairs without group_id are not implemented here: the"
+                    " reference regroups and reorders the whole pool by the"
+                    " pairs' connected components (data_providers.cpp:857-872,"
+                    " 922-942)"
+                )
+            raise Error("Cannot generate pairs for data without groups")
+        if len(pair_winners) > 0:
+            if len(pair_losers) != len(pair_winners) or len(pair_weights) != len(pair_winners):
+                raise Error("pairs: winners, losers and weights disagree in length")
+            pair_list = order_pairs_by_winner(
+                PairList(pair_winners.copy(), pair_losers.copy(), pair_weights.copy()),
+                group_sizes, n_rows,
+            )
+        else:
+            pair_list = order_pairs_by_winner(
+                generate_pairs(group_sizes, y, sample_weight), group_sizes, n_rows
+            )
     # Validate dense class codes before class-weight indexing or allocating
     # prediction planes. The later objective check was too late to protect
-    # MakeClassificationWeights (upstream data_providers.cpp:162-168).
+    # MakeClassificationWeights (reference data_providers.cpp:162-168).
     if loss == "MultiClass" or loss == "MultiClassOneVsAll":
         for r in range(n_rows):
             var label = y[r]
@@ -1098,7 +1239,7 @@ def train(
     # categorical feature it overrides an explicit `permutation_count`
     # too, because four identical permutations of a dataset with no
     # permutation-dependent column are four identical datasets. This implementation
-    # is Plain (archive/reference/PORTING.md 88), so the second half of their condition
+    # is Plain, so the second half of their condition
     # holds unconditionally here.
     #
     # `HasPermutationFeatures` (`:86-98`) is "some cat feature is used for
@@ -1548,6 +1689,15 @@ def train(
                 cls = 1 if y[r] > Float32(0.5) else 0
             w = w * class_weights[cls]
         hw.unsafe_ptr().unsafe_store(r, w)
+    if is_pair_logit:
+        # `InitPairLogit` (`targets/querywise_targets_impl.h:326-346`): the
+        # target weights become the per-row sums of the pair weights, folded
+        # in the pinned endpoint order (`gbdt/data/pairs.mojo::prepare_pairs`)
+        var pair_prep = prepare_pairs(
+            pair_list.winners, pair_list.losers, pair_list.weights, n_rows
+        )
+        for r in range(n_rows):
+            hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
     ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
@@ -1800,7 +1950,7 @@ def train(
     var model = TAdditiveModel()
     var fit_result = fit_with_test(
         model, ctx, n_rows, fold_counts, max_depth, cindex, targets,
-        weights, use_class_weights or use_sample_weight,
+        weights, use_class_weights or use_sample_weight or is_pair_logit,
         # `trace` rides POSITIONALLY (delta from the granted spec's
         # `trace=trace`: the later arguments here are positional, and a
         # positional argument may not follow a keyword one)
@@ -1845,6 +1995,10 @@ def train(
         min_split_gain=min_split_gain,
         min_child_hessian=min_child_hessian,
         feature_fraction=feature_fraction,
+        group_sizes=query_sizes,
+        pair_winners=pair_list.winners.copy(),
+        pair_losers=pair_list.losers.copy(),
+        pair_weights=pair_list.weights.copy(),
     )
     host_times.stop_host("train_fit_with_test", t_phase)
     t_phase = host_times.start()

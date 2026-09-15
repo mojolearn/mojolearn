@@ -90,7 +90,29 @@ tree's chunk boundaries by one value (`values[(i + 1) % n]` fills slot
 `i`), the partition `pinned_sum.mojo::sabotage_shifted_host_tree_sum`
 measured to move the sums where a rotation inside a chunk cannot; it
 reaches r2's three sums, the silhouette's `a`, `b` and mean. The integer
-metrics have no fold and do not move under it. Read back by
+metrics have no fold and do not move under it, and on the `hashed`, `wide`,
+`denormal` and `denormal_ftz` fixtures the shifted tree rounded to the same
+r2 and silhouette bits (lane/metrics-sabotage-coverage, 2026-09-15), so the
+same define also perturbs a VALUE each metric reads:
+
+  `host_accuracy_score`    sample 0's prediction is read as a label that
+                           flips its agreement (the count moves by one).
+  `host_adjusted_rand_score`, `host_entropy`, `host_mutual_info`
+                           label 0 of the first array is read as another
+                           label of the same array's range
+                           (`host_sabotage_label0`); homogeneity,
+                           completeness and v-measure reach it through
+                           entropy and mutual information.
+  `host_r2_score`          every prediction is read as `y_hat + 1 + |y|`,
+                           so the residual outgrows the scale of `y`.
+  `host_silhouette`        row 0 is read shifted by `1 + |x|` in every
+                           feature of every distance it takes part in
+                           (`host_sabotage_l2sqrt`), independent of the
+                           chunk, so `silhouette_samples` moves at every
+                           chunksize. `host_l2sqrt_unexpanded` itself is
+                           unchanged (trustworthiness reads it).
+
+`host_fowlkes_mallows` keeps its own arm. Read back by
 `metrics_host_sabotage`.
 
 The restatement is a prediction until measured. The four-column diff of
@@ -100,7 +122,7 @@ from std.math import sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from checks.numerics import ftz, identical_log, identical_mul_add, identical_sqrt
+from checks.numerics import ftz, identical_div, identical_log, identical_mul_add, identical_sqrt
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -162,6 +184,59 @@ def host_canonicalize_nan(x: Float32) -> Float32:
 
 
 # ===========================================================================
+# The value sabotage helpers. FOR THE SABOTAGE GATE ONLY: every call site is
+# inside `comptime if METRICS_ORACLE_HOST_SABOTAGE`, so a production build
+# never reaches them.
+# ===========================================================================
+
+
+def host_sabotage_label0(labels: List[Int32], n: Int) -> List[Int32]:
+    """A copy of `labels` whose element 0 is another label of the same
+    array: its minimum if element 0 is not the minimum, else its maximum.
+    It stays inside every class range the caller validated, and moves
+    whenever the array holds two distinct labels. Wrong on purpose."""
+    var out = labels.copy()
+    if n < 1:
+        return out^
+    var lo = labels[0]
+    var hi = labels[0]
+    for i in range(n):
+        if labels[i] < lo:
+            lo = labels[i]
+        if labels[i] > hi:
+            hi = labels[i]
+    out[0] = lo if labels[0] != lo else hi
+    return out^
+
+
+def host_sabotage_shift(v: Float32) -> Float32:
+    """`v + 1 + |v|`: never absorbed by rounding for a finite `v`, whatever
+    its scale (a subnormal, a zero, a value of 1e4). Wrong on purpose."""
+    var a = v if v >= Float32(0.0) else -v
+    return ftz(ftz(v + Float32(1.0)) + a)
+
+
+def host_sabotage_l2sqrt(
+    x: List[Float32], i: Int, j: Int, n_cols: Int
+) -> Float32:
+    """`host_l2sqrt_unexpanded` with row 0 read through
+    `host_sabotage_shift` in every feature. Wrong on purpose."""
+    var acc = Float32(0.0)
+    var bi = i * n_cols
+    var bj = j * n_cols
+    for f in range(n_cols):
+        var xi = ftz(x[bi + f])
+        var xj = ftz(x[bj + f])
+        if i == 0:
+            xi = host_sabotage_shift(xi)
+        if j == 0:
+            xj = host_sabotage_shift(xj)
+        var diff = ftz(xi - xj)
+        acc = ftz(identical_mul_add(diff, diff, acc))
+    return ftz(identical_sqrt(acc))
+
+
+# ===========================================================================
 # accuracy_score
 # ===========================================================================
 
@@ -178,7 +253,13 @@ def host_accuracy_score(
         )
     var count = 0
     for i in range(n):
-        if y_true[i] == y_pred[i]:
+        var p = y_pred[i]
+        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+            # THE VALUE SABOTAGE ARM: sample 0's prediction read as a label
+            # that flips its agreement. Wrong on purpose.
+            if i == 0:
+                p = y_true[0] + Int32(1) if p == y_true[0] else y_true[0]
+        if y_true[i] == p:
             count += 1
     return Float32(count) / Float32(n)
 
@@ -209,7 +290,13 @@ def host_r2_score(
     var st = List[Float32](length=n, fill=Float32(0.0))
     for i in range(n):
         var yi = y[i]
-        var d1 = ftz(yi - y_hat[i])
+        var yhi = y_hat[i]
+        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+            # THE VALUE SABOTAGE ARM: every prediction read as
+            # `y_hat + 1 + |y|`. Wrong on purpose.
+            var ya = yi if yi >= Float32(0.0) else -yi
+            yhi = ftz(ftz(yhi + Float32(1.0)) + ya)
+        var d1 = ftz(yi - yhi)
         var d2 = ftz(yi - y_bar)
         se[i] = ftz(d1 * d1)
         st[i] = ftz(d2 * d2)
@@ -319,6 +406,16 @@ def host_adjusted_rand_score(
 ) raises -> Float64:
     """`compute_adjusted_rand_index_traced`, `adjusted_rand_index.mojo:160`
     (module docstring)."""
+    comptime if METRICS_ORACLE_HOST_SABOTAGE:
+        # THE VALUE SABOTAGE ARM: label 0 of `first` read as another label.
+        return _host_adjusted_rand_score(host_sabotage_label0(first, size), second, size)
+    else:
+        return _host_adjusted_rand_score(first, second, size)
+
+
+def _host_adjusted_rand_score(
+    first: List[Int32], second: List[Int32], size: Int
+) raises -> Float64:
     if size < 2:
         return 1.0
     var u1 = host_count_unique(first, size)
@@ -351,6 +448,77 @@ def host_adjusted_rand_score(
     if max_index - expected_index != 0.0:
         return (index - expected_index) / (max_index - expected_index)
     return 0.0
+
+
+# ===========================================================================
+# weighted accuracy_score and weighted r2_score
+# (metrics/impl/weighted_scores.mojo; the sabotage arm is host_tree_sum's)
+# ===========================================================================
+
+
+def host_weighted_accuracy(
+    y_true: List[Int32], y_pred: List[Int32], w: List[Float32], n: Int
+) raises -> Float32:
+    """`weighted_accuracy_score`: `tree(w where equal) / tree(w)` through
+    `identical_div`."""
+    if n <= 0:
+        raise Error("weighted accuracy_score: n must be positive, got " + String(n))
+    var num = List[Float32](length=n, fill=Float32(0.0))
+    var den = List[Float32](length=n, fill=Float32(0.0))
+    for i in range(n):
+        var wi = ftz(w[i])
+        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+            # THE WEIGHTED SABOTAGE ARM: sample 0's weight dropped. Wrong on
+            # purpose; the tree shift alone cannot move a tied fixture.
+            if i == 0 and n > 1:
+                wi = Float32(0.0)
+        den[i] = wi
+        if y_true[i] == y_pred[i]:
+            num[i] = wi
+    var sn = host_tree_sum(num, n)
+    var sd = host_tree_sum(den, n)
+    if sd <= Float32(0.0):
+        raise Error("weighted accuracy_score: the weights must have positive total")
+    return ftz(identical_div(sn, sd))
+
+
+def host_weighted_r2(
+    y: List[Float32], y_hat: List[Float32], w: List[Float32], n: Int
+) raises -> Float32:
+    """`weighted_r2_score`: the weighted mean, then `tree(w * (y - y_hat)^2)`
+    and `tree(w * (y - y_avg)^2)`, then the unweighted metric's epilogue."""
+    if n <= 0:
+        raise Error("weighted r2_score: n must be positive, got " + String(n))
+    var wy = List[Float32](length=n, fill=Float32(0.0))
+    var ww = List[Float32](length=n, fill=Float32(0.0))
+    for i in range(n):
+        var wi = ftz(w[i])
+        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+            # THE WEIGHTED SABOTAGE ARM, as in host_weighted_accuracy.
+            if i == 0 and n > 1:
+                wi = Float32(0.0)
+        wy[i] = ftz(wi * ftz(y[i]))
+        ww[i] = wi
+    var swy = host_tree_sum(wy, n)
+    var sw = host_tree_sum(ww, n)
+    if sw <= Float32(0.0):
+        raise Error("weighted r2_score: the weights must have positive total")
+    var y_avg = ftz(identical_div(swy, sw))
+    var se = List[Float32](length=n, fill=Float32(0.0))
+    var st = List[Float32](length=n, fill=Float32(0.0))
+    for i in range(n):
+        var wi = ftz(w[i])
+        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+            if i == 0 and n > 1:
+                wi = Float32(0.0)
+        var yi = ftz(y[i])
+        var d1 = ftz(yi - ftz(y_hat[i]))
+        var d2 = ftz(yi - y_avg)
+        se[i] = ftz(wi * ftz(d1 * d1))
+        st[i] = ftz(wi * ftz(d2 * d2))
+    var sse = host_tree_sum(se, n)
+    var ssto = host_tree_sum(st, n)
+    return host_r2_epilogue(sse, ssto)
 
 
 # ===========================================================================
@@ -405,6 +573,16 @@ def host_entropy(
     labels: List[Int32], size: Int, lower: Int32, upper: Int32
 ) raises -> Float64:
     """`entropy_traced`, `entropy.mojo:191`, the IDENTICAL arm."""
+    comptime if METRICS_ORACLE_HOST_SABOTAGE:
+        # THE VALUE SABOTAGE ARM: label 0 read as another label.
+        return _host_entropy(host_sabotage_label0(labels, size), size, lower, upper)
+    else:
+        return _host_entropy(labels, size, lower, upper)
+
+
+def _host_entropy(
+    labels: List[Int32], size: Int, lower: Int32, upper: Int32
+) raises -> Float64:
     if size == 0:
         return 1.0
     var n_unique = Int(upper - lower + 1)
@@ -424,6 +602,16 @@ def host_mutual_info(
 ) raises -> Float64:
     """`mutual_info_score_traced`, `mutual_info_score.mojo:240`, the
     IDENTICAL arm."""
+    comptime if METRICS_ORACLE_HOST_SABOTAGE:
+        # THE VALUE SABOTAGE ARM: label 0 of `first` read as another label.
+        return _host_mutual_info(host_sabotage_label0(first, size), second, size, lower, upper)
+    else:
+        return _host_mutual_info(first, second, size, lower, upper)
+
+
+def _host_mutual_info(
+    first: List[Int32], second: List[Int32], size: Int, lower: Int32, upper: Int32
+) raises -> Float64:
     if size <= 0:
         raise Error(
             "mutual_info_score: size must be positive, got "
@@ -569,7 +757,14 @@ def host_silhouette(
                 b[c] = Float32(0.0) if singleton else _float32_max()
         if not singleton:
             for j in range(n_rows):
-                dist[j] = host_l2sqrt_unexpanded(x, i, j, n_cols) if j != i else Float32(0.0)
+                if j == i:
+                    dist[j] = Float32(0.0)
+                else:
+                    comptime if METRICS_ORACLE_HOST_SABOTAGE:
+                        # THE VALUE SABOTAGE ARM: row 0 read shifted.
+                        dist[j] = host_sabotage_l2sqrt(x, i, j, n_cols)
+                    else:
+                        dist[j] = host_l2sqrt_unexpanded(x, i, j, n_cols)
             for c in range(n_labels):
                 var cc = Int(counts[c])
                 var denom = Float32(cc - 1) if c == rc else Float32(cc)

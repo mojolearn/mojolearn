@@ -1342,7 +1342,7 @@ def brute_force_knn_impl(
     `fused_l2_knn` is entered ONLY for the four members of their set, which
     is exactly their `:444-447`; everything else takes their `else` and
     goes to `tiled_brute_force_knn`, which is exactly their `:485-511`
-    default. Cosine is NEVER fusable upstream either, and it is worth
+    default. Cosine is NEVER fusable in the reference either, and it is worth
     saying why rather than only that: `fusedL2Knn`'s whole trick is that
     the expanded L2 epilogue `xn + yn - 2 dot` is MONOTONE in `-dot`, so
     the register queue can rank on the raw accumulator and fix the value
@@ -1534,7 +1534,7 @@ def brute_force_knn_impl(
 
     # A METRIC OUTSIDE THE FUSABLE SET IS NOT AN ERROR, IT IS THEIR `else`.
     # `KNN_METHOD_FUSED` asks for an arm; asking for it with cosine or Lp
-    # is asking for an arm that does not exist upstream either, so it is
+    # is asking for an arm that does not exist in the reference either, so it is
     # refused BY NAME rather than silently substituted -- the same rule
     # DEVIATION 512 applies to a column whose lane width cannot express
     # the FAISS queue.

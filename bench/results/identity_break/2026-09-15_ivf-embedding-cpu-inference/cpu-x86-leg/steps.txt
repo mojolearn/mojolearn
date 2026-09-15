@@ -1,0 +1,17 @@
+== bindings
+== cpu column
+cpu column exit 0
+== sabotage column
+sabotage column exit 0
+== saved-model gate, wheel families only
+check wheel families exit 0
+check wheel families sabotage exit 0
+== pytest
+pytest exit 0
+pytest sabotage exit 0
+== installed wheel
+wheel build exit 0
+wheel import exit 0
+check installed wheel exit 0
+wheel fit refusal exit 0
+wheel check binaries exit 0

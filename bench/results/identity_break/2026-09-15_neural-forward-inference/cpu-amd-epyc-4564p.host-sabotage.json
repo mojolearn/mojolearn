@@ -1,0 +1,5154 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-6.8.0-51-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-4564p-16-core-processor",
+ "commit": "0b459d9e85fd4364a99641295093bc35b201d4e2",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "host": {
+  "cpu_model": "AMD EPYC 4564P 16-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "byte-lm",
+   "byte-lm-resident"
+  ],
+  "families": {
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "8855a82f005bfb902cf6ec09cc8d84785974697aaa8a171b022d1ead4d6f1e9c",
+    "size": 493552,
+    "sabotage": true
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "502d5fbc9a560c5fca90d955d51447dfa85c345af7365fa4ae661b54ee26f21d",
+    "size": 594488,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_host": {
+    "column": "cpu",
+    "sha256": "f0b7c231434faf167fcb6bef173a73ae1f33eb654605cf866c8295b492d05767",
+    "size": 207368,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "1cce891bc719d2832636aa6360bb52a2d91151216da58fede44e4e9d416be369",
+    "size": 653856,
+    "sabotage": false
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "adf1cc8f6110b8bb85d1cb37dfbc0154daa546bab0569a5429e2090f2326d60a",
+    "size": 267200,
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "d5e079b861febf529cb9d72081f7a0b6b27767ac91958c1189db2b05ad8a5b5e",
+    "size": 301768,
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "fc54810741c66ec5a12df1573b256eb5dd0ba2d011c0bbf87054b1f51925fee0",
+    "size": 231328,
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "a3efceec174f3fd2fa11a8eeee8ba77a577f385dce78e684e7f4b13d8e65a353",
+    "size": 1256872,
+    "sabotage": false
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "55e1df13edebb1ca67306586578bc18bf8d2c91b40943955a77c2a458219e4c9",
+    "size": 748872,
+    "sabotage": false
+   },
+   "_mojolearn_neural_host": {
+    "column": "cpu",
+    "sha256": "0629fa022df9da0cc3d6e092552f438df2e2f24781e1ff874df0b9e1d1eda340",
+    "size": 490504,
+    "sabotage": true
+   },
+   "_mojolearn_svm_host": {
+    "column": "cpu",
+    "sha256": "e46a2e8bc20b77b2214a16cc830344c125f966afa556be618aef5a26d1c0a7bb",
+    "size": 395080,
+    "sabotage": false
+   },
+   "_mojolearn_tokenizer_host": {
+    "column": "cpu",
+    "sha256": "6126b0d018adc4575a0e6dfb74f76a2e9a25ceecc905dfd60a7fcd48268aefdd",
+    "size": 374160,
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "754938006556f3dcafec26d29e22d2a95c502a8da178d0d37c49bc36b8dc64d9",
+    "size": 420416,
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "9822785f9ca6ba8ec34a8743d21ab83560a49e039ea95fbbf8e9b65c56bae490",
+    "size": 341528,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "cells": {
+  "byte-lm/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9b64e6df58a1d48a"
+   ],
+   "parts": [
+    {
+     "loss": "a72847199afa707d",
+     "params": "23ba1ad46ac7a9e7",
+     "logits": "4fc4e4ec579a8865"
+    }
+   ],
+   "infer": [
+    "3492882b0a13f6dc"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "8ee0a8ef26092454"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3492882b0a13f6dc"
+   ],
+   "batch": [
+    "ca81cd69e1a231d3"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d30f35c vs 0x3d30f364"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "b31979d1ad024b9e"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "a9460ce8378a8f95"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cd717af21b31d266"
+   ],
+   "parts": [
+    {
+     "loss": "92c679712e322b10",
+     "params": "6e043c32d47826be",
+     "logits": "5a1aa917c368da02"
+    }
+   ],
+   "infer": [
+    "8968c839f2dff510"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "605591b75637e530"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8968c839f2dff510"
+   ],
+   "batch": [
+    "9b8f3fc9165f0464"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:nll 0x40a7cea1 vs 0x40a7cea0; logits element 0 0x3e437f19 vs 0x3e437f1c"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "89fa60e13b692f4d"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "2fa943164781494a"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "86985fa98b301452"
+   ],
+   "parts": [
+    {
+     "loss": "eba2f94b28857302",
+     "params": "02f9e246adeb4c33",
+     "logits": "f40ed58f253742e6"
+    }
+   ],
+   "infer": [
+    "502dc478db58e903"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "81daf017a8f617d3"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "502dc478db58e903"
+   ],
+   "batch": [
+    "b30b92abb8538dde"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d8269d7 vs 0x3d8269da"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "146d206dd6e5ee3a"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "9582ef8f44ce34dd"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "438c3618d1763f13"
+   ],
+   "parts": [
+    {
+     "loss": "f8393cfd69735ebe",
+     "params": "2e7f3042958dfe87",
+     "logits": "3827709893b7ed13"
+    }
+   ],
+   "infer": [
+    "36fb0cb03aa7f7ef"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "8b21bcbf6fc7eb9a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "36fb0cb03aa7f7ef"
+   ],
+   "batch": [
+    "1e27eefb0db69b7a"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d9f9d82 vs 0x3d9f9d83"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "a587b91abc2e4607"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "f4ec8b07f1097f21"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dad13097f62a95d6"
+   ],
+   "parts": [
+    {
+     "loss": "752504947c4e1876",
+     "params": "533d90877806d0db",
+     "logits": "6a61a5fb50f3c153"
+    }
+   ],
+   "infer": [
+    "d089db9d27047699"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b907c842bc2f60b0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d089db9d27047699"
+   ],
+   "batch": [
+    "18ad4b9ace724e7b"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d883a8b vs 0x3d883a89"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "9db71b1abeafaf26"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "6b1d39acc69f261f"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7b02ffdc29006167"
+   ],
+   "parts": [
+    {
+     "loss": "43f10dda40a5a89f",
+     "params": "eeba62424d4e8a4d",
+     "logits": "e7316bb026a0ae6a"
+    }
+   ],
+   "infer": [
+    "2495f021c6f0dcd6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "e1cf2a9d3b950ed4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2495f021c6f0dcd6"
+   ],
+   "batch": [
+    "020a43745287f51e"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3e492412 vs 0x3e492415"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "317642bdbeebcbe2"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "c8c73b13eb7c50ad"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "91ea015af52695dd"
+   ],
+   "parts": [
+    {
+     "loss": "8cd0a61f7fcc620f",
+     "params": "0afd8036758d48d7",
+     "logits": "783ebe367b0f0087"
+    }
+   ],
+   "infer": [
+    "7aa896d428760af1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "370d9670760666da"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "7aa896d428760af1"
+   ],
+   "batch": [
+    "98db5e1d3f6b8088"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d9ed9fa vs 0x3d9ed9fc"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "b003dc1323976ee0"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "becc5a440dfad921"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9b64e6df58a1d48a"
+   ],
+   "parts": [
+    {
+     "loss": "a72847199afa707d",
+     "params": "23ba1ad46ac7a9e7",
+     "logits": "4fc4e4ec579a8865"
+    }
+   ],
+   "infer": [
+    "3492882b0a13f6dc"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "8ee0a8ef26092454"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3492882b0a13f6dc"
+   ],
+   "batch": [
+    "ca81cd69e1a231d3"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d30f35c vs 0x3d30f364"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "a444b47737e774aa"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "a9460ce8378a8f95"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9a6b457d63a1eb06"
+   ],
+   "parts": [
+    {
+     "loss": "3b2f6059c5a5dd2d",
+     "params": "fe2c13937a2bc913",
+     "logits": "ab4168a128cbfd3f"
+    }
+   ],
+   "infer": [
+    "ef3ae39ad315587a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "5f35b574cb301c39"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ef3ae39ad315587a"
+   ],
+   "batch": [
+    "2e00fb6047e2e160"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0xbca2f1ba vs 0xbca2f1b8"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "b9db1a7fe28621b0"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "99b5a94516c47135"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba1/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1609902abaf80a04"
+   ],
+   "parts": [
+    {
+     "forward": "a1b9bd38c3d8533d",
+     "prefill": "a1b9bd38c3d8533d",
+     "step": "50c8fffaf8c010a2",
+     "backward": "f1511e64f8fa8249"
+    }
+   ],
+   "infer": [
+    "287594d467b00080"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "9e31419e1fa90bea"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "3fd0b9d19f53c9c1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "6dc76b046d9dfd07"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "391f299672dab181"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "2aeec179608e9a97"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba1/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c821893bfb5ba46c"
+   ],
+   "parts": [
+    {
+     "forward": "58aeaa31110af3da",
+     "prefill": "58aeaa31110af3da",
+     "step": "a8d3b4e4b4cf9fd9",
+     "backward": "6e0163d714f415a4"
+    }
+   ],
+   "infer": [
+    "1aedd7b07841c52d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2a0722b84da6ed65"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "29e18589720b7474"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "606a5724ab5c0f41"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "46cd7e8f5f0e0a0f"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "dbffc133bc3721f9"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba1/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "062931419c55ee5a"
+   ],
+   "parts": [
+    {
+     "forward": "c726ba8c688851b3",
+     "prefill": "c726ba8c688851b3",
+     "step": "b0304f6d0a3d4432",
+     "backward": "c42af8940038b2c5"
+    }
+   ],
+   "infer": [
+    "3b810d1094783dc8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "e5769e8a44d7ab2a"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "08398a6bfcc8570a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "02307cd514fceb2d"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "8cbbe1d21ec1f3d7"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "aa3f2807929aa090"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba1/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0e7b2cee60a53003"
+   ],
+   "parts": [
+    {
+     "forward": "15dc7e7be085b651",
+     "prefill": "15dc7e7be085b651",
+     "step": "74bef90fb99757ba",
+     "backward": "38fcd807df86a237"
+    }
+   ],
+   "infer": [
+    "2893a442ab568ff4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "1e49549ef8d988d7"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "8a4cd7a1b49c65a8"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "44ae6f0520c58bb3"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "43b10726cbb58d42"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "5a27254a2c6992fe"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba1/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b7b8e653d7d0f153"
+   ],
+   "parts": [
+    {
+     "forward": "75c78448833068e6",
+     "prefill": "75c78448833068e6",
+     "step": "8f20ff5b161cb63e",
+     "backward": "1368d04e99287c9b"
+    }
+   ],
+   "infer": [
+    "0d3d950925e49347"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "f2e58a684459a401"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "7b0bbb310451668a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "6a7023d45d75092c"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "bc5909619c3cac1c"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "719b643ef8a1937d"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba1/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b7b8e653d7d0f153"
+   ],
+   "parts": [
+    {
+     "forward": "75c78448833068e6",
+     "prefill": "75c78448833068e6",
+     "step": "8f20ff5b161cb63e",
+     "backward": "1368d04e99287c9b"
+    }
+   ],
+   "infer": [
+    "0d3d950925e49347"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "f2e58a684459a401"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "deb7fd8a06a24ed9"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "6a7023d45d75092c"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "bc5909619c3cac1c"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "719b643ef8a1937d"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba1/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2ac98fad7386a721"
+   ],
+   "parts": [
+    {
+     "forward": "82425d3aec16b35f",
+     "prefill": "82425d3aec16b35f",
+     "step": "76b43ac3a902e78d",
+     "backward": "9890749b6530ba2c"
+    }
+   ],
+   "infer": [
+    "8e0019f82a657963"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0477489d0120b325"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "3fd0b9d19f53c9c1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "d3d5d8870262f8b6"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "e418b60fb6290ec9"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "20af316bb914d272"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba1/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1609902abaf80a04"
+   ],
+   "parts": [
+    {
+     "forward": "a1b9bd38c3d8533d",
+     "prefill": "a1b9bd38c3d8533d",
+     "step": "50c8fffaf8c010a2",
+     "backward": "f1511e64f8fa8249"
+    }
+   ],
+   "infer": [
+    "287594d467b00080"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "9e31419e1fa90bea"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "3fd0b9d19f53c9c1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "6dc76b046d9dfd07"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "cddb48d6847bf27e"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "2aeec179608e9a97"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba1/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0a83c66670f92b55"
+   ],
+   "parts": [
+    {
+     "forward": "9e753e72f34e4e39",
+     "prefill": "9e753e72f34e4e39",
+     "step": "5d643aa92db8f0e1",
+     "backward": "3251da66cd144cbe"
+    }
+   ],
+   "infer": [
+    "c0e8d2045bc0faf6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "d10241482c584a1b"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "0f0f848b5a1a12e3"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "d337c6414d0c6b88"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "5b4c1e59cda855d2"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "482dcec170138baf"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5b05a3ecbd70248e"
+   ],
+   "parts": [
+    {
+     "forward": "22f79ee009fd9884",
+     "prefill": "22f79ee009fd9884",
+     "step": "3fa40f29231409be",
+     "backward": "f252b3fc19f5f9f5"
+    }
+   ],
+   "infer": [
+    "12732625355f735f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "d0908964408a6571"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f4abbd5451ff5172"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "99cad63be0fb7239"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "7b8158ce4a922886"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "40eb3c972e939ed6"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "48a4bec7b6f6e4f6"
+   ],
+   "parts": [
+    {
+     "forward": "b1b37a3a50613035",
+     "prefill": "b1b37a3a50613035",
+     "step": "2ac937f80e406013",
+     "backward": "259bb8b9c52831ff"
+    }
+   ],
+   "infer": [
+    "be91a924efd6ddd9"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "3239e99c525b296a"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f899efc2a35ec48a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "d662c396d92de418"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "0fd4c1114008f114"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "d5d9f8aace71ba4e"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2689cc3187df61fd"
+   ],
+   "parts": [
+    {
+     "forward": "89bd6f051ff55c9d",
+     "prefill": "89bd6f051ff55c9d",
+     "step": "795c0526eb99905f",
+     "backward": "7aae23b1c93fc40c"
+    }
+   ],
+   "infer": [
+    "af95a2d09b59a10b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "cfddb10b2b3dfd90"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "ebd9a6af0f062bee"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "cc350cb47739345e"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "72daf016a2769077"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "ed86d19fa6040cf2"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0d1022f692c144dd"
+   ],
+   "parts": [
+    {
+     "forward": "b0de377444fd2763",
+     "prefill": "b0de377444fd2763",
+     "step": "d6eae4bf431bd487",
+     "backward": "106aa7db8af5171c"
+    }
+   ],
+   "infer": [
+    "b9b6bfb1a00431c4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "224adc2e9645785c"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "47957b59ac09a5d8"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "3151cfcc25d5c776"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "66534518a279d511"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "9c69821ede9820c7"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a143926e29ac0813"
+   ],
+   "parts": [
+    {
+     "forward": "59dd134e992e3a6e",
+     "prefill": "59dd134e992e3a6e",
+     "step": "572468002b3b7a14",
+     "backward": "302657acf2f7450f"
+    }
+   ],
+   "infer": [
+    "7fb6952a4a9c774d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "dea2ec49e17c3b92"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "c43d27b4d3607e26"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "ce0a5a78bcd04f68"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "f61785828ee98466"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "4576781d15656ec3"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a143926e29ac0813"
+   ],
+   "parts": [
+    {
+     "forward": "59dd134e992e3a6e",
+     "prefill": "59dd134e992e3a6e",
+     "step": "572468002b3b7a14",
+     "backward": "302657acf2f7450f"
+    }
+   ],
+   "infer": [
+    "7fb6952a4a9c774d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "dea2ec49e17c3b92"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "85aeeec8c5a056a1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "ce0a5a78bcd04f68"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "f61785828ee98466"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "4576781d15656ec3"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c565acd587b39ab2"
+   ],
+   "parts": [
+    {
+     "forward": "3547ea68fdd14546",
+     "prefill": "3547ea68fdd14546",
+     "step": "c97c231502cc561d",
+     "backward": "9f21e95760900853"
+    }
+   ],
+   "infer": [
+    "6c3a237beafb6b2e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "9fc5dc1848b7366e"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f4abbd5451ff5172"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "30287f3369d63e43"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "07ff6afef2f21e47"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "760eaa99666ad7e4"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5b05a3ecbd70248e"
+   ],
+   "parts": [
+    {
+     "forward": "22f79ee009fd9884",
+     "prefill": "22f79ee009fd9884",
+     "step": "3fa40f29231409be",
+     "backward": "f252b3fc19f5f9f5"
+    }
+   ],
+   "infer": [
+    "12732625355f735f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "d0908964408a6571"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f4abbd5451ff5172"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "99cad63be0fb7239"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "e377b5116cfe6084"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "40eb3c972e939ed6"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3506202ab66d8a1f"
+   ],
+   "parts": [
+    {
+     "forward": "17ba93b4ffb5ae32",
+     "prefill": "17ba93b4ffb5ae32",
+     "step": "2754d4affce78416",
+     "backward": "d027a7c5a9895e6d"
+    }
+   ],
+   "infer": [
+    "7a66f5742f47e0d7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "55d66f9c0b6bb090"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "08cdec93b208dfcc"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "2992677ebe413db5"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 4 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight']"
+   ],
+   "batchscale": [
+    "1e3f3ccbd1ef4b84"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "0e12ee4b943ccb00"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba3/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "63de4bf6b9f8262a"
+   ],
+   "parts": [
+    {
+     "forward": "ad91191acfc10cdc",
+     "prefill": "ad91191acfc10cdc",
+     "step": "a8f15324412ea8ac",
+     "backward": "c22b89ea9adb5239"
+    }
+   ],
+   "infer": [
+    "80b047e6226a4e6d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "db6cd68a01f3d954"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "8335131b23bae55d"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "292bbf6a571391a3"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 8 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "06c65dbfa36ea071"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "991d3013a256c047"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba3/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4bad5909ae635933"
+   ],
+   "parts": [
+    {
+     "forward": "a090590475d5007d",
+     "prefill": "a090590475d5007d",
+     "step": "e54aa28169614cd0",
+     "backward": "5b6ee53c37c0e31d"
+    }
+   ],
+   "infer": [
+    "b1062239e52b60fb"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "dcdc59a76501511b"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "cd68b3cf1d7e2468"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "f3bd46f553f22909"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "57e2d01b0f87d261"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "894786334560ba8a"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba3/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6535988e7df6b7c8"
+   ],
+   "parts": [
+    {
+     "forward": "ede99ffa7bf0079f",
+     "prefill": "ede99ffa7bf0079f",
+     "step": "0fae52bee974f5fa",
+     "backward": "e74b4001c7bca031"
+    }
+   ],
+   "infer": [
+    "5f062ecf63bfe9cf"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0e80075cd0b35adc"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "54338d80374d4535"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "e5f2eacc692aa8dc"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 8 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "5e6ccabd8faa4a76"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "6f6165f610cbdcb7"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba3/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "07f2064c0243e8c2"
+   ],
+   "parts": [
+    {
+     "forward": "30c72ea40f24ed46",
+     "prefill": "30c72ea40f24ed46",
+     "step": "59dc48e0ed8a629b",
+     "backward": "e7e1645a28abbdf8"
+    }
+   ],
+   "infer": [
+    "754b6a18533e2448"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "1fa612855112f29b"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f71f944d03be5153"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "be0084453f949005"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "82718949e317eb87"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "80edd989334be3f5"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba3/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d506465b344d39d6"
+   ],
+   "parts": [
+    {
+     "forward": "0e9957d80f386f8b",
+     "prefill": "0e9957d80f386f8b",
+     "step": "604ad23767cdc881",
+     "backward": "ef7c0b0389f8f3f1"
+    }
+   ],
+   "infer": [
+    "af9268c7df4ab813"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "6808db6d5a177cf0"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "4c9c87c7c49eccbd"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "78db7df43245f472"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 8 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "d1cabc7b8f4b4ab3"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "41ec9f71ef8d1cf3"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba3/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d506465b344d39d6"
+   ],
+   "parts": [
+    {
+     "forward": "0e9957d80f386f8b",
+     "prefill": "0e9957d80f386f8b",
+     "step": "604ad23767cdc881",
+     "backward": "ef7c0b0389f8f3f1"
+    }
+   ],
+   "infer": [
+    "af9268c7df4ab813"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "6808db6d5a177cf0"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "ee432f5df351f529"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "78db7df43245f472"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 8 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "d1cabc7b8f4b4ab3"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "41ec9f71ef8d1cf3"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba3/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "59a1567b027ac450"
+   ],
+   "parts": [
+    {
+     "forward": "e717ac9d9ddc52e7",
+     "prefill": "e717ac9d9ddc52e7",
+     "step": "86dba571883661a5",
+     "backward": "248b553849edd27e"
+    }
+   ],
+   "infer": [
+    "8ad9e5ad08be43ff"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "89a14d31022e9a1f"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "8335131b23bae55d"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "050c6b60f15665f4"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "8ca59ddd61f76e96"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "00d34e3434e6a8f7"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba3/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "63de4bf6b9f8262a"
+   ],
+   "parts": [
+    {
+     "forward": "ad91191acfc10cdc",
+     "prefill": "ad91191acfc10cdc",
+     "step": "a8f15324412ea8ac",
+     "backward": "c22b89ea9adb5239"
+    }
+   ],
+   "infer": [
+    "80b047e6226a4e6d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "db6cd68a01f3d954"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "8335131b23bae55d"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "292bbf6a571391a3"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 8 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "1b559a8e4891a285"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "991d3013a256c047"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba3/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "467cfdf1eeb3a1c6"
+   ],
+   "parts": [
+    {
+     "forward": "f9604f3205a13dc9",
+     "prefill": "f9604f3205a13dc9",
+     "step": "b9d2b09ff4215cb5",
+     "backward": "e0ee6bce5bedd183"
+    }
+   ],
+   "infer": [
+    "b22b968a8d938466"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "5405d4923d164dba"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "21d8a2cbf5d39256"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "c4695e3042bc5e5e"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 8 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "22e5fd7b7f74c5f1"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "0985ea86b3fd6ae8"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "295d4e62d4c78b14"
+   ],
+   "parts": [
+    {
+     "forward": "8d431df291630b43",
+     "prefill": "8d431df291630b43",
+     "step": "cb617deca75d536b",
+     "backward": "2b4978ef99181243"
+    }
+   ],
+   "infer": [
+    "07f9d37e77d87002"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0b12906fcf644a41"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "41c065998015307c"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "5185ee1be0a72be5"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "a3896db997440bb0"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "f74213c84461ef95"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "251eb6369ef11d70"
+   ],
+   "parts": [
+    {
+     "forward": "f945b28ed68ac0d1",
+     "prefill": "f945b28ed68ac0d1",
+     "step": "605be2e98dc718b0",
+     "backward": "84abec851a5155c7"
+    }
+   ],
+   "infer": [
+    "0cdfdcf7e79a3a95"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "42b2fafa1e1ed92b"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "88f6733750d71307"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "5480cd2fd1ec39e3"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "cb734e17f0a4a47f"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "afcf4e6986035ac3"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7d565e3a35324caa"
+   ],
+   "parts": [
+    {
+     "forward": "9f2fa8f7e6c133c9",
+     "prefill": "9f2fa8f7e6c133c9",
+     "step": "24d0838231c0cad8",
+     "backward": "263524d200a29672"
+    }
+   ],
+   "infer": [
+    "2d6dbb6822c186f1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "4db1da4bb28c01e4"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "d64e16e9457f1512"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "0e60acf19fba3e74"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "1f43e6b114b8f7be"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "5c57868cf7772f11"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ecbe59229197362b"
+   ],
+   "parts": [
+    {
+     "forward": "ac97c0c343242077",
+     "prefill": "ac97c0c343242077",
+     "step": "72c9a1879ba208cd",
+     "backward": "652a9110ff876827"
+    }
+   ],
+   "infer": [
+    "477d523e8a69477d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "3f9de0dc9d751d87"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f7b820c4caf9e16d"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "f7322716ad07daec"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "b84d3023aed23d86"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "c36247c81d4962e3"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "da87cbc4fb93d086"
+   ],
+   "parts": [
+    {
+     "forward": "7027a64be9fdd40b",
+     "prefill": "7027a64be9fdd40b",
+     "step": "af6572a31845d191",
+     "backward": "ed3d456dfcdc2139"
+    }
+   ],
+   "infer": [
+    "d1f168584e9e1a72"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "53dd0889d21e13ca"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "174e6a3a08b33eab"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "c47919c0f5c78ce2"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "6f52de8e35346d4c"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "d902f6879a27c52a"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "da87cbc4fb93d086"
+   ],
+   "parts": [
+    {
+     "forward": "7027a64be9fdd40b",
+     "prefill": "7027a64be9fdd40b",
+     "step": "af6572a31845d191",
+     "backward": "ed3d456dfcdc2139"
+    }
+   ],
+   "infer": [
+    "d1f168584e9e1a72"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "53dd0889d21e13ca"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "3e90019a6be2628a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "c47919c0f5c78ce2"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "6f52de8e35346d4c"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "d902f6879a27c52a"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e48bc0a8545b1a29"
+   ],
+   "parts": [
+    {
+     "forward": "1bea61079a11d4ca",
+     "prefill": "1bea61079a11d4ca",
+     "step": "4d76acc6bc9e8381",
+     "backward": "17ae1fd02f9f713f"
+    }
+   ],
+   "infer": [
+    "72dcdfaf205c34af"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2dac2083ee6c5599"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "41c065998015307c"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "95f387677893408d"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "f29e53c59e172276"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "5a7bf67c86d70c4f"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "295d4e62d4c78b14"
+   ],
+   "parts": [
+    {
+     "forward": "8d431df291630b43",
+     "prefill": "8d431df291630b43",
+     "step": "cb617deca75d536b",
+     "backward": "2b4978ef99181243"
+    }
+   ],
+   "infer": [
+    "07f9d37e77d87002"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0b12906fcf644a41"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "41c065998015307c"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "5185ee1be0a72be5"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "191cf83d656a36ee"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "f74213c84461ef95"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "79d66e219ac996a9"
+   ],
+   "parts": [
+    {
+     "forward": "8106780ba6ea711d",
+     "prefill": "8106780ba6ea711d",
+     "step": "daf06356d38238cf",
+     "backward": "0992bdfc5c0a27d1"
+    }
+   ],
+   "infer": [
+    "2bf1485119797852"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "27de71a8fe28a6f9"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "0b99fe53b0eaa46a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "d2c6b30184854635"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "0693b30581def973"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "380e172afa388c71"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "037e7701daa7fc7c"
+   ],
+   "parts": [
+    {
+     "loss": "a4ec77c75e14345b",
+     "logits": "0fe4484b8ae121c4",
+     "params": "925e00879ea7d1b2"
+    }
+   ],
+   "infer": [
+    "ab48cb30e5bcfe28"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "674582804fcf1a50"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ab48cb30e5bcfe28"
+   ],
+   "batch": [
+    "8e0e9bb0ac27a621"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "8ae8dda8ba22a4aa"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "6eafd29a27e3b376"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "0d5f79c415affdbe"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "b9eb17cf58e2e69f"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e02c7412e926a415"
+   ],
+   "parts": [
+    {
+     "loss": "ea5c009d27c49712",
+     "logits": "1f6dc0c81773f75d",
+     "params": "a76c4fe209566a16"
+    }
+   ],
+   "infer": [
+    "6cf4c8d04b2746df"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1e49500f833e02a1"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "6cf4c8d04b2746df"
+   ],
+   "batch": [
+    "18be67105abdd9f0"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "e4e74a603305d265"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "7da094a4bce624b4"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "5374b6e854274ba6"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "ca228ec507c21d5b"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0fb42364f4c84411"
+   ],
+   "parts": [
+    {
+     "loss": "9f1aa537af2475c9",
+     "logits": "186aaf3187ecd023",
+     "params": "a7a4032f361162d9"
+    }
+   ],
+   "infer": [
+    "934fc17a557a972f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "284aef669039f101"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "934fc17a557a972f"
+   ],
+   "batch": [
+    "57cef73428798df9"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "af0e02cacfad8270"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "3868e1890bf25d35"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "0508cd2153ea38b6"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "905bd437fc2312ec"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "68e2e32002737938"
+   ],
+   "parts": [
+    {
+     "loss": "26531085ace68276",
+     "logits": "bad9b4cbae2391aa",
+     "params": "2112c0aafee5224c"
+    }
+   ],
+   "infer": [
+    "b86635922ea1a23a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6adcd1530cd32c5e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b86635922ea1a23a"
+   ],
+   "batch": [
+    "cb517e33a3c66c0b"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "cb7ed4b4430e1283"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "87bfd07b0b3cb13d"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "4f594c1343ea1f10"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "af95476ddbb3dce3"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "97c929c9824ede42"
+   ],
+   "parts": [
+    {
+     "loss": "62b23d29a741ac74",
+     "logits": "f5f9f47d0ec3e5e5",
+     "params": "94c84d18dc20fa5c"
+    }
+   ],
+   "infer": [
+    "d2901e19c5e0d37f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f7f05521e7cdfec7"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d2901e19c5e0d37f"
+   ],
+   "batch": [
+    "6b434cc3595b1172"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "87af7af2b081fddc"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "66825be665b22b30"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "bb88262d4a6df6ff"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "fb170c6af821206e"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2dc833bbce3de194"
+   ],
+   "parts": [
+    {
+     "loss": "f75f1e70aa4e703a",
+     "logits": "236dc22d343ee72d",
+     "params": "b5bef64e7de1ac22"
+    }
+   ],
+   "infer": [
+    "2d8ddb2370a94ecb"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f34e7e4227d3ab4b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2d8ddb2370a94ecb"
+   ],
+   "batch": [
+    "80c7783212e22775"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "ee2093efea1daf9e"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "17d748d11f46ed94"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "894b378bb756e641"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "42f4f540263f34e2"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "daa904c0d89aefde"
+   ],
+   "parts": [
+    {
+     "loss": "29d5432e0b75276a",
+     "logits": "5c182db098f59cbb",
+     "params": "6bb6696530a15b22"
+    }
+   ],
+   "infer": [
+    "0ede72c0f36afd52"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "5113ff087cd1d774"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0ede72c0f36afd52"
+   ],
+   "batch": [
+    "fe4b54400a42e7f2"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "2f241faee9373acb"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "327d0bfd2395a506"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "7fbe10673487b961"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "ab4e92cf67b66b87"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "037e7701daa7fc7c"
+   ],
+   "parts": [
+    {
+     "loss": "a4ec77c75e14345b",
+     "logits": "0fe4484b8ae121c4",
+     "params": "925e00879ea7d1b2"
+    }
+   ],
+   "infer": [
+    "ab48cb30e5bcfe28"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "674582804fcf1a50"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ab48cb30e5bcfe28"
+   ],
+   "batch": [
+    "8e0e9bb0ac27a621"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "8ae8dda8ba22a4aa"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "6eafd29a27e3b376"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "68f192674b46402a"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "b9eb17cf58e2e69f"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8c6bfc3b26396833"
+   ],
+   "parts": [
+    {
+     "loss": "8b50535cb7622257",
+     "logits": "010202cbb30c9c75",
+     "params": "b5de12584bf6e56c"
+    }
+   ],
+   "infer": [
+    "6e93779db1a13209"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "bf0a203a904b24cf"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "6e93779db1a13209"
+   ],
+   "batch": [
+    "97fb5496015e899e"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "1af4d714620deaf5"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "6dc47e85c06129c7"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "1e493280d9bc38e4"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "1cd60e4a63bfa52e"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2-dtlimit/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b9e7928a2a4d30cf"
+   ],
+   "parts": [
+    {
+     "forward": "a28525fcbdf69e7c",
+     "prefill": "a28525fcbdf69e7c",
+     "step": "1a8d61928f80731b",
+     "backward": "dce0c7958d21aa6e"
+    }
+   ],
+   "infer": [
+    "b45183b966b0b3fe"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "5e22e2c84dd421e2"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "fc40c30a5ef759e1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "cd0ad4d1f1ebde94"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight']"
+   ],
+   "batchscale": [
+    "423095e1dc7f3ad9"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "5e19d799035da292"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2-dtlimit/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "70a5916600842982"
+   ],
+   "parts": [
+    {
+     "forward": "b394fe4506ed0ce6",
+     "prefill": "b394fe4506ed0ce6",
+     "step": "e209223bebadb556",
+     "backward": "9da085fa072094a8"
+    }
+   ],
+   "infer": [
+    "eee3faa4fde7a3d5"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "3f8359ee1f0272a1"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "d17cd4c49bbf55b4"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "1561179a532a5697"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight']"
+   ],
+   "batchscale": [
+    "d6a120ec016ef00e"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "564fb3cb94a7c9a6"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2-dtlimit/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6cff59b5b34681ab"
+   ],
+   "parts": [
+    {
+     "forward": "585e95d1d8cbea33",
+     "prefill": "585e95d1d8cbea33",
+     "step": "03433104841689eb",
+     "backward": "dacd675014a78caa"
+    }
+   ],
+   "infer": [
+    "bb6913d8f0a44c82"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "f8dd2a37b887a06a"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "d9aa90106508c6f4"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "7c7e39f70c6a2340"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 4 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight']"
+   ],
+   "batchscale": [
+    "6000f2420170e886"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "3081dc74b8c441bc"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2-dtlimit/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "911465156f47fed2"
+   ],
+   "parts": [
+    {
+     "forward": "c5e2c9b6691196f7",
+     "prefill": "c5e2c9b6691196f7",
+     "step": "acc40b9ff5315110",
+     "backward": "b5b1eb6c980ed1c5"
+    }
+   ],
+   "infer": [
+    "c3002d5fb4aa4233"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "807ddba9de9653c8"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "b96eaa63de60edcd"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "7b66b1a3a14acfb8"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:conv1d.bias', 'A2:conv1d.weight', 'A4:conv1d.bias', 'A4:conv1d.weight']"
+   ],
+   "batchscale": [
+    "76997a9b796c079a"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "310e0a8272c9c2e7"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2-dtlimit/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5686523944c0f4f4"
+   ],
+   "parts": [
+    {
+     "forward": "1202222a0b71e2b3",
+     "prefill": "1202222a0b71e2b3",
+     "step": "bcb0c115b61aeafd",
+     "backward": "b30222b186d1385c"
+    }
+   ],
+   "infer": [
+    "c2433840994a780c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "f54dffa3bfdcec8e"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f8759cd70e5a991b"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "6301d0357ff4a866"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 4 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight']"
+   ],
+   "batchscale": [
+    "49584ab9f10e4847"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "2d700f708fbcd8f5"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2-dtlimit/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5686523944c0f4f4"
+   ],
+   "parts": [
+    {
+     "forward": "1202222a0b71e2b3",
+     "prefill": "1202222a0b71e2b3",
+     "step": "bcb0c115b61aeafd",
+     "backward": "b30222b186d1385c"
+    }
+   ],
+   "infer": [
+    "c2433840994a780c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "f54dffa3bfdcec8e"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "14b7680b4a85314e"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "6301d0357ff4a866"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 4 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight']"
+   ],
+   "batchscale": [
+    "49584ab9f10e4847"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "2d700f708fbcd8f5"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2-dtlimit/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "04cf69094de5328f"
+   ],
+   "parts": [
+    {
+     "forward": "3925d6de6ca9222c",
+     "prefill": "3925d6de6ca9222c",
+     "step": "9da0d90bf81204c3",
+     "backward": "aee1cac57ca9ae63"
+    }
+   ],
+   "infer": [
+    "785cfa0ad37eeec7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0101af3cee76cd67"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "fc40c30a5ef759e1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "3282e2d8d4f91249"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:conv1d.bias', 'A2:conv1d.weight', 'A4:conv1d.bias', 'A4:conv1d.weight']"
+   ],
+   "batchscale": [
+    "49e6122140b1c67d"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "301e522f8e1d284d"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2-dtlimit/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b9e7928a2a4d30cf"
+   ],
+   "parts": [
+    {
+     "forward": "a28525fcbdf69e7c",
+     "prefill": "a28525fcbdf69e7c",
+     "step": "1a8d61928f80731b",
+     "backward": "dce0c7958d21aa6e"
+    }
+   ],
+   "infer": [
+    "b45183b966b0b3fe"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "5e22e2c84dd421e2"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "fc40c30a5ef759e1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "cd0ad4d1f1ebde94"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight']"
+   ],
+   "batchscale": [
+    "add725388bc3dc47"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "5e19d799035da292"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "mamba2-dtlimit/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "caba9face6653ba0"
+   ],
+   "parts": [
+    {
+     "forward": "bc863cb1490ec5b2",
+     "prefill": "bc863cb1490ec5b2",
+     "step": "64f23695be227e12",
+     "backward": "0172a48609f0bc93"
+    }
+   ],
+   "infer": [
+    "730d297b7889e679"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "40cbc3d68646a2b9"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "835884c3c2618c53"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "5e6136ab5ecd7e55"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight']"
+   ],
+   "batchscale": [
+    "77f859ce5bcf42dd"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "89434096ed312590"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer-window/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "49ffb2316f238e6d"
+   ],
+   "parts": [
+    {
+     "forward": "c82dd5cdbfffbfbd",
+     "prefill": "c82dd5cdbfffbfbd",
+     "step": "b2ddd5d3feb8f2c9",
+     "backward": "fe5c6d7f0d134528"
+    }
+   ],
+   "infer": [
+    "6d3cce5e3acb87de"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ae6ecfa4f682d08e"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "c6f0e94cbc9ade59"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "212351f26cf2ea25"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "3a2ff9ce989fc95a"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "a28ad367431b99e9"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer-window/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4cc1690c572f7931"
+   ],
+   "parts": [
+    {
+     "forward": "718b5d9d7c5226c4",
+     "prefill": "718b5d9d7c5226c4",
+     "step": "7713196af6a286a7",
+     "backward": "8a73a9856cf9ef26"
+    }
+   ],
+   "infer": [
+    "c19a977595d7217f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "9b1d3d92085ffdaf"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "cebcb9e7e839c5fd"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "eace7960b014bd0a"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "5e3f33fd63972af7"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "3dcb03d8f4be8c06"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer-window/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "af2bffef90669cb5"
+   ],
+   "parts": [
+    {
+     "forward": "1b638fc1c26453cc",
+     "prefill": "1b638fc1c26453cc",
+     "step": "e4cc7dcf4835d59c",
+     "backward": "754f0437ba5ea7de"
+    }
+   ],
+   "infer": [
+    "dab8d98c6148a221"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "937215b18f504c5f"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "3ed927cc1a04c983"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "e1e96857e9c912a4"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "769769039bc00c82"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "532148431f84e558"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer-window/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "44a2b49da1619c85"
+   ],
+   "parts": [
+    {
+     "forward": "b5a4a1e39bdc208e",
+     "prefill": "b5a4a1e39bdc208e",
+     "step": "94abd12f2b1ab8d2",
+     "backward": "4a03615542eab412"
+    }
+   ],
+   "infer": [
+    "e01bb81b8b745026"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "7891decdc6d2bc03"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "ec1cc10a6b0298e7"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "052d53c67d5977f0"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "ccfb251d272b604b"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "e738b94515d2e925"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer-window/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4f8ec13b57260957"
+   ],
+   "parts": [
+    {
+     "forward": "76c4f62e7daf9f60",
+     "prefill": "76c4f62e7daf9f60",
+     "step": "f9d8c74ace681f88",
+     "backward": "9ef4d11061580f93"
+    }
+   ],
+   "infer": [
+    "f0a11d1b83f20677"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "586aec93e87b85e1"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "e6e8d4b4b5b5e46a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "5f70e6d27d39b5de"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "b0f75e5a7faac639"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "2522f5186cee8397"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer-window/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4f8ec13b57260957"
+   ],
+   "parts": [
+    {
+     "forward": "76c4f62e7daf9f60",
+     "prefill": "76c4f62e7daf9f60",
+     "step": "f9d8c74ace681f88",
+     "backward": "9ef4d11061580f93"
+    }
+   ],
+   "infer": [
+    "f0a11d1b83f20677"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "586aec93e87b85e1"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f27349ced3ee6254"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "5f70e6d27d39b5de"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "b0f75e5a7faac639"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "2522f5186cee8397"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer-window/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "44fa7ec52d690ee9"
+   ],
+   "parts": [
+    {
+     "forward": "a2baf3bfaace1cbb",
+     "prefill": "a2baf3bfaace1cbb",
+     "step": "26ea79b93b820ea2",
+     "backward": "d33c479d6030e898"
+    }
+   ],
+   "infer": [
+    "1493e7c0bee28ef3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "d1cee9c7a2caa1d2"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "c6f0e94cbc9ade59"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "6a7752a8ad2e7e49"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "53fd9e07323dcbca"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "90f6ef59edf4e67d"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer-window/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "49ffb2316f238e6d"
+   ],
+   "parts": [
+    {
+     "forward": "c82dd5cdbfffbfbd",
+     "prefill": "c82dd5cdbfffbfbd",
+     "step": "b2ddd5d3feb8f2c9",
+     "backward": "fe5c6d7f0d134528"
+    }
+   ],
+   "infer": [
+    "6d3cce5e3acb87de"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ae6ecfa4f682d08e"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "c6f0e94cbc9ade59"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "212351f26cf2ea25"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "601311a501442f10"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "a28ad367431b99e9"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "transformer-window/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e1f21e879b6d8fa9"
+   ],
+   "parts": [
+    {
+     "forward": "48ba16e9cc53e0fb",
+     "prefill": "48ba16e9cc53e0fb",
+     "step": "375ec2cfc21a8e30",
+     "backward": "568448e481d8b4e3"
+    }
+   ],
+   "infer": [
+    "1711b3adb8a2640c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "d4a6f323bbcb88a3"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "756fe43411985468"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "36281f513ad8f76b"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved"
+   ],
+   "batchscale": [
+    "c11cf27fbb070e42"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "57963a9f4c6e690d"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm-resident/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9bd534f6f997348d"
+   ],
+   "parts": [
+    {
+     "loss": "a72847199afa707d",
+     "params": "23ba1ad46ac7a9e7",
+     "grads": "eac79c51a52baaa2",
+     "logits": "4fc4e4ec579a8865"
+    }
+   ],
+   "infer": [
+    "3492882b0a13f6dc"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "8ee0a8ef26092454"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3492882b0a13f6dc"
+   ],
+   "batch": [
+    "ca81cd69e1a231d3"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d30f35c vs 0x3d30f364"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "b31979d1ad024b9e"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "a9460ce8378a8f95"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm-resident/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "60c34fe6102d3620"
+   ],
+   "parts": [
+    {
+     "loss": "92c679712e322b10",
+     "params": "6e043c32d47826be",
+     "grads": "3790048d4d9f09ce",
+     "logits": "5a1aa917c368da02"
+    }
+   ],
+   "infer": [
+    "8968c839f2dff510"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "605591b75637e530"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8968c839f2dff510"
+   ],
+   "batch": [
+    "9b8f3fc9165f0464"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:nll 0x40a7cea1 vs 0x40a7cea0; logits element 0 0x3e437f19 vs 0x3e437f1c"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "89fa60e13b692f4d"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "2fa943164781494a"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm-resident/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "75563fba53dd2764"
+   ],
+   "parts": [
+    {
+     "loss": "eba2f94b28857302",
+     "params": "02f9e246adeb4c33",
+     "grads": "3b747f357acf2c6c",
+     "logits": "f40ed58f253742e6"
+    }
+   ],
+   "infer": [
+    "502dc478db58e903"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "81daf017a8f617d3"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "502dc478db58e903"
+   ],
+   "batch": [
+    "b30b92abb8538dde"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d8269d7 vs 0x3d8269da"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "146d206dd6e5ee3a"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "9582ef8f44ce34dd"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm-resident/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6477bd6ed6c02956"
+   ],
+   "parts": [
+    {
+     "loss": "f8393cfd69735ebe",
+     "params": "2e7f3042958dfe87",
+     "grads": "f4f17c18cea15dcc",
+     "logits": "3827709893b7ed13"
+    }
+   ],
+   "infer": [
+    "36fb0cb03aa7f7ef"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "8b21bcbf6fc7eb9a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "36fb0cb03aa7f7ef"
+   ],
+   "batch": [
+    "1e27eefb0db69b7a"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d9f9d82 vs 0x3d9f9d83"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "a587b91abc2e4607"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "f4ec8b07f1097f21"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm-resident/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "087032203f3a2b5b"
+   ],
+   "parts": [
+    {
+     "loss": "752504947c4e1876",
+     "params": "533d90877806d0db",
+     "grads": "59928a6dbd3e3363",
+     "logits": "6a61a5fb50f3c153"
+    }
+   ],
+   "infer": [
+    "d089db9d27047699"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b907c842bc2f60b0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d089db9d27047699"
+   ],
+   "batch": [
+    "18ad4b9ace724e7b"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d883a8b vs 0x3d883a89"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "9db71b1abeafaf26"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "6b1d39acc69f261f"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm-resident/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "64e8c4633abb5986"
+   ],
+   "parts": [
+    {
+     "loss": "43f10dda40a5a89f",
+     "params": "eeba62424d4e8a4d",
+     "grads": "8b22b16ee790870f",
+     "logits": "e7316bb026a0ae6a"
+    }
+   ],
+   "infer": [
+    "2495f021c6f0dcd6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "e1cf2a9d3b950ed4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2495f021c6f0dcd6"
+   ],
+   "batch": [
+    "020a43745287f51e"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3e492412 vs 0x3e492415"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "317642bdbeebcbe2"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "c8c73b13eb7c50ad"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm-resident/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8fe2aead4054e41d"
+   ],
+   "parts": [
+    {
+     "loss": "8cd0a61f7fcc620f",
+     "params": "0afd8036758d48d7",
+     "grads": "ddd12a5dab742a08",
+     "logits": "783ebe367b0f0087"
+    }
+   ],
+   "infer": [
+    "7aa896d428760af1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "370d9670760666da"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "7aa896d428760af1"
+   ],
+   "batch": [
+    "98db5e1d3f6b8088"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d9ed9fa vs 0x3d9ed9fc"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "b003dc1323976ee0"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "becc5a440dfad921"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm-resident/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9bd534f6f997348d"
+   ],
+   "parts": [
+    {
+     "loss": "a72847199afa707d",
+     "params": "23ba1ad46ac7a9e7",
+     "grads": "eac79c51a52baaa2",
+     "logits": "4fc4e4ec579a8865"
+    }
+   ],
+   "infer": [
+    "3492882b0a13f6dc"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "8ee0a8ef26092454"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3492882b0a13f6dc"
+   ],
+   "batch": [
+    "ca81cd69e1a231d3"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0x3d30f35c vs 0x3d30f364"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "a444b47737e774aa"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "a9460ce8378a8f95"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "byte-lm-resident/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ecdaa98f2fc06401"
+   ],
+   "parts": [
+    {
+     "loss": "3b2f6059c5a5dd2d",
+     "params": "fe2c13937a2bc913",
+     "grads": "589dfbcadd17cd60",
+     "logits": "ab4168a128cbfd3f"
+    }
+   ],
+   "infer": [
+    "ef3ae39ad315587a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "5f35b574cb301c39"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ef3ae39ad315587a"
+   ],
+   "batch": [
+    "2e00fb6047e2e160"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler LanguageModelInference threaded=True threads=2 (CPU) B=5 vs trainer B=5:seq 0 token 0:logits element 0 0xbca2f1ba vs 0xbca2f1b8"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:trainer.logits prefix recompute",
+    "sampler:LanguageModelInference threaded=True threads=2 (CPU)",
+    "trainer:trainer.logits"
+   ],
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "b9db1a7fe28621b0"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "99b5a94516c47135"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4610c84719bc1a25"
+   ],
+   "parts": [
+    {
+     "loss": "5e82d5357d084426",
+     "logits": "f1a775afe812bd4b",
+     "params": "d28a060fcb9c4f35"
+    }
+   ],
+   "infer": [
+    "98fdd09d6895c393"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4c6bb23f04af6858"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "98fdd09d6895c393"
+   ],
+   "batch": [
+    "73d7e6800a5cb5b9"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "a14b4cd9184a5a34"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "9ae573a84ecf90f8"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 2 of 2 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "a06be44a502ae683"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "e3ed9349d65d6d85"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "603f4c03dcbe47c9"
+   ],
+   "parts": [
+    {
+     "loss": "e9abc56392257295",
+     "logits": "40675cdece413319",
+     "params": "72c02cfae8749d71"
+    }
+   ],
+   "infer": [
+    "b8a83b18804d304c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "9818c749c2dfc7ea"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b8a83b18804d304c"
+   ],
+   "batch": [
+    "0c2564b3ff5f7a68"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "9f6648df433827af"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "80ecfdf5e1fd7965"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 2 of 2 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "fdc82b4e04145a4a"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "ef7cb16e56c55a9d"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "18a317bc4260eb9a"
+   ],
+   "parts": [
+    {
+     "loss": "c2882ca5bcc33c37",
+     "logits": "f5d53745fd0ebb8b",
+     "params": "2709a6309498336d"
+    }
+   ],
+   "infer": [
+    "5aff613f2b2b410b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "148bfe51d04c1d98"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "5aff613f2b2b410b"
+   ],
+   "batch": [
+    "e8f89b1e94bb877a"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "935b160b9a5d1ae1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "99a88af5db3ba4c4"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 2 of 2 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "a202fc31ffb04c21"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "212115ef403995a6"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "70d8b0c335b40464"
+   ],
+   "parts": [
+    {
+     "loss": "e9726ac8e6dbcfb5",
+     "logits": "571530c03f76d0c4",
+     "params": "b04a08e0b404080e"
+    }
+   ],
+   "infer": [
+    "77783e7b88b441e7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "98b807c41ebff82a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "77783e7b88b441e7"
+   ],
+   "batch": [
+    "87325534a2d13c5c"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "b1543091f6ddb627"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "3271e56a56b048ee"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 2 of 2 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "86fc3aae3f32b981"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "c4d39883aa6707ea"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "70a608ce179e03dd"
+   ],
+   "parts": [
+    {
+     "loss": "779e600db4671456",
+     "logits": "52ce71d9b03b5d80",
+     "params": "1145a29636495f93"
+    }
+   ],
+   "infer": [
+    "93d90bf8a3a011b9"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10a8d940bbce9051"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "93d90bf8a3a011b9"
+   ],
+   "batch": [
+    "d1b4a3dcdf913d4d"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "557fcb8ac104b01a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "dd94d6ce0f01b073"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 2 of 2 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "ddc6e40565127e7f"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "5fa27e5ae0bd8876"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "eb0dc6c31a737411"
+   ],
+   "parts": [
+    {
+     "loss": "ebede16dfd432fa6",
+     "logits": "fcd2654eddc8b643",
+     "params": "1b0e9a2e241e1c5d"
+    }
+   ],
+   "infer": [
+    "f0968618a5270506"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "35a817ce8929a5d6"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "f0968618a5270506"
+   ],
+   "batch": [
+    "4c44e330f5084b77"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "743c668e023e6740"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "49f70c4b208aded0"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 2 of 2 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "90d996e686d885fb"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "6e1a847820350830"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9a7b9c31419aa4b9"
+   ],
+   "parts": [
+    {
+     "loss": "2b8eb43c4cdf2b8e",
+     "logits": "8610a76a16903f78",
+     "params": "8b4fa705fb904ccf"
+    }
+   ],
+   "infer": [
+    "15a269c11eed513b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4bea33bdf66a23bc"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "15a269c11eed513b"
+   ],
+   "batch": [
+    "8c6c59bb5973c2c7"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "7f85526ff9bb0a7e"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "110dcd9ce98a7c10"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 2 of 2 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "28d024ef3dca9112"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "4ecfc720e7f2126e"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4610c84719bc1a25"
+   ],
+   "parts": [
+    {
+     "loss": "5e82d5357d084426",
+     "logits": "f1a775afe812bd4b",
+     "params": "d28a060fcb9c4f35"
+    }
+   ],
+   "infer": [
+    "98fdd09d6895c393"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4c6bb23f04af6858"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "98fdd09d6895c393"
+   ],
+   "batch": [
+    "73d7e6800a5cb5b9"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "a14b4cd9184a5a34"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "9ae573a84ecf90f8"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 2 of 2 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "92d532da43b5e781"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "e3ed9349d65d6d85"
+   ],
+   "ragged_verdict": "STABLE"
+  },
+  "samba-untied-dropout-accum/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "42e27eabc8c4706f"
+   ],
+   "parts": [
+    {
+     "loss": "8e16a1f9d338d289",
+     "logits": "aaf23394cee02399",
+     "params": "9156ae39723c1dba"
+    }
+   ],
+   "infer": [
+    "7b088d5151256956"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ecaf3ac775bac83b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "7b088d5151256956"
+   ],
+   "batch": [
+    "44d27fc3172fb605"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "bd86f42f23ab1765"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "2a46376740cf4f17"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 2 of 2 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "8f8eb052000a3229"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "38933652ae1bf123"
+   ],
+   "ragged_verdict": "STABLE"
+  }
+ },
+ "complete_by_coverage": false,
+ "merged_from": [
+  {
+   "file": "hostsab.mamba1.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-51-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "hostsab.mamba2.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-51-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "hostsab.mamba3.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-51-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "hostsab.mamba2-dtlimit.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-51-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "hostsab.transformer.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-51-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "hostsab.transformer-window.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-51-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "hostsab.samba.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-51-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "hostsab.samba-untied-dropout-accum.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-51-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "hostsab.byte-lm.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-51-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "hostsab.byte-lm-resident.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-51-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  }
+ ],
+ "merged_separate_builds": false
+}

@@ -65,7 +65,8 @@ from checks.numerics import (
     identical_exp,
     identical_mul_add,
 )
-from svm.impl.svm_parameter import KERNEL_LINEAR, KERNEL_RBF, KernelParams
+from svm.impl.svm_parameter import KERNEL_LINEAR, KERNEL_POLYNOMIAL, KERNEL_RBF, KernelParams
+from kernel_methods.impl.distance.kernel_matrices import polynomial_epilogue_kernel
 
 
 #: SABOTAGE (svc_check "std exp under IDENTICAL"): route the RBF exponential
@@ -163,7 +164,7 @@ def kernel_workspace_floats(m: Int, n: Int, k: Int) -> Int:
 # DEVIATION 2492 (2026-09-10): THE FUSED FAST RBF TILE
 # ---------------------------------------------------------------------------
 # `kernel_op` is a GEMM over k = n_features followed by the expansion
-# epilogue, which is upstream's shape (`GramMatrixBase::evaluate`, then
+# epilogue, which is the reference's shape (`GramMatrixBase::evaluate`, then
 # `rbf_kernel_expanded`). For the SMO's tiles k is small (tens of features)
 # and the product is `nnz x n_rows` cells, so the GEMM is skinny in exactly
 # the dimension a GEMM is tiled for: measured on the M4 at
@@ -376,6 +377,17 @@ def kernel_op(
         ctx.enqueue_function[rbf_kernel_expanded_kernel](
             out.unsafe_ptr(), Int32(m), Int32(n),
             norm_a.unsafe_ptr(), norm_b.unsafe_ptr(), Float32(kp.gamma),
+            grid_dim=_grid(m * n), block_dim=KM_TPB,
+        )
+    elif kp.kernel == KERNEL_POLYNOMIAL:
+        # cuVS `PolynomialKernel::evaluate`: the linear Gram above, then
+        # `pow(gain * K + offset, exponent)` cell by cell, spelled as the
+        # kernel_methods lane's DEVIATION 1663 epilogue (one fused
+        # multiply-add, then an ascending repeated product, so a negative
+        # base is legal where `identical_pow` would return NaN).
+        ctx.enqueue_function[polynomial_epilogue_kernel](
+            out.unsafe_ptr(), Int32(m * n), Int32(kp.degree),
+            Float32(kp.gamma), Float32(kp.coef0),
             grid_dim=_grid(m * n), block_dim=KM_TPB,
         )
     elif kp.kernel != KERNEL_LINEAR:

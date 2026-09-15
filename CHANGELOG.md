@@ -10,7 +10,245 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
-- New `mojolearn.metrics.fowlkes_mallows_score`, mirroring scikit-learn's definition (cuML
+- Public CPU inference from a saved model for `GaussianProcessRegressor` (every kernel the fit
+  accepts, `normalize_y` included), `GaussianProcessClassifier` (binary and one-vs-rest) and
+  `GaussianMixture.sample` (lane/inference-neighbors-density). `GaussianProcessRegressor` gains
+  `save` and `load` (`mojolearn-gp-1`); `mojolearn.host_model(path)` returns the predictive mean
+  and std, and a saved classifier's labels and probabilities, through a new INFERENCE-ONLY host
+  binding, `_mojolearn_gp_infer_host`, which registers `gpr_predict` and `gpc_predict` and no fit,
+  Laplace Newton loop, log marginal likelihood or Cholesky door; the gp reference binding still
+  does not ship. `_mojolearn_mixture_infer_host` also registers `gmm_sample`. On the M4 the 27
+  models saved by the Metal classes (base, ties and dupes) match every committed infer cell that
+  carries one (the 166-lane record's Apple, NVIDIA and AMD columns for the four RBF and Matern GP
+  lanes, the gpc and gmm-sample lanes' own columns); gp-normalize-y has no committed column, and its
+  x86 CPU infer hashes equal the Metal recording on all three fixtures, so its NVIDIA and AMD cells are
+  owed. On x86 the 27 recordings read IDENTICAL through the shipped bindings and EXPECTED MISMATCH SEEN
+  under the host sabotage build, with a new sample sabotage arm in `gmm_sample_binding` because the
+  existing arm cannot reach a sample drawn from a saved model
+  (bench/results/identity_break/2026-09-15_inference-gp-gpc-gmm-sample).
+- Public CPU inference from a model saved on a GPU for more neighbor and density lanes
+  (lane/inference-neighbors-density). `NearestNeighbors` on the sqeuclidean, manhattan,
+  chebyshev, cosine and minkowski metrics and over the random ball cover, the
+  distance-weighted `KNeighborsClassifier` and `KNeighborsRegressor`, and `KernelDensity`
+  on the five kernel and metric pairs and with sample weights, all through host bindings
+  that already shipped. `RadiusNeighbors` gains `save` and `load` (`mojolearn-radius-1`) and
+  answers `radius_neighbors` on a CPU on its four metrics. `IsolationForest` gains `save`
+  and `load` (`mojolearn-iforest-1`; the file holds the training matrix and the knobs, since
+  every scoring call rebuilds the forest, DEVIATION 874). `GaussianMixture` gains `save` and
+  `load` (`mojolearn-gmm-1`) and `HDBSCAN(prediction_data=True)` gains `save` and `load`
+  (`mojolearn-hdbscan-2`) for `mojolearn.hdbscan.approximate_predict`, `membership_vector` and
+  `all_points_membership_vectors`; their CPU entries ship
+  in two new INFERENCE-ONLY host bindings, `_mojolearn_mixture_infer_host` (232,112 bytes
+  on the M4, against 406,456 for the reference binding with the fit) and
+  `_mojolearn_hdbscan_infer_host` (287,280 bytes with the two soft clustering entries), which
+  register the scoring or prediction entries and no fit: `nm` finds no EM step, Boruvka MST or prediction data
+  generation in either file. `mojolearn.host_model(path)` loads a saved model into a host
+  class that binds them, as the scalers are served through the estimators binding; CPU fits
+  still refuse. On the
+  M4, one core: the 54 neighbor and KDE models saved by the Metal classes predict IDENTICAL
+  on the CPU against their recordings and the 166-lane record's Apple, NVIDIA and AMD infer
+  cells, and the host sabotage build reads DIVERGENT on 50 of 54
+  (bench/results/identity_break/2026-09-15_inference-neighbors-density). The 16 iforest,
+  gmm and hdbscan models saved by the Metal classes predict IDENTICAL through the
+  inference-only bindings against their recordings and every committed infer cell, and the
+  sabotage build reads DIVERGENT on all 16
+  (bench/results/identity_break/2026-09-15_inference-iforest-gmm-hdbscan). The NVIDIA and AMD
+  recordings, and a CPU identity gate workflow that builds the inference-only families, are
+  owed.
+- New `python -m mojolearn verify --all` (`--quick`, `--full`, `--lanes`, `--fixtures`,
+  `--repeats`, `--json`): runs the identity_break lanes from the installed package (the
+  wheel's byte copy of `tools/identity_break.py`, fixtures generated from its seeds) and
+  compares every train, infer, model and batch part with
+  `mojolearn/verify_reference/table.json`, a table generated from the committed records
+  with each hash's record directory and commit, plus small GPU-trained saved models whose
+  bytes and loaded answers must equal the recorded ones. Parts read IDENTICAL, DIVERGENT,
+  OWED or REFUSED; exit codes are `verify`'s. On a CPU-only install it runs the public CPU
+  reference lanes and the portable models. The card verifier's list-every-stage flag is now
+  `--all-stages`. Maintainers regenerate the table with `verify --all --emit-reference` and
+  the models with `verify --emit-models` (docs/VERIFY.md).
+- New `GaussianProcessClassifier`, scikit-learn's Laplace approximation (`_gpc.py`) with
+  `optimizer=None`: binary fits by the posterior-mode Newton loop, one-vs-rest past two classes,
+  `predict`, `predict_proba`, `latent_mean_and_variance`, `log_marginal_likelihood_value_`, `save` and
+  `load`. The loop stops by the reference's rule read on an identical float32 likelihood, so its
+  iteration count (`n_iter_`) is the same on every column (DEVIATION 2830, closing DEVIATION 1766);
+  the float32 orders are pinned (DEVIATION 2831); the probability runs in float64 through a new
+  portable float64 erf (DEVIATION 2832); the one-vs-rest composition is DEVIATION 2833.
+  `optimizer`, `n_restarts_optimizer`, `warm_start`, `copy_X_train=False`, `random_state`,
+  `multi_class='one_vs_one'` and `n_jobs` are refused by name. The device path is
+  `gaussian_process/classifier.mojo`, the CPU host restatement `gaussian_process/host/gpc_oracle.mojo`
+  in the gp host family; fit on a CPU-only install stays internal, and a saved classifier predicts on
+  the CPU through `GaussianProcessClassifier.load` or `mojolearn.host_model`. New identity lanes
+  `gpc` and `gpc-multiclass` with batch declarations. Apple M4: the Metal column STABLE on all 18
+  train, 18 infer, 18 model and 18 batch cells, and the Metal fit and prediction equal to the host
+  binding's bit for bit; the gp regressor's cells unchanged, IDENTICAL x4 against the 166-lane
+  record. Against scikit-learn 1.9.0 on the lanes' fixtures: every label agrees, the largest
+  probability difference is 1.6e-4 (the `wide` fixture) and at most 1.1e-5 elsewhere. The NVIDIA and
+  AMD columns are owed to the release record.
+- New `KMeans.transform` and `KMeans.fit_transform`, with cuML's `KMeans.transform` as the
+  reference: the distance from every row to every fitted center under the model's `metric`
+  (squared for the default `'euclidean'`, cuVS `L2Expanded`; the root for
+  `'l2_sqrt_expanded'`), float32 `(n_samples, n_clusters)`. Each cell is the fused
+  assignment kernel's cell, so the distance at `predict`'s label is the row minimum bit for
+  bit. On the GPU binding and the CPU core host binding; cosine refuses by name as its fit
+  does. The seven fitting k-means lanes add `transform` to their infer and batch cells.
+  Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the release
+  record.
+- Public CPU inference for saved ARIMA models, UMAP embeddings and the whitened full-SVD PCA.
+  `ARIMA.save`/`load` and `UMAP.save`/`load` are new; `mojolearn.host_model(path)`, or the
+  classes on a CPU-only install, predict (in sample and out of sample), forecast and read the
+  fitted ARIMA attributes, and transform with a saved UMAP embedding. A UMAP transform's answer
+  depends on the query batch by its contract; the CPU answers the GPU's bytes for the same batch.
+  ARIMA inference ships in a new host binding, `_mojolearn_forecast_host`, which carries
+  predict and forecast and no fit (about 270 KB on macOS arm64); the ARIMA fit stays a source
+  reference build. `ExponentialSmoothing.fit` now refuses on a CPU-only install outside the
+  internal reference context, as every other CPU fit does. Apple M4 CPU column against the
+  committed Apple, NVIDIA and AMD columns; the model cells of the new save formats are owed to
+  the release record.
+- New `GaussianProcessRegressor.sample_y(X, n_samples=1, random_state=0)`, with
+  scikit-learn's `sample_y` as the reference: float32 `(n_rows, n_samples)` draws from the
+  posterior, the mean plus a factor of the predictive covariance `k(X, X) - V^T V` times
+  standard normals, un-normalized under `normalize_y`. The covariance is factored by the
+  identical Cholesky at its pinned `2^-20` jitter, the normals are position-mapped Philox keyed
+  by `random_state` (tag "GPSY") through the guarded Box-Muller, and the products are the
+  identical GEMM (DEVIATION 2793), so one model, `X`, `n_samples` and `random_state` give the
+  same bits on every vendor; they are not scikit-learn's bits. A covariance that does not
+  factor, `random_state=None` and the unfitted-prior arm refuse by name. On the GPU binding,
+  with an internal verifier arm in the gp host binding; public CPU `sample_y` from a saved
+  model is left to the neighbors and density inference lane. New `gp-sample-y` and
+  `gp-sample-y-normalize` identity lanes (batch n/a: the rows of one call are jointly
+  correlated), so the gp lanes' recorded cells do not move.
+- New `GaussianMixture.sample(n_samples)`, with scikit-learn's `BaseMixture.sample` as the
+  reference: `(X, y)` with the component counts a multinomial draw over `weights_` and the
+  rows grouped by component ascending. Every draw is position-mapped Philox keyed by
+  `random_state` (DEVIATION 2791), the normals are RAFT's Box-Muller with the pinned seams,
+  and each row is the forward substitution through the fitted `precisions_cholesky_`
+  (DEVIATION 2792), so one model and one `random_state` give the same bits on every vendor;
+  they are not scikit-learn's bits. `X` is float32 and `y` int32. On the GPU mixture binding
+  and the internal mixture host binding; public CPU exposure from a saved model is left to
+  the neighbors and density inference lane. New `gmm-sample` and `gmm-random-init-sample`
+  identity lanes, so the gmm lanes' recorded cells do not move. Apple M4 Metal and CPU
+  columns only; the NVIDIA and AMD cells are owed to the release record.
+
+- CPU inference from saved models for StandardScaler, MinMaxScaler, Lasso, ElasticNet,
+  KernelRidge (linear and rbf kernels), Nystroem (linear and rbf) and RBFSampler: each
+  gains `save` and `load`, and `mojolearn.host_model(path)` transforms or predicts on a
+  CPU-only install. The shipped estimators host binding serves the six entries
+  (`standard_transform`, `minmax_transform`, `cd_predict`, `kernel_ridge_predict`,
+  `nystroem_transform`, `rbf_sampler_transform`); the preprocessing, solver and
+  kernel_methods reference bindings still do not ship. The saved-model classical lanes
+  grow from 12 to 29, adding the ols, ridge and logistic option variants. On a CPU-only
+  install `StandardScaler.fit`, `MinMaxScaler.fit`, `Lasso.fit` and `ElasticNet.fit` now
+  refuse by name outside the internal reference scope, as every other estimator fit does.
+- New `IVFIndex.extend(X)`, with cuVS `ivf_flat::extend` (fixed centres) as the reference.
+  - The new rows are assigned to the built index's fixed centres by the build's own
+    assignment and tie rule, then appended to their lists under the ids `n_rows_`,
+    `n_rows_ + 1`, and so on. `extend_labels_` names each row's list.
+  - Extending by a set of rows in one call, or in several calls in the same order,
+    gives the same index bytes, so a search after it is the same everywhere.
+  - It runs on the GPU binding and on the CPU host bindings, the shipped
+    `_mojolearn_ivf_search_host` included, so a GPU-built index saved and loaded
+    on a CPU can be extended there.
+  - Caller-chosen ids and `adaptive_centers` are not implemented.
+  - New identity lane `ivf-extend` with a batch declaration. Apple M4 Metal and
+    RunPod x86 CPU columns only; the NVIDIA and AMD cells are owed to the release
+    record. Evidence: bench/results/identity_break/2026-09-15_ivf-extend/.
+- Public CPU inference for saved `IVFIndex` indexes and `Embedding` tables.
+  - `IVFIndex.fit` now builds the index and `search` answers from it, as two
+    binding calls. The train, infer and batch hashes are unchanged against
+    the committed Apple, NVIDIA and AMD columns, on Metal and on the CPU.
+  - `IVFIndex.save` / `load` (`mojolearn-ivf-flat-1`) and `Embedding.save` /
+    `load` (`mojolearn-embedding-1`) carry GPU-built state to a CPU, and
+    `mojolearn.host_model` returns a host instance for either file.
+  - Two new host bindings ship in the wheels, `_mojolearn_ivf_search_host`
+    (search only) and `_mojolearn_embedding_infer_host` (lookup only). Each
+    serves its family on a CPU-only install that has no reference binding.
+  - `Embedding.backward` refuses on a CPU-only install outside the internal
+    verifier.
+  - Evidence: bench/results/identity_break/2026-09-15_ivf-embedding-cpu-inference/.
+- CPU inference from saved SVM models for `SVC(kernel='linear')`, `SVC(kernel='poly')`,
+  `SVR` and `SVR(kernel='linear')`: `SVR` gains `save` and `load` (format
+  `mojolearn-svr-1`), and `mojolearn.host_model(path)`, or the classes on a CPU-only
+  install, answer `decision_function` and `predict` through the shipped svm host binding's
+  `svc_predict` and `svr_predict`. No entry was added to that binding. The svm family's
+  saved-model lanes grow from one (`svc`) to five. The svm host sabotage build gains an
+  intercept arm in the fit and a decision arm in predict, so on an integer-grid fixture
+  such as `ties` a saved model's file and its predictions now move there too. Apple M4 Metal recording checked on an x86 CPU against the committed Apple,
+  NVIDIA and AMD columns; the SVR model cells and every `svc-poly` GPU cell are owed to the
+  release record.
+- Public CPU `Cholesky` inference. On a CPU-only install `Cholesky().fit(A)` factors a given
+  matrix and `solve` answers from it, and `Cholesky.save` / `Cholesky.load` (or
+  `mojolearn.host_model`, which returns a `HostCholesky`) carry a factor from a GPU box to a
+  CPU. The door moved into the linalg host binding, which ships in the inference wheel; the
+  `cholesky` identity lane is now the linalg family's and a public CPU reference probe. Apple
+  M4 CPU column: train, infer and batch IDENTICAL x4 against the 166-lane record, the new
+  saved-factor model cells OWED to the release record, the sabotage build DIVERGENT on every
+  train and owed cell.
+- New `GPT2Tokenizer.encode_batch(documents, allow_endoftext=False)`, `decode_batch` and
+  `decode_bytes_batch`. `encode_batch` is one call into the tokenizer host binding
+  (`gpt2_encode_batch`) that encodes each document alone, so every document's ids equal
+  `encode` on it; the decode calls loop over `decode_bytes`. The `tokenizer` identity lane
+  now carries batch cells over 64 documents instead of `n/a`; its train and infer hashes
+  are unchanged against the three committed GPU columns. A new
+  `-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1` build must read BATCH_MOVED. Apple M4 CPU
+  column only; the GPU columns' batch cells are owed to the release record.
+- New public CPU neural inference from GPU-trained weights: `MLPInference` (the small
+  8-16-3 MLP's `predict_logits`, from `SmallMLPTrainer.save_checkpoint` files or the four
+  weights) and `TransformerBlockInference` (`TransformerBlock.forward` from a zero state,
+  full causal or sliding window, ragged `lengths` included). Both run on a new shipped host
+  binding, `_mojolearn_neural_host`, that exports forward entries only (no optimizer, loss,
+  backward or decode step is compiled in). On a CPU column the `mlp`, `transformer` and
+  `transformer-window` identity lanes now ask their held-out and batch cells through these
+  classes: against the three committed GPU columns every train, infer, model and batch cell
+  reads IDENTICAL (nine fixtures each), and a `-D MOJOLEARN_HOST_SABOTAGE=1` build of the new
+  binding reads DIVERGENT on all 27 infer and 27 batch cells with every train cell unchanged.
+  Training on the CPU stays internal to the verifier.
+- New public CPU inference from GPU-trained weights for the Mamba blocks and the Samba
+  stack. `Mamba1BlockInference`, `Mamba2BlockInference` (with `dt_limit`) and
+  `Mamba3BlockInference` run the block's `forward` from a zero state. `SambaInference`
+  runs `SambaStack.forward`'s logits, from `SambaStack.save_checkpoint` files or a config
+  and its weights. Both honor ragged `lengths`. A carried state, `step`, `allocate_state` and
+  `backward` refuse by name. The byte LM's public class stays `LanguageModelInference.from_checkpoint`.
+  - **Binding:** `_mojolearn_neural_host` gains six forward-only entries. `nm` on the Linux
+    build finds no backward, optimizer, loss or decode symbol, where the reference training,
+    Mamba and Transformer bindings show 20, 71 and 12. The Linux test wheel grows from
+    1,891,155 to 1,972,140 bytes.
+  - **Identity:** on a CPU column, the mamba1, mamba2, mamba2-dtlimit, mamba3, samba,
+    samba-untied-dropout-accum, byte-lm and byte-lm-resident lanes ask their infer, batch,
+    batchscale and ragged cells through these classes. The transformer lanes do the same for
+    batchscale and ragged. Against the three committed GPU columns, all 90 train, 90 batch,
+    90 batchscale and 90 ragged cells read IDENTICAL; the infer and model cells read 126
+    IDENTICAL and 54 N/A, with none owed.
+  - **Sabotage:** a sabotage build of the neural and byte LM bindings reads DIVERGENT on
+    every batch, batchscale and ragged cell, and the batch sabotage reads BATCH_MOVED on
+    all ten lanes.
+  - **Wheel check:** the installed test wheel answers 16 of 16 public calls byte for byte
+    against the source tree.
+  - **Evidence:** `bench/results/identity_break/2026-09-15_neural-forward-inference`, one
+    AMD EPYC CPU column.
+- `SVC(kernel='poly', degree, gamma, coef0)`, which was refused by name. The SVM Gram matrix is
+  the identical linear GEMM followed by the kernel_methods polynomial epilogue (one fused
+  multiply-add, then an ascending repeated product, DEVIATION 1663), so a negative base is
+  legal; `degree` is an integer in [0, 32] and `coef0` any finite float. The svm host binding
+  and its oracle carry the same arm, both bindings take `degree` and `coef0` in the fit and
+  predict parameter lists, and saved poly models record `coef0`. New `svc-poly` identity lane
+  (train, infer, model and batch). SVR still refuses 'poly'. Apple M4 Metal and CPU columns
+  only; NVIDIA and AMD columns are owed to the release record.
+- `GaussianProcessRegressor(normalize_y=True)`, which was refused. It follows the scikit-learn
+  reference: y is centered and scaled by StandardScaler's pinned Float32 folds before the fit
+  (a zero standard deviation scales by one), and the predictive mean and std are scaled back
+  with one correctly rounded binary32 operation each on the host. New `gp-normalize-y`
+  identity lane. Apple M4 Metal and CPU columns only; NVIDIA and AMD columns are owed to the
+  release record.
+- `score(X, y, sample_weight=...)` on `GradientBoostingClassifier`, `GradientBoostingRegressor`,
+  the random forests and the Extra Trees, and `sample_weight` on `metrics.accuracy_score` and
+  `metrics.r2_score`, all of which refused weights. They follow scikit-learn's reference definitions of weighted
+  accuracy (`np.average(y == y_pred, weights=w)`) and weighted R2 (`force_finite=True`) in
+  Float32 on the pinned-sum path (`metrics/impl/weighted_scores.mojo`); weights are 1-D,
+  finite, non-negative and of positive total. Both metrics bindings export the weighted arms;
+  the new `gbdt-adapter-score-weighted` and `rf-score-weighted` identity lanes cover them, with
+  the metrics host sabotage build required to read DIVERGENT. Apple M4 Metal and CPU columns
+  only; NVIDIA and AMD columns are owed to the release record.
+- New `mojolearn.metrics.fowlkes_mallows_score`, following the scikit-learn reference definition (cuML
   has none): the device integer contingency matrix, exact Int64 pair counts, then
   `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, 0.0 when `tk == 0` (no samples, one sample,
   all singletons). It was a named absence. The metrics GPU binding and the metrics host
@@ -26,13 +264,50 @@ Linux legs are OWED before this heading reads published.
   `hdbscan-leaf` lanes still match. Those lanes and `par-hdbscan` now carry infer and batch
   cells instead of `n/a:transductive`, with the batch and host sabotage builds required to
   move them. Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the
-  release record. `membership_vector` and `all_points_membership_vectors` are not
-  implemented and refuse by name.
-
-- Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
-  namely the byte LM's, the forest's, the tokenizer's and the twelve routed families (core,
-  linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp, arima), fifteen in
-  all. 0.8.5 carried the byte LM's alone. The
+  release record.
+- New `mojolearn.hdbscan.membership_vector(clusterer, points_to_predict, batch_size=4096)` and
+  `all_points_membership_vectors(clusterer, batch_size=4096)`, cuML's soft clustering: for each
+  point and each selected cluster, the probability of membership. They need
+  `HDBSCAN(prediction_data=True)` and refuse by name without it. cuML computes four of the steps in
+  float64, which an Apple GPU cannot run; here every step is float32 with pinned seams on the GPU
+  binding and the CPU host binding, and rows where cuML overflows to NaN (duplicated points) are
+  finite (DEVIATION 1616). The `hdbscan` and `hdbscan-leaf` identity lanes hash both calls in their
+  infer cells, and their batch part asks `membership_vector` alone and split.
+- `GradientBoosting.fit` takes `group_id`, CatBoost's Pool argument: one string or integer id per
+  row (an integer compares by its decimal spelling, as their Pool hashes it), each group's rows
+  consecutive or the fit raises "group Ids are not consecutive". The grouping crosses into the GPU
+  binding and the GBDT host binding as run lengths. `loss="QueryRMSE"` reads it; every other loss
+  refuses it BY NAME. `subgroup_id` and `pairs` are refused by name in Python. A fit without them
+  sends the same parameter layout as before.
+- New `loss="QueryRMSE"` for `GradientBoosting`, the first learning-to-rank loss, with the CatBoost
+  reference's querywise target (`query_rmse.cu`, the group means and ids of `query_helper.cu`, the
+  querywise der calcer's inverse bin order in leaf estimation) on the GPU and restated in the GBDT
+  host binding for the CPU reference column. SymmetricTree with the greedy searcher, Newton leaves at
+  one iteration by default; a bootstrap, categorical features, an eval set, the pointwise searcher
+  and the non-symmetric policies are refused by name. Without `group_id` every row is its own
+  query, as in the reference, so the fit learns nothing. Prediction is the ordinary row-wise raw
+  score, so saved-model CPU inference covers it. New identity lane `gbdt-query-rmse` with a batch
+  part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed to the release record.
+- New `loss="PairLogit"` for `GradientBoosting`, the pairwise ranking loss of the CatBoost reference
+  (`pair_logit.cu` through the querywise target), on the same arm as QueryRMSE. Without `pairs` the
+  pairs are generated from `group_id` and the grades as the reference's default does (every two rows
+  of a query with different grades, the higher grade the winner); `fit(pairs=..., pairs_weight=...)`
+  takes explicit `[winner, loser]` row pairs inside groups. Two named DEVIATIONs: each row's pair
+  derivatives are summed in one fixed order where the reference sums them in thread arrival order,
+  and the search weight plane follows `secondDerAsWeights` as the pointwise target does, where the
+  reference's querywise branch has the two arms reversed (so at the default Cosine score the trees
+  can differ from the reference's GPU and follow its CPU weighting). Each tree's leaf values are
+  shifted to average zero after estimation, as the reference's `MakeZeroAverage` does for this loss
+  (a shift no pairwise loss or ranking metric can see, but raw predictions do). `pairs` without
+  `group_id`, the `max_pairs` subsample and PairLogitPairwise are not implemented. New identity lane
+  `gbdt-pair-logit` with a batch part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed
+  to the release record.
+- The host (CPU) bindings `python/mojolearn/host_surface.py` marks `ships_in_wheel` ship in
+  both wheels under `mojolearn/host/`: ten families, byte_lm, forest, tokenizer, neural, core,
+  linalg, estimators, metrics, svm and forecast. The other seventeen families the manifest
+  declares (preprocessing, tsa, solver, trees, rf, gp, kernel_methods, mixture, hdbscan, gbdt,
+  training, resample, mamba, arima, embedding, ivf, transformer) are source reference builds
+  for the verifier and do not ship. 0.8.5 carried the byte LM's alone. The
   list is read from `python/mojolearn/host_surface.py` by the two wheel builders, the Linux
   packer, both smokes and the Linux admission; `packaging/check_ext_lists.py` (and its
   `--host` mode, which needs no built binary) fails any of them that carries a host list of

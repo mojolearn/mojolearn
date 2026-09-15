@@ -13,7 +13,7 @@ strategy is supported currently", and `_params_from_cpu` (`:134-135` /
 `:146-147`) raises `UnsupportedOnGPU` at the scikit-learn boundary. There
 is no cuVS kernel, no RAFT primitive and no cuML C++ entry to cite as a reference.
 `neighbors/NOT_IMPLEMENTED.tsv` carried a row saying exactly that, and the
-row's REASON -- "there is no upstream GPU kernel to implement" -- was withdrawn
+row's REASON -- "there is no reference GPU kernel to implement" -- was withdrawn
 on 2026-09-01: a refusal is legitimate only when the thing is genuinely
 impossible here or when refusing IS the correct behaviour for the input.
 "a prior implementation does not have it" is neither. It has no reference
