@@ -3,12 +3,13 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## Unreleased (0.8.6 prep; the freeze commit names it 0.8.6 with the version bump)
+## 0.8.6 (unreleased 2026-09-16)
 
-Packaging release. Nothing in a kernel moves; what changes is what the two wheels carry and
-what a user can check from a pip install. The freeze checks of docs/RELEASE_CHECKLIST.md,
-the per-vendor GPU-box build and the byte compare of the host bindings across the three
-Linux legs are OWED before this heading reads published.
+Packaging release, frozen on branch release/0.8.6 at main b8c9e477e. Nothing in a kernel
+moves; what changes is what the two wheels carry and what a user can check from a pip install.
+The per-vendor GPU-box build, the byte compare of the host bindings across the three Linux
+legs and the release identity record (one AMD, one NVIDIA and one Apple column) are OWED
+before this heading reads published. The publication date is set when the wheels go out.
 
 - Public CPU inference from a saved model for `GaussianProcessRegressor` (every kernel the fit
   accepts, `normalize_y` included), `GaussianProcessClassifier` (binary and one-vs-rest) and
