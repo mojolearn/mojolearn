@@ -151,6 +151,24 @@ class KMeans(NumericModeMixin):
             return _METRIC_NAMES[self.metric]
         return int(self.metric)
 
+    def _inference_inputs(self, X):
+        """`X` and the centers as float32 C order, and the metric code, for
+        `predict` and `transform`; refuses an unfitted model and a feature
+        count other than the fit's."""
+        centers = getattr(self, "cluster_centers_", None)
+        if centers is None:
+            raise RuntimeError("this estimator is not fitted yet")
+        metric_code = self._metric_code()
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        d = x.shape[1]
+        dc = centers.shape[1]
+        if d != dc:
+            raise ValueError(
+                f"mojolearn: X has {d} features, KMeans was fitted with {dc}"
+            )
+        c, _ = as_f32_c(centers, ndim=2, name="cluster_centers_")
+        return x, c, metric_code
+
     def fit(self, X, y=None, sample_weight=None):
         """Fit, and set `labels_` from a pass against the final centroids."""
         if isinstance(self.init, str):
@@ -267,23 +285,10 @@ class KMeans(NumericModeMixin):
         lowest center index. A cosine metric is refused by name here as it
         is at fit. CPU `predict` is public inference and is served by the
         core host binding on a CPU-only install.
-
-        `transform` is not provided: cuVS's `kmeans_transform` materializes
-        the n x k pairwise matrix through a distance kernel no fit path
-        uses (`cluster/NOT_IMPLEMENTED.tsv`).
         """
-        centers = getattr(self, "cluster_centers_", None)
-        if centers is None:
-            raise RuntimeError("this estimator is not fitted yet")
-        metric_code = self._metric_code()
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, c, metric_code = self._inference_inputs(X)
         n, d = x.shape
-        k, dc = centers.shape
-        if d != dc:
-            raise ValueError(
-                f"mojolearn: X has {d} features, KMeans was fitted with {dc}"
-            )
-        c, _ = as_f32_c(centers, ndim=2, name="cluster_centers_")
+        k = c.shape[0]
         labels = empty((n,), "<i4")
         self._bind("_mojolearn").kmeans_predict(
             addr_ro(x, name="X"),
@@ -293,3 +298,39 @@ class KMeans(NumericModeMixin):
             [n, d, k, metric_code],
         )
         return labels
+
+    def transform(self, X):
+        """The distance from every row of `X` to every fitted center,
+        float32 `(n_samples, n_clusters)`.
+
+        The reference is cuML's `KMeans.transform` (`kmeans.pyx:1084`), cuVS
+        `kmeans_transform` (`detail/kmeans.cuh:1178-1219`): the distance
+        under this model's `metric`, so `'euclidean'` (cuVS `L2Expanded`,
+        the default) gives SQUARED distances and `'l2_sqrt_expanded'` gives
+        their roots. scikit-learn's `transform` always returns the root;
+        pass `metric='l2_sqrt_expanded'` for that meaning. `X` is converted
+        to the centers' float32, C order.
+
+        Each cell is the fused assignment kernel's cell
+        (`cluster/impl/detail/kmeans_transform.mojo`, host
+        `kmeans_oracle.mojo::host_kmeans_transform`), so
+        `transform(X)[i, predict(X)[i]]` is the minimum of row `i` bit for
+        bit. A cosine metric is refused by name, as it is at fit. CPU
+        `transform` is public inference, served by the core host binding on
+        a CPU-only install.
+        """
+        x, c, metric_code = self._inference_inputs(X)
+        n, d = x.shape
+        k = c.shape[0]
+        out = empty((n, k), "<f4")
+        self._bind("_mojolearn").kmeans_transform(
+            addr_ro(x, name="X"),
+            addr_ro(c, name="cluster_centers_"),
+            addr(out, name="distances"),
+            # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_transform_binding.
+            [n, d, k, metric_code],
+        )
+        return out
+
+    def fit_transform(self, X, y=None, sample_weight=None):
+        return self.fit(X, sample_weight=sample_weight).transform(X)
