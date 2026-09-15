@@ -1,0 +1,21 @@
+mac_slot: Metal slot busy (/Users/andrewhendel/CascadeProjects/mojolearn :: bash -c { bash /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/mac_slot.sh status); waiting
+mac_slot: Metal slot busy (/Users/andrewhendel/CascadeProjects/mojolearn :: bash -c { bash /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/mac_slot.sh status); waiting
+mac_slot: Metal slot busy (/Users/andrewhendel/CascadeProjects/mojolearn :: bash -c cd /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-gbdt-slow-old; upti); waiting
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+# vendor=apple-m4 commit=1386833b4d6098de5db802ac0ccb43ab7fb33942 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 17:38:48  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | odd              |
+|------------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr-tables | 9aef0c9ccfa6907c | 24ff7d7c24861171 | 2b3fac1172a1b684 |
+| gbdt-categorical-ctr-tables infer | a624d9f200295ebd | ba5bb1e19090253b | d0a5ab298e3f354c |
+| gbdt-categorical-ctr-tables model | bf3bea6dea6870d5 | 1a89f2f0c4b4089c | d12b8a92dfaf4f57 |
+| gbdt-categorical-ctr-tables batch | d37a90de0b078e27 | da78c16224627804 | 8a24ba90ab6fff7f |
+
+cells=3 stable=3 moved=0 refused=0
+infer: stable=3
+model: stable=3
+batch: stable=3
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/ctr/metal-gbdt-categorical-ctr-tables.json

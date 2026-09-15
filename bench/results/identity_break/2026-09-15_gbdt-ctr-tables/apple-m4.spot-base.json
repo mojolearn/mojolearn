@@ -1,0 +1,178 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "1386833b4d6098de5db802ac0ccb43ab7fb33942",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  }
+ },
+ "cells": {
+  "gbdt-symmetric/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "56560dec5bdb6cb9"
+   ],
+   "parts": [
+    {
+     "predict": "7f15e34e477a4eae",
+     "proba": "dc63b1265ff9fd00"
+    }
+   ],
+   "infer": [
+    "e1db044dc82354ac"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ee776c33f052679a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e1db044dc82354ac"
+   ],
+   "batch": [
+    "9d36287df25eff95"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-rmse/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3f8aef8d73be249c"
+   ],
+   "parts": [
+    {
+     "predict": "ee36dc006c02ac7c"
+    }
+   ],
+   "infer": [
+    "ba6284898fcd7adb"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6a7e0d174aadda21"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ba6284898fcd7adb"
+   ],
+   "batch": [
+    "3a53a53abfe321f6"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-feature-freq/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7d9c56b51213cb42"
+   ],
+   "parts": [
+    {
+     "predict": "1b921d15d43a233a"
+    }
+   ],
+   "infer": [
+    "95b976d85efc7f2d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b2959e177eb6e088"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "95b976d85efc7f2d"
+   ],
+   "batch": [
+    "272537bbe18b712b"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-categorical-ctr/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3c492b90c998f095"
+   ],
+   "parts": [
+    {
+     "predict": "7f15e34e477a4eae"
+    }
+   ],
+   "infer": [
+    "01fd6a33928b42a8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d1bc6890d23ce613"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "01fd6a33928b42a8"
+   ],
+   "batch": [
+    "8c08c90af3b9bafd"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-gbdt-ctr/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "b85f40771fdb8a9b08fbb06e460c8682e5c44546a90b7a935242a63ad4dbe2f2",
+    "size": 2761120
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "18b48ff0cc1eaed28371bc420e99863d3e2ab9601ef84046b394f316731a438c",
+    "size": 6985888
+   }
+  ]
+ }
+}

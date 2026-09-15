@@ -1,0 +1,27 @@
+# vendor=apple-m4 commit=1386833b4d6098de5db802ac0ccb43ab7fb33942 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 17:45:00  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             |
+|------------------------|------------------|
+| gbdt-symmetric         | 56560dec5bdb6cb9 |
+| gbdt-symmetric infer   | e1db044dc82354ac |
+| gbdt-symmetric model   | ee776c33f052679a |
+| gbdt-symmetric batch   | 9d36287df25eff95 |
+| gbdt-rmse              | 3f8aef8d73be249c |
+| gbdt-rmse infer        | ba6284898fcd7adb |
+| gbdt-rmse model        | 6a7e0d174aadda21 |
+| gbdt-rmse batch        | 3a53a53abfe321f6 |
+| gbdt-feature-freq      | 7d9c56b51213cb42 |
+| gbdt-feature-freq infer | 95b976d85efc7f2d |
+| gbdt-feature-freq model | b2959e177eb6e088 |
+| gbdt-feature-freq batch | 272537bbe18b712b |
+| gbdt-categorical-ctr   | 3c492b90c998f095 |
+| gbdt-categorical-ctr infer | 01fd6a33928b42a8 |
+| gbdt-categorical-ctr model | d1bc6890d23ce613 |
+| gbdt-categorical-ctr batch | 8c08c90af3b9bafd |
+
+cells=4 stable=4 moved=0 refused=0
+infer: stable=4
+model: stable=4
+batch: stable=4
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-gbdt-ctr/bench/results/identity_break/2026-09-15_gbdt-ctr-tables/apple-m4.spot-base.json

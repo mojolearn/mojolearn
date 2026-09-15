@@ -54,4 +54,27 @@ edited, so no saved-model byte of any existing lane can move from this lane.
 
 ## Evidence
 
-Pending.
+Fixture probe, Apple M4 Metal, bindings built from 1386833b4, base fixture:
+
+- gbdt-categorical-ctr-tables: the saved model carries `ctr_columns`, 8
+  `ctr_table` records (Borders at priors {0,1}, {0.5,1}, {1,1} with two target
+  classes, and FeatureFreq with denominator 20000, for each of the two
+  categorical inputs) and 52 `ctr_entry` records; 17 model columns for 11 raw
+  inputs; the trees split on CTR columns. GPU and HostGBDT hash equal on the
+  held-out rows (unseen and seen-once categories included) and on the
+  training rows; a NaN categorical value is refused by both with
+  "categorical feature 0 row 3 is not finite".
+- gbdt-tensor-ctr-tables: the saved model carries `tensor_ctr_registry 6 2`
+  and two `feature_freq_tensor` records (the second with one split in its
+  history, on the first tensor column); the tree splits on both tensor
+  columns. GPU and HostGBDT hash equal on held-out and training rows; a NaN
+  source value is refused by both with "tensor CTR split history cannot
+  quantize NaN".
+
+RunPod CPU pod guqti0t3eychjo (verified deleted, $0.009), commit e8cdd0aed:
+the eight existing HostGBDT lanes on the base fixture with
+`MOJOLEARN_IDENTITY_HOST_INFER=1`, diffed against the three 166-lane GPU
+columns, read train IDENTICAL=8 (x4), infer/model IDENTICAL=16, batch
+IDENTICAL=8. `docs_facts --check`, `wheel_ci pins` and `inventory` exit 0.
+
+Identity columns, sabotage and the installed wheel: pending.
