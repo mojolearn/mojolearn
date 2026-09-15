@@ -4134,13 +4134,25 @@ def _real_count(verdict):
     return None
 
 
-def diff(paths, require_columns=0, require_lanes=None):
+def diff(paths, require_columns=0, require_lanes=None, fixtures=None, no_batch=False):
     cols = []
     for p in paths:
         with open(p) as fh:
             j = json.load(fh)
         cols.append((j.get("vendor") or os.path.basename(p), j))
     keys = sorted(set(k for _, j in cols for k in j["cells"]))
+    if fixtures:
+        # --fixtures SCOPES the diff (2026-09-15, lane/cpu-training-gate-speed):
+        # a column run on a fixture subset (the CPU gate's branch scope) is
+        # compared on those fixtures only, and --require-columns demands its
+        # hashes only there. The full nine stay the main gate's.
+        unknown = [f for f in fixtures if f not in FIXTURES]
+        if unknown:
+            raise SystemExit(f"REFUSING: --fixtures names no fixture: {unknown}; fixtures are {FIXTURES}")
+        keys = [k for k in keys if k.split("/", 1)[1] in set(fixtures)]
+        print(f"NOTE: --fixtures scopes this diff to {sorted(fixtures)}")
+    if no_batch:
+        print("NOTE: --no-batch: the batch part is not compared (a column run with --no-batch carries none)")
     if require_lanes:
         # --lanes SCOPES the diff (2026-09-14 night): the verdicts, the
         # summaries and the exit status are over the named lanes only. Until
@@ -4264,7 +4276,7 @@ def diff(paths, require_columns=0, require_lanes=None):
     uncarried = {"infer/model": 0, "batch": 0}
     counts2 = {"infer/model": {}, "batch": {}}
     for k in keys:
-        for col in ("infer", "model", "batch"):
+        for col in ("infer", "model") if no_batch else ("infer", "model", "batch"):
             group = "batch" if col == "batch" else "infer/model"
             carried = any(f"{col}_verdict" in (j["cells"].get(k) or {}) for _, j in cols)
             if not carried:
@@ -4403,7 +4415,8 @@ def main():
     ap.add_argument("--json", default="")
     ap.add_argument("--lanes", default="")
     ap.add_argument("--skip", default="", help="lanes to leave out, comma separated; each is reported as SKIPPED")
-    ap.add_argument("--fixtures", default="")
+    ap.add_argument("--fixtures", default="",
+                    help="fixtures to run, comma separated; with --diff, the fixtures compared")
     ap.add_argument("--repeats", type=int, default=2)
     ap.add_argument("--vendor", default=None,
                     help="the box label, ^[a-z0-9][a-z0-9_.-]*$ and not a placeholder; default "
@@ -4413,7 +4426,8 @@ def main():
                     help="rows evaluated alone per batch call (default %(default)s); the split and the "
                          "prefixes are fixed, and the part's hash does not depend on N")
     ap.add_argument("--no-batch", action="store_true",
-                    help="skip the batch part; its cells record n/a:skipped (--no-batch)")
+                    help="skip the batch part; its cells record n/a:skipped (--no-batch); with --diff, "
+                         "leave the batch part uncompared")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--diff", nargs="+", default=None, metavar="JSON",
                     help="compare JSONs cell by cell: the train column, then infer and model where carried")
@@ -4437,7 +4451,8 @@ def main():
             unknown = [n for n in lanes if n not in LANES]
             if unknown:
                 raise SystemExit(f"REFUSING: --lanes names no lane: {unknown}; lanes are {sorted(LANES)}")
-        return diff(args.diff, args.require_columns, lanes)
+        fixtures = [f for f in args.fixtures.split(",") if f] or None
+        return diff(args.diff, args.require_columns, lanes, fixtures, args.no_batch)
     return run(args)
 
 

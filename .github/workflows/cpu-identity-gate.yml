@@ -162,6 +162,14 @@ on:
 
 permissions: {}
 
+# SUPERSEDED RUNS ON ONE BRANCH ARE CANCELLED; MAIN'S NEVER ARE (2026-09-15,
+# lane/cpu-training-gate-speed, approved by Andrew for superseded same-branch
+# runs only). A branch push cancels that branch's older in-progress run; every
+# main run sits in a group of its own, so none waits for or cancels another.
+concurrency:
+  group: cpu-identity-gate-${{ github.ref == 'refs/heads/main' && format('main-{0}', github.run_id) || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   # THE LISTS THIS GATE RUNS ON ARE NOT WRITTEN HERE. Since the host surface
   # manifest lane (2026-09-14) they come from python/mojolearn/host_surface.py,
@@ -208,37 +216,78 @@ env:
   MOJOLEARN_HOST_SURFACE: python/mojolearn/host_surface.py
 
 jobs:
+  # WHAT THIS RUN CHECKS (2026-09-15, lane/cpu-training-gate-speed;
+  # tools/cpu_identity_gate_check.py plan). FULL scope, on main, on
+  # workflow_dispatch and on any branch change the plan cannot attribute to a
+  # host family (python/, tools/, a recorded column, the builder, pixi, a
+  # workflow change beyond trigger paths and comments): every covered lane,
+  # all nine fixtures, two repeats, the batch part, seven runners. FAMILIES
+  # scope, on a branch push whose changes against its merge base with main
+  # fall inside host families (a .mojo file in a family binding's import
+  # closure, its build shim, its manifest entry): those families' covered
+  # lanes plus the smoke lanes, on fixtures base, denormal and odd, one
+  # repeat, no batch part, three runners (x86-64 24.04, ARM64, macOS). A
+  # branch gate is a fast screen, not the merge evidence: the full gate runs
+  # on main and on a workflow_dispatch of the branch. A main push whose git
+  # tree a successful FULL run already gated (a fast-forward to a dispatched
+  # branch commit) is skipped and says which run gated it.
+  plan:
+    name: Plan (scope and skip)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      skip: ${{ steps.plan.outputs.SKIP }}
+      scope: ${{ steps.plan.outputs.SCOPE }}
+      lanes: ${{ steps.plan.outputs.LANES }}
+      families: ${{ steps.plan.outputs.FAMILIES }}
+      matrix: ${{ steps.plan.outputs.MATRIX }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/bench/results/*
+      - name: Plan
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.ref }}" != refs/heads/main ]; then
+            git fetch --no-tags --filter=blob:none origin main
+          fi
+          python3 tools/cpu_identity_gate_check.py plan --event "${{ github.event_name }}" --ref "${{ github.ref }}" \
+            --base origin/main --repo "${{ github.repository }}" | tee plan.txt
+          cat plan.txt >> "$GITHUB_OUTPUT"
+          scope=$(sed -n 's/^SCOPE=//p' plan.txt)
+          full='[{"runner":"ubuntu-24.04-arm","slot":"arm64","label":"ARM64 Linux (Azure Cobalt 100)"},{"runner":"macos-15","slot":"macos15","label":"Apple M1 macOS (hosted)"},{"runner":"ubuntu-24.04","slot":"x86-a","label":"x86-64 Linux draw a (24.04)"},{"runner":"ubuntu-24.04","slot":"x86-b","label":"x86-64 Linux draw b (24.04)"},{"runner":"ubuntu-24.04","slot":"x86-c","label":"x86-64 Linux draw c (24.04)"},{"runner":"ubuntu-22.04","slot":"x86-d","label":"x86-64 Linux draw d (22.04)"},{"runner":"ubuntu-22.04","slot":"x86-e","label":"x86-64 Linux draw e (22.04)"}]'
+          branch='[{"runner":"ubuntu-24.04","slot":"x86-a","label":"x86-64 Linux draw a (24.04)"},{"runner":"ubuntu-24.04-arm","slot":"arm64","label":"ARM64 Linux (Azure Cobalt 100)"},{"runner":"macos-15","slot":"macos15","label":"Apple M1 macOS (hosted)"}]'
+          if [ "$scope" = families ]; then echo "MATRIX=$branch" >> "$GITHUB_OUTPUT"; else echo "MATRIX=$full" >> "$GITHUB_OUTPUT"; fi
+          {
+            echo "### plan: scope $scope"
+            sed -n 's/^REASON=/reason: /p; s/^LANES=/lanes: /p; s/^SKIP=/skip: /p' plan.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+
   gate:
-    name: ${{ matrix.label }}
+    needs: plan
+    if: needs.plan.outputs.skip != 'true'
+    # The scope is in the job name: a main push is skipped only on a tree whose
+    # seven "(full)" jobs succeeded.
+    name: ${{ matrix.label }} (${{ needs.plan.outputs.scope }})
     strategy:
       fail-fast: false
       matrix:
         # GitHub does not let a workflow choose Intel or AMD for x86-64; Azure
         # assigns the host. So x86-64 runs as several independent draws on two
         # images, each report records the CPU it got, and a vendor enters the
-        # certified table only from a report that names it.
-        include:
-          - runner: ubuntu-24.04-arm
-            slot: arm64
-            label: ARM64 Linux (Azure Cobalt 100)
-          - runner: macos-15
-            slot: macos15
-            label: Apple M1 macOS (hosted)
-          - runner: ubuntu-24.04
-            slot: x86-a
-            label: x86-64 Linux draw a (24.04)
-          - runner: ubuntu-24.04
-            slot: x86-b
-            label: x86-64 Linux draw b (24.04)
-          - runner: ubuntu-24.04
-            slot: x86-c
-            label: x86-64 Linux draw c (24.04)
-          - runner: ubuntu-22.04
-            slot: x86-d
-            label: x86-64 Linux draw d (22.04)
-          - runner: ubuntu-22.04
-            slot: x86-e
-            label: x86-64 Linux draw e (22.04)
+        # certified table only from a report that names it. The list is the
+        # plan job's (seven at full scope, three at families scope).
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
@@ -249,6 +298,8 @@ jobs:
       MOJOLEARN_NUMERIC_MODE: identical
       PYTHONPATH: ${{ github.workspace }}/python
       GATE_OUT: ${{ github.workspace }}/cpu-identity-gate-out
+      GATE_SCOPE: ${{ needs.plan.outputs.scope }}
+      PLAN_LANES: ${{ needs.plan.outputs.lanes }}
     defaults:
       run:
         shell: bash
@@ -313,6 +364,8 @@ jobs:
           shards="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)"
           echo "GATE_SHARDS=$shards" >> "$GITHUB_ENV"
           echo "identity_break shards on this runner: $shards"
+          # The runner image, part of the host binding cache key.
+          echo "IMAGE_VERSION=${ImageVersion:-unknown}" >> "$GITHUB_ENV"
           python3 -m pip install --quiet numpy
           ls bench/results/forest_host/ bench/results/identity_break/2026-09-13_three-columns/
 
@@ -338,44 +391,117 @@ jobs:
             echo "FIX_COLUMNS=$(python3 $manifest --training-fix-columns)"
           } | tee -a "$GITHUB_ENV" | tee "$GATE_OUT/manifest.txt"
           python3 $manifest --json > "$GATE_OUT/host_surface.json"
+          # What this run's covered-lanes steps run (the plan job's scope). FULL:
+          # every covered lane, nine fixtures, two repeats, the batch part.
+          # FAMILIES: the plan's lanes, three fixtures, one repeat, no batch.
+          python3 - "$manifest" <<'PY' | tee -a "$GITHUB_ENV" | tee "$GATE_OUT/run_scope.txt"
+          import importlib.util, os, sys
+          spec = importlib.util.spec_from_file_location("hs", sys.argv[1]); hs = importlib.util.module_from_spec(spec); spec.loader.exec_module(hs)
+          covered = hs.covered_lanes()
+          if os.environ["GATE_SCOPE"] == "families":
+              want = set(x for x in os.environ["PLAN_LANES"].split(",") if x)
+              unknown = sorted(want - set(covered))
+              if unknown:
+                  sys.exit(f"the plan names lanes the manifest does not cover: {unknown}")
+              lanes = [n for n in covered if n in want]
+              print("RUN_ARGS=--fixtures base,denormal,odd --repeats 1 --no-batch")
+              print("DIFF_ARGS=--fixtures base,denormal,odd --no-batch")
+          elif os.environ["GATE_SCOPE"] == "full":
+              lanes = covered
+              print("RUN_ARGS=")
+              print("DIFF_ARGS=")
+          else:
+              sys.exit(f"unknown GATE_SCOPE {os.environ['GATE_SCOPE']!r}")
+          print("RUN_LANES=" + ",".join(lanes))
+          print("RUN_RECORD_LANES=" + ",".join(n for n in hs.record_covered_lanes() if n in lanes))
+          print("RUN_FIX_LANES=" + ",".join(n for n in hs.fix_covered_lanes() if n in lanes))
+          PY
+          # The host binding cache key: every tracked .mojo file, the build
+          # scripts and the pixi lock, by their git blob ids (the tree the
+          # bindings compile from, whatever the sparse checkout holds).
+          echo "HOST_SRC_HASH=$(git ls-files -s -- '*.mojo' 'bindings/*.sh' pixi.lock pixi.toml | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest()[:32])')" | tee -a "$GITHUB_ENV"
           for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns) $(python3 $manifest --training-fix-columns); do
             [ -e "$d" ] || { echo "manifest names $d, which is not in this checkout: the record lags the surface" >&2; exit 1; }
           done
 
+      # The pixi environments (the Mojo toolchain among them), cached on
+      # pixi.lock; only main writes the cache, branches read main's.
       - uses: prefix-dev/setup-pixi@v0.10.1
         with:
           run-install: true
-          cache: false
+          cache: true
+          cache-write: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build the byte LM host binding (CPU column)
+      # BUILT HOST BINDINGS, CACHED (2026-09-15). The key is the source tree
+      # (HOST_SRC_HASH), the runner image and arch; the numeric mode is fixed
+      # (identical) and the column is the CPU column, both asserted by every
+      # binding and read back below. The prod set and the sabotage set have
+      # different keys and directories, so a sabotage build can never be
+      # restored as the prod set.
+      - name: Restore the prod host set
+        id: hostcache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: python/mojolearn/host
+          key: cpu-host-prod-identical-${{ matrix.runner }}-${{ runner.arch }}-${{ env.IMAGE_VERSION }}-${{ env.HOST_SRC_HASH }}
+
+      - name: Restore the sabotage host set
+        id: sabcache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/host-sab
+          key: cpu-host-sab-identical-${{ matrix.runner }}-${{ runner.arch }}-${{ env.IMAGE_VERSION }}-${{ env.HOST_SRC_HASH }}
+
+      # Every host binding the manifest declares, the prod set into
+      # python/mojolearn/host and the sabotage set (-D MOJOLEARN_HOST_SABOTAGE=1)
+      # into host-sab, one family per process, GATE_SHARDS at a time. A set
+      # restored from the cache is not rebuilt.
+      - name: Build the host bindings (CPU column), prod and sabotage sets
+        env:
+          PROD_HIT: ${{ steps.hostcache.outputs.cache-hit }}
+          SAB_HIT: ${{ steps.sabcache.outputs.cache-hit }}
         run: |
           set -o pipefail
           pixi run mojo --version | tee "$GATE_OUT/mojo_version.txt"
           echo "MOJOLEARN_MOJO_VERSION=$(pixi run mojo --version | head -1)" >> "$GITHUB_ENV"
-          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host.log"
+          list="$RUNNER_TEMP/build_list.txt"; : > "$list"
+          if [ "$PROD_HIT" = true ]; then echo "prod host set restored from the cache"; else
+            for f in byte_lm forest tokenizer $HOST_FAMILIES; do echo "prod $f" >> "$list"; done; fi
+          if [ "$SAB_HIT" = true ]; then echo "sabotage host set restored from the cache"; else
+            [ -z "$COVERED_LANES" ] || for f in byte_lm forest $HOST_FAMILIES; do echo "sab $f" >> "$list"; done; fi
+          [ -s "$list" ] || exit 0
+          cat > "$RUNNER_TEMP/build_one.sh" <<'SH'
+          set -u
+          set_name=$1; fam=$2
+          if [ "$set_name" = sab ]; then
+            export MOJOLEARN_HOST_OUTDIR="$RUNNER_TEMP/host-sab" MOJOLEARN_BYTE_LM_HOST_OUTDIR="$RUNNER_TEMP/host-sab" \
+              MOJOLEARN_FOREST_HOST_OUTDIR="$RUNNER_TEMP/host-sab" MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1"
+            log="$GATE_OUT/build_${fam}_host_sab.log"
+          else
+            log="$GATE_OUT/build_${fam}_host.log"
+          fi
+          start=$(date +%s)
+          if MOJOLEARN_BUILD_JOBS=1 sh "bindings/build_${fam}_host.sh" > "$log" 2>&1; then
+            echo "built $set_name $fam in $(( $(date +%s) - start )) s"
+          else
+            echo "BUILD FAILED: $set_name $fam"; tail -60 "$log"; exit 1
+          fi
+          SH
+          xargs -P "$GATE_SHARDS" -L 1 sh "$RUNNER_TEMP/build_one.sh" < "$list"
 
-      - name: Build the forest host binding (CPU column)
-        run: |
-          set -o pipefail
-          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host.log"
+      - name: Save the prod host set
+        if: steps.hostcache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: python/mojolearn/host
+          key: ${{ steps.hostcache.outputs.cache-primary-key }}
 
-      # The third binding loaded by path (the expose-tokenizer lane,
-      # 2026-09-14): the read-back step below takes every binding the
-      # manifest declares, so a declared family this workflow does not
-      # build fails there on the first runner.
-      - name: Build the tokenizer host binding (CPU column)
-        run: |
-          set -o pipefail
-          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_tokenizer_host.sh 2>&1 | tee "$GATE_OUT/build_tokenizer_host.log"
-
-      # The phase 1 host set, one binding per family in HOST_FAMILIES, each
-      # exporting the GPU binding's names for the fits it covers.
-      - name: Build the phase 1 host bindings (CPU column)
-        run: |
-          set -o pipefail
-          for family in $HOST_FAMILIES; do
-            MOJOLEARN_BUILD_JOBS=2 sh "bindings/build_${family}_host.sh" 2>&1 | tee "$GATE_OUT/build_${family}_host.log"
-          done
+      - name: Save the sabotage host set
+        if: steps.sabcache.outputs.cache-hit != 'true' && env.COVERED_LANES != ''
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/host-sab
+          key: ${{ steps.sabcache.outputs.cache-primary-key }}
 
       # The package must take the CPU-only path on this runner, and each host
       # binding must read back as the CPU column. A binding that compiled as
@@ -577,7 +703,7 @@ jobs:
       # (python/mojolearn/host_surface.py, TRAINING_FIX_LANES).
       # Empty COVERED_LANES runs nothing and says so; that is a statement about
       # phase 1, not a pass.
-      - name: The CPU column, covered lanes (every fixture)
+      - name: The CPU column, covered lanes
         if: always()
         timeout-minutes: 50
         run: |
@@ -586,16 +712,17 @@ jobs:
             echo "no identity_break lane has a CPU implementation yet (COVERED_LANES is empty); phase 1 of docs/lanes/BRIEF_cpu_training_2026-09-13.md adds the first (gemm-pinned). Nothing run, nothing certified." | tee "$GATE_OUT/cpu_column.log"
             exit 0
           fi
-          python3 tools/cpu_identity_gate_check.py run-column --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
-            --json "$GATE_OUT/cpu-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_column.log"
+          echo "scope $GATE_SCOPE: lanes $RUN_LANES; identity_break arguments: ${RUN_ARGS:-(none: nine fixtures, two repeats, the batch part)}"
+          python3 tools/cpu_identity_gate_check.py run-column --lanes "$RUN_LANES" --shards "$GATE_SHARDS" \
+            --json "$GATE_OUT/cpu-${{ matrix.slot }}.json" -- $RUN_ARGS 2>&1 | tee "$GATE_OUT/cpu_column.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
-            --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" \
+            --covered "$RUN_LANES" --commit "$MOJOLEARN_COMMIT" \
             --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_column_check.log"
           python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
-            --require-columns 4 --lanes "$RECORD_COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
-          if [ -n "$FIX_COVERED_LANES" ]; then
+            --require-columns 4 --lanes "$RUN_RECORD_LANES" $DIFF_ARGS 2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
+          if [ -n "$RUN_FIX_LANES" ]; then
             python3 tools/identity_break.py --diff $FIX_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
-              --require-columns 4 --lanes "$FIX_COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns_fix.txt"
+              --require-columns 4 --lanes "$RUN_FIX_LANES" $DIFF_ARGS 2>&1 | tee "$GATE_OUT/diff_four_columns_fix.txt"
           fi
 
       # The covered lanes' negative control (brief section 3.4). A gate that
@@ -639,37 +766,17 @@ jobs:
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
-      # covered lanes (sharded as above; the build is its own step since
-      # 2026-09-15 so the run step's time is the lanes'), and the four-way
-      # diff must exit non-zero with
-      # DIVERGENT on them. Every covered cell must still be STABLE (a wrong
-      # answer, not a refusal). A fixture on which the moved fold is exact
-      # (gemm-pinned/ties, an integer grid) stays IDENTICAL; the requirement
-      # is DIVERGENT in the summary, not on every cell. Empty COVERED_LANES
-      # skips it with the same statement as above.
-      - name: Build the sabotage host set (MOJOLEARN_HOST_SABOTAGE)
-        if: always()
-        timeout-minutes: 20
-        env:
-          MOJOLEARN_BYTE_LM_HOST_OUTDIR: ${{ runner.temp }}/host-sab
-          MOJOLEARN_FOREST_HOST_OUTDIR: ${{ runner.temp }}/host-sab
-          # The phase 1 build scripts read MOJOLEARN_HOST_OUTDIR when their
-          # own MOJOLEARN_<FAMILY>_HOST_OUTDIR is unset.
-          MOJOLEARN_HOST_OUTDIR: ${{ runner.temp }}/host-sab
-          MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_HOST_SABOTAGE=1"
-        run: |
-          set -o pipefail
-          if [ -z "$COVERED_LANES" ]; then
-            echo "no covered lane, no sabotage host set to build (COVERED_LANES is empty)"
-            exit 0
-          fi
-          rm -rf "${{ runner.temp }}/host-sab"
-          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host_sab.log"
-          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host_sab.log"
-          for family in $HOST_FAMILIES; do
-            MOJOLEARN_BUILD_JOBS=2 sh "bindings/build_${family}_host.sh" 2>&1 | tee "$GATE_OUT/build_${family}_host_sab.log"
-          done
-
+      # lanes this run covers (sharded as above) on ONE fixture (base), one
+      # repeat, no batch part, since 2026-09-15: the step only has to show
+      # the gate can fail. Every cell must still be STABLE (a wrong answer,
+      # not a refusal); the four-way diff on base must exit non-zero with
+      # DIVERGENT; and, stricter per lane than the full-fixture step it
+      # replaces (which asked for DIVERGENT anywhere in the summary),
+      # `cpu_identity_gate_check.py sabotage-caught` requires EVERY lane to
+      # move a train, infer or model hash off the committed columns, except
+      # the lanes its SABOTAGE_BLIND names as measured blind, which must stay
+      # blind. The set is built in the build step above (or restored under
+      # its own cache key). Empty COVERED_LANES skips it.
       - name: The CPU column, covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE
         if: always()
         timeout-minutes: 50
@@ -686,25 +793,30 @@ jobs:
             [ -f "${{ runner.temp }}/host-sab/$b.so" ] || { echo "the sabotage host set lacks $b.so" >&2; exit 1; }
           done
           export MOJOLEARN_HOST_DIR="${{ runner.temp }}/host-sab" MOJOLEARN_HOST_ALLOW_SABOTAGE=1
-          python3 tools/cpu_identity_gate_check.py run-column --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
-            --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
+          python3 tools/cpu_identity_gate_check.py run-column --lanes "$RUN_LANES" --shards "$GATE_SHARDS" \
+            --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" -- --fixtures base --repeats 1 --no-batch \
+            2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
-            --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
+            --covered "$RUN_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
           if python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
-               --require-columns 4 --lanes "$RECORD_COVERED_LANES" > "$GATE_OUT/diff_four_columns_sab.txt" 2>&1; then
+               --require-columns 4 --lanes "$RUN_RECORD_LANES" --fixtures base --no-batch \
+               > "$GATE_OUT/diff_four_columns_sab.txt" 2>&1; then
             echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the GPU columns" >&2
             exit 1
           fi
           grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_sab.txt"
-          if [ -n "$FIX_COVERED_LANES" ]; then
+          if [ -n "$RUN_FIX_LANES" ]; then
             if python3 tools/identity_break.py --diff $FIX_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
-                 --require-columns 4 --lanes "$FIX_COVERED_LANES" > "$GATE_OUT/diff_four_columns_fix_sab.txt" 2>&1; then
-              echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the fix columns on $FIX_COVERED_LANES" >&2
+                 --require-columns 4 --lanes "$RUN_FIX_LANES" --fixtures base --no-batch \
+                 > "$GATE_OUT/diff_four_columns_fix_sab.txt" 2>&1; then
+              echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the fix columns on $RUN_FIX_LANES" >&2
               exit 1
             fi
             grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_fix_sab.txt"
           fi
-          echo "sabotage caught on the covered lanes"
+          python3 tools/cpu_identity_gate_check.py sabotage-caught "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
+            --lanes "$RUN_LANES" --against $GPU_COLUMNS $FIX_COLUMNS 2>&1 | tee "$GATE_OUT/sabotage_caught.log"
+          echo "sabotage caught on every covered lane of this run"
 
       # The same sabotage host set (built by the step above into host-sab)
       # must make the classical gate say so on every recording.
