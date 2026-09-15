@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TCtrBinBuilder`: rows in bin order, with the segment boundaries marked.
 
-MIRRORS `catboost/cuda/ctrs/ctr_bins_builder.h` at CatBoost `54a8143a`.
+Reference: `catboost/cuda/ctrs/ctr_bins_builder.h` (CatBoost `54a8143a`).
 
-Every CTR in their design is a SEGMENTED reduction over rows grouped by
+Every CTR in the reference is a SEGMENTED reduction over rows grouped by
 category, so before any calcer runs, something has to produce
 
     indices   the rows, ordered by (accumulated bin), each carrying a

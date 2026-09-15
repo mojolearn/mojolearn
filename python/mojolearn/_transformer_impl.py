@@ -93,6 +93,17 @@ W slots (`TransformerState` says how the buffers are laid out);
 `TransformerBlock.backward(x, grad_output)` is the zero-state prefill
 VJP under the IDENTICAL tier, from the lane's own backward chains.
 
+ON A CPU-ONLY INSTALL (2026-09-15). `_backend._HOST_MODULES` routes
+`_mojolearn_transformer` to `_mojolearn_transformer_host` when that host
+binding is built (`bindings/build_transformer_host.sh`), which exports
+the same four entries under the same address and params contract over
+the lane's host oracles (`transformer/host/transformer_block_host.mojo`),
+so this class runs unchanged there. The `transformer` and
+`transformer-window` lanes of `tools/identity_break.py` are covered CPU
+training lanes (`python/mojolearn/host_surface.py`): the CPU identity
+gate diffs their forward, prefill, step, backward, held-out and batch
+cells against the Apple, NVIDIA and AMD columns.
+
 RUN LEDGER. THIS PATH RAN 2026-09-02, the day the binding first
 compiled (rc 0 on the first attempt, 15 AIR blobs, transformer 7 and
 gemm 8). `python/mojolearn/tests/test_transformer_surface.py` printed

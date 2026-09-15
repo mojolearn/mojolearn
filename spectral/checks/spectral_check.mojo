@@ -1049,7 +1049,7 @@ def _n_components_of(g: CooGraph) -> Int:
 
 def check_spectral_disconnected_graph_records_the_limit() raises:
     """THE BLOBS VERDICT, 2026-08-24, recorded as a property of the
-    algorithm we mirror rather than as a defect of the implementation.
+    reference algorithm rather than as a defect of the implementation.
 
     Three well-separated blobs with `n_neighbors = 10` produce a kNN graph
     with THREE CONNECTED COMPONENTS and no cross-blob edge at all. RAFT's
@@ -1072,7 +1072,7 @@ def check_spectral_disconnected_graph_records_the_limit() raises:
     ONE near-zero plus 0.16515295 and 0.18516985 -- different counts,
     because which copies re-emerge is exactly what rounding decides.
 
-    THIS IS UPSTREAM'S ALGORITHM, FAITHFULLY MIRRORED, and this lane's own
+    THIS IS A PROPERTY OF THE REFERENCE ALGORITHM, and this lane's own
     contract already said so: `IDENTICAL_SPECTRAL_CONTRACT.md` section 3
     warns that a `k`-column embedding of a `c`-component graph with
     `k <= c` sits entirely inside a degenerate subspace. The check that

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Time-series estimators on the GPU, mirroring cuML's `cuml.tsa`.
+"""Time-series estimators on the GPU. Reference: cuML's `cuml.tsa`.
 
 PRIVATE ON PURPOSE. Nothing here is re-exported from `mojolearn/__init__.py`
 by this file; that is the package owner's call. Import it as
@@ -61,7 +61,7 @@ is a claim about the source and not a measurement of three GPUs.
 UPSTREAM IS RETIRING WHAT ExponentialSmoothing MIRRORS. The pinned tree's
 `holtwinters.pyx` carries a `.. deprecated:: 26.08` and says
 `cuml.tsa.ExponentialSmoothing` will be removed in cuML 26.12. The implementation is
-faithful to v26.08.00 and stays valid; what expires is the ability to
+checked against v26.08.00 and stays valid; what expires is the ability to
 check our numbers against a real cuML run.
 """
 
@@ -301,7 +301,7 @@ class ExponentialSmoothing:
                                    arm divides by it.
         seasonal         honored   'additive'/'add' (default) or
                                    'multiplicative'/'mul'; anything else is
-                                   refused by name in cuML's own words.
+                                   refused by name with the reference's message.
         seasonal_periods honored   cuML's frequency; must be >= 2.
         start_periods    honored   must be >= 2 and <= seasonal_periods.
         ts_num           honored   the number of series; must match
@@ -353,7 +353,7 @@ class ExponentialSmoothing:
                                   cuML writes this only in the arm its fit
                                   does not take.
 
-    A cuML DEFECT THAT IS IMPLEMENTED FAITHFULLY AND NOT FIXED. When the line
+    A cuML DEFECT THAT IS REPRODUCED ON PURPOSE AND NOT FIXED. When the line
     search hits its iteration limit, `hw_optim.cuh:485-508` stores the LAST
     trial point rather than the one that minimized the loss. That is
     rapidsai/cuml#888 and it is flagged in their own comment. It is

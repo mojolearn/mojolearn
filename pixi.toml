@@ -242,7 +242,7 @@ check-sym-arms-identical = "mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 check
 
 # Border selection for CTR values. MinEntropy is what their GPU uses for
 # FeatureFreq simple ctrs, it is NOT the GreedyLogSum we use for numeric
-# features, and this compares our exact-DP port against CatBoost's own
+# features, and this compares our exact-DP implementation against CatBoost's own
 # borders over six budgets. Host-side, seconds, no GPU.
 check-minentropy = "mojo run -I . checks/min_entropy_check.mojo"
 
@@ -347,7 +347,7 @@ check-multiclass-score = "mojo run -I . checks/multiclass_score_check.mojo"
 # 2, 3 and 7. Own main(); a GPU, under a minute.
 check-multiclass-train = "mojo run -I . checks/multiclass_train_check.mojo"
 
-# The nine losses ported on 2026-08-21 against CATBOOST'S OWN CPU OUTPUT --
+# The nine losses implemented on 2026-08-21 against CATBOOST'S OWN CPU OUTPUT --
 # grid per cell, tree 0's splits and leaf values, all 48 splits with the
 # first divergent tree, every row, and their own objective on both fits.
 # Needs bench/oracle_losses.txt, which is committed; regenerate with
@@ -612,7 +612,7 @@ check-cindex-packing = "mojo run -I . checks/cindex_packing_check.mojo"
 # cindex and NOTHING else -- different histogram layouts (stat-major against
 # stat-minor), different collision schemes, different reduce shapes,
 # OPPOSITE sign conventions (archive/reference/PORTING.md 94a), fixed-point on one side at 8
-# bits and none on the other. Agreement is two ports of one algorithm
+# bits and none on the other. Agreement is two implementations of one algorithm
 # arriving at one answer, not a tautology.
 #
 # It does NOT prove either matches CatBoost -- both could share a misreading;
@@ -663,7 +663,7 @@ probe-pointwise-default = "mojo run -I . checks/pointwise_default_probe.mojo"
 # RUNG 2's core: the fold layout ordered boosting grows trees on. N tasks
 # become 2N partitions over one concatenated document array, LEARN at even
 # folds and TEST at odd ones -- and that pairing is why the dynamic scorer
-# (ported and gated before this file existed) reads folds (f, f+1) as
+# (implemented and gated before this file existed) reads folds (f, f+1) as
 # (estimate, test) and steps by two. Put the test half first and the scorer
 # evaluates every split against the wrong half of every fold, with finite
 # scores and a well-formed tree to show for it.
@@ -1108,7 +1108,7 @@ check-kde = "mojo run -I . kde/checks/kde_check.mojo"
 # only -- no device, no float, so there is no IDENTICAL arm to run.
 check-tokenizer = "mojo run -I . tokenizer/checks/tokenizer_check.mojo"
 # THE METRIC LANE, 2026-09-01. `CosineExpanded`, `LpUnexpanded` and
-# `weights='distance'`: the eight ported DistanceType values against a
+# `weights='distance'`: the eight implemented DistanceType values against a
 # float32 second spelling and a float64 reference computed a third way,
 # the two norm/`metric_arg` reach sabotages, `knn_search` end to end
 # against a float64 brute force, and the weighted vote. The `-identical`
@@ -1425,7 +1425,7 @@ e2-growth-cards = "mojo run -I . checks/e2_growth_cards.mojo"
 logloss-leaf-oracle-gen = "python tools/catboost_logloss_leaf_oracle.py"
 # Runs CatBoost itself. Writes bench/oracle.txt (read by `oracle`) and
 # bench/oracle.json (the same content, for humans and for diffing).
-# Runs CatBoost CPU for the nine losses ported 2026-08-21. Writes
+# Runs CatBoost CPU for the nine losses implemented 2026-08-21. Writes
 # bench/oracle_losses.txt (read by `check-loss-oracle`).
 loss-oracle-gen = "python tools/catboost_loss_oracle.py"
 oracle-gen = "python tools/catboost_oracle.py > bench/oracle.json"
@@ -1468,7 +1468,7 @@ score-probe = "python tools/score_probe.py"
 
 # boost_from_average against CatBoost ITSELF: their get_scale_and_bias()
 # bias vs the bias our python surface reports, bit for bit, on hashed
-# fixtures -- every ported arm (RMSE/Logloss, weighted and not), BOTH
+# fixtures -- every implemented arm (RMSE/Logloss, weighted and not), BOTH
 # sides of their data-dependent default (unset RMSE auto-true, unset
 # Logloss stays zero -- Logloss is NOT on their adjust list, the misread
 # behind the 2026-08-22 higgs report), and a weighted-vs-unweighted
@@ -1478,13 +1478,13 @@ check-bfa-oracle = "python tools/bfa_oracle_check.py"
 [feature.bench.dependencies]
 python = ">=3.11"
 numpy = "*"
-# The incumbent we are porting. `tools/catboost_reference.py` calls it to
-# produce the oracle values a check compares against, which is the only way a
-# port gets an answer it did not compute itself.
+# The reference for the tree lanes. `tools/catboost_reference.py` calls it to
+# produce the oracle values a check compares against, which is the only way an
+# implementation gets an answer it did not compute itself.
 catboost = ">=1.2"
 # Only for its DATASET LOADERS. covtype is 581012 x 54 of real data, which is
 # what a timing claim needs beside a synthetic one. Not used as an oracle for
-# the tree port; CatBoost is the oracle there.
+# the tree lanes; CatBoost is the oracle there.
 scikit-learn = "*"
 
 # THE GPU BASELINE ARM, added 2026-08-20. Its own feature, NOT added to

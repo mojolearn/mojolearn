@@ -2,33 +2,33 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IVF-FLAT's build: train the coarse quantizer, assign, lay the lists out.
 
-FOLLOWS `cuvs/src/neighbors/ivf_flat/ivf_flat_build.cuh` at cuVS `6ba2ce2`:
+Reference: `cuvs/src/neighbors/ivf_flat/ivf_flat_build.cuh` (cuVS `6ba2ce2`):
 `build` (`:390-444`) and the `extend`-on-build path it takes (`:180-345`),
 reduced to the one call `build` makes with `add_data_on_build = true` and
 `adaptive_centers = false`.
 
-THEIR THREE STEPS, AND WHICH OF OURS IS WHICH
-----------------------------------------------
+THE REFERENCE'S THREE STEPS AND THIS IMPLEMENTATION'S
+-----------------------------------------------------
 
-| theirs | line | ours |
+| reference | line | here |
 |---|---|---|
 | train the quantizer on a strided subsample | `:414-437` | the WHOLE dataset (DEVIATION 1781) through the implemented k-means |
 | `kmeans::predict` the labels, in batches | `:222-224` | `cluster/impl/kmeans.mojo::predict`, one call |
 | `build_index_kernel` scatters into the lists | `:317-325` | `ivf/checks/list_layout.mojo::build_list_layout` (DEVIATIONS 1782/1783) |
 
-**THE COARSE QUANTIZER IS NOT THEIR QUANTIZER, AND THAT IS DEVIATION 1780.**
+**THE COARSE QUANTIZER IS NOT THE REFERENCE QUANTIZER, AND THAT IS DEVIATION 1780.**
 `build` at `:432-436` fills `cuvs::cluster::kmeans::balanced_params` and
 calls `cuvs::cluster::kmeans::fit`, which dispatches to KMEANS-BALANCED --
 a hierarchical, balanced-cluster-size quantizer with its own mesocluster
 recursion. This tree has no implementation of it,
 so this build trains the implemented Lloyd k-means instead. That is a departure
-from `ENGINEERING_RULES.md` 0b-i -- their dispatch goes somewhere we do not
+from `ENGINEERING_RULES.md` 0b-i -- the reference dispatch goes somewhere this tree does not
 have -- and it is stated at the top of `ivf/README.md` and in
 `ivf/NOT_IMPLEMENTED.tsv` rather than buried. Two consequences a reader must
 carry:
 
   - **list sizes are not balanced.** Balanced k-means exists to keep them
-    even, which is what makes their scan's per-list work uniform. Ours
+    even, which is what makes the reference scan's per-list work uniform. This build
     inherits Lloyd's list-size distribution, empty lists included.
   - **the identity status of the coarse centroids is the k-means lane's,
     not this lane's.** `IDENTITY_PATHS.md` is the file that says

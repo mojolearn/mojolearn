@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The pieces every k-means path shares: batching, convergence, sampling.
 
-FOLLOWS `cuvs/src/cluster/detail/kmeans_common.cuh` at cuVS `94c2819`.
+Reference: `cuvs/src/cluster/detail/kmeans_common.cuh` (cuVS `94c2819`).
 Partial.
 
 What is implemented here is the part of that file that is DECISION rather than
@@ -10,7 +10,7 @@ plumbing. Most of its bulk is RAFT and CUB glue (`cub::DeviceHistogram`,
 `cub::DeviceSelect::If`, `cub::DeviceReduce`, `thrust::for_each_n`); some of
 those became `checks/` files and the rest are simply not implemented yet.
 
-The decisions that ARE theirs and are copied exactly:
+The reference decisions this file matches exactly:
 
 - which arm of `minClusterAndDistanceCompute` runs, which is a pure metric
   test and nothing else (`is_fused`, `kmeans_common.cuh:378-379`),

@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One score helper per feature policy, folded into one best split.
 
-FOLLOWS `catboost/cuda/methods/pointwise_scores_calcer.h` at CatBoost
-`54a8143a` -- `TScoreHelper` (which their `histograms_helper.h:353-419`
-defines) and `TScoresCalcerOnCompressedDataSet`. Followed statement for statement. Do not
+Reference: `catboost/cuda/methods/pointwise_scores_calcer.h` (CatBoost
+`54a8143a`), `TScoreHelper` (which the reference `histograms_helper.h:353-419`
+defines) and `TScoresCalcerOnCompressedDataSet`. Do not
 improve.
 
 This is the join between everything the pointwise family has built: a
@@ -289,8 +289,8 @@ struct PolicyScoreHelper(Movable):
         # sizes, and a device read past the end of a live buffer whenever a
         # policy's largest global id reaches its own bin-feature count.
         #
-        # Upstream indexes by feature too (`compute_scores.cu:136`,
-        # `binFeaturesWeights[featureId]`, transcribed at
+        # The reference indexes by feature too (`compute_scores.cu:136`,
+        # `binFeaturesWeights[featureId]`, implemented at
         # `greedy_subsets_searcher/kernel/compute_scores.mojo:287-289`), and
         # the GREEDY arm in this tree sizes them `n_features`
         # (`greedy_search_helper.mojo:583, 1095, 2906`). Only the pointwise

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""GPU scoring functions, including cuML implements and native regression errors.
+"""GPU scoring functions: cluster and classification metrics and native regression errors.
 
 **metrics IS NOT AN ESTIMATOR.** It is a set of scoring functions, so this
 module is shaped like `sklearn.metrics` -- plain functions, no class, no
@@ -10,8 +10,8 @@ not carry is refused BY NAME with a reason, never accepted and ignored.
 
 WHERE THE NAMES AND THE DEFAULTS COME FROM. Function and argument names
 follow scikit-learn. New regression-error
-functions document their bounded Float32 contract below. For the original
-implements, **the defaults and semantics are cuML's**, from the pinned `v26.08.00`
+functions document their bounded Float32 contract below. For the functions
+cuML also has, **the defaults and semantics are cuML's**, from the pinned `v26.08.00`
 checkout, and where the two libraries differ the difference is written on
 the function. Three of those differences matter:
 
@@ -221,7 +221,7 @@ def _pair_1d(a, b, name_a, name_b, loader):
 
 def _prepare_cluster_labels(labels_true, labels_pred):
     """cuML 26.08's `prepare_cluster_metric_inputs`
-    (`python/cuml/cuml/metrics/cluster/utils.py`), mirrored exactly.
+    (`python/cuml/cuml/metrics/cluster/utils.py`), same behavior.
 
     Both arrays are remapped onto the CONTIGUOUS range `[0, n_classes - 1]`
     over the UNION of their distinct labels, and the range handed to the
@@ -735,7 +735,7 @@ def _silhouette(X, labels, metric, chunksize, caller):
             f"mojolearn {caller}: labels has {lab.shape[0]} entries and X "
             f"has {x.shape[0]} rows"
         )
-    # cuML's silhouette_score.pyx:99-101, mirrored: monotonic labels via
+    # Same behavior as cuML's silhouette_score.pyx:99-101: monotonic labels via
     # cp.unique(..., return_inverse=True), and n_labels is how many distinct
     # labels there are. `_labels.sorted_classes` (DEVIATION 2340) gives
     # both in one O(rows) pass (DEVIATION 2377).

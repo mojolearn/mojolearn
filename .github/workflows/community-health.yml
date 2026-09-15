@@ -1,32 +1,21 @@
 name: Community health
 
 on:
-  pull_request:
-    paths:
-      - "python/mojolearn_diagnostics.py"
-      - "python/pyproject.toml"
-      - "SUPPORT.md"
-      - "SUPPORT_MATRIX.md"
-      - "CONTRIBUTING.md"
-      - "GOVERNANCE.md"
-      - "SECURITY.md"
-      - ".github/**"
-  push:
-    paths:
-      - "python/mojolearn_diagnostics.py"
-      - "python/pyproject.toml"
-      - "SUPPORT.md"
-      - "SUPPORT_MATRIX.md"
-      - "CONTRIBUTING.md"
-      - "GOVERNANCE.md"
-      - "SECURITY.md"
-      - ".github/**"
+  # LIGHT TOUCH (Andrew, Sep 15 2026): this workflow never starts by itself. Every job
+  # is skipped unless the dispatch input confirm is RUN-HEAVY, so a wrong trigger costs nothing.
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Heavy run on paid or queued runners. Type RUN-HEAVY to really run it; anything else skips every job"
+        required: true
+        default: ""
+        type: string
 
 permissions: {}
 
 jobs:
   diagnostics:
+    if: inputs.confirm == 'RUN-HEAVY'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

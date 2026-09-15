@@ -26,6 +26,15 @@
   (mamba1/negative infer IDENTICAL, as in the committed sabotage diff) and 36
   batch. docs_facts --check and wheel_ci pins pass.
 
+- Merge rule (Andrew, Sep 15 afternoon): merge on one-core M4 evidence at the head, CI informational.
+  origin/main ee13e0d4b (public CPU inference only) merged as a7efe374a, then 6ad50f394 (with
+  lane/cpu-training-transformer). Conflicts: generated spans (taken from main, regenerated),
+  host_surface.py TRAINING_LANE_NAMES (both sides kept) and NO_CPU_PATH (now "the Samba blocks"),
+  the gate workflow (main's file, no push trigger), test_cpu_training_misc's sentence assertion
+  ("Samba blocks"); test_cpu_training_transformer's sentence assertion now expects "Samba blocks".
+  The mamba family is ships_in_wheel=False (training-only reference build). Counts at the merge head
+  are in its commit message.
+
 ## Running
 - Nothing. Pushed with [skip ci] until Codex's routine gate (08b50887a) is on
   main; then this branch gates after lane/cpu-training-transformer merges. No

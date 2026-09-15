@@ -604,7 +604,7 @@ def select_leaves_to_split(leaves: List[TLeaf]) raises -> List[Int]:
     Writing the kernel's sign into the struct and flipping the test instead
     LOOKS equivalent and is not: `best_split_properties_less` would then be
     reading a field in the opposite orientation from the one it was
-    transcribed against, and would silently select the WORST candidate on
+    written against, and would silently select the WORST candidate on
     every cross-block reduce. This function had `gain > 0` on its first
     run and grew a one-leaf tree, which is what that mistake looks like
     from the outside: no candidate ever passes, every leaf is marked
@@ -787,7 +787,7 @@ def fit_non_symmetric_tree[
 ) raises -> TNonSymmetricTree:
     """`TGreedyTreeLikeStructureSearcher<TNonSymmetricTree>::FitImpl`.
 
-    Their whole tree, `structure_searcher_template.h:41-67`:
+    The reference tree, `structure_searcher_template.h:41-67`:
 
         TPointsSubsets subsets = searchHelper.CreateInitialSubsets(objective);
         while (true) {
@@ -2582,10 +2582,10 @@ def fit_depthwise_tree[
     that costs a review.
 
     **The rename was not cosmetic and the merge was not either.** Two
-    drivers, one per policy, is OUR structure. CatBoost has ONE
+    drivers, one per policy, was a structure the reference does not have. CatBoost has ONE
     `TGreedySearchHelper` with `if (Options.Policy == ...)` at four sites
     (`greedy_search_helper.cpp:319`, `:465`, `:355`, `:668`), and
-    `ENGINEERING_RULES.md` 0b says their design wins over ours. So the two
+    `ENGINEERING_RULES.md` 0b says the reference structure wins. So the two
     lanes' drivers became one function with four branches, which is both
     less code and more faithful -- and it removed the surface on which the
     Depthwise arm and the Lossguide arm could drift apart in everything

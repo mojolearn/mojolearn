@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The 6-bit pointwise accumulator: `TPointHist<0, 1, BlockSize>`.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_6bit.cu` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_6bit.cu`
+(CatBoost `54a8143a`).
 
 Up to 64 bins per feature, 64 as the absent marker. Everything structural
 about it follows from ONE fact: twice the bins in the same 1024-slot warp

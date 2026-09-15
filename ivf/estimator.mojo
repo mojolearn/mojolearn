@@ -8,8 +8,8 @@ the Python surface; this file is the entry it should reach, shaped like
 `kde/estimator.mojo::kde_score_samples_host` and
 `neighbors/estimator.mojo::knn_search`.
 
-Nothing here is an implementation. `ivf/impl/` mirrors cuVS and is governed by COPY,
-This file is host-side policy cuVS has no counterpart for,
+Nothing here is an implementation. `ivf/impl/` implements the cuVS reference
+behavior. This file is host-side policy cuVS has no counterpart for,
 in the same category as `checks/`.
 
 THE POLICY CHOICES
@@ -22,7 +22,7 @@ THE POLICY CHOICES
    parameter is an answer nobody chose. `IvfFlatSearchParams.default()`
    still carries their 20 for anyone implementing against their surface.
 
-2. **`n_probes > n_lists` RAISES; THEIRS CLAMPS.**
+2. **`n_probes > n_lists` RAISES; THE REFERENCE CLAMPS.**
    `ivf_flat_search.cuh:331` does `std::min(params.n_probes,
    index.n_lists())`. Under policy 1 a clamp would mean two callers who
    wrote different numbers get one answer and no card can say which

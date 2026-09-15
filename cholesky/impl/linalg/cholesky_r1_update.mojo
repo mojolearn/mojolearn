@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`raft::linalg::choleskyRank1Update`, the public entry.
 
-IMPLEMENTATION of `raft/linalg/cholesky_r1_update.cuh` at RAFT `ebf9268`
-(`upstream/raft-v26.08.00`). Their header is a forwarder to
+Reference: `raft/linalg/cholesky_r1_update.cuh` (RAFT `ebf9268`,
+`upstream/raft-v26.08.00`). The reference header is a forwarder to
 `detail/cholesky_r1_update.cuh` plus the long doc comment that is the only
 prose specification of the routine anywhere in the three checkouts; both are
-mirrored, the doc because it states the contract their code assumes and does
-not check.
+reflected here, the doc because it states the contract the reference code
+assumes and does not check.
 
-THEIR CONTRACT, in their words (`:18-49`), and what it means here
+THE REFERENCE CONTRACT (`:18-49`), and what it means here
 -----------------------------------------------------------------
 - On entry `L` is the factor of `A`, both `(n-1) x (n-1)`; the new column of
   `A'` is stored as the `n`-th column of `L` for UPPER, or as the `n`-th ROW
@@ -20,7 +20,7 @@ THEIR CONTRACT, in their words (`:18-49`), and what it means here
   thrown. The `eps` argument can be used to override this behavior."
 - "NOTE: The new mdspan-based API will not be provided for this function."
 
-THE INCREMENTAL PROPERTY, and why this lane mirrors the file at all
+THE INCREMENTAL PROPERTY, and why this lane implements the routine at all
 --------------------------------------------------------------------
 A caller that grows a matrix one row at a time and needs its factor at every
 step -- LARS's active set (`cuml/src/solver/lars_impl.cuh:240-320`), a

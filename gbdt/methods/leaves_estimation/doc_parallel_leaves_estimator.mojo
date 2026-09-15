@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Estimating one tree's leaves on a dataset it was not grown on.
 
-FOLLOWS `catboost/cuda/methods/leaves_estimation/doc_parallel_leaves_estimator.{h,cpp}`
-at CatBoost `54a8143a` -- specifically `CreateDerCalcer` (`:41-56`), the
+Reference: `catboost/cuda/methods/leaves_estimation/doc_parallel_leaves_estimator.{h,cpp}`
+(CatBoost `54a8143a`), specifically `CreateDerCalcer` (`:41-56`), the
 half that turns a (structure, dataset, cursor) triple into something the
-oracle can read. Followed statement for statement.
+oracle can read.
 
 ## Why this exists, when `fit` already estimates leaves
 

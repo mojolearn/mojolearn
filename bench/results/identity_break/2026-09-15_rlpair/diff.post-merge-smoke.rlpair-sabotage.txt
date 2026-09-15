@@ -1,0 +1,33 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column apple-m4 ran with MOJOLEARN_IDENTITY_RLPAIR_SABOTAGE ON; its rlpair cells are a sabotage run and must read RLPAIR_MOVED, they are not evidence
+| lane/fixture                 | verdict    | apple-m4         | apple-m4         |
+|------------------------------|------------|------------------|------------------|
+| byte-lm/base                 | IDENTICAL x2 | f9a8d760f503f795 | f9a8d760f503f795 |
+| mamba2/base                  | IDENTICAL x2 | 5b05a3ecbd70248e | 5b05a3ecbd70248e |
+| samba/base                   | IDENTICAL x2 | 037e7701daa7fc7c | 037e7701daa7fc7c |
+| transformer/base             | IDENTICAL x2 | 295d4e62d4c78b14 | 295d4e62d4c78b14 |
+
+summary: IDENTICAL=4
+
+| lane/fixture                 | column | verdict      | apple-m4         | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|
+| byte-lm/base                 | infer  | IDENTICAL x2 | 220885cbd8d2f82f | 220885cbd8d2f82f |
+| byte-lm/base                 | model  | IDENTICAL x2 | b1d65b99997911c5 | b1d65b99997911c5 |
+| byte-lm/base                 | batch  | IDENTICAL x2 | c44734e41960ea7d | c44734e41960ea7d |
+| byte-lm/base                 | rlpair | RLPAIR_MOVED | 75d10aa264b7a173 | RLPAIR_MOVED     |
+| mamba2/base                  | infer  | IDENTICAL x2 | b0084ee171c0720f | b0084ee171c0720f |
+| mamba2/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba2/base                  | batch  | IDENTICAL x2 | d21a83ab6b3ce297 | d21a83ab6b3ce297 |
+| mamba2/base                  | rlpair | RLPAIR_MOVED | f4abbd5451ff5172 | RLPAIR_MOVED     |
+| samba/base                   | infer  | IDENTICAL x2 | 77db10c414ebd846 | 77db10c414ebd846 |
+| samba/base                   | model  | IDENTICAL x2 | 674582804fcf1a50 | 674582804fcf1a50 |
+| samba/base                   | batch  | IDENTICAL x2 | aacbe0585755bc0f | aacbe0585755bc0f |
+| samba/base                   | rlpair | RLPAIR_MOVED | 8ae8dda8ba22a4aa | RLPAIR_MOVED     |
+| transformer/base             | infer  | IDENTICAL x2 | d658bafd272776e1 | d658bafd272776e1 |
+| transformer/base             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| transformer/base             | batch  | IDENTICAL x2 | 321df8136b576084 | 321df8136b576084 |
+| transformer/base             | rlpair | RLPAIR_MOVED | 41c065998015307c | RLPAIR_MOVED     |
+
+summary (infer/model): IDENTICAL=6, N/A=2
+summary (batch): IDENTICAL=4
+summary (rlpair): RLPAIR_MOVED=4

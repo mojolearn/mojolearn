@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`CalcHash`: the model-side combination key fold.
 
-FOLLOWS `catboost/libs/model/hash.h:11-14` at `54a8143a` -- the
+Reference: `catboost/libs/model/hash.h:11-14` (CatBoost `54a8143a`), the
 "specially designed hash function for low collision rate" their apply path
 folds a feature combination with -- plus the exact widening rule its one
 caller applies to a category hash on the way in.

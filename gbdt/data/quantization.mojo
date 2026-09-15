@@ -2,10 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Borders for a column that may contain NaN, and the bin a NaN lands in.
 
-FOLLOWS `CalcQuantization` (`catboost/libs/data/quantization.cpp:300-346`)
+Reference: `CalcQuantization` (`catboost/libs/data/quantization.cpp:300-346`)
 and the NaN half of the apply-time quantizer
-(`libs/model/cpu/quantization.h:368-409`) at CatBoost `54a8143a`.
-Followed statement for statement.
+(`libs/model/cpu/quantization.h:368-409`) (CatBoost `54a8143a`).
 
 ## The whole mechanism is a SENTINEL BORDER, and nothing downstream knows
 

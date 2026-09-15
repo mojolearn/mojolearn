@@ -42,7 +42,7 @@ so a change to either side is a mismatch and not a silent divergence.
 
 THE NORM VECTORS ARE NOT DRAWN. RMS norm weights initialize to exactly 1.0. They
 are written after the draw, exactly as the numpy generator does, which is why the
-retained arrays hold 128 exact ones and why a draw-only port would differ in
+retained arrays hold 128 exact ones and why a draw-only implementation would differ in
 precisely those four tensors.
 """
 from training.byte_lm_config import ByteConfig

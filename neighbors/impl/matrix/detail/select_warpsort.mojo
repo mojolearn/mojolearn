@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Warp-sort top-k, the bitonic WarpSelect family.
 
-FOLLOWS `raft/matrix/detail/select_warpsort.cuh` at RAFT `9aa17e5`, together
+Reference: `raft/matrix/detail/select_warpsort.cuh` (RAFT `9aa17e5`), together
 with the whole of `raft/util/bitonic_sort.cuh` which it is built on. Partial:
 ONE of the four warp queues is implemented, `warp_sort_immediate`.
 
-Same rule as its sibling `select_radix.mojo`: this is a RAFT file we READ AND
-FOLLOW STATEMENT FOR STATEMENT, not a RAFT call we stand in for, so it lives in `gbdt/` with
-raft as its upstream and carries the attribution duty that follows.
+Same rule as its sibling `select_radix.mojo`: this file is CHECKED LINE BY
+LINE AGAINST A RAFT FILE, not a RAFT call we stand in for, so it lives in `gbdt/` with
+raft as its reference.
 
 WHY THIS FILE EXISTS AT ALL, AND WHY IT DID NOT UNTIL NOW
 ---------------------------------------------------------
@@ -31,7 +31,7 @@ entire practical range for a reason that turned out to be wrong.
 
 WHAT IS IMPLEMENTED AND WHAT IS NOT
 -------------------------------
-IMPLEMENTED, followed statement for statement:
+IMPLEMENTED, matching the reference:
   * `raft/util/bitonic_sort.cuh` in full: `bitonic<Size>::merge_impl` and
     `::sort_impl`, as `bitonic_merge` / `bitonic_sort`.
   * `warp_sort` (the base queue): the constructor, `load_sorted`, `store`,

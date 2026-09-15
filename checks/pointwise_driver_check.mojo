@@ -29,7 +29,7 @@ passed anyway. A gate that launches a path is not a gate that reaches it
 ([[mojotrees-verify-reach-not-output]]). Each
 kernel must claim exactly the groups in its range and return from the rest,
 so the three groups come out filled exactly once with no coordination
-between the launches. That is CatBoost's design: the host does not decide
+between the launches. That is the reference dispatch: the host does not decide
 which kernel handles which block, the kernels do, at runtime, from the data.
 
 GROUP 2 EXISTS FOR ONE LINE. `lowerBound = BITS > 5 ? upperBound / 2 : 15`

@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """cuML's HDBSCAN runner: linkage, condense, extract, score, relabel.
 
-FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/runner.h` (cuML `265b9da`):
+Reference: `cuml-v26.08.00/cpp/src/hdbscan/runner.h` (cuML `265b9da`):
 `build_linkage` (`:54-150`) and `_fit_hdbscan` (`:152-234`).
-Followed statement for statement, their order.
+Steps run in the reference order.
 
-WHAT THEIR `build_linkage` DOES THAT OURS DOES NOT, AND WHY. Their
+WHAT THE REFERENCE `build_linkage` DOES THAT THIS ONE DOES NOT, AND WHY. The reference
 `:66-113` fills a `mutual_reachability_params` and, inside it, an
 `all_neighbors_params` carrying `overlap_factor`, `n_clusters` and either
 `brute_force_params` or `nn_descent_params`. That whole block is the

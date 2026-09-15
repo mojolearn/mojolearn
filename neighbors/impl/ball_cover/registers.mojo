@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The eps-neighborhood query kernels of the random ball cover.
 
-FOLLOWS `cuvs/src/neighbors/ball_cover/registers.cuh` at cuVS `94c2819`:
+Reference: `cuvs/src/neighbors/ball_cover/registers.cuh` (cuVS `94c2819`):
 `block_rbc_kernel_eps_csr_pass` (`:576`), `block_rbc_kernel_eps_dense`
 (`:458`), `block_rbc_kernel_eps_max_k` (`:859`),
 `block_rbc_kernel_eps_max_k_copy` (`:983`), and both `rbc_eps_pass` host

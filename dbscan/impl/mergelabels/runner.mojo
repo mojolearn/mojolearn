@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`MergeLabels::run`, which is one call, kept as its own file like theirs.
+"""`MergeLabels::run`, which is one call, kept as its own file.
 
-FOLLOWS `cuml/cpp/src/dbscan/mergelabels/runner.cuh` at cuML `00094f7`.
-Followed statement for statement.
+Reference: `cuml/cpp/src/dbscan/mergelabels/runner.cuh` (cuML `00094f7`).
 
-Their whole file is:
+The reference file is:
 
     raft::label::merge_labels<Index_, TPB_X>(
         labels_a, labels_b, mask, work_buffer, m, N, stream);

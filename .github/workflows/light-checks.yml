@@ -1,0 +1,49 @@
+name: Light checks
+
+# LIGHT TOUCH (Andrew, Sep 15 2026): the ONLY workflow that runs by itself.
+# One Linux runner, Python only, no Mojo build, no bindings, no matrix, a hard
+# ten minute cap. Everything heavy is manual with confirm RUN-HEAVY.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: light-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  light:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Generated doc facts agree with the code
+        run: python3 tools/docs_facts.py --check
+      - name: Build scripts pin both CPU baselines
+        run: python3 packaging/wheel_ci.py pins .
+      - name: Every packaged module is reachable by import
+        run: python3 packaging/wheel_ci.py inventory python/mojolearn
+      - name: Every workflow parses, and only this one starts by itself
+        run: |
+          python3 -m venv /tmp/yaml-venv
+          /tmp/yaml-venv/bin/pip install --quiet pyyaml==6.0.2
+          /tmp/yaml-venv/bin/python - <<'PY'
+          import glob, sys, yaml
+          bad = []
+          for f in sorted(glob.glob(".github/workflows/*.yml")):
+              d = yaml.safe_load(open(f))
+              on = d.get(True, d.get("on"))
+              auto = sorted(set(on) & {"push", "schedule"}) if isinstance(on, dict) else []
+              name = f.rsplit("/", 1)[-1]
+              if auto and name not in ("light-checks.yml", "issue-hygiene.yml"):
+                  bad.append(f"{name} starts by itself on {auto}")
+          print("\n".join(bad) or "ok: only light-checks (and the daily issue bot) start by themselves")
+          sys.exit(1 if bad else 0)
+          PY

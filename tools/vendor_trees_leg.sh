@@ -17,7 +17,7 @@
 # THE PAIRING IS THE REPOSITORY'S OWN STANDING RULE, not a choice made here:
 #
 #   gbdt-symmetric   CatBoost ONLY. Oblivious trees are CatBoost's design and
-#                    the lineage this package ports; LightGBM must never
+#                    the reference this package cites; LightGBM must never
 #                    appear beside this lane (standing order 2026-08-22).
 #   gbdt-lossguide   LightGBM. Leaf-wise growth IS LightGBM's own algorithm,
 #                    which is exactly why it belongs here and not above.
