@@ -716,7 +716,11 @@ def main():
     chk.add_argument('--lane-rule-only', action='append', default=[], metavar='LANE',
                      help='with --every-fixture, this lane keeps the --every-lane rule, by name (repeatable)')
     args = parser.parse_args()
-    if args.lane_rule_only and not args.every_fixture:
+    # `--lane-rule-only` belongs to the `check` subparser, so a `record`
+    # namespace does not carry it and reading it unconditionally made every
+    # `record` call die with an AttributeError before it recorded anything
+    # (found by lane/neighbors-rest, 2026-09-15).
+    if getattr(args, 'lane_rule_only', None) and not args.every_fixture:
         parser.error('--lane-rule-only needs --every-fixture')
     if args.command == 'record':
         return do_record(args)
