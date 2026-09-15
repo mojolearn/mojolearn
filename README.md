@@ -540,6 +540,13 @@ outside, at three costs](docs/VERIFY_EXTERNALLY.md), [release](docs/PYPI_RELEASE
 [engineering rules](ENGINEERING_RULES.md), [contributing](CONTRIBUTING.md),
 [governance](GOVERNANCE.md), and [notices](NOTICE).
 
+## Trademarks and affiliation
+
+mojolearn is an independent project by Andrew Hendel. It is not affiliated
+with, sponsored by, or endorsed by Modular, Inc. MAX® and Mojo® are trademarks
+of Modular, Inc. Binary wheels include unmodified Modular runtime components
+redistributed under Modular's own license; see [NOTICE](NOTICE).
+
 ## Citation
 
 Every line of Mojo in this repository was written for it. The library
