@@ -184,7 +184,7 @@ CLASSICAL_RECORDED = (
 #: with no route. The CPU identity gate workflow builds every family the
 #: manifest declares and checks this list, with SEARCH_LOOKUP_RECORDED and
 #: INFERENCE_ONLY_RECORDED, as `saved_model_recorded()` (production must
-#: match, the sabotage host set must differ on every fixture).
+#: match, the sabotage host set must differ on every lane).
 FORECAST_RECORDED = (
     "bench/results/classical_host/2026-09-15-apple-m4-arima",
 )
