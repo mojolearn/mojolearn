@@ -51,7 +51,11 @@ from mojolearn import _backend, host_surface
 ROOT = Path(__file__).resolve().parents[3]
 
 EMB_LANES = ("embedding", "embedding-sort")
-IVF_LANES = ("ivf", "ivf-euclidean")
+IVF_LANES = ("ivf", "ivf-euclidean", "ivf-extend")
+#: The lanes a committed record of their own carries; ivf-extend (stage 2 of
+#: lane/inference-embedding-ivf-cholesky) is in no record and is OWED against
+#: the training record.
+RECORDED_OWN = ("embedding", "embedding-sort", "ivf", "ivf-euclidean")
 EMB_HOST = "embedding/host/embedding_host.mojo"
 IVF_HOST = "ivf/host/ivf_host.mojo"
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
@@ -77,6 +81,9 @@ def test_manifest_declares_both_families():
         assert (ROOT / host_surface.build_shim(name)).is_file()
         for lane in lanes:
             assert lane in host_surface.covered_lanes()
+            if lane not in RECORDED_OWN:
+                assert lane in host_surface.record_covered_lanes()
+                continue
             assert lane in host_surface.fix_covered_lanes(), f"{lane} is not diffed against its own record"
             assert lane not in host_surface.record_covered_lanes()
             assert host_surface.TRAINING_LANE_NAMES[lane] in host_surface.training_sentence()

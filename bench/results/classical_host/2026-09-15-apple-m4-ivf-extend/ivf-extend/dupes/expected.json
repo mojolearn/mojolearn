@@ -1,0 +1,78 @@
+{
+  "commit": "c6c6f79b075f2c00544977a1e94d47fdcf89f711",
+  "estimator": "IVFIndex",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "dupes",
+  "lane": "ivf-extend",
+  "model_sha256": "667918778ad720e3602865d7b200539d1905bd93b0607e03c9f1ed27947945ee",
+  "numeric_mode": "identical",
+  "predictions": {
+    "extend_list_indices": {
+      "dtype": "<i4",
+      "sha256": "1dec7d5cde6a5ab1e88ddb7961e6594b9dec182b1b7f5037e6fb53658ef2b865",
+      "shape": [
+        4160
+      ]
+    },
+    "extend_lists": {
+      "dtype": "<i4",
+      "sha256": "c85f74111cfa0cdbd2a11f8cb4d1356bf8eaaf8ca77cb536438a5a56bec4011c",
+      "shape": [
+        64
+      ]
+    },
+    "identity_hash": "802c8f83c4e8dddd",
+    "list_data": {
+      "dtype": "<f4",
+      "sha256": "ba0c988b4c1879749f3b10fd8f65549bf1f6906fcd9c47572a62363b9b925d9a",
+      "shape": [
+        4096,
+        16
+      ]
+    },
+    "list_indices": {
+      "dtype": "<i4",
+      "sha256": "400bfedca418d4f0dbca4175c94e336e25fab4d53f733fe58878dd6497d7e26e",
+      "shape": [
+        4096
+      ]
+    },
+    "search_after_extend_ids": {
+      "dtype": "<i4",
+      "sha256": "fac12be4740da491042e3c1686d13b128a30ff48f418204ee260ecba47eb5a85",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_distances": {
+      "dtype": "<f4",
+      "sha256": "23e1804f8b3ce63fab9f4bb122c824b2ae79efe6b6b6fb676ea1d5cd6acf17a9",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_second_batch_ids": {
+      "dtype": "<i4",
+      "sha256": "4378c2f11b7fa16b0bdacfae09a40c011f5c3b32ee243bc5cbf221dcad15135d",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "seconds": 3.210057
+  },
+  "recorded_at": "2026-09-15T13:58:31-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "e31c19919dd0d22a22c740be1b69d4029a2203b50921ee428a485970456fcfa7"
+}

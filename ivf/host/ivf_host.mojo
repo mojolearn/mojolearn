@@ -86,6 +86,7 @@ from cluster.host.kmeans_oracle import (
 from ivf.checks.list_layout import (
     ListLayout,
     build_list_layout,
+    extend_list_layout,
     gather_candidate_indices,
     gather_candidate_norms,
     gather_candidate_vectors,
@@ -394,3 +395,39 @@ def host_ivf_build_and_search(
     order, so a saved index answers what this call answers."""
     var index = host_ivf_build(x, n_rows, dim, n_lists, kmeans_n_iters, metric, seed)
     return host_ivf_search(index, queries, n_queries, k, n_probes)
+
+
+def host_ivf_extend(
+    index: IvfHostIndex,
+    new_x: List[Float32],
+    n_new: Int,
+    mut new_labels: List[UInt32],
+) raises -> IvfHostIndex:
+    """`ivf_flat_extend_host` on the host (lane/inference-embedding-ivf-cholesky,
+    2026-09-15): the build's own assignment restated (`host_assign` over the
+    squared data norms against the FIXED centres, the `(distance, list id)`
+    tie rule the build's `ivf.assign` stage uses), then `extend_list_layout`.
+    `new_labels` is cleared and receives the list each new row went to."""
+    var n_lists = index.n_lists
+    var dim = index.dim
+    ivf_validate_data(new_x, n_new, dim, "extension rows")
+    var x_norm = host_row_norms(new_x, n_new, dim, False)
+    var predict_c_norm = host_row_norms(index.centers, n_lists, dim, index.metric == METRIC_COSINE_EXPANDED)
+    var labels = List[UInt32](length=n_new, fill=UInt32(0))
+    var min_dist = List[Float32](length=n_new, fill=Float32(0.0))
+    host_assign(
+        new_x, n_new, x_norm, index.centers, n_lists, predict_c_norm, dim,
+        host_metric_is_sqrt(index.metric), labels, min_dist,
+    )
+    var layout = extend_list_layout(
+        index.offsets, index.list_indices, index.list_data, index.n_rows, dim,
+        n_lists, labels, new_x, n_new,
+    )
+    new_labels.clear()
+    for j in range(n_new):
+        new_labels.append(labels[j])
+    return IvfHostIndex(
+        n_lists, dim, index.n_rows + n_new, index.metric, index.centers.copy(),
+        index.center_norms.copy(), layout.offsets.copy(), layout.list_indices.copy(),
+        layout.list_data.copy(),
+    )

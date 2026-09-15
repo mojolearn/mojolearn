@@ -119,3 +119,18 @@ Behavior here:
   does not check `SEARCH_LOOKUP_RECORDED`. That is owed to the workflow's
   owner; this lane does not edit workflows.
 - Stage 2 (`IVFIndex.extend`): in progress.
+- An intermittent Metal failure seen once on the M4 (2026-09-15 about 13:45 ET)
+  needs its own lane.
+  - What was seen: one identity_break process over ivf, ivf-euclidean and
+    ivf-extend read correct cells on the first five `ivf` fixtures. It then read
+    zero distances, `merge_probed_lists: list 0 appears at probe 0 and probe 1`
+    and batch cells that moved, on every later cell. Another agent's Metal GBDT
+    run was live on the same GPU.
+  - What it was not: a rerun of the `ivf` lane alone, with that GBDT run still
+    live, read 9 of 9 cells STABLE and IDENTICAL to the committed Apple, NVIDIA
+    and AMD columns. No GPU-path Mojo source changed on main between the clean
+    stage 1 runs and that failure.
+  - The suspects are device state accumulating across many `DeviceContext`s in
+    one long process, or device contention. The stage 2 Metal columns were
+    therefore taken one process per lane. The failure itself is not diagnosed
+    here.

@@ -60,7 +60,7 @@ def test_gpu_and_reference_bindings_register_build_and_search():
     shared = _read("bindings/ivf_index_arrays.mojo")
     assert "ivf_validate_index_arrays" in shared
     for rel in ("bindings/_mojolearn_ivf_host.mojo", "bindings/_mojolearn_ivf_search_host.mojo"):
-        assert "from bindings.ivf_host_search import ivf_flat_search_binding" in _read(rel), rel
+        assert re.search(r"from bindings\.ivf_host_search import [^\n]*\bivf_flat_search_binding\b", _read(rel)), rel
     for rel in ("bindings/_mojolearn_embedding_host.mojo", "bindings/_mojolearn_embedding_infer_host.mojo"):
         assert "from bindings.embedding_host_forward import" in _read(rel), rel
 
@@ -202,3 +202,89 @@ def test_a_saved_table_looks_up_on_the_shipped_binding(tmp_path):
     assert (y.tobytes() == w[ids].tobytes()) != sabotaged
     with pytest.raises(Exception, match="embedding_backward|internal bitwise verifier"):
         h.backward(ids, np.zeros((5, 4), np.float32))
+
+
+# -- stage 2: IVFIndex.extend (2026-09-15) -------------------------------------
+
+def test_extend_is_registered_on_the_gpu_reference_and_shipped_bindings():
+    for rel in ("bindings/_mojolearn_ivf.mojo", "bindings/_mojolearn_ivf_host.mojo",
+                "bindings/_mojolearn_ivf_search_host.mojo"):
+        assert "ivf_flat_extend" in _registered(rel), rel
+    for fam in ("ivf", "ivf_search"):
+        assert "ivf_flat_extend" in host_surface.family(fam)["exports"], fam
+    assert "ivf-extend" in host_surface.family("ivf")["training_lanes"]
+    assert "ivf-extend" in host_surface.family("ivf_search")["inference_lanes"]
+
+
+def test_extend_uses_the_build_assignment_and_one_layout_rule():
+    gpu = _read("ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo")
+    body = gpu[gpu.index("def ivf_flat_extend("):]
+    assert "predict(ctx, dx, x_norm, centroids, labels, min_dist, kp, n_new, dim)" in body
+    assert "extend_list_layout(" in body
+    host = _read("ivf/host/ivf_host.mojo")
+    hbody = host[host.index("def host_ivf_extend("):]
+    assert "host_assign(" in hbody and "extend_list_layout(" in hbody
+    layout = _read("ivf/checks/list_layout.mojo")
+    assert "out_indices[slot] = UInt32(n_rows + j)" in layout
+
+
+def test_extend_refuses_without_an_index_and_on_a_changed_metric():
+    with pytest.raises(ValueError, match="before extend"):
+        IVFIndex(n_lists=2, n_probes=1).extend(np.zeros((2, 3), np.float32))
+    m = _fake_index()
+    with pytest.raises(ValueError, match="features"):
+        m.extend(np.zeros((2, 4), np.float32))
+    m.metric = "sqeuclidean"
+    with pytest.raises(ValueError, match="a built index has one metric"):
+        m.extend(np.zeros((2, 3), np.float32))
+
+
+def test_clone_copies_and_does_not_alias():
+    m = _fake_index()
+    c = m._clone()
+    assert type(c) is IVFIndex and c.numeric_mode == "identical"
+    for name in ("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_"):
+        assert np.asarray(getattr(c, name)).tobytes() == np.asarray(getattr(m, name)).tobytes()
+        assert getattr(c, name) is not getattr(m, name)
+
+
+def _extend_pair(host_cls):
+    from mojolearn._cpu_reference import reference_training
+    x = np.random.default_rng(6).standard_normal((600, 6)).astype(np.float32)
+    with reference_training():
+        base = IVFIndex(n_lists=8, n_probes=3, n_neighbors=5, random_state=2).fit(x[:400])
+    return base, x
+
+
+@pytest.mark.skipif(not (_built("_mojolearn_ivf_host") and _built("_mojolearn_ivf_search_host")),
+                    reason="the ivf reference and search host bindings are not both built here")
+def test_extend_one_call_equals_two_calls_and_the_shipped_binding(tmp_path):
+    import mojolearn
+    if _backend._CPU_ONLY is None:
+        pytest.skip("a GPU set loaded; the reference fit would run on the GPU")
+    base, x = _extend_pair(IVFIndex)
+    one = base._clone().extend(x[400:600])
+    two = base._clone().extend(x[400:480])
+    first = np.asarray(two.extend_labels_).copy()
+    two.extend(x[480:600])
+    for name in ("list_offsets_", "list_indices_", "list_data_"):
+        assert np.asarray(getattr(one, name)).tobytes() == np.asarray(getattr(two, name)).tobytes(), name
+    assert np.concatenate([first, np.asarray(two.extend_labels_)]).tobytes() == np.asarray(one.extend_labels_).tobytes()
+    ids = np.asarray(one.list_indices_)
+    offs = np.asarray(one.list_offsets_)
+    for l in range(8):
+        seg = ids[offs[l]:offs[l + 1]]
+        assert np.all(np.diff(seg) > 0), l
+    assert sorted(ids.tolist()) == list(range(600))
+    path = str(tmp_path / "ivf.npz")
+    base.save(path)
+    h = mojolearn.host_model(path)
+    assert type(h).__name__ == "HostIVFIndex"
+    hx = h._clone().extend(x[400:600])
+    for name in ("list_offsets_", "list_indices_", "list_data_"):
+        assert np.asarray(getattr(hx, name)).tobytes() == np.asarray(getattr(one, name)).tobytes(), name
+    q = x[:16]
+    d0, i0 = one.search(q)
+    d1, i1 = hx.search(q)
+    assert np.asarray(d0).tobytes() == np.asarray(d1).tobytes()
+    assert np.asarray(i0).tobytes() == np.asarray(i1).tobytes()

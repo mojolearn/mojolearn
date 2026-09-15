@@ -2692,6 +2692,33 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
 
 
+@lane("ivf-extend")
+def _(ml, X, yc, yr, Xh=None):
+    """IVFIndex.extend (python/mojolearn/_ivf_impl.py; lane/inference-embedding-
+    ivf-cholesky stage 2, 2026-09-15), cuVS ivf_flat::extend with fixed
+    centres. The `ivf` lane's index (16 lists, random_state 3) built on rows
+    0..3072, extended by rows 3072..4096 in ONE call and, from a clone of the
+    same built index, in TWO calls split at 3584: the two extended indexes
+    must be the same bytes, and the new rows' lists the same, or the train
+    cell reads REFUSED naming the array. Then 64 queries with 4 probes. Train
+    hashes the extended CSR arrays, the new rows' lists and the search; the
+    model column saves the extended index; the probe searches 64 held-out
+    rows."""
+    base = ml.IVFIndex(n_lists=16, n_probes=4, n_neighbors=8, random_state=3).fit(X[:3072])
+    one = base._clone().extend(X[3072:4096])
+    two = base._clone().extend(X[3072:3584])
+    first = np.asarray(two.extend_labels_).copy()
+    two.extend(X[3584:4096])
+    for name in ("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_"):
+        _same_bytes(f"one-call extend {name}", getattr(one, name), f"two-call extend {name}", getattr(two, name))
+    _same_bytes("one-call new-row lists", one.extend_labels_, "two-call new-row lists",
+                np.concatenate([first, np.asarray(two.extend_labels_)]))
+    d, i = one.search(X[4096:4160])
+    return _fit(dict(offsets=_h(one.list_offsets_), carry=_h(one.list_indices_), data=_h(one.list_data_),
+                     lists=_h(one.extend_labels_), dist=_h(d), idx=_h(i), cand=_h(one.n_candidates_)),
+                one, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
+
+
 @lane("embedding")
 def _(ml, X, yc, yr, Xh=None):
     """Embedding (python/mojolearn/embedding.py), profile
@@ -4388,6 +4415,19 @@ def _batch_embedding(ml, e, Xh):
 
 
 _batch_decl(_batch_ivf, "ivf", "ivf-euclidean")
+
+
+def _batch_ivf_extend(ml, e, Xh):
+    """extend is row-wise in the new rows' LISTS: a row's list comes from the
+    fixed centres alone, so each held-out row extended alone, and in pieces,
+    must name the list it names inside the whole batch of 64. Every call
+    extends a fresh clone of the fitted index; the ids are not compared,
+    because a row's id is its position in the extension by contract."""
+    return [_BatchRows("extend (new-row lists)", Xh[:64],
+                       lambda r: (np.asarray(e._clone().extend(r).extend_labels_),))]
+
+
+_batch_decl(_batch_ivf_extend, "ivf-extend")
 _batch_decl(_batch_embedding, "embedding", "embedding-sort")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
 _batch_decl(_batch_training_primitives, "training-primitives")

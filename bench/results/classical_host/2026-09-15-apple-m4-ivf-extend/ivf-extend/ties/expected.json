@@ -1,0 +1,78 @@
+{
+  "commit": "c6c6f79b075f2c00544977a1e94d47fdcf89f711",
+  "estimator": "IVFIndex",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "ties",
+  "lane": "ivf-extend",
+  "model_sha256": "0d954140e0a9c674150c0488658b5977ab41eacc2c1ae30861bc1f0c99cbb503",
+  "numeric_mode": "identical",
+  "predictions": {
+    "extend_list_indices": {
+      "dtype": "<i4",
+      "sha256": "d649ca3fa61147e66960d83b9f4dd6d03ef652fe7ede6135196414e62e7d80e2",
+      "shape": [
+        4160
+      ]
+    },
+    "extend_lists": {
+      "dtype": "<i4",
+      "sha256": "4cbeb5cb9978ae32df5063395f1b5e17c8d70cceb4b9b06322b2b63faeee7c96",
+      "shape": [
+        64
+      ]
+    },
+    "identity_hash": "ee7fa6ee3ed98541",
+    "list_data": {
+      "dtype": "<f4",
+      "sha256": "a49e792306d48293ee5f5ebb2acba8386004a2658e202eea3defa483b7159af3",
+      "shape": [
+        4096,
+        16
+      ]
+    },
+    "list_indices": {
+      "dtype": "<i4",
+      "sha256": "41f14867bd877308de91c496e3d57bc92e9cb644ea1965a33fd302b94d2503c3",
+      "shape": [
+        4096
+      ]
+    },
+    "search_after_extend_ids": {
+      "dtype": "<i4",
+      "sha256": "0a900bfae9dac6412d6eb04f6e17de66630a0f48cab1bd5d2671c45e2bec288e",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_distances": {
+      "dtype": "<f4",
+      "sha256": "0e73c802e609357d0cc7995ec6ce656166c326dd6a9758ff3e3620637c9523e0",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_second_batch_ids": {
+      "dtype": "<i4",
+      "sha256": "d66cb98c32b11eece130ef3ccb747867afeb9f6b36672941270f7713d195ed12",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "seconds": 3.122028
+  },
+  "recorded_at": "2026-09-15T13:57:46-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "cb717abc7fdea535547b185d7f6b53f113cbab5b15e61b6f0f7c62e31ea62f5e"
+}

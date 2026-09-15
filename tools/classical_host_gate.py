@@ -193,6 +193,15 @@ LANES = {
     'ivf': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),
     'ivf-euclidean': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),
     'embedding': ('Embedding', lambda e, X: _embedding_probe(e, X), {}),
+    # Stage 2 of the same lane: an index built and EXTENDED on the GPU, saved;
+    # the extras extend a clone of the loaded index by 64 held-out rows (the
+    # host binding's extend on a CPU) and search 64 more rows after it.
+    'ivf-extend': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), dict(
+        _IVF_EXTRAS,
+        extend_lists=lambda e, X: e._clone().extend(X[64:128]).extend_labels_,
+        extend_list_indices=lambda e, X: e._clone().extend(X[64:128]).list_indices_,
+        search_after_extend_ids=lambda e, X: e._clone().extend(X[64:128]).search(X[128:192])[1],
+    )),
     # lane/inference-svm (2026-09-15): SVC's linear and polynomial kernels
     # through the svc format, and SVR (rbf and linear) through its own. Each
     # probe is its identity_break lane's infer probe.
@@ -220,7 +229,7 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'minmax-scaler-clip': 'transform', 'lasso': 'predict', 'elasticnet': 'predict',
                'elasticnet-l2end-no-intercept': 'predict', 'kernel-ridge': 'predict',
                'nystroem': 'transform', 'rbf-sampler': 'transform',
-               'ivf': 'search_distances', 'ivf-euclidean': 'search_distances', 'embedding': 'forward',
+               'ivf': 'search_distances', 'ivf-euclidean': 'search_distances', 'embedding': 'forward', 'ivf-extend': 'search_distances',
                'svc-linear': 'decision_function', 'svc-poly': 'decision_function',
                'svr': 'predict', 'svr-linear': 'predict'}
 

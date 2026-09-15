@@ -688,6 +688,10 @@ TRAINING_LANE_NAMES = {
     # own host binding, under both L2 metrics.
     "ivf": "the IVF-Flat index",
     "ivf-euclidean": "the IVF-Flat index under euclidean distance",
+    # lane/inference-embedding-ivf-cholesky stage 2 (2026-09-15): the rows
+    # added to a built index by IVFIndex.extend. No GPU record carries the
+    # lane yet, so every cell is OWED against the record.
+    "ivf-extend": "extending a built IVF-Flat index",
     # The GPU byte LM trainer's lanes (same branch): SmallByteLanguageModelTrainer,
     # stateless and on its resident session, whose single-device entries a
     # CPU-only install serves from the byte LM host binding's step, loss and
@@ -1688,7 +1692,7 @@ FAMILIES = (
         routes="_mojolearn_ivf",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("ivf", "ivf-euclidean"),
+        training_lanes=("ivf", "ivf-euclidean", "ivf-extend"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("IVFIndex",),
@@ -1704,6 +1708,7 @@ FAMILIES = (
             "ivf_host_numeric_mode", "ivf_host_vendor", "ivf_host_column",
             "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
             "ivf_flat_build_and_search", "ivf_flat_build", "ivf_flat_search",
+            "ivf_flat_extend",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
@@ -1723,10 +1728,10 @@ FAMILIES = (
         loaded_by="_backend._HOST_INFERENCE_MODULES and python/mojolearn/_classical_host.py",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(),
-        inference_lanes=("ivf", "ivf-euclidean"),
+        inference_lanes=("ivf", "ivf-euclidean", "ivf-extend"),
         forest_kinds=(),
         classes=("IVFIndex",),
-        display="IVF-Flat search over a saved index",
+        display="IVF-Flat search over a saved index and extending it",
         host_modules=(
             "ivf/host/ivf_host.mojo", "bindings/ivf_host_search.mojo",
             "bindings/ivf_index_arrays.mojo",
@@ -1735,7 +1740,7 @@ FAMILIES = (
         exports=(
             "ivf_search_host_numeric_mode", "ivf_search_host_vendor",
             "ivf_search_host_column", "ivf_search_host_sabotage",
-            "ivf_vendor", "ivf_numeric_mode", "ivf_flat_search",
+            "ivf_vendor", "ivf_numeric_mode", "ivf_flat_search", "ivf_flat_extend",
         ),
         gate="tools/classical_host_gate.py and tools/identity_break.py",
         ships_in_wheel=True,
