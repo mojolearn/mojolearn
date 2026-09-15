@@ -56,7 +56,8 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
                            the search's host insertion sort, restated
                            because its file imports the device kernels.
 
-THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` walks every CANDIDATE
+THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` moves every extended
+row to the next list (`host_ivf_extend`, stage 2) and walks every CANDIDATE
 distance's feature axis DESCENDING (the coarse distances and the quantizer's
 own arm, `kmeans_oracle`'s extra unit per quantized centroid-sum cell, which
 the same define turns on, are left as they are), so the returned distances
@@ -419,6 +420,14 @@ def host_ivf_extend(
         new_x, n_new, x_norm, index.centers, n_lists, predict_c_norm, dim,
         host_metric_is_sqrt(index.metric), labels, min_dist,
     )
+    comptime if IVF_HOST_SABOTAGE:
+        # THE EXTEND SABOTAGE ARM (stage 2, 2026-09-15): every new row goes to
+        # the NEXT list, wrong on purpose. The candidate-distance arm below
+        # never reaches extend's assignment, and the first CPU leg's owed check
+        # showed the new-row lists and the ties fixture's extended layout
+        # unmoved under the sabotage set without this.
+        for j in range(n_new):
+            labels[j] = UInt32((Int(labels[j]) + 1) % n_lists)
     var layout = extend_list_layout(
         index.offsets, index.list_indices, index.list_data, index.n_rows, dim,
         n_lists, labels, new_x, n_new,
