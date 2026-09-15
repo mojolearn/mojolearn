@@ -1,0 +1,48 @@
+6558 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a6a80000000, nodemask=2)
+6886 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5aa7c0000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/parallel_hdbscan_check.py", line 112, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/parallel_hdbscan_check.py", line 72, in main
+    many = trace_fit(many_path, lambda: fit_hdbscan(_identical(HDBSCAN(**params)), X, devices=devices))
+  File "/root/mojolearn/tools/parallel_hdbscan_check.py", line 52, in trace_fit
+    return function()
+  File "/root/mojolearn/tools/parallel_hdbscan_check.py", line 72, in <lambda>
+    many = trace_fit(many_path, lambda: fit_hdbscan(_identical(HDBSCAN(**params)), X, devices=devices))
+                                        ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/pkg-sab/python/mojolearn/parallel_classical.py", line 317, in fit_hdbscan
+    result = pool.map([('hdbscan_fit', estimator, (X,))])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/pkg-sab/python/mojolearn/_parallel_pool.py", line 98, in map
+    raise error
+  File "/root/pkg-sab/python/mojolearn/_parallel_pool.py", line 93, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/pkg-sab/python/mojolearn/_parallel_pool.py", line 78, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/pkg-sab/python/mojolearn/_parallel_worker.py", line 222, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/root/pkg-sab/python/mojolearn/_parallel_worker.py", line 129, in execute
+    state.fit(*args)
+    ~~~~~~~~~^^^^^^^
+  File "/root/pkg-sab/python/mojolearn/hdbscan.py", line 162, in fit
+    n_clusters = self._extension().hdbscan_fit(
+        # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_fit_binding.
+    ...<5 lines>...
+         1 if self.allow_single_cluster else 0, method, float(self.cluster_selection_epsilon), metric],
+    )
+Exception: mst: Number of edges found by MST is invalid. This may be due to loss in precision. Try increasing precision of weights. (found 5 > 4)
+

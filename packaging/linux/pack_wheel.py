@@ -116,6 +116,8 @@ IDENTICAL_ONLY_NAMES = (
     # Workstream D, 2026-09-14: the four door-less families given a binding.
     "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
     "_mojolearn_resample",
+    # 2026-09-14: IVFIndex and Embedding left `_NOT_YET`.
+    "_mojolearn_ivf", "_mojolearn_embedding",
 )
 TIERS = ("fast", "deterministic", "identical")
 

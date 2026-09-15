@@ -1,0 +1,10 @@
+started=2026-09-14T23:00:07Z commit=309be6db98d5790b596cd9829c88000cbca86a91
+vendor=nvidia arch=sm_90a
+builds: 5 identical bindings
+one exit=0
+two exit=0
+diff exit=0
+summary: IDENTICAL=63
+summary (infer/model): IDENTICAL=72, N/A=54
+summary (batch): IDENTICAL=45, N/A=18
+finished=2026-09-14T23:11:09Z

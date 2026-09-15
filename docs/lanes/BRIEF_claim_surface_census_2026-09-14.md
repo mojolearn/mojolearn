@@ -53,6 +53,11 @@ classes). The host surface is measured by `tools/forest_host_gate.py` and
    but minkowski (documented at `python/mojolearn/neighbors.py:439-442`, so this one is
    stated); `cross_val_score(groups=)` (warned and ignored,
    `python/mojolearn/model_selection.py:135-137`).
+   RESOLVED (2026-09-14): all three now refuse by name. GBDT and `cross_val_score` in
+   1217ed7bb; NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor and
+   RadiusNeighbors refuse a `p` other than the default 2 under a metric that does not read
+   it (`_refuse_inert_p` in `python/mojolearn/neighbors.py`), all
+   covered by `cd python && python3 -m mojolearn.tests.test_refuse_ignored_knobs`.
 
 ## 3. Proposed lanes, 57
 
@@ -212,8 +217,8 @@ positive targets; shift the fixture, do not clamp on the device.
 | kernel methods | 7,719 | kernel matrix, random features, sabotage | none, rows 78-85 reserved | `kernel_methods/checks/km_check.mojo` |
 | resampling, bootstrap intervals | 7,159 | index map, intervals, statistics | none | `resample/checks/resample_check.mojo` |
 | Cholesky potrf, trsm, logdet, solve | 6,275 | sabotage | only as a blob inside the GP build | `cholesky/checks/cholesky_check.mojo`, `bindings/build_gp.sh:233` |
-| IVF index | 5,458 | layout sabotage, large-k, large-probe | Apple only | `ivf/checks/ivf_check.mojo` |
-| embedding lane | 6,449 | check only, NO sabotage arm ever built | Apple + AMD card, no NVIDIA leg, no pixi task | `embedding/checks/embedding_check.mojo:12` |
+| IVF index | 5,458 | layout sabotage, large-k, large-probe | Apple + NVIDIA + AMD, IDENTICAL card byte-identical (2026-09-14) | `ivf/checks/ivf_check.mojo` |
+| embedding lane | 6,449 | check; sabotage arms run 2026-09-14, eleven of sixteen bite on NVIDIA and AMD, ten on Apple (bench/results/ivf_embed_km_legs_2026-09-14) | Apple + NVIDIA + AMD card byte-identical, no pixi task | `embedding/checks/embedding_check.mojo:12` |
 | GPT-2 byte BPE tokenizer | 1,861 | 43/43 exact tiktoken ids | no float arithmetic, no identity arm by construction | `tokenizer/checks/tokenizer_check.mojo` |
 
 Inside shipped bindings, implemented, gated, never routed from Python:

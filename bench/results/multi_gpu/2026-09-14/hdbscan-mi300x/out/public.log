@@ -1,0 +1,15 @@
+4798 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b3480000000, nodemask=2)
+5126 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b0e00000000, nodemask=2)
+PASS HDBSCAN 5 2 {'min_cluster_size': 2, 'min_samples': 2} records 24 clusters 0
+5331 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7be280000000, nodemask=2)
+5331 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x701100000000, nodemask=1)
+PASS HDBSCAN 37 3 {'min_cluster_size': 4} records 24 clusters 3
+5546 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b3080000000, nodemask=2)
+PASS HDBSCAN 200 2 {'min_cluster_size': 8, 'min_samples': 3} records 24 clusters 3
+5753 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7bf800000000, nodemask=2)
+PASS HDBSCAN 515 5 {'min_cluster_size': 10, 'cluster_selection_method': 'leaf'} records 24 clusters 4
+5958 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x589e80000000, nodemask=2)
+5958 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73ec00000000, nodemask=1)
+PASS HDBSCAN 1024 4 {'min_cluster_size': 15, 'alpha': 1.5, 'allow_single_cluster': True} records 24 clusters 4
+6163 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x322a40000000, nodemask=1)
+PASS 5 HDBSCAN configurations and 3 refusals

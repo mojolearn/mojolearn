@@ -210,13 +210,19 @@ _MODULES = (
     # Apple M4 the day they were written; no box has run them through the
     # Python door yet, and the identity_break lanes and three columns are
     # owed (docs/lanes/LANE_BODY_*.py). The Cholesky door is inside
-    # `_mojolearn_gp` (bindings/build_gp.sh already links cholesky/); IVF is
-    # prepared (bindings/_mojolearn_ivf.mojo) and deliberately NOT listed
-    # until its NVIDIA and AMD legs run.
+    # `_mojolearn_gp` (bindings/build_gp.sh already links cholesky/).
     "_mojolearn_kernel_methods",
     "_mojolearn_mixture",
     "_mojolearn_hdbscan",
     "_mojolearn_resample",
+    # 2026-09-14, lane/expose-ivf-embedding: the two `_NOT_YET` entries given
+    # their doors. IVFIndex (bindings/_mojolearn_ivf.mojo, prepared earlier
+    # the same day and listed now that check-ivf reads ALL OK with one card
+    # on Apple, NVIDIA and AMD) and Embedding (bindings/_mojolearn_embedding.mojo,
+    # profile mojolearn.identical.embedding.fp32.v1 with padding_idx and the
+    # microbatch carry). IDENTICAL only, like every non-tree binding.
+    "_mojolearn_ivf",
+    "_mojolearn_embedding",
 )
 
 #: ONE RULE FOR TIERS (DEVIATION 2490, 2026-09-10): THE TREE LANES SHIP
@@ -983,6 +989,28 @@ def host_families_built():
 #:     cholesky_solve and cholesky_profile_jitter over the same chol_oracle;
 #:     gp_parallel_available is absent, so the ordered multi-GPU driver
 #:     refuses by name.
+#:   _mojolearn_gbdt -> _mojolearn_gbdt_host (gbdt-symmetric, gbdt-rmse,
+#:     gbdt-depthwise, gbdt-lossguide; workstream E batch 3, 2026-09-14):
+#:     gbdt_fit over gbdt/host/gbdt_oracle.mojo::gbdt_host_fit (the device
+#:     trainer restated on the host for SymmetricTree, Logloss, Cosine and
+#:     Newton leaves), gbdt/host/gbdt_oracle_rmse.mojo::gbdt_rmse_host_fit
+#:     (the same tree with RMSE and the searcher's leaves) and
+#:     gbdt/host/gbdt_oracle_depthwise.mojo (Depthwise with Cosine, Lossguide
+#:     with NewtonL2); every other option value refuses by name inside
+#:     gbdt_fit,
+#:     gbdt_predict and gbdt_model_dim over the model text and
+#:     core/gbdt_host_predict.mojo, and gbdt_sigmoid; gbdt_predict_multi,
+#:     the ordered and FeatureFreq fits and the adapters' binary transforms
+#:     are absent. Its own family for the reason the rf family is: the
+#:     forest host binding exports other names under another contract.
+#:   _mojolearn_arima -> _mojolearn_arima_host (arima, arima-011,
+#:     arima-seasonal-c; workstream E, 2026-09-14): arima_fit,
+#:     arima_predict and arima_forecast over arima/host/arima_oracle.mojo
+#:     (estimate_x0, the Jones transform, the batched L-BFGS over the
+#:     finite-difference Kalman likelihood, the undifferenced forecast), the
+#:     GPU binding's whole surface; p, q or P above 1, any Q, d + D of 2,
+#:     p + q + k of 0 and an in-sample prediction (start < n_obs) refuse by
+#:     name.
 _HOST_MODULES = host_surface.routed_modules()
 
 #: The env switch the CPU identity gate sets to load a host binding built
@@ -1576,6 +1604,8 @@ def _build_script(name):
         "_mojolearn_mixture": "build_mixture.sh",
         "_mojolearn_hdbscan": "build_hdbscan.sh",
         "_mojolearn_resample": "build_resample.sh",
+        "_mojolearn_ivf": "build_ivf.sh",
+        "_mojolearn_embedding": "build_embedding.sh",
     }.get(name, "build" + name[len("_mojolearn"):] + ".sh")
 
 

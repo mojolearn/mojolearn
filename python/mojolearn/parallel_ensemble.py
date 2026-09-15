@@ -173,3 +173,99 @@ def fit_feature_freq(estimator, X, y, *, devices=(0,), sample_weight=None):
         pool.close()
     estimator.__dict__ = result.__dict__.copy()
     return estimator
+
+
+def _admit_forest_predictor(estimator):
+    from .randomforest import RandomForestClassifier, RandomForestRegressor
+    from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
+    if type(estimator) not in (RandomForestClassifier, RandomForestRegressor,
+                               ExtraTreesClassifier, ExtraTreesRegressor):
+        raise TypeError('ParallelForestPredictor requires a mojolearn RandomForest or ExtraTrees estimator')
+    if not all(hasattr(estimator, name) for name in (
+            '_offsets', '_colid', '_quesval', '_left_child', '_leaves',
+            '_n_trees', '_num_outputs', 'n_features_in_')):
+        raise RuntimeError('ParallelForestPredictor requires a fitted estimator')
+    if estimator._effective_mode() != 'identical':
+        raise ValueError('ParallelForestPredictor requires IDENTICAL numeric mode')
+    if estimator._prediction_engine() != 'parallel_groves':
+        raise ValueError("ParallelForestPredictor requires inference_engine='parallel_groves'")
+    return isinstance(estimator, (RandomForestClassifier, ExtraTreesClassifier))
+
+
+class ParallelForestPredictor:
+    """Own a fitted RF/ET snapshot whose logical groves reside across GPUs.
+
+    Preparation snapshots the estimator immediately. Later source mutations
+    or refits do not affect this predictor. Predictions use the existing
+    parallel_groves reduction and original estimator label/dtype conversion.
+    This pools inference model storage; fit_forest remains a separate API.
+    Use as a context manager, or call close to release GPU state and worker.
+    """
+    def __init__(self, estimator, *, devices=(0, 1)):
+        import threading
+        self._classifier = _admit_forest_predictor(estimator)
+        self.devices = tuple(devices)
+        if len(self.devices) > 64:
+            raise ValueError('ParallelForestPredictor supports at most 64 devices')
+        self._pool = DevicePool(self.devices, cooperative=True)
+        self._lock = threading.RLock()
+        self._closed = False
+        try:
+            metadata = self._pool.map([('forest_prepare', estimator, None)])[0]
+            self.n_features_in_ = metadata['n_features']
+            self.n_estimators_ = metadata['trees']
+            if self._classifier:
+                self.classes_ = metadata['classes']
+                self.n_classes_ = metadata['outputs']
+        except BaseException:
+            self._closed = True
+            self._pool.close()
+            raise
+
+    def _predict(self, X, method):
+        with self._lock:
+            if self._closed:
+                raise RuntimeError('pooled forest predictor is closed')
+            if method not in ('predict', 'predict_proba'):
+                raise ValueError('unsupported pooled forest prediction method')
+            if method == 'predict_proba' and not self._classifier:
+                raise ValueError('predict_proba requires a classifier')
+            X, _ = as_f32_c(X, ndim=2, name='X')
+            if X.shape[1] != self.n_features_in_:
+                raise ValueError('X has %d features, fit saw %d' %
+                                 (X.shape[1], self.n_features_in_))
+            try:
+                return self._pool.map([('forest_predict', None, (method, X))])[0]
+            except BaseException:
+                # DevicePool closes on a failed RPC. Never restart a fresh
+                # worker that has lost this predictor's prepared snapshot.
+                self._closed = True
+                self._pool.close()
+                raise
+
+    def predict(self, X):
+        """Predict using the snapshot's original label decoding/output dtype."""
+        return self._predict(X, 'predict')
+
+    def predict_proba(self, X):
+        """Classifier probabilities: RF float32, ExtraTrees float64."""
+        return self._predict(X, 'predict_proba')
+
+    def close(self):
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            try:
+                self._pool.map([('forest_release', None, None)])
+            finally:
+                self._pool.close()
+
+    def __enter__(self):
+        with self._lock:
+            if self._closed:
+                raise RuntimeError('pooled forest predictor is closed')
+            return self
+
+    def __exit__(self, *exc):
+        self.close()

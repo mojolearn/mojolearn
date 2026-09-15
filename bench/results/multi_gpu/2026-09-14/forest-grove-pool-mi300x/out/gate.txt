@@ -1,0 +1,26 @@
+started=2026-09-14T21:52:10Z commit=81120c4edf5d13cf7451d8cb135648782b09ed49
+arch=gfx942 gpus=2 nproc=192 mem=2267G
+pixi-warm exit=0 seconds=0
+build-base exit=0 seconds=38
+build-et-separate exit=0 seconds=22
+build-rf-separate exit=0 seconds=22
+public-separate exit=0 seconds=122
+native-separate exit=0 seconds=10
+fault-separate exit=0 seconds=10
+resident-separate exit=0 seconds=9
+build-et-packed exit=0 seconds=21
+build-rf-packed exit=0 seconds=23
+public-packed exit=0 seconds=122
+native-packed exit=0 seconds=10
+fault-packed exit=0 seconds=10
+resident-packed exit=0 seconds=9
+native-separate PASS_lines=76 witness=2
+native-packed PASS_lines=76 witness=2
+fault-separate PASS_lines=76 witness=2
+fault-packed PASS_lines=76 witness=2
+public-separate: PASS 16 RF/ET configurations, persistent snapshots and refusals|
+public-packed: PASS 16 RF/ET configurations, persistent snapshots and refusals|
+resident-separate: WORKSPACE_PASS RF_INPUT True cached/uncached resize/reuse/empty/changed-input/close|WORKSPACE_PASS RF_INPUT False cached/uncached resize/reuse/empty/changed-input/close|RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction|
+resident-packed: WORKSPACE_PASS RF_INPUT True cached/uncached resize/reuse/empty/changed-input/close|WORKSPACE_PASS RF_INPUT False cached/uncached resize/reuse/empty/changed-input/close|RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction|
+public separate==packed True
+finished=2026-09-14T21:58:35Z

@@ -2,6 +2,45 @@
 
 # PROFILE `mojolearn.identical.embedding.fp32.v1`
 
+## Sabotage arms run, findings resolved, and a Python door (2026-09-14)
+
+The Apple M4, an NVIDIA H100 and an AMD MI300X produced the clause (a) card at
+md5 `c7f824c3` at 171752af4, and `tools/embedding_sabotage_arm.sh` built all
+sixteen `MOJOLEARN_EMB_SABOTAGE_*` arms on the three
+(`bench/results/ivf_embed_km_legs_2026-09-14/README.md`). Five arms raised or
+could not run there, and each was a defect in the check's prediction or in the
+arm, not in a kernel; `embedding/checks/embedding_check.mojo` now carries the
+resolutions and the 11.1 table below is corrected to match:
+
+- `EMB_EMPTY_ROW_NEG_ZERO` and `EMB_SORT_TIE_REVERSED` moved exactly one stage on
+  their predicted-inert cases (`emb.dw_seed` on F-NODUP, `emb.perm` on
+  F-DUPSAME) and left `emb.dw` alone. The seed stage is written `-0.0` on every
+  case by the first arm, and a reversed tie swaps every duplicate pair's slots.
+  The inert masks are now exact: that one stage must move and the other eight,
+  `emb.dw` included, must not.
+- `EMB_PAD_ROW_NEG_ZERO` first moves `emb.dw_seed`, because the check defines
+  that stage as the `T = 0` backward, which is the seed and the `padding_idx`
+  store (section 10 now says so).
+- `EMB_ACCUM_BY_ADD`'s control was dead on F-SPLIT at `t0 = 3` by construction:
+  every straddling row there has one contributor after the boundary, where ADD
+  and CARRY are the same additions. That split is now the arm's asserted inert
+  case, and the witness is F-TREE4 split at `t0 = 2`, where ADD gives
+  `0x3F800001` and the chain `0x3F800000` by planted bits.
+- `EMB_GATHER_CLAMP_OOR` was unrunnable because the device entry points refuse an
+  out-of-range id before the kernel's clamp can see it. The arm now drops that
+  refusal too, and the check's device refusal step is its witness: the clean
+  build refuses F-OOR by name with nothing launched, the armed build accepts it
+  and returns the clamped gather.
+- `EMB_NO_FLUSH_ACC` raised on Apple because the check measured flushing on the
+  HOST processor, which keeps subnormals, while the Metal device flushes the
+  add. A device probe now decides, and on a flushing device the arm is asserted
+  inert on every case (9.3's prediction), a smoke test rather than a reach proof.
+
+`mojolearn.Embedding` (`bindings/_mojolearn_embedding.mojo`) is the Python door:
+the gather, the PLAN_SCAN fold, `padding_idx` and the carry, with `max_norm`,
+`scale_grad_by_freq` and `sparse` refused by name. Its identity_break lane is
+`embedding`.
+
 ## PLAN_SORT implementation update (2026-09-10)
 
 `embedding/checks/embedding_sort.mojo` implements the section 6.2 total-key
@@ -742,7 +781,7 @@ flush arm in this lane a single-column run can see.
     emb.counts        [V]        Int32    R1
     emb.run_begin     [V + 1]    Int32    R2
     emb.perm          [T]        Int32    R3
-    emb.dw_seed       [V, d]     Float32  the +0.0 fill, or the carried-in dW
+    emb.dw_seed       [V, d]     Float32  the +0.0 fill, or the carried-in dW, and the padding_idx store (the T = 0 backward)
     emb.dw            [V, d]     Float32  E0 through E4
 
 Nine stages, three of them INTEGER, and that is the whole of section 5:
@@ -788,17 +827,17 @@ defect and not a numerics one.
 | `EMB_FOLD_READS_LAUNCH` | `emb.dw` | nothing | 4.1's last paragraph |
 | `EMB_SINGLE_RUN_BYPASS` | `emb.dw` | **every cell except one whose sole contributor is `-0.0`** | 4.3 |
 | `EMB_EMPTY_ROW_SKIPPED` | `emb.dw_seed`, then `emb.dw` | **any gate that does not POISON the output buffer** | 4.3, the store is required |
-| `EMB_EMPTY_ROW_NEG_ZERO` | `emb.dw` | nothing | 4.3, `+0.0` and not `-0.0` |
+| `EMB_EMPTY_ROW_NEG_ZERO` | `emb.dw_seed` | **`emb.dw`** on any fixture where every row has a contributor (F-NODUP), while `emb.dw_seed` moves on every fixture | 4.3, `+0.0` and not `-0.0` |
 | `EMB_SEED_SEEDLESS` | `emb.dw` | **the same mask as the bypass**, which is why both are needed | 7.2(c) |
-| `EMB_SORT_TIE_REVERSED` | `emb.perm`, then `emb.dw` | a fixture with no duplicate ids; one whose duplicates carry bitwise equal `dY` rows | 5.5(a) |
+| `EMB_SORT_TIE_REVERSED` | `emb.perm`, then `emb.dw` | every stage on a fixture with no duplicate ids; **`emb.dw` only** on one whose duplicates carry bitwise equal `dY` rows (F-DUPSAME moves `emb.perm`) | 5.5(a) |
 | `EMB_SORT_KEY_ID_ONLY_UNSTABLE` | `emb.perm` | a fixture with no duplicate ids | 5.5(b) |
 | `EMB_RANK_BY_ARRIVAL` | `emb.perm` | no duplicates; a single-block launch, where arrival order IS position order | 5.5's third trap |
 | `EMB_PAD_ROW_CONTRIBUTES` | `emb.counts`, then `emb.run_begin` and `emb.perm` | **`emb.dw`, which it must NOT move**, plus any fixture with no `padding_idx` | section 6, and the proof the two spellings are bit-equal in `dW` |
-| `EMB_PAD_ROW_NEG_ZERO` | `emb.dw` at row `padding_idx` | a fixture with no `padding_idx` | section 6 |
-| `EMB_NO_FLUSH_ACC` | `emb.dw` | no subnormal intermediate; **and ON APPLE, ENTIRELY** | seam E3 |
+| `EMB_PAD_ROW_NEG_ZERO` | `emb.dw_seed` at row `padding_idx` (the `T = 0` store), then `emb.dw` | a fixture with no `padding_idx` | section 6 |
+| `EMB_NO_FLUSH_ACC` | `emb.dw` | no subnormal intermediate; **and on any device whose raw add flushes (Apple), ENTIRELY**, decided by a device probe | seam E3 |
 | `EMB_GATHER_NO_FLUSH` | `emb.fwd` | no subnormal WEIGHT; **not inert on Apple**, this lane's only single-column flush proof | G1, G2, DEVIATION 1310 |
-| `EMB_GATHER_CLAMP_OOR` | `emb.fwd` | a fixture with no out-of-range id | section 6 |
-| `EMB_ACCUM_BY_ADD` | `emb.dw`, **in clause (e)'s gate only** | any split leaving every row's contributors on one side; every exactly-representable fixture | 5.4 |
+| `EMB_GATHER_CLAMP_OOR` | `emb.fwd` (the arm drops the device id refusal and clamps) | a fixture with no out-of-range id | section 6 |
+| `EMB_ACCUM_BY_ADD` | `emb.dw`, **in clause (e)'s gate only** | any split leaving every row's contributors on one side; any split where every straddling row has ONE contributor after the boundary; every exactly-representable fixture | 5.4 |
 | `EMB_ACCUM_REFILLS` | `emb.dw_seed` | a single-microbatch gate | 5.4's price |
 
 Each must move the stage its OWN clause writes and no earlier one.
@@ -968,23 +1007,24 @@ Cited from elsewhere and never redefined: 621, 1505, 1938.
 
 **OWED.**
 
-1. **NOT ONE SABOTAGE ARM HAS BEEN BUILT. That, and not a missing file, is
-   the largest debt in the lane.** Both legs left all fifteen buildable arms
-   unrun; two of the eighteen cannot be built at all and a third is falsifiable
-   only under a clause neither leg ran.
-2. **An NVIDIA leg**, and clauses (b), (c), (e) and (f) on the two existing
-   columns.
+1. **The sabotage arms.** All sixteen buildable arms were built and run on
+   the Apple M4, an NVIDIA H100 and an AMD MI300X on 2026-09-14, and the five
+   findings of that round are resolved in the check (the status section at
+   the top). Still owed: the two unbuilt rows, `EMB_FOLD_VIA_GEMM_ONEHOT` and
+   `EMB_SORT_KEY_ID_ONLY_UNSTABLE`.
+2. **Clauses (b), (c) and (f) on every column.** The NVIDIA leg ran on
+   2026-09-14 (clause (a), card `c7f824c3`), and clause (e) runs in every
+   sabotage round as `EMB_ACCUM_BY_ADD`'s witness.
 3. **PLAN_SORT is implemented.** Clause (d) now exercises both real plans
    and three launch geometries. Additional vendor evidence and a measured
    dispatch crossover remain owed; the production default stays PLAN_SCAN.
 4. **A `pixi.toml` task, an `embedding/README.md`, a `NOT_IMPLEMENTED.tsv`.** Every other lane carries all four.
-5. **An `IDENTITY_PATHS.md` row**, DEVIATION 1300. It must record exactly what
-   the 2026-08-28 round did and did not close, which is clause (a) only, on
-   Apple and AMD, cards byte-identical, NO NVIDIA, no sabotage arm built.
-6. **`SUPPORT_MATRIX.md`, `archive/plans/CARD_GAPS.md` and `archive/plans/UNWIRED.md` do not mention
-   `embedding/`.** What they should say is not "specified, never compiled",
-   which is false, but "carded on Apple and AMD at clause (a), NVIDIA owed, no
-   sabotage arm ever built".
+5. **An `IDENTITY_PATHS.md` row**, DEVIATION 1300. It must record what the
+   rounds closed: clause (a) with the card byte-identical on Apple, NVIDIA and
+   AMD, and the sabotage arms of section 11.1 run on all three (2026-09-14).
+6. **`archive/plans/CARD_GAPS.md` and `archive/plans/UNWIRED.md` do not
+   mention `embedding/`.** `SUPPORT_MATRIX.md` carries the lane since
+   2026-09-14, with the Python door.
 7. **`refuse_nonfinite` is now a FOURTH copy**, after `mamba_oracle.mojo:57`,
    `optimizer_oracle.mojo:162` and `loss_oracle.mojo:167`. It belongs in
    `checks/numerics.mojo` and **three lanes now want the same edit.**

@@ -186,6 +186,19 @@ spelling and a fixture at a non-power-of-four `head_dim` is required.
 arithmetic per cell does not read B, L, the cache length or the launch, so
 shape coverage is about the gates and not about the profile.
 
+**What has measured the B and L row, as of 2026-09-14.** Clause (c)'s
+batch half passed at B in {1, 2, 3} inside `transformer_backward_check` on
+NVIDIA and AMD (`bench/results/e1/2026-09-03_091511-mojolearn-e2-nv` and
+`2026-09-03_092106-mojolearn-e2-amd`, `transformer-backward.identical.check.log`).
+The forward check's clause (c) is opt-in (`MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_C=1`)
+and every committed forward log reads SKIPPED, and
+`checks/batch_invariance_check.mojo` (B in {1, 17, 64}) has no committed
+record. Through the public `TransformerBlock.forward`, the `batch` part of
+`tools/identity_break.py` (since 4230ab5b0) asks 8 sequences whole, each
+alone and split 1, 7 and the rest, and the prefix lengths 1, 7 and 15
+against 16, for the transformer and transformer-window lanes. One Apple M4
+smoke read STABLE on `base`; the first three-column record is owed.
+
 `intermediate_size = 300` is not decoration. Every projection in a small
 config has `k <= 128`, which is `P == 1` under the GEMM profile, so the
 whole balanced fold tree sits unexercised inside the block exactly as it
