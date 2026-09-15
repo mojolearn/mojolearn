@@ -227,6 +227,34 @@ class _Combined(Kernel):
         return f"({self.a._name()} {self.sym} {self.b._name()})"
 
 
+class _SavedKernel(Kernel):
+    """A kernel read back from a saved model: its postfix `(kind, param,
+    length_scales)` nodes exactly as `_nodes()` produced them at save time,
+    so `_kernel_arrays()` hands the binding the same four arrays the fit
+    handed it (the neighbors and density inference lane, 2026-09-15)."""
+
+    def __init__(self, nodes):
+        self.__nodes = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]
+
+    def _nodes(self):
+        return [(k, p, list(ls)) for k, p, ls in self.__nodes]
+
+    def _name(self):
+        return f"_SavedKernel({len(self.__nodes)} nodes)"
+
+
+#: The model file (the neighbors and density inference lane, 2026-09-15):
+#: `X_train` `<f4` (n, d), `L` `<f4` (n, n), `alpha` `<f4` (n) as fitted; the
+#: kernel's postfix spec as `kinds` `<i4`, `params` `<f8`, `ls_len` `<i4` and the
+#: `ls` table `<f8` (the Python floats `_nodes()` held, so the binary32 arrays
+#: predict builds are the fit's); `ints` `<i8` [n_features_in_, info_,
+#: normalize_y_, n_ls]; `reals` `<f8` [alpha, _y_train_mean, _y_train_std,
+#: log_marginal_likelihood_value_]. `mojolearn.host_model(path)` predicts the
+#: mean and std from it on a CPU through the inference-only gp binding, with
+#: normalize_y's scale-back in `predict` as on the GPU.
+_GP_FORMAT = "mojolearn-gp-1"
+
+
 class GaussianProcessRegressor(NumericModeMixin):
     """Exact dense GP regression on the GPU, the scikit-learn surface over
     `gaussian_process/estimator.mojo` (DEVIATIONS 1750-1771 are the
@@ -673,6 +701,83 @@ class GaussianProcessRegressor(NumericModeMixin):
             self.n_clamped_ = int(n_clamped)
             return mean, std
         return mean
+
+    # -- saved models -----------------------------------------------------------
+
+    def save(self, path):
+        """Write what `predict` reads to `path` as an npz (`_GP_FORMAT`)."""
+        if not hasattr(self, "alpha_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        from . import _serialize
+        from .linear_model import _saved_mode
+        nodes = self.kernel._nodes()
+        table = [float(v) for _, _, ls in nodes for v in ls]
+        n = int(self.X_train_.shape[0])
+        return _serialize.write_npz(path, {
+            "format": _GP_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "X_train": self.X_train_,
+            "L": self.L_.reshape((n * n,)),
+            "alpha": self.alpha_,
+            "kinds": Array.from_list([int(k) for k, _, _ in nodes], "<i4"),
+            "params": Array.from_list([float(p) for _, p, _ in nodes], "<f8"),
+            "ls_len": Array.from_list([len(ls) for _, _, ls in nodes], "<i4"),
+            "ls": Array.from_list(table if table else [1.0], "<f8"),
+            "ints": Array.from_list([int(self.n_features_in_), int(self.info_),
+                                     1 if getattr(self, "normalize_y_", False) else 0, len(table)], "<i8"),
+            "reals": Array.from_list([float(self.alpha), float(getattr(self, "_y_train_mean", 0.0)),
+                                      float(getattr(self, "_y_train_std", 1.0)),
+                                      float(self.log_marginal_likelihood_value_)], "<f8"),
+        })
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`; `predict` (mean and std) answers from
+        it. Every array is read at its saved dtype and never cast."""
+        from . import _serialize
+        from .linear_model import _check_saved_by, _restore_mode
+        arrays = _serialize.read_npz(path, _GP_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        ints = _serialize.exact(arrays, "ints", "<i8")
+        reals = _serialize.exact(arrays, "reals", "<f8")
+        if ints.size != 4 or reals.size != 4:
+            raise ValueError(f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, 4 and 4 are needed")
+        d, info, norm, n_ls = (int(ints[i]) for i in range(4))
+        x = _serialize.exact(arrays, "X_train", "<f4")
+        if x.ndim != 2 or x.shape[1] != d or x.shape[0] < 1:
+            raise ValueError(f"mojolearn: {path!r} X_train has shape {tuple(x.shape)}, ints say {d} features")
+        n = int(x.shape[0])
+        l_flat = _serialize.exact(arrays, "L", "<f4")
+        dual = _serialize.exact(arrays, "alpha", "<f4")
+        if l_flat.size != n * n or dual.ndim != 1 or dual.size != n:
+            raise ValueError(f"mojolearn: {path!r} L or alpha does not match {n} training rows")
+        kinds = _serialize.exact(arrays, "kinds", "<i4")
+        params = _serialize.exact(arrays, "params", "<f8")
+        ls_len = _serialize.exact(arrays, "ls_len", "<i4")
+        ls = _serialize.exact(arrays, "ls", "<f8")
+        if not (kinds.size == params.size == ls_len.size) or kinds.size < 1:
+            raise ValueError(f"mojolearn: {path!r} carries a malformed kernel spec")
+        lens = [int(ls_len[i]) for i in range(ls_len.size)]
+        if sum(lens) != n_ls or ls.size != max(n_ls, 1):
+            raise ValueError(f"mojolearn: {path!r} length scale table does not match its node lengths")
+        nodes, off = [], 0
+        for i in range(kinds.size):
+            nodes.append((int(kinds[i]), float(params[i]), [float(ls[off + j]) for j in range(lens[i])]))
+            off += lens[i]
+        obj = cls(kernel=_SavedKernel(nodes), alpha=float(reals[0]), normalize_y=bool(norm))
+        _restore_mode(obj, arrays)
+        obj.X_train_ = x
+        obj.kernel_ = obj.kernel
+        obj.n_features_in_ = d
+        obj.L_ = l_flat.reshape((n, n))
+        obj.alpha_ = dual
+        obj.info_ = info
+        obj.normalize_y_ = bool(norm)
+        obj._y_train_mean = float(reals[1])
+        obj._y_train_std = float(reals[2])
+        obj.log_marginal_likelihood_value_ = float(reals[3])
+        return obj
 
     # -- the rest of sklearn's surface, honored or refused by name ----------
 

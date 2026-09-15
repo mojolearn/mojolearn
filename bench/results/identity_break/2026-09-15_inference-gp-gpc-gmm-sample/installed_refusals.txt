@@ -1,0 +1,7 @@
+installed from wheel3/target/mojolearn/__init__.py vendor cpu
+GaussianProcessRegressor fit refused: mojolearn: public CPU estimators support inference from save
+GaussianProcessClassifier fit refused: mojolearn: public CPU estimators support inference from save
+GaussianMixture fit refused: mojolearn: public CPU estimators support inference from save
+gp-normalize-y host_model -> HostGaussianProcessRegressor binds mojolearn._host._mojolearn_gp_infer_host gpr_fit absent
+gpc-multiclass host_model -> HostGaussianProcessClassifier binds mojolearn._host._mojolearn_gp_infer_host gpc_fit absent
+gmm-sample host_model -> HostGaussianMixture binds mojolearn._host._mojolearn_mixture_infer_host gmm_fit absent

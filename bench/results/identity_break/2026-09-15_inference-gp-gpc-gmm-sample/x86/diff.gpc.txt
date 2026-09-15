@@ -1,0 +1,134 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 7 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gp_host'] commit=a3357cd9857cd79035f25d0c5147dbe592309252
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_svm_host'] commit=afd1dcd2af4ff33e2e4bddfaae58df0798732580
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    arm64: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    arm64: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    arm64: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    arm64: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    arm64: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    arm64: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    arm64: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    arm64: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    arm64: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    arm64: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    arm64: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    arm64: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-7713-64-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+| lane/fixture                 | verdict    | arm64            | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|
+| gpc-multiclass/base          | IDENTICAL x3 | 03d42b186d3d23de | 03d42b186d3d23de | 03d42b186d3d23de |
+| gpc-multiclass/denormal      | IDENTICAL x2 | e2879b5eb341003a | e2879b5eb341003a | (not run)        |
+| gpc-multiclass/denormal_ftz  | IDENTICAL x2 | e2879b5eb341003a | e2879b5eb341003a | (not run)        |
+| gpc-multiclass/dupes         | IDENTICAL x3 | 03d42b186d3d23de | 03d42b186d3d23de | 03d42b186d3d23de |
+| gpc-multiclass/hashed        | IDENTICAL x2 | 181acf0aafcb8d7f | 181acf0aafcb8d7f | (not run)        |
+| gpc-multiclass/negative      | IDENTICAL x2 | eba4fef6bf4f1391 | eba4fef6bf4f1391 | (not run)        |
+| gpc-multiclass/odd           | IDENTICAL x2 | 12702bc35db689d4 | 12702bc35db689d4 | (not run)        |
+| gpc-multiclass/ties          | IDENTICAL x3 | 1de9790fa6022bd1 | 1de9790fa6022bd1 | 1de9790fa6022bd1 |
+| gpc-multiclass/wide          | IDENTICAL x2 | 6ef9cd023801b550 | 6ef9cd023801b550 | (not run)        |
+| gpc/base                     | IDENTICAL x3 | 8b68b996d36775e7 | 8b68b996d36775e7 | 8b68b996d36775e7 |
+| gpc/denormal                 | IDENTICAL x2 | 9b41ad56958c3286 | 9b41ad56958c3286 | (not run)        |
+| gpc/denormal_ftz             | IDENTICAL x2 | 9b41ad56958c3286 | 9b41ad56958c3286 | (not run)        |
+| gpc/dupes                    | IDENTICAL x3 | 8b68b996d36775e7 | 8b68b996d36775e7 | 8b68b996d36775e7 |
+| gpc/hashed                   | IDENTICAL x2 | 8df82eb703a3d9a8 | 8df82eb703a3d9a8 | (not run)        |
+| gpc/negative                 | IDENTICAL x2 | e159f0086dea6ea3 | e159f0086dea6ea3 | (not run)        |
+| gpc/odd                      | IDENTICAL x2 | 2390c88bdb274c27 | 2390c88bdb274c27 | (not run)        |
+| gpc/ties                     | IDENTICAL x3 | c49b12da8e54b073 | c49b12da8e54b073 | c49b12da8e54b073 |
+| gpc/wide                     | IDENTICAL x2 | 0660ecee79edde49 | 0660ecee79edde49 | (not run)        |
+
+summary: IDENTICAL=18
+
+| lane/fixture                 | column | verdict      | arm64            | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| gpc-multiclass/base          | infer  | IDENTICAL x3 | 84db38aa85e9efe3 | 84db38aa85e9efe3 | 84db38aa85e9efe3 |
+| gpc-multiclass/base          | model  | IDENTICAL x3 | a7da75ab43e33d59 | a7da75ab43e33d59 | a7da75ab43e33d59 |
+| gpc-multiclass/base          | batch  | IDENTICAL x3 | 772762bf3af9d5ab | 772762bf3af9d5ab | 772762bf3af9d5ab |
+| gpc-multiclass/denormal      | infer  | IDENTICAL x2 | fb65a74653a8c928 | fb65a74653a8c928 | (not run)        |
+| gpc-multiclass/denormal      | model  | IDENTICAL x2 | 6a06c6e9e1b52fbd | 6a06c6e9e1b52fbd | (not run)        |
+| gpc-multiclass/denormal      | batch  | IDENTICAL x2 | 0b6b909883561caf | 0b6b909883561caf | (not run)        |
+| gpc-multiclass/denormal_ftz  | infer  | IDENTICAL x2 | fb65a74653a8c928 | fb65a74653a8c928 | (not run)        |
+| gpc-multiclass/denormal_ftz  | model  | IDENTICAL x2 | ec9bd2135d89a38a | ec9bd2135d89a38a | (not run)        |
+| gpc-multiclass/denormal_ftz  | batch  | IDENTICAL x2 | 0b6b909883561caf | 0b6b909883561caf | (not run)        |
+| gpc-multiclass/dupes         | infer  | IDENTICAL x3 | 84db38aa85e9efe3 | 84db38aa85e9efe3 | 84db38aa85e9efe3 |
+| gpc-multiclass/dupes         | model  | IDENTICAL x3 | a7da75ab43e33d59 | a7da75ab43e33d59 | a7da75ab43e33d59 |
+| gpc-multiclass/dupes         | batch  | IDENTICAL x3 | 772762bf3af9d5ab | 772762bf3af9d5ab | 772762bf3af9d5ab |
+| gpc-multiclass/hashed        | infer  | IDENTICAL x2 | ea81a2c3a726ff07 | ea81a2c3a726ff07 | (not run)        |
+| gpc-multiclass/hashed        | model  | IDENTICAL x2 | ad095c88a27ebcc8 | ad095c88a27ebcc8 | (not run)        |
+| gpc-multiclass/hashed        | batch  | IDENTICAL x2 | 29ed3923c985a394 | 29ed3923c985a394 | (not run)        |
+| gpc-multiclass/negative      | infer  | IDENTICAL x2 | d35fed113ef73176 | d35fed113ef73176 | (not run)        |
+| gpc-multiclass/negative      | model  | IDENTICAL x2 | dec1293907b2b18f | dec1293907b2b18f | (not run)        |
+| gpc-multiclass/negative      | batch  | IDENTICAL x2 | 5fc9640b35c5fd5d | 5fc9640b35c5fd5d | (not run)        |
+| gpc-multiclass/odd           | infer  | IDENTICAL x2 | f57fd8a7a5d1e719 | f57fd8a7a5d1e719 | (not run)        |
+| gpc-multiclass/odd           | model  | IDENTICAL x2 | e09bd84a508af322 | e09bd84a508af322 | (not run)        |
+| gpc-multiclass/odd           | batch  | IDENTICAL x2 | b117ad2778d35fd5 | b117ad2778d35fd5 | (not run)        |
+| gpc-multiclass/ties          | infer  | IDENTICAL x3 | 5f34edf8c694f013 | 5f34edf8c694f013 | 5f34edf8c694f013 |
+| gpc-multiclass/ties          | model  | IDENTICAL x3 | 3b3ac4079026dcdb | 3b3ac4079026dcdb | 3b3ac4079026dcdb |
+| gpc-multiclass/ties          | batch  | IDENTICAL x3 | f212e023f26bc35c | f212e023f26bc35c | f212e023f26bc35c |
+| gpc-multiclass/wide          | infer  | IDENTICAL x2 | b3674a9463aa4f92 | b3674a9463aa4f92 | (not run)        |
+| gpc-multiclass/wide          | model  | IDENTICAL x2 | bde361487f19df87 | bde361487f19df87 | (not run)        |
+| gpc-multiclass/wide          | batch  | IDENTICAL x2 | 7ad6723007e8de0c | 7ad6723007e8de0c | (not run)        |
+| gpc/base                     | infer  | IDENTICAL x3 | fc0b4c2f28c2e079 | fc0b4c2f28c2e079 | fc0b4c2f28c2e079 |
+| gpc/base                     | model  | IDENTICAL x3 | 81b8bb9e635d8e83 | 81b8bb9e635d8e83 | 81b8bb9e635d8e83 |
+| gpc/base                     | batch  | IDENTICAL x3 | b46f1f9043e091a8 | b46f1f9043e091a8 | b46f1f9043e091a8 |
+| gpc/denormal                 | infer  | IDENTICAL x2 | cd21375d6187b126 | cd21375d6187b126 | (not run)        |
+| gpc/denormal                 | model  | IDENTICAL x2 | 1ed2aed7cb4ce5f2 | 1ed2aed7cb4ce5f2 | (not run)        |
+| gpc/denormal                 | batch  | IDENTICAL x2 | ba78f499f85cae98 | ba78f499f85cae98 | (not run)        |
+| gpc/denormal_ftz             | infer  | IDENTICAL x2 | cd21375d6187b126 | cd21375d6187b126 | (not run)        |
+| gpc/denormal_ftz             | model  | IDENTICAL x2 | b91daefb85705ccd | b91daefb85705ccd | (not run)        |
+| gpc/denormal_ftz             | batch  | IDENTICAL x2 | ba78f499f85cae98 | ba78f499f85cae98 | (not run)        |
+| gpc/dupes                    | infer  | IDENTICAL x3 | fc0b4c2f28c2e079 | fc0b4c2f28c2e079 | fc0b4c2f28c2e079 |
+| gpc/dupes                    | model  | IDENTICAL x3 | 81b8bb9e635d8e83 | 81b8bb9e635d8e83 | 81b8bb9e635d8e83 |
+| gpc/dupes                    | batch  | IDENTICAL x3 | b46f1f9043e091a8 | b46f1f9043e091a8 | b46f1f9043e091a8 |
+| gpc/hashed                   | infer  | IDENTICAL x2 | 9da411da0b1e3037 | 9da411da0b1e3037 | (not run)        |
+| gpc/hashed                   | model  | IDENTICAL x2 | f4c2aca55d9362f2 | f4c2aca55d9362f2 | (not run)        |
+| gpc/hashed                   | batch  | IDENTICAL x2 | 0419fbbe5d340ea4 | 0419fbbe5d340ea4 | (not run)        |
+| gpc/negative                 | infer  | IDENTICAL x2 | b7e320a5c79c2f12 | b7e320a5c79c2f12 | (not run)        |
+| gpc/negative                 | model  | IDENTICAL x2 | 42456472e82844f7 | 42456472e82844f7 | (not run)        |
+| gpc/negative                 | batch  | IDENTICAL x2 | c2f1bdf1ba2a74f9 | c2f1bdf1ba2a74f9 | (not run)        |
+| gpc/odd                      | infer  | IDENTICAL x2 | 1af8d13ad9045833 | 1af8d13ad9045833 | (not run)        |
+| gpc/odd                      | model  | IDENTICAL x2 | d5a786c8bdd995bf | d5a786c8bdd995bf | (not run)        |
+| gpc/odd                      | batch  | IDENTICAL x2 | 1d0177239abe0a3c | 1d0177239abe0a3c | (not run)        |
+| gpc/ties                     | infer  | IDENTICAL x3 | ede5baa0c8969b06 | ede5baa0c8969b06 | ede5baa0c8969b06 |
+| gpc/ties                     | model  | IDENTICAL x3 | 7b9bf869ad365c26 | 7b9bf869ad365c26 | 7b9bf869ad365c26 |
+| gpc/ties                     | batch  | IDENTICAL x3 | c5069c7b59de4ee1 | c5069c7b59de4ee1 | c5069c7b59de4ee1 |
+| gpc/wide                     | infer  | IDENTICAL x2 | 209675fda33ccf51 | 209675fda33ccf51 | (not run)        |
+| gpc/wide                     | model  | IDENTICAL x2 | a3ba1f8be78a6a1e | a3ba1f8be78a6a1e | (not run)        |
+| gpc/wide                     | batch  | IDENTICAL x2 | e8e16299ce5b249c | e8e16299ce5b249c | (not run)        |
+
+summary (infer/model): IDENTICAL=36
+summary (batch): IDENTICAL=18
+summary (rlpair): 

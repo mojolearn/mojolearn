@@ -1,0 +1,1143 @@
+NOTE: --lanes scopes this diff to 18 lane(s); 148 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host'] commit=59cbcedd2b3c7bb809ffd3b28dc26a2d7791c8fa
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-h100-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    amd-mi325x-gfx942: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    nvidia-h100-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    amd-mi325x-gfx942: {'X': '32ea0bbed60b8e6c'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    cpu-apple-m4: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| kde-cosine-minkowski/base    | IDENTICAL x4 | 2cc7fbd9d26fe15f | 2cc7fbd9d26fe15f | 2cc7fbd9d26fe15f | 2cc7fbd9d26fe15f |
+| kde-cosine-minkowski/denormal | IDENTICAL x3 | 5a2cee4f1a1ebbd5 | 5a2cee4f1a1ebbd5 | 5a2cee4f1a1ebbd5 | (not run)        |
+| kde-cosine-minkowski/denormal_ftz | IDENTICAL x3 | 5a2cee4f1a1ebbd5 | 5a2cee4f1a1ebbd5 | 5a2cee4f1a1ebbd5 | (not run)        |
+| kde-cosine-minkowski/dupes   | IDENTICAL x4 | 2cc7fbd9d26fe15f | 2cc7fbd9d26fe15f | 2cc7fbd9d26fe15f | 2cc7fbd9d26fe15f |
+| kde-cosine-minkowski/hashed  | IDENTICAL x3 | a9a66749b2bbc20e | a9a66749b2bbc20e | a9a66749b2bbc20e | (not run)        |
+| kde-cosine-minkowski/negative | IDENTICAL x3 | 7afb1edfa310bbdf | 7afb1edfa310bbdf | 7afb1edfa310bbdf | (not run)        |
+| kde-cosine-minkowski/odd     | IDENTICAL x3 | cb0e0da4fb87a043 | cb0e0da4fb87a043 | cb0e0da4fb87a043 | (not run)        |
+| kde-cosine-minkowski/ties    | IDENTICAL x4 | 23587f0f79cdce9e | 23587f0f79cdce9e | 23587f0f79cdce9e | 23587f0f79cdce9e |
+| kde-cosine-minkowski/wide    | IDENTICAL x3 | b48e9968fad86041 | b48e9968fad86041 | b48e9968fad86041 | (not run)        |
+| kde-epanechnikov-l1/base     | IDENTICAL x4 | f8f65516ba475fa2 | f8f65516ba475fa2 | f8f65516ba475fa2 | f8f65516ba475fa2 |
+| kde-epanechnikov-l1/denormal | IDENTICAL x3 | 9bd34001eee4e722 | 9bd34001eee4e722 | 9bd34001eee4e722 | (not run)        |
+| kde-epanechnikov-l1/denormal_ftz | IDENTICAL x3 | 9bd34001eee4e722 | 9bd34001eee4e722 | 9bd34001eee4e722 | (not run)        |
+| kde-epanechnikov-l1/dupes    | IDENTICAL x4 | f8f65516ba475fa2 | f8f65516ba475fa2 | f8f65516ba475fa2 | f8f65516ba475fa2 |
+| kde-epanechnikov-l1/hashed   | IDENTICAL x3 | 8a47aa91f3a3e0d1 | 8a47aa91f3a3e0d1 | 8a47aa91f3a3e0d1 | (not run)        |
+| kde-epanechnikov-l1/negative | IDENTICAL x3 | 9a130c4224101ef9 | 9a130c4224101ef9 | 9a130c4224101ef9 | (not run)        |
+| kde-epanechnikov-l1/odd      | IDENTICAL x3 | 655ac21a6761f8b5 | 655ac21a6761f8b5 | 655ac21a6761f8b5 | (not run)        |
+| kde-epanechnikov-l1/ties     | IDENTICAL x4 | 9d61f71062dcd4c2 | 9d61f71062dcd4c2 | 9d61f71062dcd4c2 | 9d61f71062dcd4c2 |
+| kde-epanechnikov-l1/wide     | IDENTICAL x3 | 2d201ece23c520b1 | 2d201ece23c520b1 | 2d201ece23c520b1 | (not run)        |
+| kde-exponential-chebyshev/base | IDENTICAL x4 | 4955944cfce4cc2e | 4955944cfce4cc2e | 4955944cfce4cc2e | 4955944cfce4cc2e |
+| kde-exponential-chebyshev/denormal | IDENTICAL x3 | 0c35b4bf1699cdf7 | 0c35b4bf1699cdf7 | 0c35b4bf1699cdf7 | (not run)        |
+| kde-exponential-chebyshev/denormal_ftz | IDENTICAL x3 | 0c35b4bf1699cdf7 | 0c35b4bf1699cdf7 | 0c35b4bf1699cdf7 | (not run)        |
+| kde-exponential-chebyshev/dupes | IDENTICAL x4 | 4955944cfce4cc2e | 4955944cfce4cc2e | 4955944cfce4cc2e | 4955944cfce4cc2e |
+| kde-exponential-chebyshev/hashed | IDENTICAL x3 | 9e933d61986426ab | 9e933d61986426ab | 9e933d61986426ab | (not run)        |
+| kde-exponential-chebyshev/negative | IDENTICAL x3 | 040863f2f11a6101 | 040863f2f11a6101 | 040863f2f11a6101 | (not run)        |
+| kde-exponential-chebyshev/odd | IDENTICAL x3 | 923162f6d57b53ad | 923162f6d57b53ad | 923162f6d57b53ad | (not run)        |
+| kde-exponential-chebyshev/ties | IDENTICAL x4 | 771fafe72c84a4f4 | 771fafe72c84a4f4 | 771fafe72c84a4f4 | 771fafe72c84a4f4 |
+| kde-exponential-chebyshev/wide | IDENTICAL x3 | 07e4f1bd67c75580 | 07e4f1bd67c75580 | 07e4f1bd67c75580 | (not run)        |
+| kde-linear-cosine/base       | IDENTICAL x4 | afa97b36fbe911fb | afa97b36fbe911fb | afa97b36fbe911fb | afa97b36fbe911fb |
+| kde-linear-cosine/denormal   | IDENTICAL x3 | e5fa16ac419a08df | e5fa16ac419a08df | e5fa16ac419a08df | (not run)        |
+| kde-linear-cosine/denormal_ftz | IDENTICAL x3 | e5fa16ac419a08df | e5fa16ac419a08df | e5fa16ac419a08df | (not run)        |
+| kde-linear-cosine/dupes      | IDENTICAL x4 | afa97b36fbe911fb | afa97b36fbe911fb | afa97b36fbe911fb | afa97b36fbe911fb |
+| kde-linear-cosine/hashed     | IDENTICAL x3 | c6ac6acaf1551161 | c6ac6acaf1551161 | c6ac6acaf1551161 | (not run)        |
+| kde-linear-cosine/negative   | IDENTICAL x3 | 97bb4ab75de5a992 | 97bb4ab75de5a992 | 97bb4ab75de5a992 | (not run)        |
+| kde-linear-cosine/odd        | IDENTICAL x3 | f41fe39918a6a2d5 | f41fe39918a6a2d5 | f41fe39918a6a2d5 | (not run)        |
+| kde-linear-cosine/ties       | IDENTICAL x4 | 038d0662d8a2348a | 038d0662d8a2348a | 038d0662d8a2348a | 038d0662d8a2348a |
+| kde-linear-cosine/wide       | IDENTICAL x3 | a5caf2c8fa841881 | a5caf2c8fa841881 | a5caf2c8fa841881 | (not run)        |
+| kde-tophat-sqeuclidean/base  | IDENTICAL x4 | cde93651e40f745f | cde93651e40f745f | cde93651e40f745f | cde93651e40f745f |
+| kde-tophat-sqeuclidean/denormal | IDENTICAL x3 | ed2dc634ab047fad | ed2dc634ab047fad | ed2dc634ab047fad | (not run)        |
+| kde-tophat-sqeuclidean/denormal_ftz | IDENTICAL x3 | ed2dc634ab047fad | ed2dc634ab047fad | ed2dc634ab047fad | (not run)        |
+| kde-tophat-sqeuclidean/dupes | IDENTICAL x4 | cde93651e40f745f | cde93651e40f745f | cde93651e40f745f | cde93651e40f745f |
+| kde-tophat-sqeuclidean/hashed | IDENTICAL x3 | c8ee65b5c1d4f3e6 | c8ee65b5c1d4f3e6 | c8ee65b5c1d4f3e6 | (not run)        |
+| kde-tophat-sqeuclidean/negative | IDENTICAL x3 | 12d60ed8102089d1 | 12d60ed8102089d1 | 12d60ed8102089d1 | (not run)        |
+| kde-tophat-sqeuclidean/odd   | IDENTICAL x3 | ffe846ee331fd1d9 | ffe846ee331fd1d9 | ffe846ee331fd1d9 | (not run)        |
+| kde-tophat-sqeuclidean/ties  | IDENTICAL x4 | 3c1cc56f542820e3 | 3c1cc56f542820e3 | 3c1cc56f542820e3 | 3c1cc56f542820e3 |
+| kde-tophat-sqeuclidean/wide  | IDENTICAL x3 | 2c820a1cb78d7cec | 2c820a1cb78d7cec | 2c820a1cb78d7cec | (not run)        |
+| kde-weighted/base            | IDENTICAL x4 | 5f9d58891c2141db | 5f9d58891c2141db | 5f9d58891c2141db | 5f9d58891c2141db |
+| kde-weighted/denormal        | IDENTICAL x3 | ff56aea7723235d5 | ff56aea7723235d5 | ff56aea7723235d5 | (not run)        |
+| kde-weighted/denormal_ftz    | IDENTICAL x3 | ff56aea7723235d5 | ff56aea7723235d5 | ff56aea7723235d5 | (not run)        |
+| kde-weighted/dupes           | IDENTICAL x4 | 5f9d58891c2141db | 5f9d58891c2141db | 5f9d58891c2141db | 5f9d58891c2141db |
+| kde-weighted/hashed          | IDENTICAL x3 | e73144305ae1098b | e73144305ae1098b | e73144305ae1098b | (not run)        |
+| kde-weighted/negative        | IDENTICAL x3 | 3de94d1a03bf818e | 3de94d1a03bf818e | 3de94d1a03bf818e | (not run)        |
+| kde-weighted/odd             | IDENTICAL x3 | e56721dfde54f53a | e56721dfde54f53a | e56721dfde54f53a | (not run)        |
+| kde-weighted/ties            | IDENTICAL x4 | eed19bb187e30ec9 | eed19bb187e30ec9 | eed19bb187e30ec9 | eed19bb187e30ec9 |
+| kde-weighted/wide            | IDENTICAL x3 | a0522884aefbde03 | a0522884aefbde03 | a0522884aefbde03 | (not run)        |
+| knn-chebyshev/base           | IDENTICAL x4 | 216fff8aa5989758 | 216fff8aa5989758 | 216fff8aa5989758 | 216fff8aa5989758 |
+| knn-chebyshev/denormal       | IDENTICAL x3 | 7529dc2d3cbeffa9 | 7529dc2d3cbeffa9 | 7529dc2d3cbeffa9 | (not run)        |
+| knn-chebyshev/denormal_ftz   | IDENTICAL x3 | 7529dc2d3cbeffa9 | 7529dc2d3cbeffa9 | 7529dc2d3cbeffa9 | (not run)        |
+| knn-chebyshev/dupes          | IDENTICAL x4 | e99889dfad36b7f9 | e99889dfad36b7f9 | e99889dfad36b7f9 | e99889dfad36b7f9 |
+| knn-chebyshev/hashed         | IDENTICAL x3 | 38c9ba5b53bf50b4 | 38c9ba5b53bf50b4 | 38c9ba5b53bf50b4 | (not run)        |
+| knn-chebyshev/negative       | IDENTICAL x3 | a072add0bea1061c | a072add0bea1061c | a072add0bea1061c | (not run)        |
+| knn-chebyshev/odd            | IDENTICAL x3 | 14e51035498fb41b | 14e51035498fb41b | 14e51035498fb41b | (not run)        |
+| knn-chebyshev/ties           | IDENTICAL x4 | ffb6231807d08ca5 | ffb6231807d08ca5 | ffb6231807d08ca5 | ffb6231807d08ca5 |
+| knn-chebyshev/wide           | IDENTICAL x3 | 5d9dd46c34e7ea9b | 5d9dd46c34e7ea9b | 5d9dd46c34e7ea9b | (not run)        |
+| knn-clf-distance/base        | IDENTICAL x4 | 5d6f66edfe15362c | 5d6f66edfe15362c | 5d6f66edfe15362c | 5d6f66edfe15362c |
+| knn-clf-distance/denormal    | IDENTICAL x3 | b049f105466d025f | b049f105466d025f | b049f105466d025f | (not run)        |
+| knn-clf-distance/denormal_ftz | IDENTICAL x3 | b049f105466d025f | b049f105466d025f | b049f105466d025f | (not run)        |
+| knn-clf-distance/dupes       | IDENTICAL x4 | 65656a96c0304161 | 65656a96c0304161 | 65656a96c0304161 | 65656a96c0304161 |
+| knn-clf-distance/hashed      | IDENTICAL x3 | f904e61e0194d01a | f904e61e0194d01a | f904e61e0194d01a | (not run)        |
+| knn-clf-distance/negative    | IDENTICAL x3 | e75299d3a91e1db0 | e75299d3a91e1db0 | e75299d3a91e1db0 | (not run)        |
+| knn-clf-distance/odd         | IDENTICAL x3 | 32663deab2ca83f8 | 32663deab2ca83f8 | 32663deab2ca83f8 | (not run)        |
+| knn-clf-distance/ties        | IDENTICAL x4 | 5f7ed9edc31eb1ec | 5f7ed9edc31eb1ec | 5f7ed9edc31eb1ec | 5f7ed9edc31eb1ec |
+| knn-clf-distance/wide        | IDENTICAL x3 | 9391e4e4cd54795b | 9391e4e4cd54795b | 9391e4e4cd54795b | (not run)        |
+| knn-cosine/base              | IDENTICAL x4 | be2fe881dd0df53e | be2fe881dd0df53e | be2fe881dd0df53e | be2fe881dd0df53e |
+| knn-cosine/denormal          | IDENTICAL x3 | 418429e14db4ffde | 418429e14db4ffde | 418429e14db4ffde | (not run)        |
+| knn-cosine/denormal_ftz      | IDENTICAL x3 | 418429e14db4ffde | 418429e14db4ffde | 418429e14db4ffde | (not run)        |
+| knn-cosine/dupes             | IDENTICAL x4 | 283e29961c629516 | 283e29961c629516 | 283e29961c629516 | 283e29961c629516 |
+| knn-cosine/hashed            | IDENTICAL x3 | 262d2662ebe6917c | 262d2662ebe6917c | 262d2662ebe6917c | (not run)        |
+| knn-cosine/negative          | IDENTICAL x3 | 5daef21e2ef055c5 | 5daef21e2ef055c5 | 5daef21e2ef055c5 | (not run)        |
+| knn-cosine/odd               | IDENTICAL x3 | 1b728c25890ac7d2 | 1b728c25890ac7d2 | 1b728c25890ac7d2 | (not run)        |
+| knn-cosine/ties              | IDENTICAL x4 | 206c8bdc271bc1e7 | 206c8bdc271bc1e7 | 206c8bdc271bc1e7 | 206c8bdc271bc1e7 |
+| knn-cosine/wide              | IDENTICAL x3 | dbc33d7526b1322b | dbc33d7526b1322b | dbc33d7526b1322b | (not run)        |
+| knn-manhattan/base           | IDENTICAL x4 | df1cd4d404b1a5c0 | df1cd4d404b1a5c0 | df1cd4d404b1a5c0 | df1cd4d404b1a5c0 |
+| knn-manhattan/denormal       | IDENTICAL x3 | 8f9ba3a71a19e94c | 8f9ba3a71a19e94c | 8f9ba3a71a19e94c | (not run)        |
+| knn-manhattan/denormal_ftz   | IDENTICAL x3 | 8f9ba3a71a19e94c | 8f9ba3a71a19e94c | 8f9ba3a71a19e94c | (not run)        |
+| knn-manhattan/dupes          | IDENTICAL x4 | df38b77bd3ed392d | df38b77bd3ed392d | df38b77bd3ed392d | df38b77bd3ed392d |
+| knn-manhattan/hashed         | IDENTICAL x3 | c2109fa1c4ee57bb | c2109fa1c4ee57bb | c2109fa1c4ee57bb | (not run)        |
+| knn-manhattan/negative       | IDENTICAL x3 | 8484fc4952f900d5 | 8484fc4952f900d5 | 8484fc4952f900d5 | (not run)        |
+| knn-manhattan/odd            | IDENTICAL x3 | 56a067bdc8b52a76 | 56a067bdc8b52a76 | 56a067bdc8b52a76 | (not run)        |
+| knn-manhattan/ties           | IDENTICAL x4 | 8fef9cc1bfef43c5 | 8fef9cc1bfef43c5 | 8fef9cc1bfef43c5 | 8fef9cc1bfef43c5 |
+| knn-manhattan/wide           | IDENTICAL x3 | d7489bca7dd97685 | d7489bca7dd97685 | d7489bca7dd97685 | (not run)        |
+| knn-minkowski-p3/base        | IDENTICAL x4 | 29ae306635a3f3fb | 29ae306635a3f3fb | 29ae306635a3f3fb | 29ae306635a3f3fb |
+| knn-minkowski-p3/denormal    | IDENTICAL x3 | 7a2a07ae9152e078 | 7a2a07ae9152e078 | 7a2a07ae9152e078 | (not run)        |
+| knn-minkowski-p3/denormal_ftz | IDENTICAL x3 | 7a2a07ae9152e078 | 7a2a07ae9152e078 | 7a2a07ae9152e078 | (not run)        |
+| knn-minkowski-p3/dupes       | IDENTICAL x4 | d38f7d7bbd7402ec | d38f7d7bbd7402ec | d38f7d7bbd7402ec | d38f7d7bbd7402ec |
+| knn-minkowski-p3/hashed      | IDENTICAL x3 | a1f9bd7e2edb78b7 | a1f9bd7e2edb78b7 | a1f9bd7e2edb78b7 | (not run)        |
+| knn-minkowski-p3/negative    | IDENTICAL x3 | eb221aadbb301af9 | eb221aadbb301af9 | eb221aadbb301af9 | (not run)        |
+| knn-minkowski-p3/odd         | IDENTICAL x3 | 69c6535e725897e8 | 69c6535e725897e8 | 69c6535e725897e8 | (not run)        |
+| knn-minkowski-p3/ties        | IDENTICAL x4 | bdcd5a382d301db9 | bdcd5a382d301db9 | bdcd5a382d301db9 | bdcd5a382d301db9 |
+| knn-minkowski-p3/wide        | IDENTICAL x3 | ec4a1f13d1b508e1 | ec4a1f13d1b508e1 | ec4a1f13d1b508e1 | (not run)        |
+| knn-rbc/base                 | IDENTICAL x4 | 1d3aafd15744f092 | 1d3aafd15744f092 | 1d3aafd15744f092 | 1d3aafd15744f092 |
+| knn-rbc/denormal             | IDENTICAL x3 | db2e42f33a66c6f6 | db2e42f33a66c6f6 | db2e42f33a66c6f6 | (not run)        |
+| knn-rbc/denormal_ftz         | IDENTICAL x3 | db2e42f33a66c6f6 | db2e42f33a66c6f6 | db2e42f33a66c6f6 | (not run)        |
+| knn-rbc/dupes                | IDENTICAL x4 | 48f8078b7abf02f5 | 48f8078b7abf02f5 | 48f8078b7abf02f5 | 48f8078b7abf02f5 |
+| knn-rbc/hashed               | IDENTICAL x3 | 7e05fb5ad376e5b1 | 7e05fb5ad376e5b1 | 7e05fb5ad376e5b1 | (not run)        |
+| knn-rbc/negative             | IDENTICAL x3 | 41939520e7b705d9 | 41939520e7b705d9 | 41939520e7b705d9 | (not run)        |
+| knn-rbc/odd                  | IDENTICAL x3 | 9b810e50d7279e59 | 9b810e50d7279e59 | 9b810e50d7279e59 | (not run)        |
+| knn-rbc/ties                 | IDENTICAL x4 | 23daf3a923d4c74f | 23daf3a923d4c74f | 23daf3a923d4c74f | 23daf3a923d4c74f |
+| knn-rbc/wide                 | IDENTICAL x3 | 1feee6f8805973d2 | 1feee6f8805973d2 | 1feee6f8805973d2 | (not run)        |
+| knn-reg-distance/base        | IDENTICAL x4 | c52330c7caf6200d | c52330c7caf6200d | c52330c7caf6200d | c52330c7caf6200d |
+| knn-reg-distance/denormal    | IDENTICAL x3 | 7ca8089e55b7f464 | 7ca8089e55b7f464 | 7ca8089e55b7f464 | (not run)        |
+| knn-reg-distance/denormal_ftz | IDENTICAL x3 | 7ca8089e55b7f464 | 7ca8089e55b7f464 | 7ca8089e55b7f464 | (not run)        |
+| knn-reg-distance/dupes       | IDENTICAL x4 | bcaba27f35bbd28b | bcaba27f35bbd28b | bcaba27f35bbd28b | bcaba27f35bbd28b |
+| knn-reg-distance/hashed      | IDENTICAL x3 | c8d6e79b6c4b3da5 | c8d6e79b6c4b3da5 | c8d6e79b6c4b3da5 | (not run)        |
+| knn-reg-distance/negative    | IDENTICAL x3 | fa87cf03ee9f543b | fa87cf03ee9f543b | fa87cf03ee9f543b | (not run)        |
+| knn-reg-distance/odd         | IDENTICAL x3 | fa33e2cc29f115b1 | fa33e2cc29f115b1 | fa33e2cc29f115b1 | (not run)        |
+| knn-reg-distance/ties        | IDENTICAL x4 | 084f6006e76cc290 | 084f6006e76cc290 | 084f6006e76cc290 | 084f6006e76cc290 |
+| knn-reg-distance/wide        | IDENTICAL x3 | 13d462b4371cd9fa | 13d462b4371cd9fa | 13d462b4371cd9fa | (not run)        |
+| knn-sqeuclidean/base         | IDENTICAL x4 | 8516edaa4529c5de | 8516edaa4529c5de | 8516edaa4529c5de | 8516edaa4529c5de |
+| knn-sqeuclidean/denormal     | IDENTICAL x3 | e911a632efe00e32 | e911a632efe00e32 | e911a632efe00e32 | (not run)        |
+| knn-sqeuclidean/denormal_ftz | IDENTICAL x3 | e911a632efe00e32 | e911a632efe00e32 | e911a632efe00e32 | (not run)        |
+| knn-sqeuclidean/dupes        | IDENTICAL x4 | b65d62b3b0dfe602 | b65d62b3b0dfe602 | b65d62b3b0dfe602 | b65d62b3b0dfe602 |
+| knn-sqeuclidean/hashed       | IDENTICAL x3 | 6734a34e35fcd6d9 | 6734a34e35fcd6d9 | 6734a34e35fcd6d9 | (not run)        |
+| knn-sqeuclidean/negative     | IDENTICAL x3 | 34699c15e4653945 | 34699c15e4653945 | 34699c15e4653945 | (not run)        |
+| knn-sqeuclidean/odd          | IDENTICAL x3 | cf6105ee7f63dcb5 | cf6105ee7f63dcb5 | cf6105ee7f63dcb5 | (not run)        |
+| knn-sqeuclidean/ties         | IDENTICAL x4 | e1330827a49fa48c | e1330827a49fa48c | e1330827a49fa48c | e1330827a49fa48c |
+| knn-sqeuclidean/wide         | IDENTICAL x3 | 614e7cc6db2c44f8 | 614e7cc6db2c44f8 | 614e7cc6db2c44f8 | (not run)        |
+| radius-chebyshev/base        | IDENTICAL x4 | 1be89376fd4bbea3 | 1be89376fd4bbea3 | 1be89376fd4bbea3 | 1be89376fd4bbea3 |
+| radius-chebyshev/denormal    | IDENTICAL x3 | 61ce01e6618e5028 | 61ce01e6618e5028 | 61ce01e6618e5028 | (not run)        |
+| radius-chebyshev/denormal_ftz | IDENTICAL x3 | 61ce01e6618e5028 | 61ce01e6618e5028 | 61ce01e6618e5028 | (not run)        |
+| radius-chebyshev/dupes       | IDENTICAL x4 | 99b1b6404107eda5 | 99b1b6404107eda5 | 99b1b6404107eda5 | 99b1b6404107eda5 |
+| radius-chebyshev/hashed      | IDENTICAL x3 | d616368af4777cd7 | d616368af4777cd7 | d616368af4777cd7 | (not run)        |
+| radius-chebyshev/negative    | IDENTICAL x3 | a251b503af39d952 | a251b503af39d952 | a251b503af39d952 | (not run)        |
+| radius-chebyshev/odd         | IDENTICAL x3 | e5d80437361c13b9 | e5d80437361c13b9 | e5d80437361c13b9 | (not run)        |
+| radius-chebyshev/ties        | IDENTICAL x4 | 93e842a257c1cbb1 | 93e842a257c1cbb1 | 93e842a257c1cbb1 | 93e842a257c1cbb1 |
+| radius-chebyshev/wide        | IDENTICAL x3 | 345e90650359bb7f | 345e90650359bb7f | 345e90650359bb7f | (not run)        |
+| radius-manhattan/base        | IDENTICAL x4 | adbab4c619ab70dc | adbab4c619ab70dc | adbab4c619ab70dc | adbab4c619ab70dc |
+| radius-manhattan/denormal    | IDENTICAL x3 | b3066725061ddd46 | b3066725061ddd46 | b3066725061ddd46 | (not run)        |
+| radius-manhattan/denormal_ftz | IDENTICAL x3 | b3066725061ddd46 | b3066725061ddd46 | b3066725061ddd46 | (not run)        |
+| radius-manhattan/dupes       | IDENTICAL x4 | f57dcac1b9d84889 | f57dcac1b9d84889 | f57dcac1b9d84889 | f57dcac1b9d84889 |
+| radius-manhattan/hashed      | IDENTICAL x3 | f520a1cd60de3a00 | f520a1cd60de3a00 | f520a1cd60de3a00 | (not run)        |
+| radius-manhattan/negative    | IDENTICAL x3 | 39bcca9c46c29872 | 39bcca9c46c29872 | 39bcca9c46c29872 | (not run)        |
+| radius-manhattan/odd         | IDENTICAL x3 | 372fb9c534550f4d | 372fb9c534550f4d | 372fb9c534550f4d | (not run)        |
+| radius-manhattan/ties        | IDENTICAL x4 | f4469b7cc5451c2b | f4469b7cc5451c2b | f4469b7cc5451c2b | f4469b7cc5451c2b |
+| radius-manhattan/wide        | IDENTICAL x3 | 96656c718463c3c0 | 96656c718463c3c0 | 96656c718463c3c0 | (not run)        |
+| radius-minkowski-p3/base     | IDENTICAL x4 | b132db7ad58141aa | b132db7ad58141aa | b132db7ad58141aa | b132db7ad58141aa |
+| radius-minkowski-p3/denormal | IDENTICAL x3 | 6c81dc794832ad12 | 6c81dc794832ad12 | 6c81dc794832ad12 | (not run)        |
+| radius-minkowski-p3/denormal_ftz | IDENTICAL x3 | 6c81dc794832ad12 | 6c81dc794832ad12 | 6c81dc794832ad12 | (not run)        |
+| radius-minkowski-p3/dupes    | IDENTICAL x4 | 570ca9be0cd30129 | 570ca9be0cd30129 | 570ca9be0cd30129 | 570ca9be0cd30129 |
+| radius-minkowski-p3/hashed   | IDENTICAL x3 | 26b9387b18775ebd | 26b9387b18775ebd | 26b9387b18775ebd | (not run)        |
+| radius-minkowski-p3/negative | IDENTICAL x3 | 24200fcd26a4d801 | 24200fcd26a4d801 | 24200fcd26a4d801 | (not run)        |
+| radius-minkowski-p3/odd      | IDENTICAL x3 | 719f2301e2d663c0 | 719f2301e2d663c0 | 719f2301e2d663c0 | (not run)        |
+| radius-minkowski-p3/ties     | IDENTICAL x4 | 1ffd20a4b0de4753 | 1ffd20a4b0de4753 | 1ffd20a4b0de4753 | 1ffd20a4b0de4753 |
+| radius-minkowski-p3/wide     | IDENTICAL x3 | e00b98e48925e909 | e00b98e48925e909 | e00b98e48925e909 | (not run)        |
+| radius/base                  | IDENTICAL x4 | b4fa4ebf9623f5d0 | b4fa4ebf9623f5d0 | b4fa4ebf9623f5d0 | b4fa4ebf9623f5d0 |
+| radius/denormal              | IDENTICAL x3 | b31c83097872381e | b31c83097872381e | b31c83097872381e | (not run)        |
+| radius/denormal_ftz          | IDENTICAL x3 | b31c83097872381e | b31c83097872381e | b31c83097872381e | (not run)        |
+| radius/dupes                 | IDENTICAL x4 | ad02d42d5b3fded7 | ad02d42d5b3fded7 | ad02d42d5b3fded7 | ad02d42d5b3fded7 |
+| radius/hashed                | IDENTICAL x3 | cdc57602d696879d | cdc57602d696879d | cdc57602d696879d | (not run)        |
+| radius/negative              | IDENTICAL x3 | 4b7b50fe64e2d7af | 4b7b50fe64e2d7af | 4b7b50fe64e2d7af | (not run)        |
+| radius/odd                   | IDENTICAL x3 | 99a3e94304f0d55a | 99a3e94304f0d55a | 99a3e94304f0d55a | (not run)        |
+| radius/ties                  | IDENTICAL x4 | d4e4484a004f4042 | d4e4484a004f4042 | d4e4484a004f4042 | d4e4484a004f4042 |
+| radius/wide                  | IDENTICAL x3 | 4ea06c29cad72c3a | 4ea06c29cad72c3a | 4ea06c29cad72c3a | (not run)        |
+
+summary: IDENTICAL=162
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| kde-cosine-minkowski/base    | infer  | IDENTICAL x4 | e2af54529a08a7be | e2af54529a08a7be | e2af54529a08a7be | e2af54529a08a7be |
+| kde-cosine-minkowski/base    | model  | IDENTICAL x4 | 3f69c1096d5277d6 | 3f69c1096d5277d6 | 3f69c1096d5277d6 | 3f69c1096d5277d6 |
+| kde-cosine-minkowski/base    | batch  | IDENTICAL x4 | f21fcb8f05b35e5c | f21fcb8f05b35e5c | f21fcb8f05b35e5c | f21fcb8f05b35e5c |
+| kde-cosine-minkowski/denormal | infer  | IDENTICAL x3 | a8de2c3520c4d82c | a8de2c3520c4d82c | a8de2c3520c4d82c | (not run)        |
+| kde-cosine-minkowski/denormal | model  | IDENTICAL x3 | 22e1263527aa4935 | 22e1263527aa4935 | 22e1263527aa4935 | (not run)        |
+| kde-cosine-minkowski/denormal | batch  | IDENTICAL x3 | 236fd608e6e2db96 | 236fd608e6e2db96 | 236fd608e6e2db96 | (not run)        |
+| kde-cosine-minkowski/denormal_ftz | infer  | IDENTICAL x3 | a8de2c3520c4d82c | a8de2c3520c4d82c | a8de2c3520c4d82c | (not run)        |
+| kde-cosine-minkowski/denormal_ftz | model  | IDENTICAL x3 | b1ddb3438b4ddf0a | b1ddb3438b4ddf0a | b1ddb3438b4ddf0a | (not run)        |
+| kde-cosine-minkowski/denormal_ftz | batch  | IDENTICAL x3 | 236fd608e6e2db96 | 236fd608e6e2db96 | 236fd608e6e2db96 | (not run)        |
+| kde-cosine-minkowski/dupes   | infer  | IDENTICAL x4 | e2af54529a08a7be | e2af54529a08a7be | e2af54529a08a7be | e2af54529a08a7be |
+| kde-cosine-minkowski/dupes   | model  | IDENTICAL x4 | 3f69c1096d5277d6 | 3f69c1096d5277d6 | 3f69c1096d5277d6 | 3f69c1096d5277d6 |
+| kde-cosine-minkowski/dupes   | batch  | IDENTICAL x4 | f21fcb8f05b35e5c | f21fcb8f05b35e5c | f21fcb8f05b35e5c | f21fcb8f05b35e5c |
+| kde-cosine-minkowski/hashed  | infer  | IDENTICAL x3 | d957d9dfd4009cc9 | d957d9dfd4009cc9 | d957d9dfd4009cc9 | (not run)        |
+| kde-cosine-minkowski/hashed  | model  | IDENTICAL x3 | 2f143308f55a3554 | 2f143308f55a3554 | 2f143308f55a3554 | (not run)        |
+| kde-cosine-minkowski/hashed  | batch  | IDENTICAL x3 | 740eb1455d714d62 | 740eb1455d714d62 | 740eb1455d714d62 | (not run)        |
+| kde-cosine-minkowski/negative | infer  | IDENTICAL x3 | 45141b420398c615 | 45141b420398c615 | 45141b420398c615 | (not run)        |
+| kde-cosine-minkowski/negative | model  | IDENTICAL x3 | dcd420c8f48dc52d | dcd420c8f48dc52d | dcd420c8f48dc52d | (not run)        |
+| kde-cosine-minkowski/negative | batch  | IDENTICAL x3 | 63b6670031bd6fd0 | 63b6670031bd6fd0 | 63b6670031bd6fd0 | (not run)        |
+| kde-cosine-minkowski/odd     | infer  | IDENTICAL x3 | 3c552280672fff57 | 3c552280672fff57 | 3c552280672fff57 | (not run)        |
+| kde-cosine-minkowski/odd     | model  | IDENTICAL x3 | 3c129d599ce8872a | 3c129d599ce8872a | 3c129d599ce8872a | (not run)        |
+| kde-cosine-minkowski/odd     | batch  | IDENTICAL x3 | ead32883ee676242 | ead32883ee676242 | ead32883ee676242 | (not run)        |
+| kde-cosine-minkowski/ties    | infer  | IDENTICAL x4 | a33c2e206e5a28eb | a33c2e206e5a28eb | a33c2e206e5a28eb | a33c2e206e5a28eb |
+| kde-cosine-minkowski/ties    | model  | IDENTICAL x4 | fd7e7226ebe1d3de | fd7e7226ebe1d3de | fd7e7226ebe1d3de | fd7e7226ebe1d3de |
+| kde-cosine-minkowski/ties    | batch  | IDENTICAL x4 | df36b50d65a3adf5 | df36b50d65a3adf5 | df36b50d65a3adf5 | df36b50d65a3adf5 |
+| kde-cosine-minkowski/wide    | infer  | IDENTICAL x3 | 1f68cbd94cf554e8 | 1f68cbd94cf554e8 | 1f68cbd94cf554e8 | (not run)        |
+| kde-cosine-minkowski/wide    | model  | IDENTICAL x3 | 46f68cb6a6438c9d | 46f68cb6a6438c9d | 46f68cb6a6438c9d | (not run)        |
+| kde-cosine-minkowski/wide    | batch  | IDENTICAL x3 | 2a7017b4536d1626 | 2a7017b4536d1626 | 2a7017b4536d1626 | (not run)        |
+| kde-epanechnikov-l1/base     | infer  | IDENTICAL x4 | 33f8a3ca1a52a0b4 | 33f8a3ca1a52a0b4 | 33f8a3ca1a52a0b4 | 33f8a3ca1a52a0b4 |
+| kde-epanechnikov-l1/base     | model  | IDENTICAL x4 | a39cb2033ade3b6f | a39cb2033ade3b6f | a39cb2033ade3b6f | a39cb2033ade3b6f |
+| kde-epanechnikov-l1/base     | batch  | IDENTICAL x4 | 703f14a4e3090576 | 703f14a4e3090576 | 703f14a4e3090576 | 703f14a4e3090576 |
+| kde-epanechnikov-l1/denormal | infer  | IDENTICAL x3 | 3b9d9b732e5389eb | 3b9d9b732e5389eb | 3b9d9b732e5389eb | (not run)        |
+| kde-epanechnikov-l1/denormal | model  | IDENTICAL x3 | d39564b3a291262a | d39564b3a291262a | d39564b3a291262a | (not run)        |
+| kde-epanechnikov-l1/denormal | batch  | IDENTICAL x3 | 45aab15f2a899b48 | 45aab15f2a899b48 | 45aab15f2a899b48 | (not run)        |
+| kde-epanechnikov-l1/denormal_ftz | infer  | IDENTICAL x3 | 3b9d9b732e5389eb | 3b9d9b732e5389eb | 3b9d9b732e5389eb | (not run)        |
+| kde-epanechnikov-l1/denormal_ftz | model  | IDENTICAL x3 | 80188120a2b1babd | 80188120a2b1babd | 80188120a2b1babd | (not run)        |
+| kde-epanechnikov-l1/denormal_ftz | batch  | IDENTICAL x3 | 45aab15f2a899b48 | 45aab15f2a899b48 | 45aab15f2a899b48 | (not run)        |
+| kde-epanechnikov-l1/dupes    | infer  | IDENTICAL x4 | 33f8a3ca1a52a0b4 | 33f8a3ca1a52a0b4 | 33f8a3ca1a52a0b4 | 33f8a3ca1a52a0b4 |
+| kde-epanechnikov-l1/dupes    | model  | IDENTICAL x4 | a39cb2033ade3b6f | a39cb2033ade3b6f | a39cb2033ade3b6f | a39cb2033ade3b6f |
+| kde-epanechnikov-l1/dupes    | batch  | IDENTICAL x4 | 703f14a4e3090576 | 703f14a4e3090576 | 703f14a4e3090576 | 703f14a4e3090576 |
+| kde-epanechnikov-l1/hashed   | infer  | IDENTICAL x3 | c8cbf111f14c7810 | c8cbf111f14c7810 | c8cbf111f14c7810 | (not run)        |
+| kde-epanechnikov-l1/hashed   | model  | IDENTICAL x3 | c0e22f41a3a70995 | c0e22f41a3a70995 | c0e22f41a3a70995 | (not run)        |
+| kde-epanechnikov-l1/hashed   | batch  | IDENTICAL x3 | 3c48c205dd3b6f37 | 3c48c205dd3b6f37 | 3c48c205dd3b6f37 | (not run)        |
+| kde-epanechnikov-l1/negative | infer  | IDENTICAL x3 | 2596dbd563f03730 | 2596dbd563f03730 | 2596dbd563f03730 | (not run)        |
+| kde-epanechnikov-l1/negative | model  | IDENTICAL x3 | c5fdbfa167d32071 | c5fdbfa167d32071 | c5fdbfa167d32071 | (not run)        |
+| kde-epanechnikov-l1/negative | batch  | IDENTICAL x3 | c9bb223c8ba3b04b | c9bb223c8ba3b04b | c9bb223c8ba3b04b | (not run)        |
+| kde-epanechnikov-l1/odd      | infer  | IDENTICAL x3 | 026977dfcfedd87d | 026977dfcfedd87d | 026977dfcfedd87d | (not run)        |
+| kde-epanechnikov-l1/odd      | model  | IDENTICAL x3 | d51c423a7e0e2eb0 | d51c423a7e0e2eb0 | d51c423a7e0e2eb0 | (not run)        |
+| kde-epanechnikov-l1/odd      | batch  | IDENTICAL x3 | ddb8c885a96e7ddb | ddb8c885a96e7ddb | ddb8c885a96e7ddb | (not run)        |
+| kde-epanechnikov-l1/ties     | infer  | IDENTICAL x4 | b32f12fa353fa102 | b32f12fa353fa102 | b32f12fa353fa102 | b32f12fa353fa102 |
+| kde-epanechnikov-l1/ties     | model  | IDENTICAL x4 | 607371bac93ff1c3 | 607371bac93ff1c3 | 607371bac93ff1c3 | 607371bac93ff1c3 |
+| kde-epanechnikov-l1/ties     | batch  | IDENTICAL x4 | c529724d75630610 | c529724d75630610 | c529724d75630610 | c529724d75630610 |
+| kde-epanechnikov-l1/wide     | infer  | IDENTICAL x3 | 1f6ce946305e9a91 | 1f6ce946305e9a91 | 1f6ce946305e9a91 | (not run)        |
+| kde-epanechnikov-l1/wide     | model  | IDENTICAL x3 | 9bcb591ef7fe5a57 | 9bcb591ef7fe5a57 | 9bcb591ef7fe5a57 | (not run)        |
+| kde-epanechnikov-l1/wide     | batch  | IDENTICAL x3 | f98fa183a91e8283 | f98fa183a91e8283 | f98fa183a91e8283 | (not run)        |
+| kde-exponential-chebyshev/base | infer  | IDENTICAL x4 | 9265e066af938ddd | 9265e066af938ddd | 9265e066af938ddd | 9265e066af938ddd |
+| kde-exponential-chebyshev/base | model  | IDENTICAL x4 | a8b0414787a34254 | a8b0414787a34254 | a8b0414787a34254 | a8b0414787a34254 |
+| kde-exponential-chebyshev/base | batch  | IDENTICAL x4 | e4598d44cb7542c8 | e4598d44cb7542c8 | e4598d44cb7542c8 | e4598d44cb7542c8 |
+| kde-exponential-chebyshev/denormal | infer  | IDENTICAL x3 | 918b3bbe670bbcc5 | 918b3bbe670bbcc5 | 918b3bbe670bbcc5 | (not run)        |
+| kde-exponential-chebyshev/denormal | model  | IDENTICAL x3 | 9f7c5f16c0d7cbed | 9f7c5f16c0d7cbed | 9f7c5f16c0d7cbed | (not run)        |
+| kde-exponential-chebyshev/denormal | batch  | IDENTICAL x3 | 5e957931032d79c7 | 5e957931032d79c7 | 5e957931032d79c7 | (not run)        |
+| kde-exponential-chebyshev/denormal_ftz | infer  | IDENTICAL x3 | 918b3bbe670bbcc5 | 918b3bbe670bbcc5 | 918b3bbe670bbcc5 | (not run)        |
+| kde-exponential-chebyshev/denormal_ftz | model  | IDENTICAL x3 | 52dce22419081c4d | 52dce22419081c4d | 52dce22419081c4d | (not run)        |
+| kde-exponential-chebyshev/denormal_ftz | batch  | IDENTICAL x3 | 5e957931032d79c7 | 5e957931032d79c7 | 5e957931032d79c7 | (not run)        |
+| kde-exponential-chebyshev/dupes | infer  | IDENTICAL x4 | 9265e066af938ddd | 9265e066af938ddd | 9265e066af938ddd | 9265e066af938ddd |
+| kde-exponential-chebyshev/dupes | model  | IDENTICAL x4 | a8b0414787a34254 | a8b0414787a34254 | a8b0414787a34254 | a8b0414787a34254 |
+| kde-exponential-chebyshev/dupes | batch  | IDENTICAL x4 | e4598d44cb7542c8 | e4598d44cb7542c8 | e4598d44cb7542c8 | e4598d44cb7542c8 |
+| kde-exponential-chebyshev/hashed | infer  | IDENTICAL x3 | 080f542da22a9e37 | 080f542da22a9e37 | 080f542da22a9e37 | (not run)        |
+| kde-exponential-chebyshev/hashed | model  | IDENTICAL x3 | d48316c91334687f | d48316c91334687f | d48316c91334687f | (not run)        |
+| kde-exponential-chebyshev/hashed | batch  | IDENTICAL x3 | 22d0bf6bc1dfa28b | 22d0bf6bc1dfa28b | 22d0bf6bc1dfa28b | (not run)        |
+| kde-exponential-chebyshev/negative | infer  | IDENTICAL x3 | 1658f6ae7a786d67 | 1658f6ae7a786d67 | 1658f6ae7a786d67 | (not run)        |
+| kde-exponential-chebyshev/negative | model  | IDENTICAL x3 | d27288eaf1e531e3 | d27288eaf1e531e3 | d27288eaf1e531e3 | (not run)        |
+| kde-exponential-chebyshev/negative | batch  | IDENTICAL x3 | e1aa0666dfb84227 | e1aa0666dfb84227 | e1aa0666dfb84227 | (not run)        |
+| kde-exponential-chebyshev/odd | infer  | IDENTICAL x3 | 47a2eaf4d131dd5a | 47a2eaf4d131dd5a | 47a2eaf4d131dd5a | (not run)        |
+| kde-exponential-chebyshev/odd | model  | IDENTICAL x3 | c1bced417f68c522 | c1bced417f68c522 | c1bced417f68c522 | (not run)        |
+| kde-exponential-chebyshev/odd | batch  | IDENTICAL x3 | c6abeccb6eae0822 | c6abeccb6eae0822 | c6abeccb6eae0822 | (not run)        |
+| kde-exponential-chebyshev/ties | infer  | IDENTICAL x4 | 1ca4af3183ffe6b3 | 1ca4af3183ffe6b3 | 1ca4af3183ffe6b3 | 1ca4af3183ffe6b3 |
+| kde-exponential-chebyshev/ties | model  | IDENTICAL x4 | 3d563f03a2174bfd | 3d563f03a2174bfd | 3d563f03a2174bfd | 3d563f03a2174bfd |
+| kde-exponential-chebyshev/ties | batch  | IDENTICAL x4 | f9107a2d207a84a7 | f9107a2d207a84a7 | f9107a2d207a84a7 | f9107a2d207a84a7 |
+| kde-exponential-chebyshev/wide | infer  | IDENTICAL x3 | f4cf636d78592d9c | f4cf636d78592d9c | f4cf636d78592d9c | (not run)        |
+| kde-exponential-chebyshev/wide | model  | IDENTICAL x3 | 1c0a8729f2bc4f0f | 1c0a8729f2bc4f0f | 1c0a8729f2bc4f0f | (not run)        |
+| kde-exponential-chebyshev/wide | batch  | IDENTICAL x3 | 56780ba90c9624f8 | 56780ba90c9624f8 | 56780ba90c9624f8 | (not run)        |
+| kde-linear-cosine/base       | infer  | IDENTICAL x4 | abf3fbff5c858cef | abf3fbff5c858cef | abf3fbff5c858cef | abf3fbff5c858cef |
+| kde-linear-cosine/base       | model  | IDENTICAL x4 | 13cf8ce7fe202391 | 13cf8ce7fe202391 | 13cf8ce7fe202391 | 13cf8ce7fe202391 |
+| kde-linear-cosine/base       | batch  | IDENTICAL x4 | 9b366c6405ab66a7 | 9b366c6405ab66a7 | 9b366c6405ab66a7 | 9b366c6405ab66a7 |
+| kde-linear-cosine/denormal   | infer  | IDENTICAL x3 | 297d414f21e0e75e | 297d414f21e0e75e | 297d414f21e0e75e | (not run)        |
+| kde-linear-cosine/denormal   | model  | IDENTICAL x3 | 7b4dc8fb3d40d436 | 7b4dc8fb3d40d436 | 7b4dc8fb3d40d436 | (not run)        |
+| kde-linear-cosine/denormal   | batch  | IDENTICAL x3 | c7c022838d3276ba | c7c022838d3276ba | c7c022838d3276ba | (not run)        |
+| kde-linear-cosine/denormal_ftz | infer  | IDENTICAL x3 | 297d414f21e0e75e | 297d414f21e0e75e | 297d414f21e0e75e | (not run)        |
+| kde-linear-cosine/denormal_ftz | model  | IDENTICAL x3 | 7b4dc8fb3d40d436 | 7b4dc8fb3d40d436 | 7b4dc8fb3d40d436 | (not run)        |
+| kde-linear-cosine/denormal_ftz | batch  | IDENTICAL x3 | c7c022838d3276ba | c7c022838d3276ba | c7c022838d3276ba | (not run)        |
+| kde-linear-cosine/dupes      | infer  | IDENTICAL x4 | abf3fbff5c858cef | abf3fbff5c858cef | abf3fbff5c858cef | abf3fbff5c858cef |
+| kde-linear-cosine/dupes      | model  | IDENTICAL x4 | 13cf8ce7fe202391 | 13cf8ce7fe202391 | 13cf8ce7fe202391 | 13cf8ce7fe202391 |
+| kde-linear-cosine/dupes      | batch  | IDENTICAL x4 | 9b366c6405ab66a7 | 9b366c6405ab66a7 | 9b366c6405ab66a7 | 9b366c6405ab66a7 |
+| kde-linear-cosine/hashed     | infer  | IDENTICAL x3 | c0315d9bb1da6048 | c0315d9bb1da6048 | c0315d9bb1da6048 | (not run)        |
+| kde-linear-cosine/hashed     | model  | IDENTICAL x3 | 753718d9fcec3f76 | 753718d9fcec3f76 | 753718d9fcec3f76 | (not run)        |
+| kde-linear-cosine/hashed     | batch  | IDENTICAL x3 | 9c4546a5a15c60de | 9c4546a5a15c60de | 9c4546a5a15c60de | (not run)        |
+| kde-linear-cosine/negative   | infer  | IDENTICAL x3 | b247e880ea3a6a4b | b247e880ea3a6a4b | b247e880ea3a6a4b | (not run)        |
+| kde-linear-cosine/negative   | model  | IDENTICAL x3 | 4299096fe8a0893b | 4299096fe8a0893b | 4299096fe8a0893b | (not run)        |
+| kde-linear-cosine/negative   | batch  | IDENTICAL x3 | bbdc8c94e37d40ae | bbdc8c94e37d40ae | bbdc8c94e37d40ae | (not run)        |
+| kde-linear-cosine/odd        | infer  | IDENTICAL x3 | 90a289b091484c96 | 90a289b091484c96 | 90a289b091484c96 | (not run)        |
+| kde-linear-cosine/odd        | model  | IDENTICAL x3 | ae04ae4206c6620e | ae04ae4206c6620e | ae04ae4206c6620e | (not run)        |
+| kde-linear-cosine/odd        | batch  | IDENTICAL x3 | 5486ec35e3824264 | 5486ec35e3824264 | 5486ec35e3824264 | (not run)        |
+| kde-linear-cosine/ties       | infer  | IDENTICAL x4 | 07c4969f173c9414 | 07c4969f173c9414 | 07c4969f173c9414 | 07c4969f173c9414 |
+| kde-linear-cosine/ties       | model  | IDENTICAL x4 | 799ff55929e006b7 | 799ff55929e006b7 | 799ff55929e006b7 | 799ff55929e006b7 |
+| kde-linear-cosine/ties       | batch  | IDENTICAL x4 | 5131de9bc1acdacd | 5131de9bc1acdacd | 5131de9bc1acdacd | 5131de9bc1acdacd |
+| kde-linear-cosine/wide       | infer  | IDENTICAL x3 | 204c7da79d79af78 | 204c7da79d79af78 | 204c7da79d79af78 | (not run)        |
+| kde-linear-cosine/wide       | model  | IDENTICAL x3 | 047b34653ea8eb71 | 047b34653ea8eb71 | 047b34653ea8eb71 | (not run)        |
+| kde-linear-cosine/wide       | batch  | IDENTICAL x3 | 6428c993be76a289 | 6428c993be76a289 | 6428c993be76a289 | (not run)        |
+| kde-tophat-sqeuclidean/base  | infer  | IDENTICAL x4 | 1b5d5d663fef4284 | 1b5d5d663fef4284 | 1b5d5d663fef4284 | 1b5d5d663fef4284 |
+| kde-tophat-sqeuclidean/base  | model  | IDENTICAL x4 | c993389731292ddf | c993389731292ddf | c993389731292ddf | c993389731292ddf |
+| kde-tophat-sqeuclidean/base  | batch  | IDENTICAL x4 | 021dad334c77050a | 021dad334c77050a | 021dad334c77050a | 021dad334c77050a |
+| kde-tophat-sqeuclidean/denormal | infer  | IDENTICAL x3 | 5c83fca813b57885 | 5c83fca813b57885 | 5c83fca813b57885 | (not run)        |
+| kde-tophat-sqeuclidean/denormal | model  | IDENTICAL x3 | 293d462980aa4a36 | 293d462980aa4a36 | 293d462980aa4a36 | (not run)        |
+| kde-tophat-sqeuclidean/denormal | batch  | IDENTICAL x3 | 547693bbe3e875e0 | 547693bbe3e875e0 | 547693bbe3e875e0 | (not run)        |
+| kde-tophat-sqeuclidean/denormal_ftz | infer  | IDENTICAL x3 | 5c83fca813b57885 | 5c83fca813b57885 | 5c83fca813b57885 | (not run)        |
+| kde-tophat-sqeuclidean/denormal_ftz | model  | IDENTICAL x3 | 06617b4535762846 | 06617b4535762846 | 06617b4535762846 | (not run)        |
+| kde-tophat-sqeuclidean/denormal_ftz | batch  | IDENTICAL x3 | 547693bbe3e875e0 | 547693bbe3e875e0 | 547693bbe3e875e0 | (not run)        |
+| kde-tophat-sqeuclidean/dupes | infer  | IDENTICAL x4 | 1b5d5d663fef4284 | 1b5d5d663fef4284 | 1b5d5d663fef4284 | 1b5d5d663fef4284 |
+| kde-tophat-sqeuclidean/dupes | model  | IDENTICAL x4 | c993389731292ddf | c993389731292ddf | c993389731292ddf | c993389731292ddf |
+| kde-tophat-sqeuclidean/dupes | batch  | IDENTICAL x4 | 021dad334c77050a | 021dad334c77050a | 021dad334c77050a | 021dad334c77050a |
+| kde-tophat-sqeuclidean/hashed | infer  | IDENTICAL x3 | 002adb003262b1b8 | 002adb003262b1b8 | 002adb003262b1b8 | (not run)        |
+| kde-tophat-sqeuclidean/hashed | model  | IDENTICAL x3 | a117a488cef65bb3 | a117a488cef65bb3 | a117a488cef65bb3 | (not run)        |
+| kde-tophat-sqeuclidean/hashed | batch  | IDENTICAL x3 | 1e8576f2f5a10923 | 1e8576f2f5a10923 | 1e8576f2f5a10923 | (not run)        |
+| kde-tophat-sqeuclidean/negative | infer  | IDENTICAL x3 | 7c0df788570d3815 | 7c0df788570d3815 | 7c0df788570d3815 | (not run)        |
+| kde-tophat-sqeuclidean/negative | model  | IDENTICAL x3 | eecfd977fef169c5 | eecfd977fef169c5 | eecfd977fef169c5 | (not run)        |
+| kde-tophat-sqeuclidean/negative | batch  | IDENTICAL x3 | 3d5e0a875caa5e12 | 3d5e0a875caa5e12 | 3d5e0a875caa5e12 | (not run)        |
+| kde-tophat-sqeuclidean/odd   | infer  | IDENTICAL x3 | 1f5639e5df3c9476 | 1f5639e5df3c9476 | 1f5639e5df3c9476 | (not run)        |
+| kde-tophat-sqeuclidean/odd   | model  | IDENTICAL x3 | 42e8723db20bbe8b | 42e8723db20bbe8b | 42e8723db20bbe8b | (not run)        |
+| kde-tophat-sqeuclidean/odd   | batch  | IDENTICAL x3 | 59a388ed48b85a4a | 59a388ed48b85a4a | 59a388ed48b85a4a | (not run)        |
+| kde-tophat-sqeuclidean/ties  | infer  | IDENTICAL x4 | 6a97220daf14cf5c | 6a97220daf14cf5c | 6a97220daf14cf5c | 6a97220daf14cf5c |
+| kde-tophat-sqeuclidean/ties  | model  | IDENTICAL x4 | 87fae666d3f610e7 | 87fae666d3f610e7 | 87fae666d3f610e7 | 87fae666d3f610e7 |
+| kde-tophat-sqeuclidean/ties  | batch  | IDENTICAL x4 | 9c81669a5405c91a | 9c81669a5405c91a | 9c81669a5405c91a | 9c81669a5405c91a |
+| kde-tophat-sqeuclidean/wide  | infer  | IDENTICAL x3 | 835c8ed46e107d11 | 835c8ed46e107d11 | 835c8ed46e107d11 | (not run)        |
+| kde-tophat-sqeuclidean/wide  | model  | IDENTICAL x3 | f9535c3d73d6456a | f9535c3d73d6456a | f9535c3d73d6456a | (not run)        |
+| kde-tophat-sqeuclidean/wide  | batch  | IDENTICAL x3 | dac2b5874973c62a | dac2b5874973c62a | dac2b5874973c62a | (not run)        |
+| kde-weighted/base            | infer  | IDENTICAL x4 | 4f090c7438ab89c4 | 4f090c7438ab89c4 | 4f090c7438ab89c4 | 4f090c7438ab89c4 |
+| kde-weighted/base            | model  | IDENTICAL x4 | ed3ad9a95b60986d | ed3ad9a95b60986d | ed3ad9a95b60986d | ed3ad9a95b60986d |
+| kde-weighted/base            | batch  | IDENTICAL x4 | 34d189cd0f66077c | 34d189cd0f66077c | 34d189cd0f66077c | 34d189cd0f66077c |
+| kde-weighted/denormal        | infer  | IDENTICAL x3 | fafa89d29b5563b9 | fafa89d29b5563b9 | fafa89d29b5563b9 | (not run)        |
+| kde-weighted/denormal        | model  | IDENTICAL x3 | 43a5eddd0fa6f0be | 43a5eddd0fa6f0be | 43a5eddd0fa6f0be | (not run)        |
+| kde-weighted/denormal        | batch  | IDENTICAL x3 | 9c3e4443cc356334 | 9c3e4443cc356334 | 9c3e4443cc356334 | (not run)        |
+| kde-weighted/denormal_ftz    | infer  | IDENTICAL x3 | fafa89d29b5563b9 | fafa89d29b5563b9 | fafa89d29b5563b9 | (not run)        |
+| kde-weighted/denormal_ftz    | model  | IDENTICAL x3 | 6dd6780f2c70aea6 | 6dd6780f2c70aea6 | 6dd6780f2c70aea6 | (not run)        |
+| kde-weighted/denormal_ftz    | batch  | IDENTICAL x3 | 9c3e4443cc356334 | 9c3e4443cc356334 | 9c3e4443cc356334 | (not run)        |
+| kde-weighted/dupes           | infer  | IDENTICAL x4 | 4f090c7438ab89c4 | 4f090c7438ab89c4 | 4f090c7438ab89c4 | 4f090c7438ab89c4 |
+| kde-weighted/dupes           | model  | IDENTICAL x4 | ed3ad9a95b60986d | ed3ad9a95b60986d | ed3ad9a95b60986d | ed3ad9a95b60986d |
+| kde-weighted/dupes           | batch  | IDENTICAL x4 | 34d189cd0f66077c | 34d189cd0f66077c | 34d189cd0f66077c | 34d189cd0f66077c |
+| kde-weighted/hashed          | infer  | IDENTICAL x3 | d44c78f6baa8d6dc | d44c78f6baa8d6dc | d44c78f6baa8d6dc | (not run)        |
+| kde-weighted/hashed          | model  | IDENTICAL x3 | 53fe9d82cc4dc276 | 53fe9d82cc4dc276 | 53fe9d82cc4dc276 | (not run)        |
+| kde-weighted/hashed          | batch  | IDENTICAL x3 | 08dbd45781b24f8d | 08dbd45781b24f8d | 08dbd45781b24f8d | (not run)        |
+| kde-weighted/negative        | infer  | IDENTICAL x3 | 89c0159d99d9b46b | 89c0159d99d9b46b | 89c0159d99d9b46b | (not run)        |
+| kde-weighted/negative        | model  | IDENTICAL x3 | f38733eebd943f9e | f38733eebd943f9e | f38733eebd943f9e | (not run)        |
+| kde-weighted/negative        | batch  | IDENTICAL x3 | 06af65d683e2a8c3 | 06af65d683e2a8c3 | 06af65d683e2a8c3 | (not run)        |
+| kde-weighted/odd             | infer  | IDENTICAL x3 | 594d6362da79cc2b | 594d6362da79cc2b | 594d6362da79cc2b | (not run)        |
+| kde-weighted/odd             | model  | IDENTICAL x3 | c03119066e262d41 | c03119066e262d41 | c03119066e262d41 | (not run)        |
+| kde-weighted/odd             | batch  | IDENTICAL x3 | e7c9cfecebed965d | e7c9cfecebed965d | e7c9cfecebed965d | (not run)        |
+| kde-weighted/ties            | infer  | IDENTICAL x4 | fd50122f27e7a79d | fd50122f27e7a79d | fd50122f27e7a79d | fd50122f27e7a79d |
+| kde-weighted/ties            | model  | IDENTICAL x4 | baee26310e103854 | baee26310e103854 | baee26310e103854 | baee26310e103854 |
+| kde-weighted/ties            | batch  | IDENTICAL x4 | 0ab991b75295e9b0 | 0ab991b75295e9b0 | 0ab991b75295e9b0 | 0ab991b75295e9b0 |
+| kde-weighted/wide            | infer  | IDENTICAL x3 | 19990e59847f44ff | 19990e59847f44ff | 19990e59847f44ff | (not run)        |
+| kde-weighted/wide            | model  | IDENTICAL x3 | c22f395c6857d83a | c22f395c6857d83a | c22f395c6857d83a | (not run)        |
+| kde-weighted/wide            | batch  | IDENTICAL x3 | a468b0d3ad0409a5 | a468b0d3ad0409a5 | a468b0d3ad0409a5 | (not run)        |
+| knn-chebyshev/base           | infer  | IDENTICAL x4 | 85bf9daf0386b59f | 85bf9daf0386b59f | 85bf9daf0386b59f | 85bf9daf0386b59f |
+| knn-chebyshev/base           | model  | IDENTICAL x4 | 9fcdb70c0e9f5be8 | 9fcdb70c0e9f5be8 | 9fcdb70c0e9f5be8 | 9fcdb70c0e9f5be8 |
+| knn-chebyshev/base           | batch  | IDENTICAL x4 | 683144a1f2f526f5 | 683144a1f2f526f5 | 683144a1f2f526f5 | 683144a1f2f526f5 |
+| knn-chebyshev/denormal       | infer  | IDENTICAL x3 | bf5de0931ab4b7a3 | bf5de0931ab4b7a3 | bf5de0931ab4b7a3 | (not run)        |
+| knn-chebyshev/denormal       | model  | IDENTICAL x3 | 26e61503a445cfbf | 26e61503a445cfbf | 26e61503a445cfbf | (not run)        |
+| knn-chebyshev/denormal       | batch  | IDENTICAL x3 | e1bc9df6e5700770 | e1bc9df6e5700770 | e1bc9df6e5700770 | (not run)        |
+| knn-chebyshev/denormal_ftz   | infer  | IDENTICAL x3 | bf5de0931ab4b7a3 | bf5de0931ab4b7a3 | bf5de0931ab4b7a3 | (not run)        |
+| knn-chebyshev/denormal_ftz   | model  | IDENTICAL x3 | bafb044a74f8fc98 | bafb044a74f8fc98 | bafb044a74f8fc98 | (not run)        |
+| knn-chebyshev/denormal_ftz   | batch  | IDENTICAL x3 | e1bc9df6e5700770 | e1bc9df6e5700770 | e1bc9df6e5700770 | (not run)        |
+| knn-chebyshev/dupes          | infer  | IDENTICAL x4 | 42aa74427e3c4f6a | 42aa74427e3c4f6a | 42aa74427e3c4f6a | 42aa74427e3c4f6a |
+| knn-chebyshev/dupes          | model  | IDENTICAL x4 | dd5631e90586bfcf | dd5631e90586bfcf | dd5631e90586bfcf | dd5631e90586bfcf |
+| knn-chebyshev/dupes          | batch  | IDENTICAL x4 | 12c632e392a08c4f | 12c632e392a08c4f | 12c632e392a08c4f | 12c632e392a08c4f |
+| knn-chebyshev/hashed         | infer  | IDENTICAL x3 | 7d8d316420265922 | 7d8d316420265922 | 7d8d316420265922 | (not run)        |
+| knn-chebyshev/hashed         | model  | IDENTICAL x3 | cae31f9540e4d4d2 | cae31f9540e4d4d2 | cae31f9540e4d4d2 | (not run)        |
+| knn-chebyshev/hashed         | batch  | IDENTICAL x3 | e5dab28ecc220dec | e5dab28ecc220dec | e5dab28ecc220dec | (not run)        |
+| knn-chebyshev/negative       | infer  | IDENTICAL x3 | 5843b582766bc3f1 | 5843b582766bc3f1 | 5843b582766bc3f1 | (not run)        |
+| knn-chebyshev/negative       | model  | IDENTICAL x3 | d46a6b5b3c433661 | d46a6b5b3c433661 | d46a6b5b3c433661 | (not run)        |
+| knn-chebyshev/negative       | batch  | IDENTICAL x3 | 01640868a17e3530 | 01640868a17e3530 | 01640868a17e3530 | (not run)        |
+| knn-chebyshev/odd            | infer  | IDENTICAL x3 | 59a6f79d244e35f9 | 59a6f79d244e35f9 | 59a6f79d244e35f9 | (not run)        |
+| knn-chebyshev/odd            | model  | IDENTICAL x3 | 10eaf9c8e17d945b | 10eaf9c8e17d945b | 10eaf9c8e17d945b | (not run)        |
+| knn-chebyshev/odd            | batch  | IDENTICAL x3 | 789a97a2b3d0393f | 789a97a2b3d0393f | 789a97a2b3d0393f | (not run)        |
+| knn-chebyshev/ties           | infer  | IDENTICAL x4 | 61fdcb8274d164a4 | 61fdcb8274d164a4 | 61fdcb8274d164a4 | 61fdcb8274d164a4 |
+| knn-chebyshev/ties           | model  | IDENTICAL x4 | 5243539c628d2238 | 5243539c628d2238 | 5243539c628d2238 | 5243539c628d2238 |
+| knn-chebyshev/ties           | batch  | IDENTICAL x4 | 17b22dbfae124fbb | 17b22dbfae124fbb | 17b22dbfae124fbb | 17b22dbfae124fbb |
+| knn-chebyshev/wide           | infer  | IDENTICAL x3 | 1d44f07f5d59684e | 1d44f07f5d59684e | 1d44f07f5d59684e | (not run)        |
+| knn-chebyshev/wide           | model  | IDENTICAL x3 | e17507466bf1509b | e17507466bf1509b | e17507466bf1509b | (not run)        |
+| knn-chebyshev/wide           | batch  | IDENTICAL x3 | ce9423b41590dc2d | ce9423b41590dc2d | ce9423b41590dc2d | (not run)        |
+| knn-clf-distance/base        | infer  | IDENTICAL x4 | 27345d180c69e075 | 27345d180c69e075 | 27345d180c69e075 | 27345d180c69e075 |
+| knn-clf-distance/base        | model  | IDENTICAL x4 | 13ba9e3acab2179f | 13ba9e3acab2179f | 13ba9e3acab2179f | 13ba9e3acab2179f |
+| knn-clf-distance/base        | batch  | IDENTICAL x4 | 71f774c6a3805384 | 71f774c6a3805384 | 71f774c6a3805384 | 71f774c6a3805384 |
+| knn-clf-distance/denormal    | infer  | IDENTICAL x3 | 161b9103ffcfdd91 | 161b9103ffcfdd91 | 161b9103ffcfdd91 | (not run)        |
+| knn-clf-distance/denormal    | model  | IDENTICAL x3 | 0f588d898c892f10 | 0f588d898c892f10 | 0f588d898c892f10 | (not run)        |
+| knn-clf-distance/denormal    | batch  | IDENTICAL x3 | 81085f4e1697efb3 | 81085f4e1697efb3 | 81085f4e1697efb3 | (not run)        |
+| knn-clf-distance/denormal_ftz | infer  | IDENTICAL x3 | 161b9103ffcfdd91 | 161b9103ffcfdd91 | 161b9103ffcfdd91 | (not run)        |
+| knn-clf-distance/denormal_ftz | model  | IDENTICAL x3 | 4f2ca5a9a8656623 | 4f2ca5a9a8656623 | 4f2ca5a9a8656623 | (not run)        |
+| knn-clf-distance/denormal_ftz | batch  | IDENTICAL x3 | 81085f4e1697efb3 | 81085f4e1697efb3 | 81085f4e1697efb3 | (not run)        |
+| knn-clf-distance/dupes       | infer  | IDENTICAL x4 | df3825c0aa9b0795 | df3825c0aa9b0795 | df3825c0aa9b0795 | df3825c0aa9b0795 |
+| knn-clf-distance/dupes       | model  | IDENTICAL x4 | 7dd29e4d99cb3e1d | 7dd29e4d99cb3e1d | 7dd29e4d99cb3e1d | 7dd29e4d99cb3e1d |
+| knn-clf-distance/dupes       | batch  | IDENTICAL x4 | 5dff5de2207656c1 | 5dff5de2207656c1 | 5dff5de2207656c1 | 5dff5de2207656c1 |
+| knn-clf-distance/hashed      | infer  | IDENTICAL x3 | 359639676aeba81b | 359639676aeba81b | 359639676aeba81b | (not run)        |
+| knn-clf-distance/hashed      | model  | IDENTICAL x3 | 59c29fd8202e117b | 59c29fd8202e117b | 59c29fd8202e117b | (not run)        |
+| knn-clf-distance/hashed      | batch  | IDENTICAL x3 | 96b8c8bbcd9f986e | 96b8c8bbcd9f986e | 96b8c8bbcd9f986e | (not run)        |
+| knn-clf-distance/negative    | infer  | IDENTICAL x3 | 39d87d163805dcf3 | 39d87d163805dcf3 | 39d87d163805dcf3 | (not run)        |
+| knn-clf-distance/negative    | model  | IDENTICAL x3 | 0798677ba91e437e | 0798677ba91e437e | 0798677ba91e437e | (not run)        |
+| knn-clf-distance/negative    | batch  | IDENTICAL x3 | fe695d85388715cb | fe695d85388715cb | fe695d85388715cb | (not run)        |
+| knn-clf-distance/odd         | infer  | IDENTICAL x3 | 440957e05a506027 | 440957e05a506027 | 440957e05a506027 | (not run)        |
+| knn-clf-distance/odd         | model  | IDENTICAL x3 | 8c424019c7957f8a | 8c424019c7957f8a | 8c424019c7957f8a | (not run)        |
+| knn-clf-distance/odd         | batch  | IDENTICAL x3 | 85772560a7f06000 | 85772560a7f06000 | 85772560a7f06000 | (not run)        |
+| knn-clf-distance/ties        | infer  | IDENTICAL x4 | 51fbb53f70ef95fe | 51fbb53f70ef95fe | 51fbb53f70ef95fe | 51fbb53f70ef95fe |
+| knn-clf-distance/ties        | model  | IDENTICAL x4 | 9d81f24bb5a3a46d | 9d81f24bb5a3a46d | 9d81f24bb5a3a46d | 9d81f24bb5a3a46d |
+| knn-clf-distance/ties        | batch  | IDENTICAL x4 | 2affda44a6cf9d5a | 2affda44a6cf9d5a | 2affda44a6cf9d5a | 2affda44a6cf9d5a |
+| knn-clf-distance/wide        | infer  | IDENTICAL x3 | 277b1687374533da | 277b1687374533da | 277b1687374533da | (not run)        |
+| knn-clf-distance/wide        | model  | IDENTICAL x3 | 9e05696904110682 | 9e05696904110682 | 9e05696904110682 | (not run)        |
+| knn-clf-distance/wide        | batch  | IDENTICAL x3 | f581ce1c7385393b | f581ce1c7385393b | f581ce1c7385393b | (not run)        |
+| knn-cosine/base              | infer  | IDENTICAL x4 | 45f87790aaba81b4 | 45f87790aaba81b4 | 45f87790aaba81b4 | 45f87790aaba81b4 |
+| knn-cosine/base              | model  | IDENTICAL x4 | a6427c8352b608b8 | a6427c8352b608b8 | a6427c8352b608b8 | a6427c8352b608b8 |
+| knn-cosine/base              | batch  | IDENTICAL x4 | 2f90783542f65771 | 2f90783542f65771 | 2f90783542f65771 | 2f90783542f65771 |
+| knn-cosine/denormal          | infer  | IDENTICAL x3 | b2cb64372b84fdec | b2cb64372b84fdec | b2cb64372b84fdec | (not run)        |
+| knn-cosine/denormal          | model  | IDENTICAL x3 | ec7c6213c976454a | ec7c6213c976454a | ec7c6213c976454a | (not run)        |
+| knn-cosine/denormal          | batch  | IDENTICAL x3 | b054dc4352bf7fc1 | b054dc4352bf7fc1 | b054dc4352bf7fc1 | (not run)        |
+| knn-cosine/denormal_ftz      | infer  | IDENTICAL x3 | b2cb64372b84fdec | b2cb64372b84fdec | b2cb64372b84fdec | (not run)        |
+| knn-cosine/denormal_ftz      | model  | IDENTICAL x3 | 3be498ee096ad3ea | 3be498ee096ad3ea | 3be498ee096ad3ea | (not run)        |
+| knn-cosine/denormal_ftz      | batch  | IDENTICAL x3 | b054dc4352bf7fc1 | b054dc4352bf7fc1 | b054dc4352bf7fc1 | (not run)        |
+| knn-cosine/dupes             | infer  | IDENTICAL x4 | ed02b98206dc7b42 | ed02b98206dc7b42 | ed02b98206dc7b42 | ed02b98206dc7b42 |
+| knn-cosine/dupes             | model  | IDENTICAL x4 | 8b93c8f69f7f0dc1 | 8b93c8f69f7f0dc1 | 8b93c8f69f7f0dc1 | 8b93c8f69f7f0dc1 |
+| knn-cosine/dupes             | batch  | IDENTICAL x4 | 7cb6ce3730f7e0f8 | 7cb6ce3730f7e0f8 | 7cb6ce3730f7e0f8 | 7cb6ce3730f7e0f8 |
+| knn-cosine/hashed            | infer  | IDENTICAL x3 | 4d957fb8ee856b7f | 4d957fb8ee856b7f | 4d957fb8ee856b7f | (not run)        |
+| knn-cosine/hashed            | model  | IDENTICAL x3 | f0b5ec3e5c1ef41f | f0b5ec3e5c1ef41f | f0b5ec3e5c1ef41f | (not run)        |
+| knn-cosine/hashed            | batch  | IDENTICAL x3 | d1f6abda6f6933c8 | d1f6abda6f6933c8 | d1f6abda6f6933c8 | (not run)        |
+| knn-cosine/negative          | infer  | IDENTICAL x3 | e77cde5b09677ccb | e77cde5b09677ccb | e77cde5b09677ccb | (not run)        |
+| knn-cosine/negative          | model  | IDENTICAL x3 | 8a8c8987151691c5 | 8a8c8987151691c5 | 8a8c8987151691c5 | (not run)        |
+| knn-cosine/negative          | batch  | IDENTICAL x3 | 8b42ec13d87c8f1a | 8b42ec13d87c8f1a | 8b42ec13d87c8f1a | (not run)        |
+| knn-cosine/odd               | infer  | IDENTICAL x3 | 1187c6eebfa94235 | 1187c6eebfa94235 | 1187c6eebfa94235 | (not run)        |
+| knn-cosine/odd               | model  | IDENTICAL x3 | 355934afd7db6e52 | 355934afd7db6e52 | 355934afd7db6e52 | (not run)        |
+| knn-cosine/odd               | batch  | IDENTICAL x3 | 8790fff09ffbf24f | 8790fff09ffbf24f | 8790fff09ffbf24f | (not run)        |
+| knn-cosine/ties              | infer  | IDENTICAL x4 | ef08d9ae912ae104 | ef08d9ae912ae104 | ef08d9ae912ae104 | ef08d9ae912ae104 |
+| knn-cosine/ties              | model  | IDENTICAL x4 | af099d8dc056f48b | af099d8dc056f48b | af099d8dc056f48b | af099d8dc056f48b |
+| knn-cosine/ties              | batch  | IDENTICAL x4 | 128d2cd0620be187 | 128d2cd0620be187 | 128d2cd0620be187 | 128d2cd0620be187 |
+| knn-cosine/wide              | infer  | IDENTICAL x3 | 9f12a3eef1a18272 | 9f12a3eef1a18272 | 9f12a3eef1a18272 | (not run)        |
+| knn-cosine/wide              | model  | IDENTICAL x3 | 359d5ba839ede73e | 359d5ba839ede73e | 359d5ba839ede73e | (not run)        |
+| knn-cosine/wide              | batch  | IDENTICAL x3 | 26c0c4fe7ae8e3fc | 26c0c4fe7ae8e3fc | 26c0c4fe7ae8e3fc | (not run)        |
+| knn-manhattan/base           | infer  | IDENTICAL x4 | 0c50c33ce8d101a4 | 0c50c33ce8d101a4 | 0c50c33ce8d101a4 | 0c50c33ce8d101a4 |
+| knn-manhattan/base           | model  | IDENTICAL x4 | cd79f58159bc6f62 | cd79f58159bc6f62 | cd79f58159bc6f62 | cd79f58159bc6f62 |
+| knn-manhattan/base           | batch  | IDENTICAL x4 | 10b3a84533d40806 | 10b3a84533d40806 | 10b3a84533d40806 | 10b3a84533d40806 |
+| knn-manhattan/denormal       | infer  | IDENTICAL x3 | 9f8d4c079e765688 | 9f8d4c079e765688 | 9f8d4c079e765688 | (not run)        |
+| knn-manhattan/denormal       | model  | IDENTICAL x3 | 79c426f53bdfd96b | 79c426f53bdfd96b | 79c426f53bdfd96b | (not run)        |
+| knn-manhattan/denormal       | batch  | IDENTICAL x3 | ea6dbc7094c44c08 | ea6dbc7094c44c08 | ea6dbc7094c44c08 | (not run)        |
+| knn-manhattan/denormal_ftz   | infer  | IDENTICAL x3 | 9f8d4c079e765688 | 9f8d4c079e765688 | 9f8d4c079e765688 | (not run)        |
+| knn-manhattan/denormal_ftz   | model  | IDENTICAL x3 | ff1324196230341b | ff1324196230341b | ff1324196230341b | (not run)        |
+| knn-manhattan/denormal_ftz   | batch  | IDENTICAL x3 | ea6dbc7094c44c08 | ea6dbc7094c44c08 | ea6dbc7094c44c08 | (not run)        |
+| knn-manhattan/dupes          | infer  | IDENTICAL x4 | e281a4103fbaaef2 | e281a4103fbaaef2 | e281a4103fbaaef2 | e281a4103fbaaef2 |
+| knn-manhattan/dupes          | model  | IDENTICAL x4 | 4236e13a4f7525bd | 4236e13a4f7525bd | 4236e13a4f7525bd | 4236e13a4f7525bd |
+| knn-manhattan/dupes          | batch  | IDENTICAL x4 | edfd0b9b563f8873 | edfd0b9b563f8873 | edfd0b9b563f8873 | edfd0b9b563f8873 |
+| knn-manhattan/hashed         | infer  | IDENTICAL x3 | d977799baeb8f042 | d977799baeb8f042 | d977799baeb8f042 | (not run)        |
+| knn-manhattan/hashed         | model  | IDENTICAL x3 | 260f67359fc2f243 | 260f67359fc2f243 | 260f67359fc2f243 | (not run)        |
+| knn-manhattan/hashed         | batch  | IDENTICAL x3 | 7edca93aaf0a35f9 | 7edca93aaf0a35f9 | 7edca93aaf0a35f9 | (not run)        |
+| knn-manhattan/negative       | infer  | IDENTICAL x3 | 15defde8b5ddf06d | 15defde8b5ddf06d | 15defde8b5ddf06d | (not run)        |
+| knn-manhattan/negative       | model  | IDENTICAL x3 | e4d91ae9fa60afe6 | e4d91ae9fa60afe6 | e4d91ae9fa60afe6 | (not run)        |
+| knn-manhattan/negative       | batch  | IDENTICAL x3 | 0d77bb5976e91938 | 0d77bb5976e91938 | 0d77bb5976e91938 | (not run)        |
+| knn-manhattan/odd            | infer  | IDENTICAL x3 | b06518cd286b18fe | b06518cd286b18fe | b06518cd286b18fe | (not run)        |
+| knn-manhattan/odd            | model  | IDENTICAL x3 | 85d5f1e623f86eb1 | 85d5f1e623f86eb1 | 85d5f1e623f86eb1 | (not run)        |
+| knn-manhattan/odd            | batch  | IDENTICAL x3 | e741e1b093d15d57 | e741e1b093d15d57 | e741e1b093d15d57 | (not run)        |
+| knn-manhattan/ties           | infer  | IDENTICAL x4 | e1e159dd9c916c14 | e1e159dd9c916c14 | e1e159dd9c916c14 | e1e159dd9c916c14 |
+| knn-manhattan/ties           | model  | IDENTICAL x4 | 1016d1125951292d | 1016d1125951292d | 1016d1125951292d | 1016d1125951292d |
+| knn-manhattan/ties           | batch  | IDENTICAL x4 | 59958372d6c83bfa | 59958372d6c83bfa | 59958372d6c83bfa | 59958372d6c83bfa |
+| knn-manhattan/wide           | infer  | IDENTICAL x3 | fae81abe9bed9aaa | fae81abe9bed9aaa | fae81abe9bed9aaa | (not run)        |
+| knn-manhattan/wide           | model  | IDENTICAL x3 | de0412f2090931f3 | de0412f2090931f3 | de0412f2090931f3 | (not run)        |
+| knn-manhattan/wide           | batch  | IDENTICAL x3 | d9b0dbbfc473e5f3 | d9b0dbbfc473e5f3 | d9b0dbbfc473e5f3 | (not run)        |
+| knn-minkowski-p3/base        | infer  | IDENTICAL x4 | b10c67db8cf2d93f | b10c67db8cf2d93f | b10c67db8cf2d93f | b10c67db8cf2d93f |
+| knn-minkowski-p3/base        | model  | IDENTICAL x4 | 2e10324808b3d9d2 | 2e10324808b3d9d2 | 2e10324808b3d9d2 | 2e10324808b3d9d2 |
+| knn-minkowski-p3/base        | batch  | IDENTICAL x4 | 1577ac7a8b38cc11 | 1577ac7a8b38cc11 | 1577ac7a8b38cc11 | 1577ac7a8b38cc11 |
+| knn-minkowski-p3/denormal    | infer  | IDENTICAL x3 | 98b8e77bc62484ca | 98b8e77bc62484ca | 98b8e77bc62484ca | (not run)        |
+| knn-minkowski-p3/denormal    | model  | IDENTICAL x3 | eda94d85fdc805a8 | eda94d85fdc805a8 | eda94d85fdc805a8 | (not run)        |
+| knn-minkowski-p3/denormal    | batch  | IDENTICAL x3 | 505da58bc23f7818 | 505da58bc23f7818 | 505da58bc23f7818 | (not run)        |
+| knn-minkowski-p3/denormal_ftz | infer  | IDENTICAL x3 | 98b8e77bc62484ca | 98b8e77bc62484ca | 98b8e77bc62484ca | (not run)        |
+| knn-minkowski-p3/denormal_ftz | model  | IDENTICAL x3 | cd0481cdfbb1ff69 | cd0481cdfbb1ff69 | cd0481cdfbb1ff69 | (not run)        |
+| knn-minkowski-p3/denormal_ftz | batch  | IDENTICAL x3 | 505da58bc23f7818 | 505da58bc23f7818 | 505da58bc23f7818 | (not run)        |
+| knn-minkowski-p3/dupes       | infer  | IDENTICAL x4 | 8763bf8d122dfa14 | 8763bf8d122dfa14 | 8763bf8d122dfa14 | 8763bf8d122dfa14 |
+| knn-minkowski-p3/dupes       | model  | IDENTICAL x4 | 41955aa18f1ba955 | 41955aa18f1ba955 | 41955aa18f1ba955 | 41955aa18f1ba955 |
+| knn-minkowski-p3/dupes       | batch  | IDENTICAL x4 | 354baf95da2fa04e | 354baf95da2fa04e | 354baf95da2fa04e | 354baf95da2fa04e |
+| knn-minkowski-p3/hashed      | infer  | IDENTICAL x3 | 4466d12af0551e09 | 4466d12af0551e09 | 4466d12af0551e09 | (not run)        |
+| knn-minkowski-p3/hashed      | model  | IDENTICAL x3 | 86f268788d10f4e4 | 86f268788d10f4e4 | 86f268788d10f4e4 | (not run)        |
+| knn-minkowski-p3/hashed      | batch  | IDENTICAL x3 | 3bc4b7d4ff4a6bfc | 3bc4b7d4ff4a6bfc | 3bc4b7d4ff4a6bfc | (not run)        |
+| knn-minkowski-p3/negative    | infer  | IDENTICAL x3 | b48193f231cf831a | b48193f231cf831a | b48193f231cf831a | (not run)        |
+| knn-minkowski-p3/negative    | model  | IDENTICAL x3 | c6d62b82aba926ab | c6d62b82aba926ab | c6d62b82aba926ab | (not run)        |
+| knn-minkowski-p3/negative    | batch  | IDENTICAL x3 | c0f52f99a060ebbc | c0f52f99a060ebbc | c0f52f99a060ebbc | (not run)        |
+| knn-minkowski-p3/odd         | infer  | IDENTICAL x3 | 887742009da6b7bc | 887742009da6b7bc | 887742009da6b7bc | (not run)        |
+| knn-minkowski-p3/odd         | model  | IDENTICAL x3 | 9445d0f2e3fceb97 | 9445d0f2e3fceb97 | 9445d0f2e3fceb97 | (not run)        |
+| knn-minkowski-p3/odd         | batch  | IDENTICAL x3 | 9a7673ced9f48131 | 9a7673ced9f48131 | 9a7673ced9f48131 | (not run)        |
+| knn-minkowski-p3/ties        | infer  | IDENTICAL x4 | 8a62d9a7de10894d | 8a62d9a7de10894d | 8a62d9a7de10894d | 8a62d9a7de10894d |
+| knn-minkowski-p3/ties        | model  | IDENTICAL x4 | ca7e170fd4dbb367 | ca7e170fd4dbb367 | ca7e170fd4dbb367 | ca7e170fd4dbb367 |
+| knn-minkowski-p3/ties        | batch  | IDENTICAL x4 | 8caf1dd2918bcb6c | 8caf1dd2918bcb6c | 8caf1dd2918bcb6c | 8caf1dd2918bcb6c |
+| knn-minkowski-p3/wide        | infer  | IDENTICAL x3 | ca5b4480fc62c85a | ca5b4480fc62c85a | ca5b4480fc62c85a | (not run)        |
+| knn-minkowski-p3/wide        | model  | IDENTICAL x3 | cafdbe43eeca7368 | cafdbe43eeca7368 | cafdbe43eeca7368 | (not run)        |
+| knn-minkowski-p3/wide        | batch  | IDENTICAL x3 | bd5e8966f4b13a72 | bd5e8966f4b13a72 | bd5e8966f4b13a72 | (not run)        |
+| knn-rbc/base                 | infer  | IDENTICAL x4 | 94547b3dc58e2d86 | 94547b3dc58e2d86 | 94547b3dc58e2d86 | 94547b3dc58e2d86 |
+| knn-rbc/base                 | model  | IDENTICAL x4 | 88fe338f22e892ce | 88fe338f22e892ce | 88fe338f22e892ce | 88fe338f22e892ce |
+| knn-rbc/base                 | batch  | IDENTICAL x4 | 31bc51bc2d9dfaa4 | 31bc51bc2d9dfaa4 | 31bc51bc2d9dfaa4 | 31bc51bc2d9dfaa4 |
+| knn-rbc/denormal             | infer  | IDENTICAL x3 | efaf6f918c3053ef | efaf6f918c3053ef | efaf6f918c3053ef | (not run)        |
+| knn-rbc/denormal             | model  | IDENTICAL x3 | 89332bf156119399 | 89332bf156119399 | 89332bf156119399 | (not run)        |
+| knn-rbc/denormal             | batch  | IDENTICAL x3 | 4b88ca48985e7fee | 4b88ca48985e7fee | 4b88ca48985e7fee | (not run)        |
+| knn-rbc/denormal_ftz         | infer  | IDENTICAL x3 | efaf6f918c3053ef | efaf6f918c3053ef | efaf6f918c3053ef | (not run)        |
+| knn-rbc/denormal_ftz         | model  | IDENTICAL x3 | 2f6461a7cebcf9cd | 2f6461a7cebcf9cd | 2f6461a7cebcf9cd | (not run)        |
+| knn-rbc/denormal_ftz         | batch  | IDENTICAL x3 | 4b88ca48985e7fee | 4b88ca48985e7fee | 4b88ca48985e7fee | (not run)        |
+| knn-rbc/dupes                | infer  | IDENTICAL x4 | 590cec8ee362b9d0 | 590cec8ee362b9d0 | 590cec8ee362b9d0 | 590cec8ee362b9d0 |
+| knn-rbc/dupes                | model  | IDENTICAL x4 | 71980f97cd4c3be7 | 71980f97cd4c3be7 | 71980f97cd4c3be7 | 71980f97cd4c3be7 |
+| knn-rbc/dupes                | batch  | IDENTICAL x4 | 352ec9eda2d42de9 | 352ec9eda2d42de9 | 352ec9eda2d42de9 | 352ec9eda2d42de9 |
+| knn-rbc/hashed               | infer  | IDENTICAL x3 | b5c50681d55c154e | b5c50681d55c154e | b5c50681d55c154e | (not run)        |
+| knn-rbc/hashed               | model  | IDENTICAL x3 | 74e1d4bf6383b153 | 74e1d4bf6383b153 | 74e1d4bf6383b153 | (not run)        |
+| knn-rbc/hashed               | batch  | IDENTICAL x3 | 363211da474dc977 | 363211da474dc977 | 363211da474dc977 | (not run)        |
+| knn-rbc/negative             | infer  | IDENTICAL x3 | f7159dbae89faf64 | f7159dbae89faf64 | f7159dbae89faf64 | (not run)        |
+| knn-rbc/negative             | model  | IDENTICAL x3 | 60a968568084d660 | 60a968568084d660 | 60a968568084d660 | (not run)        |
+| knn-rbc/negative             | batch  | IDENTICAL x3 | 7e48f0fcc68cb7ba | 7e48f0fcc68cb7ba | 7e48f0fcc68cb7ba | (not run)        |
+| knn-rbc/odd                  | infer  | IDENTICAL x3 | 5abacc5b3dc16b57 | 5abacc5b3dc16b57 | 5abacc5b3dc16b57 | (not run)        |
+| knn-rbc/odd                  | model  | IDENTICAL x3 | 36649907ba5db9d5 | 36649907ba5db9d5 | 36649907ba5db9d5 | (not run)        |
+| knn-rbc/odd                  | batch  | IDENTICAL x3 | 7c4eaead63d351b7 | 7c4eaead63d351b7 | 7c4eaead63d351b7 | (not run)        |
+| knn-rbc/ties                 | infer  | IDENTICAL x4 | 234e9e649f45c983 | 234e9e649f45c983 | 234e9e649f45c983 | 234e9e649f45c983 |
+| knn-rbc/ties                 | model  | IDENTICAL x4 | 0184787f1d03ee52 | 0184787f1d03ee52 | 0184787f1d03ee52 | 0184787f1d03ee52 |
+| knn-rbc/ties                 | batch  | IDENTICAL x4 | be9dd86463c63469 | be9dd86463c63469 | be9dd86463c63469 | be9dd86463c63469 |
+| knn-rbc/wide                 | infer  | IDENTICAL x3 | 2e7d2dc9f4939b14 | 2e7d2dc9f4939b14 | 2e7d2dc9f4939b14 | (not run)        |
+| knn-rbc/wide                 | model  | IDENTICAL x3 | db0673aa3230762c | db0673aa3230762c | db0673aa3230762c | (not run)        |
+| knn-rbc/wide                 | batch  | IDENTICAL x3 | 6726353ac9d76ed6 | 6726353ac9d76ed6 | 6726353ac9d76ed6 | (not run)        |
+| knn-reg-distance/base        | infer  | IDENTICAL x4 | 4fd5cf34814e724c | 4fd5cf34814e724c | 4fd5cf34814e724c | 4fd5cf34814e724c |
+| knn-reg-distance/base        | model  | IDENTICAL x4 | b82ff06f8b739f98 | b82ff06f8b739f98 | b82ff06f8b739f98 | b82ff06f8b739f98 |
+| knn-reg-distance/base        | batch  | IDENTICAL x4 | 895dc1515fbc5e66 | 895dc1515fbc5e66 | 895dc1515fbc5e66 | 895dc1515fbc5e66 |
+| knn-reg-distance/denormal    | infer  | IDENTICAL x3 | 9b6ea23bcb256e4a | 9b6ea23bcb256e4a | 9b6ea23bcb256e4a | (not run)        |
+| knn-reg-distance/denormal    | model  | IDENTICAL x3 | de4201997ae487ac | de4201997ae487ac | de4201997ae487ac | (not run)        |
+| knn-reg-distance/denormal    | batch  | IDENTICAL x3 | 9ebe0aa55f880a0b | 9ebe0aa55f880a0b | 9ebe0aa55f880a0b | (not run)        |
+| knn-reg-distance/denormal_ftz | infer  | IDENTICAL x3 | 9b6ea23bcb256e4a | 9b6ea23bcb256e4a | 9b6ea23bcb256e4a | (not run)        |
+| knn-reg-distance/denormal_ftz | model  | IDENTICAL x3 | 109f24aa28862975 | 109f24aa28862975 | 109f24aa28862975 | (not run)        |
+| knn-reg-distance/denormal_ftz | batch  | IDENTICAL x3 | 9ebe0aa55f880a0b | 9ebe0aa55f880a0b | 9ebe0aa55f880a0b | (not run)        |
+| knn-reg-distance/dupes       | infer  | IDENTICAL x4 | 26f173ab47f2a29b | 26f173ab47f2a29b | 26f173ab47f2a29b | 26f173ab47f2a29b |
+| knn-reg-distance/dupes       | model  | IDENTICAL x4 | 661b72798b99c396 | 661b72798b99c396 | 661b72798b99c396 | 661b72798b99c396 |
+| knn-reg-distance/dupes       | batch  | IDENTICAL x4 | c77624500d626e72 | c77624500d626e72 | c77624500d626e72 | c77624500d626e72 |
+| knn-reg-distance/hashed      | infer  | IDENTICAL x3 | a42b18d43fb0bbae | a42b18d43fb0bbae | a42b18d43fb0bbae | (not run)        |
+| knn-reg-distance/hashed      | model  | IDENTICAL x3 | 192c0ceb43186f36 | 192c0ceb43186f36 | 192c0ceb43186f36 | (not run)        |
+| knn-reg-distance/hashed      | batch  | IDENTICAL x3 | 7d210faa10096cdb | 7d210faa10096cdb | 7d210faa10096cdb | (not run)        |
+| knn-reg-distance/negative    | infer  | IDENTICAL x3 | 525084ce53178a55 | 525084ce53178a55 | 525084ce53178a55 | (not run)        |
+| knn-reg-distance/negative    | model  | IDENTICAL x3 | d3e76acaacc6629f | d3e76acaacc6629f | d3e76acaacc6629f | (not run)        |
+| knn-reg-distance/negative    | batch  | IDENTICAL x3 | 128e2d03f2407882 | 128e2d03f2407882 | 128e2d03f2407882 | (not run)        |
+| knn-reg-distance/odd         | infer  | IDENTICAL x3 | 0d909ae385a8ee89 | 0d909ae385a8ee89 | 0d909ae385a8ee89 | (not run)        |
+| knn-reg-distance/odd         | model  | IDENTICAL x3 | 1c60557b010ba215 | 1c60557b010ba215 | 1c60557b010ba215 | (not run)        |
+| knn-reg-distance/odd         | batch  | IDENTICAL x3 | 2e4ec1f74257185e | 2e4ec1f74257185e | 2e4ec1f74257185e | (not run)        |
+| knn-reg-distance/ties        | infer  | IDENTICAL x4 | 1b019d878594bccc | 1b019d878594bccc | 1b019d878594bccc | 1b019d878594bccc |
+| knn-reg-distance/ties        | model  | IDENTICAL x4 | 7070fd3a026689f1 | 7070fd3a026689f1 | 7070fd3a026689f1 | 7070fd3a026689f1 |
+| knn-reg-distance/ties        | batch  | IDENTICAL x4 | a83d7cb4bb21993d | a83d7cb4bb21993d | a83d7cb4bb21993d | a83d7cb4bb21993d |
+| knn-reg-distance/wide        | infer  | IDENTICAL x3 | 1e274443af7a2296 | 1e274443af7a2296 | 1e274443af7a2296 | (not run)        |
+| knn-reg-distance/wide        | model  | IDENTICAL x3 | df97943874096a51 | df97943874096a51 | df97943874096a51 | (not run)        |
+| knn-reg-distance/wide        | batch  | IDENTICAL x3 | 3aa81ea0570e52e0 | 3aa81ea0570e52e0 | 3aa81ea0570e52e0 | (not run)        |
+| knn-sqeuclidean/base         | infer  | IDENTICAL x4 | 76baacee7d15c095 | 76baacee7d15c095 | 76baacee7d15c095 | 76baacee7d15c095 |
+| knn-sqeuclidean/base         | model  | IDENTICAL x4 | 220a6df6b7f08ecb | 220a6df6b7f08ecb | 220a6df6b7f08ecb | 220a6df6b7f08ecb |
+| knn-sqeuclidean/base         | batch  | IDENTICAL x4 | db82b7dc7bcec3ea | db82b7dc7bcec3ea | db82b7dc7bcec3ea | db82b7dc7bcec3ea |
+| knn-sqeuclidean/denormal     | infer  | IDENTICAL x3 | a840743c8e7783ec | a840743c8e7783ec | a840743c8e7783ec | (not run)        |
+| knn-sqeuclidean/denormal     | model  | IDENTICAL x3 | ca456a3b69e74f5b | ca456a3b69e74f5b | ca456a3b69e74f5b | (not run)        |
+| knn-sqeuclidean/denormal     | batch  | IDENTICAL x3 | 69bfae5e0532bb6e | 69bfae5e0532bb6e | 69bfae5e0532bb6e | (not run)        |
+| knn-sqeuclidean/denormal_ftz | infer  | IDENTICAL x3 | a840743c8e7783ec | a840743c8e7783ec | a840743c8e7783ec | (not run)        |
+| knn-sqeuclidean/denormal_ftz | model  | IDENTICAL x3 | 1dcf8efaf98e595d | 1dcf8efaf98e595d | 1dcf8efaf98e595d | (not run)        |
+| knn-sqeuclidean/denormal_ftz | batch  | IDENTICAL x3 | 69bfae5e0532bb6e | 69bfae5e0532bb6e | 69bfae5e0532bb6e | (not run)        |
+| knn-sqeuclidean/dupes        | infer  | IDENTICAL x4 | 5de321ac7c644998 | 5de321ac7c644998 | 5de321ac7c644998 | 5de321ac7c644998 |
+| knn-sqeuclidean/dupes        | model  | IDENTICAL x4 | a106a8dd4166ef57 | a106a8dd4166ef57 | a106a8dd4166ef57 | a106a8dd4166ef57 |
+| knn-sqeuclidean/dupes        | batch  | IDENTICAL x4 | e5f0e0e9136d840b | e5f0e0e9136d840b | e5f0e0e9136d840b | e5f0e0e9136d840b |
+| knn-sqeuclidean/hashed       | infer  | IDENTICAL x3 | c29fcd5dba3ddf9a | c29fcd5dba3ddf9a | c29fcd5dba3ddf9a | (not run)        |
+| knn-sqeuclidean/hashed       | model  | IDENTICAL x3 | 6a238cf6dee71105 | 6a238cf6dee71105 | 6a238cf6dee71105 | (not run)        |
+| knn-sqeuclidean/hashed       | batch  | IDENTICAL x3 | de9b86470bea3c79 | de9b86470bea3c79 | de9b86470bea3c79 | (not run)        |
+| knn-sqeuclidean/negative     | infer  | IDENTICAL x3 | c922704979aa128b | c922704979aa128b | c922704979aa128b | (not run)        |
+| knn-sqeuclidean/negative     | model  | IDENTICAL x3 | a3e609f5ba879213 | a3e609f5ba879213 | a3e609f5ba879213 | (not run)        |
+| knn-sqeuclidean/negative     | batch  | IDENTICAL x3 | ec66aecb59bbcc1c | ec66aecb59bbcc1c | ec66aecb59bbcc1c | (not run)        |
+| knn-sqeuclidean/odd          | infer  | IDENTICAL x3 | 0c6f8232cafe242c | 0c6f8232cafe242c | 0c6f8232cafe242c | (not run)        |
+| knn-sqeuclidean/odd          | model  | IDENTICAL x3 | 2e5f790a836299dc | 2e5f790a836299dc | 2e5f790a836299dc | (not run)        |
+| knn-sqeuclidean/odd          | batch  | IDENTICAL x3 | 436cef7e7c433bf3 | 436cef7e7c433bf3 | 436cef7e7c433bf3 | (not run)        |
+| knn-sqeuclidean/ties         | infer  | IDENTICAL x4 | 8b1d0d2c178dcbc9 | 8b1d0d2c178dcbc9 | 8b1d0d2c178dcbc9 | 8b1d0d2c178dcbc9 |
+| knn-sqeuclidean/ties         | model  | IDENTICAL x4 | 8096f29c3e671db0 | 8096f29c3e671db0 | 8096f29c3e671db0 | 8096f29c3e671db0 |
+| knn-sqeuclidean/ties         | batch  | IDENTICAL x4 | 6e306c2669600f8f | 6e306c2669600f8f | 6e306c2669600f8f | 6e306c2669600f8f |
+| knn-sqeuclidean/wide         | infer  | IDENTICAL x3 | 315037decede5e9b | 315037decede5e9b | 315037decede5e9b | (not run)        |
+| knn-sqeuclidean/wide         | model  | IDENTICAL x3 | d79417b3b836be90 | d79417b3b836be90 | d79417b3b836be90 | (not run)        |
+| knn-sqeuclidean/wide         | batch  | IDENTICAL x3 | 962732e39f6ab11c | 962732e39f6ab11c | 962732e39f6ab11c | (not run)        |
+| radius-chebyshev/base        | infer  | IDENTICAL x4 | 47f179252c05327e | 47f179252c05327e | 47f179252c05327e | 47f179252c05327e |
+| radius-chebyshev/base        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8574229ff00211a8 |
+| radius-chebyshev/base        | batch  | IDENTICAL x4 | 49212cdc3335248f | 49212cdc3335248f | 49212cdc3335248f | 49212cdc3335248f |
+| radius-chebyshev/denormal    | infer  | IDENTICAL x3 | 32fdf6cafa080fdd | 32fdf6cafa080fdd | 32fdf6cafa080fdd | (not run)        |
+| radius-chebyshev/denormal    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-chebyshev/denormal    | batch  | IDENTICAL x3 | 87eeb1e332711a36 | 87eeb1e332711a36 | 87eeb1e332711a36 | (not run)        |
+| radius-chebyshev/denormal_ftz | infer  | IDENTICAL x3 | 32fdf6cafa080fdd | 32fdf6cafa080fdd | 32fdf6cafa080fdd | (not run)        |
+| radius-chebyshev/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-chebyshev/denormal_ftz | batch  | IDENTICAL x3 | 87eeb1e332711a36 | 87eeb1e332711a36 | 87eeb1e332711a36 | (not run)        |
+| radius-chebyshev/dupes       | infer  | IDENTICAL x4 | 4f42e54d861fc686 | 4f42e54d861fc686 | 4f42e54d861fc686 | 4f42e54d861fc686 |
+| radius-chebyshev/dupes       | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 368e386bc9afc1ce |
+| radius-chebyshev/dupes       | batch  | IDENTICAL x4 | d12572b1d2b4c056 | d12572b1d2b4c056 | d12572b1d2b4c056 | d12572b1d2b4c056 |
+| radius-chebyshev/hashed      | infer  | IDENTICAL x3 | 6f0dd5e75ecfd9e4 | 6f0dd5e75ecfd9e4 | 6f0dd5e75ecfd9e4 | (not run)        |
+| radius-chebyshev/hashed      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-chebyshev/hashed      | batch  | IDENTICAL x3 | d45dd9c711c40e9e | d45dd9c711c40e9e | d45dd9c711c40e9e | (not run)        |
+| radius-chebyshev/negative    | infer  | IDENTICAL x3 | 67e8e395dc4ee1ba | 67e8e395dc4ee1ba | 67e8e395dc4ee1ba | (not run)        |
+| radius-chebyshev/negative    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-chebyshev/negative    | batch  | IDENTICAL x3 | b10293002d0f345a | b10293002d0f345a | b10293002d0f345a | (not run)        |
+| radius-chebyshev/odd         | infer  | IDENTICAL x3 | 43e568967a392b5e | 43e568967a392b5e | 43e568967a392b5e | (not run)        |
+| radius-chebyshev/odd         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-chebyshev/odd         | batch  | IDENTICAL x3 | 8cd116af9f03e67c | 8cd116af9f03e67c | 8cd116af9f03e67c | (not run)        |
+| radius-chebyshev/ties        | infer  | IDENTICAL x4 | 7b5a2419abc8f304 | 7b5a2419abc8f304 | 7b5a2419abc8f304 | 7b5a2419abc8f304 |
+| radius-chebyshev/ties        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | bf872c24d7a8d1fe |
+| radius-chebyshev/ties        | batch  | IDENTICAL x4 | 5f798a0fb8253a07 | 5f798a0fb8253a07 | 5f798a0fb8253a07 | 5f798a0fb8253a07 |
+| radius-chebyshev/wide        | infer  | IDENTICAL x3 | abcd9366c6e9697a | abcd9366c6e9697a | abcd9366c6e9697a | (not run)        |
+| radius-chebyshev/wide        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-chebyshev/wide        | batch  | IDENTICAL x3 | d4f14c8e7f4394ad | d4f14c8e7f4394ad | d4f14c8e7f4394ad | (not run)        |
+| radius-manhattan/base        | infer  | IDENTICAL x4 | 51e361a7911b9eb7 | 51e361a7911b9eb7 | 51e361a7911b9eb7 | 51e361a7911b9eb7 |
+| radius-manhattan/base        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | a57f1f07d75f73e1 |
+| radius-manhattan/base        | batch  | IDENTICAL x4 | 2b54e52e49b2b3c9 | 2b54e52e49b2b3c9 | 2b54e52e49b2b3c9 | 2b54e52e49b2b3c9 |
+| radius-manhattan/denormal    | infer  | IDENTICAL x3 | d467cf36242844c9 | d467cf36242844c9 | d467cf36242844c9 | (not run)        |
+| radius-manhattan/denormal    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-manhattan/denormal    | batch  | IDENTICAL x3 | 4bb3a9fa1f0a054c | 4bb3a9fa1f0a054c | 4bb3a9fa1f0a054c | (not run)        |
+| radius-manhattan/denormal_ftz | infer  | IDENTICAL x3 | d467cf36242844c9 | d467cf36242844c9 | d467cf36242844c9 | (not run)        |
+| radius-manhattan/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-manhattan/denormal_ftz | batch  | IDENTICAL x3 | 4bb3a9fa1f0a054c | 4bb3a9fa1f0a054c | 4bb3a9fa1f0a054c | (not run)        |
+| radius-manhattan/dupes       | infer  | IDENTICAL x4 | b3ebfcda94a96aa3 | b3ebfcda94a96aa3 | b3ebfcda94a96aa3 | b3ebfcda94a96aa3 |
+| radius-manhattan/dupes       | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | d1c5d251599b1830 |
+| radius-manhattan/dupes       | batch  | IDENTICAL x4 | d8ac4219b67b2a4c | d8ac4219b67b2a4c | d8ac4219b67b2a4c | d8ac4219b67b2a4c |
+| radius-manhattan/hashed      | infer  | IDENTICAL x3 | 80d08244b239ac42 | 80d08244b239ac42 | 80d08244b239ac42 | (not run)        |
+| radius-manhattan/hashed      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-manhattan/hashed      | batch  | IDENTICAL x3 | 819c03be5fab9500 | 819c03be5fab9500 | 819c03be5fab9500 | (not run)        |
+| radius-manhattan/negative    | infer  | IDENTICAL x3 | d7960118855980db | d7960118855980db | d7960118855980db | (not run)        |
+| radius-manhattan/negative    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-manhattan/negative    | batch  | IDENTICAL x3 | 60115615ac598373 | 60115615ac598373 | 60115615ac598373 | (not run)        |
+| radius-manhattan/odd         | infer  | IDENTICAL x3 | b28b2b565e51540d | b28b2b565e51540d | b28b2b565e51540d | (not run)        |
+| radius-manhattan/odd         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-manhattan/odd         | batch  | IDENTICAL x3 | 84928b8dd182e647 | 84928b8dd182e647 | 84928b8dd182e647 | (not run)        |
+| radius-manhattan/ties        | infer  | IDENTICAL x4 | c641c75dd063a967 | c641c75dd063a967 | c641c75dd063a967 | c641c75dd063a967 |
+| radius-manhattan/ties        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | d893a0c29ba99797 |
+| radius-manhattan/ties        | batch  | IDENTICAL x4 | e7b7266b64bcfa5a | e7b7266b64bcfa5a | e7b7266b64bcfa5a | e7b7266b64bcfa5a |
+| radius-manhattan/wide        | infer  | IDENTICAL x3 | f5b2dde4c595864e | f5b2dde4c595864e | f5b2dde4c595864e | (not run)        |
+| radius-manhattan/wide        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-manhattan/wide        | batch  | IDENTICAL x3 | 3c074b0ddf67d9e5 | 3c074b0ddf67d9e5 | 3c074b0ddf67d9e5 | (not run)        |
+| radius-minkowski-p3/base     | infer  | IDENTICAL x4 | 2d41cf8a43dd0a2c | 2d41cf8a43dd0a2c | 2d41cf8a43dd0a2c | 2d41cf8a43dd0a2c |
+| radius-minkowski-p3/base     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | a0553fab96a1dc7b |
+| radius-minkowski-p3/base     | batch  | IDENTICAL x4 | 84477c7df1b3807f | 84477c7df1b3807f | 84477c7df1b3807f | 84477c7df1b3807f |
+| radius-minkowski-p3/denormal | infer  | IDENTICAL x3 | a50411d34da25d30 | a50411d34da25d30 | a50411d34da25d30 | (not run)        |
+| radius-minkowski-p3/denormal | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-minkowski-p3/denormal | batch  | IDENTICAL x3 | 841ca0e2de306f70 | 841ca0e2de306f70 | 841ca0e2de306f70 | (not run)        |
+| radius-minkowski-p3/denormal_ftz | infer  | IDENTICAL x3 | a50411d34da25d30 | a50411d34da25d30 | a50411d34da25d30 | (not run)        |
+| radius-minkowski-p3/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-minkowski-p3/denormal_ftz | batch  | IDENTICAL x3 | 841ca0e2de306f70 | 841ca0e2de306f70 | 841ca0e2de306f70 | (not run)        |
+| radius-minkowski-p3/dupes    | infer  | IDENTICAL x4 | 6853e189dcd43a88 | 6853e189dcd43a88 | 6853e189dcd43a88 | 6853e189dcd43a88 |
+| radius-minkowski-p3/dupes    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2eab5f990f27ab24 |
+| radius-minkowski-p3/dupes    | batch  | IDENTICAL x4 | d0aca4463baeb5ad | d0aca4463baeb5ad | d0aca4463baeb5ad | d0aca4463baeb5ad |
+| radius-minkowski-p3/hashed   | infer  | IDENTICAL x3 | 00c1a2ba4f724cc8 | 00c1a2ba4f724cc8 | 00c1a2ba4f724cc8 | (not run)        |
+| radius-minkowski-p3/hashed   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-minkowski-p3/hashed   | batch  | IDENTICAL x3 | b0b5f135ed972f45 | b0b5f135ed972f45 | b0b5f135ed972f45 | (not run)        |
+| radius-minkowski-p3/negative | infer  | IDENTICAL x3 | 89ddc1bb6f4ad18c | 89ddc1bb6f4ad18c | 89ddc1bb6f4ad18c | (not run)        |
+| radius-minkowski-p3/negative | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-minkowski-p3/negative | batch  | IDENTICAL x3 | 9cbfcf1f2ab62a1e | 9cbfcf1f2ab62a1e | 9cbfcf1f2ab62a1e | (not run)        |
+| radius-minkowski-p3/odd      | infer  | IDENTICAL x3 | d844548968cd9cdd | d844548968cd9cdd | d844548968cd9cdd | (not run)        |
+| radius-minkowski-p3/odd      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-minkowski-p3/odd      | batch  | IDENTICAL x3 | 135d2d40bc054f26 | 135d2d40bc054f26 | 135d2d40bc054f26 | (not run)        |
+| radius-minkowski-p3/ties     | infer  | IDENTICAL x4 | e5a4d7644387eab9 | e5a4d7644387eab9 | e5a4d7644387eab9 | e5a4d7644387eab9 |
+| radius-minkowski-p3/ties     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | dcecf77c7d145391 |
+| radius-minkowski-p3/ties     | batch  | IDENTICAL x4 | bef0bf1314b15764 | bef0bf1314b15764 | bef0bf1314b15764 | bef0bf1314b15764 |
+| radius-minkowski-p3/wide     | infer  | IDENTICAL x3 | 839efe755774007f | 839efe755774007f | 839efe755774007f | (not run)        |
+| radius-minkowski-p3/wide     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius-minkowski-p3/wide     | batch  | IDENTICAL x3 | 161e485ace70e983 | 161e485ace70e983 | 161e485ace70e983 | (not run)        |
+| radius/base                  | infer  | IDENTICAL x4 | 3eb3a2ab621fbb97 | 3eb3a2ab621fbb97 | 3eb3a2ab621fbb97 | 3eb3a2ab621fbb97 |
+| radius/base                  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2ee81955e923d21f |
+| radius/base                  | batch  | IDENTICAL x4 | 82dc025f5d11958f | 82dc025f5d11958f | 82dc025f5d11958f | 82dc025f5d11958f |
+| radius/denormal              | infer  | IDENTICAL x3 | 0d8e5847c0de67f1 | 0d8e5847c0de67f1 | 0d8e5847c0de67f1 | (not run)        |
+| radius/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius/denormal              | batch  | IDENTICAL x3 | 077d53f576613c46 | 077d53f576613c46 | 077d53f576613c46 | (not run)        |
+| radius/denormal_ftz          | infer  | IDENTICAL x3 | 0d8e5847c0de67f1 | 0d8e5847c0de67f1 | 0d8e5847c0de67f1 | (not run)        |
+| radius/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius/denormal_ftz          | batch  | IDENTICAL x3 | 077d53f576613c46 | 077d53f576613c46 | 077d53f576613c46 | (not run)        |
+| radius/dupes                 | infer  | IDENTICAL x4 | 469e7731aa72a0fd | 469e7731aa72a0fd | 469e7731aa72a0fd | 469e7731aa72a0fd |
+| radius/dupes                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 5167cd08ec11b8bd |
+| radius/dupes                 | batch  | IDENTICAL x4 | 4d7333803753c329 | 4d7333803753c329 | 4d7333803753c329 | 4d7333803753c329 |
+| radius/hashed                | infer  | IDENTICAL x3 | 362bee6da9e01a6a | 362bee6da9e01a6a | 362bee6da9e01a6a | (not run)        |
+| radius/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius/hashed                | batch  | IDENTICAL x3 | 61666507b6f28324 | 61666507b6f28324 | 61666507b6f28324 | (not run)        |
+| radius/negative              | infer  | IDENTICAL x3 | 9a8506316edc0a0a | 9a8506316edc0a0a | 9a8506316edc0a0a | (not run)        |
+| radius/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius/negative              | batch  | IDENTICAL x3 | 232527c96d938269 | 232527c96d938269 | 232527c96d938269 | (not run)        |
+| radius/odd                   | infer  | IDENTICAL x3 | ef0450b6bc48f488 | ef0450b6bc48f488 | ef0450b6bc48f488 | (not run)        |
+| radius/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius/odd                   | batch  | IDENTICAL x3 | a47b832ad72fd8ef | a47b832ad72fd8ef | a47b832ad72fd8ef | (not run)        |
+| radius/ties                  | infer  | IDENTICAL x4 | 5f3eec45e2afb437 | 5f3eec45e2afb437 | 5f3eec45e2afb437 | 5f3eec45e2afb437 |
+| radius/ties                  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 57306f414d5af0b4 |
+| radius/ties                  | batch  | IDENTICAL x4 | 92534521f997d952 | 92534521f997d952 | 92534521f997d952 | 92534521f997d952 |
+| radius/wide                  | infer  | IDENTICAL x3 | 2561486a5ba9ea00 | 2561486a5ba9ea00 | 2561486a5ba9ea00 | (not run)        |
+| radius/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| radius/wide                  | batch  | IDENTICAL x3 | 512219b638664e57 | 512219b638664e57 | 512219b638664e57 | (not run)        |
+
+summary (infer/model): IDENTICAL=288, N/A=24, OWED=12
+summary (batch): IDENTICAL=162
+summary (rlpair): 
+REQUIRE FAIL kde-cosine-minkowski/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-cosine-minkowski/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-epanechnikov-l1/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-exponential-chebyshev/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-linear-cosine/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-tophat-sqeuclidean/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL kde-weighted/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-chebyshev/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-clf-distance/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-cosine/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-manhattan/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-minkowski-p3/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-rbc/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-reg-distance/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL knn-sqeuclidean/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-chebyshev/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-manhattan/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius-minkowski-p3/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+REQUIRE FAIL radius/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-apple-m4 has no cell)
+require-columns 4 over ['kde-cosine-minkowski', 'kde-epanechnikov-l1', 'kde-exponential-chebyshev', 'kde-linear-cosine', 'kde-tophat-sqeuclidean', 'kde-weighted', 'knn-chebyshev', 'knn-clf-distance', 'knn-cosine', 'knn-manhattan', 'knn-minkowski-p3', 'knn-rbc', 'knn-reg-distance', 'knn-sqeuclidean', 'radius', 'radius-chebyshev', 'radius-manhattan', 'radius-minkowski-p3']: 408 short (12 OWED)
+OWED radius-chebyshev/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED radius-chebyshev/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED radius-chebyshev/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED radius-manhattan/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED radius-manhattan/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED radius-manhattan/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED radius-minkowski-p3/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED radius-minkowski-p3/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED radius-minkowski-p3/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED radius/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED radius/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED radius/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+summary (owed): OWED=12; the next release record owes exactly these cell parts; wrote bench/results/identity_break/2026-09-15_inference-neighbors-density/owed.json
