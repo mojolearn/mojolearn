@@ -68,6 +68,29 @@ Linux legs are OWED before this heading reads published.
   reads IDENTICAL (nine fixtures each), and a `-D MOJOLEARN_HOST_SABOTAGE=1` build of the new
   binding reads DIVERGENT on all 27 infer and 27 batch cells with every train cell unchanged.
   Training on the CPU stays internal to the verifier.
+- New public CPU inference from GPU-trained weights for the Mamba blocks and the Samba
+  stack. `Mamba1BlockInference`, `Mamba2BlockInference` (with `dt_limit`) and
+  `Mamba3BlockInference` run the block's `forward` from a zero state. `SambaInference`
+  runs `SambaStack.forward`'s logits, from `SambaStack.save_checkpoint` files or a config
+  and its weights. Both honor ragged `lengths`. A carried state, `step`, `allocate_state` and
+  `backward` refuse by name. The byte LM's public class stays `LanguageModelInference.from_checkpoint`.
+  - **Binding:** `_mojolearn_neural_host` gains six forward-only entries. `nm` on the Linux
+    build finds no backward, optimizer, loss or decode symbol, where the reference training,
+    Mamba and Transformer bindings show 20, 71 and 12. The Linux test wheel grows from
+    1,891,155 to 1,972,140 bytes.
+  - **Identity:** on a CPU column, the mamba1, mamba2, mamba2-dtlimit, mamba3, samba,
+    samba-untied-dropout-accum, byte-lm and byte-lm-resident lanes ask their infer, batch,
+    batchscale and ragged cells through these classes. The transformer lanes do the same for
+    batchscale and ragged. Against the three committed GPU columns, all 90 train, 90 batch,
+    90 batchscale and 90 ragged cells read IDENTICAL; the infer and model cells read 126
+    IDENTICAL and 54 N/A, with none owed.
+  - **Sabotage:** a sabotage build of the neural and byte LM bindings reads DIVERGENT on
+    every batch, batchscale and ragged cell, and the batch sabotage reads BATCH_MOVED on
+    all ten lanes.
+  - **Wheel check:** the installed test wheel answers 16 of 16 public calls byte for byte
+    against the source tree.
+  - **Evidence:** `bench/results/identity_break/2026-09-15_neural-forward-inference`, one
+    AMD EPYC CPU column.
 - `score(X, y, sample_weight=...)` on `GradientBoostingClassifier`, `GradientBoostingRegressor`,
   the random forests and the Extra Trees, and `sample_weight` on `metrics.accuracy_score` and
   `metrics.r2_score`, all of which refused weights. They follow scikit-learn's reference definitions of weighted

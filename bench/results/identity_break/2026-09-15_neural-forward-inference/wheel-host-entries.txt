@@ -1,0 +1,11 @@
+/tmp/wheel/dist/mojolearn-0.8.5-py3-none-linux_x86_64.whl 1959320 compressed
+mojolearn/host/_mojolearn_byte_lm_host.so 497648 159084
+mojolearn/host/_mojolearn_core_host.so 594488 170826
+mojolearn/host/_mojolearn_estimators_host.so 653856 201588
+mojolearn/host/_mojolearn_forecast_host.so 267200 69213
+mojolearn/host/_mojolearn_forest_host.so 301768 73536
+mojolearn/host/_mojolearn_linalg_host.so 231328 58166
+mojolearn/host/_mojolearn_metrics_host.so 748872 236579
+mojolearn/host/_mojolearn_neural_host.so 490504 154316
+mojolearn/host/_mojolearn_svm_host.so 395080 122857
+mojolearn/host/_mojolearn_tokenizer_host.so 374160 106354

@@ -1,0 +1,22 @@
+{
+ "columns": [
+  "apple-m4",
+  "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+  "amd-mi325x-gfx942",
+  "cpu-amd-epyc-4564p-16-core-processor"
+ ],
+ "require_columns": 4,
+ "lanes": [
+  "byte-lm",
+  "byte-lm-resident",
+  "mamba1",
+  "mamba2",
+  "mamba2-dtlimit",
+  "mamba3",
+  "samba",
+  "samba-untied-dropout-accum",
+  "transformer",
+  "transformer-window"
+ ],
+ "owed": []
+}
