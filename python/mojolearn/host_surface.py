@@ -141,6 +141,12 @@ CLASSICAL_RECORDED = (
     "bench/results/classical_host/2026-09-14-nvidia-h100-b",
     "bench/results/classical_host/2026-09-14-amd-mi300x-b",
     "bench/results/classical_host/2026-09-14-apple-m4-multiclass",
+    # lane/inference-linear-svm (2026-09-15): the 17 saved-model lanes that
+    # joined the estimators family's inference lanes, recorded on the M4's
+    # Metal set on three fixtures. The NVIDIA and AMD recordings of these
+    # lanes are owed to the next release record; their infer cells in the
+    # 166-lane record are the cross-vendor comparison until then.
+    "bench/results/classical_host/2026-09-15-apple-m4-linear-kernel",
     # lane/inference-forecast-umap-pca (2026-09-15): pca-full-whiten and umap,
     # recorded on the M4's Metal set; both bind families the gate builds.
     "bench/results/classical_host/2026-09-15-apple-m4-umap-pca",
@@ -850,19 +856,37 @@ FAMILIES = (
             "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
             "par-queries-kde",
         ),
-        inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde",
-                         "pca-full-whiten"),
+        # lane/inference-linear-svm (2026-09-15): the option variants of
+        # ols, ridge and logistic load through the same formats; the
+        # scalers, lasso and elasticnet and the three kernel methods load
+        # through formats of their own, and their transform and predict
+        # entries are served here (the reference-only preprocessing, solver
+        # and kernel_methods bindings keep the fits).
+        inference_lanes=(
+            "ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde",
+            "ols-no-intercept", "ols-weighted", "ridge-no-intercept", "logistic-l1",
+            "logistic-elasticnet", "logistic-unpenalized-no-intercept",
+            "standard-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
+            "minmax-scaler", "minmax-scaler-clip", "lasso", "elasticnet",
+            "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler", "pca-full-whiten",
+        ),
         forest_kinds=(),
         classes=(
             "LinearRegression", "Ridge", "TruncatedSVD", "LogisticRegression",
-            "PCA", "KernelDensity", "DBSCAN",
+            "PCA", "KernelDensity", "DBSCAN", "StandardScaler", "MinMaxScaler",
+            "Lasso", "ElasticNet", "KernelRidge", "Nystroem", "RBFSampler",
         ),
-        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver) and kernel density",
+        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
             "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
             "decomposition/host/pca_full_oracle.mojo",
+            "preprocessing/host/scaler_oracle.mojo",
+            "kernel_methods/host/km_host_oracle.mojo",
+            "kernel_methods/checks/random_features.mojo",
+            "cholesky/host/chol_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
@@ -872,6 +896,8 @@ FAMILIES = (
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",
+            "standard_transform", "minmax_transform", "cd_predict",
+            "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

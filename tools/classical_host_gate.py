@@ -129,6 +129,39 @@ LANES = {
         _ARIMA_EXTRAS, ma=lambda e, X: e.ma_)),
     'arima-seasonal-c': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
         _ARIMA_EXTRAS, ar=lambda e, X: e.ar_, sar=lambda e, X: e.sar_, mu=lambda e, X: e.mu_)),
+    # lane/inference-linear-svm (2026-09-15): the option variants of ols,
+    # ridge and logistic through the formats above, and the scalers,
+    # coordinate descent and the kernel methods through formats of their
+    # own. Each probe is its identity_break lane's infer probe; the extras
+    # are the other public surfaces of the loaded model.
+    'ols-no-intercept': ('LinearRegression', lambda e, X: (e.predict(X),), {}),
+    'ols-weighted': ('LinearRegression', lambda e, X: (e.predict(X),), {}),
+    'ridge-no-intercept': ('Ridge', lambda e, X: (e.predict(X),), {}),
+    'logistic-l1': ('LogisticRegression', lambda e, X: (e.predict_proba(X),),
+                    {'predict': lambda e, X: e.predict(X),
+                     'decision_function': lambda e, X: e.decision_function(X)}),
+    'logistic-elasticnet': ('LogisticRegression', lambda e, X: (e.predict_proba(X),),
+                            {'predict': lambda e, X: e.predict(X),
+                             'decision_function': lambda e, X: e.decision_function(X)}),
+    'logistic-unpenalized-no-intercept': ('LogisticRegression', lambda e, X: (e.predict_proba(X),),
+                                          {'predict': lambda e, X: e.predict(X),
+                                           'decision_function': lambda e, X: e.decision_function(X)}),
+    'standard-scaler': ('StandardScaler', lambda e, X: (e.transform(X),),
+                        {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'standard-scaler-no-mean': ('StandardScaler', lambda e, X: (e.transform(X),),
+                                {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'standard-scaler-no-std': ('StandardScaler', lambda e, X: (e.transform(X),),
+                               {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'minmax-scaler': ('MinMaxScaler', lambda e, X: (e.transform(X),),
+                      {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'minmax-scaler-clip': ('MinMaxScaler', lambda e, X: (e.transform(X),),
+                           {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'lasso': ('Lasso', lambda e, X: (e.predict(X),), {}),
+    'elasticnet': ('ElasticNet', lambda e, X: (e.predict(X),), {}),
+    'elasticnet-l2end-no-intercept': ('ElasticNet', lambda e, X: (e.predict(X),), {}),
+    'kernel-ridge': ('KernelRidge', lambda e, X: (e.predict(X[:64, :4]),), {}),
+    'nystroem': ('Nystroem', lambda e, X: (e.transform(X[:64, :4]),), {}),
+    'rbf-sampler': ('RBFSampler', lambda e, X: (e.transform(X),), {}),
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'logistic': 'predict_proba', 'pca': 'transform',
@@ -137,7 +170,16 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'knn': 'kneighbors_distances', 'knn-clf': 'predict',
                'knn-reg': 'predict', 'logistic-multiclass': 'predict_proba',
                'pca-full-whiten': 'transform', 'umap': 'transform',
-               'arima': 'forecast', 'arima-011': 'forecast', 'arima-seasonal-c': 'forecast'}
+               'arima': 'forecast', 'arima-011': 'forecast', 'arima-seasonal-c': 'forecast',
+               'ols-no-intercept': 'predict', 'ols-weighted': 'predict',
+               'ridge-no-intercept': 'predict', 'logistic-l1': 'predict_proba',
+               'logistic-elasticnet': 'predict_proba',
+               'logistic-unpenalized-no-intercept': 'predict_proba',
+               'standard-scaler': 'transform', 'standard-scaler-no-mean': 'transform',
+               'standard-scaler-no-std': 'transform', 'minmax-scaler': 'transform',
+               'minmax-scaler-clip': 'transform', 'lasso': 'predict', 'elasticnet': 'predict',
+               'elasticnet-l2end-no-intercept': 'predict', 'kernel-ridge': 'predict',
+               'nystroem': 'transform', 'rbf-sampler': 'transform'}
 
 
 def _fit_logistic_multiclass(ml, X, yc, yr, Xh=None):

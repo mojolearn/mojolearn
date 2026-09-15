@@ -22,6 +22,16 @@ Linux legs are OWED before this heading reads published.
   committed Apple, NVIDIA and AMD columns; the model cells of the new save formats are owed to
   the release record.
 
+- CPU inference from saved models for StandardScaler, MinMaxScaler, Lasso, ElasticNet,
+  KernelRidge (linear and rbf kernels), Nystroem (linear and rbf) and RBFSampler: each
+  gains `save` and `load`, and `mojolearn.host_model(path)` transforms or predicts on a
+  CPU-only install. The shipped estimators host binding serves the six entries
+  (`standard_transform`, `minmax_transform`, `cd_predict`, `kernel_ridge_predict`,
+  `nystroem_transform`, `rbf_sampler_transform`); the preprocessing, solver and
+  kernel_methods reference bindings still do not ship. The saved-model classical lanes
+  grow from 12 to 29, adding the ols, ridge and logistic option variants. On a CPU-only
+  install `StandardScaler.fit`, `MinMaxScaler.fit`, `Lasso.fit` and `ElasticNet.fit` now
+  refuse by name outside the internal reference scope, as every other estimator fit does.
 - Public CPU `Cholesky` inference. On a CPU-only install `Cholesky().fit(A)` factors a given
   matrix and `solve` answers from it, and `Cholesky.save` / `Cholesky.load` (or
   `mojolearn.host_model`, which returns a `HostCholesky`) carry a factor from a GPU box to a
