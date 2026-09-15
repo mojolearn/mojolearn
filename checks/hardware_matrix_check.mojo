@@ -483,17 +483,47 @@ def check_hardware_matrix() raises:
                 + column_name(c)
                 + " no longer names every contract primitive"
             )
-    # The declared GPU columns were not audited for primitives; UNAUDITED is
-    # never a refusal, so their admission is exactly what it was.
+    # Qualcomm and Intel (audited 2026-09-15 against the Khronos specs) name
+    # all four primitives through OpenCL, so their admission is exactly what
+    # it was before the arithmetic clause existed.
     for c in range(COLUMN_COUNT):
-        if c != COLUMN_QUALCOMM and c != COLUMN_INTEL and c != COLUMN_SPEC_BASELINE:
+        if c != COLUMN_QUALCOMM and c != COLUMN_INTEL:
             continue
+        if (
+            column_fma_instruction(c) != CAP_PRESENT
+            or column_float32_division(c) != CAP_PRESENT
+            or column_int32_exact(c) != CAP_PRESENT
+            or column_float_bits_readable(c) != CAP_PRESENT
+        ):
+            raise Error(
+                "check_hardware_matrix FAIL: "
+                + column_name(c)
+                + " no longer names every contract primitive; OpenCL C's"
+                " fma builtin is correctly rounded by specification"
+            )
         if column_arithmetic_refusal_reason(c).byte_length() != 0:
             raise Error(
                 "check_hardware_matrix FAIL: "
                 + column_name(c)
-                + " is refused on arithmetic it was never audited for"
+                + " is refused on arithmetic"
             )
+    # The spec baseline is what BOTH portable specs guarantee, and Vulkan's
+    # does not guarantee a fused multiply-add. It was refused on memory and
+    # is now refused on both, and the reason a user reads names both.
+    _pin(
+        "spec-baseline fma",
+        column_fma_instruction(COLUMN_SPEC_BASELINE),
+        CAP_ABSENT,
+    )
+    var baseline_why = identity_refusal_reason(COLUMN_SPEC_BASELINE)
+    if not baseline_why.startswith(
+        column_arithmetic_refusal_reason(COLUMN_SPEC_BASELINE)
+    ) or baseline_why.find("KB of threadgroup memory") < 0:
+        raise Error(
+            "check_hardware_matrix FAIL: the spec baseline's refusal must"
+            " name the missing fused multiply-add AND the 16 KB memory floor: "
+            + baseline_why
+        )
     # TPU and Trainium. The memory and block rows would admit them, so the
     # reason a user reads is the arithmetic. (Their atomics row is False too;
     # see `column_has_threadgroup_int_atomics` for why that clause is owed a
@@ -526,7 +556,8 @@ def check_hardware_matrix() raises:
             )
         # REACH: the arithmetic refusal branch ran and says why.
         var why = identity_refusal_reason(c)
-        if why != column_arithmetic_refusal_reason(c) or why.byte_length() == 0:
+        var arithmetic = column_arithmetic_refusal_reason(c)
+        if arithmetic.byte_length() == 0 or not why.startswith(arithmetic):
             raise Error(
                 "check_hardware_matrix FAIL: "
                 + column_name(c)
@@ -594,9 +625,11 @@ def check_hardware_matrix() raises:
         + "; identity floor frozen at profile 1 (32 KB / 32 lanes / block"
         " 512): "
         + String(admitted)
-        + " vendor columns meet it, the portable baseline is REFUSED on"
-        " memory, tpu and trainium are REFUSED on arithmetic (no documented"
-        " fused multiply-add; trainium also no division), apple/nvidia/amd"
+        + " vendor columns meet it (qualcomm and intel name every contract"
+        " primitive through OpenCL), the portable baseline is REFUSED on"
+        " memory and on arithmetic (Vulkan guarantees no fused multiply-add),"
+        " tpu and trainium are REFUSED on arithmetic (no documented fused"
+        " multiply-add; trainium also no division), apple/nvidia/amd"
         " smem modes unchanged by the budget rewrite"
     )
 
