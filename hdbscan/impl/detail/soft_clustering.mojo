@@ -88,11 +88,22 @@ and an entry theirs rounds to a tiny float32 can be flushed to zero here
 when `m * m` falls below FLT_MIN; (d) the `1e-8` is lost in float32 unless
 the larger lambda is below about 0.2, which the double keeps as a relative
 `1e-8 / lambda`; and the fold order of each sum, at most one ulp per
-column. The combined effect is measured against cuML's own
-`membership_vector` on an H100
-(`bench/results/identity_break/2026-09-15_hdbscan-membership-vector/`).
-A different argmax on an exact merge height tie picks a different death and
-can move a whole row's scale; theirs does not specify which it picks.
+column. A different argmax on an exact merge height tie picks a different
+death and can move a whole row's scale; theirs does not specify which it
+picks.
+MEASURED (2026-09-15,
+`bench/results/identity_break/2026-09-15_hdbscan-membership-vector/`).
+(1) The seams alone: on the same fitted tree, against a numpy
+transcription of their four float64 seams, over 4 fits (blobs and a
+duplicated grid, eom and leaf): all_points rows differ by at most 2.0e-7
+in their sums and 1.2e-2 in one cell (a cell near 1e-6 that one side
+flushes or underflows); membership_vector rows by at most 5.1e-5 (that
+transcription also recomputes the neighborhood in float64); the argmax of
+no row moves; no row is non-finite. (2) End to end against cuML 26.8.0 on
+an H100: of the 4 fits, cuML's labels_ equal ours on one (the duplicated
+grid, eom); there cells differ by up to 0.30 and row sums by up to 0.29
+with no argmax moved, which (1) bounds as the fit's tie resolution
+feeding a different tree, not these seams.
 ======================================================================
 """
 

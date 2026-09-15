@@ -84,6 +84,113 @@ def _compare(ours, theirs):
     return out
 
 
+F32 = np.float32
+F32MAX = np.finfo(np.float32).max
+
+
+def _walk_heights(point_parent, fallback, parents, iic, lambdas, selected):
+    """merge_height_kernel (kernels/soft_clustering.cuh:14-98), in Python."""
+    nr, ns = len(point_parent), len(selected)
+    h = np.empty((nr, ns), F32)
+    for r in range(nr):
+        for c in range(ns):
+            left, right = int(point_parent[r]), int(selected[c])
+            tl = tr = False
+            last = 0
+            while left != right:
+                if left > right:
+                    tl, last, left = True, left, int(parents[iic[left]])
+                else:
+                    tr, last, right = True, right, int(parents[iic[right]])
+            h[r, c] = lambdas[iic[last]] if (tl and tr) else fallback[r]
+    return h
+
+
+def _norm32(v):
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        return (v / v.sum(axis=1, dtype=F32, keepdims=True)).astype(F32)
+
+
+def _dist_membership_f64_seams(x, rows, pd):
+    """soft_clustering.cuh:46-149 with cuML's precision: float32 distances and
+    sums, value_t(1.0 / val) through a double."""
+    ns = len(pd["selected_clusters"])
+    ex = x[np.asarray(pd["exemplar_idx"])[: pd["n_exemplars"]]].astype(F32)
+    off = np.asarray(pd["exemplar_label_offsets"])
+    rn = (rows * rows).sum(axis=1, dtype=F32)
+    en = (ex * ex).sum(axis=1, dtype=F32)
+    d2 = (rn[:, None] + en[None, :] - F32(2.0) * (rows @ ex.T)).astype(F32)
+    d = np.sqrt(np.maximum(d2, F32(0.0))).astype(F32)
+    mins = np.stack([d[:, off[c]:off[c + 1]].min(axis=1) for c in range(ns)], axis=1).astype(F32)
+    with np.errstate(divide="ignore"):
+        inv = (1.0 / mins.astype(np.float64)).astype(F32)
+    dmv = np.where(mins > 0, inv, F32(F32MAX / F32(ns))).astype(F32)
+    return _norm32(dmv)
+
+
+def _softmax32(o):
+    with np.errstate(invalid="ignore", over="ignore"):
+        return np.exp((o - o.max(axis=1, keepdims=True)).astype(F32)).astype(F32)
+
+
+def transcribe_all_points(x, pd):
+    """cuML all_points_membership_vectors (soft_clustering.cuh:385-482) in
+    numpy at cuML's precision, from OUR fitted prediction data."""
+    par = np.asarray(pd["parents"]); lam = np.asarray(pd["lambdas"], F32)
+    iic = np.asarray(pd["index_into_children"]); deaths = np.asarray(pd["deaths"], F32)
+    sel = np.asarray(pd["selected_clusters"]); nl = x.shape[0]
+    rows = x.astype(F32)
+    dmv = _dist_membership_f64_seams(x, rows, pd)
+    row_lam = lam[iic[np.arange(nl)]]
+    h = _walk_heights(par[iic[np.arange(nl)]], row_lam, par, iic, lam, sel)
+    vec = deaths[par[iic[np.arange(nl)]] - nl]
+    with np.errstate(divide="ignore", over="ignore"):
+        o = np.exp(-(vec.astype(np.float64)[:, None] + 1e-8) / h.astype(np.float64)).astype(F32)
+    o = _norm32(_softmax32(o))
+    am = np.argmax(h, axis=1)
+    ml = np.maximum(row_lam, deaths[sel[am] - nl])
+    prob = (h[np.arange(nl), am] / ml).astype(F32)
+    mv = _norm32((dmv * o).astype(F32))
+    return (mv * prob[:, None]).astype(F32)
+
+
+def transcribe_membership_vector(x, q, pd, core, min_samples):
+    """cuML membership_vector (soft_clustering.cuh:501-627) in numpy at cuML's
+    precision, from OUR fitted prediction data and core distances. The
+    neighborhood is a stable float64 sort, so on a distance tie it can name a
+    different neighbor than the pinned (distance, index) order."""
+    par = np.asarray(pd["parents"]); lam = np.asarray(pd["lambdas"], F32)
+    iic = np.asarray(pd["index_into_children"]); deaths = np.asarray(pd["deaths"], F32)
+    sel = np.asarray(pd["selected_clusters"]); nl = x.shape[0]
+    q = q.astype(F32); core = np.asarray(core, F32)
+    dmv = _dist_membership_f64_seams(x, q, pd)
+    k = (min_samples - 1) * 2
+    d = np.sqrt(np.maximum(((q.astype(np.float64)[:, None, :] - x.astype(np.float64)[None, :, :]) ** 2).sum(-1), 0.0))
+    nb = np.argsort(d, axis=1, kind="stable")[:, :k]
+    nd = np.take_along_axis(d, nb, axis=1).astype(F32)
+    pcore = nd[:, min_samples - 1]
+    mr = np.maximum(np.maximum(pcore[:, None], core[nb]), nd)
+    ind = nb[np.arange(len(q)), np.argmin(mr, axis=1)]
+    mmr = mr.min(axis=1)
+    with np.errstate(divide="ignore"):
+        pl = np.where(mmr > 0, (F32(1.0) / mmr).astype(F32), F32MAX).astype(F32)
+    pl = np.minimum(pl, lam[iic[ind]])
+    h = _walk_heights(par[iic[ind]], pl, par, iic, lam, sel)
+    vec = deaths[par[iic[ind]] - nl]
+    den = (vec[:, None] - h).astype(F32)
+    den = np.where(den <= 0, F32(1e-8), den).astype(F32)
+    with np.errstate(over="ignore", invalid="ignore"):
+        o = (vec[:, None] / den).astype(F32)
+    o = _norm32(_softmax32(o))
+    with np.errstate(over="ignore", invalid="ignore"):
+        c = (o.astype(np.float64) ** 2 * dmv.astype(np.float64) ** 0.5).astype(F32)
+    c = _norm32(c)
+    am = np.argmax(h, axis=1)
+    ml = np.maximum(pl, deaths[sel[am] - nl]).astype(np.float64) + 1e-8
+    prob = (h[np.arange(len(q)), am].astype(np.float64) / ml).astype(F32)
+    return (c * prob[:, None]).astype(F32)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
@@ -91,6 +198,12 @@ def main():
     args = ap.parse_args()
     import mojolearn
     from mojolearn import hdbscan as mh
+    from mojolearn._cpu_reference import reference_training
+    with reference_training():
+        return _main(args, mojolearn, mh)
+
+
+def _main(args, mojolearn, mh):
     rec = dict(tool="tools/hdbscan_soft_cuml_reference.py", runs=[])
     if not args.skip_cuml:
         import cuml
@@ -104,6 +217,13 @@ def main():
             ol = np.asarray(m.labels_)
             omv = np.asarray(mh.membership_vector(m, q))
             oap = np.asarray(mh.all_points_membership_vectors(m))
+            try:
+                ms = cfg.get("min_samples") or cfg["min_cluster_size"]
+                run["vs_float64_transcription"] = dict(
+                    membership_vector=_compare(omv, transcribe_membership_vector(x, q, m._prediction_data, m.core_distances_, ms)),
+                    all_points_membership_vectors=_compare(oap, transcribe_all_points(x, m._prediction_data)))
+            except Exception as exc:  # a transcription failure is recorded, never silent
+                run["vs_float64_transcription"] = f"failed: {type(exc).__name__}: {exc}"
             run["ours"] = dict(n_clusters=int(m.n_clusters_), n_exemplars=int(m._prediction_data["n_exemplars"]),
                                labels_sha256=hashlib.sha256(ol.astype(np.int32).tobytes()).hexdigest(),
                                membership_vector_sha256=_sha(omv), all_points_sha256=_sha(oap),

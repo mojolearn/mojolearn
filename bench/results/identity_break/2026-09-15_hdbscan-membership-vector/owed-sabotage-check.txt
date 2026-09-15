@@ -1,0 +1,13 @@
+owed hdbscan-leaf/base infer: production 2117320835e91e8a sabotage f825c78b9b98a666 MOVED
+owed hdbscan-leaf/base batch: production 927cb01ec674a031 sabotage d4a3b40ebb16d339 MOVED
+owed hdbscan-leaf/dupes infer: production 2117320835e91e8a sabotage f825c78b9b98a666 MOVED
+owed hdbscan-leaf/dupes batch: production 927cb01ec674a031 sabotage d4a3b40ebb16d339 MOVED
+owed hdbscan-leaf/ties infer: production 47607746aff5c75c sabotage 00b174bcfc659687 MOVED
+owed hdbscan-leaf/ties batch: production bfcae42c42ea55d7 sabotage 0a243d1569b786b3 MOVED
+owed hdbscan/base infer: production cfe5f8df2a406451 sabotage f66d92fde264f2ad MOVED
+owed hdbscan/base batch: production 43c868ddda4bae13 sabotage 5935b1d822675c8b MOVED
+owed hdbscan/dupes infer: production cfe5f8df2a406451 sabotage f66d92fde264f2ad MOVED
+owed hdbscan/dupes batch: production 43c868ddda4bae13 sabotage 5935b1d822675c8b MOVED
+owed hdbscan/ties infer: production 6ec7f68f0f81ae9b sabotage 44c6c390d49f29f7 MOVED
+owed hdbscan/ties batch: production a5c1950592d1d992 sabotage efff66af5a69dd2c MOVED
+owed verdict OK (12 of 12 owed cell part(s) moved, 0 failure(s))

@@ -1,0 +1,286 @@
+{
+ "tool": "tools/hdbscan_soft_cuml_reference.py",
+ "runs": [
+  {
+   "fixture": "blobs",
+   "config": "eom",
+   "params": {
+    "min_cluster_size": 20,
+    "min_samples": 10,
+    "cluster_selection_method": "eom"
+   },
+   "n_rows": 2200,
+   "n_queries": 400,
+   "vs_float64_transcription": {
+    "membership_vector": {
+     "shape_ours": [
+      400,
+      4
+     ],
+     "shape_cuml": [
+      400,
+      4
+     ],
+     "cells": 1600,
+     "cuml_nonfinite_cells": 0,
+     "cuml_nonfinite_rows": 0,
+     "ours_nonfinite_cells": 0,
+     "bitwise_equal_cells": 167,
+     "max_abs_diff": 2.574920654296875e-05,
+     "max_rel_diff": 0.6246918439865112,
+     "max_rel_diff_cells_ge_1e-6": 0.0024951584815346125,
+     "max_ulps": 5240295.0,
+     "median_ulps": 42.0,
+     "argmax_differs_rows": 0,
+     "row_sum_max_abs_diff": 2.574920654296875e-05,
+     "cuml_rows_summing_to_1": 12,
+     "ours_rows_summing_to_1_where_cuml_does": 12
+    },
+    "all_points_membership_vectors": {
+     "shape_ours": [
+      2200,
+      4
+     ],
+     "shape_cuml": [
+      2200,
+      4
+     ],
+     "cells": 8800,
+     "cuml_nonfinite_cells": 0,
+     "cuml_nonfinite_rows": 0,
+     "ours_nonfinite_cells": 0,
+     "bitwise_equal_cells": 6039,
+     "max_abs_diff": 0.0009855031967163086,
+     "max_rel_diff": 1.0,
+     "max_rel_diff_cells_ge_1e-6": 1.0,
+     "max_ulps": 16378133.0,
+     "median_ulps": 0.0,
+     "argmax_differs_rows": 0,
+     "row_sum_max_abs_diff": 2.0116567611694336e-07,
+     "cuml_rows_summing_to_1": 82,
+     "ours_rows_summing_to_1_where_cuml_does": 82
+    }
+   },
+   "ours": {
+    "n_clusters": 4,
+    "n_exemplars": 82,
+    "labels_sha256": "9f3f4b2e5111030ce3d797328713a7beb7f26cb86f0bda2fc1c082945ca99b65",
+    "membership_vector_sha256": "b4438bd27a9da5bcce67991da89ec0b5ca688326e64b4f2b9917086e1392a1f3",
+    "all_points_sha256": "c7cd6f2df6679c93e3f73a78d502000010083fea5716f29866a83ef402082414",
+    "membership_nonfinite": 0,
+    "all_points_nonfinite": 0
+   }
+  },
+  {
+   "fixture": "blobs",
+   "config": "leaf",
+   "params": {
+    "min_cluster_size": 15,
+    "min_samples": 5,
+    "cluster_selection_method": "leaf"
+   },
+   "n_rows": 2200,
+   "n_queries": 400,
+   "vs_float64_transcription": {
+    "membership_vector": {
+     "shape_ours": [
+      400,
+      6
+     ],
+     "shape_cuml": [
+      400,
+      6
+     ],
+     "cells": 2400,
+     "cuml_nonfinite_cells": 0,
+     "cuml_nonfinite_rows": 0,
+     "ours_nonfinite_cells": 0,
+     "bitwise_equal_cells": 387,
+     "max_abs_diff": 5.1081180572509766e-05,
+     "max_rel_diff": 0.06100354893793526,
+     "max_rel_diff_cells_ge_1e-6": 0.0014731632777706292,
+     "max_ulps": 895303.0,
+     "median_ulps": 24.0,
+     "argmax_differs_rows": 0,
+     "row_sum_max_abs_diff": 5.1081180572509766e-05,
+     "cuml_rows_summing_to_1": 9,
+     "ours_rows_summing_to_1_where_cuml_does": 9
+    },
+    "all_points_membership_vectors": {
+     "shape_ours": [
+      2200,
+      6
+     ],
+     "shape_cuml": [
+      2200,
+      6
+     ],
+     "cells": 13200,
+     "cuml_nonfinite_cells": 0,
+     "cuml_nonfinite_rows": 0,
+     "ours_nonfinite_cells": 0,
+     "bitwise_equal_cells": 8999,
+     "max_abs_diff": 0.011470198631286621,
+     "max_rel_diff": 1.0,
+     "max_rel_diff_cells_ge_1e-6": 1.0,
+     "max_ulps": 16760119.0,
+     "median_ulps": 0.0,
+     "argmax_differs_rows": 0,
+     "row_sum_max_abs_diff": 1.7881393432617188e-07,
+     "cuml_rows_summing_to_1": 81,
+     "ours_rows_summing_to_1_where_cuml_does": 81
+    }
+   },
+   "ours": {
+    "n_clusters": 6,
+    "n_exemplars": 96,
+    "labels_sha256": "2e5a8ab424af96788686afe62ac5befbb80bf2548f38eae21fecf17ff8e96ba3",
+    "membership_vector_sha256": "77bb906b58402167fcacafac92fa121cf89c144fed1e0207a5ba39c86b4aa965",
+    "all_points_sha256": "994aaef2f9a786ca607c29c358c639871f9a505310791201f259e71533c12645",
+    "membership_nonfinite": 0,
+    "all_points_nonfinite": 0
+   }
+  },
+  {
+   "fixture": "dupes-grid",
+   "config": "eom",
+   "params": {
+    "min_cluster_size": 20,
+    "min_samples": 10,
+    "cluster_selection_method": "eom"
+   },
+   "n_rows": 1200,
+   "n_queries": 200,
+   "vs_float64_transcription": {
+    "membership_vector": {
+     "shape_ours": [
+      200,
+      4
+     ],
+     "shape_cuml": [
+      200,
+      4
+     ],
+     "cells": 800,
+     "cuml_nonfinite_cells": 0,
+     "cuml_nonfinite_rows": 0,
+     "ours_nonfinite_cells": 0,
+     "bitwise_equal_cells": 559,
+     "max_abs_diff": 5.960464477539063e-08,
+     "max_rel_diff": 3.909604853305273e-07,
+     "max_rel_diff_cells_ge_1e-6": 3.909604853305273e-07,
+     "max_ulps": 4.0,
+     "median_ulps": 0.0,
+     "argmax_differs_rows": 0,
+     "row_sum_max_abs_diff": 7.82310962677002e-08,
+     "cuml_rows_summing_to_1": 34,
+     "ours_rows_summing_to_1_where_cuml_does": 34
+    },
+    "all_points_membership_vectors": {
+     "shape_ours": [
+      1200,
+      4
+     ],
+     "shape_cuml": [
+      1200,
+      4
+     ],
+     "cells": 4800,
+     "cuml_nonfinite_cells": 0,
+     "cuml_nonfinite_rows": 0,
+     "ours_nonfinite_cells": 0,
+     "bitwise_equal_cells": 3358,
+     "max_abs_diff": 1.1920928955078125e-07,
+     "max_rel_diff": 0.10834074020385742,
+     "max_rel_diff_cells_ge_1e-6": 3.1997458121926795e-07,
+     "max_ulps": 908828.0,
+     "median_ulps": 0.0,
+     "argmax_differs_rows": 0,
+     "row_sum_max_abs_diff": 1.2665987014770508e-07,
+     "cuml_rows_summing_to_1": 284,
+     "ours_rows_summing_to_1_where_cuml_does": 284
+    }
+   },
+   "ours": {
+    "n_clusters": 4,
+    "n_exemplars": 284,
+    "labels_sha256": "fa3fba3b9f3ed29a748580e73c41611bdba5218c27bd1a8fcf898d8e350f0081",
+    "membership_vector_sha256": "357b0a9c2a2fe145d8835576ce9109dcbcd7747e655019c3959e19b6c6ca0a02",
+    "all_points_sha256": "4eaede9bd300b6c99b901d09b048de6f794e440b66f0fce5aa893eaddf260c0d",
+    "membership_nonfinite": 0,
+    "all_points_nonfinite": 0
+   }
+  },
+  {
+   "fixture": "dupes-grid",
+   "config": "leaf",
+   "params": {
+    "min_cluster_size": 15,
+    "min_samples": 5,
+    "cluster_selection_method": "leaf"
+   },
+   "n_rows": 1200,
+   "n_queries": 200,
+   "vs_float64_transcription": {
+    "membership_vector": {
+     "shape_ours": [
+      200,
+      11
+     ],
+     "shape_cuml": [
+      200,
+      11
+     ],
+     "cells": 2200,
+     "cuml_nonfinite_cells": 0,
+     "cuml_nonfinite_rows": 0,
+     "ours_nonfinite_cells": 0,
+     "bitwise_equal_cells": 1434,
+     "max_abs_diff": 1.1920928955078125e-07,
+     "max_rel_diff": 4.127257377627335e-07,
+     "max_rel_diff_cells_ge_1e-6": 4.127257377627335e-07,
+     "max_ulps": 5.0,
+     "median_ulps": 0.0,
+     "argmax_differs_rows": 0,
+     "row_sum_max_abs_diff": 2.245069481432438e-07,
+     "cuml_rows_summing_to_1": 98,
+     "ours_rows_summing_to_1_where_cuml_does": 98
+    },
+    "all_points_membership_vectors": {
+     "shape_ours": [
+      1200,
+      11
+     ],
+     "shape_cuml": [
+      1200,
+      11
+     ],
+     "cells": 13200,
+     "cuml_nonfinite_cells": 0,
+     "cuml_nonfinite_rows": 0,
+     "ours_nonfinite_cells": 0,
+     "bitwise_equal_cells": 5696,
+     "max_abs_diff": 5.960464477539063e-08,
+     "max_rel_diff": 1.0,
+     "max_rel_diff_cells_ge_1e-6": 3.722179499873074e-07,
+     "max_ulps": 16626212.0,
+     "median_ulps": 1.0,
+     "argmax_differs_rows": 0,
+     "row_sum_max_abs_diff": 1.3597309589385986e-07,
+     "cuml_rows_summing_to_1": 604,
+     "ours_rows_summing_to_1_where_cuml_does": 604
+    }
+   },
+   "ours": {
+    "n_clusters": 11,
+    "n_exemplars": 366,
+    "labels_sha256": "c623aa5f9188708434806759515c440b1c487d2b2a3738ef869c5921cfcad8cd",
+    "membership_vector_sha256": "d48a3e115a4728ce32ec05800cd65658388e133bda8da5dcd879631a22e9cd7a",
+    "all_points_sha256": "464f90f1bcd5c4695ec1c7837f66a8b8795e0550a518996e2d97ed1cc9ebfcbe",
+    "membership_nonfinite": 0,
+    "all_points_nonfinite": 0
+   }
+  }
+ ],
+ "mojolearn_numeric_mode": "identical"
+}

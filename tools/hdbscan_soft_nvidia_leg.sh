@@ -30,6 +30,11 @@ run() {
 }
 say "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 if [ -n "${MOJOLEARN_COMMIT:-}" ] && [ ! -s /root/mojolearn/commit.txt ]; then echo "$MOJOLEARN_COMMIT" > /root/mojolearn/commit.txt; fi
+# identity_break refuses without a commit witness, and this runner passes no
+# environment: set MOJOLEARN_HDBSCAN_SOFT_COMMIT below before renting, as the
+# 2026-09-15 leg's identity phase refused for want of it.
+MOJOLEARN_HDBSCAN_SOFT_COMMIT=""
+if [ ! -s /root/mojolearn/commit.txt ] && [ -n "$MOJOLEARN_HDBSCAN_SOFT_COMMIT" ]; then echo "$MOJOLEARN_HDBSCAN_SOFT_COMMIT" > /root/mojolearn/commit.txt; fi
 say "commit=$(cat /root/mojolearn/commit.txt 2>/dev/null | head -1)"
 nvidia-smi --query-gpu=name,driver_version,compute_cap --format=csv,noheader > "$OUT/logs/device.txt" 2>&1
 say "device=$(tr '\n' ' ' < "$OUT/logs/device.txt")"
@@ -42,6 +47,10 @@ say "gpu_archs=$MOJOLEARN_GPU_ARCHS"
 VENDOR_LABEL="nvidia-$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | tr 'A-Z ' 'a-z-' | tr -cd 'a-z0-9-' | cut -c1-24)-$MOJOLEARN_GPU_ARCHS"
 say "vendor_label=$VENDOR_LABEL"
 
+# The surface test's float64 queries go through the base binding, and the
+# 2026-09-15 leg lost its PREDICT and SOFT arms without it.
+run build-base env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 \
+    MOJOLEARN_COMPILE_JOBS="${MOJOLEARN_COMPILE_JOBS:-8}" sh bindings/build.sh
 run build-hdbscan env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 \
     MOJOLEARN_COMPILE_JOBS="${MOJOLEARN_COMPILE_JOBS:-8}" sh bindings/build_hdbscan.sh
 sha256sum python/mojolearn/identical/_mojolearn_hdbscan.so >> "$G" 2>/dev/null

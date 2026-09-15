@@ -1,0 +1,37 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_hdbscan_host'] commit=82248f7899cd8542338c782382375c0284b9abd8
+| lane/fixture                 | verdict    | apple-m4         | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| hdbscan-leaf/base            | DIVERGENT  | parts differ: labels,core,counts; agree: - | 9d136bc011b39e78 |
+| hdbscan-leaf/dupes           | DIVERGENT  | parts differ: labels,core,counts; agree: - | 9d136bc011b39e78 |
+| hdbscan-leaf/ties            | DIVERGENT  | parts differ: labels,core,counts; agree: - | 38c4ab16664267e5 |
+| hdbscan/base                 | DIVERGENT  | parts differ: labels,core,counts; agree: - | 1ba67d4db1385d26 |
+| hdbscan/dupes                | DIVERGENT  | parts differ: labels,core,counts; agree: - | 1ba67d4db1385d26 |
+| hdbscan/ties                 | DIVERGENT  | parts differ: labels,core,counts; agree: - | 5196591a54982010 |
+
+summary: DIVERGENT=6
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| hdbscan-leaf/base            | infer  | DIVERGENT    | 2117320835e91e8a | f825c78b9b98a666 |
+| hdbscan-leaf/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/base            | batch  | DIVERGENT    | 927cb01ec674a031 | d4a3b40ebb16d339 |
+| hdbscan-leaf/dupes           | infer  | DIVERGENT    | 2117320835e91e8a | f825c78b9b98a666 |
+| hdbscan-leaf/dupes           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/dupes           | batch  | DIVERGENT    | 927cb01ec674a031 | d4a3b40ebb16d339 |
+| hdbscan-leaf/ties            | infer  | DIVERGENT    | 47607746aff5c75c | 00b174bcfc659687 |
+| hdbscan-leaf/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/ties            | batch  | DIVERGENT    | bfcae42c42ea55d7 | 0a243d1569b786b3 |
+| hdbscan/base                 | infer  | DIVERGENT    | cfe5f8df2a406451 | f66d92fde264f2ad |
+| hdbscan/base                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan/base                 | batch  | DIVERGENT    | 43c868ddda4bae13 | 5935b1d822675c8b |
+| hdbscan/dupes                | infer  | DIVERGENT    | cfe5f8df2a406451 | f66d92fde264f2ad |
+| hdbscan/dupes                | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan/dupes                | batch  | DIVERGENT    | 43c868ddda4bae13 | 5935b1d822675c8b |
+| hdbscan/ties                 | infer  | DIVERGENT    | 6ec7f68f0f81ae9b | 44c6c390d49f29f7 |
+| hdbscan/ties                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| hdbscan/ties                 | batch  | DIVERGENT    | a5c1950592d1d992 | efff66af5a69dd2c |
+
+summary (infer/model): DIVERGENT=6, N/A=6
+summary (batch): DIVERGENT=6
+summary (rlpair): 
