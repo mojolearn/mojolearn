@@ -27,7 +27,13 @@ bytes (`key_fields`):
     a different CPU binding than RunPod 22.04 from one source);
   * the absolute repository path (the rpath into .pixi is baked in).
 A build whose environment or arguments mention SABOTAGE or FAULT_INJECT is
-NEVER looked up and NEVER uploaded.
+NEVER looked up and NEVER uploaded, unless the runner opts in with
+MOJOLEARN_BINCACHE_NEGATIVE=1 (tools/runpod_cpu_leg.sh, 2026-09-15). Then the
+build is a NEGATIVE CONTROL: its fields carry variant=sabotage (so its key can
+never equal a production key), it is looked up only among the map's `sget`
+rows, which list the separate prefix bincache/sabotage-v1/, and it uploads
+only there. A production build never reads an `sget` row, and an archive of
+the other variant fails the fields check on placement.
 
 CREDENTIALS NEVER REACH A BOX. This follows tools/dataset_store.sh exactly:
 the Mac lists the cache and mints short-lived presigned URLs (`plan`), and the
@@ -74,6 +80,7 @@ SCHEMA = "mojolearn-bincache-v1"
 DEFAULT_MAP = "/root/.mojolearn_bincache/urls.tsv"
 DEFAULT_OUT = "/root/gemm_leg_out/bincache"
 OBJECT_PREFIX = "bincache/v1"
+SABOTAGE_PREFIX = "bincache/sabotage-v1"
 INBOX_PREFIX = "bincache/inbox"
 KEY_ENV_PREFIXES = ("MOJOLEARN_", "MOJO_", "MODULAR_")
 # Variables that name a commit, a thread count for RUNNING, a log or this
@@ -413,7 +420,7 @@ def build_env(environ):
 def key_fields(repo, script, args, environ, image, dev_arch=None, os_info=None, force_tree=False):
     repo = Path(repo).resolve()
     src, _ = source_digest(repo, script, args, force_tree=force_tree)
-    return dict(
+    fields = dict(
         schema=SCHEMA,
         script=os.path.relpath(Path(script).resolve(), repo),
         args=list(args),
@@ -428,6 +435,18 @@ def key_fields(repo, script, args, environ, image, dev_arch=None, os_info=None, 
         os=os_fields() if os_info is None else os_info,
         repo_path=str(repo),
     )
+    if is_sabotage(fields):
+        # Production keys carry no variant field, so they are unchanged; a
+        # sabotage key can never collide with one.
+        fields["variant"] = "sabotage"
+    return fields
+
+
+def is_sabotage(fields):
+    for k, v in list(fields.get("build_env", {}).items()) + [("args", " ".join(fields.get("args", [])))]:
+        if SABOTAGE_RE.search(k) or SABOTAGE_RE.search(str(v)):
+            return True
+    return False
 
 
 def refusal(fields, environ):
@@ -435,6 +454,10 @@ def refusal(fields, environ):
     for k, v in list(fields["build_env"].items()) + [("args", " ".join(fields["args"]))]:
         if SABOTAGE_RE.search(k) or SABOTAGE_RE.search(v):
             return "sabotage:" + k
+    return outdir_refusal(fields, environ)
+
+
+def outdir_refusal(fields, environ):
     for k, v in environ.items():
         if k.endswith("_OUTDIR") and k.startswith("MOJOLEARN_") and v:
             p = Path(v)
@@ -571,13 +594,13 @@ def http_put(url, src, tries=4, headers=None):
 
 
 def read_map(path):
-    m = dict(header={}, get={}, put=[])
+    m = dict(header={}, get={}, sget={}, put=[])
     for line in Path(path).read_text().splitlines():
         parts = line.split("\t")
         if len(parts) == 2 and parts[0].startswith("#"):
             m["header"][parts[0][1:]] = parts[1]
-        elif len(parts) == 3 and parts[0] == "get" and KEY_RE.match(parts[1]):
-            m["get"][parts[1]] = parts[2]
+        elif len(parts) == 3 and parts[0] in ("get", "sget") and KEY_RE.match(parts[1]):
+            m[parts[0]][parts[1]] = parts[2]
         elif len(parts) == 3 and parts[0] == "put" and SEG_RE.match(parts[1]):
             m["put"].append((parts[1], parts[2]))
     return m
@@ -644,9 +667,9 @@ class Record:
         if self.dir is not None:
             (self.dir / "keys" / (key + ".json")).write_text(json.dumps(fields, indent=1, sort_keys=True))
 
-    def upload_row(self, leg, slot, dest, key):
+    def upload_row(self, leg, slot, dest, key, sabotage=False):
         with open(self.dir / "uploads.tsv", "a") as fh:
-            fh.write("%s\t%s\t%s\t%s\tsabotage=0\n" % (leg, slot, dest, key))
+            fh.write("%s\t%s\t%s\t%s\tsabotage=%d\n" % (leg, slot, dest, key, 1 if sabotage else 0))
 
 
 def claim_slot(map_path, puts):
@@ -685,17 +708,23 @@ def cmd_build(argv, environ=None):
         rec.row(rel_script, "error-key:%s" % type(exc).__name__, "", time.time() - t0, [])
         return rc
     why = refusal(fields, environ)
-    if why:
+    negative = bool(why.startswith("sabotage:") and environ.get("MOJOLEARN_BINCACHE_NEGATIVE", "") == "1"
+                    and fields.get("variant") == "sabotage" and not outdir_refusal(fields, environ))
+    if why and not negative:
         rc = subprocess.call(plain, env=environ)
         rec.row(rel_script, "refused:" + why, "", time.time() - t0, [])
         return rc
+    # A negative control reads and writes ONLY the sabotage namespace; a
+    # production build ONLY the production one.
+    gets = urls["sget"] if negative else urls["get"]
+    tag = "negative-" if negative else ""
     key = key_of(fields)
     rec.key(key, fields)
-    miss = "miss"
-    if key in urls["get"]:
+    miss = tag + "miss"
+    if key in gets:
         with tempfile.TemporaryDirectory(prefix="bincache-") as td:
             arc = os.path.join(td, "a.tar.gz")
-            code = http_get(urls["get"][key], arc)
+            code = http_get(gets[key], arc)
             if code != 200:
                 miss = "miss-get-%s" % code
             else:
@@ -720,10 +749,10 @@ def cmd_build(argv, environ=None):
                                 raise Reject("placed file differs " + rel)
                             placed.append(dict(path=rel, sha256=sha256_bytes(data)))
                             print("built %s (from bincache key %s, sha256 %s)" % (rel, key[:16], placed[-1]["sha256"]))
-                        rec.row(rel_script, "hit", key, time.time() - t0, placed)
+                        rec.row(rel_script, tag + "hit", key, time.time() - t0, placed)
                         return 0
                 except Reject as exc:
-                    miss = "rejected:" + str(exc).replace("\t", " ")
+                    miss = tag + "rejected:" + str(exc).replace("\t", " ")
     before = snapshot(repo, environ)
     tb = time.time()
     rc, log_sha = run_tee(plain, environ)
@@ -754,7 +783,7 @@ def cmd_build(argv, environ=None):
         rec.row(rel_script, miss + "+built-not-uploaded:no-slot", key, time.time() - t0, files_meta)
         return 0
     partition = urls["header"].get("partition", "")
-    dest = "%s/%s/%s.tar.gz" % (OBJECT_PREFIX, partition, key)
+    dest = "%s/%s/%s.tar.gz" % (SABOTAGE_PREFIX if negative else OBJECT_PREFIX, partition, key)
     with tempfile.TemporaryDirectory(prefix="bincache-") as td:
         arc = os.path.join(td, "a.tar.gz")
         pack(arc, key, fields, repo, outputs, dict(
@@ -766,7 +795,7 @@ def cmd_build(argv, environ=None):
     if code != 200:
         rec.row(rel_script, miss + "+built-upload-failed-%s" % code, key, time.time() - t0, files_meta)
         return 0
-    rec.upload_row(urls["header"].get("leg", ""), slot, dest, key)
+    rec.upload_row(urls["header"].get("leg", ""), slot, dest, key, sabotage=negative)
     rec.row(rel_script, miss + "+built-uploaded", key, time.time() - t0, files_meta)
     return 0
 
@@ -854,26 +883,35 @@ def cmd_plan(argv):
     ap.add_argument("--slots", type=int, default=64)
     ap.add_argument("--max-get", type=int, default=2000)
     ap.add_argument("--expires", type=int, default=7200)
+    ap.add_argument("--negative", action="store_true",
+                    help="also list the sabotage namespace as sget rows (negative controls)")
     a = ap.parse_args(argv)
     parts = a.partition.split("/")
     if len(parts) != 2 or not all(SEG_RE.match(p) for p in parts) or not SEG_RE.match(a.leg_id):
         raise SystemExit("bincache plan: bad partition or leg id")
     creds = creds_from_env()
-    objs = list_objects(creds, "%s/%s/" % (OBJECT_PREFIX, a.partition))
-    objs.sort(key=lambda o: o[1], reverse=True)
     lines = ["#partition\t" + a.partition, "#image\t" + a.image, "#leg\t" + a.leg_id]
-    n_get = 0
-    for name, _, _ in objs[: a.max_get]:
-        m = re.match(r"^%s/%s/([0-9a-f]{64})\.tar\.gz$" % (re.escape(OBJECT_PREFIX), re.escape(a.partition)), name)
-        if m:
-            lines.append("get\t%s\t%s" % (m.group(1), presign("GET", name, a.expires, creds)))
-            n_get += 1
+    n_get = n_sget = 0
+    for prefix, verb in ((OBJECT_PREFIX, "get"), (SABOTAGE_PREFIX, "sget")):
+        if verb == "sget" and not a.negative:
+            continue
+        objs = list_objects(creds, "%s/%s/" % (prefix, a.partition))
+        objs.sort(key=lambda o: o[1], reverse=True)
+        for name, _, _ in objs[: a.max_get]:
+            m = re.match(r"^%s/%s/([0-9a-f]{64})\.tar\.gz$" % (re.escape(prefix), re.escape(a.partition)), name)
+            if m:
+                lines.append("%s\t%s\t%s" % (verb, m.group(1), presign("GET", name, a.expires, creds)))
+                if verb == "get":
+                    n_get += 1
+                else:
+                    n_sget += 1
     for i in range(a.slots):
         slot = "%03d" % i
         lines.append("put\t%s\t%s" % (slot, presign("PUT", "%s/%s/%s.tar.gz" % (INBOX_PREFIX, a.leg_id, slot),
                                                     a.expires, creds)))
     sys.stdout.write("\n".join(lines) + "\n")
-    print("BINCACHE PLAN partition=%s entries=%d slots=%d" % (a.partition, n_get, a.slots), file=sys.stderr)
+    print("BINCACHE PLAN partition=%s entries=%d negative_entries=%d slots=%d"
+          % (a.partition, n_get, n_sget, a.slots), file=sys.stderr)
     return 0
 
 
@@ -881,21 +919,27 @@ def check_upload_row(row, keys_dir):
     """(slot, dest, key) or raise ValueError. The Mac re-derives the key
     from the fields the box recorded and refuses anything sabotaged."""
     parts = row.rstrip("\n").split("\t")
-    if len(parts) != 5 or parts[4] != "sabotage=0":
+    if len(parts) != 5 or parts[4] not in ("sabotage=0", "sabotage=1"):
         raise ValueError("malformed row")
     leg, slot, dest, key = parts[:4]
+    negative = parts[4] == "sabotage=1"
     if not SEG_RE.match(leg) or not SEG_RE.match(slot) or not KEY_RE.match(key):
         raise ValueError("bad leg, slot or key")
     m = re.match(r"^%s/([A-Za-z0-9._-]{1,120})/([A-Za-z0-9._-]{1,120})/([0-9a-f]{64})\.tar\.gz$"
-                 % re.escape(OBJECT_PREFIX), dest)
+                 % re.escape(SABOTAGE_PREFIX if negative else OBJECT_PREFIX), dest)
     if not m or m.group(3) != key:
         raise ValueError("bad destination")
     fields = json.loads((Path(keys_dir) / (key + ".json")).read_text())
     if key_of(fields) != key:
         raise ValueError("recorded fields do not hash to the key")
-    for k, v in list(fields.get("build_env", {}).items()) + [("args", " ".join(fields.get("args", [])))]:
-        if SABOTAGE_RE.search(k) or SABOTAGE_RE.search(str(v)):
-            raise ValueError("sabotage build")
+    sab = is_sabotage(fields)
+    if negative:
+        # A negative control goes ONLY to the sabotage namespace, and only
+        # when its own fields say sabotage.
+        if not sab or fields.get("variant") != "sabotage":
+            raise ValueError("row says sabotage=1 but the fields are a production build")
+    elif sab or "variant" in fields:
+        raise ValueError("sabotage build")
     return leg, slot, dest, key
 
 

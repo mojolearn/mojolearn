@@ -174,7 +174,7 @@ def compute_split_properties_half_byte_kernel[
                         result,
                     )
                 elif m > 1:
-                    # DEVIATION 1898: upstream's atomicAdd is relaxed; the non-
+                    # DEVIATION 1898: the reference's atomicAdd is relaxed; the non-
                     # Apple Mojo default is seq_cst.
                     _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                         bin_sums.unsafe_offset(at), result

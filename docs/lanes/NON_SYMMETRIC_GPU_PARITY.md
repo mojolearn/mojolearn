@@ -19,7 +19,7 @@ The corresponding MojoLearn restrictions remain in place.
 
 Sources: [CatBoost GPU non-symmetric registry](https://github.com/catboost/catboost/blob/master/catboost/cuda/train_lib/pointwise_non_symmetric.cpp),
 [multiclass registry](https://github.com/catboost/catboost/blob/master/catboost/cuda/train_lib/multiclass.cpp).
-The local upstream checkout is pinned at
+The local reference checkout is pinned at
 `54a8143a5904ea1cfe98fe0d84c31d48cf13369b`; the current online registry was
 also inspected. Availability is not a claim that all parameter combinations
 produce identical models to CatBoost.

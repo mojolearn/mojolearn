@@ -248,7 +248,7 @@ def _select_top_k(
     that writes each winner to its rank rather than to an atomic slot
     (DEVIATIONS 500/501). `radix_topk_one_block_kernel` under `FAST`: RAFT's
     own selector, tie back-fill and atomic placement included, because
-    fixing a thing upstream does not do is an improvement and improvements
+    fixing a thing the reference does not do is an improvement and improvements
     do not live in `impl/`.
 
     IDENTICAL admits k up to IDENTICAL_MAX_K using the shared selector's

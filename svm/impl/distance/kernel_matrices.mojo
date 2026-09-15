@@ -163,7 +163,7 @@ def kernel_workspace_floats(m: Int, n: Int, k: Int) -> Int:
 # DEVIATION 2492 (2026-09-10): THE FUSED FAST RBF TILE
 # ---------------------------------------------------------------------------
 # `kernel_op` is a GEMM over k = n_features followed by the expansion
-# epilogue, which is upstream's shape (`GramMatrixBase::evaluate`, then
+# epilogue, which is the reference's shape (`GramMatrixBase::evaluate`, then
 # `rbf_kernel_expanded`). For the SMO's tiles k is small (tens of features)
 # and the product is `nnz x n_rows` cells, so the GEMM is skinny in exactly
 # the dimension a GEMM is tiled for: measured on the M4 at

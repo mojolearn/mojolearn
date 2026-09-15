@@ -61,7 +61,7 @@ INDICES nor their positions are, whenever more elements tie at the k-th value
 than there are slots left. Two runs on one device can return different
 neighbors of equal distance.
 
-That is a real property of the upstream and it is NOT fixed here, because
+That is a real property of the reference and it is NOT fixed here, because
 fixing it is an improvement on RAFT and improvements do not belong in
 `impl/`. What it costs was worth stating and used to end: "an `IDENTICAL`
 column cannot cover k-NN indices without an index tie-break that RAFT does
@@ -82,7 +82,7 @@ DEVIATIONS
 1. `BitsPerPass = 8`, so 256 buckets and 4 passes over a 32-bit key. RAFT's
    tuned setting is 11 bits (2048 buckets, 3 passes). Eight keeps the
    histogram at 1 KB against Metal's 32 KB threadgroup budget
-   (`archive/reference/PORTING.md 1`) and makes the block scan exactly one element per thread.
+   and makes the block scan exactly one element per thread.
    A pass costs a full sweep of the survivors, so this trades one extra pass
    for a much smaller scan. Measure before changing it.
 2. `vectorized_process` is not implemented. It is a 16-byte-load optimization
@@ -103,7 +103,7 @@ What that bought: the loop ran 2 barriers x 8 rounds = **16 barriers per
 radix pass per row**, against one collective call. The counts are integers,
 so the result is bit-for-bit the same sequence the loop produced and there is
 no fidelity cost anywhere in it. The scan is now the same KIND of thing
-upstream's is, so it is ordinary implemented code, not a substitution to declare.
+the reference's is, so it is ordinary implemented code, not a substitution to declare.
 See `archive/reference/VENDOR_LIBRARIES.md`.
 
 `Atomic.fetch_add` on the SHARED histogram is NOT in that category and stays.

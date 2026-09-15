@@ -23,16 +23,16 @@ the split is a different file:
       + greedy_search_helper            + methods/pointwise_scores_calcer
 
 Different histogram layouts (stat-major against stat-minor), different
-collision schemes, different reduce shapes, OPPOSITE SIGN CONVENTIONS
-(`archive/reference/PORTING.md` 94a), a fixed-point accumulator on one side at 8 bits and none
-on the other. Agreement between them is not a tautology; it is two implements of
+collision schemes, different reduce shapes, OPPOSITE SIGN CONVENTIONS,
+a fixed-point accumulator on one side at 8 bits and none
+on the other. Agreement between them is not a tautology; it is two implementations of
 one algorithm arriving at one answer.
 
 ## What agreement does and does not prove
 
 It does NOT prove either matches CatBoost -- both could share a misreading.
 `tools/catboost_oracle.py` is what compares against their own output, and
-`archive/reference/PORTING.md` 91 F records that it runs their CPU learner.
+It runs their CPU learner.
 
 It DOES prove that the ~9,000 lines landed for the pointwise family compute
 the same splits as an implementation that has been gated against CatBoost's

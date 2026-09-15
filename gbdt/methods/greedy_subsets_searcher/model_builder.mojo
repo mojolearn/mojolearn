@@ -285,7 +285,7 @@ def _to_ui16(value: Int, what: String) raises -> UInt16:
     `ui32`. A dataset with more than 65,535 features, or a tree wider than
     65,535 leaves on one side, would wrap and produce a model that applies
     cleanly and answers wrong. This raises instead, which is a DEVIATION
-    (archive/reference/PORTING.md 350) and the only kind that is free: it cannot change any
+    and the only kind that is free: it cannot change any
     model their code would have built correctly.
     """
     if value < 0 or value > 65535:

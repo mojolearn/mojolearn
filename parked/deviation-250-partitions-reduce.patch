@@ -43,8 +43,8 @@ index 042ceec..4499833 100644
 +has now made twice and measured twice; `effectiveBlockCount` is their
 +answer to BOTH ends of that tradeoff.
 +
-+BITS MOVE with this port, and the ledger entry (PORTING.md, the
-+2026-08-22 partitions-reduce entry) carries the price: the per-thread
++BITS MOVE with this change, and the 2026-08-22 partitions-reduce
++ledger entry carries the price: the per-thread
 +stripe stride became the effective grid rather than the launched grid, and
 +phase 2's fold became serial-in-chunk rather than a 512-lane tree, so
 +every float partition stat can round differently in its last bits. The

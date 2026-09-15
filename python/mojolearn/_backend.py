@@ -1009,9 +1009,12 @@ def host_families_built():
 #:     with NewtonL2); every other option value refuses by name inside
 #:     gbdt_fit,
 #:     gbdt_predict and gbdt_model_dim over the model text and
-#:     core/gbdt_host_predict.mojo, and gbdt_sigmoid; gbdt_predict_multi,
-#:     the ordered and FeatureFreq fits and the adapters' binary transforms
-#:     are absent. Its own family for the reason the rf family is: the
+#:     core/gbdt_host_predict.mojo, and gbdt_sigmoid; gbdt_fit_ordered_rmse
+#:     over gbdt/host/gbdt_oracle_ordered.mojo and
+#:     gbdt_fit_two_level_feature_freq over
+#:     gbdt/host/gbdt_oracle_feature_freq.mojo (gbdt-ordered-rmse,
+#:     gbdt-feature-freq; lane/cpu-training-gbdt-ordered, 2026-09-15);
+#:     gbdt_predict_multi and the adapters' binary transforms are absent. Its own family for the reason the rf family is: the
 #:     forest host binding exports other names under another contract.
 #:   _mojolearn_training -> _mojolearn_training_host (the mlp lane,
 #:     2026-09-14): optimizer_step and ce_loss over

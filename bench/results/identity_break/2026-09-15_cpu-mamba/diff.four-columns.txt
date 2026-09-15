@@ -1,0 +1,157 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 162 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_mamba_host'] commit=df617c6997cdf9f794c073c2d027dc68c9b1191f
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| mamba1/base                  | IDENTICAL x4 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 |
+| mamba1/denormal              | IDENTICAL x4 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 |
+| mamba1/denormal_ftz          | IDENTICAL x4 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 |
+| mamba1/dupes                 | IDENTICAL x4 | 2ac98fad7386a721 | 2ac98fad7386a721 | 2ac98fad7386a721 | 2ac98fad7386a721 |
+| mamba1/hashed                | IDENTICAL x4 | 062931419c55ee5a | 062931419c55ee5a | 062931419c55ee5a | 062931419c55ee5a |
+| mamba1/negative              | IDENTICAL x4 | 0a83c66670f92b55 | 0a83c66670f92b55 | 0a83c66670f92b55 | 0a83c66670f92b55 |
+| mamba1/odd                   | IDENTICAL x4 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 |
+| mamba1/ties                  | IDENTICAL x4 | c821893bfb5ba46c | c821893bfb5ba46c | c821893bfb5ba46c | c821893bfb5ba46c |
+| mamba1/wide                  | IDENTICAL x4 | 0e7b2cee60a53003 | 0e7b2cee60a53003 | 0e7b2cee60a53003 | 0e7b2cee60a53003 |
+| mamba2-dtlimit/base          | IDENTICAL x4 | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf |
+| mamba2-dtlimit/denormal      | IDENTICAL x4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 |
+| mamba2-dtlimit/denormal_ftz  | IDENTICAL x4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 |
+| mamba2-dtlimit/dupes         | IDENTICAL x4 | 04cf69094de5328f | 04cf69094de5328f | 04cf69094de5328f | 04cf69094de5328f |
+| mamba2-dtlimit/hashed        | IDENTICAL x4 | 6cff59b5b34681ab | 6cff59b5b34681ab | 6cff59b5b34681ab | 6cff59b5b34681ab |
+| mamba2-dtlimit/negative      | IDENTICAL x4 | caba9face6653ba0 | caba9face6653ba0 | caba9face6653ba0 | caba9face6653ba0 |
+| mamba2-dtlimit/odd           | IDENTICAL x4 | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf |
+| mamba2-dtlimit/ties          | IDENTICAL x4 | 70a5916600842982 | 70a5916600842982 | 70a5916600842982 | 70a5916600842982 |
+| mamba2-dtlimit/wide          | IDENTICAL x4 | 911465156f47fed2 | 911465156f47fed2 | 911465156f47fed2 | 911465156f47fed2 |
+| mamba2/base                  | IDENTICAL x4 | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e |
+| mamba2/denormal              | IDENTICAL x4 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 |
+| mamba2/denormal_ftz          | IDENTICAL x4 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 |
+| mamba2/dupes                 | IDENTICAL x4 | c565acd587b39ab2 | c565acd587b39ab2 | c565acd587b39ab2 | c565acd587b39ab2 |
+| mamba2/hashed                | IDENTICAL x4 | 2689cc3187df61fd | 2689cc3187df61fd | 2689cc3187df61fd | 2689cc3187df61fd |
+| mamba2/negative              | IDENTICAL x4 | 3506202ab66d8a1f | 3506202ab66d8a1f | 3506202ab66d8a1f | 3506202ab66d8a1f |
+| mamba2/odd                   | IDENTICAL x4 | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e |
+| mamba2/ties                  | IDENTICAL x4 | 48a4bec7b6f6e4f6 | 48a4bec7b6f6e4f6 | 48a4bec7b6f6e4f6 | 48a4bec7b6f6e4f6 |
+| mamba2/wide                  | IDENTICAL x4 | 0d1022f692c144dd | 0d1022f692c144dd | 0d1022f692c144dd | 0d1022f692c144dd |
+| mamba3/base                  | IDENTICAL x4 | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a |
+| mamba3/denormal              | IDENTICAL x4 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 |
+| mamba3/denormal_ftz          | IDENTICAL x4 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 |
+| mamba3/dupes                 | IDENTICAL x4 | 59a1567b027ac450 | 59a1567b027ac450 | 59a1567b027ac450 | 59a1567b027ac450 |
+| mamba3/hashed                | IDENTICAL x4 | 6535988e7df6b7c8 | 6535988e7df6b7c8 | 6535988e7df6b7c8 | 6535988e7df6b7c8 |
+| mamba3/negative              | IDENTICAL x4 | 467cfdf1eeb3a1c6 | 467cfdf1eeb3a1c6 | 467cfdf1eeb3a1c6 | 467cfdf1eeb3a1c6 |
+| mamba3/odd                   | IDENTICAL x4 | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a |
+| mamba3/ties                  | IDENTICAL x4 | 4bad5909ae635933 | 4bad5909ae635933 | 4bad5909ae635933 | 4bad5909ae635933 |
+| mamba3/wide                  | IDENTICAL x4 | 07f2064c0243e8c2 | 07f2064c0243e8c2 | 07f2064c0243e8c2 | 07f2064c0243e8c2 |
+
+summary: IDENTICAL=36
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| mamba1/base                  | infer  | IDENTICAL x4 | 97e86b9db80719a7 | 97e86b9db80719a7 | 97e86b9db80719a7 | 97e86b9db80719a7 |
+| mamba1/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/base                  | batch  | IDENTICAL x4 | fbb1f3233000006e | fbb1f3233000006e | fbb1f3233000006e | fbb1f3233000006e |
+| mamba1/denormal              | infer  | IDENTICAL x4 | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 79e0f910c5525ef7 |
+| mamba1/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/denormal              | batch  | IDENTICAL x4 | a17b09e0f608dab7 | a17b09e0f608dab7 | a17b09e0f608dab7 | a17b09e0f608dab7 |
+| mamba1/denormal_ftz          | infer  | IDENTICAL x4 | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 79e0f910c5525ef7 |
+| mamba1/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/denormal_ftz          | batch  | IDENTICAL x4 | a17b09e0f608dab7 | a17b09e0f608dab7 | a17b09e0f608dab7 | a17b09e0f608dab7 |
+| mamba1/dupes                 | infer  | IDENTICAL x4 | 4f1ca2b3595ec583 | 4f1ca2b3595ec583 | 4f1ca2b3595ec583 | 4f1ca2b3595ec583 |
+| mamba1/dupes                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/dupes                 | batch  | IDENTICAL x4 | 7eb2c68796e0f91a | 7eb2c68796e0f91a | 7eb2c68796e0f91a | 7eb2c68796e0f91a |
+| mamba1/hashed                | infer  | IDENTICAL x4 | b2e6c1006bf3a5ce | b2e6c1006bf3a5ce | b2e6c1006bf3a5ce | b2e6c1006bf3a5ce |
+| mamba1/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/hashed                | batch  | IDENTICAL x4 | 29fc3810bca1e78a | 29fc3810bca1e78a | 29fc3810bca1e78a | 29fc3810bca1e78a |
+| mamba1/negative              | infer  | IDENTICAL x4 | c0e8d2045bc0faf6 | c0e8d2045bc0faf6 | c0e8d2045bc0faf6 | c0e8d2045bc0faf6 |
+| mamba1/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/negative              | batch  | IDENTICAL x4 | a48d8850d38c0e4c | a48d8850d38c0e4c | a48d8850d38c0e4c | a48d8850d38c0e4c |
+| mamba1/odd                   | infer  | IDENTICAL x4 | 97e86b9db80719a7 | 97e86b9db80719a7 | 97e86b9db80719a7 | 97e86b9db80719a7 |
+| mamba1/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/odd                   | batch  | IDENTICAL x4 | fbb1f3233000006e | fbb1f3233000006e | fbb1f3233000006e | fbb1f3233000006e |
+| mamba1/ties                  | infer  | IDENTICAL x4 | 13aed38cf2e3c341 | 13aed38cf2e3c341 | 13aed38cf2e3c341 | 13aed38cf2e3c341 |
+| mamba1/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/ties                  | batch  | IDENTICAL x4 | 23b7f12c8a228592 | 23b7f12c8a228592 | 23b7f12c8a228592 | 23b7f12c8a228592 |
+| mamba1/wide                  | infer  | IDENTICAL x4 | 905c98cf2a276d1d | 905c98cf2a276d1d | 905c98cf2a276d1d | 905c98cf2a276d1d |
+| mamba1/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/wide                  | batch  | IDENTICAL x4 | e83173af858d8291 | e83173af858d8291 | e83173af858d8291 | e83173af858d8291 |
+| mamba2-dtlimit/base          | infer  | IDENTICAL x4 | 574842725ea2d43f | 574842725ea2d43f | 574842725ea2d43f | 574842725ea2d43f |
+| mamba2-dtlimit/base          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/base          | batch  | IDENTICAL x4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 |
+| mamba2-dtlimit/denormal      | infer  | IDENTICAL x4 | a88b2984e2b61ecc | a88b2984e2b61ecc | a88b2984e2b61ecc | a88b2984e2b61ecc |
+| mamba2-dtlimit/denormal      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/denormal      | batch  | IDENTICAL x4 | fc87c19f72f968a4 | fc87c19f72f968a4 | fc87c19f72f968a4 | fc87c19f72f968a4 |
+| mamba2-dtlimit/denormal_ftz  | infer  | IDENTICAL x4 | a88b2984e2b61ecc | a88b2984e2b61ecc | a88b2984e2b61ecc | a88b2984e2b61ecc |
+| mamba2-dtlimit/denormal_ftz  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/denormal_ftz  | batch  | IDENTICAL x4 | fc87c19f72f968a4 | fc87c19f72f968a4 | fc87c19f72f968a4 | fc87c19f72f968a4 |
+| mamba2-dtlimit/dupes         | infer  | IDENTICAL x4 | ce418d3c6ca799ae | ce418d3c6ca799ae | ce418d3c6ca799ae | ce418d3c6ca799ae |
+| mamba2-dtlimit/dupes         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/dupes         | batch  | IDENTICAL x4 | 14ae83f5c3e1998f | 14ae83f5c3e1998f | 14ae83f5c3e1998f | 14ae83f5c3e1998f |
+| mamba2-dtlimit/hashed        | infer  | IDENTICAL x4 | f9184585ded42cc8 | f9184585ded42cc8 | f9184585ded42cc8 | f9184585ded42cc8 |
+| mamba2-dtlimit/hashed        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/hashed        | batch  | IDENTICAL x4 | 6251ed997aa6e1ff | 6251ed997aa6e1ff | 6251ed997aa6e1ff | 6251ed997aa6e1ff |
+| mamba2-dtlimit/negative      | infer  | IDENTICAL x4 | e71489aec1499756 | e71489aec1499756 | e71489aec1499756 | e71489aec1499756 |
+| mamba2-dtlimit/negative      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/negative      | batch  | IDENTICAL x4 | 822a574e48d23549 | 822a574e48d23549 | 822a574e48d23549 | 822a574e48d23549 |
+| mamba2-dtlimit/odd           | infer  | IDENTICAL x4 | 574842725ea2d43f | 574842725ea2d43f | 574842725ea2d43f | 574842725ea2d43f |
+| mamba2-dtlimit/odd           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/odd           | batch  | IDENTICAL x4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 |
+| mamba2-dtlimit/ties          | infer  | IDENTICAL x4 | 6961b92c3565ded6 | 6961b92c3565ded6 | 6961b92c3565ded6 | 6961b92c3565ded6 |
+| mamba2-dtlimit/ties          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/ties          | batch  | IDENTICAL x4 | af6fcf1e9222cb76 | af6fcf1e9222cb76 | af6fcf1e9222cb76 | af6fcf1e9222cb76 |
+| mamba2-dtlimit/wide          | infer  | IDENTICAL x4 | c8604d7add29e134 | c8604d7add29e134 | c8604d7add29e134 | c8604d7add29e134 |
+| mamba2-dtlimit/wide          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/wide          | batch  | IDENTICAL x4 | 93f22fa95029c3d8 | 93f22fa95029c3d8 | 93f22fa95029c3d8 | 93f22fa95029c3d8 |
+| mamba2/base                  | infer  | IDENTICAL x4 | b0084ee171c0720f | b0084ee171c0720f | b0084ee171c0720f | b0084ee171c0720f |
+| mamba2/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/base                  | batch  | IDENTICAL x4 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d21a83ab6b3ce297 |
+| mamba2/denormal              | infer  | IDENTICAL x4 | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 715e3b3d9ee219ba |
+| mamba2/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/denormal              | batch  | IDENTICAL x4 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | ce1a26dfa4587c15 |
+| mamba2/denormal_ftz          | infer  | IDENTICAL x4 | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 715e3b3d9ee219ba |
+| mamba2/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/denormal_ftz          | batch  | IDENTICAL x4 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | ce1a26dfa4587c15 |
+| mamba2/dupes                 | infer  | IDENTICAL x4 | bc19a007224d9860 | bc19a007224d9860 | bc19a007224d9860 | bc19a007224d9860 |
+| mamba2/dupes                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/dupes                 | batch  | IDENTICAL x4 | 82b6615b36847109 | 82b6615b36847109 | 82b6615b36847109 | 82b6615b36847109 |
+| mamba2/hashed                | infer  | IDENTICAL x4 | fa5cdfa7a8028ea4 | fa5cdfa7a8028ea4 | fa5cdfa7a8028ea4 | fa5cdfa7a8028ea4 |
+| mamba2/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/hashed                | batch  | IDENTICAL x4 | a824974d95e976a1 | a824974d95e976a1 | a824974d95e976a1 | a824974d95e976a1 |
+| mamba2/negative              | infer  | IDENTICAL x4 | e47047c1022164fb | e47047c1022164fb | e47047c1022164fb | e47047c1022164fb |
+| mamba2/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/negative              | batch  | IDENTICAL x4 | 5e4dc2619d55149f | 5e4dc2619d55149f | 5e4dc2619d55149f | 5e4dc2619d55149f |
+| mamba2/odd                   | infer  | IDENTICAL x4 | b0084ee171c0720f | b0084ee171c0720f | b0084ee171c0720f | b0084ee171c0720f |
+| mamba2/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/odd                   | batch  | IDENTICAL x4 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d21a83ab6b3ce297 |
+| mamba2/ties                  | infer  | IDENTICAL x4 | bbd1634ec2e78ddf | bbd1634ec2e78ddf | bbd1634ec2e78ddf | bbd1634ec2e78ddf |
+| mamba2/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/ties                  | batch  | IDENTICAL x4 | 4b2801f8f573c8c8 | 4b2801f8f573c8c8 | 4b2801f8f573c8c8 | 4b2801f8f573c8c8 |
+| mamba2/wide                  | infer  | IDENTICAL x4 | b67647742c88aaf1 | b67647742c88aaf1 | b67647742c88aaf1 | b67647742c88aaf1 |
+| mamba2/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/wide                  | batch  | IDENTICAL x4 | 0a20d6f3d8237f24 | 0a20d6f3d8237f24 | 0a20d6f3d8237f24 | 0a20d6f3d8237f24 |
+| mamba3/base                  | infer  | IDENTICAL x4 | 6d73873ffe222457 | 6d73873ffe222457 | 6d73873ffe222457 | 6d73873ffe222457 |
+| mamba3/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/base                  | batch  | IDENTICAL x4 | a59631110897fda3 | a59631110897fda3 | a59631110897fda3 | a59631110897fda3 |
+| mamba3/denormal              | infer  | IDENTICAL x4 | 2092a683dc18e94b | 2092a683dc18e94b | 2092a683dc18e94b | 2092a683dc18e94b |
+| mamba3/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/denormal              | batch  | IDENTICAL x4 | 4182cf2b203fedea | 4182cf2b203fedea | 4182cf2b203fedea | 4182cf2b203fedea |
+| mamba3/denormal_ftz          | infer  | IDENTICAL x4 | 2092a683dc18e94b | 2092a683dc18e94b | 2092a683dc18e94b | 2092a683dc18e94b |
+| mamba3/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/denormal_ftz          | batch  | IDENTICAL x4 | 4182cf2b203fedea | 4182cf2b203fedea | 4182cf2b203fedea | 4182cf2b203fedea |
+| mamba3/dupes                 | infer  | IDENTICAL x4 | 572e878fb8e538ce | 572e878fb8e538ce | 572e878fb8e538ce | 572e878fb8e538ce |
+| mamba3/dupes                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/dupes                 | batch  | IDENTICAL x4 | 605d8473f84fd235 | 605d8473f84fd235 | 605d8473f84fd235 | 605d8473f84fd235 |
+| mamba3/hashed                | infer  | IDENTICAL x4 | c1862ccad54884ed | c1862ccad54884ed | c1862ccad54884ed | c1862ccad54884ed |
+| mamba3/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/hashed                | batch  | IDENTICAL x4 | b922b29fdddfc3d6 | b922b29fdddfc3d6 | b922b29fdddfc3d6 | b922b29fdddfc3d6 |
+| mamba3/negative              | infer  | IDENTICAL x4 | 27f5cfbb4648281d | 27f5cfbb4648281d | 27f5cfbb4648281d | 27f5cfbb4648281d |
+| mamba3/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/negative              | batch  | IDENTICAL x4 | da761d278ab6655a | da761d278ab6655a | da761d278ab6655a | da761d278ab6655a |
+| mamba3/odd                   | infer  | IDENTICAL x4 | 6d73873ffe222457 | 6d73873ffe222457 | 6d73873ffe222457 | 6d73873ffe222457 |
+| mamba3/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/odd                   | batch  | IDENTICAL x4 | a59631110897fda3 | a59631110897fda3 | a59631110897fda3 | a59631110897fda3 |
+| mamba3/ties                  | infer  | IDENTICAL x4 | 1b23621d97f54640 | 1b23621d97f54640 | 1b23621d97f54640 | 1b23621d97f54640 |
+| mamba3/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/ties                  | batch  | IDENTICAL x4 | a93eb5738c206655 | a93eb5738c206655 | a93eb5738c206655 | a93eb5738c206655 |
+| mamba3/wide                  | infer  | IDENTICAL x4 | 229127d013a0eeb7 | 229127d013a0eeb7 | 229127d013a0eeb7 | 229127d013a0eeb7 |
+| mamba3/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/wide                  | batch  | IDENTICAL x4 | ac07fbd366e6fce2 | ac07fbd366e6fce2 | ac07fbd366e6fce2 | ac07fbd366e6fce2 |
+
+summary (infer/model): IDENTICAL=36, N/A=36
+summary (batch): IDENTICAL=36
+require-columns 4 over ['mamba1', 'mamba2', 'mamba2-dtlimit', 'mamba3']: OK

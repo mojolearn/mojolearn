@@ -1,0 +1,61 @@
+== runpod_cpu_leg: lane leg-proof, RENT ==
+  worktree /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-runpod-cpu  commit 7b76dd4a4e04  dirty tracked files: 0
+  pod mojolearn-cpu-leg-proof-20260915-165055  image runpod/base:1.3.1-ubuntu2204  flavors cpu3c,cpu5c  vCPU 8  disk 40GB  lease 75m
+  envs default,test  build [core,estimators]  sabotage-build [core,estimators]  jobs 8  bincache=1 envcache=1
+  source: 2510 files, 17084564 bytes gz, sha256 f4b480d0f2407558
+  box script OK (bash -n, no placeholder, commit baked in); create request: {"name":"mojolearn-cpu-leg-proof-20260915-165055","imageName":"runpod/base:1.3.1-ubuntu2204","computeType":"CPU","cpuFlavorIds":["cpu3c","cpu5c"],"vcpuCount":8,"containerDiskInGb":40,"volumeInGb":0,"ports":["22/tcp"],"supportPublicIp":true,"cloudType":"SECURE"}
+  cache key: pixi	pixi	0.77.0	runpod-cpu/v1/pixi-bin/0.77.0/linux-64/pixi
+  cache key: env	default	74724bfe77fc4247390533608d646980baddcfbf6f94e42fb9eed5793e135d90	runpod-cpu/v1/pixi-env/linux-64/default/74724bfe77fc4247390533608d646980baddcfbf6f94e42fb9eed5793e135d90
+  cache key: env	test	a68b304946123ddbb7d3c11cb0d7a873d194264b7fdcb7a62a9eb0fe66cba7aa	runpod-cpu/v1/pixi-env/linux-64/test/a68b304946123ddbb7d3c11cb0d7a873d194264b7fdcb7a62a9eb0fe66cba7aa
+  dead-man composes (sh -n)
+[12:50:57 cpu-leg] pre-flight: pods on this account
+[12:50:58 cpu-leg] dead-man ARMED before the create: pid 20830, fires in 5700s, keyed by mojolearn-cpu-leg-proof-20260915-165055
+[12:50:58 cpu-leg] creating mojolearn-cpu-leg-proof-20260915-165055. THE BILL STARTS HERE.
+[12:51:00 cpu-leg] pod byg7nqtw65c4j6 created. COST $0.24/hr
+[12:52:05 cpu-leg] ssh up (-p 39510 root@38.80.152.147) after 67s; cost $0.24/hr
+[12:52:05 cpu-leg] arming the ON-POD watchdog (75 minutes)
+    WATCHDOG_ALIVE pid=93
+    sleep 4500
+    1
+    TOKEN_GET_200
+[12:52:15 cpu-leg] staging the source (17084564 bytes)
+[12:52:49 cpu-leg] CACHE PLAN pixi:pixi=hit env:default=hit env:test=miss
+[12:52:55 cpu-leg] BINCACHE STAGED partition=none/runpod-cpu-runpod-base-1.3.1-ubuntu2204 leg=20260915T165252Z-f6da77dd entries=2
+[12:52:57 cpu-leg] starting the box pipeline (env, build, command, cache upload)
+[12:53:20 cpu-leg]   box: env_start
+[12:54:02 cpu-leg]   box: env_end
+[12:54:02 cpu-leg]   box: build_start
+[12:54:02 cpu-leg]   box: build_end
+[12:54:02 cpu-leg]   box: run_start
+[12:54:02 cpu-leg]   box: run_end
+[12:54:03 cpu-leg]   box: upload_start
+[12:55:07 cpu-leg]   box: upload_end
+[12:55:07 cpu-leg] fetching $LEG_OUT
+    cache: pixi	restored	version=0.77.0
+    cache: env:default	restored	install_rc=0	restore_s=37	pixi_install_s=0
+    cache: env:test	miss	install_rc=0	restore_s=1	pixi_install_s=5
+    cache: toolchain	ok	462 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39f8c0000000, nodemask=2)
+    cache: env:test	uploaded	bytes=559044165	seconds=48
+    bincache: bindings/build_core_host.sh	hit	0.5
+    bincache: bindings/build_estimators_host.sh	hit	0.5
+    bincache: bindings/build_core_host.sh	negative-hit	0.5
+    bincache: bindings/build_estimators_host.sh	negative-hit	0.7
+[12:55:08 cpu-leg] command exit: 0   results: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/legs/warm
+
+== teardown (exit 0) ==
+  DELETE https://rest.runpod.io/v1/pods/byg7nqtw65c4j6 -> HTTP 204
+  VERIFIED: byg7nqtw65c4j6 is gone (GET pod HTTP 404; not in the pod listing)
+  create (POST to ssh up)                          67 s
+  arm (on-pod watchdog)                            10 s
+  stage (source + R2 URL maps)                     42 s
+  env (pixi binary + envs)                         46 s
+  build (host bindings)                            3 s
+  run (command)                                    10 s
+  create to first result (POST to command end)     180 s
+  cache upload (misses only)                       48 s
+  fetch                                            1 s
+  teardown (DELETE to verified gone)               1 s
+  billed (POST to verified gone)                   253 s
+  spend $0.0169 at $0.24/hr
+  dead-man cancelled (pid 20830)
+runner_exit=0

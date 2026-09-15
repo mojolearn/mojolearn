@@ -19,7 +19,7 @@ body:
   - type: textarea
     id: upstream
     attributes:
-      label: Relevant upstream implementation or specification
+      label: Relevant reference implementation or specification
       description: Include source, version/commit and license when applicable.
   - type: dropdown
     id: help

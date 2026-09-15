@@ -52,6 +52,19 @@ is a local packaging/inference test, not release certification. Hosted CI for
 the new commit must still be observed; PyPI publication is not part of this
 change. Earlier full hosted run 34978769155 passed on all three CPU hosts.
 
+## Addendum, the same day (lane/inference-tokenizer-neural)
+
+- A ninth shipped family, `neural` (`_mojolearn_neural_host`, loaded by
+  path), carries the forward entries of two training-only families:
+  `MLPInference` and `TransformerBlockInference`. It exports no training
+  entry, and `nm` finds no backward, optimizer or decode symbol in it.
+  The same check on the GPU transformer and training binaries finds 15 and
+  21, so a zero from this check is meaningful.
+- `GPT2Tokenizer.encode_batch` joins the tokenizer family's surface.
+- The results above are unchanged by either. The new cells are in
+  `bench/results/identity_break/2026-09-15_tokenizer-batch` and
+  `2026-09-15_neural-inference`.
+
 ## Forecasting, UMAP transform and full-SVD PCA (lane/inference-forecast-umap-pca, 2026-09-15)
 
 - Saved ARIMA models (`ARIMA.save`/`load`, format `mojolearn-arima-1`) predict in sample and
@@ -60,7 +73,7 @@ change. Earlier full hosted run 34978769155 passed on all three CPU hosts.
   registers `arima_predict` and `arima_forecast` from `bindings/arima_host_predict.mojo` and no
   fit. The manifest's `serves` key routes `_mojolearn_arima` to it on a CPU-only install when
   the reference `_mojolearn_arima_host` is not built (`host_surface.inference_routes()`,
-  `_backend._HOST_INFERENCE_MODULES`). Nine host families ship.
+  `_backend._HOST_INFERENCE_MODULES`). With the neural family above, ten host families ship.
 - Saved UMAP embeddings (`UMAP.save`/`load`, format `mojolearn-umap-1`) transform through the
   already shipped metrics host binding. The transform's answer depends on the query batch
   (umap/transform.mojo: the batch mean sigma floor, the batch maximum edge weight and the

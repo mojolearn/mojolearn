@@ -514,7 +514,7 @@ def half_byte_hist_kernel(
                 if det:
                     if active_block_count > 1:
                         var q = Int32(val * fixed_scale)
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(
@@ -542,7 +542,7 @@ def half_byte_hist_kernel(
                     # wanted; that branch is now a CHOICE rather than the
                     # only thing that compiles.
                     if active_block_count > 1:
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             dst.unsafe_offset(fold), val
@@ -1002,7 +1002,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
                 if det:
                     if active_block_count > 1:
                         var q = Int32(val * fixed_scale)
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(
@@ -1030,7 +1030,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
                     # wanted; that branch is now a CHOICE rather than the
                     # only thing that compiles.
                     if active_block_count > 1:
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             dst.unsafe_offset(fold), val

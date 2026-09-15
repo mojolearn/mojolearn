@@ -3,7 +3,7 @@
 
 Training and query rows are disjoint. Fit sees training rows only. Quality
 compares query-to-training neighborhoods before and after embedding, without
-requiring coordinate equality or sklearn. It does not certify upstream parity,
+requiring coordinate equality or sklearn. It does not certify reference parity,
 cross-vendor identity, or performance.
 
 Declared before the first run: k=5, bipartite trustworthiness >=0.85,

@@ -234,7 +234,7 @@ def gbdt_fit_two_level_feature_freq(
     )
     return model_text(trained)
 
-#: `gbdt_predict_multi`'s transform, mirroring their `EPredictionType`
+#: `gbdt_predict_multi`'s transform, following their `EPredictionType`
 #: (`libs/model/eval_processing.h:186-226`). `RAW` is their `RawFormulaVal`,
 #: `SOFTMAX` their `Probability` for a multi-output model, `SIGMOID` their
 #: `MultiProbability`.
@@ -417,6 +417,9 @@ def gbdt_fit(
     eval_y: MutPointer[Float32, MutUntrackedOrigin],
     n_eval_rows: Int,
     params: GbdtFitParams,
+    # the pool's grouping as run lengths in row order (`train`'s
+    # `group_sizes`); empty means no `group_id`
+    group_sizes: List[UInt32] = List[UInt32](),
 ) raises -> GbdtFitResult:
     """Fit and return the model as `model_text`, plus both loss curves.
 
@@ -568,6 +571,7 @@ def gbdt_fit(
         min_child_hessian=params.min_child_hessian,
         feature_fraction=params.feature_fraction,
         x_borrow=x_borrow,
+        group_sizes=group_sizes,
     )
     host_times.stop_host("gbdt_fit_train", t_phase)
     t_phase = host_times.start()
@@ -640,7 +644,7 @@ def gbdt_predict_multi(
 
     `out_preds` is ROW-MAJOR, `[row * width + k]`.
 
-    `mode` picks the transform, mirroring their `EPredictionType`:
+    `mode` picks the transform, following their `EPredictionType`:
 
       PREDICT_RAW      `dim` columns, the raw approxes -- their
                        `RawFormulaVal`, the contract every other predict

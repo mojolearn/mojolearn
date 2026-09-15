@@ -1527,7 +1527,7 @@ def transformer_block_backward_oracle(
 
     # =====================================================================
     # STAGE 27-28. The RoPE backward, on q and on k. DEVIATION 1412.
-    # ONE function serves both, because upstream applies one function to
+    # ONE function serves both, because the reference applies one function to
     # both (:158-159) and a second spelling would be a second place to
     # drift. **RoPE is NOT applied to v** and therefore v's gradient does
     # not pass through here -- easy to get wrong and impossible to see in

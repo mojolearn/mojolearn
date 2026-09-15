@@ -1,0 +1,6 @@
+pixi	miss	version=0.77.0
+env:default	miss	install_rc=0	restore_s=0	pixi_install_s=15
+env:test	miss	install_rc=0	restore_s=0	pixi_install_s=5
+env:default	uploaded	bytes=558294361	seconds=62
+env:test	uploaded	bytes=559107610	seconds=65
+pixi	uploaded	bytes=78512480

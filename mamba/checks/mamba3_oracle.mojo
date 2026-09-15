@@ -32,7 +32,7 @@ recurrence, mod 2pi applied EVERY step, mod composed from identical_div /
 exact floor / pinned 2pi bits / one subtract); 830 (the diagonal rides
 the pre-rotation QK dot times gamma; the reference's include-then-subtract
 spelling is the DIAG_INCLUDE_SUBTRACT required-RED arm); 831 (decode is
-prefill resumption via the buffer construction below; the upstream
+prefill resumption via the buffer construction below; the reference
 four-piece `Input_States` continuation is SUPPORTED and tolerance-checked,
 never bit-gated against an unbroken prefill).
 
@@ -94,7 +94,7 @@ DECODE IS PREFILL RESUMPTION (DEVIATION 831 + 832). ONE function serves
 both paths: `mamba3_block_oracle` takes the carried state (theta, sealed
 boundary h, the last working chunk's buffered rows), rebuilds the working
 sequence, and runs the chunked schedule over it. A prefill is the same
-call with a fresh zero state. The upstream per-token step recurrence
+call with a fresh zero state. The reference per-token step recurrence
 (`mamba3_siso_step_ref`:119-127) is NOT here; it lives in the impl file
 as the required-RED arm STEP_UPSTREAM_RECURRENCE.
 
@@ -232,7 +232,7 @@ struct Mamba3State(Copyable, Movable):
          ([B, Q, H, P]), post-softplus dt, sigma(trap) and ADT
          ([B, Q, H] each) -- contract section 5's list;
       4. the PENDING `Input_States` continuation pieces `pend_k`
-         [B, H, N] / `pend_v` [B, H, P] (upstream's K_State/V_State),
+         [B, H, N] / `pend_v` [B, H, P] (the reference's K_State/V_State),
          consumed by S22 on the next call's first token.
 
     One `buf_len` for the whole batch: every sequence in a launch
@@ -277,7 +277,7 @@ struct Mamba3State(Copyable, Movable):
         k_in: List[Float32],
         v_in: List[Float32],
     ) raises:
-        """The upstream four-piece `Input_States` continuation (contract
+        """The reference four-piece `Input_States` continuation (contract
         section 5 claim 2): legal only on a FRESH state. theta and h load
         directly; k/v are held PENDING for S22's correction, which needs
         the next call's first-token dt and sigma(trap) (fwd:367-371; the

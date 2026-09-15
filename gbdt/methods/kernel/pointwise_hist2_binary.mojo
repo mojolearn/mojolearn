@@ -21,7 +21,7 @@ lookup.
 A BINARY FEATURE HAS ONE BORDER, so the writeback lands ONE value per
 (feature, stat) at `FirstFoldIndex * 2 + w` with no `+ fold` term. That is
 the visible difference from the half-byte kernel's writeback, and the reason
-these are two files here as they are upstream.
+these are two files here as they are in the reference.
 
 NO BIT-WIDTH DISPATCH. Unlike the one-byte kernels this one has no
 `GetMaxBinCount` bounds test: every feature it is given is binary by
@@ -154,7 +154,7 @@ def compute_split_properties_b_kernel[
                     acc,
                 )
             elif m > 1:
-                # DEVIATION 1898: upstream's atomicAdd is relaxed; the non-Apple
+                # DEVIATION 1898: the reference's atomicAdd is relaxed; the non-Apple
                 # Mojo default is seq_cst.
                 _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                     bin_sums.unsafe_offset(at), acc

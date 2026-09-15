@@ -251,15 +251,15 @@ class ForestProtocol:
                     regressor_tags=None if classifier else RegressorTags())
 
     def score(self, X, y, sample_weight=None):
-        """Mode-aware GPU accuracy or Float32 R²; weighted scoring is unsupported.
+        """Mode-aware GPU accuracy or Float32 R², weighted when `sample_weight`
+        is given (scikit-learn's weighted accuracy and R² on the pinned-sum
+        path of `metrics.accuracy_score` and `metrics.r2_score`).
 
         Class labels are compared on the host without narrowing their values;
         the GPU accuracy kernel receives exact integer equality indicators.
         Regression scoring uses the same Float32 target domain as tree fitting.
         """
         from . import _metrics_impl as metrics
-        if sample_weight is not None:
-            raise NotImplementedError("Forest score does not yet support sample_weight")
         if getattr(y, "ndim", 1) != 1:
             raise ValueError("score requires one-dimensional targets")
         target = flatten_labels(y)
@@ -269,10 +269,11 @@ class ForestProtocol:
         mode = self._effective_mode()
         if self._estimator_type == "classifier":
             equal = Array.from_list([int(a == b) for a, b in zip(target, prediction)], "<i4")
-            return metrics.accuracy_score(full(equal.shape, 1, "<i4"), equal, numeric_mode=mode)
+            return metrics.accuracy_score(full(equal.shape, 1, "<i4"), equal,
+                                          sample_weight=sample_weight, numeric_mode=mode)
         return metrics.r2_score(as_f32_c(y, ndim=1, name="y")[0],
                                 as_f32_c(prediction, ndim=1, name="prediction")[0],
-                                numeric_mode=mode)
+                                sample_weight=sample_weight, numeric_mode=mode)
 
 
 def _export_fit_result(native, descriptor, *, compare_legacy=False):

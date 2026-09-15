@@ -6,8 +6,8 @@ NO REFERENCE FILE, AND THE ONLY HONEST WAY TO SAY IT. CatBoost serializes a mode
 with flatbuffers (`catboost/libs/model/flatbuffers/model.fbs`, written by
 `libs/model/model.cpp`) and exports JSON, CoreML, ONNX, PMML, C++ and Python
 from `libs/model/model_export/`. None of that is implemented here and none of it
-is mirrored. This file writes a format of our own, and that is DEVIATION 49
-in `archive/reference/PORTING.md` with the reason. What IS taken from them is the CONTENT
+is followed. This file writes a format of our own, and that is DEVIATION 49.
+What IS taken from them is the CONTENT
 list: an applied model needs the trees, the leaf values in leaf order, and
 the quantization borders, which is why their `TModelTrees` carries
 `FloatFeatures` (borders included) beside `TreeSplits` and `LeafValues`.
