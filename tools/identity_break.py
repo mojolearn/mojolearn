@@ -1781,8 +1781,16 @@ def _ctr_saved_or_fit(ml, fit):
         if not path or not os.path.isfile(path):
             raise RuntimeError(f"CPU training refuses CTR tables by name; set {GBDT_CTR_MODELS_ENV} to the "
                                f"directory of this lane's GPU-saved models (no {path})")
-        from mojolearn._forest_host import host_model
+        from mojolearn._forest_host import binary_path, host_model
         est = host_model(path)
+        # the train and batch cells predict through this object, so it takes
+        # _probe_fit_host's guard: a forest binding loaded earlier under the
+        # shared module name (host_record reads MOJOLEARN_HOST_DIR) is not the
+        # MOJOLEARN_FOREST_HOST_BINARY asked for
+        bound = getattr(getattr(est, "_binding", None), "__file__", None)
+        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
+            raise RuntimeError(f"the forest binding in this process is {bound}, "
+                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
         est.identity_saved_path = path
         return est
     est = fit()

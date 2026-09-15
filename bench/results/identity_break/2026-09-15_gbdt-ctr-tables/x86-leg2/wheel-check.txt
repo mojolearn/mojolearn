@@ -1,0 +1,9 @@
+mojolearn from /root/wheel-target/mojolearn/__init__.py
+forest binary /root/wheel-target/mojolearn/host/_mojolearn_forest_host.so
+gbdt-categorical-ctr-tables/base           IDENTICAL host=a624d9f200295ebd gpu=a624d9f200295ebd
+gbdt-categorical-ctr-tables/odd            IDENTICAL host=d0a5ab298e3f354c gpu=d0a5ab298e3f354c
+gbdt-categorical-ctr-tables/ties           IDENTICAL host=ba5bb1e19090253b gpu=ba5bb1e19090253b
+gbdt-tensor-ctr-tables/base           IDENTICAL host=18c29c1d0b000438 gpu=18c29c1d0b000438
+gbdt-tensor-ctr-tables/odd            IDENTICAL host=b6a857464e3fc541 gpu=b6a857464e3fc541
+gbdt-tensor-ctr-tables/ties           IDENTICAL host=1659c6bbc45fd69d gpu=1659c6bbc45fd69d
+summary: IDENTICAL=6 DIFFER=0
