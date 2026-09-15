@@ -146,6 +146,11 @@ on:
       - "hdbscan/impl/condensed_hierarchy.mojo"
       - "hdbscan/checks/hdbscan_sabotage.mojo"
       - "hdbscan/checks/mutual_reachability_dense.mojo"
+      - "transformer/host/transformer_block_host.mojo"
+      - "transformer/checks/transformer_oracle.mojo"
+      - "transformer/checks/transformer_backward_oracle.mojo"
+      - "transformer/checks/transformer_fixture.mojo"
+      - "python/mojolearn/_transformer_impl.py"
       - "spectral/checks/symmetric_eig_host.mojo"
       - "core/knn_host_predict.mojo"
       - "cluster/host/kmeans_oracle.mojo"
@@ -620,8 +625,8 @@ jobs:
       # every negative draw one epoch late, in resample_host by shifting
       # every per-replicate and per-chunk tree's chunk boundaries by one
       # value, and in hdbscan_host_oracle by reading every core distance one
-      # neighbor early; the kernel_methods and mixture host families move
-      # through gemm_oracle's descending leaf);
+      # neighbor early; the kernel_methods, mixture and transformer host
+      # families move through gemm_oracle's descending leaf);
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
