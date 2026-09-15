@@ -1,0 +1,141 @@
+NOTE: --lanes scopes this diff to 8 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column apple-m4 ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+| lane/fixture                 | verdict    | apple-m4         | apple-m4         |
+|------------------------------|------------|------------------|------------------|
+| kmeans-array/base            | IDENTICAL x2 | 37ab2f0355ef716a | 37ab2f0355ef716a |
+| kmeans-array/denormal        | IDENTICAL x2 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 |
+| kmeans-array/odd             | IDENTICAL x2 | 5b347e0f29ddb844 | 5b347e0f29ddb844 |
+| kmeans-array/ties            | IDENTICAL x2 | f7e7677d5ae7597f | f7e7677d5ae7597f |
+| kmeans-classic-pp/base       | IDENTICAL x2 | e6648c8209c562ac | e6648c8209c562ac |
+| kmeans-classic-pp/denormal   | IDENTICAL x2 | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e |
+| kmeans-classic-pp/odd        | IDENTICAL x2 | a47bec6025e076d8 | a47bec6025e076d8 |
+| kmeans-classic-pp/ties       | IDENTICAL x2 | b0f1aa9e9e7adf6f | b0f1aa9e9e7adf6f |
+| kmeans-cosine/base           | IDENTICAL x2 | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/denormal       | IDENTICAL x2 | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/odd            | IDENTICAL x2 | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/ties           | IDENTICAL x2 | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-random/base           | IDENTICAL x2 | 2bab0cda9f319dbb | 2bab0cda9f319dbb |
+| kmeans-random/denormal       | IDENTICAL x2 | ddb08cf02222e6a3 | ddb08cf02222e6a3 |
+| kmeans-random/odd            | IDENTICAL x2 | f22e6751eeedc598 | f22e6751eeedc598 |
+| kmeans-random/ties           | IDENTICAL x2 | 9f90e48e2d5a4ce4 | 9f90e48e2d5a4ce4 |
+| kmeans-sqrt/base             | IDENTICAL x2 | 8864be3c295d6c4a | 8864be3c295d6c4a |
+| kmeans-sqrt/denormal         | IDENTICAL x2 | c2486d60db950886 | c2486d60db950886 |
+| kmeans-sqrt/odd              | IDENTICAL x2 | cd50fd82b95de87a | cd50fd82b95de87a |
+| kmeans-sqrt/ties             | IDENTICAL x2 | 07a5cce02a00bdae | 07a5cce02a00bdae |
+| kmeans-weighted/base         | IDENTICAL x2 | 5080fbf55610f54e | 5080fbf55610f54e |
+| kmeans-weighted/denormal     | IDENTICAL x2 | c3613adfb9158691 | c3613adfb9158691 |
+| kmeans-weighted/odd          | IDENTICAL x2 | fc6107e901e7d7be | fc6107e901e7d7be |
+| kmeans-weighted/ties         | IDENTICAL x2 | a7070391c3cc52fb | a7070391c3cc52fb |
+| kmeans/base                  | IDENTICAL x2 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+| kmeans/denormal              | IDENTICAL x2 | 993fe5caff144b0c | 993fe5caff144b0c |
+| kmeans/odd                   | IDENTICAL x2 | 43d8a3d3859f4143 | 43d8a3d3859f4143 |
+| kmeans/ties                  | IDENTICAL x2 | 3de3e103006de69c | 3de3e103006de69c |
+| par-kmeans/base              | IDENTICAL x2 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+| par-kmeans/denormal          | IDENTICAL x2 | 993fe5caff144b0c | 993fe5caff144b0c |
+| par-kmeans/odd               | IDENTICAL x2 | 43d8a3d3859f4143 | 43d8a3d3859f4143 |
+| par-kmeans/ties              | IDENTICAL x2 | 3de3e103006de69c | 3de3e103006de69c |
+
+summary: IDENTICAL=32
+
+| lane/fixture                 | column | verdict      | apple-m4         | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|
+| kmeans-array/base            | infer  | IDENTICAL x2 | b0e1e0e15756eb6c | b0e1e0e15756eb6c |
+| kmeans-array/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-array/base            | batch  | BATCH_MOVED  | c031eae95609c744 | BATCH_MOVED      |
+| kmeans-array/denormal        | infer  | IDENTICAL x2 | 488465c2d9efdfcc | 488465c2d9efdfcc |
+| kmeans-array/denormal        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-array/denormal        | batch  | BATCH_MOVED  | e5dbd1efbf839da3 | BATCH_MOVED      |
+| kmeans-array/odd             | infer  | IDENTICAL x2 | e23895c420b80215 | e23895c420b80215 |
+| kmeans-array/odd             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-array/odd             | batch  | BATCH_MOVED  | 6b332575d6403b7d | BATCH_MOVED      |
+| kmeans-array/ties            | infer  | IDENTICAL x2 | e040b6717c6900e3 | e040b6717c6900e3 |
+| kmeans-array/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-array/ties            | batch  | BATCH_MOVED  | 7a609f8e096c0abe | BATCH_MOVED      |
+| kmeans-classic-pp/base       | infer  | IDENTICAL x2 | 9933c62acd4bbde8 | 9933c62acd4bbde8 |
+| kmeans-classic-pp/base       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/base       | batch  | BATCH_MOVED  | 2bf16d90cfe65678 | BATCH_MOVED      |
+| kmeans-classic-pp/denormal   | infer  | IDENTICAL x2 | 778849bbc86c4e30 | 778849bbc86c4e30 |
+| kmeans-classic-pp/denormal   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/denormal   | batch  | BATCH_MOVED  | 1053df22203556fb | BATCH_MOVED      |
+| kmeans-classic-pp/odd        | infer  | IDENTICAL x2 | 70d10d0be6535590 | 70d10d0be6535590 |
+| kmeans-classic-pp/odd        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/odd        | batch  | BATCH_MOVED  | 011d067387d7ef5d | BATCH_MOVED      |
+| kmeans-classic-pp/ties       | infer  | IDENTICAL x2 | 68fef3193854d3b7 | 68fef3193854d3b7 |
+| kmeans-classic-pp/ties       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/ties       | batch  | BATCH_MOVED  | 35d1bbf38b864377 | BATCH_MOVED      |
+| kmeans-cosine/base           | infer  | N/A          | n/a:function     | n/a:function     |
+| kmeans-cosine/base           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/base           | batch  | N/A          | n/a:fit-refused  | n/a:fit-refused  |
+| kmeans-cosine/denormal       | infer  | N/A          | n/a:function     | n/a:function     |
+| kmeans-cosine/denormal       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/denormal       | batch  | N/A          | n/a:fit-refused  | n/a:fit-refused  |
+| kmeans-cosine/odd            | infer  | N/A          | n/a:function     | n/a:function     |
+| kmeans-cosine/odd            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/odd            | batch  | N/A          | n/a:fit-refused  | n/a:fit-refused  |
+| kmeans-cosine/ties           | infer  | N/A          | n/a:function     | n/a:function     |
+| kmeans-cosine/ties           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/ties           | batch  | N/A          | n/a:fit-refused  | n/a:fit-refused  |
+| kmeans-random/base           | infer  | IDENTICAL x2 | 456c4915b48a291c | 456c4915b48a291c |
+| kmeans-random/base           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-random/base           | batch  | BATCH_MOVED  | 6b9bf5684fdeeae1 | BATCH_MOVED      |
+| kmeans-random/denormal       | infer  | IDENTICAL x2 | 2414f9dab4d67bf7 | 2414f9dab4d67bf7 |
+| kmeans-random/denormal       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-random/denormal       | batch  | BATCH_MOVED  | c509f863533aec6c | BATCH_MOVED      |
+| kmeans-random/odd            | infer  | IDENTICAL x2 | c415e79de2c2d102 | c415e79de2c2d102 |
+| kmeans-random/odd            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-random/odd            | batch  | BATCH_MOVED  | bddbcb7ae1fdbba9 | BATCH_MOVED      |
+| kmeans-random/ties           | infer  | IDENTICAL x2 | fb03f93b52fe9f5c | fb03f93b52fe9f5c |
+| kmeans-random/ties           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-random/ties           | batch  | BATCH_MOVED  | 85d63fd1c6ed6d8a | BATCH_MOVED      |
+| kmeans-sqrt/base             | infer  | IDENTICAL x2 | 3b648e50c114da3c | 3b648e50c114da3c |
+| kmeans-sqrt/base             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/base             | batch  | BATCH_MOVED  | a44ce4484c90c89d | BATCH_MOVED      |
+| kmeans-sqrt/denormal         | infer  | IDENTICAL x2 | be51e36725dda648 | be51e36725dda648 |
+| kmeans-sqrt/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/denormal         | batch  | BATCH_MOVED  | 93d9317af719042f | BATCH_MOVED      |
+| kmeans-sqrt/odd              | infer  | IDENTICAL x2 | db19ea8a99baebc2 | db19ea8a99baebc2 |
+| kmeans-sqrt/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/odd              | batch  | BATCH_MOVED  | 5d46fd602108b99c | BATCH_MOVED      |
+| kmeans-sqrt/ties             | infer  | IDENTICAL x2 | 871a994938643a94 | 871a994938643a94 |
+| kmeans-sqrt/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/ties             | batch  | BATCH_MOVED  | 9a46124e117d999f | BATCH_MOVED      |
+| kmeans-weighted/base         | infer  | IDENTICAL x2 | b3757aeee5a4565d | b3757aeee5a4565d |
+| kmeans-weighted/base         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/base         | batch  | BATCH_MOVED  | 23d7741ac2b47c06 | BATCH_MOVED      |
+| kmeans-weighted/denormal     | infer  | IDENTICAL x2 | b60d27c11f34efd2 | b60d27c11f34efd2 |
+| kmeans-weighted/denormal     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/denormal     | batch  | BATCH_MOVED  | c32e35b47334bdbc | BATCH_MOVED      |
+| kmeans-weighted/odd          | infer  | IDENTICAL x2 | ef7a458b978799ab | ef7a458b978799ab |
+| kmeans-weighted/odd          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/odd          | batch  | BATCH_MOVED  | d8a260999d921bc6 | BATCH_MOVED      |
+| kmeans-weighted/ties         | infer  | IDENTICAL x2 | 5d74abfacfa726bf | 5d74abfacfa726bf |
+| kmeans-weighted/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/ties         | batch  | BATCH_MOVED  | dab381015ad56843 | BATCH_MOVED      |
+| kmeans/base                  | infer  | IDENTICAL x2 | b9a7dd27a045bc21 | b9a7dd27a045bc21 |
+| kmeans/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans/base                  | batch  | BATCH_MOVED  | 2dc7903bd0a181f5 | BATCH_MOVED      |
+| kmeans/denormal              | infer  | IDENTICAL x2 | 4ae0bd69e13e1d90 | 4ae0bd69e13e1d90 |
+| kmeans/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans/denormal              | batch  | BATCH_MOVED  | 6e4fe0fb8940cfe6 | BATCH_MOVED      |
+| kmeans/odd                   | infer  | IDENTICAL x2 | bc82439049a4e870 | bc82439049a4e870 |
+| kmeans/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans/odd                   | batch  | BATCH_MOVED  | eb91feb5618b7fe2 | BATCH_MOVED      |
+| kmeans/ties                  | infer  | IDENTICAL x2 | 8ed60ce2830d99fa | 8ed60ce2830d99fa |
+| kmeans/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans/ties                  | batch  | BATCH_MOVED  | a004b4996d66e994 | BATCH_MOVED      |
+| par-kmeans/base              | infer  | IDENTICAL x2 | b9a7dd27a045bc21 | b9a7dd27a045bc21 |
+| par-kmeans/base              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-kmeans/base              | batch  | BATCH_MOVED  | 2dc7903bd0a181f5 | BATCH_MOVED      |
+| par-kmeans/denormal          | infer  | IDENTICAL x2 | 4ae0bd69e13e1d90 | 4ae0bd69e13e1d90 |
+| par-kmeans/denormal          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-kmeans/denormal          | batch  | BATCH_MOVED  | 6e4fe0fb8940cfe6 | BATCH_MOVED      |
+| par-kmeans/odd               | infer  | IDENTICAL x2 | bc82439049a4e870 | bc82439049a4e870 |
+| par-kmeans/odd               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-kmeans/odd               | batch  | BATCH_MOVED  | eb91feb5618b7fe2 | BATCH_MOVED      |
+| par-kmeans/ties              | infer  | IDENTICAL x2 | 8ed60ce2830d99fa | 8ed60ce2830d99fa |
+| par-kmeans/ties              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-kmeans/ties              | batch  | BATCH_MOVED  | a004b4996d66e994 | BATCH_MOVED      |
+
+summary (infer/model): IDENTICAL=28, N/A=36
+summary (batch): BATCH_MOVED=28, N/A=4
+summary (rlpair): 
