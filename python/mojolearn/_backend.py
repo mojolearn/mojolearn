@@ -933,8 +933,10 @@ def host_families_built():
 #:     dbscan/host/dbscan_oracle.mojo and (batch 2) qn_fit over
 #:     glm/host/qn_oracle.mojo (the L-BFGS arm; batch 3, 2026-09-14, adds
 #:     the OWL-QN arm, the softmax loss and DBSCAN's sample_weight;
-#:     qn's sample_weight refuses by name); pca_fit_full and
-#:     inverse_transform are absent.
+#:     qn's sample_weight refuses by name), pca_fit_full over
+#:     decomposition/host/pca_full_oracle.mojo (the pca-full-whiten lane,
+#:     2026-09-14; the tall route only, a wide matrix refuses by name);
+#:     inverse_transform is absent.
 #:   _mojolearn_metrics -> _mojolearn_metrics_host (workstream E batch 2,
 #:     2026-09-14): accuracy_score, adjusted_rand_score, entropy,
 #:     mutual_info_score, homogeneity_score, completeness_score,
@@ -942,9 +944,12 @@ def host_families_built():
 #:     metrics/host/metrics_oracle.mojo, spectral_fit_predict_dataset
 #:     over spectral/host/spectral_oracle.mojo (the spectral lane) and
 #:     spectral_fit_predict_graph over the same oracle (the
-#:     spectral-precomputed lane, 2026-09-14); rand_score, the ranking and
-#:     classification metrics, the regression errors, kl_divergence,
-#:     trustworthiness and the UMAP entries are absent.
+#:     spectral-precomputed lane, 2026-09-14), and umap_fit_transform,
+#:     umap_transform and umap_numeric_mode over umap/host/umap_oracle.mojo
+#:     (the umap lane, lane/cpu-training-umap-b, 2026-09-14: the IDENTICAL
+#:     device epoch fold restated on the host); rand_score, the ranking and
+#:     classification metrics, the regression errors, kl_divergence and
+#:     trustworthiness are absent.
 #:   _mojolearn_preprocessing -> _mojolearn_preprocessing_host (workstream
 #:     E batch 2, 2026-09-14): standard_fit, standard_transform, minmax_fit
 #:     and minmax_transform over preprocessing/host/scaler_oracle.mojo, the

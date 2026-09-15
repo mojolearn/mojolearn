@@ -269,6 +269,15 @@ TRAINING_LANE_NAMES = {
     "kpss": "the KPSS stationarity test",
     "svr": "SVR",
     "svr-linear": "the linear SVR",
+    # The pca-full-whiten lane (lane/cpu-training-pca-whiten, 2026-09-14):
+    # PCA with svd_solver='full' trains through
+    # decomposition/host/pca_full_oracle.mojo, the tall TSQR Householder QR
+    # and the one-sided Jacobi of svd_full.mojo restated on the host,
+    # exported as pca_fit_full from the estimators host binding (a wide
+    # matrix refuses by name). IDENTICAL x4 on all 27 train, infer and model
+    # cells on the M4's CPU column (one core) before the gate ran, and the
+    # sabotage build DIVERGENT on all 27.
+    "pca-full-whiten": "whitened PCA through the full SVD",
     # Workstream E batch 3 (2026-09-14): gradient boosting on its default
     # symmetric tree with the Logloss loss trains through
     # gbdt/host/gbdt_oracle.mojo, the device trainer restated on the host,
@@ -298,13 +307,22 @@ TRAINING_LANE_NAMES = {
     "arima": "ARIMA",
     "arima-011": "differenced ARIMA",
     "arima-seasonal-c": "seasonal ARIMA",
+    # The umap host lane (lane/cpu-training-umap-b, 2026-09-14): UMAP fits
+    # and transforms through umap/host/umap_oracle.mojo, exported under the
+    # GPU binding's names from the metrics host binding. The fit's optimizer
+    # is the IDENTICAL DEVICE epoch fold (kernel-matrix row
+    # umap_device_optimizer_for) restated vertex by vertex, not the serial
+    # host loop, which produces different bits. Gate run 34914545371 at
+    # 5988700d9 (136-lane record): all nine train and nine infer cells
+    # IDENTICAL x4 on the seven runners, the sabotage build DIVERGENT on all
+    # eighteen; the 166-lane record carries the same umap hashes.
+    "umap": "UMAP",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "UMAP",
     "the neural blocks",
     "gradient boosting training other than symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss",
 )
@@ -470,7 +488,7 @@ FAMILIES = (
             "kde-exponential-chebyshev", "kde-linear-cosine", "kde-cosine-minkowski",
             "kde-weighted", "ols-no-intercept", "ols-weighted", "ridge-no-intercept",
             "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
-            "logistic-elasticnet", "logistic-multiclass",
+            "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
         ),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
@@ -483,12 +501,13 @@ FAMILIES = (
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
             "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
+            "decomposition/host/pca_full_oracle.mojo",
         ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
-            "pca_fit", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
+            "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",
@@ -501,30 +520,37 @@ FAMILIES = (
         # metrics family's first host binding. It routes `_mojolearn_metrics`
         # on a CPU-only install and carries the five metrics the identity
         # harness's metrics lane computes plus the four label metrics that
-        # share their integer kernels; the spectral, UMAP and remaining
-        # metric entries stay absent and refuse by name.
+        # share their integer kernels; the spectral entries joined in the
+        # same batch and the UMAP entries on lane/cpu-training-umap-b
+        # (umap_fit_transform, umap_transform, umap_numeric_mode); the
+        # remaining metric entries stay absent and refuse by name.
         family="metrics",
         binding="_mojolearn_metrics_host",
         routes="_mojolearn_metrics",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("metrics", "spectral", "spectral-precomputed"),
+        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
-            "SpectralClustering",
+            "SpectralClustering", "UMAP",
             "metrics.accuracy_score", "metrics.adjusted_rand_score",
             "metrics.entropy", "metrics.mutual_info_score",
             "metrics.homogeneity_score", "metrics.completeness_score",
             "metrics.v_measure_score", "metrics.r2_score",
             "metrics.silhouette_score", "metrics.silhouette_samples",
         ),
-        display="the label, r2 and silhouette metrics and spectral clustering",
+        display="the label, r2 and silhouette metrics, spectral clustering and UMAP",
         host_modules=(
             "metrics/host/metrics_oracle.mojo",
             "spectral/host/spectral_oracle.mojo",
             "cluster/host/kmeans_oracle.mojo",
             "core/knn_host_predict.mojo",
+            "umap/host/umap_oracle.mojo",
+            "umap/sparse_graph.mojo",
+            "umap/graph.mojo",
+            "umap/curve.mojo",
+            "umap/params.mojo",
         ),
         exports=(
             "metrics_host_numeric_mode", "metrics_host_vendor",
@@ -533,6 +559,7 @@ FAMILIES = (
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
             "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
+            "umap_fit_transform", "umap_transform", "umap_numeric_mode",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

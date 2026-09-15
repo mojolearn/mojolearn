@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[3]
 LANES_E = ("knn", "knn-clf", "knn-reg", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan")
 FITS_E = ("pca_fit", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit")
 ORACLES_E = ("decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
-             "dbscan/host/dbscan_oracle.mojo")
+             "dbscan/host/dbscan_oracle.mojo", "decomposition/host/pca_full_oracle.mojo")
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 
 
@@ -67,7 +67,9 @@ def test_binding_registers_the_four_fits():
     for name in FITS_E:
         assert f'("{name}")' in src, f"the estimators host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name}"
-    for absent in ("pca_fit_full", "qn_fit", "inverse_transform"):
+    # pca_fit_full (the pca-full-whiten lane) and qn_fit (batch 2) are
+    # registered now; inverse_transform stays absent.
+    for absent in ("inverse_transform",):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
 
@@ -117,7 +119,9 @@ def test_readme_no_longer_says_knn_training_has_no_cpu_path():
     sentence = host_surface.no_cpu_path_sentence()
     assert "k-NN" not in sentence, sentence
     assert "DBSCAN" not in sentence, sentence
-    assert "logistic regression training" in sentence, sentence
+    # logistic regression trains on the host since batch 2, so the sentence
+    # no longer names it.
+    assert "logistic regression" not in sentence, sentence
     for rel in ("README.md", "SUPPORT_MATRIX.md"):
         text = _read(rel)
         m = re.search(r"<!--fact:no_cpu_path-->(.*?)<!--/fact-->", text, re.S)
