@@ -1,0 +1,49 @@
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_tokenizer_host'] commit=bc47909fdfcce60e0d27fdacae521788c5015c22
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_tokenizer_host'] commit=bc47909fdfcce60e0d27fdacae521788c5015c22
+| lane/fixture                 | verdict    | cpu-amd-epyc-9754-128-core-processor | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|------------|------------------|------------------|
+| tokenizer/base               | DIVERGENT  | parts differ: ids,decoded,roundtrip; agree: n_vocab | 74458a3ecb971805 |
+| tokenizer/denormal           | DIVERGENT  | parts differ: ids,decoded,roundtrip; agree: n_vocab | d322d18fab348b21 |
+| tokenizer/denormal_ftz       | DIVERGENT  | parts differ: ids,decoded,roundtrip; agree: n_vocab | 4f403b1e5e237dea |
+| tokenizer/dupes              | DIVERGENT  | parts differ: ids,decoded,roundtrip; agree: n_vocab | 6b30a6941eef4198 |
+| tokenizer/hashed             | DIVERGENT  | parts differ: ids,decoded,roundtrip; agree: n_vocab | 898febe78a80327a |
+| tokenizer/negative           | DIVERGENT  | parts differ: ids,decoded,roundtrip; agree: n_vocab | 5262bf205be38975 |
+| tokenizer/odd                | DIVERGENT  | parts differ: ids,decoded,roundtrip; agree: n_vocab | 74458a3ecb971805 |
+| tokenizer/ties               | DIVERGENT  | parts differ: ids,decoded,roundtrip; agree: n_vocab | 0f4aff7c9f453e85 |
+| tokenizer/wide               | DIVERGENT  | parts differ: ids,decoded,roundtrip; agree: n_vocab | d8f676c80c02e0ac |
+
+summary: DIVERGENT=9
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9754-128-core-processor | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| tokenizer/base               | infer  | DIVERGENT    | 1939b74da0333639 | 4bec413bce4c1597 |
+| tokenizer/base               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/base               | batch  | DIVERGENT    | 6e235476cc31241f | 54dbcc73f9b214e0 |
+| tokenizer/denormal           | infer  | DIVERGENT    | e881084e86e9c718 | b667c4cb1f0b2319 |
+| tokenizer/denormal           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/denormal           | batch  | DIVERGENT    | 52a4b46c6638283e | d2aeb5e86d087908 |
+| tokenizer/denormal_ftz       | infer  | DIVERGENT    | 0ce2094be5609967 | 68693a34296e6a1d |
+| tokenizer/denormal_ftz       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/denormal_ftz       | batch  | DIVERGENT    | ed742c6961610923 | a8effeeb8268bdc3 |
+| tokenizer/dupes              | infer  | DIVERGENT    | 5315d2de648bc57b | 7c980118bc464c5c |
+| tokenizer/dupes              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/dupes              | batch  | DIVERGENT    | b3db5e08a72d5afc | 225efd6e83196894 |
+| tokenizer/hashed             | infer  | DIVERGENT    | 471b06ab4e24044f | 26a404942548a5ff |
+| tokenizer/hashed             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/hashed             | batch  | DIVERGENT    | 0a2474e3f79bd1c9 | a6171c088a42aba2 |
+| tokenizer/negative           | infer  | DIVERGENT    | 2188bf1646406ed2 | 82628ed3422d8ad5 |
+| tokenizer/negative           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/negative           | batch  | DIVERGENT    | b680bde5e6e8d3c8 | 12d5dea685216316 |
+| tokenizer/odd                | infer  | DIVERGENT    | 1939b74da0333639 | 4bec413bce4c1597 |
+| tokenizer/odd                | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/odd                | batch  | DIVERGENT    | 428ccb5ef4e44ab4 | 4da32467a812901e |
+| tokenizer/ties               | infer  | DIVERGENT    | 3b5edfe0d355b03e | b4997614d6879154 |
+| tokenizer/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/ties               | batch  | DIVERGENT    | 48f42ce5bfd939ae | 4e17f982ec8a49e1 |
+| tokenizer/wide               | infer  | DIVERGENT    | c4af8e403d8a4ff5 | 2f27a19f8fea5b93 |
+| tokenizer/wide               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/wide               | batch  | DIVERGENT    | 023683c8a469bd0b | 3fba878431b331fa |
+
+summary (infer/model): DIVERGENT=9, N/A=9
+summary (batch): DIVERGENT=9
+summary (rlpair): 

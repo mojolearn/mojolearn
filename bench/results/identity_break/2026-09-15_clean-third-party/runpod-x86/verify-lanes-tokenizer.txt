@@ -1,0 +1,27 @@
+# verify --all: cpu (cpu), 1 lanes x 9 fixtures, harness wheel copy, table /tmp/tgt/mojolearn/verify_reference/table.json
+  tokenizer                          tokenizer           0.4s
+  portable:rf-clf                    base        0.0s
+  portable:gbdt-symmetric            base        0.0s
+  portable:ols                       base        0.0s
+  portable:pca                       base        0.0s
+# python -m mojolearn verify --all
+# mojolearn 0.8.5  commit bc47909fdfcce60e0d27fdacae521788c5015c22 (MOJOLEARN_COMMIT)
+# mode identical  vendor cpu (class cpu)  device Linux x86_64 (no vendor tool answered)
+# cpu AMD EPYC 9754 128-Core Processor  Linux-5.15.0-94-generic-x86_64-with-glibc2.35  python 3.14.7  numpy 2.5.3
+# reference table /tmp/tgt/mojolearn/verify_reference/table.json (sha256 4aba246bf1e3bb2f, 54 records)
+# depth full: 1 lanes x 9 fixtures, 1 repeat(s), 4 portable model(s)
+# note: this harness is not the one the table was generated with; lanes added or changed since then read OWED or DIVERGENT until the table is regenerated
+
+| family          | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-----------------|-------|-----------|-----------|------|---------|-----|
+| tokenizer       |     1 |         0 |         0 |   27 |       0 |   9 |
+| portable models |     4 |         4 |         0 |    0 |       4 |   0 |
+| all             |     5 |         4 |         0 |   27 |       4 |   9 |
+
+REFUSED (4):
+  portable:rf-clf batch: ImportError: mojolearn: /tmp/tgt/mojolearn/host/_mojolearn_forest_host.so is not built. Build it with bindings/build_forest_host.sh
+  portable:gbdt-symmetric batch: ImportError: mojolearn: /tmp/tgt/mojolearn/host/_mojolearn_forest_host.so is not built. Build it with bindings/build_forest_host.sh
+  portable:ols batch: batch: ImportError: mojolearn: /tmp/tgt/mojolearn/host/_mojolearn_estimators_host.so is not built. Build it with bindings/build_estimators_host.sh
+  portable:pca batch: batch: ImportError: mojolearn: /tmp/tgt/mojolearn/host/_mojolearn_estimators_host.so is not built. Build it with bindings/build_estimators_host.sh
+
+RESULT: VERIFIED (4 identical, 0 divergent, 27 owed, 4 refused, 9 n/a cell parts). 0.7s. exit 0
