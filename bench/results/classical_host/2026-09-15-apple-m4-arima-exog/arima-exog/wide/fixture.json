@@ -1,0 +1,8 @@
+{
+  "estimator": "ARIMA",
+  "heldout_seed": 1,
+  "kind": "wide",
+  "lane": "arima-exog",
+  "probe_rows": 512,
+  "x_sha256": "ee9ce9b2667c2f08ef5ace37a58b08e8d2c908961ffae1804aa7677df13baf32"
+}

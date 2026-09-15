@@ -1,0 +1,8 @@
+{
+  "estimator": "ARIMA",
+  "heldout_seed": 1,
+  "kind": "dupes",
+  "lane": "arima-exog",
+  "probe_rows": 512,
+  "x_sha256": "d972aff24972f93e34af5bc3bce36bbcad5d04cd190ad08cf2b862d6e5424506"
+}

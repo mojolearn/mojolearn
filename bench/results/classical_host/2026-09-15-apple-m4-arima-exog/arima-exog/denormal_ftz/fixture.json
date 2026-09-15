@@ -1,0 +1,8 @@
+{
+  "estimator": "ARIMA",
+  "heldout_seed": 1,
+  "kind": "denormal_ftz",
+  "lane": "arima-exog",
+  "probe_rows": 512,
+  "x_sha256": "60d83c08d83e1ea984eb9799d8cd248cbaabe7241e79ae02de828fa5b6e8d802"
+}

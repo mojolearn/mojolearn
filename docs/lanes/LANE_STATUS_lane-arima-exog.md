@@ -46,9 +46,21 @@ PROVEN and pushed:
   `packaging/wheel_ci.py inventory python/mojolearn` 84 modules.
 
 OWED:
-1. The nine-fixture `classical_host_gate.py record` of the two lanes. It was
-   RUNNING when the restart was called and was stopped; delete any partial
-   `bench/results/classical_host/2026-09-15-apple-m4-arima-exog` and redo it.
+1. The `classical_host_gate.py record` of `arima-exog-seasonal` ONLY. The
+   recording runs lane by lane; `arima-exog` finished all nine fixtures and
+   `arima-exog-seasonal` finished some of them before the stop. EVERY FIXTURE
+   WHOSE `expected.json` PARSES IS COMMITTED under
+   `bench/results/classical_host/2026-09-15-apple-m4-arima-exog`. DO NOT
+   delete the directory and do not redo what is there. Check which
+   `arima-exog-seasonal` fixtures are present, then record the rest:
+
+       python3 tools/classical_host_gate.py record \
+           bench/results/classical_host/2026-09-15-apple-m4-arima-exog \
+           --lanes arima-exog-seasonal
+
+   `record` refuses to overwrite an existing fixture directory, so pass
+   `--overwrite` for a lane that is partly there, or record with
+   `--fixtures <the missing ones>`.
 2. The CPU column, both sabotage columns and the owed check (one CPU pod).
 3. The NVIDIA column (one small pod). No AMD box this lane.
 4. statsmodels agreement (runs on the CPU pod; the script is committed).
@@ -70,12 +82,16 @@ command-queue leak; ONE Metal job at a time, base fixture first):
     python3 tools/identity_break.py --lanes arima-exog,arima-exog-seasonal \
         --fixtures base --repeats 1 --json <out>/metal.new-base.json
 
-The nine-fixture recording the CPU pod's gate reads (the OWED item; ~1m25s
-per fixture-pair on a healthy M4, much slower on a leaking one):
+The recording the CPU pod's gate reads. `arima-exog` is committed in full and
+part of `arima-exog-seasonal` with it; the rest of the seasonal lane is owed (~1m25s per fixture-pair on a healthy M4, far
+slower on a leaking one, which is why it was stopped):
 
     python3 tools/classical_host_gate.py record \
         bench/results/classical_host/2026-09-15-apple-m4-arima-exog \
-        --lanes arima-exog,arima-exog-seasonal
+        --lanes arima-exog-seasonal
+
+Until it exists, the pod command's gate steps cover the `arima-exog` half
+only; `$REC` in cpu_cmd.sh is that same directory.
 
 The existing lanes' spot check (must stay IDENTICAL x4):
 

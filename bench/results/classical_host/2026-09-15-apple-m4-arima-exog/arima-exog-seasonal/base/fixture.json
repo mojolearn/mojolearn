@@ -1,0 +1,8 @@
+{
+  "estimator": "ARIMA",
+  "heldout_seed": 1,
+  "kind": "base",
+  "lane": "arima-exog-seasonal",
+  "probe_rows": 512,
+  "x_sha256": "0c063e7d6c062779007f924eeffb93146c544f5a141bd74200c7c602a9f5549d"
+}
