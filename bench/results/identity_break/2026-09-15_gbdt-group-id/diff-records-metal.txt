@@ -1,0 +1,648 @@
+NOTE: --lanes scopes this diff to 16 lane(s); 150 other lane(s) the JSONs carry are not compared
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    nvidia-h100-sm_90a: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    amd-mi325x-gfx942: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    apple-m4: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    apple-m4: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    apple-m4: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    nvidia-h100-sm_90a: {'X': 'e4b16c115962dfcd'}
+    amd-mi325x-gfx942: {'X': 'e4b16c115962dfcd'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    apple-m4: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gbdt-adapter-clf/base        | IDENTICAL x4 | 933184700a044eb2 | 933184700a044eb2 | 933184700a044eb2 | 933184700a044eb2 |
+| gbdt-adapter-clf/denormal    | IDENTICAL x3 | 933184700a044eb2 | 933184700a044eb2 | 933184700a044eb2 | (not run)        |
+| gbdt-adapter-clf/denormal_ftz | IDENTICAL x3 | 933184700a044eb2 | 933184700a044eb2 | 933184700a044eb2 | (not run)        |
+| gbdt-adapter-clf/dupes       | IDENTICAL x3 | 6c3582dfcd94bc9c | 6c3582dfcd94bc9c | 6c3582dfcd94bc9c | (not run)        |
+| gbdt-adapter-clf/hashed      | IDENTICAL x3 | dd5bb5e8c3018e9a | dd5bb5e8c3018e9a | dd5bb5e8c3018e9a | (not run)        |
+| gbdt-adapter-clf/negative    | IDENTICAL x3 | 9aa127676f821c18 | 9aa127676f821c18 | 9aa127676f821c18 | (not run)        |
+| gbdt-adapter-clf/odd         | IDENTICAL x4 | f8f56dac8e714ab8 | f8f56dac8e714ab8 | f8f56dac8e714ab8 | f8f56dac8e714ab8 |
+| gbdt-adapter-clf/ties        | IDENTICAL x4 | 492cbf5fbc9e6304 | 492cbf5fbc9e6304 | 492cbf5fbc9e6304 | 492cbf5fbc9e6304 |
+| gbdt-adapter-clf/wide        | IDENTICAL x3 | 2c52f777f933c7cc | 2c52f777f933c7cc | 2c52f777f933c7cc | (not run)        |
+| gbdt-adapter-reg/base        | IDENTICAL x4 | 3f8aef8d73be249c | 3f8aef8d73be249c | 3f8aef8d73be249c | 3f8aef8d73be249c |
+| gbdt-adapter-reg/denormal    | IDENTICAL x3 | 400f099e655dc453 | 400f099e655dc453 | 400f099e655dc453 | (not run)        |
+| gbdt-adapter-reg/denormal_ftz | IDENTICAL x3 | 400f099e655dc453 | 400f099e655dc453 | 400f099e655dc453 | (not run)        |
+| gbdt-adapter-reg/dupes       | IDENTICAL x3 | 49848bfd3c26b52e | 49848bfd3c26b52e | 49848bfd3c26b52e | (not run)        |
+| gbdt-adapter-reg/hashed      | IDENTICAL x3 | a89dba586c0f1ab4 | a89dba586c0f1ab4 | a89dba586c0f1ab4 | (not run)        |
+| gbdt-adapter-reg/negative    | IDENTICAL x3 | e54f74cdab3f29f0 | e54f74cdab3f29f0 | e54f74cdab3f29f0 | (not run)        |
+| gbdt-adapter-reg/odd         | IDENTICAL x4 | 7b54ca9d69e29714 | 7b54ca9d69e29714 | 7b54ca9d69e29714 | 7b54ca9d69e29714 |
+| gbdt-adapter-reg/ties        | IDENTICAL x4 | 88cba1574daa922e | 88cba1574daa922e | 88cba1574daa922e | 88cba1574daa922e |
+| gbdt-adapter-reg/wide        | IDENTICAL x3 | 5ea3a06d9df1d862 | 5ea3a06d9df1d862 | 5ea3a06d9df1d862 | (not run)        |
+| gbdt-categorical-ctr/base    | IDENTICAL x4 | 3c492b90c998f095 | 3c492b90c998f095 | 3c492b90c998f095 | 3c492b90c998f095 |
+| gbdt-categorical-ctr/denormal | IDENTICAL x3 | 3c492b90c998f095 | 3c492b90c998f095 | 3c492b90c998f095 | (not run)        |
+| gbdt-categorical-ctr/denormal_ftz | IDENTICAL x3 | 3c492b90c998f095 | 3c492b90c998f095 | 3c492b90c998f095 | (not run)        |
+| gbdt-categorical-ctr/dupes   | IDENTICAL x3 | ee68c4c16449a9d5 | ee68c4c16449a9d5 | ee68c4c16449a9d5 | (not run)        |
+| gbdt-categorical-ctr/hashed  | IDENTICAL x3 | 107f80749876299b | 107f80749876299b | 107f80749876299b | (not run)        |
+| gbdt-categorical-ctr/negative | IDENTICAL x3 | 8b6ff846e24d5317 | 8b6ff846e24d5317 | 8b6ff846e24d5317 | (not run)        |
+| gbdt-categorical-ctr/odd     | IDENTICAL x4 | 3f1f7468b711f825 | 3f1f7468b711f825 | 3f1f7468b711f825 | 3f1f7468b711f825 |
+| gbdt-categorical-ctr/ties    | IDENTICAL x4 | b19fd4bbd5430219 | b19fd4bbd5430219 | b19fd4bbd5430219 | b19fd4bbd5430219 |
+| gbdt-categorical-ctr/wide    | IDENTICAL x3 | d2746faae8d63897 | d2746faae8d63897 | d2746faae8d63897 | (not run)        |
+| gbdt-depthwise/base          | IDENTICAL x4 | 38726fc0c93c0bff | 38726fc0c93c0bff | 38726fc0c93c0bff | 38726fc0c93c0bff |
+| gbdt-depthwise/denormal      | IDENTICAL x3 | 64ba350c759ff2e9 | 64ba350c759ff2e9 | 64ba350c759ff2e9 | (not run)        |
+| gbdt-depthwise/denormal_ftz  | IDENTICAL x3 | 64ba350c759ff2e9 | 64ba350c759ff2e9 | 64ba350c759ff2e9 | (not run)        |
+| gbdt-depthwise/dupes         | IDENTICAL x3 | e521424a96e216cb | e521424a96e216cb | e521424a96e216cb | (not run)        |
+| gbdt-depthwise/hashed        | IDENTICAL x3 | 9455870882645f48 | 9455870882645f48 | 9455870882645f48 | (not run)        |
+| gbdt-depthwise/negative      | IDENTICAL x3 | d77fc9f6a3eee0a2 | d77fc9f6a3eee0a2 | d77fc9f6a3eee0a2 | (not run)        |
+| gbdt-depthwise/odd           | IDENTICAL x4 | fb9e5c03088814f6 | fb9e5c03088814f6 | fb9e5c03088814f6 | fb9e5c03088814f6 |
+| gbdt-depthwise/ties          | IDENTICAL x4 | 465cb10f303e005a | 465cb10f303e005a | 465cb10f303e005a | 465cb10f303e005a |
+| gbdt-depthwise/wide          | IDENTICAL x3 | 2a77ec865e62539a | 2a77ec865e62539a | 2a77ec865e62539a | (not run)        |
+| gbdt-exact-mae/base          | IDENTICAL x4 | 2c8a23ac5ef0b570 | 2c8a23ac5ef0b570 | 2c8a23ac5ef0b570 | 2c8a23ac5ef0b570 |
+| gbdt-exact-mae/denormal      | IDENTICAL x3 | 8aadaf501b445bb2 | 8aadaf501b445bb2 | 8aadaf501b445bb2 | (not run)        |
+| gbdt-exact-mae/denormal_ftz  | IDENTICAL x3 | 8aadaf501b445bb2 | 8aadaf501b445bb2 | 8aadaf501b445bb2 | (not run)        |
+| gbdt-exact-mae/dupes         | IDENTICAL x3 | dd7a34caa5d0e601 | dd7a34caa5d0e601 | dd7a34caa5d0e601 | (not run)        |
+| gbdt-exact-mae/hashed        | IDENTICAL x3 | 87e677565b7d6752 | 87e677565b7d6752 | 87e677565b7d6752 | (not run)        |
+| gbdt-exact-mae/negative      | IDENTICAL x3 | 35479cfde1dd0d69 | 35479cfde1dd0d69 | 35479cfde1dd0d69 | (not run)        |
+| gbdt-exact-mae/odd           | IDENTICAL x4 | 62e0e9af15af59e8 | 62e0e9af15af59e8 | 62e0e9af15af59e8 | 62e0e9af15af59e8 |
+| gbdt-exact-mae/ties          | IDENTICAL x4 | 65948ea43ed2efdd | 65948ea43ed2efdd | 65948ea43ed2efdd | 65948ea43ed2efdd |
+| gbdt-exact-mae/wide          | IDENTICAL x3 | ceccde877271335e | ceccde877271335e | ceccde877271335e | (not run)        |
+| gbdt-feature-freq/base       | IDENTICAL x4 | 7d9c56b51213cb42 | 7d9c56b51213cb42 | 7d9c56b51213cb42 | 7d9c56b51213cb42 |
+| gbdt-feature-freq/denormal   | IDENTICAL x3 | e7f1da14d1a9794b | e7f1da14d1a9794b | e7f1da14d1a9794b | (not run)        |
+| gbdt-feature-freq/denormal_ftz | IDENTICAL x3 | e7f1da14d1a9794b | e7f1da14d1a9794b | e7f1da14d1a9794b | (not run)        |
+| gbdt-feature-freq/dupes      | IDENTICAL x3 | e8c61a9407503755 | e8c61a9407503755 | e8c61a9407503755 | (not run)        |
+| gbdt-feature-freq/hashed     | IDENTICAL x3 | 9d97a55431b6f8e0 | 9d97a55431b6f8e0 | 9d97a55431b6f8e0 | (not run)        |
+| gbdt-feature-freq/negative   | IDENTICAL x3 | 75028913a14bb938 | 75028913a14bb938 | 75028913a14bb938 | (not run)        |
+| gbdt-feature-freq/odd        | IDENTICAL x4 | c481331145bfb998 | c481331145bfb998 | c481331145bfb998 | c481331145bfb998 |
+| gbdt-feature-freq/ties       | IDENTICAL x4 | 57ff9964d1af1d4a | 57ff9964d1af1d4a | 57ff9964d1af1d4a | 57ff9964d1af1d4a |
+| gbdt-feature-freq/wide       | IDENTICAL x3 | c6d7fccba2483372 | c6d7fccba2483372 | c6d7fccba2483372 | (not run)        |
+| gbdt-lossguide-newtoncosine/base | IDENTICAL x4 | b5246f258d7f7fd5 | b5246f258d7f7fd5 | b5246f258d7f7fd5 | b5246f258d7f7fd5 |
+| gbdt-lossguide-newtoncosine/denormal | IDENTICAL x3 | 093e47ff8f287593 | 093e47ff8f287593 | 093e47ff8f287593 | (not run)        |
+| gbdt-lossguide-newtoncosine/denormal_ftz | IDENTICAL x3 | 093e47ff8f287593 | 093e47ff8f287593 | 093e47ff8f287593 | (not run)        |
+| gbdt-lossguide-newtoncosine/dupes | IDENTICAL x3 | 81c0afdc436264f3 | 81c0afdc436264f3 | 81c0afdc436264f3 | (not run)        |
+| gbdt-lossguide-newtoncosine/hashed | IDENTICAL x3 | 39f50d191a27a7b6 | 39f50d191a27a7b6 | 39f50d191a27a7b6 | (not run)        |
+| gbdt-lossguide-newtoncosine/negative | IDENTICAL x3 | 4173887b83a88583 | 4173887b83a88583 | 4173887b83a88583 | (not run)        |
+| gbdt-lossguide-newtoncosine/odd | IDENTICAL x4 | f37e48556364dee2 | f37e48556364dee2 | f37e48556364dee2 | f37e48556364dee2 |
+| gbdt-lossguide-newtoncosine/ties | IDENTICAL x4 | 6e49cedd249ddecb | 6e49cedd249ddecb | 6e49cedd249ddecb | 6e49cedd249ddecb |
+| gbdt-lossguide-newtoncosine/wide | IDENTICAL x3 | a00cbe3d7fb7e23f | a00cbe3d7fb7e23f | a00cbe3d7fb7e23f | (not run)        |
+| gbdt-lossguide/base          | IDENTICAL x4 | bc3017cb29615105 | bc3017cb29615105 | bc3017cb29615105 | bc3017cb29615105 |
+| gbdt-lossguide/denormal      | IDENTICAL x3 | b0a6d4a26ed4d77c | b0a6d4a26ed4d77c | b0a6d4a26ed4d77c | (not run)        |
+| gbdt-lossguide/denormal_ftz  | IDENTICAL x3 | b0a6d4a26ed4d77c | b0a6d4a26ed4d77c | b0a6d4a26ed4d77c | (not run)        |
+| gbdt-lossguide/dupes         | IDENTICAL x3 | b1546f9b3c4293a5 | b1546f9b3c4293a5 | b1546f9b3c4293a5 | (not run)        |
+| gbdt-lossguide/hashed        | IDENTICAL x3 | 3841103ecb3ac05d | 3841103ecb3ac05d | 3841103ecb3ac05d | (not run)        |
+| gbdt-lossguide/negative      | IDENTICAL x3 | 67b332fcf8b5d0dd | 67b332fcf8b5d0dd | 67b332fcf8b5d0dd | (not run)        |
+| gbdt-lossguide/odd           | IDENTICAL x4 | 9fd309c55a93e6c3 | 9fd309c55a93e6c3 | 9fd309c55a93e6c3 | 9fd309c55a93e6c3 |
+| gbdt-lossguide/ties          | IDENTICAL x4 | 19d199f7bfa16c25 | 19d199f7bfa16c25 | 19d199f7bfa16c25 | 19d199f7bfa16c25 |
+| gbdt-lossguide/wide          | IDENTICAL x3 | b9cc1b2b55425cdc | b9cc1b2b55425cdc | b9cc1b2b55425cdc | (not run)        |
+| gbdt-multiclass/base         | IDENTICAL x4 | a5f1e32eedd64780 | a5f1e32eedd64780 | a5f1e32eedd64780 | a5f1e32eedd64780 |
+| gbdt-multiclass/denormal     | IDENTICAL x3 | 148a04f75e8506db | 148a04f75e8506db | 148a04f75e8506db | (not run)        |
+| gbdt-multiclass/denormal_ftz | IDENTICAL x3 | 148a04f75e8506db | 148a04f75e8506db | 148a04f75e8506db | (not run)        |
+| gbdt-multiclass/dupes        | IDENTICAL x3 | 967ab71272fb5e43 | 967ab71272fb5e43 | 967ab71272fb5e43 | (not run)        |
+| gbdt-multiclass/hashed       | IDENTICAL x3 | 19d8dd7851c76f34 | 19d8dd7851c76f34 | 19d8dd7851c76f34 | (not run)        |
+| gbdt-multiclass/negative     | IDENTICAL x3 | 57cd3bc976e876d5 | 57cd3bc976e876d5 | 57cd3bc976e876d5 | (not run)        |
+| gbdt-multiclass/odd          | IDENTICAL x4 | 455dd5addb3f02c2 | 455dd5addb3f02c2 | 455dd5addb3f02c2 | 455dd5addb3f02c2 |
+| gbdt-multiclass/ties         | IDENTICAL x4 | 2313d13ab4e2ab31 | 2313d13ab4e2ab31 | 2313d13ab4e2ab31 | 2313d13ab4e2ab31 |
+| gbdt-multiclass/wide         | IDENTICAL x3 | a5f1e32eedd64780 | a5f1e32eedd64780 | a5f1e32eedd64780 | (not run)        |
+| gbdt-nan-modes/base          | IDENTICAL x4 | 69ff4c8007c1f9fe | 69ff4c8007c1f9fe | 69ff4c8007c1f9fe | 69ff4c8007c1f9fe |
+| gbdt-nan-modes/denormal      | IDENTICAL x3 | 69ff4c8007c1f9fe | 69ff4c8007c1f9fe | 69ff4c8007c1f9fe | (not run)        |
+| gbdt-nan-modes/denormal_ftz  | IDENTICAL x3 | 69ff4c8007c1f9fe | 69ff4c8007c1f9fe | 69ff4c8007c1f9fe | (not run)        |
+| gbdt-nan-modes/dupes         | IDENTICAL x3 | a67c5dc9b03a0d16 | a67c5dc9b03a0d16 | a67c5dc9b03a0d16 | (not run)        |
+| gbdt-nan-modes/hashed        | IDENTICAL x3 | 4181d3af038c9429 | 4181d3af038c9429 | 4181d3af038c9429 | (not run)        |
+| gbdt-nan-modes/negative      | IDENTICAL x3 | afa3f43a49e423d1 | afa3f43a49e423d1 | afa3f43a49e423d1 | (not run)        |
+| gbdt-nan-modes/odd           | IDENTICAL x4 | 161804fea5952ecd | 161804fea5952ecd | 161804fea5952ecd | 161804fea5952ecd |
+| gbdt-nan-modes/ties          | IDENTICAL x4 | 04e6975c827a53fb | 04e6975c827a53fb | 04e6975c827a53fb | 04e6975c827a53fb |
+| gbdt-nan-modes/wide          | IDENTICAL x3 | 92c16b03d68d3a45 | 92c16b03d68d3a45 | 92c16b03d68d3a45 | (not run)        |
+| gbdt-onevsall/base           | IDENTICAL x4 | 8055b03a6a9b2693 | 8055b03a6a9b2693 | 8055b03a6a9b2693 | 8055b03a6a9b2693 |
+| gbdt-onevsall/denormal       | IDENTICAL x3 | cecda816b6db2fbc | cecda816b6db2fbc | cecda816b6db2fbc | (not run)        |
+| gbdt-onevsall/denormal_ftz   | IDENTICAL x3 | cecda816b6db2fbc | cecda816b6db2fbc | cecda816b6db2fbc | (not run)        |
+| gbdt-onevsall/dupes          | IDENTICAL x3 | a2662afbac988373 | a2662afbac988373 | a2662afbac988373 | (not run)        |
+| gbdt-onevsall/hashed         | IDENTICAL x3 | 3a0ffe510b1e3750 | 3a0ffe510b1e3750 | 3a0ffe510b1e3750 | (not run)        |
+| gbdt-onevsall/negative       | IDENTICAL x3 | 24da4621316bd507 | 24da4621316bd507 | 24da4621316bd507 | (not run)        |
+| gbdt-onevsall/odd            | IDENTICAL x4 | d1c61adcfae95dc8 | d1c61adcfae95dc8 | d1c61adcfae95dc8 | d1c61adcfae95dc8 |
+| gbdt-onevsall/ties           | IDENTICAL x4 | 76e0dd66a5092560 | 76e0dd66a5092560 | 76e0dd66a5092560 | 76e0dd66a5092560 |
+| gbdt-onevsall/wide           | IDENTICAL x3 | 8055b03a6a9b2693 | 8055b03a6a9b2693 | 8055b03a6a9b2693 | (not run)        |
+| gbdt-ordered-rmse/base       | IDENTICAL x4 | a6e77b5224108785 | a6e77b5224108785 | a6e77b5224108785 | a6e77b5224108785 |
+| gbdt-ordered-rmse/denormal   | IDENTICAL x3 | 67483c1b821234ac | 67483c1b821234ac | 67483c1b821234ac | (not run)        |
+| gbdt-ordered-rmse/denormal_ftz | IDENTICAL x3 | 2a44bb38f86cd4ec | 2a44bb38f86cd4ec | 2a44bb38f86cd4ec | (not run)        |
+| gbdt-ordered-rmse/dupes      | IDENTICAL x3 | 1e39bd4034194fb0 | 1e39bd4034194fb0 | 1e39bd4034194fb0 | (not run)        |
+| gbdt-ordered-rmse/hashed     | IDENTICAL x3 | 30d789002f114183 | 30d789002f114183 | 30d789002f114183 | (not run)        |
+| gbdt-ordered-rmse/negative   | IDENTICAL x3 | 50eaef5f0c669042 | 50eaef5f0c669042 | 50eaef5f0c669042 | (not run)        |
+| gbdt-ordered-rmse/odd        | IDENTICAL x4 | d83c83930af5d802 | d83c83930af5d802 | d83c83930af5d802 | d83c83930af5d802 |
+| gbdt-ordered-rmse/ties       | IDENTICAL x4 | 563f339900c22c9d | 563f339900c22c9d | 563f339900c22c9d | 563f339900c22c9d |
+| gbdt-ordered-rmse/wide       | IDENTICAL x3 | 356a38c2904749c0 | 356a38c2904749c0 | 356a38c2904749c0 | (not run)        |
+| gbdt-parametric-losses/base  | IDENTICAL x4 | eb682c0ae5c06ec7 | eb682c0ae5c06ec7 | eb682c0ae5c06ec7 | eb682c0ae5c06ec7 |
+| gbdt-parametric-losses/denormal | IDENTICAL x3 | 1161679af1afa292 | 1161679af1afa292 | 1161679af1afa292 | (not run)        |
+| gbdt-parametric-losses/denormal_ftz | IDENTICAL x3 | 1161679af1afa292 | 1161679af1afa292 | 1161679af1afa292 | (not run)        |
+| gbdt-parametric-losses/dupes | IDENTICAL x3 | 7910d109dd778f2f | 7910d109dd778f2f | 7910d109dd778f2f | (not run)        |
+| gbdt-parametric-losses/hashed | IDENTICAL x3 | 584561abe9f5b6bf | 584561abe9f5b6bf | 584561abe9f5b6bf | (not run)        |
+| gbdt-parametric-losses/negative | IDENTICAL x3 | 013810016c5e7b5b | 013810016c5e7b5b | 013810016c5e7b5b | (not run)        |
+| gbdt-parametric-losses/odd   | IDENTICAL x4 | f70b7e0960454bcf | f70b7e0960454bcf | f70b7e0960454bcf | f70b7e0960454bcf |
+| gbdt-parametric-losses/ties  | IDENTICAL x4 | efc6587263899c79 | efc6587263899c79 | efc6587263899c79 | efc6587263899c79 |
+| gbdt-parametric-losses/wide  | IDENTICAL x3 | 4b966bcd16dcb904 | 4b966bcd16dcb904 | 4b966bcd16dcb904 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/base | IDENTICAL x4 | 2ac238ddce22e2ef | 2ac238ddce22e2ef | 2ac238ddce22e2ef | 2ac238ddce22e2ef |
+| gbdt-pointwise-l2-bayesian-eval/denormal | IDENTICAL x3 | 2ac238ddce22e2ef | 2ac238ddce22e2ef | 2ac238ddce22e2ef | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/denormal_ftz | IDENTICAL x3 | 2ac238ddce22e2ef | 2ac238ddce22e2ef | 2ac238ddce22e2ef | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/dupes | IDENTICAL x3 | 86fffcdb2023b393 | 86fffcdb2023b393 | 86fffcdb2023b393 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/hashed | IDENTICAL x3 | d9ff6008c1161f15 | d9ff6008c1161f15 | d9ff6008c1161f15 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/negative | IDENTICAL x3 | 4d75d6379c698eb9 | 4d75d6379c698eb9 | 4d75d6379c698eb9 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/odd | IDENTICAL x4 | 59cf66d7ddc936b4 | 59cf66d7ddc936b4 | 59cf66d7ddc936b4 | 59cf66d7ddc936b4 |
+| gbdt-pointwise-l2-bayesian-eval/ties | IDENTICAL x4 | 84ba6825b4967e89 | 84ba6825b4967e89 | 84ba6825b4967e89 | 84ba6825b4967e89 |
+| gbdt-pointwise-l2-bayesian-eval/wide | IDENTICAL x3 | b677c76dcdb5e233 | b677c76dcdb5e233 | b677c76dcdb5e233 | (not run)        |
+| gbdt-rmse/base               | IDENTICAL x4 | 3f8aef8d73be249c | 3f8aef8d73be249c | 3f8aef8d73be249c | 3f8aef8d73be249c |
+| gbdt-rmse/denormal           | IDENTICAL x3 | 400f099e655dc453 | 400f099e655dc453 | 400f099e655dc453 | (not run)        |
+| gbdt-rmse/denormal_ftz       | IDENTICAL x3 | 400f099e655dc453 | 400f099e655dc453 | 400f099e655dc453 | (not run)        |
+| gbdt-rmse/dupes              | IDENTICAL x3 | 49848bfd3c26b52e | 49848bfd3c26b52e | 49848bfd3c26b52e | (not run)        |
+| gbdt-rmse/hashed             | IDENTICAL x3 | a89dba586c0f1ab4 | a89dba586c0f1ab4 | a89dba586c0f1ab4 | (not run)        |
+| gbdt-rmse/negative           | IDENTICAL x3 | e54f74cdab3f29f0 | e54f74cdab3f29f0 | e54f74cdab3f29f0 | (not run)        |
+| gbdt-rmse/odd                | IDENTICAL x4 | 7b54ca9d69e29714 | 7b54ca9d69e29714 | 7b54ca9d69e29714 | 7b54ca9d69e29714 |
+| gbdt-rmse/ties               | IDENTICAL x4 | 88cba1574daa922e | 88cba1574daa922e | 88cba1574daa922e | 88cba1574daa922e |
+| gbdt-rmse/wide               | IDENTICAL x3 | 5ea3a06d9df1d862 | 5ea3a06d9df1d862 | 5ea3a06d9df1d862 | (not run)        |
+| gbdt-symmetric/base          | IDENTICAL x4 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 |
+| gbdt-symmetric/denormal      | IDENTICAL x3 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | (not run)        |
+| gbdt-symmetric/denormal_ftz  | IDENTICAL x3 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 | (not run)        |
+| gbdt-symmetric/dupes         | IDENTICAL x3 | 9d55545ce5f2ac2b | 9d55545ce5f2ac2b | 9d55545ce5f2ac2b | (not run)        |
+| gbdt-symmetric/hashed        | IDENTICAL x3 | cf3de2636433b65a | cf3de2636433b65a | cf3de2636433b65a | (not run)        |
+| gbdt-symmetric/negative      | IDENTICAL x3 | fb9966f26639c286 | fb9966f26639c286 | fb9966f26639c286 | (not run)        |
+| gbdt-symmetric/odd           | IDENTICAL x4 | 0836bd47530040d0 | 0836bd47530040d0 | 0836bd47530040d0 | 0836bd47530040d0 |
+| gbdt-symmetric/ties          | IDENTICAL x4 | b32c469f812adf25 | b32c469f812adf25 | b32c469f812adf25 | b32c469f812adf25 |
+| gbdt-symmetric/wide          | IDENTICAL x3 | bc0084b9b1e30f87 | bc0084b9b1e30f87 | bc0084b9b1e30f87 | (not run)        |
+
+summary: IDENTICAL=144
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gbdt-adapter-clf/base        | infer  | IDENTICAL x4 | 33875685be67febb | 33875685be67febb | 33875685be67febb | 33875685be67febb |
+| gbdt-adapter-clf/base        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-clf/base        | batch  | IDENTICAL x4 | 984baeb0cccbd21e | 984baeb0cccbd21e | 984baeb0cccbd21e | 984baeb0cccbd21e |
+| gbdt-adapter-clf/denormal    | infer  | IDENTICAL x3 | 33875685be67febb | 33875685be67febb | 33875685be67febb | (not run)        |
+| gbdt-adapter-clf/denormal    | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-clf/denormal    | batch  | IDENTICAL x3 | 984baeb0cccbd21e | 984baeb0cccbd21e | 984baeb0cccbd21e | (not run)        |
+| gbdt-adapter-clf/denormal_ftz | infer  | IDENTICAL x3 | 33875685be67febb | 33875685be67febb | 33875685be67febb | (not run)        |
+| gbdt-adapter-clf/denormal_ftz | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-clf/denormal_ftz | batch  | IDENTICAL x3 | 984baeb0cccbd21e | 984baeb0cccbd21e | 984baeb0cccbd21e | (not run)        |
+| gbdt-adapter-clf/dupes       | infer  | IDENTICAL x3 | e85d77ea7956ef95 | e85d77ea7956ef95 | e85d77ea7956ef95 | (not run)        |
+| gbdt-adapter-clf/dupes       | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-clf/dupes       | batch  | IDENTICAL x3 | 832f98d68d745aec | 832f98d68d745aec | 832f98d68d745aec | (not run)        |
+| gbdt-adapter-clf/hashed      | infer  | IDENTICAL x3 | 84bd02377a59dbc3 | 84bd02377a59dbc3 | 84bd02377a59dbc3 | (not run)        |
+| gbdt-adapter-clf/hashed      | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-clf/hashed      | batch  | IDENTICAL x3 | 0003824fb96636b7 | 0003824fb96636b7 | 0003824fb96636b7 | (not run)        |
+| gbdt-adapter-clf/negative    | infer  | IDENTICAL x3 | ccd4bd587a2483c3 | ccd4bd587a2483c3 | ccd4bd587a2483c3 | (not run)        |
+| gbdt-adapter-clf/negative    | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-clf/negative    | batch  | IDENTICAL x3 | f2ca7ffadecb0625 | f2ca7ffadecb0625 | f2ca7ffadecb0625 | (not run)        |
+| gbdt-adapter-clf/odd         | infer  | IDENTICAL x4 | 94e4c2a70fc9bfd8 | 94e4c2a70fc9bfd8 | 94e4c2a70fc9bfd8 | 94e4c2a70fc9bfd8 |
+| gbdt-adapter-clf/odd         | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-clf/odd         | batch  | IDENTICAL x4 | 38ba96eea94d8ea9 | 38ba96eea94d8ea9 | 38ba96eea94d8ea9 | 38ba96eea94d8ea9 |
+| gbdt-adapter-clf/ties        | infer  | IDENTICAL x4 | fe960ad1ad7c54e5 | fe960ad1ad7c54e5 | fe960ad1ad7c54e5 | fe960ad1ad7c54e5 |
+| gbdt-adapter-clf/ties        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-clf/ties        | batch  | IDENTICAL x4 | 14399e0cd5893cd4 | 14399e0cd5893cd4 | 14399e0cd5893cd4 | 14399e0cd5893cd4 |
+| gbdt-adapter-clf/wide        | infer  | IDENTICAL x3 | 2dd0483189f81a32 | 2dd0483189f81a32 | 2dd0483189f81a32 | (not run)        |
+| gbdt-adapter-clf/wide        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-clf/wide        | batch  | IDENTICAL x3 | 24653b9a06a6071a | 24653b9a06a6071a | 24653b9a06a6071a | (not run)        |
+| gbdt-adapter-reg/base        | infer  | IDENTICAL x4 | ba6284898fcd7adb | ba6284898fcd7adb | ba6284898fcd7adb | ba6284898fcd7adb |
+| gbdt-adapter-reg/base        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-reg/base        | batch  | IDENTICAL x4 | 3a53a53abfe321f6 | 3a53a53abfe321f6 | 3a53a53abfe321f6 | 3a53a53abfe321f6 |
+| gbdt-adapter-reg/denormal    | infer  | IDENTICAL x3 | 86db747723f31263 | 86db747723f31263 | 86db747723f31263 | (not run)        |
+| gbdt-adapter-reg/denormal    | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-reg/denormal    | batch  | IDENTICAL x3 | 24d0e532611fba96 | 24d0e532611fba96 | 24d0e532611fba96 | (not run)        |
+| gbdt-adapter-reg/denormal_ftz | infer  | IDENTICAL x3 | 86db747723f31263 | 86db747723f31263 | 86db747723f31263 | (not run)        |
+| gbdt-adapter-reg/denormal_ftz | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-reg/denormal_ftz | batch  | IDENTICAL x3 | 24d0e532611fba96 | 24d0e532611fba96 | 24d0e532611fba96 | (not run)        |
+| gbdt-adapter-reg/dupes       | infer  | IDENTICAL x3 | da755bd965b6c511 | da755bd965b6c511 | da755bd965b6c511 | (not run)        |
+| gbdt-adapter-reg/dupes       | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-reg/dupes       | batch  | IDENTICAL x3 | 17cffc317f1b3c99 | 17cffc317f1b3c99 | 17cffc317f1b3c99 | (not run)        |
+| gbdt-adapter-reg/hashed      | infer  | IDENTICAL x3 | b79afaae27b8bdb6 | b79afaae27b8bdb6 | b79afaae27b8bdb6 | (not run)        |
+| gbdt-adapter-reg/hashed      | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-reg/hashed      | batch  | IDENTICAL x3 | 15a568bd232c8fbd | 15a568bd232c8fbd | 15a568bd232c8fbd | (not run)        |
+| gbdt-adapter-reg/negative    | infer  | IDENTICAL x3 | 2f7db100a96ca46b | 2f7db100a96ca46b | 2f7db100a96ca46b | (not run)        |
+| gbdt-adapter-reg/negative    | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-reg/negative    | batch  | IDENTICAL x3 | 36bc296fc8f0a3cf | 36bc296fc8f0a3cf | 36bc296fc8f0a3cf | (not run)        |
+| gbdt-adapter-reg/odd         | infer  | IDENTICAL x4 | 88f9e64eea1b35df | 88f9e64eea1b35df | 88f9e64eea1b35df | 88f9e64eea1b35df |
+| gbdt-adapter-reg/odd         | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-reg/odd         | batch  | IDENTICAL x4 | 6b459ed54f82865a | 6b459ed54f82865a | 6b459ed54f82865a | 6b459ed54f82865a |
+| gbdt-adapter-reg/ties        | infer  | IDENTICAL x4 | 4044415de3b73aee | 4044415de3b73aee | 4044415de3b73aee | 4044415de3b73aee |
+| gbdt-adapter-reg/ties        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-reg/ties        | batch  | IDENTICAL x4 | 1681c6f968f338d2 | 1681c6f968f338d2 | 1681c6f968f338d2 | 1681c6f968f338d2 |
+| gbdt-adapter-reg/wide        | infer  | IDENTICAL x3 | 3f008ec3ab37ef2f | 3f008ec3ab37ef2f | 3f008ec3ab37ef2f | (not run)        |
+| gbdt-adapter-reg/wide        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented | n/a:save-not-implemented | (not run)        |
+| gbdt-adapter-reg/wide        | batch  | IDENTICAL x3 | 288e6b1fb3347f2d | 288e6b1fb3347f2d | 288e6b1fb3347f2d | (not run)        |
+| gbdt-categorical-ctr/base    | infer  | IDENTICAL x4 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 |
+| gbdt-categorical-ctr/base    | model  | IDENTICAL x4 | d1bc6890d23ce613 | d1bc6890d23ce613 | d1bc6890d23ce613 | d1bc6890d23ce613 |
+| gbdt-categorical-ctr/base    | batch  | IDENTICAL x4 | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd |
+| gbdt-categorical-ctr/denormal | infer  | IDENTICAL x3 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | (not run)        |
+| gbdt-categorical-ctr/denormal | model  | IDENTICAL x3 | cc6b3c93fed4b10a | cc6b3c93fed4b10a | cc6b3c93fed4b10a | (not run)        |
+| gbdt-categorical-ctr/denormal | batch  | IDENTICAL x3 | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd | (not run)        |
+| gbdt-categorical-ctr/denormal_ftz | infer  | IDENTICAL x3 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | (not run)        |
+| gbdt-categorical-ctr/denormal_ftz | model  | IDENTICAL x3 | cc6b3c93fed4b10a | cc6b3c93fed4b10a | cc6b3c93fed4b10a | (not run)        |
+| gbdt-categorical-ctr/denormal_ftz | batch  | IDENTICAL x3 | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd | (not run)        |
+| gbdt-categorical-ctr/dupes   | infer  | IDENTICAL x3 | ebf616782020460e | ebf616782020460e | ebf616782020460e | (not run)        |
+| gbdt-categorical-ctr/dupes   | model  | IDENTICAL x3 | a54a7179f5f55506 | a54a7179f5f55506 | a54a7179f5f55506 | (not run)        |
+| gbdt-categorical-ctr/dupes   | batch  | IDENTICAL x3 | 6c4abca5e06509e8 | 6c4abca5e06509e8 | 6c4abca5e06509e8 | (not run)        |
+| gbdt-categorical-ctr/hashed  | infer  | IDENTICAL x3 | 59ada771e335830b | 59ada771e335830b | 59ada771e335830b | (not run)        |
+| gbdt-categorical-ctr/hashed  | model  | IDENTICAL x3 | f9caff45f0d43d88 | f9caff45f0d43d88 | f9caff45f0d43d88 | (not run)        |
+| gbdt-categorical-ctr/hashed  | batch  | IDENTICAL x3 | 8ec393a7a64c5a33 | 8ec393a7a64c5a33 | 8ec393a7a64c5a33 | (not run)        |
+| gbdt-categorical-ctr/negative | infer  | IDENTICAL x3 | 9b0045ff2be0ff78 | 9b0045ff2be0ff78 | 9b0045ff2be0ff78 | (not run)        |
+| gbdt-categorical-ctr/negative | model  | IDENTICAL x3 | 75733da36563fa3a | 75733da36563fa3a | 75733da36563fa3a | (not run)        |
+| gbdt-categorical-ctr/negative | batch  | IDENTICAL x3 | d19606059eb16d0f | d19606059eb16d0f | d19606059eb16d0f | (not run)        |
+| gbdt-categorical-ctr/odd     | infer  | IDENTICAL x4 | 6db4a8fb8ffcc4df | 6db4a8fb8ffcc4df | 6db4a8fb8ffcc4df | 6db4a8fb8ffcc4df |
+| gbdt-categorical-ctr/odd     | model  | IDENTICAL x4 | ca74bdd7ef688c0d | ca74bdd7ef688c0d | ca74bdd7ef688c0d | ca74bdd7ef688c0d |
+| gbdt-categorical-ctr/odd     | batch  | IDENTICAL x4 | ee6e7cfed828deb2 | ee6e7cfed828deb2 | ee6e7cfed828deb2 | ee6e7cfed828deb2 |
+| gbdt-categorical-ctr/ties    | infer  | IDENTICAL x4 | 7e2f6402af40601a | 7e2f6402af40601a | 7e2f6402af40601a | 7e2f6402af40601a |
+| gbdt-categorical-ctr/ties    | model  | IDENTICAL x4 | e65f09cb2a1e7754 | e65f09cb2a1e7754 | e65f09cb2a1e7754 | e65f09cb2a1e7754 |
+| gbdt-categorical-ctr/ties    | batch  | IDENTICAL x4 | 2adbd46492fefdf1 | 2adbd46492fefdf1 | 2adbd46492fefdf1 | 2adbd46492fefdf1 |
+| gbdt-categorical-ctr/wide    | infer  | IDENTICAL x3 | 4904fc9a408f2e1e | 4904fc9a408f2e1e | 4904fc9a408f2e1e | (not run)        |
+| gbdt-categorical-ctr/wide    | model  | IDENTICAL x3 | 192effc19beb0214 | 192effc19beb0214 | 192effc19beb0214 | (not run)        |
+| gbdt-categorical-ctr/wide    | batch  | IDENTICAL x3 | c69fa1a241cda669 | c69fa1a241cda669 | c69fa1a241cda669 | (not run)        |
+| gbdt-depthwise/base          | infer  | IDENTICAL x4 | 688bf9a8e927232e | 688bf9a8e927232e | 688bf9a8e927232e | 688bf9a8e927232e |
+| gbdt-depthwise/base          | model  | IDENTICAL x4 | 448c1bcf37ffdc97 | 448c1bcf37ffdc97 | 448c1bcf37ffdc97 | 448c1bcf37ffdc97 |
+| gbdt-depthwise/base          | batch  | IDENTICAL x4 | 25bf2754b853a026 | 25bf2754b853a026 | 25bf2754b853a026 | 25bf2754b853a026 |
+| gbdt-depthwise/denormal      | infer  | IDENTICAL x3 | 7b73dadeb43db4cf | 7b73dadeb43db4cf | 7b73dadeb43db4cf | (not run)        |
+| gbdt-depthwise/denormal      | model  | IDENTICAL x3 | a5f5c6eac0c3732c | a5f5c6eac0c3732c | a5f5c6eac0c3732c | (not run)        |
+| gbdt-depthwise/denormal      | batch  | IDENTICAL x3 | c75b24565da79e80 | c75b24565da79e80 | c75b24565da79e80 | (not run)        |
+| gbdt-depthwise/denormal_ftz  | infer  | IDENTICAL x3 | 7b73dadeb43db4cf | 7b73dadeb43db4cf | 7b73dadeb43db4cf | (not run)        |
+| gbdt-depthwise/denormal_ftz  | model  | IDENTICAL x3 | a5f5c6eac0c3732c | a5f5c6eac0c3732c | a5f5c6eac0c3732c | (not run)        |
+| gbdt-depthwise/denormal_ftz  | batch  | IDENTICAL x3 | c75b24565da79e80 | c75b24565da79e80 | c75b24565da79e80 | (not run)        |
+| gbdt-depthwise/dupes         | infer  | IDENTICAL x3 | fc255cbff38ea320 | fc255cbff38ea320 | fc255cbff38ea320 | (not run)        |
+| gbdt-depthwise/dupes         | model  | IDENTICAL x3 | ca399349c402761a | ca399349c402761a | ca399349c402761a | (not run)        |
+| gbdt-depthwise/dupes         | batch  | IDENTICAL x3 | 72dbff12dd6a21a5 | 72dbff12dd6a21a5 | 72dbff12dd6a21a5 | (not run)        |
+| gbdt-depthwise/hashed        | infer  | IDENTICAL x3 | d11cf64a629bd4fb | d11cf64a629bd4fb | d11cf64a629bd4fb | (not run)        |
+| gbdt-depthwise/hashed        | model  | IDENTICAL x3 | 80b172e1332f9dd9 | 80b172e1332f9dd9 | 80b172e1332f9dd9 | (not run)        |
+| gbdt-depthwise/hashed        | batch  | IDENTICAL x3 | 5f52a35c82337b02 | 5f52a35c82337b02 | 5f52a35c82337b02 | (not run)        |
+| gbdt-depthwise/negative      | infer  | IDENTICAL x3 | ddaa5cebdc9c1484 | ddaa5cebdc9c1484 | ddaa5cebdc9c1484 | (not run)        |
+| gbdt-depthwise/negative      | model  | IDENTICAL x3 | 9c2f348d3bf8e73c | 9c2f348d3bf8e73c | 9c2f348d3bf8e73c | (not run)        |
+| gbdt-depthwise/negative      | batch  | IDENTICAL x3 | fcc3087fb2cb9d5c | fcc3087fb2cb9d5c | fcc3087fb2cb9d5c | (not run)        |
+| gbdt-depthwise/odd           | infer  | IDENTICAL x4 | 4ee637393df9aff7 | 4ee637393df9aff7 | 4ee637393df9aff7 | 4ee637393df9aff7 |
+| gbdt-depthwise/odd           | model  | IDENTICAL x4 | e4f63fb009a0a7b5 | e4f63fb009a0a7b5 | e4f63fb009a0a7b5 | e4f63fb009a0a7b5 |
+| gbdt-depthwise/odd           | batch  | IDENTICAL x4 | 992386f8f1c7c126 | 992386f8f1c7c126 | 992386f8f1c7c126 | 992386f8f1c7c126 |
+| gbdt-depthwise/ties          | infer  | IDENTICAL x4 | e299a1457dfaedc7 | e299a1457dfaedc7 | e299a1457dfaedc7 | e299a1457dfaedc7 |
+| gbdt-depthwise/ties          | model  | IDENTICAL x4 | ef4323cc40bbfd0a | ef4323cc40bbfd0a | ef4323cc40bbfd0a | ef4323cc40bbfd0a |
+| gbdt-depthwise/ties          | batch  | IDENTICAL x4 | 071de76e68c2fc1d | 071de76e68c2fc1d | 071de76e68c2fc1d | 071de76e68c2fc1d |
+| gbdt-depthwise/wide          | infer  | IDENTICAL x3 | 65e906e50a54735e | 65e906e50a54735e | 65e906e50a54735e | (not run)        |
+| gbdt-depthwise/wide          | model  | IDENTICAL x3 | 38d9c484d12b1f01 | 38d9c484d12b1f01 | 38d9c484d12b1f01 | (not run)        |
+| gbdt-depthwise/wide          | batch  | IDENTICAL x3 | e3852cc5e1042eb0 | e3852cc5e1042eb0 | e3852cc5e1042eb0 | (not run)        |
+| gbdt-exact-mae/base          | infer  | IDENTICAL x4 | 8be26ab7b3a20568 | 8be26ab7b3a20568 | 8be26ab7b3a20568 | 8be26ab7b3a20568 |
+| gbdt-exact-mae/base          | model  | IDENTICAL x4 | 610f6e7030433d25 | 610f6e7030433d25 | 610f6e7030433d25 | 610f6e7030433d25 |
+| gbdt-exact-mae/base          | batch  | IDENTICAL x4 | f90756faab4e2172 | f90756faab4e2172 | f90756faab4e2172 | f90756faab4e2172 |
+| gbdt-exact-mae/denormal      | infer  | IDENTICAL x3 | c2284f225593a1fe | c2284f225593a1fe | c2284f225593a1fe | (not run)        |
+| gbdt-exact-mae/denormal      | model  | IDENTICAL x3 | be2ac3ddb7f396d2 | be2ac3ddb7f396d2 | be2ac3ddb7f396d2 | (not run)        |
+| gbdt-exact-mae/denormal      | batch  | IDENTICAL x3 | 5c12c874301934fb | 5c12c874301934fb | 5c12c874301934fb | (not run)        |
+| gbdt-exact-mae/denormal_ftz  | infer  | IDENTICAL x3 | c2284f225593a1fe | c2284f225593a1fe | c2284f225593a1fe | (not run)        |
+| gbdt-exact-mae/denormal_ftz  | model  | IDENTICAL x3 | be2ac3ddb7f396d2 | be2ac3ddb7f396d2 | be2ac3ddb7f396d2 | (not run)        |
+| gbdt-exact-mae/denormal_ftz  | batch  | IDENTICAL x3 | 5c12c874301934fb | 5c12c874301934fb | 5c12c874301934fb | (not run)        |
+| gbdt-exact-mae/dupes         | infer  | IDENTICAL x3 | 6bdb462abd6f18ed | 6bdb462abd6f18ed | 6bdb462abd6f18ed | (not run)        |
+| gbdt-exact-mae/dupes         | model  | IDENTICAL x3 | 8d42efc265c62e0c | 8d42efc265c62e0c | 8d42efc265c62e0c | (not run)        |
+| gbdt-exact-mae/dupes         | batch  | IDENTICAL x3 | 41441f7974409377 | 41441f7974409377 | 41441f7974409377 | (not run)        |
+| gbdt-exact-mae/hashed        | infer  | IDENTICAL x3 | 932a42c0a74312f1 | 932a42c0a74312f1 | 932a42c0a74312f1 | (not run)        |
+| gbdt-exact-mae/hashed        | model  | IDENTICAL x3 | 96d3202c8895bfac | 96d3202c8895bfac | 96d3202c8895bfac | (not run)        |
+| gbdt-exact-mae/hashed        | batch  | IDENTICAL x3 | 6b639459cb18f2a6 | 6b639459cb18f2a6 | 6b639459cb18f2a6 | (not run)        |
+| gbdt-exact-mae/negative      | infer  | IDENTICAL x3 | 5297076a892fce2a | 5297076a892fce2a | 5297076a892fce2a | (not run)        |
+| gbdt-exact-mae/negative      | model  | IDENTICAL x3 | 34018c1599e804b2 | 34018c1599e804b2 | 34018c1599e804b2 | (not run)        |
+| gbdt-exact-mae/negative      | batch  | IDENTICAL x3 | d18e6ca3dd26bf2a | d18e6ca3dd26bf2a | d18e6ca3dd26bf2a | (not run)        |
+| gbdt-exact-mae/odd           | infer  | IDENTICAL x4 | 803b69f78691fd97 | 803b69f78691fd97 | 803b69f78691fd97 | 803b69f78691fd97 |
+| gbdt-exact-mae/odd           | model  | IDENTICAL x4 | a7acaed4e232dca0 | a7acaed4e232dca0 | a7acaed4e232dca0 | a7acaed4e232dca0 |
+| gbdt-exact-mae/odd           | batch  | IDENTICAL x4 | 1f55cf8d09089aa2 | 1f55cf8d09089aa2 | 1f55cf8d09089aa2 | 1f55cf8d09089aa2 |
+| gbdt-exact-mae/ties          | infer  | IDENTICAL x4 | a6a66eb2f734a4a0 | a6a66eb2f734a4a0 | a6a66eb2f734a4a0 | a6a66eb2f734a4a0 |
+| gbdt-exact-mae/ties          | model  | IDENTICAL x4 | 3c059b5d2d1d5ba4 | 3c059b5d2d1d5ba4 | 3c059b5d2d1d5ba4 | 3c059b5d2d1d5ba4 |
+| gbdt-exact-mae/ties          | batch  | IDENTICAL x4 | e6f7c7d77ba8558c | e6f7c7d77ba8558c | e6f7c7d77ba8558c | e6f7c7d77ba8558c |
+| gbdt-exact-mae/wide          | infer  | IDENTICAL x3 | 44c0704a2af40efb | 44c0704a2af40efb | 44c0704a2af40efb | (not run)        |
+| gbdt-exact-mae/wide          | model  | IDENTICAL x3 | 3834ba6ef4d9c8bb | 3834ba6ef4d9c8bb | 3834ba6ef4d9c8bb | (not run)        |
+| gbdt-exact-mae/wide          | batch  | IDENTICAL x3 | b3e9e1aa91502fb6 | b3e9e1aa91502fb6 | b3e9e1aa91502fb6 | (not run)        |
+| gbdt-feature-freq/base       | infer  | IDENTICAL x4 | 95b976d85efc7f2d | 95b976d85efc7f2d | 95b976d85efc7f2d | 95b976d85efc7f2d |
+| gbdt-feature-freq/base       | model  | IDENTICAL x4 | b2959e177eb6e088 | b2959e177eb6e088 | b2959e177eb6e088 | b2959e177eb6e088 |
+| gbdt-feature-freq/base       | batch  | IDENTICAL x4 | 272537bbe18b712b | 272537bbe18b712b | 272537bbe18b712b | 272537bbe18b712b |
+| gbdt-feature-freq/denormal   | infer  | IDENTICAL x3 | 973775798c10da25 | 973775798c10da25 | 973775798c10da25 | (not run)        |
+| gbdt-feature-freq/denormal   | model  | IDENTICAL x3 | d6c30648533bdf45 | d6c30648533bdf45 | d6c30648533bdf45 | (not run)        |
+| gbdt-feature-freq/denormal   | batch  | IDENTICAL x3 | ba9644901c99745d | ba9644901c99745d | ba9644901c99745d | (not run)        |
+| gbdt-feature-freq/denormal_ftz | infer  | IDENTICAL x3 | 973775798c10da25 | 973775798c10da25 | 973775798c10da25 | (not run)        |
+| gbdt-feature-freq/denormal_ftz | model  | IDENTICAL x3 | d6c30648533bdf45 | d6c30648533bdf45 | d6c30648533bdf45 | (not run)        |
+| gbdt-feature-freq/denormal_ftz | batch  | IDENTICAL x3 | ba9644901c99745d | ba9644901c99745d | ba9644901c99745d | (not run)        |
+| gbdt-feature-freq/dupes      | infer  | IDENTICAL x3 | 3a9423e4f0d23cad | 3a9423e4f0d23cad | 3a9423e4f0d23cad | (not run)        |
+| gbdt-feature-freq/dupes      | model  | IDENTICAL x3 | 531909ad2026b783 | 531909ad2026b783 | 531909ad2026b783 | (not run)        |
+| gbdt-feature-freq/dupes      | batch  | IDENTICAL x3 | 47618d01ef0a41e1 | 47618d01ef0a41e1 | 47618d01ef0a41e1 | (not run)        |
+| gbdt-feature-freq/hashed     | infer  | IDENTICAL x3 | cf308a4c656bfbdc | cf308a4c656bfbdc | cf308a4c656bfbdc | (not run)        |
+| gbdt-feature-freq/hashed     | model  | IDENTICAL x3 | bf3222bbcdf1f476 | bf3222bbcdf1f476 | bf3222bbcdf1f476 | (not run)        |
+| gbdt-feature-freq/hashed     | batch  | IDENTICAL x3 | 77ce3ccc6c9f7e94 | 77ce3ccc6c9f7e94 | 77ce3ccc6c9f7e94 | (not run)        |
+| gbdt-feature-freq/negative   | infer  | IDENTICAL x3 | 5a5944c8b884be8c | 5a5944c8b884be8c | 5a5944c8b884be8c | (not run)        |
+| gbdt-feature-freq/negative   | model  | IDENTICAL x3 | 0794be87633fd36b | 0794be87633fd36b | 0794be87633fd36b | (not run)        |
+| gbdt-feature-freq/negative   | batch  | IDENTICAL x3 | d92c8eb873f86399 | d92c8eb873f86399 | d92c8eb873f86399 | (not run)        |
+| gbdt-feature-freq/odd        | infer  | IDENTICAL x4 | 711887d930537c47 | 711887d930537c47 | 711887d930537c47 | 711887d930537c47 |
+| gbdt-feature-freq/odd        | model  | IDENTICAL x4 | 53a4160101e38573 | 53a4160101e38573 | 53a4160101e38573 | 53a4160101e38573 |
+| gbdt-feature-freq/odd        | batch  | IDENTICAL x4 | bfe39e4c9f5bacc7 | bfe39e4c9f5bacc7 | bfe39e4c9f5bacc7 | bfe39e4c9f5bacc7 |
+| gbdt-feature-freq/ties       | infer  | IDENTICAL x4 | 41371bafcf6397a3 | 41371bafcf6397a3 | 41371bafcf6397a3 | 41371bafcf6397a3 |
+| gbdt-feature-freq/ties       | model  | IDENTICAL x4 | a7417c31e1b422b4 | a7417c31e1b422b4 | a7417c31e1b422b4 | a7417c31e1b422b4 |
+| gbdt-feature-freq/ties       | batch  | IDENTICAL x4 | 2de7d484a30cee05 | 2de7d484a30cee05 | 2de7d484a30cee05 | 2de7d484a30cee05 |
+| gbdt-feature-freq/wide       | infer  | IDENTICAL x3 | 2a4274996f907f13 | 2a4274996f907f13 | 2a4274996f907f13 | (not run)        |
+| gbdt-feature-freq/wide       | model  | IDENTICAL x3 | 6b7d9eddfa4b79b6 | 6b7d9eddfa4b79b6 | 6b7d9eddfa4b79b6 | (not run)        |
+| gbdt-feature-freq/wide       | batch  | IDENTICAL x3 | 367ed0852797c66b | 367ed0852797c66b | 367ed0852797c66b | (not run)        |
+| gbdt-lossguide-newtoncosine/base | infer  | IDENTICAL x4 | 38081b2e11a30a91 | 38081b2e11a30a91 | 38081b2e11a30a91 | 38081b2e11a30a91 |
+| gbdt-lossguide-newtoncosine/base | model  | IDENTICAL x4 | dcc933a4bdfb034f | dcc933a4bdfb034f | dcc933a4bdfb034f | dcc933a4bdfb034f |
+| gbdt-lossguide-newtoncosine/base | batch  | IDENTICAL x4 | 132fbf3e61c14c7a | 132fbf3e61c14c7a | 132fbf3e61c14c7a | 132fbf3e61c14c7a |
+| gbdt-lossguide-newtoncosine/denormal | infer  | IDENTICAL x3 | 6bc3fbc3e8543d7d | 6bc3fbc3e8543d7d | 6bc3fbc3e8543d7d | (not run)        |
+| gbdt-lossguide-newtoncosine/denormal | model  | IDENTICAL x3 | 1f492af7e5db3bce | 1f492af7e5db3bce | 1f492af7e5db3bce | (not run)        |
+| gbdt-lossguide-newtoncosine/denormal | batch  | IDENTICAL x3 | 564cd9594770c5ed | 564cd9594770c5ed | 564cd9594770c5ed | (not run)        |
+| gbdt-lossguide-newtoncosine/denormal_ftz | infer  | IDENTICAL x3 | 6bc3fbc3e8543d7d | 6bc3fbc3e8543d7d | 6bc3fbc3e8543d7d | (not run)        |
+| gbdt-lossguide-newtoncosine/denormal_ftz | model  | IDENTICAL x3 | 1f492af7e5db3bce | 1f492af7e5db3bce | 1f492af7e5db3bce | (not run)        |
+| gbdt-lossguide-newtoncosine/denormal_ftz | batch  | IDENTICAL x3 | 564cd9594770c5ed | 564cd9594770c5ed | 564cd9594770c5ed | (not run)        |
+| gbdt-lossguide-newtoncosine/dupes | infer  | IDENTICAL x3 | aa1351bb1b3f4638 | aa1351bb1b3f4638 | aa1351bb1b3f4638 | (not run)        |
+| gbdt-lossguide-newtoncosine/dupes | model  | IDENTICAL x3 | 7c6ff629d70523df | 7c6ff629d70523df | 7c6ff629d70523df | (not run)        |
+| gbdt-lossguide-newtoncosine/dupes | batch  | IDENTICAL x3 | d9a7bae7e1a6af1a | d9a7bae7e1a6af1a | d9a7bae7e1a6af1a | (not run)        |
+| gbdt-lossguide-newtoncosine/hashed | infer  | IDENTICAL x3 | 927de5ddca76c1c1 | 927de5ddca76c1c1 | 927de5ddca76c1c1 | (not run)        |
+| gbdt-lossguide-newtoncosine/hashed | model  | IDENTICAL x3 | b79b1a467ca05f01 | b79b1a467ca05f01 | b79b1a467ca05f01 | (not run)        |
+| gbdt-lossguide-newtoncosine/hashed | batch  | IDENTICAL x3 | f13dae42e019e6e1 | f13dae42e019e6e1 | f13dae42e019e6e1 | (not run)        |
+| gbdt-lossguide-newtoncosine/negative | infer  | IDENTICAL x3 | e7490acdbbf5c595 | e7490acdbbf5c595 | e7490acdbbf5c595 | (not run)        |
+| gbdt-lossguide-newtoncosine/negative | model  | IDENTICAL x3 | c9124a34f660569a | c9124a34f660569a | c9124a34f660569a | (not run)        |
+| gbdt-lossguide-newtoncosine/negative | batch  | IDENTICAL x3 | 1ee1151ce2a53389 | 1ee1151ce2a53389 | 1ee1151ce2a53389 | (not run)        |
+| gbdt-lossguide-newtoncosine/odd | infer  | IDENTICAL x4 | 242d929eae7ea734 | 242d929eae7ea734 | 242d929eae7ea734 | 242d929eae7ea734 |
+| gbdt-lossguide-newtoncosine/odd | model  | IDENTICAL x4 | cf3e76e803cf07ee | cf3e76e803cf07ee | cf3e76e803cf07ee | cf3e76e803cf07ee |
+| gbdt-lossguide-newtoncosine/odd | batch  | IDENTICAL x4 | dc500f77d3dadbdd | dc500f77d3dadbdd | dc500f77d3dadbdd | dc500f77d3dadbdd |
+| gbdt-lossguide-newtoncosine/ties | infer  | IDENTICAL x4 | e21aac8ebaed22f4 | e21aac8ebaed22f4 | e21aac8ebaed22f4 | e21aac8ebaed22f4 |
+| gbdt-lossguide-newtoncosine/ties | model  | IDENTICAL x4 | 7f8ad257af939f4b | 7f8ad257af939f4b | 7f8ad257af939f4b | 7f8ad257af939f4b |
+| gbdt-lossguide-newtoncosine/ties | batch  | IDENTICAL x4 | 9d15ca00d60585cb | 9d15ca00d60585cb | 9d15ca00d60585cb | 9d15ca00d60585cb |
+| gbdt-lossguide-newtoncosine/wide | infer  | IDENTICAL x3 | 831d51d0f0de5162 | 831d51d0f0de5162 | 831d51d0f0de5162 | (not run)        |
+| gbdt-lossguide-newtoncosine/wide | model  | IDENTICAL x3 | e7fa5fe33b7ebbae | e7fa5fe33b7ebbae | e7fa5fe33b7ebbae | (not run)        |
+| gbdt-lossguide-newtoncosine/wide | batch  | IDENTICAL x3 | 4e2e2f3aa4778899 | 4e2e2f3aa4778899 | 4e2e2f3aa4778899 | (not run)        |
+| gbdt-lossguide/base          | infer  | IDENTICAL x4 | 38894a4992494eec | 38894a4992494eec | 38894a4992494eec | 38894a4992494eec |
+| gbdt-lossguide/base          | model  | IDENTICAL x4 | 9e01e18241859f87 | 9e01e18241859f87 | 9e01e18241859f87 | 9e01e18241859f87 |
+| gbdt-lossguide/base          | batch  | IDENTICAL x4 | e645c5854d89c482 | e645c5854d89c482 | e645c5854d89c482 | e645c5854d89c482 |
+| gbdt-lossguide/denormal      | infer  | IDENTICAL x3 | 11691f0c929f3421 | 11691f0c929f3421 | 11691f0c929f3421 | (not run)        |
+| gbdt-lossguide/denormal      | model  | IDENTICAL x3 | cb45b0cc2830737b | cb45b0cc2830737b | cb45b0cc2830737b | (not run)        |
+| gbdt-lossguide/denormal      | batch  | IDENTICAL x3 | d168f7185b64c38d | d168f7185b64c38d | d168f7185b64c38d | (not run)        |
+| gbdt-lossguide/denormal_ftz  | infer  | IDENTICAL x3 | 11691f0c929f3421 | 11691f0c929f3421 | 11691f0c929f3421 | (not run)        |
+| gbdt-lossguide/denormal_ftz  | model  | IDENTICAL x3 | cb45b0cc2830737b | cb45b0cc2830737b | cb45b0cc2830737b | (not run)        |
+| gbdt-lossguide/denormal_ftz  | batch  | IDENTICAL x3 | d168f7185b64c38d | d168f7185b64c38d | d168f7185b64c38d | (not run)        |
+| gbdt-lossguide/dupes         | infer  | IDENTICAL x3 | 48a2422d07d569e8 | 48a2422d07d569e8 | 48a2422d07d569e8 | (not run)        |
+| gbdt-lossguide/dupes         | model  | IDENTICAL x3 | 8c51a41b08c13e13 | 8c51a41b08c13e13 | 8c51a41b08c13e13 | (not run)        |
+| gbdt-lossguide/dupes         | batch  | IDENTICAL x3 | 6222402bea446ddc | 6222402bea446ddc | 6222402bea446ddc | (not run)        |
+| gbdt-lossguide/hashed        | infer  | IDENTICAL x3 | 6ad2edafdef76901 | 6ad2edafdef76901 | 6ad2edafdef76901 | (not run)        |
+| gbdt-lossguide/hashed        | model  | IDENTICAL x3 | efe7e6ef1fe94f1e | efe7e6ef1fe94f1e | efe7e6ef1fe94f1e | (not run)        |
+| gbdt-lossguide/hashed        | batch  | IDENTICAL x3 | eb8a95903164a0b0 | eb8a95903164a0b0 | eb8a95903164a0b0 | (not run)        |
+| gbdt-lossguide/negative      | infer  | IDENTICAL x3 | d3535f6580f644c7 | d3535f6580f644c7 | d3535f6580f644c7 | (not run)        |
+| gbdt-lossguide/negative      | model  | IDENTICAL x3 | f2f295f6c2c1929d | f2f295f6c2c1929d | f2f295f6c2c1929d | (not run)        |
+| gbdt-lossguide/negative      | batch  | IDENTICAL x3 | c9a5612ba8242a3f | c9a5612ba8242a3f | c9a5612ba8242a3f | (not run)        |
+| gbdt-lossguide/odd           | infer  | IDENTICAL x4 | c61553f78e6fb798 | c61553f78e6fb798 | c61553f78e6fb798 | c61553f78e6fb798 |
+| gbdt-lossguide/odd           | model  | IDENTICAL x4 | 7393593a5fb3ed79 | 7393593a5fb3ed79 | 7393593a5fb3ed79 | 7393593a5fb3ed79 |
+| gbdt-lossguide/odd           | batch  | IDENTICAL x4 | 5232e0e0101a443e | 5232e0e0101a443e | 5232e0e0101a443e | 5232e0e0101a443e |
+| gbdt-lossguide/ties          | infer  | IDENTICAL x4 | 37cf90363e2078cf | 37cf90363e2078cf | 37cf90363e2078cf | 37cf90363e2078cf |
+| gbdt-lossguide/ties          | model  | IDENTICAL x4 | 3653934f21f61d9d | 3653934f21f61d9d | 3653934f21f61d9d | 3653934f21f61d9d |
+| gbdt-lossguide/ties          | batch  | IDENTICAL x4 | e0ab456d446fcfe2 | e0ab456d446fcfe2 | e0ab456d446fcfe2 | e0ab456d446fcfe2 |
+| gbdt-lossguide/wide          | infer  | IDENTICAL x3 | 95431b9721836309 | 95431b9721836309 | 95431b9721836309 | (not run)        |
+| gbdt-lossguide/wide          | model  | IDENTICAL x3 | 0b24cabbdbb1f867 | 0b24cabbdbb1f867 | 0b24cabbdbb1f867 | (not run)        |
+| gbdt-lossguide/wide          | batch  | IDENTICAL x3 | 00753b402e022f5c | 00753b402e022f5c | 00753b402e022f5c | (not run)        |
+| gbdt-multiclass/base         | infer  | IDENTICAL x4 | eb9f3cbfed539fe0 | eb9f3cbfed539fe0 | eb9f3cbfed539fe0 | eb9f3cbfed539fe0 |
+| gbdt-multiclass/base         | model  | IDENTICAL x4 | 33d956710bbf8d85 | 33d956710bbf8d85 | 33d956710bbf8d85 | 33d956710bbf8d85 |
+| gbdt-multiclass/base         | batch  | IDENTICAL x4 | 3a70c328641a3a08 | 3a70c328641a3a08 | 3a70c328641a3a08 | 3a70c328641a3a08 |
+| gbdt-multiclass/denormal     | infer  | IDENTICAL x3 | 663b0901c8f1f7e8 | 663b0901c8f1f7e8 | 663b0901c8f1f7e8 | (not run)        |
+| gbdt-multiclass/denormal     | model  | IDENTICAL x3 | fae3f33eaab75181 | fae3f33eaab75181 | fae3f33eaab75181 | (not run)        |
+| gbdt-multiclass/denormal     | batch  | IDENTICAL x3 | 6d8cef38fef4621f | 6d8cef38fef4621f | 6d8cef38fef4621f | (not run)        |
+| gbdt-multiclass/denormal_ftz | infer  | IDENTICAL x3 | 663b0901c8f1f7e8 | 663b0901c8f1f7e8 | 663b0901c8f1f7e8 | (not run)        |
+| gbdt-multiclass/denormal_ftz | model  | IDENTICAL x3 | fae3f33eaab75181 | fae3f33eaab75181 | fae3f33eaab75181 | (not run)        |
+| gbdt-multiclass/denormal_ftz | batch  | IDENTICAL x3 | 6d8cef38fef4621f | 6d8cef38fef4621f | 6d8cef38fef4621f | (not run)        |
+| gbdt-multiclass/dupes        | infer  | IDENTICAL x3 | e6a1babee7e9b1b8 | e6a1babee7e9b1b8 | e6a1babee7e9b1b8 | (not run)        |
+| gbdt-multiclass/dupes        | model  | IDENTICAL x3 | c98d064d4c119379 | c98d064d4c119379 | c98d064d4c119379 | (not run)        |
+| gbdt-multiclass/dupes        | batch  | IDENTICAL x3 | e8b3c384b1fb87cd | e8b3c384b1fb87cd | e8b3c384b1fb87cd | (not run)        |
+| gbdt-multiclass/hashed       | infer  | IDENTICAL x3 | 9dc663cf3f2cd561 | 9dc663cf3f2cd561 | 9dc663cf3f2cd561 | (not run)        |
+| gbdt-multiclass/hashed       | model  | IDENTICAL x3 | 9053a07db01dc9b7 | 9053a07db01dc9b7 | 9053a07db01dc9b7 | (not run)        |
+| gbdt-multiclass/hashed       | batch  | IDENTICAL x3 | 8a202b4b170e6c22 | 8a202b4b170e6c22 | 8a202b4b170e6c22 | (not run)        |
+| gbdt-multiclass/negative     | infer  | IDENTICAL x3 | 5be68dbb1112acb0 | 5be68dbb1112acb0 | 5be68dbb1112acb0 | (not run)        |
+| gbdt-multiclass/negative     | model  | IDENTICAL x3 | 658c22be4241195e | 658c22be4241195e | 658c22be4241195e | (not run)        |
+| gbdt-multiclass/negative     | batch  | IDENTICAL x3 | c455d4758b8ce504 | c455d4758b8ce504 | c455d4758b8ce504 | (not run)        |
+| gbdt-multiclass/odd          | infer  | IDENTICAL x4 | 1fa8ad7b45ed2d45 | 1fa8ad7b45ed2d45 | 1fa8ad7b45ed2d45 | 1fa8ad7b45ed2d45 |
+| gbdt-multiclass/odd          | model  | IDENTICAL x4 | 7396a283e6805a3d | 7396a283e6805a3d | 7396a283e6805a3d | 7396a283e6805a3d |
+| gbdt-multiclass/odd          | batch  | IDENTICAL x4 | d59490d8d05927ad | d59490d8d05927ad | d59490d8d05927ad | d59490d8d05927ad |
+| gbdt-multiclass/ties         | infer  | IDENTICAL x4 | 36c62ed7e9da7402 | 36c62ed7e9da7402 | 36c62ed7e9da7402 | 36c62ed7e9da7402 |
+| gbdt-multiclass/ties         | model  | IDENTICAL x4 | 333644e5d21d53f8 | 333644e5d21d53f8 | 333644e5d21d53f8 | 333644e5d21d53f8 |
+| gbdt-multiclass/ties         | batch  | IDENTICAL x4 | e8439a8a50bfbf51 | e8439a8a50bfbf51 | e8439a8a50bfbf51 | e8439a8a50bfbf51 |
+| gbdt-multiclass/wide         | infer  | IDENTICAL x3 | eb9f3cbfed539fe0 | eb9f3cbfed539fe0 | eb9f3cbfed539fe0 | (not run)        |
+| gbdt-multiclass/wide         | model  | IDENTICAL x3 | bc0024b9fb857729 | bc0024b9fb857729 | bc0024b9fb857729 | (not run)        |
+| gbdt-multiclass/wide         | batch  | IDENTICAL x3 | 3a70c328641a3a08 | 3a70c328641a3a08 | 3a70c328641a3a08 | (not run)        |
+| gbdt-nan-modes/base          | infer  | IDENTICAL x4 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 |
+| gbdt-nan-modes/base          | model  | IDENTICAL x4 | d43749ca39897a78 | d43749ca39897a78 | d43749ca39897a78 | d43749ca39897a78 |
+| gbdt-nan-modes/base          | batch  | IDENTICAL x4 | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd |
+| gbdt-nan-modes/denormal      | infer  | IDENTICAL x3 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | (not run)        |
+| gbdt-nan-modes/denormal      | model  | IDENTICAL x3 | 6bd9026c1be4fc1b | 6bd9026c1be4fc1b | 6bd9026c1be4fc1b | (not run)        |
+| gbdt-nan-modes/denormal      | batch  | IDENTICAL x3 | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd | (not run)        |
+| gbdt-nan-modes/denormal_ftz  | infer  | IDENTICAL x3 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | 01fd6a33928b42a8 | (not run)        |
+| gbdt-nan-modes/denormal_ftz  | model  | IDENTICAL x3 | 6bd9026c1be4fc1b | 6bd9026c1be4fc1b | 6bd9026c1be4fc1b | (not run)        |
+| gbdt-nan-modes/denormal_ftz  | batch  | IDENTICAL x3 | 8c08c90af3b9bafd | 8c08c90af3b9bafd | 8c08c90af3b9bafd | (not run)        |
+| gbdt-nan-modes/dupes         | infer  | IDENTICAL x3 | 7126d2d30b9e52a5 | 7126d2d30b9e52a5 | 7126d2d30b9e52a5 | (not run)        |
+| gbdt-nan-modes/dupes         | model  | IDENTICAL x3 | 92631123e38a5a3f | 92631123e38a5a3f | 92631123e38a5a3f | (not run)        |
+| gbdt-nan-modes/dupes         | batch  | IDENTICAL x3 | f9afdbf6ba3aff71 | f9afdbf6ba3aff71 | f9afdbf6ba3aff71 | (not run)        |
+| gbdt-nan-modes/hashed        | infer  | IDENTICAL x3 | 59ada771e335830b | 59ada771e335830b | 59ada771e335830b | (not run)        |
+| gbdt-nan-modes/hashed        | model  | IDENTICAL x3 | 8ac1ca5a4fa67322 | 8ac1ca5a4fa67322 | 8ac1ca5a4fa67322 | (not run)        |
+| gbdt-nan-modes/hashed        | batch  | IDENTICAL x3 | 8ec393a7a64c5a33 | 8ec393a7a64c5a33 | 8ec393a7a64c5a33 | (not run)        |
+| gbdt-nan-modes/negative      | infer  | IDENTICAL x3 | 9b0045ff2be0ff78 | 9b0045ff2be0ff78 | 9b0045ff2be0ff78 | (not run)        |
+| gbdt-nan-modes/negative      | model  | IDENTICAL x3 | 92cdeaecfed9b169 | 92cdeaecfed9b169 | 92cdeaecfed9b169 | (not run)        |
+| gbdt-nan-modes/negative      | batch  | IDENTICAL x3 | d19606059eb16d0f | d19606059eb16d0f | d19606059eb16d0f | (not run)        |
+| gbdt-nan-modes/odd           | infer  | IDENTICAL x4 | 6db4a8fb8ffcc4df | 6db4a8fb8ffcc4df | 6db4a8fb8ffcc4df | 6db4a8fb8ffcc4df |
+| gbdt-nan-modes/odd           | model  | IDENTICAL x4 | d931157021dea1c1 | d931157021dea1c1 | d931157021dea1c1 | d931157021dea1c1 |
+| gbdt-nan-modes/odd           | batch  | IDENTICAL x4 | ee6e7cfed828deb2 | ee6e7cfed828deb2 | ee6e7cfed828deb2 | ee6e7cfed828deb2 |
+| gbdt-nan-modes/ties          | infer  | IDENTICAL x4 | 7e2f6402af40601a | 7e2f6402af40601a | 7e2f6402af40601a | 7e2f6402af40601a |
+| gbdt-nan-modes/ties          | model  | IDENTICAL x4 | 72dda6adec940a2a | 72dda6adec940a2a | 72dda6adec940a2a | 72dda6adec940a2a |
+| gbdt-nan-modes/ties          | batch  | IDENTICAL x4 | 2adbd46492fefdf1 | 2adbd46492fefdf1 | 2adbd46492fefdf1 | 2adbd46492fefdf1 |
+| gbdt-nan-modes/wide          | infer  | IDENTICAL x3 | 4904fc9a408f2e1e | 4904fc9a408f2e1e | 4904fc9a408f2e1e | (not run)        |
+| gbdt-nan-modes/wide          | model  | IDENTICAL x3 | b6a0ab7a969785fc | b6a0ab7a969785fc | b6a0ab7a969785fc | (not run)        |
+| gbdt-nan-modes/wide          | batch  | IDENTICAL x3 | c69fa1a241cda669 | c69fa1a241cda669 | c69fa1a241cda669 | (not run)        |
+| gbdt-onevsall/base           | infer  | IDENTICAL x4 | 9ebe038b917dc3d0 | 9ebe038b917dc3d0 | 9ebe038b917dc3d0 | 9ebe038b917dc3d0 |
+| gbdt-onevsall/base           | model  | IDENTICAL x4 | 66c3cd878ec16470 | 66c3cd878ec16470 | 66c3cd878ec16470 | 66c3cd878ec16470 |
+| gbdt-onevsall/base           | batch  | IDENTICAL x4 | 795bf20d55943289 | 795bf20d55943289 | 795bf20d55943289 | 795bf20d55943289 |
+| gbdt-onevsall/denormal       | infer  | IDENTICAL x3 | 8a1fb012333c53d5 | 8a1fb012333c53d5 | 8a1fb012333c53d5 | (not run)        |
+| gbdt-onevsall/denormal       | model  | IDENTICAL x3 | a1deef011e0cae28 | a1deef011e0cae28 | a1deef011e0cae28 | (not run)        |
+| gbdt-onevsall/denormal       | batch  | IDENTICAL x3 | bdcf7a3b6634a1ee | bdcf7a3b6634a1ee | bdcf7a3b6634a1ee | (not run)        |
+| gbdt-onevsall/denormal_ftz   | infer  | IDENTICAL x3 | 8a1fb012333c53d5 | 8a1fb012333c53d5 | 8a1fb012333c53d5 | (not run)        |
+| gbdt-onevsall/denormal_ftz   | model  | IDENTICAL x3 | a1deef011e0cae28 | a1deef011e0cae28 | a1deef011e0cae28 | (not run)        |
+| gbdt-onevsall/denormal_ftz   | batch  | IDENTICAL x3 | bdcf7a3b6634a1ee | bdcf7a3b6634a1ee | bdcf7a3b6634a1ee | (not run)        |
+| gbdt-onevsall/dupes          | infer  | IDENTICAL x3 | 1f29a1feb66272bd | 1f29a1feb66272bd | 1f29a1feb66272bd | (not run)        |
+| gbdt-onevsall/dupes          | model  | IDENTICAL x3 | 62ad097bcfe17797 | 62ad097bcfe17797 | 62ad097bcfe17797 | (not run)        |
+| gbdt-onevsall/dupes          | batch  | IDENTICAL x3 | 9e06e6167e26ccc4 | 9e06e6167e26ccc4 | 9e06e6167e26ccc4 | (not run)        |
+| gbdt-onevsall/hashed         | infer  | IDENTICAL x3 | c986dbf1c26dfe95 | c986dbf1c26dfe95 | c986dbf1c26dfe95 | (not run)        |
+| gbdt-onevsall/hashed         | model  | IDENTICAL x3 | ebd62ad3a989bcd1 | ebd62ad3a989bcd1 | ebd62ad3a989bcd1 | (not run)        |
+| gbdt-onevsall/hashed         | batch  | IDENTICAL x3 | f9708964880adaaa | f9708964880adaaa | f9708964880adaaa | (not run)        |
+| gbdt-onevsall/negative       | infer  | IDENTICAL x3 | 5b97a98afcadd0df | 5b97a98afcadd0df | 5b97a98afcadd0df | (not run)        |
+| gbdt-onevsall/negative       | model  | IDENTICAL x3 | 73f14bdaa5eef824 | 73f14bdaa5eef824 | 73f14bdaa5eef824 | (not run)        |
+| gbdt-onevsall/negative       | batch  | IDENTICAL x3 | 7d7195d49610c291 | 7d7195d49610c291 | 7d7195d49610c291 | (not run)        |
+| gbdt-onevsall/odd            | infer  | IDENTICAL x4 | df5d7b6325bd9ba1 | df5d7b6325bd9ba1 | df5d7b6325bd9ba1 | df5d7b6325bd9ba1 |
+| gbdt-onevsall/odd            | model  | IDENTICAL x4 | bb3d93d69eb06198 | bb3d93d69eb06198 | bb3d93d69eb06198 | bb3d93d69eb06198 |
+| gbdt-onevsall/odd            | batch  | IDENTICAL x4 | 245742ae15a8bcb1 | 245742ae15a8bcb1 | 245742ae15a8bcb1 | 245742ae15a8bcb1 |
+| gbdt-onevsall/ties           | infer  | IDENTICAL x4 | 597fa19abb40fb1d | 597fa19abb40fb1d | 597fa19abb40fb1d | 597fa19abb40fb1d |
+| gbdt-onevsall/ties           | model  | IDENTICAL x4 | ad927470625838f6 | ad927470625838f6 | ad927470625838f6 | ad927470625838f6 |
+| gbdt-onevsall/ties           | batch  | IDENTICAL x4 | 72bbd68979455f8c | 72bbd68979455f8c | 72bbd68979455f8c | 72bbd68979455f8c |
+| gbdt-onevsall/wide           | infer  | IDENTICAL x3 | 9ebe038b917dc3d0 | 9ebe038b917dc3d0 | 9ebe038b917dc3d0 | (not run)        |
+| gbdt-onevsall/wide           | model  | IDENTICAL x3 | 3698dee2844353e1 | 3698dee2844353e1 | 3698dee2844353e1 | (not run)        |
+| gbdt-onevsall/wide           | batch  | IDENTICAL x3 | 795bf20d55943289 | 795bf20d55943289 | 795bf20d55943289 | (not run)        |
+| gbdt-ordered-rmse/base       | infer  | IDENTICAL x4 | 3113f83d552f6e3e | 3113f83d552f6e3e | 3113f83d552f6e3e | 3113f83d552f6e3e |
+| gbdt-ordered-rmse/base       | model  | IDENTICAL x4 | 43540d21322226ab | 43540d21322226ab | 43540d21322226ab | 43540d21322226ab |
+| gbdt-ordered-rmse/base       | batch  | IDENTICAL x4 | 5cd33ee932513206 | 5cd33ee932513206 | 5cd33ee932513206 | 5cd33ee932513206 |
+| gbdt-ordered-rmse/denormal   | infer  | IDENTICAL x3 | 52d52c2862c2d480 | 52d52c2862c2d480 | 52d52c2862c2d480 | (not run)        |
+| gbdt-ordered-rmse/denormal   | model  | IDENTICAL x3 | ba60376e07b69433 | ba60376e07b69433 | ba60376e07b69433 | (not run)        |
+| gbdt-ordered-rmse/denormal   | batch  | IDENTICAL x3 | 37faad1b0ae508e9 | 37faad1b0ae508e9 | 37faad1b0ae508e9 | (not run)        |
+| gbdt-ordered-rmse/denormal_ftz | infer  | IDENTICAL x3 | 9f09dbf44c4ea866 | 9f09dbf44c4ea866 | 9f09dbf44c4ea866 | (not run)        |
+| gbdt-ordered-rmse/denormal_ftz | model  | IDENTICAL x3 | 7997d9773285efc3 | 7997d9773285efc3 | 7997d9773285efc3 | (not run)        |
+| gbdt-ordered-rmse/denormal_ftz | batch  | IDENTICAL x3 | ccafd9d9faa33059 | ccafd9d9faa33059 | ccafd9d9faa33059 | (not run)        |
+| gbdt-ordered-rmse/dupes      | infer  | IDENTICAL x3 | 957a66a8423c3f6d | 957a66a8423c3f6d | 957a66a8423c3f6d | (not run)        |
+| gbdt-ordered-rmse/dupes      | model  | IDENTICAL x3 | c73190381d66d9bf | c73190381d66d9bf | c73190381d66d9bf | (not run)        |
+| gbdt-ordered-rmse/dupes      | batch  | IDENTICAL x3 | 0526edd73c9b9280 | 0526edd73c9b9280 | 0526edd73c9b9280 | (not run)        |
+| gbdt-ordered-rmse/hashed     | infer  | IDENTICAL x3 | 405de4dd63f5341a | 405de4dd63f5341a | 405de4dd63f5341a | (not run)        |
+| gbdt-ordered-rmse/hashed     | model  | IDENTICAL x3 | e3e28f37057e2029 | e3e28f37057e2029 | e3e28f37057e2029 | (not run)        |
+| gbdt-ordered-rmse/hashed     | batch  | IDENTICAL x3 | c24af09f63a1ff94 | c24af09f63a1ff94 | c24af09f63a1ff94 | (not run)        |
+| gbdt-ordered-rmse/negative   | infer  | IDENTICAL x3 | 82e128c769eb2778 | 82e128c769eb2778 | 82e128c769eb2778 | (not run)        |
+| gbdt-ordered-rmse/negative   | model  | IDENTICAL x3 | 91ecd6c2cdf861d2 | 91ecd6c2cdf861d2 | 91ecd6c2cdf861d2 | (not run)        |
+| gbdt-ordered-rmse/negative   | batch  | IDENTICAL x3 | c325266510844f36 | c325266510844f36 | c325266510844f36 | (not run)        |
+| gbdt-ordered-rmse/odd        | infer  | IDENTICAL x4 | c7f0cb99b920a716 | c7f0cb99b920a716 | c7f0cb99b920a716 | c7f0cb99b920a716 |
+| gbdt-ordered-rmse/odd        | model  | IDENTICAL x4 | 4d02412a6fa569f9 | 4d02412a6fa569f9 | 4d02412a6fa569f9 | 4d02412a6fa569f9 |
+| gbdt-ordered-rmse/odd        | batch  | IDENTICAL x4 | c05993b79c89e09a | c05993b79c89e09a | c05993b79c89e09a | c05993b79c89e09a |
+| gbdt-ordered-rmse/ties       | infer  | IDENTICAL x4 | ca0189610e51bc17 | ca0189610e51bc17 | ca0189610e51bc17 | ca0189610e51bc17 |
+| gbdt-ordered-rmse/ties       | model  | IDENTICAL x4 | f9192cb03ecc6ece | f9192cb03ecc6ece | f9192cb03ecc6ece | f9192cb03ecc6ece |
+| gbdt-ordered-rmse/ties       | batch  | IDENTICAL x4 | 7fa28c2d36832787 | 7fa28c2d36832787 | 7fa28c2d36832787 | 7fa28c2d36832787 |
+| gbdt-ordered-rmse/wide       | infer  | IDENTICAL x3 | 7172e83c3f745933 | 7172e83c3f745933 | 7172e83c3f745933 | (not run)        |
+| gbdt-ordered-rmse/wide       | model  | IDENTICAL x3 | a9b709a9373fae6f | a9b709a9373fae6f | a9b709a9373fae6f | (not run)        |
+| gbdt-ordered-rmse/wide       | batch  | IDENTICAL x3 | 6b8ccb2798f6e41f | 6b8ccb2798f6e41f | 6b8ccb2798f6e41f | (not run)        |
+| gbdt-parametric-losses/base  | infer  | IDENTICAL x4 | e2dd23756497c207 | e2dd23756497c207 | e2dd23756497c207 | e2dd23756497c207 |
+| gbdt-parametric-losses/base  | model  | IDENTICAL x4 | 7e2e2a88d0c131fe | 7e2e2a88d0c131fe | 7e2e2a88d0c131fe | 7e2e2a88d0c131fe |
+| gbdt-parametric-losses/base  | batch  | IDENTICAL x4 | e3eec7c846e31ffa | e3eec7c846e31ffa | e3eec7c846e31ffa | e3eec7c846e31ffa |
+| gbdt-parametric-losses/denormal | infer  | IDENTICAL x3 | 97380b63c224d060 | 97380b63c224d060 | 97380b63c224d060 | (not run)        |
+| gbdt-parametric-losses/denormal | model  | IDENTICAL x3 | 1e0ccac7ced14a0b | 1e0ccac7ced14a0b | 1e0ccac7ced14a0b | (not run)        |
+| gbdt-parametric-losses/denormal | batch  | IDENTICAL x3 | 86e2715ae19f7c77 | 86e2715ae19f7c77 | 86e2715ae19f7c77 | (not run)        |
+| gbdt-parametric-losses/denormal_ftz | infer  | IDENTICAL x3 | 97380b63c224d060 | 97380b63c224d060 | 97380b63c224d060 | (not run)        |
+| gbdt-parametric-losses/denormal_ftz | model  | IDENTICAL x3 | 1e0ccac7ced14a0b | 1e0ccac7ced14a0b | 1e0ccac7ced14a0b | (not run)        |
+| gbdt-parametric-losses/denormal_ftz | batch  | IDENTICAL x3 | 86e2715ae19f7c77 | 86e2715ae19f7c77 | 86e2715ae19f7c77 | (not run)        |
+| gbdt-parametric-losses/dupes | infer  | IDENTICAL x3 | d27d89a1ca2a3981 | d27d89a1ca2a3981 | d27d89a1ca2a3981 | (not run)        |
+| gbdt-parametric-losses/dupes | model  | IDENTICAL x3 | 3cb83e6ba3849d79 | 3cb83e6ba3849d79 | 3cb83e6ba3849d79 | (not run)        |
+| gbdt-parametric-losses/dupes | batch  | IDENTICAL x3 | dc1f020f0627893d | dc1f020f0627893d | dc1f020f0627893d | (not run)        |
+| gbdt-parametric-losses/hashed | infer  | IDENTICAL x3 | 8c7eb86e987afebb | 8c7eb86e987afebb | 8c7eb86e987afebb | (not run)        |
+| gbdt-parametric-losses/hashed | model  | IDENTICAL x3 | 411c116d944cbe1e | 411c116d944cbe1e | 411c116d944cbe1e | (not run)        |
+| gbdt-parametric-losses/hashed | batch  | IDENTICAL x3 | 49e146466ad76275 | 49e146466ad76275 | 49e146466ad76275 | (not run)        |
+| gbdt-parametric-losses/negative | infer  | IDENTICAL x3 | 3f181e550af527bf | 3f181e550af527bf | 3f181e550af527bf | (not run)        |
+| gbdt-parametric-losses/negative | model  | IDENTICAL x3 | 3e302b6828292ed4 | 3e302b6828292ed4 | 3e302b6828292ed4 | (not run)        |
+| gbdt-parametric-losses/negative | batch  | IDENTICAL x3 | 72938f6b6d7f2636 | 72938f6b6d7f2636 | 72938f6b6d7f2636 | (not run)        |
+| gbdt-parametric-losses/odd   | infer  | IDENTICAL x4 | 8e189c476f8d1a35 | 8e189c476f8d1a35 | 8e189c476f8d1a35 | 8e189c476f8d1a35 |
+| gbdt-parametric-losses/odd   | model  | IDENTICAL x4 | 618dacfa57e6afe5 | 618dacfa57e6afe5 | 618dacfa57e6afe5 | 618dacfa57e6afe5 |
+| gbdt-parametric-losses/odd   | batch  | IDENTICAL x4 | 512453808845915f | 512453808845915f | 512453808845915f | 512453808845915f |
+| gbdt-parametric-losses/ties  | infer  | IDENTICAL x4 | d9e5a906ff57c89c | d9e5a906ff57c89c | d9e5a906ff57c89c | d9e5a906ff57c89c |
+| gbdt-parametric-losses/ties  | model  | IDENTICAL x4 | 098b24f142083ae7 | 098b24f142083ae7 | 098b24f142083ae7 | 098b24f142083ae7 |
+| gbdt-parametric-losses/ties  | batch  | IDENTICAL x4 | 8aebd06a0db0d07a | 8aebd06a0db0d07a | 8aebd06a0db0d07a | 8aebd06a0db0d07a |
+| gbdt-parametric-losses/wide  | infer  | IDENTICAL x3 | 0629c58332e5071b | 0629c58332e5071b | 0629c58332e5071b | (not run)        |
+| gbdt-parametric-losses/wide  | model  | IDENTICAL x3 | 326aece2829c407b | 326aece2829c407b | 326aece2829c407b | (not run)        |
+| gbdt-parametric-losses/wide  | batch  | IDENTICAL x3 | dab71611c5c3f315 | dab71611c5c3f315 | dab71611c5c3f315 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/base | infer  | IDENTICAL x4 | 2754757c200872f3 | 2754757c200872f3 | 2754757c200872f3 | 2754757c200872f3 |
+| gbdt-pointwise-l2-bayesian-eval/base | model  | IDENTICAL x4 | c29dddb945d072a8 | c29dddb945d072a8 | c29dddb945d072a8 | c29dddb945d072a8 |
+| gbdt-pointwise-l2-bayesian-eval/base | batch  | IDENTICAL x4 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | 3fd0fe4443273a54 |
+| gbdt-pointwise-l2-bayesian-eval/denormal | infer  | IDENTICAL x3 | 2754757c200872f3 | 2754757c200872f3 | 2754757c200872f3 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/denormal | model  | IDENTICAL x3 | cc76fd996e83a163 | cc76fd996e83a163 | cc76fd996e83a163 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/denormal | batch  | IDENTICAL x3 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/denormal_ftz | infer  | IDENTICAL x3 | 2754757c200872f3 | 2754757c200872f3 | 2754757c200872f3 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/denormal_ftz | model  | IDENTICAL x3 | cc76fd996e83a163 | cc76fd996e83a163 | cc76fd996e83a163 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/denormal_ftz | batch  | IDENTICAL x3 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | 3fd0fe4443273a54 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/dupes | infer  | IDENTICAL x3 | 9c447c2e24529fa4 | 9c447c2e24529fa4 | 9c447c2e24529fa4 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/dupes | model  | IDENTICAL x3 | fee0ed429e482b4f | fee0ed429e482b4f | fee0ed429e482b4f | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/dupes | batch  | IDENTICAL x3 | 6e7098112cfe3ef6 | 6e7098112cfe3ef6 | 6e7098112cfe3ef6 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/hashed | infer  | IDENTICAL x3 | c873cc2813bbb900 | c873cc2813bbb900 | c873cc2813bbb900 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/hashed | model  | IDENTICAL x3 | bc91bc55d5b974b4 | bc91bc55d5b974b4 | bc91bc55d5b974b4 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/hashed | batch  | IDENTICAL x3 | aaa3c0c9e9ff0239 | aaa3c0c9e9ff0239 | aaa3c0c9e9ff0239 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/negative | infer  | IDENTICAL x3 | 69fe3fa629a1097d | 69fe3fa629a1097d | 69fe3fa629a1097d | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/negative | model  | IDENTICAL x3 | f98af47bb5375e00 | f98af47bb5375e00 | f98af47bb5375e00 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/negative | batch  | IDENTICAL x3 | dee639c44dd07990 | dee639c44dd07990 | dee639c44dd07990 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/odd | infer  | IDENTICAL x4 | e1aec5dad8dc37f0 | e1aec5dad8dc37f0 | e1aec5dad8dc37f0 | e1aec5dad8dc37f0 |
+| gbdt-pointwise-l2-bayesian-eval/odd | model  | IDENTICAL x4 | 6ea8282d329c6c7e | 6ea8282d329c6c7e | 6ea8282d329c6c7e | 6ea8282d329c6c7e |
+| gbdt-pointwise-l2-bayesian-eval/odd | batch  | IDENTICAL x4 | 149b530e8adbf44b | 149b530e8adbf44b | 149b530e8adbf44b | 149b530e8adbf44b |
+| gbdt-pointwise-l2-bayesian-eval/ties | infer  | IDENTICAL x4 | 92b20ebae1dabad7 | 92b20ebae1dabad7 | 92b20ebae1dabad7 | 92b20ebae1dabad7 |
+| gbdt-pointwise-l2-bayesian-eval/ties | model  | IDENTICAL x4 | 293e124b96e008e4 | 293e124b96e008e4 | 293e124b96e008e4 | 293e124b96e008e4 |
+| gbdt-pointwise-l2-bayesian-eval/ties | batch  | IDENTICAL x4 | 405d98bc60e93077 | 405d98bc60e93077 | 405d98bc60e93077 | 405d98bc60e93077 |
+| gbdt-pointwise-l2-bayesian-eval/wide | infer  | IDENTICAL x3 | 194456fd0ea51325 | 194456fd0ea51325 | 194456fd0ea51325 | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/wide | model  | IDENTICAL x3 | 9ca08d3b891657ed | 9ca08d3b891657ed | 9ca08d3b891657ed | (not run)        |
+| gbdt-pointwise-l2-bayesian-eval/wide | batch  | IDENTICAL x3 | 86f88156299d777e | 86f88156299d777e | 86f88156299d777e | (not run)        |
+| gbdt-rmse/base               | infer  | IDENTICAL x4 | ba6284898fcd7adb | ba6284898fcd7adb | ba6284898fcd7adb | ba6284898fcd7adb |
+| gbdt-rmse/base               | model  | IDENTICAL x4 | 6a7e0d174aadda21 | 6a7e0d174aadda21 | 6a7e0d174aadda21 | 6a7e0d174aadda21 |
+| gbdt-rmse/base               | batch  | IDENTICAL x4 | 3a53a53abfe321f6 | 3a53a53abfe321f6 | 3a53a53abfe321f6 | 3a53a53abfe321f6 |
+| gbdt-rmse/denormal           | infer  | IDENTICAL x3 | 86db747723f31263 | 86db747723f31263 | 86db747723f31263 | (not run)        |
+| gbdt-rmse/denormal           | model  | IDENTICAL x3 | 70624119eb3559b1 | 70624119eb3559b1 | 70624119eb3559b1 | (not run)        |
+| gbdt-rmse/denormal           | batch  | IDENTICAL x3 | 24d0e532611fba96 | 24d0e532611fba96 | 24d0e532611fba96 | (not run)        |
+| gbdt-rmse/denormal_ftz       | infer  | IDENTICAL x3 | 86db747723f31263 | 86db747723f31263 | 86db747723f31263 | (not run)        |
+| gbdt-rmse/denormal_ftz       | model  | IDENTICAL x3 | 70624119eb3559b1 | 70624119eb3559b1 | 70624119eb3559b1 | (not run)        |
+| gbdt-rmse/denormal_ftz       | batch  | IDENTICAL x3 | 24d0e532611fba96 | 24d0e532611fba96 | 24d0e532611fba96 | (not run)        |
+| gbdt-rmse/dupes              | infer  | IDENTICAL x3 | da755bd965b6c511 | da755bd965b6c511 | da755bd965b6c511 | (not run)        |
+| gbdt-rmse/dupes              | model  | IDENTICAL x3 | d9198fa372812bc0 | d9198fa372812bc0 | d9198fa372812bc0 | (not run)        |
+| gbdt-rmse/dupes              | batch  | IDENTICAL x3 | 17cffc317f1b3c99 | 17cffc317f1b3c99 | 17cffc317f1b3c99 | (not run)        |
+| gbdt-rmse/hashed             | infer  | IDENTICAL x3 | b79afaae27b8bdb6 | b79afaae27b8bdb6 | b79afaae27b8bdb6 | (not run)        |
+| gbdt-rmse/hashed             | model  | IDENTICAL x3 | e11795530a351b48 | e11795530a351b48 | e11795530a351b48 | (not run)        |
+| gbdt-rmse/hashed             | batch  | IDENTICAL x3 | 15a568bd232c8fbd | 15a568bd232c8fbd | 15a568bd232c8fbd | (not run)        |
+| gbdt-rmse/negative           | infer  | IDENTICAL x3 | 2f7db100a96ca46b | 2f7db100a96ca46b | 2f7db100a96ca46b | (not run)        |
+| gbdt-rmse/negative           | model  | IDENTICAL x3 | 70b2f95595d7194e | 70b2f95595d7194e | 70b2f95595d7194e | (not run)        |
+| gbdt-rmse/negative           | batch  | IDENTICAL x3 | 36bc296fc8f0a3cf | 36bc296fc8f0a3cf | 36bc296fc8f0a3cf | (not run)        |
+| gbdt-rmse/odd                | infer  | IDENTICAL x4 | 88f9e64eea1b35df | 88f9e64eea1b35df | 88f9e64eea1b35df | 88f9e64eea1b35df |
+| gbdt-rmse/odd                | model  | IDENTICAL x4 | 7a0ea772f0108d40 | 7a0ea772f0108d40 | 7a0ea772f0108d40 | 7a0ea772f0108d40 |
+| gbdt-rmse/odd                | batch  | IDENTICAL x4 | 6b459ed54f82865a | 6b459ed54f82865a | 6b459ed54f82865a | 6b459ed54f82865a |
+| gbdt-rmse/ties               | infer  | IDENTICAL x4 | 4044415de3b73aee | 4044415de3b73aee | 4044415de3b73aee | 4044415de3b73aee |
+| gbdt-rmse/ties               | model  | IDENTICAL x4 | b1eb77816b7f439a | b1eb77816b7f439a | b1eb77816b7f439a | b1eb77816b7f439a |
+| gbdt-rmse/ties               | batch  | IDENTICAL x4 | 1681c6f968f338d2 | 1681c6f968f338d2 | 1681c6f968f338d2 | 1681c6f968f338d2 |
+| gbdt-rmse/wide               | infer  | IDENTICAL x3 | 3f008ec3ab37ef2f | 3f008ec3ab37ef2f | 3f008ec3ab37ef2f | (not run)        |
+| gbdt-rmse/wide               | model  | IDENTICAL x3 | 153340671f3c1919 | 153340671f3c1919 | 153340671f3c1919 | (not run)        |
+| gbdt-rmse/wide               | batch  | IDENTICAL x3 | 288e6b1fb3347f2d | 288e6b1fb3347f2d | 288e6b1fb3347f2d | (not run)        |
+| gbdt-symmetric/base          | infer  | IDENTICAL x4 | e1db044dc82354ac | e1db044dc82354ac | e1db044dc82354ac | e1db044dc82354ac |
+| gbdt-symmetric/base          | model  | IDENTICAL x4 | ee776c33f052679a | ee776c33f052679a | ee776c33f052679a | ee776c33f052679a |
+| gbdt-symmetric/base          | batch  | IDENTICAL x4 | 9d36287df25eff95 | 9d36287df25eff95 | 9d36287df25eff95 | 9d36287df25eff95 |
+| gbdt-symmetric/denormal      | infer  | IDENTICAL x3 | e1db044dc82354ac | e1db044dc82354ac | e1db044dc82354ac | (not run)        |
+| gbdt-symmetric/denormal      | model  | IDENTICAL x3 | 4f2c8b24bbe2eb42 | 4f2c8b24bbe2eb42 | 4f2c8b24bbe2eb42 | (not run)        |
+| gbdt-symmetric/denormal      | batch  | IDENTICAL x3 | 9d36287df25eff95 | 9d36287df25eff95 | 9d36287df25eff95 | (not run)        |
+| gbdt-symmetric/denormal_ftz  | infer  | IDENTICAL x3 | e1db044dc82354ac | e1db044dc82354ac | e1db044dc82354ac | (not run)        |
+| gbdt-symmetric/denormal_ftz  | model  | IDENTICAL x3 | 4f2c8b24bbe2eb42 | 4f2c8b24bbe2eb42 | 4f2c8b24bbe2eb42 | (not run)        |
+| gbdt-symmetric/denormal_ftz  | batch  | IDENTICAL x3 | 9d36287df25eff95 | 9d36287df25eff95 | 9d36287df25eff95 | (not run)        |
+| gbdt-symmetric/dupes         | infer  | IDENTICAL x3 | 04bc7278a6524318 | 04bc7278a6524318 | 04bc7278a6524318 | (not run)        |
+| gbdt-symmetric/dupes         | model  | IDENTICAL x3 | 534330823f304849 | 534330823f304849 | 534330823f304849 | (not run)        |
+| gbdt-symmetric/dupes         | batch  | IDENTICAL x3 | 6ea60cd70531740c | 6ea60cd70531740c | 6ea60cd70531740c | (not run)        |
+| gbdt-symmetric/hashed        | infer  | IDENTICAL x3 | 548cebaf2b1310eb | 548cebaf2b1310eb | 548cebaf2b1310eb | (not run)        |
+| gbdt-symmetric/hashed        | model  | IDENTICAL x3 | 24d9422c46dcfff9 | 24d9422c46dcfff9 | 24d9422c46dcfff9 | (not run)        |
+| gbdt-symmetric/hashed        | batch  | IDENTICAL x3 | 8cb251b8df89f2dd | 8cb251b8df89f2dd | 8cb251b8df89f2dd | (not run)        |
+| gbdt-symmetric/negative      | infer  | IDENTICAL x3 | 3d7847393c2eeeed | 3d7847393c2eeeed | 3d7847393c2eeeed | (not run)        |
+| gbdt-symmetric/negative      | model  | IDENTICAL x3 | 145ac848bbea01ba | 145ac848bbea01ba | 145ac848bbea01ba | (not run)        |
+| gbdt-symmetric/negative      | batch  | IDENTICAL x3 | 557ef75b0ae06946 | 557ef75b0ae06946 | 557ef75b0ae06946 | (not run)        |
+| gbdt-symmetric/odd           | infer  | IDENTICAL x4 | 24dbd6988a519e0c | 24dbd6988a519e0c | 24dbd6988a519e0c | 24dbd6988a519e0c |
+| gbdt-symmetric/odd           | model  | IDENTICAL x4 | 3dfdadfd1961d2b5 | 3dfdadfd1961d2b5 | 3dfdadfd1961d2b5 | 3dfdadfd1961d2b5 |
+| gbdt-symmetric/odd           | batch  | IDENTICAL x4 | a60497d0f9d20e28 | a60497d0f9d20e28 | a60497d0f9d20e28 | a60497d0f9d20e28 |
+| gbdt-symmetric/ties          | infer  | IDENTICAL x4 | e71542e71394acc3 | e71542e71394acc3 | e71542e71394acc3 | e71542e71394acc3 |
+| gbdt-symmetric/ties          | model  | IDENTICAL x4 | d01adab1226baf49 | d01adab1226baf49 | d01adab1226baf49 | d01adab1226baf49 |
+| gbdt-symmetric/ties          | batch  | IDENTICAL x4 | 8146b2372b89188b | 8146b2372b89188b | 8146b2372b89188b | 8146b2372b89188b |
+| gbdt-symmetric/wide          | infer  | IDENTICAL x3 | 9f7630d079f43f07 | 9f7630d079f43f07 | 9f7630d079f43f07 | (not run)        |
+| gbdt-symmetric/wide          | model  | IDENTICAL x3 | 1cdaebf93c86aa45 | 1cdaebf93c86aa45 | 1cdaebf93c86aa45 | (not run)        |
+| gbdt-symmetric/wide          | batch  | IDENTICAL x3 | 09f8dd630ebbce0f | 09f8dd630ebbce0f | 09f8dd630ebbce0f | (not run)        |
+
+summary (infer/model): IDENTICAL=270, N/A=18
+summary (batch): IDENTICAL=144
+summary (rlpair): 

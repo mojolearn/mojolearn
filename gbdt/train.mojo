@@ -766,6 +766,13 @@ def train(
     # default (`-D MOJOLEARN_2550_HOST_COPY=1` opts out); every other
     # caller passes the List.
     x_borrow: Optional[MutPointer[Float32, MutUntrackedOrigin]] = None,
+    # THE POOL'S GROUPING, their `TQueriesGrouping` sizes in row order: one
+    # entry per query, each the number of CONSECUTIVE rows carrying that
+    # `group_id` (`libs/data/objects.cpp:60-87` builds the groups from runs
+    # and refuses a repeated id as "group Ids are not consecutive"; the
+    # Python wrapper applies that rule before the sizes cross). Empty means
+    # no grouping, which is every existing caller.
+    group_sizes: List[UInt32] = List[UInt32](),
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -1005,6 +1012,32 @@ def train(
         )
     if len(y) != n_rows:
         raise Error("y size mismatch")
+    # ---- group_id: the grouping is checked, then refused by name ----
+    # Every loss this implementation trains is pointwise and reads no query
+    # structure. CatBoost's readers of the grouping are the querywise and
+    # pairwise targets (`cuda/targets/querywise_targets_impl.h`,
+    # `pair_logit_pairwise.h`), none of which is implemented yet, so a
+    # grouping arriving here is refused rather than carried and ignored.
+    if len(group_sizes) > 0:
+        var covered = 0
+        for g in range(len(group_sizes)):
+            if group_sizes[g] == UInt32(0):
+                raise Error(
+                    "group_id: group " + String(g) + " has no rows"
+                )
+            covered += Int(group_sizes[g])
+        if covered != n_rows:
+            raise Error(
+                "group_id: the group sizes cover " + String(covered)
+                + " rows of " + String(n_rows)
+            )
+        raise Error(
+            "group_id is read only by the querywise and pairwise losses"
+            " (QueryRMSE, PairLogit, YetiRank, QuerySoftMax,"
+            " QueryCrossEntropy), which this implementation does not train"
+            " yet; loss='" + loss + "' does not use it, so it is refused by"
+            " name rather than carried and ignored"
+        )
     # Validate dense class codes before class-weight indexing or allocating
     # prediction planes. The later objective check was too late to protect
     # MakeClassificationWeights (upstream data_providers.cpp:162-168).

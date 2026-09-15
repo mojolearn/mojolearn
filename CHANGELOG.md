@@ -10,6 +10,12 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- `GradientBoosting.fit` takes `group_id`, CatBoost's Pool argument: one string or integer id per
+  row (an integer compares by its decimal spelling, as their Pool hashes it), each group's rows
+  consecutive or the fit raises "group Ids are not consecutive". The grouping crosses into the GPU
+  binding and the GBDT host binding as run lengths, and every loss this implementation trains
+  refuses it BY NAME there, because no querywise loss is implemented yet. `subgroup_id` and `pairs`
+  are refused by name in Python. A fit without them sends the same parameter layout as before.
 - Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
   namely the byte LM's, the forest's, the tokenizer's and the twelve routed families (core,
   linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp, arima), fifteen in

@@ -213,6 +213,12 @@ effective numeric mode at `29a8c848`, tested with changed process defaults in
 lightweight checks and a separate NVIDIA native wrapper overlay. That newer
 wrapper is exposed in the 0.6.0 alpha Python overlay; that does not recertify inherited native binaries.
 
+`GradientBoosting.fit` accepts CatBoost's Pool `group_id` (string or integer ids, each group's rows
+consecutive). No loss this implementation trains reads a grouping yet, so every fit given one
+refuses it by name in both the GPU binding and the GBDT host binding; `subgroup_id` and `pairs`
+are refused by name in Python. The querywise and pairwise losses are listed in
+[gbdt/NOT_IMPLEMENTED.tsv](gbdt/NOT_IMPLEMENTED.tsv).
+
 ## What counts as certification
 
 A cross-vendor result is accepted only when all of the following are recorded:
