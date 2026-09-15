@@ -22,10 +22,19 @@ Updated 2026-09-15 by the cpusamba agent (launched as cpumamba13, re-pointed to 
   require-columns 4 OK; sabotage set DIVERGENT on every cell; a dropout-mask arm DIVERGENT on the
   dropout lane only.
 
+- Restart (Sep 15 ~11:30 ET): origin/main (450423c95, the routine CPU gate), the transformer branch
+  (b5a651dfc) and the mamba branch (082fbb569, then 3cecb4238) merged in with no conflicts. On the M4,
+  one core, core, training, mamba and transformer host bindings rebuilt into a fresh directory at
+  260a160fc: identity_break --lanes samba,samba-untied-dropout-accum diffed against the 166-lane record
+  with --require-columns 4 read IDENTICAL=18 train, IDENTICAL=36 infer/model, IDENTICAL=18 batch,
+  require-columns 4 OK (98 s); all four families built with -D MOJOLEARN_HOST_SABOTAGE=1 at 483df954b
+  read DIVERGENT=18 train, 36 infer/model, 18 batch. docs_facts --check and wheel_ci pins pass.
+  The old gate run 34975751193 ran the pre-routine workflow.
+
 ## Running
 
-- The seven-runner CPU identity gate on this branch (push of the merge with main). Check with
-  `gh run list --branch lane/cpu-training-samba -L 5`.
+- Nothing. Pushed with [skip ci]; the routine push gate on this branch runs after lane/cpu-training-transformer
+  and lane/cpu-training-mamba merge, one lane gating at a time.
 
 ## Next commands
 
