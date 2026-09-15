@@ -347,7 +347,7 @@ print("  smoke: metrics groups A, B, C and D each launched")
 
 # spectral: the kNN graph, the Laplacian, the Lanczos and the k-means, on the
 # dataset path. A FAILURE HERE IS A REAL FINDING, not flakiness -- a restart
-# breakdown or a disconnected graph is refused BY NAME by the ported code, so
+# breakdown or a disconnected graph is refused BY NAME by the Mojo code, so
 # a raise names what went wrong.
 sc = S.SpectralClustering(n_clusters=3, n_neighbors=10, random_state=0).fit(X)
 assert sc.labels_.shape == (n,), sc.labels_.shape

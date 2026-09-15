@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Merge two labellings in place, according to a core-point mask.
 
-FOLLOWS `raft/label/detail/merge_labels.cuh` at RAFT `661a3b8`
-(`propagate_label_kernel`, `reassign_label_kernel`, `merge_labels`).
-Followed statement for statement.
+Reference: `raft/label/detail/merge_labels.cuh` (RAFT `661a3b8`):
+`propagate_label_kernel`, `reassign_label_kernel`, `merge_labels`.
 
 WHY DBSCAN NEEDS THIS AT ALL
 ----------------------------

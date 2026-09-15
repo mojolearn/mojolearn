@@ -1,0 +1,26 @@
+FAILS AS IT MUST c_sampler_alone mamba2: RLPAIR_MOVED:sampler B=1 vs trainer B=5:seq 0 token 5:nll 0x3feae462 vs 0x3feae463
+FAILS AS IT MUST c_sampler_alone transformer: RLPAIR_MOVED:sampler B=1 vs trainer B=5:seq 0 token 5:nll 0x3fdaa51d vs 0x3fdaa51c
+FAILS AS IT MUST c_sampler_alone samba: RLPAIR_MOVED:sampler B=1 vs trainer B=5:seq 0 token 5:nll 0x40a818e6 vs 0x40a818e7
+FAILS AS IT MUST c_sampler_alone byte-lm-host-infer: RLPAIR_MOVED:sampler B=1 vs trainer B=5:seq 0 token 5:nll 0x40a9cb7c vs 0x40a9cb7d
+FAILS AS IT MUST c_trainer_alone mamba2: RLPAIR_MOVED:trainer B=1 vs trainer B=5:seq 0 token 7:logits element 0 0xbf924085 vs 0xbf924084
+FAILS AS IT MUST c_trainer_alone transformer: RLPAIR_MOVED:trainer B=1 vs trainer B=5:seq 0 token 7:logits element 0 0xbe4becd5 vs 0xbe4becd4
+FAILS AS IT MUST c_trainer_alone samba: RLPAIR_MOVED:trainer B=1 vs trainer B=5:seq 0 token 7:logits element 0 0x3cc9c853 vs 0x3cc9c852
+FAILS AS IT MUST c_trainer_alone byte-lm-host-infer: RLPAIR_MOVED:trainer B=1 vs trainer B=5:seq 0 token 7:logits element 0 0x3d938e11 vs 0x3d938e10
+FAILS AS IT MUST c_trainer_split mamba2: RLPAIR_MOVED:trainer split 2,3 vs trainer B=5:seq 3 token 2:logits element 0 0xbf314f1e vs 0xbf314f1f
+FAILS AS IT MUST c_trainer_split transformer: RLPAIR_MOVED:trainer split 2,3 vs trainer B=5:seq 3 token 2:logits element 0 0x3f35b881 vs 0x3f35b880
+FAILS AS IT MUST c_trainer_split samba: RLPAIR_MOVED:trainer split 2,3 vs trainer B=5:seq 3 token 2:logits element 0 0xbd741527 vs 0xbd741526
+FAILS AS IT MUST c_trainer_split byte-lm-host-infer: RLPAIR_MOVED:trainer split 2,3 vs trainer B=5:seq 3 token 2:logits element 0 0xbe149a32 vs 0xbe149a33
+FAILS AS IT MUST c_second_sampler byte-lm-host-infer: RLPAIR_MOVED:sampler threaded=True prefix recompute B=5 vs trainer B=5:seq 4 token 11:logits element 0 0x3d706a08 vs 0x3d706a09
+FAILS AS IT MUST c_join_order mamba2: RLPAIR_MOVED:continuous (join row 4 at token 3, leave row 1 after token 8) vs trainer B=5:seq 0 token 3:ids 0x00000011 vs 0x00000000; nll 0x3fdc8ebe vs 0x3f9fd236; logits element 0 0x40422a96 vs 0x40824857
+FAILS AS IT MUST c_join_order transformer: RLPAIR_MOVED:continuous (join row 4 at token 3, leave row 1 after token 8) vs trainer B=5:seq 0 token 3:ids 0x00000029 vs 0x00000017; nll 0x3f645577 vs 0x3fe1b861; logits element 0 0x3f89908e vs 0xc053bdf7
+FAILS AS IT MUST c_join_order samba: RLPAIR_MOVED:continuous (join row 4 at token 3, leave row 1 after token 8) vs trainer B=5:seq 0 token 3:ids 0x00000045 vs 0x00000070; nll 0x40a8876a vs 0x40a6c9e8; logits element 0 0x3ddd979d vs 0xbd31a5ab
+FAILS AS IT MUST c_join_order byte-lm-host-infer: RLPAIR_MOVED:continuous (join row 4 at token 3, leave row 1 after token 8) vs trainer B=5:seq 0 token 3:ids 0x00000037 vs 0x0000002a; nll 0x40ac8f1c vs 0x40a9134e; logits element 0 0x3ceb81bd vs 0x3d0aba91
+FAILS AS IT MUST c_leave_order mamba2: RLPAIR_MOVED:continuous (join row 4 at token 3, leave row 1 after token 8) vs trainer B=5:seq 0 token 9:ids 0x00000013 vs 0x0000002b; nll 0x401ac1b6 vs 0x3fe6cf36; logits element 0 0x3f797a07 vs 0x3f35dc95
+FAILS AS IT MUST c_leave_order transformer: RLPAIR_MOVED:continuous (join row 4 at token 3, leave row 1 after token 8) vs trainer B=5:seq 0 token 9:ids 0x0000000c vs 0x0000002f; nll 0x3ecd11dc vs 0x3f9555c7; logits element 0 0xc0040214 vs 0x3fd951a7
+FAILS AS IT MUST c_leave_order samba: RLPAIR_MOVED:continuous (join row 4 at token 3, leave row 1 after token 8) vs trainer B=5:seq 0 token 9:ids 0x00000051 vs 0x00000041; nll 0x40a7844a vs 0x40a7d2f2; logits element 0 0x3d260aa0 vs 0x3dffaad4
+FAILS AS IT MUST c_leave_order byte-lm-host-infer: RLPAIR_MOVED:continuous (join row 4 at token 3, leave row 1 after token 8) vs trainer B=5:seq 0 token 9:nll 0x40aca2a8 vs 0x40ac9c26; logits element 0 0x3d844393 vs 0xbcb58de1
+unpatched mamba2: f4abbd5451ff5172
+unpatched transformer: 41c065998015307c
+unpatched samba: 8ae8dda8ba22a4aa
+unpatched byte-lm-host-infer: 22f7e367585a569c
+controls broken: 0

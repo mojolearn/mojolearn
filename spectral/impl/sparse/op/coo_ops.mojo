@@ -6,7 +6,7 @@ sorted_coo_to_csr`, as HOST index plumbing.
 
 ============ DEVIATION 775: THRUST/CUB INDEX PLUMBING RUNS ON THE HOST, AND
 ============ REPEATED (row, col) KEYS ARE REFUSED BY NAME ==================
-THEIRS: `coo_sort` (`sort.h:62-70`) is `thrust::sort_by_key` over a
+REFERENCE: `coo_sort` (`sort.h:62-70`) is `thrust::sort_by_key` over a
 `(row, col)` zip with the `TupleComp` comparator (`sort.h:33-50`); NOT
 stable, so two entries with the same key land in an unspecified order.
 `coo_remove_scalar` is a per-row compaction kernel (`filter.cuh:39-85`)
@@ -14,7 +14,7 @@ behind two `exclusive_scan`s, reached by cuVS through the `raft::resources`
 overload (`filter.cuh:197-250`); `sorted_coo_to_csr` is `coo_degree` plus
 an `exclusive_scan` (`csr.cuh:78-90`). All integer
 work; none of it rounds a float.
-OURS: the same three operations on the host, over `List[Int32]`/
+HERE: the same three operations on the host, over `List[Int32]`/
 `List[Float32]`, because (a) the repository has no device sort to implement them
 onto without writing one, and (b) the outputs are pure functions of the
 input regardless of where they run -- a sort to a TOTAL ORDER `(row, col,
@@ -42,7 +42,7 @@ run of `(0, 0, 0.0)` padding entries -- and cuVS sorts THAT
 (`spectral_embedding.cu:95-101`) and only then compacts it with
 `coo_remove_scalar(0)` (`:103-108`). A sort that refuses repeats cannot
 stand where theirs sorts.
-OURS: `coo_sort` is now their sort and nothing else. `refuse_repeated_keys`
+HERE: `coo_sort` is now their sort and nothing else. `refuse_repeated_keys`
 carries DEVIATION 775's refusal and is called on the ROW-SORTED graph that
 enters the Laplacian, on the device arm and in the oracle alike -- the one
 place a repeat is actually a tie-break theirs never defined (the degree

@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """When to stop boosting, decided from a HELD-OUT error curve.
 
-FOLLOWS `catboost/libs/overfitting_detector/overfitting_detector.{h,cpp}`
-at CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/libs/overfitting_detector/overfitting_detector.{h,cpp}`
+(CatBoost `54a8143a`).
 
 THREE OF THEIR FOUR TYPES ARE HERE and the fourth is not:
 

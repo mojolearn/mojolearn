@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Solve a small symmetric positive-definite system, by Cholesky.
 
-FOLLOWS `catboost/private/libs/lapack/linear_system.{h,cpp}` at CatBoost
-`54a8143a` -- `SolveLinearSystemCholesky` (`:34-49`). Followed statement for statement. Do not
+Reference: `catboost/private/libs/lapack/linear_system.{h,cpp}` (CatBoost
+`54a8143a`), `SolveLinearSystemCholesky` (`:34-49`). Do not
 improve.
 
 Its ONE caller in this implementation's reach is the walker's blocked-Hessian arm,
@@ -22,7 +22,7 @@ and the pairwise oracle is not implemented. It is in `gbdt/NOT_IMPLEMENTED.tsv`.
 # DEVIATION 74: theirs is LAPACK's `dposv_` (`linear_system.cpp:46-47`),
 # reached through the clapack vendored in `contrib/libs/clapack`.
 #
-# clapack is OPEN, so under ENGINEERING_RULES 0b-i it is an candidate to implement rather
+# clapack is OPEN, so under ENGINEERING_RULES 0b-i it is a candidate to implement rather
 # than a call to make -- the "call the platform's equivalent" exception is
 # for CLOSED libraries (cuBLAS, cuSOLVER) where there is nothing to read.
 # And the shape rules it out anyway: this runs on the HOST, once per leaf,
@@ -30,7 +30,7 @@ and the pairwise oracle is not implemented. It is in `gbdt/NOT_IMPLEMENTED.tsv`.
 # be a round trip per leaf to solve a 6x6.
 #
 # `dposv` is factor-then-solve: Cholesky (`dpotrf`) followed by two
-# triangular solves (`dpotrs`). Both are transcribed below in their
+# triangular solves (`dpotrs`). Both are implemented below in their
 # textbook form, which is what LAPACK's own reference implementation is.
 #
 # THEIR FAILURE BEHAVIOUR IS COPIED AND IT IS NOT WHAT IT LOOKS LIKE.

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`thrust::inclusive_scan_by_key`, FUSED: the cuML RF node partition.
 
-FOLLOWS the call at
+Reference: the call at
 `cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels_impl.cuh
 :165-206` (`launchNodeSplitKernel`), its operator at `:40-46`
 (`NodeSplitPartitionScanOp`), its state at `:36-38`
@@ -42,7 +42,7 @@ writer, so partition_row_ids is populated during the scan rather than by
 a second scatter kernel."
 
 A segmented-scan primitive that takes an input ARRAY and writes an output
-ARRAY does not implementation this call. It implements a slower algorithm and freezes the
+ARRAY does not implement this call. It implements a slower algorithm and freezes the
 extra passes into the design, which is the mistake this repository has
 already paid for once (`traffic-model-ignores-blocks`; and the k-NN case
 where standing a device-wide vendor GEMM plus a vendor top-k in for a
@@ -69,7 +69,7 @@ reader to assume the flags add.
 CUB spells that as a head flag and an operator that discards the left
 operand when the right one has already reached a segment start. This
 repository already carries that exact shape in
-`gbdt/gpu_util/kernel/segmented_scan.mojo`, which mirrors CatBoost's
+`gbdt/gpu_util/kernel/segmented_scan.mojo`, which cites CatBoost's
 `TSegmentedSum` (`cuda_util/kernel/segmented_scan_helpers.cuh:11-34`):
 
     newValue = rightFlag ? right : op(left, right)
@@ -90,7 +90,7 @@ instantiations.
 
 Theirs compares adjacent keys (`thrust::equal_to<IdxT>{}` at `:205`); the
 CatBoost family this repository already implements reads a flag bit out of the
-value or the index. This implementation keeps THEIRS: slot `i` is a segment head iff
+value or the index. This implementation compares keys: slot `i` is a segment head iff
 `i == 0` or `key(i) != key(i - 1)`. That is two key evaluations per slot,
 and their key functor is a single `workload_info[slot / TPB].nodeid`
 load, so it is cheap on their side too.
@@ -104,12 +104,12 @@ load, so it is cheap on their side too.
 #       DECOUPLED LOOKBACK. The lookback is DECLINED, and a decline is a
 #       deviation, so here is its price.
 #
-# THEIRS: `cub::DeviceScanByKey` is ONE pass. Each tile scans locally and
+# REFERENCE: `cub::DeviceScanByKey` is ONE pass. Each tile scans locally and
 # then obtains its exclusive prefix by spinning on its predecessors'
 # published status words (decoupled lookback), so the output is written
 # during that same pass.
 #
-# OURS: three kernels -- block scan, a serial scan of the per-block
+# HERE: three kernels -- block scan, a serial scan of the per-block
 # aggregates, then carry-and-emit -- which is the shape this repository
 # already runs in `gbdt/gpu_util/kernel/scan.mojo`,
 # `segmented_scan.mojo` and `reorder_one_bit.mojo`, for the reason
@@ -144,11 +144,11 @@ load, so it is cheap on their side too.
 # 115b. THE FUNCTOR TRAVELS IN A ONE-ELEMENT DEVICE BUFFER, NOT IN THE
 #       KERNEL PARAMETER BLOCK.
 #
-# THEIRS: the lambda's captured state and the `NodeSplitPartitionWriter`
+# REFERENCE: the lambda's captured state and the `NodeSplitPartitionWriter`
 # struct are passed by value into the kernel's parameter block, because
 # that is what a C++ functor argument compiles to.
 #
-# OURS: the functor is written into a `size_of[F]()`-byte device buffer
+# HERE: the functor is written into a `size_of[F]()`-byte device buffer
 # once and the kernels take a `MutPointer[F, ...]` to it, loading it into
 # a register copy in their first line. MEASURED, not assumed: a Mojo
 # struct is not accepted as a kernel argument unless it conforms to
@@ -217,8 +217,8 @@ trait ScanByKeyOps(TrivialRegisterPassable):
     `key` is `node_key` (`:190-192`), `load` is `partition_state`
     (`:193-...`), `store` is `NodeSplitPartitionWriter::operator()`
     (`:97-114`) reached through `make_tabulate_output_iterator`. Keeping
-    them in ONE struct rather than three mirrors the fact that all three
-    of theirs capture the same five pointers.
+    them in ONE struct rather than three reflects the fact that all three
+    reference iterators capture the same five pointers.
     """
 
     comptime Elem: ScanByKeyElement

@@ -12,9 +12,8 @@ and umap_numeric_mode with the same parameter contract; the oracle imports
 no GPU module and NOT the serial host optimizer (whose Gauss-Seidel order
 gives different bits from the IDENTICAL device fold); the oracle spells the
 device epoch kernel's bit-carrying statements character for character; the
-sabotage define reaches the negative draw and the binding reads it back; the
-CPU identity gate workflow triggers on the oracle and the UMAP host modules
-it imports.
+sabotage define reaches the negative draw and the binding reads it back; the CPU identity gate
+runs by hand since 2026-09-15 (no push trigger).
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): a small UMAP fits and transforms twice through
@@ -28,6 +27,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -128,12 +128,8 @@ def test_sabotage_define_moves_the_negative_draw():
     assert "UMAP_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("metrics"))
 
 
-def test_workflow_triggers_on_the_oracle():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in (ORACLE, "umap/sparse_graph.mojo", "umap/graph.mojo", "umap/curve.mojo", "umap/params.mojo"):
-        assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 
-
+@reference_training()
 def test_umap_fits_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")

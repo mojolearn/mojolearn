@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The dendrogram on the host, the flat labels on the device.
 
-FOLLOWS `cuvs/cpp/src/cluster/detail/agglomerative.cuh`, cuVS `94c2819`:
-`UnionFind` (`:41-80`), `build_dendrogram_host` (`:104-155`),
+Reference: `UnionFind` (`:41-80`), `build_dendrogram_host` (`:104-155`),
 `write_levels_kernel` (`:157-166`), `inherit_labels` (`:179-210`),
 `init_label_roots` (`:212-224`) and `extract_flattened_clusters`
-(`:238-326`). Followed statement for statement, with ONE declared departure (DEVIATION 622,
-below) whose output is identical to theirs.
+(`:238-326`), `cuvs/cpp/src/cluster/detail/agglomerative.cuh` (cuVS `94c2819`).
+ONE declared departure (DEVIATION 622, below), whose output is identical to
+the reference's.
 
 WHY THE DENDROGRAM IS DETERMINISTIC GIVEN THE SORTED MST. `build_dendrogram
 _host` walks the sorted edge list in order and, per edge, merges the two
@@ -44,9 +44,9 @@ struct UnionFind(Movable):
 
     ======================================================================
     DEVIATION BLOCK -- DEVIATION 622. `find`'s PATH COMPRESSION IS THE
-    TEXTBOOK ONE; THEIRS READS `parent[-1]` AND WRITES `parent[n_indices-1]`.
+    TEXTBOOK ONE; THE REFERENCE READS `parent[-1]` AND WRITES `parent[n_indices-1]`.
     ======================================================================
-    WHAT THEIRS DOES (`:56-70`):
+    WHAT THE REFERENCE DOES (`:56-70`):
 
         while (parent[n] != -1) n = parent[n];
         while (parent[p] != n) {
@@ -68,10 +68,10 @@ struct UnionFind(Movable):
     correct throughout. For a non-root start the loop compresses every
     node on the path EXCEPT the starting one.
 
-    WHAT OURS DOES: find the root, then point every node on the path at
+    WHAT THIS IMPLEMENTATION DOES: find the root, then point every node on the path at
     it. Same root returned for every call, so `children`, `out_size`,
-    `out_delta` and therefore the labels are IDENTICAL to theirs; what
-    differs is that ours performs no out-of-bounds access. Mojo's `List`
+    `out_delta` and therefore the labels are IDENTICAL to the reference's; what
+    differs is that this one performs no out-of-bounds access. Mojo's `List`
     would have trapped on `parent[-1]`, which is how this was found.
     MEASUREMENT: `check_linkage_union_find_matches_a_naive_one` in
     `linkage_check.mojo` runs this `find`/`perform_union` against a

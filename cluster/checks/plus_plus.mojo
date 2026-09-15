@@ -270,13 +270,13 @@ def binary_search_kernel(
     n_in: Int32,
     n_trials_in: Int32,
 ):
-    """`sample_with_replacement_kernel`, followed statement for statement.
+    """`sample_with_replacement_kernel`.
 
-    FOLLOWS `raft/random/detail/rng_device.cuh:697-727`, which is what
+    Reference: `raft/random/detail/rng_device.cuh:697-727`, which is what
     `raft::random::discrete` reaches at `cuvs/.../kmeans.cuh:189`.
 
     **This replaces a DIFFERENT DECOMPOSITION of the same draw**, and the
-    difference was the point. Theirs ranks per ELEMENT with a real prefix sum
+    difference was the point. The reference ranks per ELEMENT with a real prefix sum
     and then binary-searches it:
 
         IdxT idx_start = 0; IdxT idx_end = len;

@@ -62,26 +62,21 @@
 name: Wheel CI
 
 on:
+  # LIGHT TOUCH (Andrew, Sep 15 2026): this workflow never starts by itself. Every job
+  # is skipped unless the dispatch input confirm is RUN-HEAVY, so a wrong trigger costs nothing.
   workflow_dispatch:
-  push:
-    paths:
-      - "bindings/**"
-      - "packaging/**"
-      - "python/**"
-      - "CITATION.cff"
-      - "CHANGELOG.md"
-      - "tools/citation_metadata.py"
-      - "tools/docs_facts.py"
-      - ".github/workflows/wheel-ci.yml"
-      # The packaging tests live in tools/ but gate packaging/, so an edit to
-      # a test must trigger the job that runs it. packaging/** already covers
-      # the scripts they read.
-      - "tools/test_*.py"
+    inputs:
+      confirm:
+        description: "Heavy run on paid or queued runners. Type RUN-HEAVY to really run it; anything else skips every job"
+        required: true
+        default: ""
+        type: string
 
 permissions: {}
 
 jobs:
   packaging:
+    if: inputs.confirm == 'RUN-HEAVY'
     name: Packaging, metadata and interpreters
     runs-on: macos-15
     timeout-minutes: 20
@@ -328,6 +323,7 @@ jobs:
   # is as useless as one that fails nothing.
   # ------------------------------------------------------------------------
   isa-gate:
+    if: inputs.confirm == 'RUN-HEAVY'
     name: The Linux ISA gate refuses AVX-512
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -394,6 +390,7 @@ jobs:
   # so they resolve only with their own directory as cwd.
   # ------------------------------------------------------------------------
   packaging-tests:
+    if: inputs.confirm == 'RUN-HEAVY'
     name: The packaging and release tests
     runs-on: ubuntu-latest
     timeout-minutes: 10

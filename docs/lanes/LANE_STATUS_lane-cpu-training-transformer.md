@@ -22,8 +22,27 @@
   IDENTICAL=18, N/A=18`, `summary (batch): IDENTICAL=18`, `require-columns 4 ... : OK`; the sabotage build read
   DIVERGENT=18 on all three. docs_facts --check and wheel_ci pins pass. Pushed with [skip ci] until Codex's routine
   gate (08b50887a, lane/cpu-training-routine-speed) is on main, which replaces gate-budget as the gate fix.
-- Not merged to main. Plan: once the routine gate is on origin/main, merge origin/main into this branch, push (the gate
-  queues), and merge to main when that run is green.
+- Routine gate on main (450423c95) merged in as 764495e56, no conflicts. Merge criteria (Sep 15): routine push gate
+  green on the head plus a one-core M4 run. Rerun at 764495e56, M4, one core: `bash run_lane.sh wt-transformer <out>
+  transformer,transformer-window transformer` (build_host_family.sh transformer into a fresh dir, identity_break
+  --lanes transformer,transformer-window, --diff against the 166-lane record --require-columns 4) read IDENTICAL=18
+  train, IDENTICAL=18 infer (N/A=18), IDENTICAL=18 batch, require-columns 4 OK; the -D MOJOLEARN_HOST_SABOTAGE=1 arm
+  read DIVERGENT=18 on all three.
+- Correction: 787d1015e merged origin/main at 671f5b158, not 590c11c86 (another session's fetch had moved the shared
+  ref). Routine gate 34987940025 at 216e9e94c was green on all three runners.
+- Merge rule (Andrew, Sep 15 afternoon): merge on one-core M4 evidence at the head, CI informational. main moved to
+  ee13e0d4b (public CPU inference only), then 7a8f8af9b and bbd8bc9e7; merged in. Conflicts: generated spans
+  (regenerated), host_surface.py TRAINING_LANE_NAMES (both sides kept), the gate workflow (main's file, which has no
+  push trigger any more, so this branch's path triggers are gone). The transformer family is now ships_in_wheel=False
+  (training-only reference build, as main set for the others); the workflow-trigger test returns when the gate has no
+  push trigger.
+- M4, one core, at f8bfd7264 (`lane_merge_checks.sh wt-transformer transformer,transformer-window transformer
+  transformer "test_host_surface test_cpu_inference_boundary test_cpu_training_transformer test_cpu_training_misc"`):
+  identity_break diffed against the 166-lane record with --require-columns 4 read IDENTICAL=18 train, IDENTICAL=18
+  infer (N/A=18), IDENTICAL=18 batch, OK; the -D MOJOLEARN_HOST_SABOTAGE=1 arm read DIVERGENT=18 on all three;
+  test_host_surface 102 passed, test_cpu_inference_boundary 8, test_cpu_training_transformer 8;
+  test_cpu_training_misc 11 passed and 3 failed, the same three (workflow path assertions) that fail on a clean
+  checkout of main 7a8f8af9b; docs_facts --check, wheel_ci pins and inventory pass.
 
 ## Next commands (from a worktree on this branch)
 ```

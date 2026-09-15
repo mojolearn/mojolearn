@@ -26,7 +26,7 @@ another; a Jacobi sweep picks a third. **None of them is wrong, and a
 bit-identity claim over an unpinned convention is not a claim at all.** So
 sections 2 and 3 are not implementation notes. They are the part of the
 numerical plan without which sections 5 and 8 mean nothing, and they are
-OURS: RAFT pins neither, because RAFT ships one backend and has never had
+decided here: RAFT pins neither, because RAFT ships one backend and has never had
 to.
 
 ---
@@ -200,12 +200,12 @@ do not have, and claiming a deviation we did not make is exactly as bad as
 missing one.**
 
 What remains under **DEVIATION 780** is C4 and C6, and both live in code
-that stands where a CLOSED vendor library does rather than in the mirrored
+that stands where a CLOSED vendor library does rather than in the referenced
 driver: the host Jacobi's sweep cap, and this lane's own admissibility
 guard. **A CHOSEN BOUND MUST BE SABOTAGED BEFORE IT MAY BE BELIEVED**, so
 C4 keeps its arm in section 9. The `NCV` and `MAXITER` arms keep their
 value and change their MEANING: they no longer test a choice of ours, they
-inject cuVS 25.08's older spelling and so test that this lane mirrors the
+inject cuVS 25.08's older spelling and so test that this lane matches the
 26.08 one.
 
 ## 5. The seams, every one, with the fused-or-unfused decision
@@ -225,7 +225,7 @@ RESULT passes `ftz`; a copy is not a seam.
 | L4 | `sqrt` of the degree | `raft::sqrt_op()` (`:269-270`), device `sqrtf` | `ftz(identical_sqrt(d))`, row 10's correctly rounded spelling, NEVER the vendor intrinsic | n/a |
 | L5 | zero to one | `zero_to_one_functor` `x == T(0) ? T(1) : x` (`:24-30`) | `if s == 0.0: s = 1.0`. `-0.0 == 0.0` is true, so a negative zero degree also becomes `1.0`, as theirs | select |
 | L6 | the symmetric scale | `row_scale * value * col_scale` (`diagonal.cuh:209-216`), C++ left to right, TWO products | `t = ftz(row_scale * v)` then `ftz(t * col_scale)`, TWO roundings in that order | **UNFUSED, deliberately**: fusing the pair would be one rounding where theirs has two, and this is the seam a normalization sabotage aims at (section 9) |
-| L7 | `1 / d` | `d[row] == 0 ? 0 : 1 / d[row]` (`diagonal.cuh:209-212`) | `ftz(1.0 / dr)`, a single IEEE division, correctly rounded on normals on every column measured (row 10). The `== 0` arms are unreachable after L5 and are followed statement for statement anyway, not removed | n/a |
+| L7 | `1 / d` | `d[row] == 0 ? 0 : 1 / d[row]` (`diagonal.cuh:209-212`) | `ftz(1.0 / dr)`, a single IEEE division, correctly rounded on normals on every column measured (row 10). The `== 0` arms are unreachable after L5 and are kept anyway, not removed | n/a |
 | L8 | set the diagonal to one | `set_diagonal(..., 1.0)` (`laplacian.cuh:276`) | store `1.0` | copy |
 | L9 | negate the Laplacian | `unary_op(x -> -x)` (`spectral_embedding.cu:160-163`) | `-v` | exact |
 | L10 | the kNN symmetrize reducer | `0.5f * (a + b)` (`spectral_embedding.cu:91-93`) | `ftz(0.5 * ftz(a + b))`, TWO roundings in theirs' order | **UNFUSED**, and the multiply by `0.5` is exact anyway |
@@ -243,7 +243,7 @@ RESULT passes `ftz`; a copy is not a seam.
 | K7 | `alpha_i += uu_i` | `raft::linalg::add` of two device scalars (`:371-372`) | `ftz(alpha_i + uu[i])` on the host | UNFUSED add |
 | K8 | the three clamps | `kernel_clamp_down`, `kernel_clamp_down_vector` (`:115-126`) | `if abs(x) < thr: 0.0`. A SELECT, value first, not a `max` or `min`, so ADDENDUM 11's selection hazard has no site. `-0.0` has `fabs == 0 < thr` and becomes `+0.0` | select |
 | K9 | `beta_i` is taken BEFORE `u` is clamped | `:376-380` norm, `:385-386` clamp `u`, `:388-389` clamp `beta` | the same order, exactly | ordering clause |
-| K10 | `v = u / beta_j` | `kernel_normalize` (`:100-113`), with a `beta == 0 -> divide by 1` guard | `ftz(u / (beta_j == 0 ? 1.0 : beta_j))`, the guard followed statement for statement | one IEEE division |
+| K10 | `v = u / beta_j` | `kernel_normalize` (`:100-113`), with a `beta == 0 -> divide by 1` guard | `ftz(u / (beta_j == 0 ? 1.0 : beta_j))`, the guard kept | one IEEE division |
 | K11 | `V[0] = v0 / ||v0||` and `V[k] = u / ||u||` | `unary_op(y -> y / *scalar)` (`:445-448`, `:588-592`) | `scale_vector_kernel`: `ftz(src / scalar)` | one IEEE division |
 | K12 | `beta_k = beta[ncv-1] * s` | `axpy(beta_scalar, s, beta_k)` into a ZERO-FILLED `beta_k` (`:517-522`) | `ftz(fma(beta_last, s, +0.0))` | **FUSED**, and the `+0.0` addend is theirs: `beta_k` is `matrix::fill`ed to zero at `:518` and the axpy adds onto it |
 | K13 | `res = ||beta_k||` | `norm<L2Norm>` over `nEigVecs` (`:526-532`) | `gemm_oracle` at `k` terms (always one leaf, `k <= 128`), then `ftz(identical_sqrt(.))` | per gemm v1, then n/a |
@@ -253,8 +253,8 @@ RESULT passes `ftz`; a copy is not a seam.
 
 ### 5.3 The projected eigenproblem (DEVIATION 771)
 
-`raft::linalg::eig_dc` is cuSOLVER `syevd`, CLOSED, nothing to
-follow statement for statement. It is replaced by
+`raft::linalg::eig_dc` is cuSOLVER `syevd`, CLOSED, no source to
+read. It is replaced by
 `spectral/checks/symmetric_eig_host.mojo::symmetric_eig_host`, a
 Numerical Recipes cyclic Jacobi run ON THE HOST, and **THE HOST IS PART OF
 THE NUMERICAL PLAN HERE**: this is the only dense linear algebra inside
@@ -277,9 +277,9 @@ the first restart the projected matrix IS tridiagonal. After a restart
 (`lanczos.cuh:86-98`), so it becomes arrowhead-plus-tridiagonal. Jacobi
 does not care; a `tql2` would be wrong from the first restart on.
 
-## 6. The restart and reorthogonalization decisions, mirrored
+## 6. The restart and reorthogonalization decisions
 
-Every clause here is theirs unless marked. These are the decisions that
+Every clause here matches the reference unless marked. These are the decisions that
 "can silently depend on iteration counts", so each one names its line.
 
   (a) **FULL reorthogonalization at every step**, ONE pass:
@@ -506,7 +506,7 @@ Three consequences, all in this lane's favor and one against it:
       `brute_force::build` plus `search`, which is what this lane's header
       already said.
   (c) AGAINST THIS LANE: C1, C2 and C3 of section 4 were claimed as ours
-      and are verbatim theirs. See section 4.
+      and match the reference exactly. See section 4.
 
 CLAIMED, and measured. TWO VENDORS at commit `221aa141`, 2026-08-31: an
 Apple M4 and an AMD MI325X each ran all 18 checks green under IDENTICAL and

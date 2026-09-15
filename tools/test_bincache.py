@@ -1,0 +1,434 @@
+"""tools/bincache.py: key computation, manifest verification, corruption
+rejection and the build-through-cache flow, with file:// URLs standing in for
+R2. Stdlib only; no network, no Mojo, no GPU. Run from tools/:
+
+    python3 -m unittest -v test_bincache
+"""
+import datetime
+import io
+import json
+import os
+import shutil
+
+import sys
+import tarfile
+import tempfile
+import unittest
+
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bincache as bc  # noqa: E402
+
+OS = dict(id="ubuntu", version_id="22.04", glibc="glibc 2.35", machine="x86_64",
+          ld="GNU ld 2.38", cc="cc 11.4")
+PLAT = bc.toolchain(Path("/nonexistent"))["platform"]
+
+SCRIPT = """#!/bin/sh
+set -eu
+here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$here"
+if false; then pixi run mojo build -j 2 --emit shared-lib -I . -I bindings bindings/_mojolearn_fake.mojo -o x; fi
+[ -z "${BINCACHE_TEST_MARKER:-}" ] || echo ran >> "$BINCACHE_TEST_MARKER"
+mkdir -p python/mojolearn/identical
+printf 'fake-binding %s\\n' "${MOJOLEARN_NUMERIC_MODE:-identical}" > python/mojolearn/identical/.tmp.so
+mv python/mojolearn/identical/.tmp.so python/mojolearn/identical/_mojolearn_fake.so
+echo built python/mojolearn/identical/_mojolearn_fake.so
+"""
+
+
+def make_repo(root):
+    root = Path(root)
+    (root / "bindings").mkdir(parents=True)
+    (root / "core").mkdir()
+    (root / "bindings" / "build_fake.sh").write_text(SCRIPT)
+    (root / "bindings" / "_mojolearn_fake.mojo").write_text(
+        '"""A docstring that says\nfrom the kernel import nothing\n"""\n'
+        "from std.os import getenv\nfrom core import (\n    a,\n    g,  # a module\n)\n")
+    (root / "core" / "a.mojo").write_text("from layout import TileTensor\nfn f(): pass\n")
+    (root / "core" / "g.mojo").write_text("fn g(): pass\n")
+    (root / "core" / "unrelated.mojo").write_text("fn u(): pass\n")
+    (root / "pixi.toml").write_text("[workspace]\n")
+    (root / "pixi.lock").write_text(
+        "      - conda: https://conda.modular.com/max/%s/mojo-compiler-1.0.0-release.conda\n" % PLAT)
+    return root
+
+
+def fields(repo, environ=None, image="runpod:img", arch="sm_89", os_info=None, script="bindings/build_fake.sh"):
+    return bc.key_fields(repo, Path(repo) / script, [], environ or {}, image,
+                         dev_arch=arch, os_info=os_info or dict(OS))
+
+
+class KeyTests(unittest.TestCase):
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.repo = make_repo(Path(self.td.name) / "repo").resolve()
+        self.base = bc.key_of(fields(self.repo))
+
+    def test_closure_follows_imports_and_parenthesized_names(self):
+        src, rels = bc.source_digest(self.repo, self.repo / "bindings/build_fake.sh", [])
+        self.assertEqual(src["scope"], "closure")
+        self.assertIn("core/a.mojo", rels)
+        self.assertIn("core/g.mojo", rels)          # from core import (a, g): both are modules
+        self.assertNotIn("core/unrelated.mojo", rels)
+
+    def test_each_input_moves_the_key(self):
+        cases = {
+            "toolchain": lambda: (self.repo / "pixi.lock").write_text(
+                "      - conda: https://conda.modular.com/max/%s/mojo-compiler-1.0.1-release.conda\n" % PLAT),
+            "imported source": lambda: (self.repo / "core/a.mojo").write_text("from layout import T\nfn f(): return\n"),
+            "build script": lambda: (self.repo / "bindings/build_fake.sh").write_text(SCRIPT + "# edit\n"),
+        }
+        for name, mutate in cases.items():
+            with self.subTest(name):
+                saved = {p: p.read_bytes() for p in self.repo.rglob("*") if p.is_file()}
+                mutate()
+                self.assertNotEqual(bc.key_of(fields(self.repo)), self.base, name)
+                for p, b in saved.items():
+                    p.write_bytes(b)
+        self.assertEqual(bc.key_of(fields(self.repo)), self.base)
+
+    def test_environment_image_arch_and_os_move_the_key(self):
+        moved = {
+            "image": fields(self.repo, image="do:188571990"),
+            "mode": fields(self.repo, {"MOJOLEARN_NUMERIC_MODE": "fast"}),
+            "mode deterministic": fields(self.repo, {"MOJOLEARN_NUMERIC_MODE": "deterministic"}),
+            "define": fields(self.repo, {"MOJOLEARN_BUILD_EXTRA_DEFINES": "-D MOJOLEARN_2560_MEMSET_FILL=1"}),
+            "trial": fields(self.repo, {"MOJOLEARN_GEMM_ARM_TRIAL": "kpack_hg"}),
+            "gpu archs": fields(self.repo, {"MOJOLEARN_GPU_ARCHS": "sm_90a"}),
+            "column": fields(self.repo, {"MOJOLEARN_TARGET_COLUMN": "cpu"}),
+            "jobs": fields(self.repo, {"MOJOLEARN_COMPILE_JOBS": "8"}),
+            "device arch": fields(self.repo, arch="gfx942"),
+            "os release": fields(self.repo, os_info=dict(OS, version_id="24.04")),
+            "glibc": fields(self.repo, os_info=dict(OS, glibc="glibc 2.39")),
+        }
+        keys = {n: bc.key_of(f) for n, f in moved.items()}
+        for name, k in keys.items():
+            self.assertNotEqual(k, self.base, name)
+        self.assertEqual(len(set(keys.values())), len(keys))
+
+    def test_identical_is_the_unset_mode(self):
+        self.assertEqual(bc.key_of(fields(self.repo, {"MOJOLEARN_NUMERIC_MODE": "identical"}))
+                         == self.base, False)     # the variable itself is keyed
+        self.assertEqual(fields(self.repo)["numeric_mode"], "identical")
+
+    def test_non_build_variables_and_unrelated_files_do_not_move_it(self):
+        env = {"MOJOLEARN_COMMIT": "abc", "MOJOLEARN_IDENTITY_VENDOR_LABEL": "x", "MOJOLEARN_BINCACHE": "1",
+               "MOJOLEARN_SKIP_BUILD_GATE": "1", "HOME": "/elsewhere"}
+        self.assertEqual(bc.key_of(fields(self.repo, env)), self.base)
+        (self.repo / "core/unrelated.mojo").write_text("fn u(): return 1\n")
+        (self.repo / "README.md").write_text("docs\n")
+        self.assertEqual(bc.key_of(fields(self.repo)), self.base)
+
+    def test_pixi_tasks_do_not_move_the_key_but_dependencies_do(self):
+        toml = self.repo / "pixi.toml"
+        toml.write_text('[workspace]\nname = "m"\n[dependencies]\nmojo = ">=1.0.0,<2"\n[tasks]\nprobe = "mojo run x"\n')
+        k = bc.key_of(fields(self.repo))
+        toml.write_text('[workspace]\nname = "m"\n# a comment\n[dependencies]\nmojo = ">=1.0.0,<2"\n[tasks]\n'
+                        'probe = "mojo run x"\ncheck-new = """\n[dependencies]\nnot = 1\n"""\n'
+                        '[feature.test.tasks]\nt = "pytest"\n')
+        self.assertEqual(bc.key_of(fields(self.repo)), k)
+        toml.write_text('[workspace]\nname = "m"\n[dependencies]\nmojo = ">=1.0.1,<2"\n[tasks]\nprobe = "mojo run x"\n')
+        self.assertNotEqual(bc.key_of(fields(self.repo)), k)
+
+    def test_unresolvable_import_widens_to_the_whole_tree(self):
+        (self.repo / "core/a.mojo").write_text("from nowhere.at_all import thing\n")
+        src, rels = bc.source_digest(self.repo, self.repo / "bindings/build_fake.sh", [])
+        self.assertEqual(src["scope"], "tree")
+        self.assertIn("core/unrelated.mojo", rels)
+        k = bc.key_of(fields(self.repo))
+        (self.repo / "core/unrelated.mojo").write_text("fn u(): return 2\n")
+        self.assertNotEqual(bc.key_of(fields(self.repo)), k)
+
+    def test_sabotage_is_refused(self):
+        for env in ({"MOJOLEARN_BUILD_EXTRA_DEFINES": "-D MOJOLEARN_HOST_SABOTAGE=1"},
+                    {"MOJOLEARN_MAMBA2_SABOTAGE_X": "1"},
+                    {"MOJOLEARN_BYTE_LM_FAULT_INJECT": "3"}):
+            with self.subTest(env):
+                self.assertTrue(bc.refusal(fields(self.repo, env), env).startswith("sabotage:"))
+        self.assertEqual(bc.refusal(fields(self.repo), {}), "")
+
+    def test_host_shim_resolves_through_the_family_builder(self):
+        (self.repo / "bindings/build_fake_host.sh").write_text(
+            '#!/bin/sh\nexec sh "$(dirname -- "$0")/build_host_family.sh" fake "$@"\n')
+        (self.repo / "bindings/build_host_family.sh").write_text(
+            'source_file="bindings/_mojolearn_${family}_host.mojo"\n'
+            'pixi run mojo build -j 2 --emit shared-lib "$@" -I . -I bindings \\\n    "$source_file" -o x\n')
+        (self.repo / "bindings/_mojolearn_fake_host.mojo").write_text("from core.g import g\n")
+        src, rels = bc.source_digest(self.repo, self.repo / "bindings/build_fake_host.sh", [])
+        self.assertEqual(src["scope"], "closure")
+        self.assertIn("bindings/_mojolearn_fake_host.mojo", rels)
+        self.assertIn("core/g.mojo", rels)
+        self.assertIn("bindings/build_host_family.sh", rels)
+
+
+class PresignTests(unittest.TestCase):
+    def test_aws_documented_vector(self):
+        # docs.aws.amazon.com AmazonS3 sigv4-query-string-auth example
+        creds = dict(R2_ACCOUNT_ID="x", R2_ACCESS_KEY_ID="AKIAIOSFODNN7EXAMPLE",
+                     R2_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", R2_BUCKET="examplebucket")
+        url = bc.presign("GET", "test.txt", 86400, creds,
+                         now=datetime.datetime(2013, 5, 24, tzinfo=datetime.timezone.utc),
+                         host="examplebucket.s3.amazonaws.com", region="us-east-1", path_style=False)
+        self.assertTrue(url.endswith("X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404"))
+
+
+class ArchiveTests(unittest.TestCase):
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.repo = make_repo(Path(self.td.name) / "repo").resolve()
+        so = self.repo / "python/mojolearn/identical/_mojolearn_fake.so"
+        so.parent.mkdir(parents=True)
+        so.write_bytes(os.urandom(2048))
+        self.fields = fields(self.repo)
+        self.key = bc.key_of(self.fields)
+        self.arc = Path(self.td.name) / "a.tar.gz"
+        bc.pack(self.arc, self.key, self.fields, self.repo, ["python/mojolearn/identical/_mojolearn_fake.so"], {})
+
+    def rewrite(self, edit_manifest=None, edit_blob=None, extra=None):
+        with tarfile.open(self.arc, "r:gz") as tf:
+            members = {m.name: tf.extractfile(m).read() for m in tf.getmembers()}
+        if edit_manifest:
+            man = json.loads(members["manifest.json"])
+            edit_manifest(man)
+            members["manifest.json"] = json.dumps(man).encode()
+        if edit_blob:
+            name = "files/python/mojolearn/identical/_mojolearn_fake.so"
+            members[name] = edit_blob(members[name])
+        members.update(extra or {})
+        with tarfile.open(self.arc, "w:gz") as tf:
+            for name, data in members.items():
+                ti = tarfile.TarInfo(name)
+                ti.size = len(data)
+                tf.addfile(ti, io.BytesIO(data))
+
+    def assertRejected(self, fragment, key=None, flds=None):
+        with self.assertRaises(bc.Reject) as cm:
+            bc.verify_archive(self.arc, key or self.key, flds or self.fields)
+        self.assertIn(fragment, str(cm.exception))
+
+    def test_good_archive_verifies(self):
+        manifest, blobs = bc.verify_archive(self.arc, self.key, self.fields)
+        self.assertEqual(list(blobs), ["python/mojolearn/identical/_mojolearn_fake.so"])
+
+    def test_one_flipped_byte_is_rejected(self):
+        self.rewrite(edit_blob=lambda b: bytes([b[0] ^ 1]) + b[1:])
+        self.assertRejected("sha256 mismatch")
+
+    def test_truncated_archive_is_rejected(self):
+        data = self.arc.read_bytes()
+        self.arc.write_bytes(data[: len(data) // 2])
+        self.assertRejected("unreadable")
+
+    def test_another_key_or_fields_are_rejected(self):
+        other = fields(self.repo, {"MOJOLEARN_NUMERIC_MODE": "fast"})
+        self.assertRejected("key mismatch", key=bc.key_of(other), flds=other)
+
+    def test_manifest_edited_to_match_a_new_blob_is_still_bound_to_the_key(self):
+        def edit(man):
+            man["fields"]["image"] = "forged"
+        self.rewrite(edit_manifest=edit)
+        self.assertRejected("key mismatch")
+
+    def test_extra_member_and_traversal_are_rejected(self):
+        self.rewrite(extra={"files/../../evil.so": b"x"})
+        self.assertRejected("members differ")
+
+        def trav(man):
+            man["files"][0]["path"] = "../evil.so"
+        bc.pack(self.arc, self.key, self.fields, self.repo, ["python/mojolearn/identical/_mojolearn_fake.so"], {})
+        self.rewrite(edit_manifest=trav, extra={"files/../evil.so": b"x"})
+        self.assertRejected("")
+
+
+class BuildFlowTests(unittest.TestCase):
+    """Fresh on one tree, cached on a second, corruption on a third; R2 is a
+    directory reached through file:// URLs."""
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.base = Path(self.td.name).resolve()
+        self.store = self.base / "r2"
+        self.store.mkdir()
+
+    def tree(self, name):
+        # The repository path is keyed (the rpath into .pixi is baked into a
+        # binding), and every box unpacks to /root/mojolearn, so each "box"
+        # here is a fresh tree at ONE path; the previous box's tree moves aside.
+        repo = self.base / "mojolearn"
+        if repo.exists():
+            repo.rename(self.base / ("gone-%d" % len(list(self.base.glob("gone-*")))))
+        self.trees = getattr(self, "trees", {})
+        self.trees[name] = make_repo(repo)
+        return repo
+
+    def write_map(self, name, keys=(), leg="leg1"):
+        d = self.base / ("map-" + name)
+        d.mkdir()
+        lines = ["#partition\tsm_89/runpod-img", "#image\trunpod:img", "#leg\t" + leg]
+        for k in keys:
+            lines.append("get\t%s\tfile://%s/%s.tar.gz" % (k, self.store, k))
+        for i in range(3):
+            lines.append("put\t%03d\tfile://%s/inbox/%s/%03d.tar.gz" % (i, self.store, leg, i))
+        (d / "urls.tsv").write_text("\n".join(lines) + "\n")
+        return d / "urls.tsv"
+
+    def build(self, repo, map_path, out, extra_env=None):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("MOJOLEARN_")}
+        env.update(MOJOLEARN_BINCACHE_MAP=str(map_path), MOJOLEARN_BINCACHE_OUT=str(out),
+                   BINCACHE_TEST_MARKER=str(repo / "ran.txt"))
+        env.update(extra_env or {})
+        # deterministic box facts so three trees in one process share a key
+        orig = (bc.device_arch, bc.os_fields)
+        bc.device_arch, bc.os_fields = (lambda: "sm_89"), (lambda: dict(OS))
+        try:
+            rc = self._call(env, repo)
+        finally:
+            bc.device_arch, bc.os_fields = orig
+        return rc
+
+    def _call(self, env, repo):
+        return bc.cmd_build([str(repo / "bindings/build_fake.sh")], environ=env)
+
+    def provenance(self, out):
+        return [l.split("\t") for l in (Path(out) / "provenance.tsv").read_text().splitlines()]
+
+    def promote_locally(self, out):
+        rows = (Path(out) / "uploads.tsv").read_text().splitlines()
+        for row in rows:
+            leg, slot, dest, key = bc.check_upload_row(row, Path(out) / "keys")
+            shutil.move(str(self.store / "inbox" / leg / (slot + ".tar.gz")), str(self.store / (key + ".tar.gz")))
+        return rows
+
+    def test_fresh_then_cached_then_corrupt(self):
+        a = self.tree("a")
+        out_a = self.base / "out-a"
+        self.assertEqual(self.build(a, self.write_map("a"), out_a), 0)
+        prov = self.provenance(out_a)
+        self.assertEqual(prov[0][2], "miss+built-uploaded")
+        key = prov[0][3]
+        self.assertTrue((a / "ran.txt").exists())
+        rows = self.promote_locally(out_a)
+        self.assertEqual(len(rows), 1)
+        so_a = (a / "python/mojolearn/identical/_mojolearn_fake.so").read_bytes()
+
+        b = self.tree("b")
+        out_b = self.base / "out-b"
+        self.assertEqual(self.build(b, self.write_map("b", [key]), out_b), 0)
+        prov = self.provenance(out_b)
+        self.assertEqual(prov[0][2], "hit")
+        self.assertEqual(prov[0][3], key)
+        self.assertFalse((b / "ran.txt").exists(), "a hit must not run the build script")
+        self.assertEqual((b / "python/mojolearn/identical/_mojolearn_fake.so").read_bytes(), so_a)
+        self.assertIn(bc.sha256_bytes(so_a), prov[0][5])
+        self.assertFalse((out_b / "uploads.tsv").exists())
+
+        # corrupt the stored object's binding, keep its manifest
+        arc = self.store / (key + ".tar.gz")
+        with tarfile.open(arc, "r:gz") as tf:
+            members = {m.name: tf.extractfile(m).read() for m in tf.getmembers()}
+        name = [n for n in members if n.startswith("files/")][0]
+        members[name] = b"X" + members[name][1:]
+        with tarfile.open(arc, "w:gz") as tf:
+            for n, data in members.items():
+                ti = tarfile.TarInfo(n)
+                ti.size = len(data)
+                tf.addfile(ti, io.BytesIO(data))
+        c = self.tree("c")
+        out_c = self.base / "out-c"
+        self.assertEqual(self.build(c, self.write_map("c", [key]), out_c), 0)
+        prov = self.provenance(out_c)
+        self.assertTrue(prov[0][2].startswith("rejected:sha256 mismatch"), prov[0][2])
+        self.assertTrue(prov[0][2].endswith("+built-uploaded"), prov[0][2])
+        self.assertTrue((c / "ran.txt").exists())
+        self.assertEqual((c / "python/mojolearn/identical/_mojolearn_fake.so").read_bytes(), so_a)
+
+    def test_changed_mode_misses(self):
+        a = self.tree("a")
+        out_a = self.base / "out-a"
+        self.build(a, self.write_map("a"), out_a)
+        self.promote_locally(out_a)
+        key = self.provenance(out_a)[0][3]
+        b = self.tree("b")
+        out_b = self.base / "out-b"
+        self.build(b, self.write_map("b", [key]), out_b, {"MOJOLEARN_NUMERIC_MODE": "fast"})
+        prov = self.provenance(out_b)
+        self.assertEqual(prov[0][2], "miss+built-uploaded")
+        self.assertNotEqual(prov[0][3], key)
+
+    def test_sabotage_never_touches_the_cache(self):
+        a = self.tree("a")
+        out_a = self.base / "out-a"
+        self.build(a, self.write_map("a"), out_a)
+        self.promote_locally(out_a)
+        key = self.provenance(out_a)[0][3]
+        b = self.tree("b")
+        out_b = self.base / "out-b"
+        env = {"MOJOLEARN_BUILD_EXTRA_DEFINES": "-D MOJOLEARN_HOST_SABOTAGE=1"}
+        self.assertEqual(self.build(b, self.write_map("b", [key]), out_b, env), 0)
+        prov = self.provenance(out_b)
+        self.assertTrue(prov[0][2].startswith("refused:sabotage:"), prov[0][2])
+        self.assertTrue((b / "ran.txt").exists())
+        self.assertFalse((out_b / "uploads.tsv").exists())
+        self.assertFalse(list((out_b / "keys").glob("*.json")))
+
+    def test_off_is_a_pass_through(self):
+        a = self.tree("a")
+        out_a = self.base / "out-a"
+        self.assertEqual(self.build(a, self.write_map("a"), out_a, {"MOJOLEARN_BINCACHE": "0"}), 0)
+        self.assertTrue((a / "ran.txt").exists())
+        self.assertFalse((out_a / "provenance.tsv").exists())
+        b = self.tree("b")
+        self.assertEqual(self.build(b, self.base / "no-such-map.tsv", self.base / "out-b"), 0)
+        self.assertTrue((b / "ran.txt").exists())
+        self.assertFalse((self.base / "out-b").exists())
+
+    def test_failed_build_keeps_its_exit_code_and_uploads_nothing(self):
+        a = self.tree("a")
+        (a / "bindings/build_fake.sh").write_text(SCRIPT.replace("mkdir -p python", "exit 7\nmkdir -p python"))
+        out_a = self.base / "out-a"
+        self.assertEqual(self.build(a, self.write_map("a"), out_a), 7)
+        self.assertTrue(self.provenance(out_a)[0][2].endswith("+build-failed"))
+        self.assertFalse((out_a / "uploads.tsv").exists())
+
+    def test_promote_refuses_rows_the_fields_do_not_support(self):
+        a = self.tree("a")
+        out_a = self.base / "out-a"
+        self.build(a, self.write_map("a"), out_a)
+        row = (out_a / "uploads.tsv").read_text().splitlines()[0]
+        leg, slot, dest, key = bc.check_upload_row(row, out_a / "keys")
+        kj = out_a / "keys" / (key + ".json")
+        f = json.loads(kj.read_text())
+        f["build_env"]["MOJOLEARN_BUILD_EXTRA_DEFINES"] = "-D MOJOLEARN_HOST_SABOTAGE=1"
+        kj.write_text(json.dumps(f))
+        with self.assertRaises(ValueError):
+            bc.check_upload_row(row, out_a / "keys")
+        with self.assertRaises(ValueError):
+            bc.check_upload_row(row.replace("sabotage=0", "sabotage=1"), out_a / "keys")
+        with self.assertRaises(ValueError):
+            bc.check_upload_row(row.replace(dest, "bincache/v1/../x/%s.tar.gz" % key), out_a / "keys")
+
+
+def _run_with_buffer(fn):
+    """run_tee writes to sys.stdout.buffer, which unittest's capture may lack."""
+    def wrapper(*a, **k):
+        if not hasattr(sys.stdout, "buffer"):
+            raw = io.BytesIO()
+            old = sys.stdout
+            sys.stdout = io.TextIOWrapper(raw)
+            try:
+                return fn(*a, **k)
+            finally:
+                sys.stdout = old
+        return fn(*a, **k)
+    return wrapper
+
+
+BuildFlowTests._call = _run_with_buffer(BuildFlowTests._call)
+
+
+if __name__ == "__main__":
+    unittest.main()

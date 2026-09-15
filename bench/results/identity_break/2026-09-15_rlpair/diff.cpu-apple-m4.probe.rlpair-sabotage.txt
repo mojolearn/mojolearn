@@ -1,0 +1,63 @@
+NOTE: column cpu-apple-m4-probe is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_hdbscan_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host'] commit=8d4fa23af429b784cbc74d4392fb6493be10f41f
+NOTE: column cpu-apple-m4-probe ran with MOJOLEARN_IDENTITY_RLPAIR_SABOTAGE ON; its rlpair cells are a sabotage run and must read RLPAIR_MOVED, they are not evidence
+| lane/fixture                 | verdict    | cpu-apple-m4-probe |
+|------------------------------|------------|------------------|
+| byte-lm-host-infer-threaded/base | ONE-COLUMN | 9a22cf6df14a6ca8 |
+| byte-lm-host-infer/base      | ONE-COLUMN | 9a22cf6df14a6ca8 |
+| mamba1/base                  | ONE-COLUMN | 1609902abaf80a04 |
+| mamba2-dtlimit/base          | ONE-COLUMN | b9e7928a2a4d30cf |
+| mamba2/base                  | ONE-COLUMN | 5b05a3ecbd70248e |
+| mamba3/base                  | ONE-COLUMN | 63de4bf6b9f8262a |
+| samba-untied-dropout-accum/base | ONE-COLUMN | 4610c84719bc1a25 |
+| samba/base                   | ONE-COLUMN | 037e7701daa7fc7c |
+| transformer-window/base      | ONE-COLUMN | 49ffb2316f238e6d |
+| transformer/base             | ONE-COLUMN | 295d4e62d4c78b14 |
+
+summary: ONE-COLUMN=10
+
+| lane/fixture                 | column | verdict      | cpu-apple-m4-probe |
+|------------------------------|--------|--------------|------------------|
+| byte-lm-host-infer-threaded/base | infer  | ONE-COLUMN   | b67a1f3d482ffaca |
+| byte-lm-host-infer-threaded/base | model  | N/A          | n/a:no-save      |
+| byte-lm-host-infer-threaded/base | batch  | N/A          | n/a:skipped (--no-batch) |
+| byte-lm-host-infer-threaded/base | rlpair | RLPAIR_MOVED | RLPAIR_MOVED     |
+| byte-lm-host-infer/base      | infer  | ONE-COLUMN   | b67a1f3d482ffaca |
+| byte-lm-host-infer/base      | model  | N/A          | n/a:no-save      |
+| byte-lm-host-infer/base      | batch  | N/A          | n/a:skipped (--no-batch) |
+| byte-lm-host-infer/base      | rlpair | RLPAIR_MOVED | RLPAIR_MOVED     |
+| mamba1/base                  | infer  | ONE-COLUMN   | 97e86b9db80719a7 |
+| mamba1/base                  | model  | N/A          | n/a:no-save      |
+| mamba1/base                  | batch  | N/A          | n/a:skipped (--no-batch) |
+| mamba1/base                  | rlpair | RLPAIR_MOVED | RLPAIR_MOVED     |
+| mamba2-dtlimit/base          | infer  | ONE-COLUMN   | 574842725ea2d43f |
+| mamba2-dtlimit/base          | model  | N/A          | n/a:no-save      |
+| mamba2-dtlimit/base          | batch  | N/A          | n/a:skipped (--no-batch) |
+| mamba2-dtlimit/base          | rlpair | RLPAIR_MOVED | RLPAIR_MOVED     |
+| mamba2/base                  | infer  | ONE-COLUMN   | b0084ee171c0720f |
+| mamba2/base                  | model  | N/A          | n/a:no-save      |
+| mamba2/base                  | batch  | N/A          | n/a:skipped (--no-batch) |
+| mamba2/base                  | rlpair | RLPAIR_MOVED | RLPAIR_MOVED     |
+| mamba3/base                  | infer  | ONE-COLUMN   | 6d73873ffe222457 |
+| mamba3/base                  | model  | N/A          | n/a:no-save      |
+| mamba3/base                  | batch  | N/A          | n/a:skipped (--no-batch) |
+| mamba3/base                  | rlpair | RLPAIR_MOVED | RLPAIR_MOVED     |
+| samba-untied-dropout-accum/base | infer  | ONE-COLUMN   | 43f7860a7ff7a633 |
+| samba-untied-dropout-accum/base | model  | ONE-COLUMN   | 4c6bb23f04af6858 |
+| samba-untied-dropout-accum/base | batch  | N/A          | n/a:skipped (--no-batch) |
+| samba-untied-dropout-accum/base | rlpair | RLPAIR_MOVED | RLPAIR_MOVED     |
+| samba/base                   | infer  | ONE-COLUMN   | 77db10c414ebd846 |
+| samba/base                   | model  | ONE-COLUMN   | 674582804fcf1a50 |
+| samba/base                   | batch  | N/A          | n/a:skipped (--no-batch) |
+| samba/base                   | rlpair | RLPAIR_MOVED | RLPAIR_MOVED     |
+| transformer-window/base      | infer  | ONE-COLUMN   | a35cf82209713d66 |
+| transformer-window/base      | model  | N/A          | n/a:no-save      |
+| transformer-window/base      | batch  | N/A          | n/a:skipped (--no-batch) |
+| transformer-window/base      | rlpair | RLPAIR_MOVED | RLPAIR_MOVED     |
+| transformer/base             | infer  | ONE-COLUMN   | d658bafd272776e1 |
+| transformer/base             | model  | N/A          | n/a:no-save      |
+| transformer/base             | batch  | N/A          | n/a:skipped (--no-batch) |
+| transformer/base             | rlpair | RLPAIR_MOVED | RLPAIR_MOVED     |
+
+summary (infer/model): N/A=8, ONE-COLUMN=12
+summary (batch): N/A=10
+summary (rlpair): RLPAIR_MOVED=10

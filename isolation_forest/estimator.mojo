@@ -4,7 +4,7 @@
 max_depth, max_features, bootstrap, random_state, contamination)` with
 `fit`, `score_samples`, `decision_function`, `predict`, `fit_predict`.
 
-MIRRORS `python/cuml/cuml/ensemble/isolation_forest.pyx` at rapidsai/cuml
+Reference: `python/cuml/cuml/ensemble/isolation_forest.pyx` at rapidsai/cuml
 v26.08.00: the constructor defaults (`:474-480`), `fit`'s resolution of
 `max_features` (`:616-641`), `contamination` (`:643-660`), `max_samples`
 (`:663-702`), `max_depth` (`:704-709`), the seed (`:712`,
@@ -366,8 +366,8 @@ def iforest_run_host(
     `contamination_auto` true is their `"auto"` (`offset_ = -0.5`), false
     takes the quantile and needs `contamination` in (0, 0.5].
 
-    Every refusal here is `IsolationForestEstimator.fit`'s, which is cuML's
-    `fit` transcribed, plus DEVIATION 680's finiteness scan inside the
+    Every refusal here is `IsolationForestEstimator.fit`'s, which matches cuML's
+    `fit`, plus DEVIATION 680's finiteness scan inside the
     implemented `fit`. `warm_start` and `sample_weight` have no argument on this
     entry at all; the Python layer refuses them by name before it gets here,
     which is where their `UnsupportedOnGPU` sits too (`:592-595`).

@@ -17,8 +17,7 @@ modules it reuses import none either; the oracle spells the device
 constructs a bit claim rests on (the pinned 32, the dithered quantizer, the
 row-count scale limit, the half-byte block partial flush, the Newton epsilon,
 the fused cursor update, the phase B border search's subnormal flush); the sabotage define reaches the leaf walker and
-the binding reads it back; the CPU identity gate workflow triggers on the
-oracle.
+the binding reads it back.
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): a small Logloss fit runs twice through the host
@@ -33,6 +32,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -177,11 +177,8 @@ def test_sabotage_define_moves_the_leaf_walker():
     assert "GBDT_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("gbdt"))
 
 
-def test_workflow_triggers_on_the_oracle():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {ORACLE}"
 
-
+@reference_training()
 def test_gradient_boosting_fits_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")

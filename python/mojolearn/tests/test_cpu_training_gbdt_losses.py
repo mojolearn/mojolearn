@@ -15,8 +15,7 @@ need-weights block, the sixteen-step search, splitmix64 and the stride walk
 of the bootstrap, the one-per-launch level seed, the child-Hessian bit test,
 the 1e-7 probability clip, the pinned MultiClass class, the Cholesky solve);
 the binding dispatches the new losses, exports the multi-dimensional predict
-and refuses the Bayesian bootstrap by name; the workflow triggers on the new
-files.
+and refuses the Bayesian bootstrap by name; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): small fits of each configuration run twice
@@ -31,6 +30,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -137,12 +137,8 @@ def test_binding_dispatches_and_refuses_by_name():
     assert "if is_rmse or grow_code != 0 or is_pointwise or is_multi:" in src
 
 
-def test_workflow_triggers_on_the_new_files():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in (LOSSES, MULTI) + REUSED[:2]:
-        assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 
-
+@reference_training()
 def test_the_five_configurations_fit_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")

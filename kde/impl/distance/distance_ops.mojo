@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The per-pair distance ops cuML's `pairwise_distances` reaches for KDE.
 
-FOLLOWS cuVS `cpp/src/distance/detail/distance_ops/{l2_unexp,l1,l_inf}.cuh`
-at cuVS `94c2819` (the `core()` and `epilog()` of each op), plus the
-one-thread-per-cell loop that stands in for their `pairwise_matrix` tile.
+Reference: the `core()` and `epilog()` of each op,
+`cpp/src/distance/detail/distance_ops/{l2_unexp,l1,l_inf}.cuh` (cuVS
+`94c2819`), with a one-thread-per-cell loop in place of the `pairwise_matrix` tile.
 Partial.
 
 WHICH METRICS, AND WHY THESE
@@ -53,7 +53,7 @@ WHAT IS NOT IMPLEMENTED: THEIR TILE
 ------------------------------
 `pairwise_matrix_cuda` is a `Policy4x4` Contractions kernel (Kblk 32, a 4x4
 register tile per thread, 256 threads, a 64x64 output tile) -- the same
-policy `dbscan/impl/neighbors/epsilon_neighborhood.mojo` transcribes.
+policy `dbscan/impl/neighbors/epsilon_neighborhood.mojo` implements.
 This file walks the feature axis in ONE thread per output cell, ascending,
 which is the discipline `neighbors/checks/pinned_distance_tile.mojo`
 adopted for the k-NN identical arm and for the same reason: the summation

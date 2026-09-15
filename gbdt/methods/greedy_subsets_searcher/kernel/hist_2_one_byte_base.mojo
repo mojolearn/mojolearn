@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The fused TWO-STAT one-byte histogram: both stat columns in one pass.
 
-FOLLOWS `hist_2_one_byte_base.cuh` (`TPointHist2OneByteBase`, the
+Reference: `hist_2_one_byte_base.cuh` (`TPointHist2OneByteBase`, the
 `ComputeHist2OneByteBits` launch plumbing) and the two-stat kernel loop it
 runs under, `compute_hist_loop_two_stats.cuh`
 (`ComputeSplitPropertiesDirectLoadsTwoStastImpl`,
 `ComputeSplitPropertiesTwoStatsGatherImpl`, `TComputeHistogramTwoStatsImpl`
-and its `AlignMemoryAccess`), at CatBoost `54a8143a`. Followed statement for statement. Do not
+and its `AlignMemoryAccess`) (CatBoost `54a8143a`). Do not
 improve.
 
 The per-bit accumulators live beside this file exactly as theirs do:
@@ -191,7 +191,7 @@ def hist2_acc_dtype[smem_mode: Int]() -> DType:
 
 def hist2_smem_slots[smem_mode: Int]() -> Int:
     """`GetHistSize()` = `BlockSize * 32` (`hist_2_one_byte_base.cuh:20-22`)
-    in their design, i.e. one 1024-slot slice per warp. The shared-Int32
+    in the reference, i.e. one 1024-slot slice per warp. The shared-Int32
     variant keeps 1024-slot slices but hands one to each warp PAIR, so it is
     half as many slices at the doubled block: the same 8192 slots at 512
     threads, or 4096 at 256."""

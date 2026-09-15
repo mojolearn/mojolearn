@@ -108,6 +108,11 @@ def test_sabotage_define_reaches_the_family():
 
 def test_workflow_triggers_on_the_host_modules():
     text = _read(".github/workflows/cpu-identity-gate.yml")
+    # Since Sep 15 the gate has no push trigger (it runs by hand, weekly or
+    # from the release workflow), so there is no path filter to check; a
+    # push trigger, if one returns, must still list the host modules.
+    if "\n  push:" not in text:
+        return
     for rel in host_surface.family("transformer")["host_modules"]:
         assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 

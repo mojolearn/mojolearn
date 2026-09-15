@@ -3,7 +3,7 @@
 """The apply-time CTR table: what a trained categorical model needs to
 score a row it has never seen.
 
-MIRRORS `catboost/libs/model/ctr_value_table.h` (`TCtrValueTable`), the
+Reference: `catboost/libs/model/ctr_value_table.h` (`TCtrValueTable`), the
 `TModelCtr` half of `catboost/libs/model/online_ctr.h:260-292`, and the
 lookup loop of `TStaticCtrProvider::CalcCtrs`
 (`libs/model/static_ctr_provider.cpp:63-71`) at CatBoost `54a8143a`.
@@ -309,8 +309,8 @@ struct TCtrValueTable(Copyable, Movable):
         return len(self.counts)
 
     def value_for(self, code: Int) raises -> Float32:
-        """One row's CTR value, their `TStaticCtrProvider::CalcCtrs` inner
-        loop (`static_ctr_provider.cpp:63-122`) transcribed arm for arm.
+        """One row's CTR value, the reference `TStaticCtrProvider::CalcCtrs` inner
+        loop (`static_ctr_provider.cpp:63-122`), arm for arm.
 
         Their bucket lookup is a hash walk guarded by `NotFoundIndex`; ours
         is a range test, because the key is the dense code (deviation 56).

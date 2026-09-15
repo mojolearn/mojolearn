@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The public surface: fit, predict, fit_predict, cluster_cost.
 
-FOLLOWS `cuvs/src/cluster/kmeans.cuh` at cuVS `94c2819`. Partial. Do not
+Reference: `cuvs/src/cluster/kmeans.cuh` (cuVS `94c2819`). Partial. Do not
 improve.
 
-Their file is a dispatch layer: it takes mdspans, decides host or device
+The reference file is a dispatch layer: it takes mdspans, decides host or device
 residency, picks an index type, and forwards to `detail::`. What is implemented is
 the SHAPE of that surface and the division of labor, not the mdspan
 machinery, which has no counterpart.

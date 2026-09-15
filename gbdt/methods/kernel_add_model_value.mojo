@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Add a grown tree's leaf values to the running predictions.
 
-FOLLOWS the `AddModelValue` step of
+Reference: the `AddModelValue` step of
 `catboost/cuda/methods/doc_parallel_boosting.h:265` (`AppendModels`), whose
 device side is CatBoost's add-model-value kernel family
 (`catboost/cuda/models/kernel/add_model_value.cu`).

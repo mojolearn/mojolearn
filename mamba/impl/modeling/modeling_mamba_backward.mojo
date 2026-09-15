@@ -40,7 +40,7 @@ derivative under this repository's pins, and it writes
     r3 = ftz(1.0 + r2);         r4 = pinned_mul(sg, r3)
 
 which is `sig * (1 + x*(1 - sig))`, left to right, FOUR roundings after the
-sigmoid. `_silu_prime` below is that function, transcribed from that file
+sigmoid. `_silu_prime` below is that function, taken from that file
 rather than re-derived, and both of this file's SiLU-derivative sites (B7 at
 `z`, B30 at `conv.out`) call it. **The plan's section 3.2 row B7 says "3
 roundings" and that is an undercount**: the subtraction `1 - sig` is a

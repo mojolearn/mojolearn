@@ -98,6 +98,7 @@ from . import _backend
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
 from ._bufcheck import dtype_name, is_native_f32, memcopy, probe
 from ._mode import NumericModeMixin
+from . import _ragged
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose, for `_arima_impl.py`'s reason: the read-back must not share a
@@ -537,7 +538,7 @@ class Mamba1Block(_MambaBase):
             ext.mamba1_forward(addrs, [b, l, self.d_model])
         return y
 
-    def forward(self, x, state=None):
+    def forward(self, x, state=None, *, lengths=None):
         """One block call: `(B, L, d_model)` float32 in, the block
         output (residual add included) back, any B and L.
 
@@ -545,7 +546,21 @@ class Mamba1Block(_MambaBase):
         DISCARDS the final state. Pass a `Mamba1State` to carry it: the
         state is read at entry and updated IN PLACE, so a second call
         continues the sequence exactly (the decode gate's per-token
-        claim, at any L)."""
+        claim, at any L).
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
+        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
+        after. Every real position's output is byte for byte the row run
+        alone at its own length (the scan is causal and the contract's
+        clause (c) makes a row independent of its batch; no arithmetic
+        changes, `_ragged.py` says why) and every padding position's
+        output is exactly `+0.0`, whatever the input held there. Refused
+        with a carried `state`."""
+        if lengths is not None:
+            what = type(self).__name__ + ".forward"
+            x = _batch_tokens(x, what, self.d_model, False)
+            return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
+                                          x, state, lengths, "<f4", what)[0]
         return self._call(x, state, step=False)
 
     def backward(self, x, grad_output):
@@ -817,14 +832,28 @@ class Mamba2Block(_MambaBase):
         self.h_last_ = h_last
         return y
 
-    def forward(self, x, state=None):
+    def forward(self, x, state=None, *, lengths=None):
         """One block call: `(B, L, d_model)` float32 in, the block
         output back, any B and L. `state=None` runs a self-contained
         prefill from zeros and DISCARDS the final state; pass a
         `Mamba2State` to carry it -- a later `forward` or `step` on that
         state is chunked-prefill continuation / decode, bit-for-bit the
         prefill that ran the whole sequence at once (DEVIATION 786's
-        construction; the identical tier's gates verify it)."""
+        construction; the identical tier's gates verify it).
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
+        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
+        after. Every real position's output is byte for byte the row run
+        alone at its own length (the scan is causal and the contract's
+        clause (c) makes a row independent of its batch; no arithmetic
+        changes, `_ragged.py` says why) and every padding position's
+        output is exactly `+0.0`, whatever the input held there. Refused
+        with a carried `state`."""
+        if lengths is not None:
+            what = type(self).__name__ + ".forward"
+            x = _batch_tokens(x, what, self.d_model, False)
+            return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
+                                          x, state, lengths, "<f4", what)[0]
         return self._call(x, state, step=False)
 
     def backward(self, x, grad_output):
@@ -1198,14 +1227,28 @@ class Mamba3Block(_MambaBase):
         self.theta_last_ = theta_last
         return y
 
-    def forward(self, x, state=None):
+    def forward(self, x, state=None, *, lengths=None):
         """One block call: `(B, L, d_model)` float32 in, the block
         output back, any B and L. `state=None` runs a self-contained
         prefill from zeros and DISCARDS the final state; pass a
         `Mamba3State` to carry it -- a later `forward` or `step` on that
         state is chunked-prefill continuation / decode, bit-for-bit the
         prefill that ran the whole sequence at once (DEVIATION 831's
-        construction; the identical tier's gates verify it)."""
+        construction; the identical tier's gates verify it).
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
+        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
+        after. Every real position's output is byte for byte the row run
+        alone at its own length (the scan is causal and the contract's
+        clause (c) makes a row independent of its batch; no arithmetic
+        changes, `_ragged.py` says why) and every padding position's
+        output is exactly `+0.0`, whatever the input held there. Refused
+        with a carried `state`."""
+        if lengths is not None:
+            what = type(self).__name__ + ".forward"
+            x = _batch_tokens(x, what, self.d_model, False)
+            return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
+                                          x, state, lengths, "<f4", what)[0]
         return self._call(x, state, step=False)
 
     def backward(self, x, grad_output):

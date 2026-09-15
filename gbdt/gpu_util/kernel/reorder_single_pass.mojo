@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Single-pass stable one-bit partition: their LARGE-leaf sort path.
 
-FOLLOWS THE DESIGN behind `SortByFlagsInLeaf`'s big arm
+Reference: the design behind `SortByFlagsInLeaf`'s big arm
 (`catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu:741`):
 
     if (part.Size > FastSortSize()) {          // FastSortSize() == 500000
@@ -76,7 +76,7 @@ kernel.
 # is the recorded remaining cause.
 #
 # OURS NOW: on a FAST NVIDIA or AMD column, a level whose leaf bound is
-# above the transcribed 500,000-row threshold runs ONE kernel (plus two
+# above the reference 500,000-row threshold runs ONE kernel (plus two
 # scratch memsets): decoupled-lookback scan of the zero flags fused with
 # the placement scatter, tickets ordering the tiles. Everything else --
 # Apple under FAST, every column under IDENTICAL, levels at or below the
@@ -517,7 +517,7 @@ def launch_stable_partition_routed[
     sm_count: Int = -1,
 ) raises:
     """`SortByFlagsInLeaf`'s dispatch (`split_points.cu:737-741`),
-    transcribed: above `FastSortSize()` take the single-pass machinery,
+    as in the reference: above `FastSortSize()` take the single-pass machinery,
     otherwise the path that already ran. Drop-in for
     `launch_stable_partition` -- same arguments -- with `identical` bound
     to `HIST_BUILD_MODE == NUMERIC_IDENTICAL` at the call site, the same

@@ -4,8 +4,8 @@
 `::ssd_minimal_discrete` (:34-78), state-spaces/mamba `e9594ce`, composed
 discretize-first as its own test composes it (:94-103) -- ON THE DEVICE,
 under profile `mojolearn.identical.mamba2.fp32.v1`
-(`mamba/IDENTICAL_MAMBA2_CONTRACT.md`, commit e3b46e95). **COPY, DO NOT
-IMPROVE.** Seams S10-S19 plus the `ssd.h_last` report stage; the block
+(`mamba/IDENTICAL_MAMBA2_CONTRACT.md`, commit e3b46e95). Arithmetic order is fixed
+by that contract; a change needs a DEVIATION. Seams S10-S19 plus the `ssd.h_last` report stage; the block
 around it is `mamba/impl/modules/mamba2.mojo`.
 
 The host oracle `mamba/checks/mamba2_oracle.mojo` is the ANSWER, bit for

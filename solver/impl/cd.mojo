@@ -49,7 +49,7 @@ stops on
 
     coefMax < tol  ||  diffMax / coefMax < tol                 cd.cuh:236
 
-`cdUpdateCoefKernel` (`cd.cuh:51-68`), transcribed:
+`cdUpdateCoefKernel` (`cd.cuh:51-68`):
 
     coef = *coefLoc
     r = coef > l1_alpha ? coef - l1_alpha : (coef < -l1_alpha ? coef + l1_alpha : 0)

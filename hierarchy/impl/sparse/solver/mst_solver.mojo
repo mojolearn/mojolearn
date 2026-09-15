@@ -2,13 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """RAFT's Boruvka MST solver: the control plane.
 
-FOLLOWS `raft/cpp/include/raft/sparse/solver/mst_solver.cuh` (the
+Reference: `raft/cpp/include/raft/sparse/solver/mst_solver.cuh` (the
 `Graph_COO` and `MST_solver` declarations) and
 `raft/cpp/include/raft/sparse/solver/detail/mst_solver_inl.cuh` (their
-bodies), RAFT `661a3b8`, plus the `mst()` entry of
-`raft/cpp/include/raft/sparse/solver/mst.cuh`. One Mojo file for the
-declaration header and its `_inl`.
-Followed statement for statement, their order, their names.
+bodies), plus the `mst()` entry of
+`raft/cpp/include/raft/sparse/solver/mst.cuh` (RAFT `661a3b8`). One Mojo file for the
+declaration header and its `_inl`, with the reference's order and names.
 
 WHAT IS NOT HERE, BY DECLARED DEVIATION. `alteration()`, `alteration_max()`,
 `alteration_functor`, `curand_generate_uniformX`, the `altered_weights` and
@@ -19,9 +18,9 @@ extra launches per round (`min_edge_per_vertex` below). The `sabotage`
 argument exists so `linkage_check.mojo` can put a random tie-break back and
 watch the gate fail; every production caller passes `LINK_SAB_NONE`.
 
-HOST READBACKS ARE THEIRS. `mst_edge_count.value(stream)` (`:142`, `:147`,
+HOST READBACKS MATCH THE REFERENCE. `mst_edge_count.value(stream)` (`:142`, `:147`,
 `:163`, `:246`, `:384`) and `done.value(stream)` (`:262`) are synchronous
-reads in their loop; ours are the same reads in the same places.
+reads in the reference loop; here they are the same reads in the same places.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
