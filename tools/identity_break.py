@@ -45,9 +45,10 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             transductive means the labels belong to the fitted rows only
             (DBSCAN, agglomerative, spectral: `fit` and `fit_predict`, and
             SpectralClustering.predict raises NotImplementedError by
-            design); no-predict means KMeans has `fit` and `fit_predict`
-            only, no predict or transform (`cluster.py`, verified
-            2026-09-14); function means the lane is not an estimator
+            design); KMeans answered no-predict until 2026-09-15, when
+            `predict` arrived (no `transform`) and its lanes' probe became
+            `predict` on the held-out rows, with `predict` on the training
+            rows held to `labels_`; function means the lane is not an estimator
             (linalg, metrics). THE FORECASTERS (holtwinters, arima; the
             infer probes of 2026-09-14) take no new rows, so their held-out
             axis is TIME: the infer column hashes the forecast beyond the
@@ -99,7 +100,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             IDENTICAL column moved) and `--require-columns` counts batch
             hashes as it counts infer and model hashes. A JSON that predates
             the part carries no `batch_verdict` and reads NOT-COMPARED.
-            The n/a reasons are transductive and no-predict as for infer, function
+            The n/a reasons are transductive as for infer, fit-refused (kmeans-cosine, no fitted model), function
             (metrics, resampling, cross-validation), no-batch-axis
             (tokenizer), optimizer-step and training-step (the batch IS the
             arithmetic of a step), no-model (a trainer lane that returns
@@ -805,11 +806,25 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
+def _km_probe(X, Xh):
+    """The k-means lanes' infer probe (2026-09-15). `predict` on the TRAINING
+    rows must be `labels_` bit for bit, because it is the fit's own final
+    assignment (cluster/estimator.mojo::kmeans_predict and
+    cluster/host/kmeans_oracle.mojo::host_kmeans_predict); where it is not,
+    the probe raises naming the pair and only the infer cell reads REFUSED.
+    Only the held-out rows are hashed, never the training-row output, and
+    the train column hashes the fit's own attributes, so no train cell
+    moves."""
+    def probe(e):
+        _same_bytes("predict(X)", e.predict(X), "labels_", e.labels_)
+        return (e.predict(Xh),)
+    return probe
+
+
 @lane("kmeans")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.KMeans(n_clusters=8, random_state=3).fit(X)
-    # mojolearn's KMeans has fit and fit_predict only, no predict or transform
-    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, "n/a:no-predict")
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, _km_probe(X, Xh))
 
 
 @lane("knn")
@@ -1798,20 +1813,20 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("kmeans-random")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.KMeans(n_clusters=8, init="random", n_init=3, random_state=3).fit(X)
-    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, "n/a:no-predict")
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, _km_probe(X, Xh))
 
 
 @lane("kmeans-array")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.KMeans(n_clusters=8, init="array", init_centroids=np.ascontiguousarray(X[:8]), random_state=3).fit(X)
-    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, "n/a:no-predict")
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, _km_probe(X, Xh))
 
 
 @lane("kmeans-weighted")
 def _(ml, X, yc, yr, Xh=None):
     w = _hw((X.shape[0],), "kmeans:sample_weight", 0.5, 1.5)
     m = ml.KMeans(n_clusters=8, random_state=3).fit(X, sample_weight=w)
-    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, "n/a:no-predict")
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, _km_probe(X, Xh))
 
 
 @lane("dbscan-brute-l1")
@@ -2503,7 +2518,7 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.KMeans(n_clusters=8, random_state=3, metric="l2_sqrt_expanded").fit(X)
     return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_),
                      inertia=_h(np.float64(m.inertia_)), scales=_h(np.asarray([m.sum_scale_, m.weight_scale_], dtype=np.float64))),
-                m, "n/a:no-predict")
+                m, _km_probe(X, Xh))
 
 
 @lane("kmeans-classic-pp")
@@ -2513,7 +2528,7 @@ def _(ml, X, yc, yr, Xh=None):
     the scalable k-means|| the default selects."""
     m = ml.KMeans(n_clusters=8, random_state=3, oversampling_factor=0.0).fit(X)
     return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_), inertia=_h(np.float64(m.inertia_))),
-                m, "n/a:no-predict")
+                m, _km_probe(X, Xh))
 
 
 @lane("kmeans-cosine")
@@ -2531,7 +2546,7 @@ def _(ml, X, yc, yr, Xh=None):
         # into a permanent REFUSED count
         text = f"{type(exc).__name__}: {exc}"
         return _fit(dict(refusal=_h(np.frombuffer(text.encode(), dtype=np.uint8))))
-    return _fit(dict(centers=_h(m.cluster_centers_)), m, "n/a:no-predict")
+    return _fit(dict(centers=_h(m.cluster_centers_)), m, _km_probe(X, Xh))
 
 
 # ---------------------------------------------------------------- lanes (2026-09-14 evening, the multi-GPU drivers on ONE device)
@@ -2624,7 +2639,7 @@ def _(ml, X, yc, yr, Xh=None):
     par = fit_kmeans(ml.KMeans(n_clusters=8, random_state=3), X, devices=_par_devices())
     plain = ml.KMeans(n_clusters=8, random_state=3).fit(X)
     _same_bytes("fit_kmeans centers", par.cluster_centers_, "plain centers", plain.cluster_centers_)
-    return _fit(dict(centers=_h(par.cluster_centers_), labels=_h(par.labels_)), par, "n/a:no-predict")
+    return _fit(dict(centers=_h(par.cluster_centers_), labels=_h(par.labels_)), par, _km_probe(X, Xh))
 
 
 @lane("par-gram")
@@ -3632,8 +3647,10 @@ def _batch_iforest(ml, e, Xh):
 
 _batch_decl(_batch_iforest, "iforest", "iforest-tuned", "par-iforest")
 
-_batch_decl("n/a:no-predict", "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted", "kmeans-sqrt",
-            "kmeans-classic-pp", "kmeans-cosine", "par-kmeans")
+_batch_decl(_rows_calls("predict"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted", "kmeans-sqrt",
+            "kmeans-classic-pp", "par-kmeans")
+# cosine fit is refused by name, so there is no fitted model to ask
+_batch_decl("n/a:fit-refused", "kmeans-cosine")
 # The transductive clustering lanes (read 2026-09-15 against the Python
 # estimator, the GPU binding, the CPU host binding and cuML v26.08.00): none
 # has a held-out row call on EITHER backend, so no batch part exists to ask.
