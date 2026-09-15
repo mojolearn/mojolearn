@@ -69,6 +69,89 @@ def arm_refusals(rep):
     rep.raises("REFUSE", AttributeError, "1610", "probabilities_ refused by name", lambda: m.probabilities_)
 
 
+def _dupes(seed=2):
+    """Two planted blobs with every row DUPLICATED and one grid column, so
+    k-NN distances tie many ways (the identity harness's `dupes` idea)."""
+    rng = np.random.default_rng(seed)
+    a = np.round(rng.random((40, 2)) * 8.0) / np.float32(16.0)
+    b = np.round(rng.random((40, 2)) * 8.0) / np.float32(16.0) + np.float32(5.0)
+    x = np.concatenate([a, a, b, b]).astype(np.float32)
+    return np.ascontiguousarray(x)
+
+
+def arm_predict(rep):
+    from mojolearn import hdbscan as hd
+    x, planted = _blobs()
+    plain = HDBSCAN(min_cluster_size=8).fit(x)
+    m = HDBSCAN(min_cluster_size=8, prediction_data=True).fit(x)
+    same_fit = (np.array_equal(np.asarray(plain.labels_), np.asarray(m.labels_))
+                and np.array_equal(np.asarray(plain.core_distances_).view(np.uint32), np.asarray(m.core_distances_).view(np.uint32)))
+    rep.check("PREDICT", same_fit, "prediction_data=True fits the same labels_ and core_distances_ bytes")
+
+    lab, prob = hd.approximate_predict(m, x)
+    lab, prob = np.asarray(lab), np.asarray(prob)
+    fitted = np.asarray(m.labels_)
+    rep.check("PREDICT", lab.dtype == np.int32 and lab.shape == (120,), "labels int32 (n,), the dtype of labels_", (lab.dtype, lab.shape))
+    rep.check("PREDICT", prob.dtype == np.float32 and prob.shape == (120,), "probabilities float32 (n,)", (prob.dtype, prob.shape))
+    rep.check("PREDICT", bool(np.all((prob >= 0) & (prob <= 1))), "probabilities in [0, 1]")
+    rep.check("PREDICT", bool(np.all(prob[lab == -1] == 0)), "a -1 label has probability 0 (kernels/predict.cuh:81-83)")
+    # cuML documents the labels as those of the original clustering; on the
+    # training rows of two planted blobs every row predicts its fitted label.
+    agree = float(np.mean(lab == fitted))
+    rep.check("PREDICT", agree == 1.0, "every training row predicts its fitted label on two planted blobs", agree)
+
+    far = np.asarray([[1000.0, -1000.0], [-500.0, 700.0]], dtype=np.float32)
+    fl, fp = hd.approximate_predict(m, far)
+    rep.check("PREDICT", np.array_equal(np.asarray(fl), np.asarray([-1, -1], np.int32)) and np.all(np.asarray(fp) == 0),
+              "a point far from every cluster is noise with probability 0", (list(np.asarray(fl)), list(np.asarray(fp))))
+
+    pd = m._prediction_data
+    ex = np.asarray(pd["exemplar_idx"])[: pd["n_exemplars"]]
+    rep.check("PREDICT", pd["n_exemplars"] >= m.n_clusters_ and ex.size > 0, "every selected cluster has an exemplar", pd["n_exemplars"])
+    xl, xp = hd.approximate_predict(m, x[ex])
+    rep.check("PREDICT", np.array_equal(np.asarray(xl), fitted[ex]) and bool(np.all(np.asarray(xp) > 0)),
+              "a query exactly at an exemplar predicts the exemplar's label with a positive probability")
+
+    l64, p64 = hd.approximate_predict(m, x[:17].astype(np.float64))
+    rep.check("PREDICT", np.asarray(l64).dtype == np.int32 and np.array_equal(np.asarray(l64), lab[:17])
+              and np.array_equal(np.asarray(p64).view(np.uint32), prob[:17].view(np.uint32)),
+              "a float64 query converts to float32 and returns the float32 query's bytes")
+
+    l2, p2 = hd.approximate_predict(m, x)
+    one = [hd.approximate_predict(m, x[i:i + 1]) for i in range(5)]
+    rows_alone = all(int(np.asarray(a)[0]) == int(lab[i]) and np.asarray(b).view(np.uint32)[0] == prob.view(np.uint32)[i]
+                     for i, (a, b) in enumerate(one))
+    stable = np.array_equal(np.asarray(l2), lab) and np.array_equal(np.asarray(p2).view(np.uint32), prob.view(np.uint32))
+    if mode() == "identical":
+        rep.check("PREDICT", stable and rows_alone, "two calls agree bit for bit, and a row alone equals its row in the batch")
+    else:
+        rep.report_only("PREDICT", stable and rows_alone, "two calls, and rows alone")
+
+    dx = _dupes()
+    dm = HDBSCAN(min_cluster_size=6, min_samples=4, prediction_data=True).fit(dx)
+    d1 = hd.approximate_predict(dm, dx)
+    d2 = hd.approximate_predict(dm, dx[::-1].copy())
+    rev = (np.array_equal(np.asarray(d1[0])[::-1], np.asarray(d2[0]))
+           and np.array_equal(np.asarray(d1[1])[::-1].view(np.uint32), np.asarray(d2[1]).view(np.uint32)))
+    if mode() == "identical":
+        rep.check("PREDICT", rev, "duplicated rows and tied distances: reversing the query order reverses the answer bytes")
+    else:
+        rep.report_only("PREDICT", rev, "duplicated rows, reversed query order")
+
+    rep.raises("PREDICT", ValueError, "Prediction data", "approximate_predict without prediction_data=True refused by name",
+               hd.approximate_predict, plain, x)
+    rep.raises("PREDICT", ValueError, "features", "a query with the wrong feature count", hd.approximate_predict, m, x[:, :1])
+    bad = x[:3].copy(); bad[1, 1] = np.float32("nan")
+    rep.raises("PREDICT", Exception, "1607", "a NaN query refused by name (DEVIATION 1607)", hd.approximate_predict, m, bad)
+    m1 = HDBSCAN(min_cluster_size=8, min_samples=1, prediction_data=True).fit(x)
+    rep.raises("PREDICT", Exception, "min_samples", "min_samples=1 has an empty prediction neighborhood, refused by name",
+               hd.approximate_predict, m1, x[:4])
+    rep.raises("PREDICT", TypeError, "prediction_data", "prediction_data must be a bool", HDBSCAN(prediction_data=1).fit, x)
+    rep.raises("PREDICT", NotImplementedError, "NOT IMPLEMENTED", "membership_vector refused by name", hd.membership_vector, m, x)
+    rep.raises("PREDICT", NotImplementedError, "NOT IMPLEMENTED", "all_points_membership_vectors refused by name",
+               hd.all_points_membership_vectors, m)
+
+
 def arm_provenance(rep):
     rep.check("PROVENANCE", "HDBSCAN" in mojolearn.__all__ and "hdbscan" in mojolearn.__all__, "HDBSCAN and mojolearn.hdbscan exported")
     rep.check("PROVENANCE", HDBSCAN().numeric_mode_used() == mode(), "numeric_mode_used() is the process default")
@@ -77,7 +160,8 @@ def arm_provenance(rep):
 def main(out=sys.stdout):
     bind_or_exit("_mojolearn_hdbscan", "build_hdbscan.sh")
     rep = Report("test_hdbscan_surface")
-    return run("test_hdbscan_surface", [("FIT", arm_fit), ("REFUSE", arm_refusals), ("PROVENANCE", arm_provenance)], rep, out)
+    return run("test_hdbscan_surface", [("FIT", arm_fit), ("REFUSE", arm_refusals), ("PREDICT", arm_predict),
+                                        ("PROVENANCE", arm_provenance)], rep, out)
 
 
 if __name__ == "__main__":

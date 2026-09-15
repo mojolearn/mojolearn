@@ -1121,6 +1121,8 @@ FAMILIES = (
             "hdbscan_host_numeric_mode", "hdbscan_host_vendor",
             "hdbscan_host_column", "hdbscan_host_sabotage",
             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
+            "hdbscan_generate_prediction_data", "hdbscan_approximate_predict",
+            "hdbscan_host_predict_sabotage",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,

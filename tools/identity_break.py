@@ -2311,11 +2311,14 @@ def _(ml, X, yc, yr, Xh=None):
     Boruvka MST, single linkage, the condensed tree and the labels.
     Train hashes the labels, the core distances and the four integers the
     fit reports (cluster, outlier, Boruvka round and condensed cluster
-    counts); the integer stages are where a divergence first shows."""
-    m = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
+    counts); the integer stages are where a divergence first shows.
+    The fit keeps prediction_data (2026-09-15), which moves no train byte;
+    infer is approximate_predict's labels and probabilities on 256
+    held-out rows (hdbscan.pyx:1264, predict.cuh:220-262)."""
+    m = ml.HDBSCAN(min_cluster_size=5, prediction_data=True).fit(X[:6000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
-                m, "n/a:transductive")
+                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
 
 
 @lane("hdbscan-leaf")
@@ -2324,10 +2327,11 @@ def _(ml, X, yc, yr, Xh=None):
     min_samples below min_cluster_size and allow_single_cluster, the
     other selection arm and the two knobs that change which condensed
     clusters become labels."""
-    m = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf", allow_single_cluster=True).fit(X[:6000, :4])
+    m = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf", allow_single_cluster=True,
+                   prediction_data=True).fit(X[:6000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
-                m, "n/a:transductive")
+                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
 
 
 @lane("bootstrap")
@@ -3270,14 +3274,14 @@ def _(ml, X, yc, yr, Xh=None):
     hierarchy row drivers under _par_devices()), held to the plain fit's
     labels and core distances."""
     from mojolearn.parallel_classical import fit_hdbscan
-    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5), X[:6000, :4], devices=_par_devices())
+    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
     plain = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
     _same_bytes("fit_hdbscan labels_", par.labels_, "plain labels_", plain.labels_)
     _same_bytes("fit_hdbscan core_distances_", par.core_distances_, "plain core_distances_", plain.core_distances_)
     return _fit(dict(labels=_h(par.labels_), core=_h(par.core_distances_),
                      counts=_h(np.asarray([par.n_clusters_, par.n_outliers_, par.n_boruvka_rounds_,
                                            par.n_condensed_clusters_], dtype=np.int64))),
-                par, "n/a:transductive")
+                par, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
 
 
 # ---------------------------------------------------------------- lanes (2026-09-15, the kernel-method and Cholesky drivers)
@@ -3684,21 +3688,26 @@ _batch_decl("n/a:fit-refused", "kmeans-cosine")
 #     NotImplementedError; the metrics bindings export spectral_fit_predict_
 #     dataset and _graph only; cuML spectral_clustering.pyx has fit (:263) and
 #     fit_predict (:239) only.
-#   HDBSCAN: cuML HAS held-out calls (hdbscan.pyx approximate_predict :1264,
-#     membership_vector :1180, all_points_membership_vectors :1114) but ours
-#     does not on GPU or CPU: hdbscan.py:180 fit_predict only, _mojolearn_
-#     hdbscan.mojo:188 and _mojolearn_hdbscan_host.mojo:142 export hdbscan_fit
-#     only, deferred at hdbscan/NOT_IMPLEMENTED.tsv:4. Implementing them (with
-#     generate_prediction_data) is what would make these lanes fillable.
+#   HDBSCAN is NOT transductive since 2026-09-15: HDBSCAN(prediction_data=True)
+#     and mojolearn.hdbscan.approximate_predict (cuML hdbscan.pyx:1264,
+#     predict.cuh:220-262) on both bindings, below. membership_vector (:1180)
+#     and all_points_membership_vectors (:1114) are still NOT IMPLEMENTED and
+#     refuse by name (hdbscan/NOT_IMPLEMENTED.tsv), so the part asks
+#     approximate_predict only.
 _batch_decl("n/a:transductive (DBSCAN has no predict on GPU, CPU or cuML; fit and fit_predict only)",
             "dbscan", "dbscan-brute-l1", "dbscan-weighted", "par-dbscan")
 _batch_decl("n/a:transductive (AgglomerativeClustering has no predict on GPU, CPU or cuML; fit and fit_predict only)",
             "agglomerative")
 _batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
             "spectral", "spectral-precomputed")
-_batch_decl("n/a:transductive (HDBSCAN approximate_predict and membership_vector not implemented on GPU or CPU; "
-            "cuML has them; hdbscan/NOT_IMPLEMENTED.tsv:4)",
-            "hdbscan", "hdbscan-leaf")
+
+
+def _batch_hdbscan(ml, e, Xh):
+    """approximate_predict's labels and probabilities, 64 held-out rows."""
+    return [_BatchRows("approximate_predict", Xh[:64, :4], lambda r: tuple(ml.hdbscan.approximate_predict(e, r)))]
+
+
+_batch_decl(_batch_hdbscan, "hdbscan", "hdbscan-leaf")
 
 
 def _batch_kneighbors(ml, e, Xh):
@@ -4214,10 +4223,10 @@ _batch_decl(PAR_BYTE_LM_BATCH_NA, "par-byte-lm-model-pool", "par-byte-lm-offload
 _batch_decl(_rows_calls("predict", "predict_proba"), "par-forest-pool")
 _batch_decl(_rows_calls("score_samples", "predict", sl=(slice(0, 64), slice(0, 4))), "par-gmm")
 _batch_decl(_batch_par_resample, "par-resample")
-# parallel_classical.fit_hdbscan is fit-only; see the hdbscan reason above
-_batch_decl("n/a:transductive (HDBSCAN approximate_predict and membership_vector not implemented on GPU or CPU; "
-            "cuML has them; hdbscan/NOT_IMPLEMENTED.tsv:4)",
-            "par-hdbscan")
+# parallel_classical.fit_hdbscan copies the worker's fitted estimator back, so a
+# prediction_data=True fit carries the prediction data and the root answers
+# approximate_predict; its two-device cells are owed to the release record.
+_batch_decl(_batch_hdbscan, "par-hdbscan")
 _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "par-kernel-ridge")
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "par-nystroem")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "par-rbf-sampler")
