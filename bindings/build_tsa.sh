@@ -195,10 +195,10 @@ fi
 # imports and dies at the first launch.
 #
 # WHY 10. The two lanes behind this extension define fifteen kernels that a
-# reader can count in the source: eight in holtwinters/ported (hw_transpose,
+# reader can count in the source: eight in holtwinters/impl (hw_transpose,
 # conv1d, season_residual, season_mean, batched_ls_solver,
 # holtwinters_seasonal_forecast, holtwinters_eval_gpu_global,
-# holtwinters_optim_gpu_global) and seven in tsa/ported (series_sum, center,
+# holtwinters_optim_gpu_global) and seven in tsa/impl (series_sum, center,
 # s2B_accumulation, cumsum_by_series, kpss_stationarity_check, batched_diff,
 # batched_second_diff), before anything core/ contributes and before a
 # parametric kernel's instantiations are counted separately. Ten sits below

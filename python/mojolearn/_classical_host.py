@@ -42,6 +42,7 @@ measured; the brief records on which CPUs that has passed.
 import hashlib
 
 from . import _backend, _serialize
+from ._cholesky_impl import _CHOLESKY_FORMAT, HostCholesky
 from ._solver_impl import ElasticNet, Lasso, _CD_FORMAT
 from ._svm_impl import SVC, _SVC_FORMAT
 from .decomposition import PCA, TruncatedSVD, _PCA_FORMAT, _TSVD_FORMAT
@@ -307,6 +308,9 @@ _FORMATS = {
         "KNeighborsClassifier": HostKNeighborsClassifier,
         "KNeighborsRegressor": HostKNeighborsRegressor,
     },
+    # A saved Cholesky factor (lane/inference-embedding-ivf-cholesky,
+    # 2026-09-15): `HostCholesky` solves on `_mojolearn_linalg_host`.
+    _CHOLESKY_FORMAT: {"Cholesky": HostCholesky},
 }
 CLASSICAL_FORMATS = tuple(_FORMATS)
 

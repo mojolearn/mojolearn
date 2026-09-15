@@ -1,0 +1,204 @@
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=0affb7c75f7cb9e163d9b9d1066894177ad801c2
+| lane/fixture                 | verdict    | apple-m4         | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| gbdt-adapter-clf/base        | IDENTICAL x2 | 933184700a044eb2 | 933184700a044eb2 |
+| gbdt-adapter-clf/odd         | IDENTICAL x2 | f8f56dac8e714ab8 | f8f56dac8e714ab8 |
+| gbdt-adapter-clf/ties        | IDENTICAL x2 | 492cbf5fbc9e6304 | 492cbf5fbc9e6304 |
+| gbdt-adapter-reg/base        | IDENTICAL x2 | 3f8aef8d73be249c | 3f8aef8d73be249c |
+| gbdt-adapter-reg/odd         | IDENTICAL x2 | 7b54ca9d69e29714 | 7b54ca9d69e29714 |
+| gbdt-adapter-reg/ties        | IDENTICAL x2 | 88cba1574daa922e | 88cba1574daa922e |
+| gbdt-categorical-ctr/base    | ONE-COLUMN | 3c492b90c998f095 | REFUSED          |
+| gbdt-categorical-ctr/odd     | ONE-COLUMN | 3f1f7468b711f825 | REFUSED          |
+| gbdt-categorical-ctr/ties    | ONE-COLUMN | b19fd4bbd5430219 | REFUSED          |
+| gbdt-depthwise/base          | IDENTICAL x2 | 38726fc0c93c0bff | 38726fc0c93c0bff |
+| gbdt-depthwise/odd           | IDENTICAL x2 | fb9e5c03088814f6 | fb9e5c03088814f6 |
+| gbdt-depthwise/ties          | IDENTICAL x2 | 465cb10f303e005a | 465cb10f303e005a |
+| gbdt-exact-mae/base          | IDENTICAL x2 | 2c8a23ac5ef0b570 | 2c8a23ac5ef0b570 |
+| gbdt-exact-mae/odd           | IDENTICAL x2 | 62e0e9af15af59e8 | 62e0e9af15af59e8 |
+| gbdt-exact-mae/ties          | IDENTICAL x2 | 65948ea43ed2efdd | 65948ea43ed2efdd |
+| gbdt-feature-freq/base       | ONE-COLUMN | 7d9c56b51213cb42 | REFUSED          |
+| gbdt-feature-freq/odd        | ONE-COLUMN | c481331145bfb998 | REFUSED          |
+| gbdt-feature-freq/ties       | ONE-COLUMN | 57ff9964d1af1d4a | REFUSED          |
+| gbdt-lossguide-newtoncosine/base | IDENTICAL x2 | b5246f258d7f7fd5 | b5246f258d7f7fd5 |
+| gbdt-lossguide-newtoncosine/odd | IDENTICAL x2 | f37e48556364dee2 | f37e48556364dee2 |
+| gbdt-lossguide-newtoncosine/ties | IDENTICAL x2 | 6e49cedd249ddecb | 6e49cedd249ddecb |
+| gbdt-lossguide/base          | IDENTICAL x2 | bc3017cb29615105 | bc3017cb29615105 |
+| gbdt-lossguide/odd           | IDENTICAL x2 | 9fd309c55a93e6c3 | 9fd309c55a93e6c3 |
+| gbdt-lossguide/ties          | IDENTICAL x2 | 19d199f7bfa16c25 | 19d199f7bfa16c25 |
+| gbdt-multiclass/base         | IDENTICAL x2 | a5f1e32eedd64780 | a5f1e32eedd64780 |
+| gbdt-multiclass/odd          | IDENTICAL x2 | 455dd5addb3f02c2 | 455dd5addb3f02c2 |
+| gbdt-multiclass/ties         | IDENTICAL x2 | 2313d13ab4e2ab31 | 2313d13ab4e2ab31 |
+| gbdt-nan-modes/base          | IDENTICAL x2 | 69ff4c8007c1f9fe | 69ff4c8007c1f9fe |
+| gbdt-nan-modes/odd           | IDENTICAL x2 | 161804fea5952ecd | 161804fea5952ecd |
+| gbdt-nan-modes/ties          | IDENTICAL x2 | 04e6975c827a53fb | 04e6975c827a53fb |
+| gbdt-onevsall/base           | IDENTICAL x2 | 8055b03a6a9b2693 | 8055b03a6a9b2693 |
+| gbdt-onevsall/odd            | IDENTICAL x2 | d1c61adcfae95dc8 | d1c61adcfae95dc8 |
+| gbdt-onevsall/ties           | IDENTICAL x2 | 76e0dd66a5092560 | 76e0dd66a5092560 |
+| gbdt-ordered-rmse/base       | ONE-COLUMN | a6e77b5224108785 | REFUSED          |
+| gbdt-ordered-rmse/odd        | ONE-COLUMN | d83c83930af5d802 | REFUSED          |
+| gbdt-ordered-rmse/ties       | ONE-COLUMN | 563f339900c22c9d | REFUSED          |
+| gbdt-parametric-losses/base  | IDENTICAL x2 | eb682c0ae5c06ec7 | eb682c0ae5c06ec7 |
+| gbdt-parametric-losses/odd   | IDENTICAL x2 | f70b7e0960454bcf | f70b7e0960454bcf |
+| gbdt-parametric-losses/ties  | IDENTICAL x2 | efc6587263899c79 | efc6587263899c79 |
+| gbdt-pointwise-l2-bayesian-eval/base | ONE-COLUMN | 2ac238ddce22e2ef | REFUSED          |
+| gbdt-pointwise-l2-bayesian-eval/odd | ONE-COLUMN | 59cf66d7ddc936b4 | REFUSED          |
+| gbdt-pointwise-l2-bayesian-eval/ties | ONE-COLUMN | 84ba6825b4967e89 | REFUSED          |
+| gbdt-rmse/base               | IDENTICAL x2 | 3f8aef8d73be249c | 3f8aef8d73be249c |
+| gbdt-rmse/odd                | IDENTICAL x2 | 7b54ca9d69e29714 | 7b54ca9d69e29714 |
+| gbdt-rmse/ties               | IDENTICAL x2 | 88cba1574daa922e | 88cba1574daa922e |
+| gbdt-symmetric/base          | IDENTICAL x2 | 56560dec5bdb6cb9 | 56560dec5bdb6cb9 |
+| gbdt-symmetric/odd           | IDENTICAL x2 | 0836bd47530040d0 | 0836bd47530040d0 |
+| gbdt-symmetric/ties          | IDENTICAL x2 | b32c469f812adf25 | b32c469f812adf25 |
+
+summary: IDENTICAL=36, ONE-COLUMN=12
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| gbdt-adapter-clf/base        | infer  | IDENTICAL x2 | 33875685be67febb | 33875685be67febb |
+| gbdt-adapter-clf/base        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-clf/base        | batch  | IDENTICAL x2 | 984baeb0cccbd21e | 984baeb0cccbd21e |
+| gbdt-adapter-clf/odd         | infer  | IDENTICAL x2 | 94e4c2a70fc9bfd8 | 94e4c2a70fc9bfd8 |
+| gbdt-adapter-clf/odd         | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-clf/odd         | batch  | IDENTICAL x2 | 38ba96eea94d8ea9 | 38ba96eea94d8ea9 |
+| gbdt-adapter-clf/ties        | infer  | IDENTICAL x2 | fe960ad1ad7c54e5 | fe960ad1ad7c54e5 |
+| gbdt-adapter-clf/ties        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-clf/ties        | batch  | IDENTICAL x2 | 14399e0cd5893cd4 | 14399e0cd5893cd4 |
+| gbdt-adapter-reg/base        | infer  | IDENTICAL x2 | ba6284898fcd7adb | ba6284898fcd7adb |
+| gbdt-adapter-reg/base        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-reg/base        | batch  | IDENTICAL x2 | 3a53a53abfe321f6 | 3a53a53abfe321f6 |
+| gbdt-adapter-reg/odd         | infer  | IDENTICAL x2 | 88f9e64eea1b35df | 88f9e64eea1b35df |
+| gbdt-adapter-reg/odd         | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-reg/odd         | batch  | IDENTICAL x2 | 6b459ed54f82865a | 6b459ed54f82865a |
+| gbdt-adapter-reg/ties        | infer  | IDENTICAL x2 | 4044415de3b73aee | 4044415de3b73aee |
+| gbdt-adapter-reg/ties        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-reg/ties        | batch  | IDENTICAL x2 | 1681c6f968f338d2 | 1681c6f968f338d2 |
+| gbdt-categorical-ctr/base    | infer  | ONE-COLUMN   | 01fd6a33928b42a8 | REFUSED          |
+| gbdt-categorical-ctr/base    | model  | ONE-COLUMN   | d1bc6890d23ce613 | REFUSED          |
+| gbdt-categorical-ctr/base    | batch  | ONE-COLUMN   | 8c08c90af3b9bafd | REFUSED          |
+| gbdt-categorical-ctr/odd     | infer  | ONE-COLUMN   | 6db4a8fb8ffcc4df | REFUSED          |
+| gbdt-categorical-ctr/odd     | model  | ONE-COLUMN   | ca74bdd7ef688c0d | REFUSED          |
+| gbdt-categorical-ctr/odd     | batch  | ONE-COLUMN   | ee6e7cfed828deb2 | REFUSED          |
+| gbdt-categorical-ctr/ties    | infer  | ONE-COLUMN   | 7e2f6402af40601a | REFUSED          |
+| gbdt-categorical-ctr/ties    | model  | ONE-COLUMN   | e65f09cb2a1e7754 | REFUSED          |
+| gbdt-categorical-ctr/ties    | batch  | ONE-COLUMN   | 2adbd46492fefdf1 | REFUSED          |
+| gbdt-depthwise/base          | infer  | IDENTICAL x2 | 688bf9a8e927232e | 688bf9a8e927232e |
+| gbdt-depthwise/base          | model  | IDENTICAL x2 | 448c1bcf37ffdc97 | 448c1bcf37ffdc97 |
+| gbdt-depthwise/base          | batch  | IDENTICAL x2 | 25bf2754b853a026 | 25bf2754b853a026 |
+| gbdt-depthwise/odd           | infer  | IDENTICAL x2 | 4ee637393df9aff7 | 4ee637393df9aff7 |
+| gbdt-depthwise/odd           | model  | IDENTICAL x2 | e4f63fb009a0a7b5 | e4f63fb009a0a7b5 |
+| gbdt-depthwise/odd           | batch  | IDENTICAL x2 | 992386f8f1c7c126 | 992386f8f1c7c126 |
+| gbdt-depthwise/ties          | infer  | IDENTICAL x2 | e299a1457dfaedc7 | e299a1457dfaedc7 |
+| gbdt-depthwise/ties          | model  | IDENTICAL x2 | ef4323cc40bbfd0a | ef4323cc40bbfd0a |
+| gbdt-depthwise/ties          | batch  | IDENTICAL x2 | 071de76e68c2fc1d | 071de76e68c2fc1d |
+| gbdt-exact-mae/base          | infer  | IDENTICAL x2 | 8be26ab7b3a20568 | 8be26ab7b3a20568 |
+| gbdt-exact-mae/base          | model  | IDENTICAL x2 | 610f6e7030433d25 | 610f6e7030433d25 |
+| gbdt-exact-mae/base          | batch  | IDENTICAL x2 | f90756faab4e2172 | f90756faab4e2172 |
+| gbdt-exact-mae/odd           | infer  | IDENTICAL x2 | 803b69f78691fd97 | 803b69f78691fd97 |
+| gbdt-exact-mae/odd           | model  | IDENTICAL x2 | a7acaed4e232dca0 | a7acaed4e232dca0 |
+| gbdt-exact-mae/odd           | batch  | IDENTICAL x2 | 1f55cf8d09089aa2 | 1f55cf8d09089aa2 |
+| gbdt-exact-mae/ties          | infer  | IDENTICAL x2 | a6a66eb2f734a4a0 | a6a66eb2f734a4a0 |
+| gbdt-exact-mae/ties          | model  | IDENTICAL x2 | 3c059b5d2d1d5ba4 | 3c059b5d2d1d5ba4 |
+| gbdt-exact-mae/ties          | batch  | IDENTICAL x2 | e6f7c7d77ba8558c | e6f7c7d77ba8558c |
+| gbdt-feature-freq/base       | infer  | ONE-COLUMN   | 95b976d85efc7f2d | REFUSED          |
+| gbdt-feature-freq/base       | model  | ONE-COLUMN   | b2959e177eb6e088 | REFUSED          |
+| gbdt-feature-freq/base       | batch  | ONE-COLUMN   | 272537bbe18b712b | REFUSED          |
+| gbdt-feature-freq/odd        | infer  | ONE-COLUMN   | 711887d930537c47 | REFUSED          |
+| gbdt-feature-freq/odd        | model  | ONE-COLUMN   | 53a4160101e38573 | REFUSED          |
+| gbdt-feature-freq/odd        | batch  | ONE-COLUMN   | bfe39e4c9f5bacc7 | REFUSED          |
+| gbdt-feature-freq/ties       | infer  | ONE-COLUMN   | 41371bafcf6397a3 | REFUSED          |
+| gbdt-feature-freq/ties       | model  | ONE-COLUMN   | a7417c31e1b422b4 | REFUSED          |
+| gbdt-feature-freq/ties       | batch  | ONE-COLUMN   | 2de7d484a30cee05 | REFUSED          |
+| gbdt-lossguide-newtoncosine/base | infer  | IDENTICAL x2 | 38081b2e11a30a91 | 38081b2e11a30a91 |
+| gbdt-lossguide-newtoncosine/base | model  | IDENTICAL x2 | dcc933a4bdfb034f | dcc933a4bdfb034f |
+| gbdt-lossguide-newtoncosine/base | batch  | IDENTICAL x2 | 132fbf3e61c14c7a | 132fbf3e61c14c7a |
+| gbdt-lossguide-newtoncosine/odd | infer  | IDENTICAL x2 | 242d929eae7ea734 | 242d929eae7ea734 |
+| gbdt-lossguide-newtoncosine/odd | model  | IDENTICAL x2 | cf3e76e803cf07ee | cf3e76e803cf07ee |
+| gbdt-lossguide-newtoncosine/odd | batch  | IDENTICAL x2 | dc500f77d3dadbdd | dc500f77d3dadbdd |
+| gbdt-lossguide-newtoncosine/ties | infer  | IDENTICAL x2 | e21aac8ebaed22f4 | e21aac8ebaed22f4 |
+| gbdt-lossguide-newtoncosine/ties | model  | IDENTICAL x2 | 7f8ad257af939f4b | 7f8ad257af939f4b |
+| gbdt-lossguide-newtoncosine/ties | batch  | IDENTICAL x2 | 9d15ca00d60585cb | 9d15ca00d60585cb |
+| gbdt-lossguide/base          | infer  | IDENTICAL x2 | 38894a4992494eec | 38894a4992494eec |
+| gbdt-lossguide/base          | model  | IDENTICAL x2 | 9e01e18241859f87 | 9e01e18241859f87 |
+| gbdt-lossguide/base          | batch  | IDENTICAL x2 | e645c5854d89c482 | e645c5854d89c482 |
+| gbdt-lossguide/odd           | infer  | IDENTICAL x2 | c61553f78e6fb798 | c61553f78e6fb798 |
+| gbdt-lossguide/odd           | model  | IDENTICAL x2 | 7393593a5fb3ed79 | 7393593a5fb3ed79 |
+| gbdt-lossguide/odd           | batch  | IDENTICAL x2 | 5232e0e0101a443e | 5232e0e0101a443e |
+| gbdt-lossguide/ties          | infer  | IDENTICAL x2 | 37cf90363e2078cf | 37cf90363e2078cf |
+| gbdt-lossguide/ties          | model  | IDENTICAL x2 | 3653934f21f61d9d | 3653934f21f61d9d |
+| gbdt-lossguide/ties          | batch  | IDENTICAL x2 | e0ab456d446fcfe2 | e0ab456d446fcfe2 |
+| gbdt-multiclass/base         | infer  | IDENTICAL x2 | eb9f3cbfed539fe0 | eb9f3cbfed539fe0 |
+| gbdt-multiclass/base         | model  | IDENTICAL x2 | 33d956710bbf8d85 | 33d956710bbf8d85 |
+| gbdt-multiclass/base         | batch  | IDENTICAL x2 | 3a70c328641a3a08 | 3a70c328641a3a08 |
+| gbdt-multiclass/odd          | infer  | IDENTICAL x2 | 1fa8ad7b45ed2d45 | 1fa8ad7b45ed2d45 |
+| gbdt-multiclass/odd          | model  | IDENTICAL x2 | 7396a283e6805a3d | 7396a283e6805a3d |
+| gbdt-multiclass/odd          | batch  | IDENTICAL x2 | d59490d8d05927ad | d59490d8d05927ad |
+| gbdt-multiclass/ties         | infer  | IDENTICAL x2 | 36c62ed7e9da7402 | 36c62ed7e9da7402 |
+| gbdt-multiclass/ties         | model  | IDENTICAL x2 | 333644e5d21d53f8 | 333644e5d21d53f8 |
+| gbdt-multiclass/ties         | batch  | IDENTICAL x2 | e8439a8a50bfbf51 | e8439a8a50bfbf51 |
+| gbdt-nan-modes/base          | infer  | IDENTICAL x2 | 01fd6a33928b42a8 | 01fd6a33928b42a8 |
+| gbdt-nan-modes/base          | model  | IDENTICAL x2 | d43749ca39897a78 | d43749ca39897a78 |
+| gbdt-nan-modes/base          | batch  | IDENTICAL x2 | 8c08c90af3b9bafd | 8c08c90af3b9bafd |
+| gbdt-nan-modes/odd           | infer  | IDENTICAL x2 | 6db4a8fb8ffcc4df | 6db4a8fb8ffcc4df |
+| gbdt-nan-modes/odd           | model  | IDENTICAL x2 | d931157021dea1c1 | d931157021dea1c1 |
+| gbdt-nan-modes/odd           | batch  | IDENTICAL x2 | ee6e7cfed828deb2 | ee6e7cfed828deb2 |
+| gbdt-nan-modes/ties          | infer  | IDENTICAL x2 | 7e2f6402af40601a | 7e2f6402af40601a |
+| gbdt-nan-modes/ties          | model  | IDENTICAL x2 | 72dda6adec940a2a | 72dda6adec940a2a |
+| gbdt-nan-modes/ties          | batch  | IDENTICAL x2 | 2adbd46492fefdf1 | 2adbd46492fefdf1 |
+| gbdt-onevsall/base           | infer  | IDENTICAL x2 | 9ebe038b917dc3d0 | 9ebe038b917dc3d0 |
+| gbdt-onevsall/base           | model  | IDENTICAL x2 | 66c3cd878ec16470 | 66c3cd878ec16470 |
+| gbdt-onevsall/base           | batch  | IDENTICAL x2 | 795bf20d55943289 | 795bf20d55943289 |
+| gbdt-onevsall/odd            | infer  | IDENTICAL x2 | df5d7b6325bd9ba1 | df5d7b6325bd9ba1 |
+| gbdt-onevsall/odd            | model  | IDENTICAL x2 | bb3d93d69eb06198 | bb3d93d69eb06198 |
+| gbdt-onevsall/odd            | batch  | IDENTICAL x2 | 245742ae15a8bcb1 | 245742ae15a8bcb1 |
+| gbdt-onevsall/ties           | infer  | IDENTICAL x2 | 597fa19abb40fb1d | 597fa19abb40fb1d |
+| gbdt-onevsall/ties           | model  | IDENTICAL x2 | ad927470625838f6 | ad927470625838f6 |
+| gbdt-onevsall/ties           | batch  | IDENTICAL x2 | 72bbd68979455f8c | 72bbd68979455f8c |
+| gbdt-ordered-rmse/base       | infer  | ONE-COLUMN   | 3113f83d552f6e3e | REFUSED          |
+| gbdt-ordered-rmse/base       | model  | ONE-COLUMN   | 43540d21322226ab | REFUSED          |
+| gbdt-ordered-rmse/base       | batch  | ONE-COLUMN   | 5cd33ee932513206 | REFUSED          |
+| gbdt-ordered-rmse/odd        | infer  | ONE-COLUMN   | c7f0cb99b920a716 | REFUSED          |
+| gbdt-ordered-rmse/odd        | model  | ONE-COLUMN   | 4d02412a6fa569f9 | REFUSED          |
+| gbdt-ordered-rmse/odd        | batch  | ONE-COLUMN   | c05993b79c89e09a | REFUSED          |
+| gbdt-ordered-rmse/ties       | infer  | ONE-COLUMN   | ca0189610e51bc17 | REFUSED          |
+| gbdt-ordered-rmse/ties       | model  | ONE-COLUMN   | f9192cb03ecc6ece | REFUSED          |
+| gbdt-ordered-rmse/ties       | batch  | ONE-COLUMN   | 7fa28c2d36832787 | REFUSED          |
+| gbdt-parametric-losses/base  | infer  | IDENTICAL x2 | e2dd23756497c207 | e2dd23756497c207 |
+| gbdt-parametric-losses/base  | model  | IDENTICAL x2 | 7e2e2a88d0c131fe | 7e2e2a88d0c131fe |
+| gbdt-parametric-losses/base  | batch  | IDENTICAL x2 | e3eec7c846e31ffa | e3eec7c846e31ffa |
+| gbdt-parametric-losses/odd   | infer  | IDENTICAL x2 | 8e189c476f8d1a35 | 8e189c476f8d1a35 |
+| gbdt-parametric-losses/odd   | model  | IDENTICAL x2 | 618dacfa57e6afe5 | 618dacfa57e6afe5 |
+| gbdt-parametric-losses/odd   | batch  | IDENTICAL x2 | 512453808845915f | 512453808845915f |
+| gbdt-parametric-losses/ties  | infer  | IDENTICAL x2 | d9e5a906ff57c89c | d9e5a906ff57c89c |
+| gbdt-parametric-losses/ties  | model  | IDENTICAL x2 | 098b24f142083ae7 | 098b24f142083ae7 |
+| gbdt-parametric-losses/ties  | batch  | IDENTICAL x2 | 8aebd06a0db0d07a | 8aebd06a0db0d07a |
+| gbdt-pointwise-l2-bayesian-eval/base | infer  | ONE-COLUMN   | 2754757c200872f3 | REFUSED          |
+| gbdt-pointwise-l2-bayesian-eval/base | model  | ONE-COLUMN   | c29dddb945d072a8 | REFUSED          |
+| gbdt-pointwise-l2-bayesian-eval/base | batch  | ONE-COLUMN   | 3fd0fe4443273a54 | REFUSED          |
+| gbdt-pointwise-l2-bayesian-eval/odd | infer  | ONE-COLUMN   | e1aec5dad8dc37f0 | REFUSED          |
+| gbdt-pointwise-l2-bayesian-eval/odd | model  | ONE-COLUMN   | 6ea8282d329c6c7e | REFUSED          |
+| gbdt-pointwise-l2-bayesian-eval/odd | batch  | ONE-COLUMN   | 149b530e8adbf44b | REFUSED          |
+| gbdt-pointwise-l2-bayesian-eval/ties | infer  | ONE-COLUMN   | 92b20ebae1dabad7 | REFUSED          |
+| gbdt-pointwise-l2-bayesian-eval/ties | model  | ONE-COLUMN   | 293e124b96e008e4 | REFUSED          |
+| gbdt-pointwise-l2-bayesian-eval/ties | batch  | ONE-COLUMN   | 405d98bc60e93077 | REFUSED          |
+| gbdt-rmse/base               | infer  | IDENTICAL x2 | ba6284898fcd7adb | ba6284898fcd7adb |
+| gbdt-rmse/base               | model  | IDENTICAL x2 | 6a7e0d174aadda21 | 6a7e0d174aadda21 |
+| gbdt-rmse/base               | batch  | IDENTICAL x2 | 3a53a53abfe321f6 | 3a53a53abfe321f6 |
+| gbdt-rmse/odd                | infer  | IDENTICAL x2 | 88f9e64eea1b35df | 88f9e64eea1b35df |
+| gbdt-rmse/odd                | model  | IDENTICAL x2 | 7a0ea772f0108d40 | 7a0ea772f0108d40 |
+| gbdt-rmse/odd                | batch  | IDENTICAL x2 | 6b459ed54f82865a | 6b459ed54f82865a |
+| gbdt-rmse/ties               | infer  | IDENTICAL x2 | 4044415de3b73aee | 4044415de3b73aee |
+| gbdt-rmse/ties               | model  | IDENTICAL x2 | b1eb77816b7f439a | b1eb77816b7f439a |
+| gbdt-rmse/ties               | batch  | IDENTICAL x2 | 1681c6f968f338d2 | 1681c6f968f338d2 |
+| gbdt-symmetric/base          | infer  | IDENTICAL x2 | e1db044dc82354ac | e1db044dc82354ac |
+| gbdt-symmetric/base          | model  | IDENTICAL x2 | ee776c33f052679a | ee776c33f052679a |
+| gbdt-symmetric/base          | batch  | IDENTICAL x2 | 9d36287df25eff95 | 9d36287df25eff95 |
+| gbdt-symmetric/odd           | infer  | IDENTICAL x2 | 24dbd6988a519e0c | 24dbd6988a519e0c |
+| gbdt-symmetric/odd           | model  | IDENTICAL x2 | 3dfdadfd1961d2b5 | 3dfdadfd1961d2b5 |
+| gbdt-symmetric/odd           | batch  | IDENTICAL x2 | a60497d0f9d20e28 | a60497d0f9d20e28 |
+| gbdt-symmetric/ties          | infer  | IDENTICAL x2 | e71542e71394acc3 | e71542e71394acc3 |
+| gbdt-symmetric/ties          | model  | IDENTICAL x2 | d01adab1226baf49 | d01adab1226baf49 |
+| gbdt-symmetric/ties          | batch  | IDENTICAL x2 | 8146b2372b89188b | 8146b2372b89188b |
+
+summary (infer/model): IDENTICAL=66, N/A=6, ONE-COLUMN=24
+summary (batch): IDENTICAL=36, ONE-COLUMN=12
+summary (rlpair): 

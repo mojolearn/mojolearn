@@ -8,7 +8,7 @@ The public Python surface is `python/mojolearn/ensemble.py`.
 WHY GBDT HAS ITS OWN EXTENSION
 -------------------------------
 Mojo 1.0.0 (ed45d567) decides how many kernels it compiles ahead of time from
-THE BASENAME OF THE ENTRY FILE -- see archive/reference/PORTING.md 70 and the long comment in
+THE BASENAME OF THE ENTRY FILE -- see the long comment in
 `bindings/build.sh`. That is an upstream defect with no fix here, only a
 workaround: compile a copy under a measured basename and CHECK the artifact.
 
@@ -228,6 +228,9 @@ def gbdt_fit_binding(
     Optional Float64 tails after counted weights are min_split_gain,
     min_child_hessian, then feature_fraction. Missing guards default to -1
     and missing feature_fraction defaults to 1, preserving existing layouts.
+    A fit with `group_id` sends all three and then two more: the address of
+    a uint32 buffer of group sizes (the pool's query runs in row order) and
+    the group count, 35 + n_class_weights + 5 values in all.
 
     AND THEN `n_class_weights` MORE VALUES, the class weights themselves,
     at `params[35 .. 35 + n_class_weights)`. They ride in this list rather
@@ -278,9 +281,9 @@ def gbdt_fit_binding(
             + String(n_class_weights)
         )
     var fixed_and_weights = 35 + n_class_weights
-    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3:
+    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 5:
         raise Error(
-            "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction values ("
+            "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count values ("
             + String(35 + n_class_weights)
             + ") values, got "
             + String(len(params))
@@ -339,8 +342,22 @@ def gbdt_fit_binding(
         min_child_hessian = Float64(py=params[fixed_and_weights + 1])
 
     var feature_fraction = Float64(1)
-    if len(params) == fixed_and_weights + 3:
+    if len(params) >= fixed_and_weights + 3:
         feature_fraction = Float64(py=params[fixed_and_weights + 2])
+
+    # the pool's grouping, `group_id` resolved to run lengths by the wrapper;
+    # read here, with the GIL held, like every other Python value
+    var group_sizes = List[UInt32]()
+    if len(params) == fixed_and_weights + 5:
+        var n_groups = Int(py=params[fixed_and_weights + 4])
+        if n_groups < 1:
+            raise Error(
+                "gbdt_fit: the group tail needs a positive group count, got "
+                + String(n_groups)
+            )
+        var gp = _u32_ptr(Int(py=params[fixed_and_weights + 3]))
+        for g in range(n_groups):
+            group_sizes.append(gp.unsafe_load(g))
 
     var fp = GbdtFitParams(
         Int(py=params[4]),
@@ -389,6 +406,7 @@ def gbdt_fit_binding(
         result = gbdt_fit(
             ctx, xp, n_rows, n_features, yp, wp, n_weights,
             cp, n_flags, ep, eyp, n_eval_rows, fp,
+            group_sizes=group_sizes,
         )
 
     var learn = Python.list()

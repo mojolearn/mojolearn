@@ -144,10 +144,10 @@ def max_nodes(max_depth: Int32) -> Int:
 #   (a cap on the breadth-first frontier that reorders nothing). Both may be
 #   set; the tighter binds.
 # WHY NOT REFUSE, which is what this lane did until 2026-09-01. The refusal
-#   argued that the two upstreams grow different trees and that accepting
+#   argued that the two references grow different trees and that accepting
 #   sklearn's name would be accepting cuML's algorithm under it. The first
 #   half is true and the second half does not follow: the answer to two
-#   upstreams disagreeing is to implement the one whose NAME the caller
+#   references disagreeing is to implement the one whose NAME the caller
 #   typed, which is what this block does.
 #
 # THE SHAPE, so the next reader does not have to re-derive it from the loop.
@@ -2174,7 +2174,7 @@ def score_to_candidate_kernel(
     into the finalize kernel would make that kernel write two layouts of
     the same fact, and fusing it into the reduction would make the
     reduction read a layout it does not own. Both couple two implemented files
-    to each other through a shape neither upstream has.
+    to each other through a shape neither reference has.
 
     THE ONE PIECE OF POLICY IN IT: a cell whose status is not SCORED
     becomes the DEFAULT `Split` -- `colid = -1`, `best_metric_val =

@@ -20,7 +20,7 @@ WHAT IS DIFFERENT ABOUT REGRESSION, and why the fixtures are shaped for it:
   * `num_outputs` is 1 (`objectives.cuh:351`: `NumClasses()` returns 1),
     not the class count.
   * The bin carries a `label_sum` alongside the count, and that sum is a
-    genuine float64 accumulator upstream. This device has no float64, so it
+    genuine float64 accumulator in the reference. This device has no float64, so it
     is Int32 FIXED POINT here (DEVIATION 101b) -- which is what makes the
     histogram order-independent, and is also why a leaf value is only exact
     when the planted labels land on the fixed-point grid. Both cases are

@@ -43,20 +43,20 @@ is allowed to run until `changed` stays zero. `max_iterations` truncates
 it, and a truncated propagation is a SNAPSHOT of a race: whichever labels
 happened to have propagated by the last pass on this machine. THE CAP IS
 THIS IMPLEMENTATION'S, NOT cuML's: the sentence that stood here, "cuML's default
-200, `dbscan.mojo:141`", was false -- upstream's loop is `do { } while
+200, `dbscan.mojo:141`", was false -- the reference's loop is `do { } while
 (host_m)` with no cap (`weak_cc_batched`'s docstring below says so), and
 `dbscan_fit_impl`'s 200 is a number this implementation chose. Measured 2026-08-23
 (DEVIATION 519, `tools/e2u_matrix_fit.py`): a 1,000-point chain needs 731
 passes, and at the 200 cap FAST returned seven clusters for one. The
 caller-facing surface (`dbscan/estimator.mojo`, `mojolearn.DBSCAN`) now
 defaults to the fixed point, capped at `n_samples + 1` as a bound; an
-explicit cap is still honoured, and upstream's silent truncation is what
+explicit cap is still honoured, and the reference's silent truncation is what
 an explicit binding cap still does under FAST.
 
 Under `NUMERIC_IDENTICAL` this function RAISES instead. A cap that binds is
 the one case where DBSCAN's labels are not a function of its input, so the
 mode that promises they are may not hand one back. Under `FAST` the
-upstream behaviour is unchanged, cap and all.
+reference behaviour is unchanged, cap and all.
 """
 
 from checks.numerics import (

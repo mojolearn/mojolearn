@@ -60,7 +60,7 @@ This is one of the TWO clauses that survive DEVIATION 780's correction of
 2026-08-23. Three of that deviation's original five were struck once cuVS
 26.08 was checked out and turned out to spell them verbatim; this one
 stands, because this solver has no reference source. It stands where
-cuSOLVER `syevd` is called, and the cap is a number nobody upstream ever
+cuSOLVER `syevd` is called, and the cap is a number nobody in the reference ever
 had to pick.
 `max_sweeps = 60`, where NR's `jacobi` uses 50 and calls `nrerror` when it
 runs out. This routine RETURNS the unconverged basis and its sweep count

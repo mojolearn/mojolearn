@@ -17,8 +17,8 @@ def execute(request):
         # verifier), so the shard's host fit runs in that scope here too.
         from . import _backend
         from ._cpu_reference import reference_training
-        from ._parallel_pool import CPU_OPERATIONS
-        if _backend._CPU_ONLY is None or args[0] not in CPU_OPERATIONS:
+        from ._parallel_pool import CPU_OPERATIONS, CPU_SINGLE_DEVICE_COOPERATIVE
+        if _backend._CPU_ONLY is None or args[0] not in CPU_OPERATIONS | CPU_SINGLE_DEVICE_COOPERATIVE:
             raise ValueError('cpu_reference wraps only a CPU route operation on a CPU-only install')
         with reference_training():
             return execute(args)

@@ -1,0 +1,25 @@
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host'] commit=7b76dd4a4e045cadd69ed4495493c96bf46b570a
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host'] commit=7b76dd4a4e045cadd69ed4495493c96bf46b570a
+| lane/fixture                 | verdict    | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|------------|------------------|------------------|
+| kmeans/base                  | DIVERGENT  | parts differ: centers,labels; agree: - | 1169ffe8848d53a0 |
+| ols/base                     | DIVERGENT  | parts differ: coef,predict; agree: - | 36bd85dffcc357af |
+| ridge/base                   | DIVERGENT  | parts differ: coef,predict; agree: - | a65c86616b2e64c0 |
+
+summary: DIVERGENT=3
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| kmeans/base                  | infer  | DIVERGENT    | b9a7dd27a045bc21 | 2192d61e07429ef3 |
+| kmeans/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans/base                  | batch  | DIVERGENT    | 2dc7903bd0a181f5 | 013600980331b37c |
+| ols/base                     | infer  | DIVERGENT    | 2546a13c03838433 | fc9f8772521e8e4a |
+| ols/base                     | model  | DIVERGENT    | a84289377ea9180f | 47140965e40975b7 |
+| ols/base                     | batch  | DIVERGENT    | b578bef320871443 | 53124eb72cfd3934 |
+| ridge/base                   | infer  | DIVERGENT    | a5a404bb201b0eeb | 00a0c3b1334ce404 |
+| ridge/base                   | model  | DIVERGENT    | efada80fdc2d4259 | 2ced80bce23e5735 |
+| ridge/base                   | batch  | DIVERGENT    | 5817cf4d9fb9bd91 | c2732e3cb937a128 |
+
+summary (infer/model): DIVERGENT=5, N/A=1
+summary (batch): DIVERGENT=3
+summary (rlpair): 

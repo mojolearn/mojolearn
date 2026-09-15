@@ -564,7 +564,7 @@ def compute_log_kernel(x: Float32, h: Float32, kernel: Int) -> Float32:
 # agreement about the wrong number. Consequence stated plainly: for EVEN
 # d, `metric='euclidean', kernel='cosine'` here does NOT match
 # `sklearn.neighbors.KernelDensity`; the difference is their bug and is
-# the subject of a report owed upstream (README, HAND-OFF).
+# the subject of a report owed to the reference maintainers (README, HAND-OFF).
 # ==========================================================================
 
 
@@ -573,7 +573,7 @@ def _cosine_radial_integral_fast(n: Int) -> Float64:
     ((2k)! (n + 2k + 1))`, `a = (pi/2)^2`, float64.
 
     THE SERIES AND NOT THE RECURRENCE, MEASURED: the by-parts recurrence
-    `I_m = 2/pi - m(m-1)(2/pi)^2 I_{m-2}` is what the upstream loop
+    `I_m = 2/pi - m(m-1)(2/pi)^2 I_{m-2}` is what the reference loop
     unrolls, and it CANCELS -- each step subtracts two terms near 0.6 to
     leave a result near 0.02 -- so in float32 it was off by 2.8e-3 at
     d = 9 (`check_kde_log_norm_closed_form` under IDENTICAL, 2026-08-23:
@@ -807,7 +807,7 @@ def logsumexp_kernel(
     no block fold, no warp primitive and no atomic to pin because their
     kernel has none; the brief's alternative (a `pinned_block_sum` tree plus
     a cross-block fold) was not taken because it is a different summation
-    order from the one upstream ships and COPY-DO-NOT-IMPROVE decides it.
+    order from the one the reference ships and COPY-DO-NOT-IMPROVE decides it.
     `rowmax` is this lane's addition for the card (`kde.rowmax`); their
     kernel keeps `max_exp` in a register.
 
@@ -996,7 +996,7 @@ def host_sum_weights(weights: List[Float32]) -> Float32:
 # device traffic per cell for arithmetic that needs none, and it caps the
 # problem at the matrices' size (2 x 4 bytes x cells: 16k x 16k already
 # holds 2 GB, 100k x 100k cannot be allocated at all). It is the shape
-# upstream ships (`kernel_density.py:332-342`, cupy matrices between numba
+# the reference ships (`kernel_density.py:332-342`, cupy matrices between numba
 # kernels), and IDENTICAL keeps it because the card certifies each stage
 # (`kde.dists`, `kde.logk`, `kde.rowmax`) and its serial ascending fold.
 #

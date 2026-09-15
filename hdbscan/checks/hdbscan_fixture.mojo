@@ -302,7 +302,7 @@ def hfixture_value(fix: Int, i: Int, f: Int) -> Float32:
         # their default (`hdbscan.hpp:138`) and this suite's -- Excess of
         # Mass deselects the ROOT unconditionally (`select.cuh:191`), so a
         # dataset whose condensed tree has ONE cluster returns every point
-        # as noise. That is upstream's behavior and not a defect, but a
+        # as noise. That is the reference's behavior and not a defect, but a
         # fixture built on it would plant an assignment the algorithm is
         # not asked to produce. Two blobs give the root a real split, and
         # the outlier is still the only planted noise point.

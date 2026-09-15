@@ -755,7 +755,7 @@ def check_mutual_reachability_ties() raises:
     # An index-based tie-break cannot be permutation-equivariant. Closing
     # this needs a tie-break on something INTRINSIC to the points, and that
     # is a design question this rung does not answer. What IS true and is
-    # worth stating beside it: upstream breaks the same tie with a cuRAND
+    # worth stating beside it: the reference breaks the same tie with a cuRAND
     # draw (`mst.cuh:167-190`), so ours is at least a function of the input
     # rather than of the run, and that is a strictly stronger position, not
     # a solved one.
@@ -1252,7 +1252,7 @@ def check_permutation_invariance() raises:
     so under an EXACT tie a permutation can select a different (equally
     minimal) MST, and a different MST can condense to a different tree.
     That is a real order dependence and it is the algorithm's, not a bug
-    in this implementation: upstream's answer under the same tie is a cuRAND draw,
+    in this implementation: the reference's answer under the same tie is a cuRAND draw,
     which is worse. **Mutual reachability makes ties ENDEMIC rather than
     exceptional**: `mr(a,b) = max(core_a, core_b, d(a,b))` collapses to a
     CORE DISTANCE whenever the points are closer than their cores, and

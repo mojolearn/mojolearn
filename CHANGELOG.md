@@ -20,6 +20,33 @@ Linux legs are OWED before this heading reads published.
   grow from 12 to 29, adding the ols, ridge and logistic option variants. On a CPU-only
   install `StandardScaler.fit`, `MinMaxScaler.fit`, `Lasso.fit` and `ElasticNet.fit` now
   refuse by name outside the internal reference scope, as every other estimator fit does.
+- Public CPU `Cholesky` inference. On a CPU-only install `Cholesky().fit(A)` factors a given
+  matrix and `solve` answers from it, and `Cholesky.save` / `Cholesky.load` (or
+  `mojolearn.host_model`, which returns a `HostCholesky`) carry a factor from a GPU box to a
+  CPU. The door moved into the linalg host binding, which ships in the inference wheel; the
+  `cholesky` identity lane is now the linalg family's and a public CPU reference probe. Apple
+  M4 CPU column: train, infer and batch IDENTICAL x4 against the 166-lane record, the new
+  saved-factor model cells OWED to the release record, the sabotage build DIVERGENT on every
+  train and owed cell.
+- New `GPT2Tokenizer.encode_batch(documents, allow_endoftext=False)`, `decode_batch` and
+  `decode_bytes_batch`. `encode_batch` is one call into the tokenizer host binding
+  (`gpt2_encode_batch`) that encodes each document alone, so every document's ids equal
+  `encode` on it; the decode calls loop over `decode_bytes`. The `tokenizer` identity lane
+  now carries batch cells over 64 documents instead of `n/a`; its train and infer hashes
+  are unchanged against the three committed GPU columns. A new
+  `-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1` build must read BATCH_MOVED. Apple M4 CPU
+  column only; the GPU columns' batch cells are owed to the release record.
+- New public CPU neural inference from GPU-trained weights: `MLPInference` (the small
+  8-16-3 MLP's `predict_logits`, from `SmallMLPTrainer.save_checkpoint` files or the four
+  weights) and `TransformerBlockInference` (`TransformerBlock.forward` from a zero state,
+  full causal or sliding window, ragged `lengths` included). Both run on a new shipped host
+  binding, `_mojolearn_neural_host`, that exports forward entries only (no optimizer, loss,
+  backward or decode step is compiled in). On a CPU column the `mlp`, `transformer` and
+  `transformer-window` identity lanes now ask their held-out and batch cells through these
+  classes: against the three committed GPU columns every train, infer, model and batch cell
+  reads IDENTICAL (nine fixtures each), and a `-D MOJOLEARN_HOST_SABOTAGE=1` build of the new
+  binding reads DIVERGENT on all 27 infer and 27 batch cells with every train cell unchanged.
+  Training on the CPU stays internal to the verifier.
 - New `mojolearn.metrics.fowlkes_mallows_score`, mirroring scikit-learn's definition (cuML
   has none): the device integer contingency matrix, exact Int64 pair counts, then
   `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, 0.0 when `tk == 0` (no samples, one sample,
@@ -38,7 +65,12 @@ Linux legs are OWED before this heading reads published.
   move them. Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the
   release record. `membership_vector` and `all_points_membership_vectors` are not
   implemented and refuse by name.
-
+- `GradientBoosting.fit` takes `group_id`, CatBoost's Pool argument: one string or integer id per
+  row (an integer compares by its decimal spelling, as their Pool hashes it), each group's rows
+  consecutive or the fit raises "group Ids are not consecutive". The grouping crosses into the GPU
+  binding and the GBDT host binding as run lengths, and every loss this implementation trains
+  refuses it BY NAME there, because no querywise loss is implemented yet. `subgroup_id` and `pairs`
+  are refused by name in Python. A fit without them sends the same parameter layout as before.
 - Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
   namely the byte LM's, the forest's, the tokenizer's and the twelve routed families (core,
   linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp, arima), fifteen in
