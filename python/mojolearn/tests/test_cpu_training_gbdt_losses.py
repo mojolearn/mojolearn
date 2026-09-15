@@ -42,7 +42,11 @@ LANES = ("gbdt-parametric-losses", "gbdt-exact-mae", "gbdt-lossguide-newtoncosin
          "gbdt-multiclass", "gbdt-onevsall")
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 REUSED = ("gbdt/gpu_util/kernel/random_gen.mojo", "gbdt/lapack/linear_system.mojo",
-          "gbdt/data/permutation.mojo")
+          "gbdt/data/permutation.mojo",
+          # the learning-to-rank targets the losses oracle routes (2026-09-15)
+          "gbdt/data/pairs.mojo", "gbdt/data/yeti_rank_tasks.mojo",
+          "gbdt/host/gbdt_oracle_query.mojo", "gbdt/host/gbdt_oracle_pair.mojo",
+          "gbdt/host/gbdt_oracle_yeti.mojo")
 
 
 def _read(rel):
@@ -70,10 +74,12 @@ def test_oracles_import_no_gpu_module():
     for rel in (LOSSES, MULTI) + REUSED:
         assert not GPU_IMPORTS.search(_read(rel)), f"{rel} imports a GPU module"
     assert _imports(LOSSES) == [
-        "checks.numerics", "gbdt.gpu_data.compressed_index_builder",
+        "checks.numerics", "gbdt.data.pairs", "gbdt.data.permutation",
+        "gbdt.data.yeti_rank_tasks", "gbdt.gpu_data.compressed_index_builder",
         "gbdt.gpu_data.feature_blocks", "gbdt.gpu_data.grid_policy",
         "gbdt.gpu_util.kernel.random_gen", "gbdt.host.gbdt_oracle",
-        "std.math", "std.memory",
+        "gbdt.host.gbdt_oracle_pair", "gbdt.host.gbdt_oracle_query",
+        "gbdt.host.gbdt_oracle_yeti", "std.math", "std.memory",
     ], _imports(LOSSES)
     assert _imports(MULTI) == [
         "checks.numerics", "gbdt.gpu_data.compressed_index_builder",
@@ -129,7 +135,8 @@ def test_multiclass_oracle_spells_the_bit_carrying_constructs():
 
 def test_binding_dispatches_and_refuses_by_name():
     src = _read(host_surface.binding_source("gbdt"))
-    assert "gbdt_losses_host_fit(x, y, n_rows, n_features, p, pw_loss)" in src
+    # the call carries the group and pairs tails since lane/gbdt-learning-to-rank
+    assert "gbdt_losses_host_fit(\n                x, y, n_rows, n_features, p, pw_loss, host_group_sizes," in src
     assert "gbdt_multi_host_fit(" in src and "gbdt_multi_host_model_text(multi_model)" in src
     assert '("gbdt_predict_multi")' in src
     assert "var lg_boot = lossguide_knobs and bootstrap_type == String(\"Bernoulli\")" in src

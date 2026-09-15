@@ -149,6 +149,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MULTICLASS_OVA,
     OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUERY_RMSE,
+    OBJECTIVE_YETI_RANK,
     OBJECTIVE_RMSE,
     deterministic_sum_lanes_kernel,
     launch_approximate,
@@ -158,6 +159,12 @@ from gbdt.targets.kernel.pair_logit import (
     launch_pair_logit_with,
     make_pairwise_target_buffers,
     pair_blocks,
+)
+from gbdt.targets.kernel.yeti_rank import (
+    YetiRankTargetBuffers,
+    launch_yeti_rank_with,
+    launch_yeti_rank_zero_value,
+    make_yeti_rank_target_buffers,
 )
 from gbdt.targets.kernel.query_rmse import (
     QuerywiseTargetBuffers,
@@ -667,6 +674,11 @@ def _estimate_and_apply(
     var query: Optional[QuerywiseTargetBuffers] = None,
     # the PairLogit pairs and scratch (handle views); None otherwise
     var pairs: Optional[PairwiseTargetBuffers] = None,
+    # the YetiRank task table and scratch (handle views); None otherwise
+    var yeti: Optional[YetiRankTargetBuffers] = None,
+    # the seed of this task's YetiRank evaluation stream (one draw of the
+    # fit's YetiRank stream per tree); read only with `yeti`
+    yeti_seed: UInt64 = UInt64(0),
 ) raises:
     """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
     plus the `AppendModels` that follows it, for ONE (dataset, cursor).
@@ -782,6 +794,9 @@ def _estimate_and_apply(
     if pairs.__bool__():
         # the same inverse bin order, for the pairwise der calcer
         launch_inverse_permutation(ctx, row_index, pairs.value().inverse, n_rows)
+    if yeti.__bool__():
+        # the same inverse bin order, for the YetiRank der calcer
+        launch_inverse_permutation(ctx, row_index, yeti.value().query.inverse, n_rows)
     var oracle = make_bin_optimized_oracle(
         ctx, n_rows, n_leaves, sizes,
         g_target.copy(), g_weights.copy(), g_cursor.copy(),
@@ -797,6 +812,8 @@ def _estimate_and_apply(
         num_classes,
         query^,
         pairs^,
+        yeti^,
+        yeti_seed,
     )
     # `TDocParallelLeavesEstimator::Estimate`
     # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES
@@ -835,7 +852,7 @@ def _estimate_and_apply(
     # `Float32(Float64 + Float64)` does. A shift of every leaf moves every
     # row by the same amount, so no pairwise loss or ranking metric sees it;
     # the raw predictions do.
-    if objective == OBJECTIVE_PAIR_LOGIT:
+    if objective == OBJECTIVE_PAIR_LOGIT or objective == OBJECTIVE_YETI_RANK:
         var zero_sum = Float64(0.0)
         var zero_weight = Float64(0.0)
         for i in range(len(estimated)):
@@ -1338,10 +1355,47 @@ def fit_with_test(
         )
         # `ComputeStats`' PairLogit weight (`querywise_targets_impl.h:98-101`)
         loss_norm = pair_buffers.value().pairs_total_weight
-    elif not is_querywise and (len(group_sizes) > 0 or len(pair_winners) > 0):
+    # ---- the SAMPLED-PERMUTATION querywise target (YetiRank) ----
+    # `TQuerywiseTargetsImpl`'s `InitYetiRank` arm
+    # (`gbdt/targets/kernel/yeti_rank.mojo`), on the same arm as QueryRMSE,
+    # at the reference's loss defaults (permutations 10, decay 0.85,
+    # `loss_description.cpp:181-193`).
+    var is_yeti_rank = objective == OBJECTIVE_YETI_RANK
+    var yeti_buffers = Optional[YetiRankTargetBuffers]()
+    # ================= DEVIATION: the YetiRank draw stream =================
+    # The reference draws each derivative call's seed with
+    # `GetRandom().NextUniformL()` from the one `TGpuAwareRandom` the whole fit
+    # shares with the base iteration seed and the searcher's score seeds
+    # (`querywise_targets_impl.h:213-229`). This implementation already keeps
+    # those streams apart (DEVIATION 139), so YetiRank gets a stream of its
+    # own, `TRandom(random_seed ^ "YETIRANK")`: per tree, one draw for the
+    # search pass, then one that seeds the tree's estimation stream (one draw
+    # per evaluation, `pointwise_oracle.mojo`). The host fit
+    # (`gbdt/host/gbdt_oracle_losses.mojo`) draws in the same order. The GPU
+    # reference's bits cannot be reproduced; both columns here agree.
+    # ======================================================================
+    var yeti_rand = TRandom(random_seed ^ UInt64(0x5945544952414E4B))
+    if is_yeti_rank:
+        var has_test_rows = test.__bool__() and test.value().n_rows > 0
+        if non_symmetric or use_pointwise_searcher or perm_count > 1 or has_test_rows:
+            raise Error(
+                "YetiRank is implemented for the SymmetricTree greedy"
+                " searcher at one permutation with no eval set; this fit asked"
+                " for another arm"
+            )
+        yeti_buffers = Optional(
+            make_yeti_rank_target_buffers(
+                ctx, group_sizes, n_rows, targets, weights, has_weights,
+                10, Float32(0.85),
+            )
+        )
+    if not (is_querywise or is_pair_logit or is_yeti_rank) and (
+        len(group_sizes) > 0 or len(pair_winners) > 0
+    ):
         raise Error(
-            "fit_with_test: group_sizes and pairs are read by the QueryRMSE"
-            " and PairLogit objectives only, got objective " + String(objective)
+            "fit_with_test: group_sizes and pairs are read by the QueryRMSE,"
+            " PairLogit and YetiRank objectives only, got objective "
+            + String(objective)
         )
 
     # THE FIXED-POINT BOUND, for every build whose histogram quantizes: the
@@ -1387,9 +1441,9 @@ def fit_with_test(
         )
         boot_param = bagging_temperature
     var bootstrap_on = boot_kind >= 0
-    if (is_querywise or is_pair_logit) and bootstrap_on:
+    if (is_querywise or is_pair_logit or is_yeti_rank) and bootstrap_on:
         raise Error(
-            "QueryRMSE and PairLogit with a bootstrap are not implemented here:"
+            "QueryRMSE, PairLogit and YetiRank with a bootstrap are not implemented here:"
             " the reference samples whole queries for querywise targets"
         )
 
@@ -1668,6 +1722,16 @@ def fit_with_test(
                     ctx, pair_buffers.value(), lcur, False,
                     stats, fv_part, True, mag_part, mags_in_mse,
                 )
+        elif is_yeti_rank:
+            # `GradientAt` calls `NewtonAt` for YetiRank
+            # (`querywise_targets_impl.h:131-134`), so both score arms read the
+            # pair weights in plane 0; the call's seed is this tree's first
+            # draw of the YetiRank stream (the DEVIATION at `yeti_rand`)
+            launch_yeti_rank_with[False](
+                ctx, yeti_buffers.value(), lcur, False,
+                yeti_rand.next_uniform_l(),
+                stats, fv_part, True, mag_part, mags_in_mse,
+            )
         elif second_order:
             # `secondDerAsWeights=true`: plane 0 becomes `weight * der2`
             # (`pointwise_target_impl.h:193-201`); plane 1 stays
@@ -2196,6 +2260,12 @@ def fit_with_test(
                     var p_est = Optional[PairwiseTargetBuffers]()
                     if is_pair_logit:
                         p_est = Optional(pair_buffers.value().handles())
+                    var y_est = Optional[YetiRankTargetBuffers]()
+                    var y_seed = UInt64(0)
+                    if is_yeti_rank:
+                        y_est = Optional(yeti_buffers.value().handles())
+                        # this tree's second draw: the estimation stream's seed
+                        y_seed = yeti_rand.next_uniform_l()
                     _estimate_and_apply(
                         ctx, n_rows, approx_dim, len(sizes), sizes,
                         leaf_offsets,
@@ -2212,6 +2282,8 @@ def fit_with_test(
                         est_ws,
                         q_est^,
                         p_est^,
+                        y_est^,
+                        y_seed,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
@@ -2358,6 +2430,10 @@ def fit_with_test(
             ctx, pair_buffers.value(), cursor, False,
             stats, fv_part, True, mag_part, False,
         )
+    elif is_yeti_rank:
+        # YetiRank has no function value (`FillBuffer(FunctionValue, 0)`,
+        # `kernel.h:421-423`): the final learn loss is 0 and no draw is taken
+        launch_yeti_rank_zero_value(ctx, fv_part, mse_blocks)
     else:
         launch_approximate[False](
             ctx, objective, targets, weights, Int32(n_rows), cursor,
