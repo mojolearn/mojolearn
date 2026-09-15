@@ -177,10 +177,32 @@ def column_fma_instruction(column: Int) -> Int:
       square, relu, rsqrt and reciprocal. `scalar_tensor_tensor` applies two
       operators "in sequence", documented as equivalent to two instructions
       back to back, which is the unfused spelling.
-    - qualcomm, intel, spec-baseline: UNAUDITED by this lane.
+    - qualcomm, intel: PRESENT (audited 2026-09-15 against the Khronos
+      specifications, docs/lanes/DECLARED_TPU_TRAINIUM_COLUMNS_2026-09-14.md).
+      Both parts ship OpenCL (Adreno through Qualcomm's OpenCL driver, Xe
+      through Intel's compute runtime), and the OpenCL C `fma` builtin
+      "Returns the correctly rounded floating-point representation of the
+      sum of c with the infinitely precise product of a and b. Rounding of
+      intermediate products shall not occur" (OpenCL C 3.0, math functions;
+      Table 65 lists fma as "Correctly rounded"). SPIR-V's OpenCL.std `fma`
+      (instruction 25) and SYCL 2020's `sycl::fma` say the same. Whether the
+      device does it in hardware is the `CL_FP_FMA` device flag; a software
+      fma is slower and still one rounding. The hazard this row pins is in
+      the same spec: `#pragma OPENCL FP_CONTRACT` defaults to ON, so a plain
+      `a*b+c` may or may not be fused.
+    - spec-baseline: ABSENT. The baseline is what BOTH portable
+      specifications guarantee, and Vulkan's does not guarantee a fused one.
+      GLSL.std.450 `Fma` "Computes a * b + c", and the GLSL 4.60 precision
+      table allows `a * b + c` as a "Correctly rounded single operation or
+      sequence of two correctly rounded operations", with `fma()` "Inherited
+      from a * b + c".
     """
     if column == COLUMN_TPU or column == COLUMN_TRAINIUM:
         return CAP_ABSENT
+    if column == COLUMN_SPEC_BASELINE:
+        return CAP_ABSENT
+    if column == COLUMN_QUALCOMM or column == COLUMN_INTEL:
+        return CAP_PRESENT
     if column_is_buildable(column):
         return CAP_PRESENT
     return CAP_UNAUDITED
@@ -199,11 +221,27 @@ def column_float32_division(column: Int) -> Int:
       computes it "at a higher precision compared to Scalar Engine" (whose
       activations are "approximated with piece-wise polynomials"), which
       documents neither one as a correctly rounded binary32 division.
-    - qualcomm, intel, spec-baseline: UNAUDITED by this lane.
+    - qualcomm, intel, spec-baseline: PRESENT as a name (OpenCL C `/`,
+      SPIR-V `OpFDiv`), and THIS IS THE ROW'S MEASUREMENT RISK. Neither
+      specification requires a correctly rounded single-precision division.
+      OpenCL C 3.0 Table 65 allows `x / y` "<= 2.5 ulp" (Table 66, the
+      embedded profile, "<= 3 ulp"), and correct rounding is the optional
+      `CL_FP_CORRECTLY_ROUNDED_DIVIDE_SQRT` device flag ("divide and sqrt are
+      correctly rounded as defined by the IEEE754 specification"). The GLSL
+      4.60 precision table allows `a / b` "2.5 ULP". A device that does not
+      report the flag is `check-division`'s to catch, and a column whose
+      division fails it keeps a correctly rounded fma, which is enough to
+      correct a quotient the way `portable_sqrtf` corrects a root (unbuilt).
     """
     if column == COLUMN_TRAINIUM:
         return CAP_ABSENT
     if column == COLUMN_TPU:
+        return CAP_PRESENT
+    if (
+        column == COLUMN_QUALCOMM
+        or column == COLUMN_INTEL
+        or column == COLUMN_SPEC_BASELINE
+    ):
         return CAP_PRESENT
     if column_is_buildable(column):
         return CAP_PRESENT
@@ -222,9 +260,18 @@ def column_int32_exact(column: Int) -> Int:
     - trainium: PRESENT. `nki.isa.tensor_tensor`: all-int32/uint32 operands
       default to the GpSimd Engine, "which uses native integer arithmetic.
       This ensures exact results for all 32-bit integer values."
-    - qualcomm, intel, spec-baseline: UNAUDITED by this lane.
+    - qualcomm, intel, spec-baseline: PRESENT. OpenCL C `uint` is "An
+      unsigned 32-bit integer" and `int` a two's complement 32-bit integer;
+      SPIR-V and GLSL carry the same 32-bit integer types. The accumulators
+      and Philox use unsigned words, whose wraparound C99 defines.
     """
     if column == COLUMN_TPU or column == COLUMN_TRAINIUM:
+        return CAP_PRESENT
+    if (
+        column == COLUMN_QUALCOMM
+        or column == COLUMN_INTEL
+        or column == COLUMN_SPEC_BASELINE
+    ):
         return CAP_PRESENT
     if column_is_buildable(column):
         return CAP_PRESENT
@@ -241,10 +288,20 @@ def column_float_bits_readable(column: Int) -> Int:
     - trainium: UNAUDITED. NKI bitvec operators treat INTEGER tiles as bit
       patterns; the reference read for this lane does not say how a float32
       tile's bits reach an integer tile.
-    - qualcomm, intel, spec-baseline: UNAUDITED by this lane.
+    - qualcomm, intel, spec-baseline: PRESENT. SPIR-V's core `OpBitcast`
+      reinterprets a value's bits in both the OpenCL and Vulkan flavors,
+      SYCL 2020 pre-adopts `std::bit_cast` as `sycl::bit_cast`, and GLSL has
+      `floatBitsToUint`. GLSL warns that `intBitsToFloat` may flush a
+      subnormal to zero, which is the direction `ftz` flushes anyway.
     """
     if column == COLUMN_TPU or column == COLUMN_TRAINIUM:
         return CAP_UNAUDITED
+    if (
+        column == COLUMN_QUALCOMM
+        or column == COLUMN_INTEL
+        or column == COLUMN_SPEC_BASELINE
+    ):
+        return CAP_PRESENT
     if column_is_buildable(column):
         return CAP_PRESENT
     return CAP_UNAUDITED
@@ -354,10 +411,18 @@ def column_meets_identity_floor(column: Int) -> Bool:
 
 
 def identity_refusal_reason(column: Int) -> String:
-    """Why `IDENTICAL` refuses this column, or empty if it does not."""
+    """Why `IDENTICAL` refuses this column, or empty if it does not. The arithmetic reason comes first and the kernel-shaped reason follows it, so a column refused on both (the spec baseline, since 2026-09-15) says both."""
     var arithmetic = column_arithmetic_refusal_reason(column)
+    var kernel = _kernel_floor_refusal_reason(column)
+    if arithmetic.byte_length() > 0 and kernel.byte_length() > 0:
+        return arithmetic + "; also " + kernel
     if arithmetic.byte_length() > 0:
         return arithmetic
+    return kernel
+
+
+def _kernel_floor_refusal_reason(column: Int) -> String:
+    """The kernel-shaped half of `identity_refusal_reason`: memory, atomics and block size."""
     if column_shared_limit(column) < IDENTITY_FLOOR_SHARED_BYTES:
         return (
             column_name(column)
