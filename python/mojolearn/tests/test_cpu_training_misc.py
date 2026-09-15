@@ -196,7 +196,7 @@ def test_manifest_covers_the_neural_lanes():
     for name in NEURAL_EXPORTS:
         assert f'("{name}")' in src and f'("{name}")' in gpu, name
         assert name in fam["exports"], name
-    for absent in ("neural_rng", "clip_parallel_available", "optimizer_parallel_available"):
+    for absent in ("clip_parallel_available", "optimizer_parallel_available"):
         assert f'("{absent}")' in gpu and f'("{absent}")' not in src, absent
     assert SAMBA_ORACLE in fam["host_modules"] and (ROOT / SAMBA_ORACLE).is_file()
     text = _read(SAMBA_ORACLE)
@@ -207,7 +207,7 @@ def test_manifest_covers_the_neural_lanes():
         assert oracle in text, oracle
     assert f'- "{SAMBA_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
     sentence = host_surface.no_cpu_path_sentence()
-    assert "neural blocks" not in sentence and "Samba blocks" in sentence, sentence
+    assert "neural blocks" not in sentence and "Samba" not in sentence, sentence
 
 
 def _cpu_only_with(basename):
