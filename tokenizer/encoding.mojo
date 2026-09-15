@@ -1,33 +1,39 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The public Mojo surface: GPT-2 byte-level BPE `encode` and `decode`.
+"""The public Mojo surface: byte-level BPE `encode` and `decode` in the GPT-2
+format, over a rank table the caller supplies.
 
-    var tok = load_gpt2_tokenizer()
+    var tok = load_gpt2_tokenizer_from("path/to/ranks.tsv")
     var ids = tok.encode("hello world", False)
     var back = tok.decode(ids)
+
+MOJOLEARN SHIPS NO VOCABULARY (2026-09-15). The rank file is the caller's
+(`impl/ranks.mojo` gives its format; `python/mojolearn/tokenizer.py` builds
+one from a GPT-2 `encoder.json` and `vocab.bpe`). The Unicode classes the
+pattern needs are compiled in (`impl/unicode_class.mojo`), so the rank file
+is the only thing read at run time.
 
 WHAT THE PROPERTY IS. This is HOST-ONLY integer and table work: a byte
 buffer, three range tables, a hash probe and an argmin over small integers.
 There is no floating-point arithmetic and no device kernel anywhere in
 `tokenizer/`, so cross-vendor bitwise identity is true BY CONSTRUCTION and is
-not a claim worth making. The property that has to be earned is EXACT
-AGREEMENT WITH THE REFERENCE IMPLEMENTATION -- the same id sequence as
-tiktoken 0.14.0's `gpt2` encoding, for the same text, id for id -- and
-`tokenizer/checks/tokenizer_check.mojo` is where that is asserted against 43
-recorded cases.
+not a claim worth making. The property that has to be earned is that the
+algorithm is the one stated: `tokenizer/checks/tokenizer_check.mojo` holds it
+to a second, independent Python encoder of the same algorithm over a
+synthetic vocabulary mojolearn trains itself.
 
-THE SPECIAL TOKEN. `<|endoftext|>` is id 50256 and is not in the rank table.
-It is a token ONLY when the caller passes `allow_endoftext=True`; otherwise
-the thirteen characters are ordinary text and encode as seven ids. Both
-readings are in the fixture (`endoftext_as_text`, `endoftext_as_special`),
-which is why the flag is an argument and not a policy. There is no
-"error on encountering a special token" mode: tiktoken's `encode` has one and
-`NOT_IMPLEMENTED.tsv` records its absence.
+THE SPECIAL TOKEN. `<|endoftext|>` is the id after the last rank
+(`eot_id()`, `n_vocab() - 1`) and is not in the rank table. It is a token
+ONLY when the caller passes `allow_endoftext=True`; otherwise the thirteen
+characters are ordinary text. Both readings are in the fixture
+(`endoftext_as_text`, `endoftext_as_special`), which is why the flag is an
+argument and not a policy. There is no "error on encountering a special
+token" mode; `NOT_IMPLEMENTED.tsv` records its absence.
 
 BYTES, NOT STRINGS, ARE THE INTERFACE. `encode_bytes` / `decode_bytes` are
-the real entry points. A GPT-2 token's bytes need not be valid UTF-8 on their
-own, and a caller's text may hold NUL (the fixture's `raw_bytes` case does),
-so the `String` wrappers are conveniences over the byte functions rather than
+the real entry points. A token's bytes need not be valid UTF-8 on their own,
+and a caller's text may hold NUL (the fixture's `raw_controls` case does), so
+the `String` wrappers are conveniences over the byte functions rather than
 the other way round.
 """
 
@@ -37,23 +43,15 @@ from tokenizer.impl.pretokenize import pretokenize
 from tokenizer.impl.ranks import RankTable, load_rank_table
 from tokenizer.impl.unicode_class import (
     UnicodeClasses,
-    load_unicode_classes,
+    builtin_unicode_classes,
 )
-
-comptime GPT2_RANKS_PATH = "tokenizer/data/gpt2_ranks.tsv"
-comptime GPT2_UNICODE_PATH = "tokenizer/data/unicode_categories.tsv"
-
-comptime GPT2_N_VOCAB = 50257
-"""50256 ranks plus `<|endoftext|>`. Asserted against the fixture."""
-
-comptime GPT2_ENDOFTEXT_ID = 50256
 
 comptime GPT2_ENDOFTEXT = "<|endoftext|>"
 
 comptime GPT2_PAT_STR = "'(?:[sdmt]|ll|ve|re)| ?\\p{L}++| ?\\p{N}++| ?[^\\s\\p{L}\\p{N}]++|\\s++$|\\s+(?!\\S)|\\s"
 """The pattern `impl/pretokenize.mojo` implements by hand, spelled so it can
 be compared to the fixture's own `pat_str`. THE CHECK ASSERTS THEY ARE EQUAL:
-a fixture regenerated from a different pattern must fail the gate rather than
+a fixture generated from a different pattern must fail the gate rather than
 be silently tokenized by this one."""
 
 
@@ -93,6 +91,10 @@ struct Gpt2Tokenizer(Copyable, Movable):
     def n_vocab(self) -> Int:
         return self.ranks.n_tokens() + 1
 
+    def eot_id(self) -> Int:
+        """`<|endoftext|>`'s id: the one after the last rank."""
+        return self.ranks.n_tokens()
+
     def encode_ordinary_bytes(self, text: List[UInt8]) raises -> List[Int]:
         """Pre-tokenize, then merge each pre-token. No special token is
         recognized: `<|endoftext|>` here is thirteen ordinary characters."""
@@ -106,7 +108,7 @@ struct Gpt2Tokenizer(Copyable, Movable):
         self, text: List[UInt8], allow_endoftext: Bool
     ) raises -> List[Int]:
         """`allow_endoftext=True` splits the text on the literal
-        `<|endoftext|>` and emits 50256 for each occurrence.
+        `<|endoftext|>` and emits `eot_id()` for each occurrence.
 
         The segments between occurrences are encoded INDEPENDENTLY, which is
         not a detail: the pattern's `\\s++$` alternative means end of text,
@@ -126,7 +128,7 @@ struct Gpt2Tokenizer(Copyable, Movable):
                 )
                 return out^
             out += self.encode_ordinary_bytes(_slice(text, i, hit))
-            out.append(GPT2_ENDOFTEXT_ID)
+            out.append(self.eot_id())
             i = hit + len(self.eot)
 
     def _find_eot(self, text: List[UInt8], start: Int) -> Int:
@@ -149,9 +151,10 @@ struct Gpt2Tokenizer(Copyable, Movable):
 
     def decode_bytes(self, ids: List[Int]) raises -> List[UInt8]:
         var out = List[UInt8]()
+        var eot_id = self.eot_id()
         for k in range(len(ids)):
             var id = ids[k]
-            if id == GPT2_ENDOFTEXT_ID:
+            if id == eot_id:
                 for j in range(len(self.eot)):
                     out.append(self.eot[j])
             elif id >= 0 and id < self.ranks.n_tokens():
@@ -172,10 +175,10 @@ struct Gpt2Tokenizer(Copyable, Movable):
         return bytes_string(self.decode_bytes(ids))
 
     def token_spelling(self, id: Int) raises -> String:
-        """The token as GPT-2's own printable vocabulary spelling, through the
-        byte-to-unicode bijection. For reports: a token whose bytes are half a
-        character has no readable form otherwise."""
-        if id == GPT2_ENDOFTEXT_ID:
+        """The token in the format's printable vocabulary spelling, through
+        the byte-to-unicode bijection. For reports: a token whose bytes are
+        half a character has no readable form otherwise."""
+        if id == self.eot_id():
             return String(GPT2_ENDOFTEXT)
         var b = self.ranks.token_bytes(id)
         return spell_bytes(b, 0, len(b))
@@ -188,17 +191,8 @@ def _slice(data: List[UInt8], start: Int, end: Int) -> List[UInt8]:
     return out^
 
 
-def load_gpt2_tokenizer() raises -> Gpt2Tokenizer:
-    """Load both tables from their repository-relative paths. Run checks and
-    tools from the repository root, as every other `pixi run check-*` does."""
-    return load_gpt2_tokenizer_from(
-        String(GPT2_RANKS_PATH), String(GPT2_UNICODE_PATH)
-    )
-
-
-def load_gpt2_tokenizer_from(
-    ranks_path: String, unicode_path: String
-) raises -> Gpt2Tokenizer:
+def load_gpt2_tokenizer_from(ranks_path: String) raises -> Gpt2Tokenizer:
+    """The caller's rank file and the compiled-in Unicode classes."""
     var ranks = load_rank_table(ranks_path)
-    var classes = load_unicode_classes(unicode_path)
+    var classes = builtin_unicode_classes()
     return Gpt2Tokenizer(ranks^, classes^)

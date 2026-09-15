@@ -1,124 +1,235 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The GPT-2 byte-level BPE tokenizer (the expose-tokenizer lane, 2026-09-14).
+"""A byte-level BPE tokenizer in the GPT-2 format, over a vocabulary the
+caller supplies.
 
-`GPT2Tokenizer` computes the id sequence that tiktoken 0.14.0's `gpt2`
-encoding assigns to a byte string, id for id, and the bytes back. The
-arithmetic is `tokenizer/encoding.mojo` (integers and tables only, no float,
-no device kernel), reached through the host binding
-`_mojolearn_tokenizer_host` under `mojolearn/host/`, built from source with
-`bindings/build_tokenizer_host.sh`. The same binary serves a GPU box and a
-CPU-only install, because there is no GPU path to route from: the tokenizer
-is host work by construction.
+MOJOLEARN SHIPS NO VOCABULARY (2026-09-15). `GPT2Tokenizer` is the GPT-2
+tokenization ALGORITHM: the GPT-2 pre-tokenizer pattern, byte-level BPE by
+merge rank, and `<|endoftext|>` as the id after the last rank. The class name
+names that format. The vocabulary is yours to load:
 
-What is asserted, and where: `pixi run check-tokenizer` holds the Mojo
-encoder to 43 cases recorded from tiktoken (exact id sequences, byte-exact
-round trips, the pattern and table preconditions and the pre-tokenizer reach
-arms); `python/mojolearn/tests/test_tokenizer_surface.py` holds THIS door to
-the same 43 cases through the binding, plus the refusals below. Cross-vendor
-bitwise identity is true by construction here and is not a claim this module
-makes; agreement with the reference is the property that can be wrong.
+    tok = GPT2Tokenizer.from_files("encoder.json", "vocab.bpe")
+    tok = GPT2Tokenizer.from_ranks_file("ranks.tsv")      # rank<TAB>hex lines
+    tok = GPT2Tokenizer.from_token_bytes(list_of_bytes)   # rank = list index
 
-The two tables (`gpt2_ranks.tsv`, `unicode_categories.tsv`) are read from
-the first of: the directory `MOJOLEARN_TOKENIZER_DATA` names, the package's
-own `mojolearn/data/tokenizer/` (absent until a wheel carries it), and the
-checkout's `tokenizer/data/`. None found is refused by name.
+OpenAI publishes the GPT-2 `encoder.json` and `vocab.bpe` with its GPT-2
+release, for example under
+https://openaipublic.blob.core.windows.net/gpt-2/encodings/main/ ; download
+them yourself and pass their paths. With those two files the ids are the
+GPT-2 ids. `GPT2Tokenizer()` with no vocabulary is refused by name.
+
+The arithmetic is `tokenizer/encoding.mojo` (integers and tables only, no
+float, no device kernel), reached through the host binding
+`_mojolearn_tokenizer_host` under `mojolearn/host/`. The Unicode letter,
+number and White_Space classes the pattern needs are compiled into that
+binding at build time (`tokenizer/tools/gen_unicode_categories.py`), so no
+data file is read at run time except the vocabulary.
+
+What is asserted, and where: `pixi run check-tokenizer` holds the Mojo encoder
+to a synthetic vocabulary mojolearn trains itself
+(`mojolearn/_tokenizer_synthetic.py`) and to a second, pure Python encoder of
+the same algorithm; `python/mojolearn/tests/test_tokenizer_surface.py` holds
+THIS door to the same cases through the binding, plus every refusal by name.
 """
 import array
+import json
 import os
+import tempfile
 
 from . import _backend
+from . import _tokenizer_synthetic
 from ._buffer import addr, addr_ro
 
 _EXTENSION = "_mojolearn_tokenizer_host"
-_DATA_ENV = "MOJOLEARN_TOKENIZER_DATA"
-_RANKS_FILE = "gpt2_ranks.tsv"
-_UNICODE_FILE = "unicode_categories.tsv"
 
-__all__ = ["GPT2Tokenizer", "data_dir"]
+__all__ = ["GPT2Tokenizer"]
 
-
-def _candidates():
-    here = os.path.dirname(os.path.abspath(__file__))
-    out = []
-    override = os.environ.get(_DATA_ENV, "").strip()
-    if override:
-        out.append((_DATA_ENV, os.path.abspath(override)))
-    out.append(("the package's data directory", os.path.join(here, "data", "tokenizer")))
-    out.append(("the checkout's tokenizer/data", os.path.normpath(os.path.join(here, "..", "..", "tokenizer", "data"))))
-    return out
-
-
-def data_dir():
-    """The directory holding both tables, resolved in the order the module
-    docstring gives; FileNotFoundError naming every place looked at."""
-    looked = []
-    for label, d in _candidates():
-        if os.path.isfile(os.path.join(d, _RANKS_FILE)) and os.path.isfile(os.path.join(d, _UNICODE_FILE)):
-            return d
-        looked.append(f"{label}: {d}")
-    raise FileNotFoundError(
-        f"mojolearn: no directory holds both {_RANKS_FILE} and {_UNICODE_FILE}; "
-        f"looked at {'; '.join(looked)}. Set {_DATA_ENV} to a directory that does"
-    )
+_NO_VOCABULARY = (
+    "mojolearn: GPT2Tokenizer needs a vocabulary, and mojolearn ships none. "
+    "Load one you obtained yourself: GPT2Tokenizer.from_files(encoder_json, vocab_bpe) "
+    "with the encoder.json and vocab.bpe that OpenAI publishes with its GPT-2 release, "
+    "GPT2Tokenizer.from_ranks_file(path) with a rank<TAB>hex file, or "
+    "GPT2Tokenizer.from_token_bytes(tokens)"
+)
 
 
 def _binding():
     return _backend.load_host_module(_EXTENSION)
 
 
-class GPT2Tokenizer:
-    """`encode` and `decode` for tiktoken 0.14.0's `gpt2` encoding.
+def _byte_to_char():
+    """The GPT-2 format's byte-to-unicode spelling (`tokenizer/impl/
+    byte_unicode.mojo` builds the same table): the printable Latin-1 runs
+    are fixed points and the other 68 bytes take U+0100 upward in byte
+    order."""
+    fixed = set(range(0x21, 0x7F)) | set(range(0xA1, 0xAD)) | set(range(0xAE, 0x100))
+    out, extra = {}, 256
+    for b in range(256):
+        if b in fixed:
+            out[b] = chr(b)
+        else:
+            out[b] = chr(extra)
+            extra += 1
+    return out
 
-    Ids are in [0, 50257): 50256 ranks from `gpt2_ranks.tsv` and the special
-    token `<|endoftext|>` at 50256. The special token is recognized only
-    when `allow_endoftext=True`; otherwise its thirteen characters are
-    ordinary text and encode as seven ids, which is tiktoken's
-    `encode_ordinary`. There is no "raise on a disallowed special token"
-    mode and no other special token (`tokenizer/NOT_IMPLEMENTED.tsv`).
+
+class GPT2Tokenizer:
+    """`encode` and `decode` for byte-level BPE in the GPT-2 format.
+
+    Ids are in [0, n_vocab): the vocabulary's ranks, then `<|endoftext|>` at
+    `n_vocab - 1`. The special token is recognized only when
+    `allow_endoftext=True`; otherwise its thirteen characters are ordinary
+    text. There is no "raise on a disallowed special token" mode and no
+    other special token (`tokenizer/NOT_IMPLEMENTED.tsv`).
 
     Bytes are the interface: `encode_bytes` and `decode_bytes` are the real
     entries. `encode` accepts `str` (UTF-8 encoded first) or a bytes-like
     object; `decode` is `decode_bytes` decoded as UTF-8 with
-    `errors="replace"`, tiktoken's own default, because a token stream cut
-    inside a character is still the right bytes. Invalid UTF-8 input
-    encodes as one-byte pre-tokens and round trips (tiktoken's `&str` input
-    cannot hold it, so there is nothing to compare against there).
+    `errors="replace"`, because a token stream cut inside a character is
+    still the right bytes. Invalid UTF-8 input encodes as one-byte
+    pre-tokens and round trips.
     """
 
-    N_VOCAB = 50257
-    ENDOFTEXT_ID = 50256
     ENDOFTEXT = "<|endoftext|>"
 
-    def __init__(self, data_directory=None):
-        d = os.path.abspath(data_directory) if data_directory is not None else data_dir()
-        ranks = os.path.join(d, _RANKS_FILE)
-        unicode = os.path.join(d, _UNICODE_FILE)
-        for p in (ranks, unicode):
-            if not os.path.isfile(p):
-                raise FileNotFoundError(f"mojolearn: GPT2Tokenizer table {p} does not exist")
-        self._data_dir = d
+    def __init__(self, ranks_file=None):
+        if ranks_file is None:
+            raise ValueError(_NO_VOCABULARY)
+        path = os.path.abspath(os.fspath(ranks_file))
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"mojolearn: GPT2Tokenizer rank file {path} does not exist")
+        self._source = path
         self._m = _binding()
-        self._handle = self._m.gpt2_load(ranks, unicode)
+        self._handle = self._m.gpt2_load(path)
         self._n_vocab = int(self._m.gpt2_n_vocab(self._handle))
         self._max_token_bytes = int(self._m.gpt2_max_token_bytes(self._handle))
-        if self._n_vocab != self.N_VOCAB:
-            raise RuntimeError(
-                f"mojolearn: {ranks} loads {self._n_vocab} ids, not the gpt2 encoding's {self.N_VOCAB}"
-            )
+
+    # ------------------------------------------------------------ loading
+
+    @classmethod
+    def from_ranks_file(cls, path):
+        """A rank file: one `rank<TAB>hex_of_token_bytes` line per rank,
+        ascending from 0, every one of the 256 single bytes present."""
+        return cls(path)
+
+    @classmethod
+    def from_token_bytes(cls, tokens):
+        """A vocabulary as a sequence of bytes-like tokens; a token's rank
+        (and id) is its index. Unique, non-empty, and holding all 256 single
+        bytes, or refused by name before anything is loaded."""
+        if isinstance(tokens, (str, bytes, bytearray, memoryview)):
+            raise TypeError(f"mojolearn: tokens must be a sequence of bytes, got {type(tokens).__name__}")
+        toks = []
+        for k, t in enumerate(tokens):
+            if not isinstance(t, (bytes, bytearray, memoryview)):
+                raise TypeError(f"mojolearn: token {k} must be bytes-like, got {type(t).__name__}")
+            t = bytes(t)
+            if not t:
+                raise ValueError(f"mojolearn: token {k} is empty")
+            toks.append(t)
+        seen = {}
+        for k, t in enumerate(toks):
+            if t in seen:
+                raise ValueError(f"mojolearn: token {k} repeats token {seen[t]} ({t.hex()})")
+            seen[t] = k
+        missing = [b for b in range(256) if bytes([b]) not in seen]
+        if missing:
+            raise ValueError(
+                f"mojolearn: the vocabulary lacks {len(missing)} of the 256 single-byte tokens "
+                f"(first 0x{missing[0]:02x}); byte-level BPE needs every byte")
+        fd, path = tempfile.mkstemp(prefix="mojolearn-ranks-", suffix=".tsv")
+        try:
+            with os.fdopen(fd, "w", encoding="ascii") as fh:
+                for k, t in enumerate(toks):
+                    fh.write(f"{k}\t{t.hex()}\n")
+            tok = cls(path)
+        finally:
+            os.unlink(path)
+        tok._source = "<token bytes>"
+        return tok
+
+    @classmethod
+    def from_files(cls, encoder_json, vocab_bpe):
+        """The two files of the GPT-2 format: `encoder.json` (token spelling
+        to id) and `vocab.bpe` (the merge list). mojolearn ships neither;
+        OpenAI publishes GPT-2's with its GPT-2 release.
+
+        Checked before loading, each refused by name: every spelling decodes
+        through the byte-to-unicode table; ids are 0 to n-1 with
+        `<|endoftext|>` (if present) at n; every merge's two parts and result
+        are tokens; merge results take strictly increasing ids above both
+        parts; and every token no merge makes is a single byte. Those are
+        the conditions under which merging by rank gives the merge list's
+        own result."""
+        byte_of = {c: b for b, c in _byte_to_char().items()}
+        with open(encoder_json, "r", encoding="utf-8") as fh:
+            encoder = json.load(fh)
+        if not isinstance(encoder, dict):
+            raise ValueError(f"mojolearn: {encoder_json} is not a JSON object of spelling to id")
+        eot_id = encoder.pop(cls.ENDOFTEXT, None)
+        n = len(encoder)
+        tokens = [None] * n
+        for spelling, i in encoder.items():
+            if type(i) is not int or not 0 <= i < n or tokens[i] is not None:
+                raise ValueError(f"mojolearn: {encoder_json}: id {i!r} of {spelling!r} is not a unique id in [0, {n})")
+            try:
+                tokens[i] = bytes(byte_of[c] for c in spelling)
+            except KeyError as exc:
+                raise ValueError(
+                    f"mojolearn: {encoder_json}: {spelling!r} holds {exc.args[0]!r}, which is not a "
+                    "byte-level spelling") from None
+        if eot_id is not None and eot_id != n:
+            raise ValueError(f"mojolearn: {encoder_json}: {cls.ENDOFTEXT} is id {eot_id}, not {n} (after the ranks)")
+        index = {t: i for i, t in enumerate(tokens)}
+        spelled = {c: b for c, b in zip(encoder.keys(), (tokens[i] for i in encoder.values()))}
+        made = set()
+        last = -1
+        with open(vocab_bpe, "r", encoding="utf-8") as fh:
+            lines = fh.read().split("\n")
+        for lineno, line in enumerate(lines, 1):
+            if not line.strip() or (lineno == 1 and line.startswith("#version")):
+                continue
+            parts = line.split(" ")
+            if len(parts) != 2 or parts[0] not in spelled or parts[1] not in spelled:
+                raise ValueError(f"mojolearn: {vocab_bpe}:{lineno}: {line!r} is not a merge of two tokens")
+            a, b = spelled[parts[0]], spelled[parts[1]]
+            m = index.get(a + b)
+            if m is None:
+                raise ValueError(f"mojolearn: {vocab_bpe}:{lineno}: the merge result {parts[0] + parts[1]!r} is not a token")
+            if m <= last or m <= index[a] or m <= index[b]:
+                raise ValueError(
+                    f"mojolearn: {vocab_bpe}:{lineno}: merge result id {m} does not rise above the previous "
+                    f"merge ({last}) and both parts; merging by rank would not follow this merge list")
+            last = m
+            made.add(m)
+        loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
+        if loose:
+            raise ValueError(f"mojolearn: {encoder_json}: id {loose[0]} is neither a single byte nor made by a merge")
+        tok = cls.from_token_bytes(tokens)
+        tok._source = f"{os.path.abspath(encoder_json)} + {os.path.abspath(vocab_bpe)}"
+        return tok
+
+    @classmethod
+    def _synthetic(cls):
+        """The synthetic vocabulary mojolearn trains itself
+        (`_tokenizer_synthetic.py`), for the gates and the identity lane."""
+        tok = cls.from_token_bytes(_tokenizer_synthetic.vocabulary())
+        tok._source = "<mojolearn synthetic vocabulary>"
+        return tok
 
     @property
     def n_vocab(self):
+        """The ranks plus `<|endoftext|>`."""
         return self._n_vocab
 
     @property
     def eot_token(self):
-        """`<|endoftext|>`'s id, 50256."""
-        return self.ENDOFTEXT_ID
+        """`<|endoftext|>`'s id, `n_vocab - 1`."""
+        return self._n_vocab - 1
 
     @property
-    def data_directory(self):
-        return self._data_dir
+    def vocabulary_source(self):
+        return self._source
 
     # ------------------------------------------------------------ encode
 
@@ -165,11 +276,9 @@ class GPT2Tokenizer:
 
         Each document is a str (UTF-8 encoded first) or bytes-like and is
         encoded ALONE: `encode_batch(docs)[k] == encode(docs[k])` id for id,
-        whatever else is in the batch. This is tiktoken's `encode_batch`
-        with `allow_endoftext` in place of `allowed_special` and no
-        `num_threads`: the documents are encoded one after another inside
-        ONE binding call (`gpt2_encode_batch`), which saves the per-call
-        crossing that dominates short documents."""
+        whatever else is in the batch. The documents are encoded one after
+        another inside ONE binding call (`gpt2_encode_batch`), which saves
+        the per-call crossing that dominates short documents."""
         if isinstance(documents, (str, bytes, bytearray, memoryview)):
             raise TypeError(
                 f"mojolearn: encode_batch takes a sequence of documents, got {type(documents).__name__}"
@@ -241,7 +350,7 @@ class GPT2Tokenizer:
         return out, len(seq)
 
     def decode_bytes(self, ids):
-        """The bytes of an id sequence. An id outside [0, 50257) is refused
+        """The bytes of an id sequence. An id outside [0, n_vocab) is refused
         by value and position before the binding is called."""
         arr, n = self._ids_array(ids)
         if n == 0:
@@ -267,8 +376,8 @@ class GPT2Tokenizer:
         return [self.decode_bytes(ids) for ids in batch]
 
     def decode_batch(self, batch, errors="replace"):
-        """`[decode(ids, errors) for ids in batch]`, tiktoken's `decode_batch`."""
+        """`[decode(ids, errors) for ids in batch]`."""
         return [b.decode("utf-8", errors) for b in self.decode_bytes_batch(batch)]
 
     def __repr__(self):
-        return f"GPT2Tokenizer(n_vocab={self._n_vocab}, data_directory={self._data_dir!r})"
+        return f"GPT2Tokenizer(n_vocab={self._n_vocab}, vocabulary={self._source!r})"

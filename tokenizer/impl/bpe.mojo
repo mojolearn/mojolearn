@@ -71,8 +71,9 @@ def bpe_append(
     for k in range(len(bounds) - 1):
         var id = ranks.rank(data, bounds[k], bounds[k + 1] - bounds[k])
         if id < 0:
-            # Unreachable on the GPT-2 table: all 256 single bytes are
-            # tokens, and the loop only stops when no pair merges, so every
+            # Unreachable on a table holding all 256 single bytes (the Python
+            # door refuses any other), and the loop only stops when no pair
+            # merges, so every
             # surviving piece is either a single byte or a piece that was
             # merged through a rank and therefore IS a token. Raised rather
             # than dropped because a silent gap would corrupt the id stream.

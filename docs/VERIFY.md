@@ -11,7 +11,7 @@ pip install mojolearn
 python -m mojolearn verify --all
 ```
 
-No repository, no dataset, no network and no scikit-learn is needed. The
+No repository, no dataset, no network and no other machine-learning library is needed. The
 command selects the IDENTICAL tier itself when `MOJOLEARN_NUMERIC_MODE` is
 unset; a tier you set explicitly is respected, and a FAST process is refused
 (exit 3).
@@ -63,7 +63,7 @@ Each part reads one state.
 | IDENTICAL | equal to the reference hash |
 | DIVERGENT | different from it, or this machine disagreed with itself between repeats, or batch invariance failed here |
 | OWED | no committed record carries this part yet, the record's own columns disagree at one commit, or the part changed after the record (a hash here against an `n/a` there, as when a lane gained a batch declaration); not a pass |
-| REFUSED | the lane or probe raised; the sentence is printed (for example a function with no CPU implementation, or the tokenizer lane on a wheel that does not ship the GPT-2 tables, refused by name) |
+| REFUSED | the lane or probe raised; the sentence is printed (for example a function with no CPU implementation, or a lane whose host binding this install lacks, refused by name) |
 | N/A | the estimator has no such output (a transductive clusterer has no held-out answer) |
 
 The command prints a table per family and a verdict.

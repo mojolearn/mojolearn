@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Just enough JSON to read `checks/fixtures/gpt2_reference.json`.
+"""Just enough JSON to read the tokenizer gate's fixture, the `cases.json`
+`python/mojolearn/_tokenizer_synthetic.py` writes.
 
 NOT a JSON library and not offered as one: it reads objects, arrays, strings,
 integers, `true`/`false`/`null`, and it REFUSES everything else by position --
@@ -9,8 +10,8 @@ number-to-float path at all, which is deliberate: the fixture is text and
 integers, and a tokenizer gate that parsed floats could drift on the parse
 rather than on the tokenizer.
 
-STRINGS COME BACK AS BYTES, not as `String`. The fixture's `raw_bytes` case
-is "\\u0000\\u0001\\u007f", so the text of a case contains NUL; the ids are
+STRINGS COME BACK AS BYTES, not as `String`. The fixture's `raw_controls`
+case is "\\u0000\\u0001\\u007f", so the text of a case contains NUL; the ids are
 compared against bytes and the decode round trip is compared against bytes,
 so nothing here ever needs those bytes inside a `String`. `\\uXXXX` is
 decoded, including a surrogate PAIR, and a lone surrogate is refused rather
@@ -23,25 +24,27 @@ struct JsonCase(Copyable, Movable):
     var text: List[UInt8]
     var ids: List[Int]
     var roundtrip_ok: Bool
+    var allow_endoftext: Bool
 
     def __init__(out self):
         self.name = String("")
         self.text = List[UInt8]()
         self.ids = List[Int]()
         self.roundtrip_ok = False
+        self.allow_endoftext = False
 
 
 struct JsonFixture(Copyable, Movable):
     var encoding: String
     var pat_str: String
-    var tiktoken_version: String
+    var generator: String
     var n_vocab: Int
     var cases: List[JsonCase]
 
     def __init__(out self):
         self.encoding = String("")
         self.pat_str = String("")
-        self.tiktoken_version = String("")
+        self.generator = String("")
         self.n_vocab = -1
         self.cases = List[JsonCase]()
 
@@ -310,8 +313,8 @@ def load_fixture(path: String) raises -> JsonFixture:
             out.encoding = cur.parse_string_text()
         elif key == "pat_str":
             out.pat_str = cur.parse_string_text()
-        elif key == "tiktoken_version":
-            out.tiktoken_version = cur.parse_string_text()
+        elif key == "generator":
+            out.generator = cur.parse_string_text()
         elif key == "n_vocab":
             out.n_vocab = cur.parse_int()
         elif key == "cases":
@@ -368,6 +371,8 @@ def _parse_case(mut cur: JsonCursor, path: String) raises -> JsonCase:
             saw_ids = True
         elif key == "roundtrip_ok":
             out.roundtrip_ok = cur.parse_bool()
+        elif key == "allow_endoftext":
+            out.allow_endoftext = cur.parse_bool()
         else:
             cur.skip_value()
         var sep = cur.take()

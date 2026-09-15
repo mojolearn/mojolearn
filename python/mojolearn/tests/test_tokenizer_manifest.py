@@ -4,8 +4,8 @@
 checked from SOURCE so it runs on a box with nothing built: the manifest
 declares the family, the package exports the class, the alpha API document
 names it, the build shim execs the one builder, the CPU identity gate builds
-the binding it will read back, and the table lookup refuses by name before
-any binding is loaded.
+the binding it will read back, no vocabulary or table file is tracked, and a
+missing vocabulary is refused by name before any binding is loaded.
 
     cd python && python3 -m mojolearn.tests.test_tokenizer_manifest
 """
@@ -70,33 +70,32 @@ def test_binding_source_reads_the_sabotage_define():
     assert sorted(names) == sorted(host_surface.family("tokenizer")["exports"])
 
 
-def test_data_dir_resolves_the_checkout_tables():
-    d = tokenizer_module.data_dir()
-    assert os.path.isfile(os.path.join(d, "gpt2_ranks.tsv"))
-    assert os.path.isfile(os.path.join(d, "unicode_categories.tsv"))
+def test_no_vocabulary_is_tracked_or_shipped():
+    """mojolearn ships no vocabulary and tracks no tokenizer data file
+    (2026-09-15): the tables are gone from the tree, the Unicode classes are
+    generated at build time, and the generated module is ignored."""
+    assert not (ROOT / "tokenizer" / "data").exists()
+    assert not (ROOT / "tokenizer" / "checks" / "fixtures").exists()
+    assert "tokenizer/impl/unicode_table_generated.mojo" in _read(".gitignore")
+    assert "sh tokenizer/tools/gen_unicode_table.sh" in _read("bindings/build_host_family.sh")
+    pin = _read("tokenizer/impl/unicode_class.mojo")
+    assert re.search(r'^comptime UNICODE_TABLE_SHA256_PINNED = "[0-9a-f]{64}"$', pin, re.M)
 
 
-def test_missing_tables_refused_by_name_before_any_load():
-    empty = tempfile.mkdtemp()
+def test_missing_vocabulary_refused_by_name_before_any_load():
     try:
-        mojolearn.GPT2Tokenizer(data_directory=empty)
-    except FileNotFoundError as exc:
-        assert "gpt2_ranks.tsv does not exist" in str(exc)
+        mojolearn.GPT2Tokenizer()
+    except ValueError as exc:
+        assert "needs a vocabulary, and mojolearn ships none" in str(exc)
     else:
-        raise AssertionError("an empty data directory was not refused")
-    saved = os.environ.get("MOJOLEARN_TOKENIZER_DATA")
-    os.environ["MOJOLEARN_TOKENIZER_DATA"] = empty
+        raise AssertionError("a tokenizer with no vocabulary was not refused")
+    missing = os.path.join(tempfile.mkdtemp(), "ranks.tsv")
     try:
-        # The override comes first; the checkout's tables come after, so
-        # data_dir still resolves. What must show is the override in the
-        # search list of the refusal for a directory tree with no tables.
-        looked = [d for _, d in tokenizer_module._candidates()]
-        assert looked[0] == os.path.abspath(empty)
-    finally:
-        if saved is None:
-            del os.environ["MOJOLEARN_TOKENIZER_DATA"]
-        else:
-            os.environ["MOJOLEARN_TOKENIZER_DATA"] = saved
+        mojolearn.GPT2Tokenizer.from_ranks_file(missing)
+    except FileNotFoundError as exc:
+        assert "does not exist" in str(exc)
+    else:
+        raise AssertionError("a missing rank file was not refused")
 
 
 TESTS = [(name, fn) for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]

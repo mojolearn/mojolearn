@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPU binding for the GPT-2 byte-level BPE tokenizer (`tokenizer/`), the
-expose-tokenizer lane, 2026-09-14
+"""CPU binding for the byte-level BPE tokenizer in the GPT-2 format
+(`tokenizer/`), the expose-tokenizer lane, 2026-09-14
 (docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md).
 
 HOST ONLY, AND THE ONLY BINDING THIS FAMILY HAS. `tokenizer/` is integer
@@ -13,21 +13,22 @@ not a CPU twin of a GPU entry; it is the door itself, loaded by path through
 same binary serves a GPU box and a CPU-only install alike.
 
 WHAT IT COMPUTES. `tokenizer/encoding.mojo::Gpt2Tokenizer.encode_bytes` and
-`decode_bytes`: the id sequence tiktoken 0.14.0's `gpt2` encoding assigns to
-a byte string, id for id, and the bytes back. `tokenizer/checks/
-tokenizer_check.mojo` (`pixi run check-tokenizer`) is where that agreement
-is asserted against 43 recorded cases; this file adds no arithmetic and no
-policy. `<|endoftext|>` (id 50256) is a token only when the caller passes
-`allow_endoftext=True`, otherwise its thirteen characters are ordinary text
-(both readings are in the fixture).
+`decode_bytes` over the rank file the caller loads (mojolearn ships no
+vocabulary, 2026-09-15): the ids of a byte string and the bytes back.
+`tokenizer/checks/tokenizer_check.mojo` (`pixi run check-tokenizer`) is where
+the algorithm is asserted; this file adds no arithmetic and no policy.
+`<|endoftext|>` (the id after the last rank) is a token only when the caller
+passes `allow_endoftext=True`, otherwise its thirteen characters are ordinary
+text.
 
 THE ADDRESS CONTRACT, mirrored word for word in `python/mojolearn/
 tokenizer.py`:
 
-    gpt2_load(ranks_path, unicode_path) -> handle
-        parses the two tables once and returns an opaque `_Gpt2Handle`
-        every other entry takes first. One handle per GPT2Tokenizer.
-    gpt2_n_vocab(handle) -> 50257
+    gpt2_load(ranks_path) -> handle
+        parses the caller's rank file once, with the Unicode classes
+        compiled into this build, and returns an opaque `_Gpt2Handle` every
+        other entry takes first. One handle per GPT2Tokenizer.
+    gpt2_n_vocab(handle) -> the ranks plus `<|endoftext|>`
     gpt2_max_token_bytes(handle) -> the longest token's byte length, so the
         caller can size a decode output in one call
     gpt2_encode(handle, text_addr, n_bytes, out_addr, out_cap, allow_endoftext)
@@ -39,7 +40,7 @@ tokenizer.py`:
         writes nothing and returns 0.
     gpt2_decode(handle, ids_addr, n_ids, out_addr, out_cap)
         reads `n_ids` int32 at `ids_addr`, writes the bytes at `out_addr`
-        and returns how many. An id outside [0, 50257) is refused BY NAME
+        and returns how many. An id outside [0, n_vocab) is refused BY NAME
         AND POSITION (`encoding.mojo`'s own sentence) with nothing written;
         `out_cap = n_ids * gpt2_max_token_bytes` always suffices.
 
@@ -167,19 +168,16 @@ def tokenizer_host_sabotage_binding() raises -> PythonObject:
     return PythonObject(TOKENIZER_HOST_SABOTAGE or TOKENIZER_BATCH_SABOTAGE)
 
 
-def gpt2_load_binding(
-    ranks_path: PythonObject, unicode_path: PythonObject
-) raises -> PythonObject:
-    """Parse `tokenizer/data/gpt2_ranks.tsv` and `unicode_categories.tsv`
-    (or the caller's copies) once into a handle. Every refusal in
-    `tokenizer/impl/ranks.mojo::load_rank_table` and
-    `unicode_class.mojo::load_unicode_classes` (a rank out of order, an odd
-    hex field, an empty class) raises here with the file's own sentence."""
+def gpt2_load_binding(ranks_path: PythonObject) raises -> PythonObject:
+    """Parse the caller's rank file once into a handle. Every refusal in
+    `tokenizer/impl/ranks.mojo::load_rank_table` (a rank out of order, an
+    odd hex field, a duplicate token) and
+    `unicode_class.mojo::builtin_unicode_classes` (a generated table that is
+    not the pin) raises here with its own sentence."""
     var rp = String(py=ranks_path)
-    var up = String(py=unicode_path)
     var handle = Gpt2Handle()
     with GILReleased(Python()):
-        var tok = load_gpt2_tokenizer_from(rp, up)
+        var tok = load_gpt2_tokenizer_from(rp)
         var longest = len(String(GPT2_ENDOFTEXT).as_bytes())
         for i in range(tok.ranks.n_tokens()):
             if tok.ranks.length[i] > longest:
@@ -387,7 +385,7 @@ def gpt2_decode_binding(
         var ids = List[Int](capacity=n)
         for k in range(n):
             ids.append(Int(src[k]))
-        # THE ONE CALL THAT COMPUTES ANYTHING; an id outside [0, 50257) is
+        # THE ONE CALL THAT COMPUTES ANYTHING; an id outside [0, n_vocab) is
         # refused here by name and position, nothing written.
         var out = owner[].tok.value().decode_bytes(ids)
         count = len(out)
