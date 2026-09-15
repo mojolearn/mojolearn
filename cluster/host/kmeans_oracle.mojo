@@ -1214,3 +1214,38 @@ def host_kmeans_fit(
         labels, min_dist,
     )
     return KMeansHostResult(result.inertia, result.n_iter, sum_scale, weight_scale)
+
+
+def host_kmeans_predict(
+    x: List[Float32],
+    n: Int,
+    d: Int,
+    centroids: List[Float32],
+    k: Int,
+    metric: Int,
+    mut labels: List[UInt32],
+) raises:
+    """`kmeans_predict`, `cluster/estimator.mojo`: the metric refused by
+    name as the fit refuses it, then `host_kmeans_fit`'s own final
+    assignment, statement for statement (the same row norms, the same
+    `host_assign`), so on the training rows and the returned centroids it
+    is `labels_` by construction. cuML's `KMeans.predict` is
+    `_predict_labels_inertia` keeping the labels (`kmeans.pyx:1071-1082`),
+    one cuVS assignment pass."""
+    if n < 1 or d < 1 or k < 1:
+        raise Error(
+            "kmeans_predict needs n_samples, n_features and n_clusters >= 1: got "
+            + String(n)
+            + ", "
+            + String(d)
+            + ", "
+            + String(k)
+        )
+    host_validate_params(metric, k, 1e-4, DEFAULT_OVERSAMPLING)
+    var x_norm = host_row_norms(x, n, d, metric == METRIC_COSINE_EXPANDED)
+    var c_norm = host_row_norms(centroids, k, d, metric == METRIC_COSINE_EXPANDED)
+    var min_dist = List[Float32](length=n, fill=Float32(0.0))
+    host_assign(
+        x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
+        labels, min_dist,
+    )

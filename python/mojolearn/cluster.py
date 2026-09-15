@@ -141,6 +141,16 @@ class KMeans(NumericModeMixin):
         self.metric = metric
         self.oversampling_factor = oversampling_factor
 
+    def _metric_code(self):
+        if isinstance(self.metric, str):
+            if self.metric not in _METRIC_NAMES:
+                raise ValueError(
+                    f"mojolearn: metric must be one of "
+                    f"{sorted(_METRIC_NAMES)}, got {self.metric!r}"
+                )
+            return _METRIC_NAMES[self.metric]
+        return int(self.metric)
+
     def fit(self, X, y=None, sample_weight=None):
         """Fit, and set `labels_` from a pass against the final centroids."""
         if isinstance(self.init, str):
@@ -152,15 +162,7 @@ class KMeans(NumericModeMixin):
             init_code = _INIT_NAMES[self.init]
         else:
             init_code = int(self.init)
-        if isinstance(self.metric, str):
-            if self.metric not in _METRIC_NAMES:
-                raise ValueError(
-                    f"mojolearn: metric must be one of "
-                    f"{sorted(_METRIC_NAMES)}, got {self.metric!r}"
-                )
-            metric_code = _METRIC_NAMES[self.metric]
-        else:
-            metric_code = int(self.metric)
+        metric_code = self._metric_code()
         if isinstance(self.oversampling_factor, bool) or not isinstance(
             self.oversampling_factor, (int, float)
         ):
@@ -251,3 +253,43 @@ class KMeans(NumericModeMixin):
 
     def fit_predict(self, X, y=None, sample_weight=None):
         return self.fit(X, sample_weight=sample_weight).labels_
+
+    def predict(self, X):
+        """The index of the nearest fitted center for every row of `X`.
+
+        Mirrors cuML's `KMeans.predict` (`kmeans.pyx:1071-1082`,
+        `_predict_labels_inertia` keeping the labels): `X` is converted to the
+        centers' dtype (float32, C order), and the assignment is cuVS's one
+        pass under this model's `metric`. It is the fit's own final
+        assignment (`cluster/estimator.mojo::kmeans_predict`, host
+        `kmeans_oracle.mojo::host_kmeans_predict`), so `predict` on the
+        training rows returns `labels_` bit for bit, and a tie goes to the
+        lowest center index. A cosine metric is refused by name here as it
+        is at fit. CPU `predict` is public inference and is served by the
+        core host binding on a CPU-only install.
+
+        `transform` is not provided: cuVS's `kmeans_transform` materializes
+        the n x k pairwise matrix through a distance kernel no fit path
+        uses (`cluster/NOT_IMPLEMENTED.tsv`).
+        """
+        centers = getattr(self, "cluster_centers_", None)
+        if centers is None:
+            raise RuntimeError("this estimator is not fitted yet")
+        metric_code = self._metric_code()
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        n, d = x.shape
+        k, dc = centers.shape
+        if d != dc:
+            raise ValueError(
+                f"mojolearn: X has {d} features, KMeans was fitted with {dc}"
+            )
+        c, _ = as_f32_c(centers, ndim=2, name="cluster_centers_")
+        labels = empty((n,), "<i4")
+        self._bind("_mojolearn").kmeans_predict(
+            addr_ro(x, name="X"),
+            addr_ro(c, name="cluster_centers_"),
+            addr(labels, name="labels"),
+            # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_predict_binding.
+            [n, d, k, metric_code],
+        )
+        return labels
