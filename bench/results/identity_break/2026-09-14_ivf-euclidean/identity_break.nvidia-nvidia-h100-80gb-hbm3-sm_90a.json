@@ -1,0 +1,726 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+ "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+ "commit": "76a170dcf1ee3ccdee97f4e5d591cbaa82628339",
+ "commit_source": "commit.txt",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "ivf/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e14f27972422d4e0",
+    "e14f27972422d4e0"
+   ],
+   "parts": [
+    {
+     "dist": "e48ee8a4655b5b3b",
+     "idx": "c60826edcafa9479",
+     "cand": "0230224a7da25e41"
+    },
+    {
+     "dist": "e48ee8a4655b5b3b",
+     "idx": "c60826edcafa9479",
+     "cand": "0230224a7da25e41"
+    }
+   ],
+   "infer": [
+    "fd6eed35b1338d17",
+    "fd6eed35b1338d17"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "6baf3cfbde509312",
+    "6baf3cfbde509312"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b9d8790b40b5a6ac",
+    "b9d8790b40b5a6ac"
+   ],
+   "parts": [
+    {
+     "dist": "2761cbe1d5bfbfd6",
+     "idx": "1606657dce2a90aa",
+     "cand": "e790e7001ed8e18c"
+    },
+    {
+     "dist": "2761cbe1d5bfbfd6",
+     "idx": "1606657dce2a90aa",
+     "cand": "e790e7001ed8e18c"
+    }
+   ],
+   "infer": [
+    "c62b1be91d40fc43",
+    "c62b1be91d40fc43"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "166f61a6e1f346b8",
+    "166f61a6e1f346b8"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6c061012dc979df5",
+    "6c061012dc979df5"
+   ],
+   "parts": [
+    {
+     "dist": "7e5f947d1bf4dd2f",
+     "idx": "aa8ea3fc90e30ae1",
+     "cand": "251977d28ff900e5"
+    },
+    {
+     "dist": "7e5f947d1bf4dd2f",
+     "idx": "aa8ea3fc90e30ae1",
+     "cand": "251977d28ff900e5"
+    }
+   ],
+   "infer": [
+    "49c22df302ee0334",
+    "49c22df302ee0334"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "648bf9fc3764372d",
+    "648bf9fc3764372d"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8ee39ab9ae510966",
+    "8ee39ab9ae510966"
+   ],
+   "parts": [
+    {
+     "dist": "061a7e3aa15e67c7",
+     "idx": "e463939cf2b2842a",
+     "cand": "d7414cab1e4f1114"
+    },
+    {
+     "dist": "061a7e3aa15e67c7",
+     "idx": "e463939cf2b2842a",
+     "cand": "d7414cab1e4f1114"
+    }
+   ],
+   "infer": [
+    "2bfe5d9bde8a2564",
+    "2bfe5d9bde8a2564"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "3e09f4c3db3c3e66",
+    "3e09f4c3db3c3e66"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dc905d6cb32046d8",
+    "dc905d6cb32046d8"
+   ],
+   "parts": [
+    {
+     "dist": "f580aa5a2279b16f",
+     "idx": "bc1eaaf78f5a649a",
+     "cand": "ef19da90fc1a62af"
+    },
+    {
+     "dist": "f580aa5a2279b16f",
+     "idx": "bc1eaaf78f5a649a",
+     "cand": "ef19da90fc1a62af"
+    }
+   ],
+   "infer": [
+    "3ff4c07c575048cf",
+    "3ff4c07c575048cf"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "45f49934c58d1518",
+    "45f49934c58d1518"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dc905d6cb32046d8",
+    "dc905d6cb32046d8"
+   ],
+   "parts": [
+    {
+     "dist": "f580aa5a2279b16f",
+     "idx": "bc1eaaf78f5a649a",
+     "cand": "ef19da90fc1a62af"
+    },
+    {
+     "dist": "f580aa5a2279b16f",
+     "idx": "bc1eaaf78f5a649a",
+     "cand": "ef19da90fc1a62af"
+    }
+   ],
+   "infer": [
+    "3ff4c07c575048cf",
+    "3ff4c07c575048cf"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "45f49934c58d1518",
+    "45f49934c58d1518"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9eaf39f6e83e625",
+    "c9eaf39f6e83e625"
+   ],
+   "parts": [
+    {
+     "dist": "31985f4ee2f8a80d",
+     "idx": "28bee843f1dfdd3e",
+     "cand": "539d070dede12535"
+    },
+    {
+     "dist": "31985f4ee2f8a80d",
+     "idx": "28bee843f1dfdd3e",
+     "cand": "539d070dede12535"
+    }
+   ],
+   "infer": [
+    "4ae50eab359ba1e9",
+    "4ae50eab359ba1e9"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "99ec531fb8ae409f",
+    "99ec531fb8ae409f"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "26b26d7e4be5c50a",
+    "26b26d7e4be5c50a"
+   ],
+   "parts": [
+    {
+     "dist": "3b86af15124e5552",
+     "idx": "3b3db7cef4d95386",
+     "cand": "c21a0673aafdbf5f"
+    },
+    {
+     "dist": "3b86af15124e5552",
+     "idx": "3b3db7cef4d95386",
+     "cand": "c21a0673aafdbf5f"
+    }
+   ],
+   "infer": [
+    "1e0c2401db49a53d",
+    "1e0c2401db49a53d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "8149b10d16c8ebaa",
+    "8149b10d16c8ebaa"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9a7f19689600453e",
+    "9a7f19689600453e"
+   ],
+   "parts": [
+    {
+     "dist": "1a327d9d3a889d9b",
+     "idx": "675c15b0c9f02ba9",
+     "cand": "ba50591a69b8d037"
+    },
+    {
+     "dist": "1a327d9d3a889d9b",
+     "idx": "675c15b0c9f02ba9",
+     "cand": "ba50591a69b8d037"
+    }
+   ],
+   "infer": [
+    "71333eccc89915b1",
+    "71333eccc89915b1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "9786387eb7123b42",
+    "9786387eb7123b42"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf-euclidean/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c96b7d6a7ed08e9b",
+    "c96b7d6a7ed08e9b"
+   ],
+   "parts": [
+    {
+     "dist": "cdbf46f042cf7c81",
+     "idx": "3af05056f9ee6648",
+     "cand": "2fe563a72a49a98f"
+    },
+    {
+     "dist": "cdbf46f042cf7c81",
+     "idx": "3af05056f9ee6648",
+     "cand": "2fe563a72a49a98f"
+    }
+   ],
+   "infer": [
+    "f6f71f391727d74a",
+    "f6f71f391727d74a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0d3b322b4f251d85",
+    "0d3b322b4f251d85"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf-euclidean/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2167394d0c80cc41",
+    "2167394d0c80cc41"
+   ],
+   "parts": [
+    {
+     "dist": "1a775b8392791bf1",
+     "idx": "433afb8e970006c6",
+     "cand": "3f039c3ea4ec0a9a"
+    },
+    {
+     "dist": "1a775b8392791bf1",
+     "idx": "433afb8e970006c6",
+     "cand": "3f039c3ea4ec0a9a"
+    }
+   ],
+   "infer": [
+    "6ce659c7ea10311d",
+    "6ce659c7ea10311d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a22713485f1d9568",
+    "a22713485f1d9568"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf-euclidean/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cdff352d363caa07",
+    "cdff352d363caa07"
+   ],
+   "parts": [
+    {
+     "dist": "9396a0f747eea875",
+     "idx": "f675bc6ffa136b56",
+     "cand": "a671d1c1b9996356"
+    },
+    {
+     "dist": "9396a0f747eea875",
+     "idx": "f675bc6ffa136b56",
+     "cand": "a671d1c1b9996356"
+    }
+   ],
+   "infer": [
+    "7d8a8506eeb9a78e",
+    "7d8a8506eeb9a78e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a69643bf03ceccb2",
+    "a69643bf03ceccb2"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf-euclidean/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d62c258ac8282595",
+    "d62c258ac8282595"
+   ],
+   "parts": [
+    {
+     "dist": "30fd12e68f2c95ee",
+     "idx": "e463939cf2b2842a",
+     "cand": "a90fe41998aae108"
+    },
+    {
+     "dist": "30fd12e68f2c95ee",
+     "idx": "e463939cf2b2842a",
+     "cand": "a90fe41998aae108"
+    }
+   ],
+   "infer": [
+    "ee34cd995ead59ba",
+    "ee34cd995ead59ba"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "36fcc86c5ffc7e96",
+    "36fcc86c5ffc7e96"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf-euclidean/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "bc555903de75c40e",
+    "bc555903de75c40e"
+   ],
+   "parts": [
+    {
+     "dist": "05ef635290dd1ce1",
+     "idx": "5530f7cfd52ba930",
+     "cand": "15f762eb034767d1"
+    },
+    {
+     "dist": "05ef635290dd1ce1",
+     "idx": "5530f7cfd52ba930",
+     "cand": "15f762eb034767d1"
+    }
+   ],
+   "infer": [
+    "ab8f3fc0fb8f010c",
+    "ab8f3fc0fb8f010c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "e395801cb8474d82",
+    "e395801cb8474d82"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf-euclidean/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "bc555903de75c40e",
+    "bc555903de75c40e"
+   ],
+   "parts": [
+    {
+     "dist": "05ef635290dd1ce1",
+     "idx": "5530f7cfd52ba930",
+     "cand": "15f762eb034767d1"
+    },
+    {
+     "dist": "05ef635290dd1ce1",
+     "idx": "5530f7cfd52ba930",
+     "cand": "15f762eb034767d1"
+    }
+   ],
+   "infer": [
+    "ab8f3fc0fb8f010c",
+    "ab8f3fc0fb8f010c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "e395801cb8474d82",
+    "e395801cb8474d82"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf-euclidean/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "eb269ad65df502ed",
+    "eb269ad65df502ed"
+   ],
+   "parts": [
+    {
+     "dist": "0b456eed0aa2c7ce",
+     "idx": "418f8dcdc7883af7",
+     "cand": "d6632d94b11e9533"
+    },
+    {
+     "dist": "0b456eed0aa2c7ce",
+     "idx": "418f8dcdc7883af7",
+     "cand": "d6632d94b11e9533"
+    }
+   ],
+   "infer": [
+    "5fb3dd756fa6a835",
+    "5fb3dd756fa6a835"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "5fef40b00c474a24",
+    "5fef40b00c474a24"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf-euclidean/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ec9020ff5b2a6c07",
+    "ec9020ff5b2a6c07"
+   ],
+   "parts": [
+    {
+     "dist": "d7b6ab0f70afdf41",
+     "idx": "cc54c64b0815a43b",
+     "cand": "2b0c58086aeea8f2"
+    },
+    {
+     "dist": "d7b6ab0f70afdf41",
+     "idx": "cc54c64b0815a43b",
+     "cand": "2b0c58086aeea8f2"
+    }
+   ],
+   "infer": [
+    "247b6a2b733e9ff2",
+    "247b6a2b733e9ff2"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "4960b29bcd792dc0",
+    "4960b29bcd792dc0"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "ivf-euclidean/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "db3db68bcb7ef398",
+    "db3db68bcb7ef398"
+   ],
+   "parts": [
+    {
+     "dist": "23a5ca9a88b6cb76",
+     "idx": "877d2a07efe68cc1",
+     "cand": "0d31905a71636b43"
+    },
+    {
+     "dist": "23a5ca9a88b6cb76",
+     "idx": "877d2a07efe68cc1",
+     "cand": "0d31905a71636b43"
+    }
+   ],
+   "infer": [
+    "eacf2587f37d56cb",
+    "eacf2587f37d56cb"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "1a302ceb75994c6f",
+    "1a302ceb75994c6f"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn_ivf",
+    "sha256": "63127187dfe11d2aea6ec5357a57f61915eed0ea3b35e87befd28c2bf2be7a8a",
+    "size": 2000064
+   }
+  ]
+ }
+}
