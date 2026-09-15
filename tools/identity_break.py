@@ -422,6 +422,16 @@ def _hfile(path):
 
 N, D = 20000, 16
 
+#: AUDIT ONLY. MOJOLEARN_IDENTITY_N scales the fixture row count (for example to
+#: push the par-* lanes' device-to-device buffers above 1 MiB). A column run
+#: with it records `package.fixture_n`, hashes a DIFFERENT fixture, and must
+#: never be diffed against a record at the default; `--diff` refuses a mix.
+FIXTURE_N_ENV = "MOJOLEARN_IDENTITY_N"
+if os.environ.get(FIXTURE_N_ENV, "").strip():
+    N = int(os.environ[FIXTURE_N_ENV])
+    if N < 8192:
+        raise SystemExit(f"{FIXTURE_N_ENV}={N}: the lanes slice up to 8192 fixture rows")
+
 #: the seed of the held-out draw; the training draw is seed 0
 HELDOUT_SEED = 1
 
@@ -2306,6 +2316,26 @@ def _(ml, X, yc, yr, Xh=None):
 # same commit must then hash equal to these cells, which is the claim the
 # drivers' own two-H100 gates make and no three-vendor record has held yet.
 
+#: AUDIT ONLY. MOJOLEARN_IDENTITY_WIDE=1 widens the neural par-* lanes'
+#: models (byte LM d_model 256, head_dim 64, intermediate 1024; Samba d_model
+#: 256, intermediate 1280) so their pooled gradient, optimizer and clipping
+#: buffers pass 1 MiB. Recorded as `package.wide`; `--diff` refuses a mix.
+WIDE_ENV = "MOJOLEARN_IDENTITY_WIDE"
+PAR_WIDE = os.environ.get(WIDE_ENV, "0").strip() == "1"
+
+
+def _par_byte_lm_config(ml):
+    if PAR_WIDE:
+        return ml.ByteLanguageModelConfig(d_model=256, n_heads=4, n_kv=2, head_dim=64, intermediate=1024)
+    return ml.ByteLanguageModelConfig()
+
+
+def _par_samba_config(ml):
+    if PAR_WIDE:
+        return ml.SambaConfig(vocab=256, d_model=256, layers=("mamba3", "attention"), n_heads=2, intermediate=1280)
+    return ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+
+
 def _par_devices():
     """The device tuple the par-* lanes hand the drivers: MOJOLEARN_PAR_DEVICES,
     comma-separated device indices, default "0". A two-device column names
@@ -2484,7 +2514,7 @@ def _(ml, X, yc, yr, Xh=None):
     """ParallelNeuralTrainer over the samba lane's stack, two logical shards
     of (2, 17) windows per step, two steps."""
     from mojolearn.parallel_training import ParallelNeuralTrainer
-    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    cfg = _par_samba_config(ml)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
     ids = _ids(X, 8, 17)
     with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=2) as tr:
@@ -2503,7 +2533,7 @@ def _(ml, X, yc, yr, Xh=None):
     state, two logical shards on one device, three steps; the state after
     and the per-shard losses are the parts."""
     from mojolearn.parallel_training import ParallelByteLanguageModelTrainer
-    shape = ml.ByteLanguageModelConfig()
+    shape = _par_byte_lm_config(ml)
     named, _ = _byte_lm_params(shape)
     seed = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
                                             shape=shape)
@@ -2755,7 +2785,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 def _byte_lm_seed(ml):
-    shape = ml.ByteLanguageModelConfig()
+    shape = _par_byte_lm_config(ml)
     named, _ = _byte_lm_params(shape)
     seed = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
                                             shape=shape)
@@ -2829,7 +2859,7 @@ def _(ml, X, yc, yr, Xh=None):
     (whole tensors on owners, the cross-tensor norm on the first device);
     two logical shards of (2, 17) windows, two steps."""
     from mojolearn.parallel_training import ParallelNeuralTrainer
-    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    cfg = _par_samba_config(ml)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3, max_norm=0.5)
     ids = _ids(X, 8, 17)
     with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=2) as tr:
@@ -3764,6 +3794,10 @@ def run(args):
     package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__),
                    numpy=np.__version__, python=platform.python_version(),
                    par_devices=",".join(str(d) for d in _par_devices()))
+    if N != 20000:
+        package["fixture_n"] = N
+    if PAR_WIDE:
+        package["wide"] = True
     print(f"# vendor={vendor} commit={commit} ({commit_source})"
           + (f" host.cpu_model={host['cpu_model']!r} host.column={host['column']} "
              f"host.families={sorted(host['families'])}" if host else ""))
@@ -4041,6 +4075,11 @@ def diff(paths, require_columns=0, require_lanes=None):
         if n is not None and n < require_columns:
             short.append((key, col, verdict, n))
 
+    fixture_ns = set(((j.get("package") or {}).get("fixture_n", 20000), bool((j.get("package") or {}).get("wide")))
+                     for _, j in cols)
+    if len(fixture_ns) > 1:
+        raise SystemExit(f"REFUSING TO DIFF: the columns hash different fixture sizes {sorted(fixture_ns)} "
+                         f"({FIXTURE_N_ENV}, {WIDE_ENV}); their cells are different questions")
     for n_, (_, j) in zip(names, cols):
         if j.get("host"):
             h = j["host"]
