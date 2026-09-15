@@ -47,6 +47,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -141,9 +142,12 @@ def test_workflow_diffs_each_set_against_its_columns():
     assert '- "python/mojolearn/model_selection.py"' in text
 
 
-def test_identity_command_runs_the_record_set_on_a_cpu():
+def test_identity_command_runs_public_reference_probes_on_a_cpu():
     text = _read("python/mojolearn/_identity.py")
-    assert "l in host_surface.record_covered_lanes()]" in text
+    assert "l in host_surface.public_reference_lanes()]" in text
+    assert set(host_surface.public_reference_lanes()) <= set(host_surface.record_covered_lanes())
+    wheel_lanes = {lane for f in host_surface.FAMILIES if f["ships_in_wheel"] for lane in f["training_lanes"]}
+    assert set(host_surface.public_reference_lanes()) <= wheel_lanes
 
 
 def test_core_host_binding_registers_the_fold_gather():
@@ -231,6 +235,7 @@ def _cpu_only_with(basename):
     return True
 
 
+@reference_training()
 def test_cosine_refuses_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_core_host"):
         return
@@ -244,6 +249,7 @@ def test_cosine_refuses_on_the_host_when_built():
     raise AssertionError("KMeans(metric='cosine') fit on the host; the refusal was lifted")
 
 
+@reference_training()
 def test_fold_gather_matches_python_indexing_when_built():
     if not _cpu_only_with("_mojolearn_core_host"):
         return
@@ -266,6 +272,7 @@ def test_fold_gather_matches_python_indexing_when_built():
     raise AssertionError("an out-of-range fold index was gathered")
 
 
+@reference_training()
 def test_bootstrap_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_resample_host"):
         return
@@ -294,6 +301,7 @@ def test_bootstrap_runs_on_the_host_when_built():
         raise AssertionError("the host binding exported the multi-GPU range probe")
 
 
+@reference_training()
 def test_neural_primitives_run_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_training_host"):
         return

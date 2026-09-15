@@ -38,8 +38,8 @@ gate's negative control passes, the identity_break lanes it covers for
 TRAINING (the CPU column must read STABLE and IDENTICAL x4 on them), the
 lanes and public classes it serves for INFERENCE from a saved model, the
 Mojo host modules that ship inside it, the function names it exports, and
-whether it ships in a wheel (every family does since 0.8.6, the packaging
-lane of 2026-09-14; the two wheel builders and the packer read
+whether it ships in a wheel (inference dependencies and the published byte-LM
+trainer ship; training-only families remain source reference bindings; the two wheel builders and the packer read
 `--wheel-families` and `--wheel-bindings` below instead of naming the byte
 LM's binding by hand, and packaging/check_ext_lists.py fails when any of
 them carries a host list of its own).
@@ -815,7 +815,7 @@ FAMILIES = (
             "standard_fit", "standard_transform", "minmax_fit", "minmax_transform",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         family="tsa",
@@ -835,7 +835,7 @@ FAMILIES = (
             "holtwinters_forecast", "kpss_test",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         family="solver",
@@ -858,7 +858,7 @@ FAMILIES = (
             "linkage_fit",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         family="svm",
@@ -911,7 +911,7 @@ FAMILIES = (
             "forest_release_gpu",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         # Workstream E batch 3 (2026-09-14): the RandomForest family's host
@@ -950,7 +950,7 @@ FAMILIES = (
             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         # Workstream E, the gp host lane (2026-09-14): the Gaussian process
@@ -984,7 +984,7 @@ FAMILIES = (
             "cholesky_factor", "cholesky_solve",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         # CPU training for the workstream D estimators
@@ -1020,7 +1020,7 @@ FAMILIES = (
             "nystroem_transform", "rbf_sampler_fit", "rbf_sampler_transform",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         # CPU training for the workstream D estimators
@@ -1053,7 +1053,7 @@ FAMILIES = (
             "gmm_score_bic_aic",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         # CPU training for the workstream D estimators
@@ -1086,7 +1086,7 @@ FAMILIES = (
             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         # Workstream E batch 3 (2026-09-14): the GradientBoosting family's
@@ -1130,7 +1130,7 @@ FAMILIES = (
             "gbdt_sigmoid", "gbdt_binary_probabilities", "gbdt_binary_classes",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         # The mlp lane (lane/cpu-training-mlp, 2026-09-14): the training
@@ -1174,7 +1174,7 @@ FAMILIES = (
             "rms_norm_backward", "linear_forward", "linear_backward",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         # lane/cpu-training-misc batch 2 (2026-09-15): the resampling
@@ -1202,7 +1202,7 @@ FAMILIES = (
             "bootstrap", "permutation_test", "monte_carlo_integrate",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         # Workstream E (lane/cpu-training-arima, 2026-09-14): batched
@@ -1228,7 +1228,7 @@ FAMILIES = (
             "arima_fit", "arima_predict", "arima_forecast",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         # lane/cpu-training-embedding-ivf (2026-09-15): the Embedding
@@ -1257,7 +1257,7 @@ FAMILIES = (
             "embedding_forward", "embedding_backward",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
     dict(
         # lane/cpu-training-embedding-ivf (2026-09-15): IVFIndex's host
@@ -1290,7 +1290,7 @@ FAMILIES = (
             "ivf_flat_build_and_search",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        ships_in_wheel=False,
     ),
 )
 
@@ -1323,6 +1323,15 @@ def wheel_families():
 def wheel_bindings():
     """The basenames of `wheel_families()`, in the same order."""
     return [f["binding"] for f in FAMILIES if f["ships_in_wheel"]]
+
+
+def public_reference_lanes():
+    """Small explicit verification surface available in an inference wheel.
+
+    Full CPU training verification uses source bindings and covered_lanes().
+    These probes need only public inference dependencies, including linalg.
+    """
+    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca"]
 
 
 def training_gpu_column_record():
@@ -1443,7 +1452,7 @@ def markdown_table():
     """The CPU surface as one table, for the marked spans in
     SUPPORT_MATRIX.md and docs/BYTE_LM_CPU_TRAINING.md."""
     rows = [
-        "| family | binding under `mojolearn/host/` | routes (CPU-only install) | trains on a CPU (identity_break lanes) | predicts on a CPU from a saved model | gate | in a wheel |",
+        "| family | binding under `mojolearn/host/` | routes (CPU-only install) | internal CPU reference lanes | predicts on a CPU from a saved model | gate | in a wheel |",
         "|---|---|---|---|---|---|---|",
     ]
     for f in FAMILIES:

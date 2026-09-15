@@ -59,6 +59,10 @@ on:
       - "bindings/build_host_family.sh"
       - "bindings/build_*_host.sh"
       - "python/mojolearn/host_surface.py"
+      - "python/mojolearn/_cpu_reference.py"
+      - "python/mojolearn/_mode.py"
+      - "python/mojolearn/_classical_host.py"
+      - "python/mojolearn/tests/test_cpu_inference_boundary.py"
       - "python/mojolearn/_metrics_impl.py"
       - "python/mojolearn/tests/test_classification_metrics.py"
       - "python/mojolearn/tests/test_regression_metrics.py"
@@ -352,9 +356,14 @@ jobs:
           manifest=$MOJOLEARN_HOST_SURFACE
           {
             echo "COVERED_LANES=$(python3 $manifest --covered-lanes)"
-            echo "HOST_FAMILIES=$(python3 $manifest --routed-families)"
-            echo "HOST_BINDINGS=$(python3 $manifest --routed-bindings)"
-            echo "ALL_HOST_BINDINGS=$(python3 $manifest --bindings --sep ,)"
+            if [ "$FULL_CPU_VERIFY" = true ]; then
+              echo "HOST_FAMILIES=$(python3 $manifest --routed-families)"
+              echo "HOST_BINDINGS=$(python3 $manifest --routed-bindings)"
+              echo "ALL_HOST_BINDINGS=$(python3 $manifest --bindings --sep ,)"
+            else
+              echo "HOST_FAMILIES=$(python3 -c 'import runpy; h=runpy.run_path("python/mojolearn/host_surface.py"); print(" ".join(f["family"] for f in h["FAMILIES"] if f["routes"] and f["ships_in_wheel"]))')"
+              echo "ALL_HOST_BINDINGS=$(python3 $manifest --wheel-bindings --sep ,)"
+            fi
             echo "CLASSICAL_RECORDED=$(python3 $manifest --classical-recorded)"
             echo "CLASSICAL_GPU_COLUMNS=$(python3 $manifest --classical-gpu-columns)"
             echo "GPU_COLUMNS=$(python3 $manifest --training-gpu-columns)"
@@ -386,7 +395,7 @@ jobs:
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: python/mojolearn/host/*.so
-          key: host-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.GATE_IMAGE }}-${{ env.MOJOLEARN_TARGET_CPU }}-identical-${{ hashFiles('**/*.mojo', 'bindings/*.sh', 'pixi.lock', 'pixi.toml', 'python/mojolearn/host_surface.py', '.github/workflows/cpu-identity-gate.yml') }}
+          key: host-v2-${{ env.FULL_CPU_VERIFY }}-${{ runner.os }}-${{ runner.arch }}-${{ env.GATE_IMAGE }}-${{ env.MOJOLEARN_TARGET_CPU }}-identical-${{ hashFiles('**/*.mojo', 'bindings/*.sh', 'pixi.lock', 'pixi.toml', 'python/mojolearn/host_surface.py', '.github/workflows/cpu-identity-gate.yml') }}
 
       - name: Build the byte LM host binding (CPU column)
         if: steps.host-cache.outputs.cache-hit != 'true'
@@ -447,7 +456,9 @@ jobs:
           cd python
           python3 -m pytest -q -rs -p no:cacheprovider \
             mojolearn/tests/test_classification_metrics.py \
-            mojolearn/tests/test_regression_metrics.py 2>&1 | tee "$GATE_OUT/pytest_metrics.log"
+            mojolearn/tests/test_regression_metrics.py \
+            mojolearn/tests/test_cpu_inference_boundary.py \
+            mojolearn/tests/test_host_surface.py 2>&1 | tee "$GATE_OUT/pytest_metrics.log"
           if grep -E '[0-9]+ skipped' "$GATE_OUT/pytest_metrics.log"; then
             echo "a metrics test module skipped; the step must run every test" >&2
             exit 1

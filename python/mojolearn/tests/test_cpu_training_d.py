@@ -29,6 +29,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -196,6 +197,7 @@ def _twice(fit):
     assert a == b, "two host fits returned different bytes"
 
 
+@reference_training()
 def test_estimators_fit_on_the_host_when_built():
     import numpy as np
     rng = np.random.default_rng(0)

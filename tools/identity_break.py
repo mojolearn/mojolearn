@@ -3857,6 +3857,12 @@ def _shown(verdict, values):
 
 
 def run(args):
+    from mojolearn._cpu_reference import reference_training
+    with reference_training():
+        return _run_reference(args)
+
+
+def _run_reference(args):
     import mojolearn as ml
     mode = ml.numeric_mode()
     want = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower() or "fast"

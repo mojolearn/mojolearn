@@ -45,6 +45,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -72,7 +73,7 @@ def test_manifest_declares_both_families():
         assert fam["routes"] == route
         assert host_surface.routed_modules()[route] == f"{route}_host"
         assert fam["training_lanes"] == lanes
-        assert fam["ships_in_wheel"]
+        assert not fam["ships_in_wheel"], "a training-only host family must not ship in the inference wheel"
         assert (ROOT / host_surface.build_shim(name)).is_file()
         for lane in lanes:
             assert lane in host_surface.covered_lanes()
@@ -157,6 +158,7 @@ def _cpu_only_with(basename):
     return True
 
 
+@reference_training()
 def test_embedding_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_embedding_host"):
         return
@@ -194,6 +196,7 @@ def test_embedding_runs_on_the_host_when_built():
         raise AssertionError("an out-of-range id was gathered")
 
 
+@reference_training()
 def test_ivf_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_ivf_host"):
         return
@@ -256,6 +259,7 @@ def test_adapter_holds_no_arithmetic_and_calls_the_host_entries():
         assert f'- "{rel}"' in wf, rel
 
 
+@reference_training()
 def test_byte_lm_trainer_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_byte_lm_host"):
         return
