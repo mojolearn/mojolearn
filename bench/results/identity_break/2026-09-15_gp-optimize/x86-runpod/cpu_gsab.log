@@ -1,0 +1,48 @@
+# vendor=cpu-x86-x86_64 commit=e87161dc8b813fb0510d95857664181c003936ae (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9354 32-Core Processor' host.column=cpu host.families=['_mojolearn_gp_host']
+# identity_break  mode=identical  2026-09-15 23:31:08  Linux-6.14.0-33-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gp                     | ea70c56b99a74791 | c92496318cb78403 | f01c58a79fb1af27 | ca779c84b786d493 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | fba9e6f4ea05af2c | cbdbd1248c92a3f8 | 40fd2f479f775ec4 |
+| gp infer               | 1e032c58b3e9cd14 | 22b0b528124de8d0 | 6eec04108625b28e | 890cda1ff831faab | 353cd97119d0e754 | 353cd97119d0e754 | 52e6b306c452f16c | 9e3f1cf6c455f0fa | b2713d53a58fa4c9 |
+| gp model               | 8f4a54a0bd816175 | 5a2f8a826a1aab15 | e313387e268603e1 | 6de1e70ad300db07 | e2e8bcc686c2be72 | 4dbb90dfe4b757ae | 0eca938df7a74371 | b5496b305f465a2e | adc071acad296182 |
+| gp batch               | 305bfd4eaf79a5fa | 42c01186900b0c68 | f18ced6112fb55e8 | d3e6783a8a000e56 | 9305dbeb22908e4a | 9305dbeb22908e4a | 3caf5f428c1e5112 | e3e6d237ca783492 | 0284440d2cd65731 |
+| gp-normalize-y         | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-normalize-y infer   | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-normalize-y model   | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-normalize-y batch   | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-optimize            | 39dee896f82d495a | 93ac287a895ca482 | 9ffd115279531275 | cd9744cc02f542b0 | ef62ac3314243651 | ef62ac3314243651 | 030d96d79d4c25c8 | 8d76fd8e47befbca | 680d439afbeb2ad7 |
+| gp-optimize infer      | d251358c1b688773 | ee495066b2b706d3 | 5b8d3c4965160cdb | 7285e17197ef6022 | 00e75628ae150e3b | 00e75628ae150e3b | 9290387606c75212 | b69569d92e3a0a08 | 6f06b477a93a22aa |
+| gp-optimize model      | 2f4a32020d5bffdf | 867740d7b4a1bd94 | 6722f608cacf4983 | 9d99e9a700810f61 | 1e0688cd9bedfe41 | 95cac1ebdc6c5a4d | 0536199645788811 | 464d9367ff52f57b | 1854c28f075124f4 |
+| gp-optimize batch      | c468ced43fe2d211 | 827389c7b5da2ecb | 1bdccbbac2033a68 | 4abe44280530123d | 7b5cb9563dad53ba | 7b5cb9563dad53ba | 6c70465baa2ae493 | 3ee73982339b33e4 | 3b52b61867067b8a |
+| gp-optimize-restarts   | b5eac950448dba81 | af74b349eb1581be | f72bdd6f697da767 | 0d80ff02528c345e | 8076214e26bc8340 | 8076214e26bc8340 | 906354a72696dc5a | ccfe2cfddcfe6068 | 67963273b952af93 |
+| gp-optimize-restarts infer | 1501e90eaf267594 | 7bfaba90c9e68706 | df32688634e2d063 | 6b4a5c9968e7633b | 24bf92fe1dd48157 | 24bf92fe1dd48157 | 820923be7449b3c9 | dc7b9f663c0941ca | 2621339ef8d61f11 |
+| gp-optimize-restarts model | d324343e1da009d3 | 95e5175181e0d68e | 95b2269b6aed9059 | b367074c4aaa89fc | 5ea9215e6ce42134 | f1dacff31835446e | c648b022afc4f01a | 025746285684d13b | a6345e54d3509674 |
+| gp-optimize-restarts batch | 3d7f72eabbee3dd2 | 3f8158b6344766dd | cdffd0e7093fa7e1 | fb82c29d681d9962 | aecb5903288f7eef | aecb5903288f7eef | d4e477cb2e4a3d10 | 42a37e37450e5c49 | 4ef47d31accf7264 |
+| gp-matern12            | a54e340b4a22147f | 2661efdd41bfdb23 | ece4c902bf99f265 | 770208f9d55b9e6d | 6ca669d68732c77e | 6ca669d68732c77e | dc7d705bf6b6fb42 | 91b8075bebf3738a | 5e78849478852ef7 |
+| gp-matern12 infer      | 4f79f8b5efa024a7 | a001b7e2647b5504 | d97f7a7856e5c3cf | d85b3fdd5a0d4b83 | b18535ebf335687e | b18535ebf335687e | f28fbf34f5e2f5e4 | 70c7a448533ae162 | 7a4ce4fbf93bfe0a |
+| gp-matern12 model      | ea851543bc06b7ca | 2a12147f489372a1 | beebaf027cfe7a70 | 46beb2c3302d3d68 | 48c41d7b4cb83a75 | dd194f8d55ac4e8b | c5921757366a1180 | 57c92e7dd6dba082 | 21d23bd74606c229 |
+| gp-matern12 batch      | 60ba7e42986f842e | afa881afdf169ffe | f61dcba2448ded11 | 2a36bbb9dbe1d986 | 6e00b6a519f68971 | 6e00b6a519f68971 | 9298e4ad500ce168 | e3e57f92fb8d7443 | 7d864314cdf560ff |
+| gp-matern32            | 03066455003d7df7 | f4c49d5c4fd7edda | 2a98418556cb39e1 | 710809cd4f31ce7e | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 5346a4ac3a9fb082 | 0e42009aae37b1a3 | 415c32e64ea7e125 |
+| gp-matern32 infer      | a89afc94af5f084c | d4ebe9e3a969d687 | 9b2c58c951e46aa6 | e01432f62e53b456 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e0a8a2dff9f3e703 | cebcbbd1a0cf26a5 | 59c1f19475065932 |
+| gp-matern32 model      | 2f0aa7aa6d573e8f | 643600b947937792 | 61ee8e6b6cb8b86d | 888d111afe6ab161 | 5e0b49391c46c389 | 1d3a19b8a625eff3 | 95b09e16e1e4201d | dbc28b4a4abe1085 | 41ff5d5c846cfe7d |
+| gp-matern32 batch      | 4d0c75f26ce30a17 | e0f8d36884ec439b | a696dd8895d78928 | 0e1eaf22f908fce3 | 9dc26cf63aee002d | 9dc26cf63aee002d | 314fbd59f78d11be | 6245f5a144c11e87 | 07269e71c177f0e5 |
+| gp-matern52-ard        | 68f9bac4021de057 | e7965892a63545e5 | 5a0369e0406e8d1a | fd640b7c289a6327 | 1991a044f55d7f40 | 1991a044f55d7f40 | c2a1b1e411a6de85 | f05b1867f7b7d159 | 51fb6cf765695237 |
+| gp-matern52-ard infer  | 7ed07da2d9a2b815 | d9e5f730b649eff6 | d616a8cbf56f719b | 74c9cc4f5bcd42f7 | 15773a44eee1c9ad | 15773a44eee1c9ad | 4cb708614a14be4f | de417da177231058 | 5ddd0786ba58e285 |
+| gp-matern52-ard model  | 922c3b283f374ede | 8dd23a27ab3a3f3b | 0a7e88c40917f65f | 07c08e717ae5f13a | 68633fa96ce40d4e | 3ac95409acbe4eac | 4df8669dab247308 | 2b205636e6a38315 | 02a0a5cfde095c5e |
+| gp-matern52-ard batch  | b67e8be0fee4333d | 8d902360cd06f9c6 | de23d37649d275cd | 25546aa3974473f3 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 | 2d242b760df0c661 | 331b54fb97101ccd | 7f3871eaa8cd8b17 |
+
+cells=63 stable=54 moved=0 refused=9
+infer: stable=54
+model: stable=54
+batch: stable=54
+REFUSED gp-normalize-y/base: ImportError: mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without 
+REFUSED gp-normalize-y/ties: ImportError: mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without 
+REFUSED gp-normalize-y/hashed: ImportError: mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without 
+REFUSED gp-normalize-y/wide: ImportError: mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without 
+REFUSED gp-normalize-y/denormal: ImportError: mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without 
+REFUSED gp-normalize-y/denormal_ftz: ImportError: mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without 
+REFUSED gp-normalize-y/dupes: ImportError: mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without 
+REFUSED gp-normalize-y/odd: ImportError: mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without 
+REFUSED gp-normalize-y/negative: ImportError: mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without 
+wrote /root/leg_out/cpu_gsab.json

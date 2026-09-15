@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/root/mojolearn/python/mojolearn/tests/test_gp_surface.py", line 292, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn/python/mojolearn/tests/test_gp_surface.py", line 216, in main
+    model = GaussianProcessRegressor(kernel=k).fit(x, y)
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 50, in guarded
+    require_training(self)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/root/mojolearn/python/mojolearn/_cpu_reference.py", line 34, in require_training
+    raise NotImplementedError(
+    ...<4 lines>...
+    )
+NotImplementedError: mojolearn: public CPU estimators support inference from saved models; fit/training is reserved for the internal bitwise verifier. Train on a supported GPU and load the saved model for CPU inference. The published LanguageModelHostTrainer remains supported.
