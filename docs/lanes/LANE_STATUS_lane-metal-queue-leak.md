@@ -7,60 +7,80 @@ created, possibly leaking?" and "The number of queues (5041) exceeding limit
 (512), failing IOGPUCommandQueue creation", during heavy Metal identity runs.
 
 Evidence from before this lane: /Users/andrewhendel/mojolearn-evidence/gbdt-metal-slowdown-2026-09-15/
-Evidence from this lane (outside the repo, survives a restart): /Users/andrewhendel/mojolearn-evidence/metal-queue-leak-2026-09-15/
+Evidence from this lane (outside the repo, survives a scratchpad wipe): /Users/andrewhendel/mojolearn-evidence/metal-queue-leak-2026-09-15/queue-samples.txt
 
 ## Status
 
-Phase 1 (code reading, read-only counters, script and reproduction) is done.
-Phase 2 (measurement on a quiet GPU) is NOT started, and waits for the
-coordinator. The machine has NOT restarted, and on the evidence below it may
-not need to.
+Phase 1 is done, and it answered the question without this lane running a
+single GPU job: a live `mojo` process was caught holding 1211 of the machine's
+1243 command queues, and the count fell to 34 within about 15 seconds of that
+process exiting. Phase 2 (our own measured fits, and the fix) has not started.
 
-## How to count queues (two counters, one trap)
+## The finding
+
+At 19:29 on Sep 15, with this lane doing nothing on the GPU,
+`ioclasscount AGXCommandQueue` read 1243 and the AppUsage entries showed
+**1211 of them held by one live process, pid 78701, named `mojo`** (another
+agent's lane run). A minute later the total was 2491, still climbing. When that
+process exited, the count fell to 34 within about 15 seconds and stayed near 35
+to 40.
+
+1. **A single Mojo process accumulates command queues as it runs**, over 1200
+   in one process against the kernel's stated limit of 512. That is the
+   mechanism behind the Sep 15 slowdown: a long-lived process
+   (`tools/identity_break.py` runs every lane, fixture and repeat in ONE
+   process, and every binding call builds a `DeviceContext`) crosses the limit
+   inside its own lifetime, and queue creation begins to fail or crawl.
+2. **The queues are not leaked past process exit.** They come back when the
+   process dies, so a per-process fix (reuse one context) is a real fix.
+
+## How to count queues, and the trap that produced the opposite conclusion
 
 - `ioclasscount AGXCommandQueue` is the kernel's live queue count, all
   processes. This is the real total.
 - The `AppUsage` entries on each AGXDeviceUserClient, keyed by the client's
-  `IOUserClientCreator` pid, give the per-process share. Checked at both ends
-  of the range: while one process gained queues, its AppUsage entries and the
-  kernel total both rose by exactly 36 in 20 s (557 to 593, 579 to 615); at the
-  quiet floor the AppUsage entries summed to 33 against a total of 35.
-- THE TRAP: `ioreg -l -c AGXCommandQueue` does NOT list command queues. Queues
-  are not registry entries, so that command prints zero AGXCommandQueue nodes,
-  and the `IOUserClientCreator` lines in its output belong to unrelated classes
+  `IOUserClientCreator` pid, give the per-process share. Cross-checked at both
+  ends of the range: a climbing process moved its own entries and the kernel
+  total by exactly 36 in 20 s; at the quiet floor the entries summed to 38
+  against a total of 40; and the 1211 above sat inside a total of 1243.
+- THE TRAP: **`ioreg -l -c AGXCommandQueue` does not list command queues.**
+  Measured here on Sep 15: it prints **0** nodes of class AGXCommandQueue,
+  because queues are not IORegistry entries. The `IOUserClientCreator` lines in
+  its output belong to unrelated classes that the command also walks
   (IOHIDEventServiceUserClient 140, RootDomainUserClient 117,
-  AppleKeyStoreUserClient 79, AGXDeviceUserClient 48). Counting those lines
-  produces a table that looks like queue attribution and is not one. An earlier
-  reading of this lane, and the "about 300 of 6754 queues name a live process,
-  the other 6400 name none" figure, came from that command and do not show that
-  queues outlive their creator.
+  AppleKeyStoreUserClient 79, AGXDeviceUserClient 48). Counting those lines and
+  subtracting from `ioclasscount` produces an "attribution" in which most
+  queues appear to name no live creator, and so appear to outlive their
+  process. That is an artifact of comparing two different populations. The
+  direct observation above (2491 down to 34 at process exit, no reboot)
+  contradicts it, so this lane does not carry the outliving-processes claim.
 
-## What the counters actually showed (Sep 15, read only, no GPU work)
+## Pre-restart baseline (Sep 15, read only, no GPU work by this lane)
 
-| time  | AGXCommandQueue | note |
-|---|---:|---|
-| 18:25 | 471 to 615 | climbing with NO mojolearn GPU process alive |
-| 18:27 | 654 to 692 | `VTDecoderXPCService` (pid 88848) held 632 to 670 of them, gaining about 1.8 a second |
-| later | 6591 to 6754 | coordinator, still climbing |
-| after `killall VTDecoderXPCService` | 6591, 6631 at +5 s, 6754 at +60 s | no immediate drop |
-| 19:27 | 127, then 35 | back to a normal floor, with NO reboot (uptime 9 days, 11:49; boot Sep 6) |
+| reading | time (EDT) | AGXCommandQueue | attributed to live clients | live mojo GPU processes |
+|---|---|---:|---:|---|
+| 1 | 19:33:06 | 40 | 38 | none |
+| 2 | 19:37:22 | 41 | 39 | none |
 
-Reading: the queues were reclaimed after the holding process died, but LAZILY,
-minutes later, not at exit. The coordinator's samples at 5 s and 60 s were too
-early to see it. The machine returned to a 35 queue floor on its own.
+With no mojolearn GPU process running, the machine sits at a floor of roughly
+35 to 41 queues and is not climbing: one queue in 4 minutes 16 seconds, which
+is ordinary desktop churn, against the 1.8 per second seen earlier while a
+process was accumulating them. Uptime at the baseline was 9 days, 11:53
+(boot Sep 6), so the collapse from 6754 to this floor happened with NO reboot.
 
-So the large pileup tracked one Apple system service
-(`VTDecoderXPCService`, VideoToolbox decode, started 17:29), which is not
-mojolearn and which nothing in this repo drives. The 5041 kernel message could
-not be tied to a pid: `log show` over 12 h no longer returns those lines.
+Earlier points, same day, same counter: 471 to 615 at 18:25 (no mojolearn
+process alive); 654 to 692 at 18:27, of which `VTDecoderXPCService` held 632 to
+670, gaining about 1.8 a second; 6591 to 6754 later (coordinator), where
+`killall VTDecoderXPCService` gave no immediate drop but the count was back to
+127 and then 35 by 19:27.
 
 ## Where a command queue is created in our code
 
 - The Mojo runtime creates ONE Metal command queue per `DeviceContext`.
-  `libKGENCompilerRTShared.dylib` carries `MLRT/lib/Driver/DeviceContext/Metal/MetalDeviceContext.cpp`,
-  `newCommandQueue` and the error "Failed to create Metal command queue for
-  context." No source ships, so whether dropping a context releases its queue
-  can only be measured.
+  `libKGENCompilerRTShared.dylib` carries
+  `MLRT/lib/Driver/DeviceContext/Metal/MetalDeviceContext.cpp`, `newCommandQueue`
+  and "Failed to create Metal command queue for context." No source ships, so
+  whether dropping a context releases its queue can only be measured.
 - Every Python binding call builds a fresh `DeviceContext` inside `GILReleased`
   and drops it when the call returns: `bindings/_mojolearn_gbdt.mojo` at 405
   (fit), 455 (predict), 501 (predict multi), 545 and 601. That file's docstring
@@ -73,43 +93,85 @@ not be tied to a pid: `log show` over 12 h no longer returns those lines.
   lived holders: `core/forest_inference_model.mojo:88`,
   `core/forest_inference_pool.mojo:117`, the `training/byte_lm_*` pools.
 - No Python module builds a context; Python reaches the GPU only through the
-  bindings. `tools/identity_break.py` runs every lane, fixture and repeat in
-  ONE process, so one identity run makes hundreds to thousands of contexts.
+  bindings.
 
-## Hypotheses going into phase 2
+## Phase 2 protocol, for a session with none of this context
 
-H1, ours: a dropped `DeviceContext` does not release its queue, so a long-lived
-process gains a queue per binding call. Untested. The `inproc` arm and the
-reproduction measure it directly. Nothing so far either supports or refutes it,
-because no mojolearn process was sampled while fitting.
+Run these in order on the clean GPU. Everything is macOS specific. `$REPO` is
+the shared checkout `/Users/andrewhendel/CascadeProjects/mojolearn`; never
+build, commit or switch branches there. Work in a worktree of this branch,
+`lane/metal-queue-leak`. One GPU job at a time: wrap every GPU command in
+`bash $SP/mac_slot.sh metal <command>` where `$SP` is the session scratchpad,
+or, if that helper is gone, run one `nice -n 19` process at a time after
+`pgrep -fl mojo` shows no other GPU job.
 
-H2, not ours: the Sep 15 pileup belonged to `VTDecoderXPCService`. Supported by
-the table above, and by the count returning to 35 once that process was gone.
+**Step 0, fresh boot floor.** `ioclasscount AGXCommandQueue`, with no GPU job
+running. Expect roughly 35 to 40. Write it down; every later number is a delta
+from it.
 
-H3, kernel reclaim is lazy: confirmed. Queues counted minutes after their
-process died were freed later without a reboot. Phase 2 must therefore wait
-generously after a process exits before calling anything a leak.
+**Step 1, health check (do this first, it is also the 20x regression test).**
 
-## Phase 2 plan (only when the coordinator says go)
+    cd <worktree> && MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=$REPO/python \
+      $REPO/.pixi/envs/test/bin/python -c "
+    import time, numpy as np, mojolearn as ml, mojolearn._backend as b
+    print(b.vendor(), b.numeric_mode())
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((2000, 8)).astype(np.float32)
+    y = (X[:, 3] + 0.5 * X[:, 4] > 0).astype(np.int32)
+    for r in range(5):
+        t = time.perf_counter()
+        m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss='Logloss').fit(X, y)
+        print('fit', r, round(time.perf_counter() - t, 3), 's', flush=True)
+    "
 
-1. Record the floor first: `ioclasscount AGXCommandQueue` with no GPU job
-   running.
-2. Build `checks/device_context_queue_repro.mojo` in this worktree (never the
-   shared checkout) and run `ITERS=200` under
-   `tools/diag/metal_queue_leak.py --watch <pid>`, then the `-D ONE_CTX=1`
-   build the same way. Three outcomes: flat (the runtime reuses one queue),
-   grows then falls back after exit (a per-process leak that context reuse
-   bounds), grows and stays for a long time after exit (kernel side).
-3. Then the estimator arms alone on the GPU via `mac_slot.sh metal`, or
-   `nice -n 19` once `pgrep -fl mojo` shows no other GPU job:
-   `--arm inproc --fits 200 --every 20`, `--arm ctxonly --fits 200`,
-   `--arm subproc --fits 20 --every 5`.
-4. If our bindings add queues per call, reuse one context per process (a module
-   level context in each binding, `max.gpu.host` only, GPU agnostic) and
-   re-measure. Say plainly whether that stops the growth or only slows it.
-5. If the runtime leaks regardless of our shape, write the report for Modular
-   from the reproduction's numbers. Do not contact anyone.
-6. Prove any fix: queues flat over 200 fits, per-fit seconds stable, and a
-   base-fixture `identity_break.py` spot check of a few GBDT lanes against the
-   committed Apple column. Then `python3 tools/docs_facts.py --check`,
-   `python3 packaging/wheel_ci.py pins .`, merge and push HEAD:main.
+About 1 s per fit on this base fixture is healthy. Around 20 s per fit is the
+degraded state that started this lane.
+
+**Step 2, one fit, queues created and released.** In one terminal run the
+health check again; in another, before, during and 30 s after it:
+
+    ioclasscount AGXCommandQueue
+
+Record the floor, the peak during the run, and the value 30 s after the process
+exits. Queues created by the fit equal peak minus floor; queues released at
+exit equal peak minus the after value. The kernel reclaims lazily, so wait at
+least 30 s before calling anything retained.
+
+**Step 3, N fits in ONE process, the real question.**
+
+    bash $SP/mac_slot.sh metal $REPO/.pixi/envs/test/bin/python \
+      tools/diag/metal_queue_leak.py --pkg $REPO/python --arm inproc --fits 200 --every 20
+
+This samples the kernel total and the child process's own share every 20 fits,
+then again after the child exits, and prints a VERDICT line with queues per fit
+and what was left behind. `--arm ctxonly --fits 200` repeats it with predicts
+instead of fits; `--arm subproc --fits 20 --every 5` uses one process per fit,
+which should stay flat if queues are released at exit. The counter helpers and
+the trap above are documented in that file's docstring.
+
+**Step 4, runtime or bindings.** Build the minimal reproduction, which contains
+no estimator, only a loop creating, using and dropping one `DeviceContext`:
+
+    mojo build -I . checks/device_context_queue_repro.mojo -o /tmp/qrepro
+    ITERS=200 /tmp/qrepro            # sample with --watch <pid> from the script
+    mojo build -I . -D ONE_CTX=1 checks/device_context_queue_repro.mojo -o /tmp/qrepro_one
+
+Per-iteration contexts growing while `ONE_CTX=1` stays flat means the runtime
+allocates a queue per context and never releases it inside the process, and
+that context reuse is the fix.
+
+**Step 5, the fix.** Reuse one `DeviceContext` per process in the bindings
+(module level, `max.gpu.host` only, GPU agnostic; load the mojo-syntax and
+mojo-gpu-fundamentals skills first). Re-measure steps 2 and 3. Prove it with
+queues flat over 200 fits, per-fit seconds stable, and a base-fixture
+`tools/identity_break.py` spot check of a few GBDT lanes against the committed
+Apple column. Then `python3 tools/docs_facts.py --check` and
+`python3 packaging/wheel_ci.py pins .`, merge and push HEAD:main.
+
+**Step 6, if the runtime leaks regardless of our shape**, write the report for
+Modular from the reproduction's numbers, and keep the context reuse as the
+workaround. Do not contact anyone.
+
+Until the fix lands, a long Metal run on the Mac should be split into smaller
+processes: a process making thousands of binding calls will cross 512 queues
+inside its own lifetime.
