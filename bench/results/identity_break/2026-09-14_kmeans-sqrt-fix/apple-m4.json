@@ -1,0 +1,2454 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "9fde8f5f703ef88e1258ebe1909c230a2ab4f4e3",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "kmeans/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5aa44cc11034dec9",
+    "5aa44cc11034dec9"
+   ],
+   "parts": [
+    {
+     "centers": "aba63b1367499b63",
+     "labels": "c62648b3c0e6f056"
+    },
+    {
+     "centers": "aba63b1367499b63",
+     "labels": "c62648b3c0e6f056"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3de3e103006de69c",
+    "3de3e103006de69c"
+   ],
+   "parts": [
+    {
+     "centers": "c2086044189f0be9",
+     "labels": "685d2620eef85d95"
+    },
+    {
+     "centers": "c2086044189f0be9",
+     "labels": "685d2620eef85d95"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0a570e84b0002723",
+    "0a570e84b0002723"
+   ],
+   "parts": [
+    {
+     "centers": "89ec5d99f9fd839b",
+     "labels": "80c7e1e598680983"
+    },
+    {
+     "centers": "89ec5d99f9fd839b",
+     "labels": "80c7e1e598680983"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6f0529fcb3d60536",
+    "6f0529fcb3d60536"
+   ],
+   "parts": [
+    {
+     "centers": "36757e3724096239",
+     "labels": "3704ad2d740173bf"
+    },
+    {
+     "centers": "36757e3724096239",
+     "labels": "3704ad2d740173bf"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "993fe5caff144b0c",
+    "993fe5caff144b0c"
+   ],
+   "parts": [
+    {
+     "centers": "90d988bd1de33607",
+     "labels": "9ab8dfb99430c319"
+    },
+    {
+     "centers": "90d988bd1de33607",
+     "labels": "9ab8dfb99430c319"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "993fe5caff144b0c",
+    "993fe5caff144b0c"
+   ],
+   "parts": [
+    {
+     "centers": "90d988bd1de33607",
+     "labels": "9ab8dfb99430c319"
+    },
+    {
+     "centers": "90d988bd1de33607",
+     "labels": "9ab8dfb99430c319"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2ae942d45a51757a",
+    "2ae942d45a51757a"
+   ],
+   "parts": [
+    {
+     "centers": "d7ab2543c3c16578",
+     "labels": "0b95c61d1b9c6efa"
+    },
+    {
+     "centers": "d7ab2543c3c16578",
+     "labels": "0b95c61d1b9c6efa"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "43d8a3d3859f4143",
+    "43d8a3d3859f4143"
+   ],
+   "parts": [
+    {
+     "centers": "a12f222214253637",
+     "labels": "93c7da25ed5b748d"
+    },
+    {
+     "centers": "a12f222214253637",
+     "labels": "93c7da25ed5b748d"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d4cc38e75f8e2d75",
+    "d4cc38e75f8e2d75"
+   ],
+   "parts": [
+    {
+     "centers": "040e877ca6dde80a",
+     "labels": "0492b06d130b75ea"
+    },
+    {
+     "centers": "040e877ca6dde80a",
+     "labels": "0492b06d130b75ea"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-random/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2bab0cda9f319dbb",
+    "2bab0cda9f319dbb"
+   ],
+   "parts": [
+    {
+     "centers": "8408603d1ba725bd",
+     "labels": "3ffb8627fdd2dc6e"
+    },
+    {
+     "centers": "8408603d1ba725bd",
+     "labels": "3ffb8627fdd2dc6e"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-random/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9f90e48e2d5a4ce4",
+    "9f90e48e2d5a4ce4"
+   ],
+   "parts": [
+    {
+     "centers": "7fa7244626f6795c",
+     "labels": "8715b3ebd13c1027"
+    },
+    {
+     "centers": "7fa7244626f6795c",
+     "labels": "8715b3ebd13c1027"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-random/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0b375d0049c4c87b",
+    "0b375d0049c4c87b"
+   ],
+   "parts": [
+    {
+     "centers": "362715bb7e1ffb21",
+     "labels": "d1294b93373deee0"
+    },
+    {
+     "centers": "362715bb7e1ffb21",
+     "labels": "d1294b93373deee0"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-random/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2b64e3f5f82a82d8",
+    "2b64e3f5f82a82d8"
+   ],
+   "parts": [
+    {
+     "centers": "36c9a8ed41dfd1eb",
+     "labels": "484b27eee2cbcec6"
+    },
+    {
+     "centers": "36c9a8ed41dfd1eb",
+     "labels": "484b27eee2cbcec6"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-random/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ddb08cf02222e6a3",
+    "ddb08cf02222e6a3"
+   ],
+   "parts": [
+    {
+     "centers": "216d76231e6a2b64",
+     "labels": "377b1428c5ab1dba"
+    },
+    {
+     "centers": "216d76231e6a2b64",
+     "labels": "377b1428c5ab1dba"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-random/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ddb08cf02222e6a3",
+    "ddb08cf02222e6a3"
+   ],
+   "parts": [
+    {
+     "centers": "216d76231e6a2b64",
+     "labels": "377b1428c5ab1dba"
+    },
+    {
+     "centers": "216d76231e6a2b64",
+     "labels": "377b1428c5ab1dba"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-random/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b8953eb119af6144",
+    "b8953eb119af6144"
+   ],
+   "parts": [
+    {
+     "centers": "ab10b0681320894e",
+     "labels": "6558059dee05ba3d"
+    },
+    {
+     "centers": "ab10b0681320894e",
+     "labels": "6558059dee05ba3d"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-random/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f22e6751eeedc598",
+    "f22e6751eeedc598"
+   ],
+   "parts": [
+    {
+     "centers": "ff031d3c2d8f646e",
+     "labels": "0d639db81dd7bfc7"
+    },
+    {
+     "centers": "ff031d3c2d8f646e",
+     "labels": "0d639db81dd7bfc7"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-random/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "23ce9524cf23e596",
+    "23ce9524cf23e596"
+   ],
+   "parts": [
+    {
+     "centers": "c66fdcffbf13426a",
+     "labels": "1c97473554415c28"
+    },
+    {
+     "centers": "c66fdcffbf13426a",
+     "labels": "1c97473554415c28"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-array/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "37ab2f0355ef716a",
+    "37ab2f0355ef716a"
+   ],
+   "parts": [
+    {
+     "centers": "0c9d5a003f4d8d3a",
+     "labels": "6c4903efac9a24e6"
+    },
+    {
+     "centers": "0c9d5a003f4d8d3a",
+     "labels": "6c4903efac9a24e6"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-array/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f7e7677d5ae7597f",
+    "f7e7677d5ae7597f"
+   ],
+   "parts": [
+    {
+     "centers": "4088b720bf61858a",
+     "labels": "665b32b117552ddb"
+    },
+    {
+     "centers": "4088b720bf61858a",
+     "labels": "665b32b117552ddb"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-array/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a960d6d68f5c8665",
+    "a960d6d68f5c8665"
+   ],
+   "parts": [
+    {
+     "centers": "1c7d50ffe5772fa6",
+     "labels": "3468c0fb01c1122b"
+    },
+    {
+     "centers": "1c7d50ffe5772fa6",
+     "labels": "3468c0fb01c1122b"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-array/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ac99cd5354363ce1",
+    "ac99cd5354363ce1"
+   ],
+   "parts": [
+    {
+     "centers": "f52277656dd6a0be",
+     "labels": "7b1a15e04233c40b"
+    },
+    {
+     "centers": "f52277656dd6a0be",
+     "labels": "7b1a15e04233c40b"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-array/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "92a2b78d865ad9b0",
+    "92a2b78d865ad9b0"
+   ],
+   "parts": [
+    {
+     "centers": "eaf588b87fe95394",
+     "labels": "ec24e8cd49510678"
+    },
+    {
+     "centers": "eaf588b87fe95394",
+     "labels": "ec24e8cd49510678"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-array/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "92a2b78d865ad9b0",
+    "92a2b78d865ad9b0"
+   ],
+   "parts": [
+    {
+     "centers": "eaf588b87fe95394",
+     "labels": "ec24e8cd49510678"
+    },
+    {
+     "centers": "eaf588b87fe95394",
+     "labels": "ec24e8cd49510678"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-array/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a71e34a5786a472e",
+    "a71e34a5786a472e"
+   ],
+   "parts": [
+    {
+     "centers": "2066e7f70856be71",
+     "labels": "dd9d8b55509ce5e8"
+    },
+    {
+     "centers": "2066e7f70856be71",
+     "labels": "dd9d8b55509ce5e8"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-array/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5b347e0f29ddb844",
+    "5b347e0f29ddb844"
+   ],
+   "parts": [
+    {
+     "centers": "dc3f6cade1bb2bc0",
+     "labels": "eb00d77639756902"
+    },
+    {
+     "centers": "dc3f6cade1bb2bc0",
+     "labels": "eb00d77639756902"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-array/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "64223107950d714a",
+    "64223107950d714a"
+   ],
+   "parts": [
+    {
+     "centers": "e0fde05f3561ffde",
+     "labels": "c734a241481358b1"
+    },
+    {
+     "centers": "e0fde05f3561ffde",
+     "labels": "c734a241481358b1"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-weighted/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5080fbf55610f54e",
+    "5080fbf55610f54e"
+   ],
+   "parts": [
+    {
+     "centers": "9c93b0f0b88a4c40",
+     "labels": "c93daf6f81a5724b"
+    },
+    {
+     "centers": "9c93b0f0b88a4c40",
+     "labels": "c93daf6f81a5724b"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-weighted/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a7070391c3cc52fb",
+    "a7070391c3cc52fb"
+   ],
+   "parts": [
+    {
+     "centers": "0d992b46ff2b3123",
+     "labels": "16f16532414f56de"
+    },
+    {
+     "centers": "0d992b46ff2b3123",
+     "labels": "16f16532414f56de"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-weighted/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "eded8c9746d545c7",
+    "eded8c9746d545c7"
+   ],
+   "parts": [
+    {
+     "centers": "41fa0065706a6cc2",
+     "labels": "190a7ced0d98fc33"
+    },
+    {
+     "centers": "41fa0065706a6cc2",
+     "labels": "190a7ced0d98fc33"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-weighted/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5e333d411cffbf33",
+    "5e333d411cffbf33"
+   ],
+   "parts": [
+    {
+     "centers": "50962c5fb244a4b2",
+     "labels": "45858f474959f262"
+    },
+    {
+     "centers": "50962c5fb244a4b2",
+     "labels": "45858f474959f262"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-weighted/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c3613adfb9158691",
+    "c3613adfb9158691"
+   ],
+   "parts": [
+    {
+     "centers": "b1ce45058e330607",
+     "labels": "816c59af82bdcdcf"
+    },
+    {
+     "centers": "b1ce45058e330607",
+     "labels": "816c59af82bdcdcf"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-weighted/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c3613adfb9158691",
+    "c3613adfb9158691"
+   ],
+   "parts": [
+    {
+     "centers": "b1ce45058e330607",
+     "labels": "816c59af82bdcdcf"
+    },
+    {
+     "centers": "b1ce45058e330607",
+     "labels": "816c59af82bdcdcf"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-weighted/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a530038afd2318d6",
+    "a530038afd2318d6"
+   ],
+   "parts": [
+    {
+     "centers": "dcb839b12626cc84",
+     "labels": "204488ab1ac0c655"
+    },
+    {
+     "centers": "dcb839b12626cc84",
+     "labels": "204488ab1ac0c655"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-weighted/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fc6107e901e7d7be",
+    "fc6107e901e7d7be"
+   ],
+   "parts": [
+    {
+     "centers": "7929e2b6f2f83011",
+     "labels": "a38ef40a77d8727c"
+    },
+    {
+     "centers": "7929e2b6f2f83011",
+     "labels": "a38ef40a77d8727c"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-weighted/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3bf996834a2fd658",
+    "3bf996834a2fd658"
+   ],
+   "parts": [
+    {
+     "centers": "744bef2b9b7052c7",
+     "labels": "1b4ba7de3302a957"
+    },
+    {
+     "centers": "744bef2b9b7052c7",
+     "labels": "1b4ba7de3302a957"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-sqrt/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8864be3c295d6c4a",
+    "8864be3c295d6c4a"
+   ],
+   "parts": [
+    {
+     "centers": "bc1b96498842c52a",
+     "labels": "48c68cf28593fe75",
+     "inertia": "92564a0100fcaaf1",
+     "scales": "1d55e98854fd7740"
+    },
+    {
+     "centers": "bc1b96498842c52a",
+     "labels": "48c68cf28593fe75",
+     "inertia": "92564a0100fcaaf1",
+     "scales": "1d55e98854fd7740"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-sqrt/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "07a5cce02a00bdae",
+    "07a5cce02a00bdae"
+   ],
+   "parts": [
+    {
+     "centers": "56b23b36a3e9c8a0",
+     "labels": "18bd71683841f055",
+     "inertia": "e7cda92c03b8e3ba",
+     "scales": "ccbbeb21461e235a"
+    },
+    {
+     "centers": "56b23b36a3e9c8a0",
+     "labels": "18bd71683841f055",
+     "inertia": "e7cda92c03b8e3ba",
+     "scales": "ccbbeb21461e235a"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-sqrt/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ac3f2b1bd8367ffa",
+    "ac3f2b1bd8367ffa"
+   ],
+   "parts": [
+    {
+     "centers": "8451c85d4e15120e",
+     "labels": "62d4ed1a8dab6e65",
+     "inertia": "8eb2148af8474b72",
+     "scales": "72c84b1193a20c89"
+    },
+    {
+     "centers": "8451c85d4e15120e",
+     "labels": "62d4ed1a8dab6e65",
+     "inertia": "8eb2148af8474b72",
+     "scales": "72c84b1193a20c89"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-sqrt/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4bde18fe714ad92e",
+    "4bde18fe714ad92e"
+   ],
+   "parts": [
+    {
+     "centers": "b20229152b8003ca",
+     "labels": "ff38991f8651dce2",
+     "inertia": "52ea06cbbcc24144",
+     "scales": "600b4305f9020d70"
+    },
+    {
+     "centers": "b20229152b8003ca",
+     "labels": "ff38991f8651dce2",
+     "inertia": "52ea06cbbcc24144",
+     "scales": "600b4305f9020d70"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-sqrt/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c2486d60db950886",
+    "c2486d60db950886"
+   ],
+   "parts": [
+    {
+     "centers": "2177b19c6b4abc6d",
+     "labels": "20025f2777dcfc34",
+     "inertia": "7343e095c5a45bc9",
+     "scales": "1d55e98854fd7740"
+    },
+    {
+     "centers": "2177b19c6b4abc6d",
+     "labels": "20025f2777dcfc34",
+     "inertia": "7343e095c5a45bc9",
+     "scales": "1d55e98854fd7740"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-sqrt/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c2486d60db950886",
+    "c2486d60db950886"
+   ],
+   "parts": [
+    {
+     "centers": "2177b19c6b4abc6d",
+     "labels": "20025f2777dcfc34",
+     "inertia": "7343e095c5a45bc9",
+     "scales": "1d55e98854fd7740"
+    },
+    {
+     "centers": "2177b19c6b4abc6d",
+     "labels": "20025f2777dcfc34",
+     "inertia": "7343e095c5a45bc9",
+     "scales": "1d55e98854fd7740"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-sqrt/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "66b6c6d6d5088c26",
+    "66b6c6d6d5088c26"
+   ],
+   "parts": [
+    {
+     "centers": "c923e7bcc013d984",
+     "labels": "34ead3faea2f861e",
+     "inertia": "87928d81cc17c9c2",
+     "scales": "aa1fd4c6b93ffce4"
+    },
+    {
+     "centers": "c923e7bcc013d984",
+     "labels": "34ead3faea2f861e",
+     "inertia": "87928d81cc17c9c2",
+     "scales": "aa1fd4c6b93ffce4"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-sqrt/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cd50fd82b95de87a",
+    "cd50fd82b95de87a"
+   ],
+   "parts": [
+    {
+     "centers": "ab50372c64bc4946",
+     "labels": "fe16a667ef5c6a06",
+     "inertia": "f486b3c11f756a4d",
+     "scales": "84c61ffe0bee1ead"
+    },
+    {
+     "centers": "ab50372c64bc4946",
+     "labels": "fe16a667ef5c6a06",
+     "inertia": "f486b3c11f756a4d",
+     "scales": "84c61ffe0bee1ead"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-sqrt/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5780022527a439a1",
+    "5780022527a439a1"
+   ],
+   "parts": [
+    {
+     "centers": "3092d3eb52b94606",
+     "labels": "fbc5b9a296c72fe7",
+     "inertia": "554b1f982956e2c8",
+     "scales": "ccbbeb21461e235a"
+    },
+    {
+     "centers": "3092d3eb52b94606",
+     "labels": "fbc5b9a296c72fe7",
+     "inertia": "554b1f982956e2c8",
+     "scales": "ccbbeb21461e235a"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-classic-pp/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e6648c8209c562ac",
+    "e6648c8209c562ac"
+   ],
+   "parts": [
+    {
+     "centers": "af9d8b55ee52f38c",
+     "labels": "4289044e26f0e8e4",
+     "inertia": "a5895b24a105a0b7"
+    },
+    {
+     "centers": "af9d8b55ee52f38c",
+     "labels": "4289044e26f0e8e4",
+     "inertia": "a5895b24a105a0b7"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-classic-pp/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b0f1aa9e9e7adf6f",
+    "b0f1aa9e9e7adf6f"
+   ],
+   "parts": [
+    {
+     "centers": "9355d60a8054255a",
+     "labels": "51fdbe41aedca8be",
+     "inertia": "becc1f43a7ab2c2c"
+    },
+    {
+     "centers": "9355d60a8054255a",
+     "labels": "51fdbe41aedca8be",
+     "inertia": "becc1f43a7ab2c2c"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-classic-pp/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8aec37d06d525fce",
+    "8aec37d06d525fce"
+   ],
+   "parts": [
+    {
+     "centers": "22a85e6f5f43d5ea",
+     "labels": "558e1a3bea594259",
+     "inertia": "b4360f7e20dd6285"
+    },
+    {
+     "centers": "22a85e6f5f43d5ea",
+     "labels": "558e1a3bea594259",
+     "inertia": "b4360f7e20dd6285"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-classic-pp/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "51beac4d46f297db",
+    "51beac4d46f297db"
+   ],
+   "parts": [
+    {
+     "centers": "f13bcc0774ad97f4",
+     "labels": "164c78ed042f09fc",
+     "inertia": "efa937225218a63a"
+    },
+    {
+     "centers": "f13bcc0774ad97f4",
+     "labels": "164c78ed042f09fc",
+     "inertia": "efa937225218a63a"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-classic-pp/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d3ba0ebbb0af1b3e",
+    "d3ba0ebbb0af1b3e"
+   ],
+   "parts": [
+    {
+     "centers": "00cdfc0985dbb2ef",
+     "labels": "03c6e787a68c423f",
+     "inertia": "17d48dab6dd19975"
+    },
+    {
+     "centers": "00cdfc0985dbb2ef",
+     "labels": "03c6e787a68c423f",
+     "inertia": "17d48dab6dd19975"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-classic-pp/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d3ba0ebbb0af1b3e",
+    "d3ba0ebbb0af1b3e"
+   ],
+   "parts": [
+    {
+     "centers": "00cdfc0985dbb2ef",
+     "labels": "03c6e787a68c423f",
+     "inertia": "17d48dab6dd19975"
+    },
+    {
+     "centers": "00cdfc0985dbb2ef",
+     "labels": "03c6e787a68c423f",
+     "inertia": "17d48dab6dd19975"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-classic-pp/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a0389077dee20809",
+    "a0389077dee20809"
+   ],
+   "parts": [
+    {
+     "centers": "a2d9aa1b9dfb9fe3",
+     "labels": "1baadd4badce5970",
+     "inertia": "268daa2cff6b8cb5"
+    },
+    {
+     "centers": "a2d9aa1b9dfb9fe3",
+     "labels": "1baadd4badce5970",
+     "inertia": "268daa2cff6b8cb5"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-classic-pp/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a47bec6025e076d8",
+    "a47bec6025e076d8"
+   ],
+   "parts": [
+    {
+     "centers": "a1ac994706bae0e7",
+     "labels": "adcf3fb5bc5205d1",
+     "inertia": "fb7a327dbd34a8a6"
+    },
+    {
+     "centers": "a1ac994706bae0e7",
+     "labels": "adcf3fb5bc5205d1",
+     "inertia": "fb7a327dbd34a8a6"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-classic-pp/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "644cff6572372f33",
+    "644cff6572372f33"
+   ],
+   "parts": [
+    {
+     "centers": "03e3728c4e07f08d",
+     "labels": "dca388ac51c11469",
+     "inertia": "e10ee5d1152df240"
+    },
+    {
+     "centers": "03e3728c4e07f08d",
+     "labels": "dca388ac51c11469",
+     "inertia": "e10ee5d1152df240"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "par-kmeans/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5aa44cc11034dec9",
+    "5aa44cc11034dec9"
+   ],
+   "parts": [
+    {
+     "centers": "aba63b1367499b63",
+     "labels": "c62648b3c0e6f056"
+    },
+    {
+     "centers": "aba63b1367499b63",
+     "labels": "c62648b3c0e6f056"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "par-kmeans/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3de3e103006de69c",
+    "3de3e103006de69c"
+   ],
+   "parts": [
+    {
+     "centers": "c2086044189f0be9",
+     "labels": "685d2620eef85d95"
+    },
+    {
+     "centers": "c2086044189f0be9",
+     "labels": "685d2620eef85d95"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "par-kmeans/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0a570e84b0002723",
+    "0a570e84b0002723"
+   ],
+   "parts": [
+    {
+     "centers": "89ec5d99f9fd839b",
+     "labels": "80c7e1e598680983"
+    },
+    {
+     "centers": "89ec5d99f9fd839b",
+     "labels": "80c7e1e598680983"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "par-kmeans/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6f0529fcb3d60536",
+    "6f0529fcb3d60536"
+   ],
+   "parts": [
+    {
+     "centers": "36757e3724096239",
+     "labels": "3704ad2d740173bf"
+    },
+    {
+     "centers": "36757e3724096239",
+     "labels": "3704ad2d740173bf"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "par-kmeans/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "993fe5caff144b0c",
+    "993fe5caff144b0c"
+   ],
+   "parts": [
+    {
+     "centers": "90d988bd1de33607",
+     "labels": "9ab8dfb99430c319"
+    },
+    {
+     "centers": "90d988bd1de33607",
+     "labels": "9ab8dfb99430c319"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "par-kmeans/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "993fe5caff144b0c",
+    "993fe5caff144b0c"
+   ],
+   "parts": [
+    {
+     "centers": "90d988bd1de33607",
+     "labels": "9ab8dfb99430c319"
+    },
+    {
+     "centers": "90d988bd1de33607",
+     "labels": "9ab8dfb99430c319"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "par-kmeans/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2ae942d45a51757a",
+    "2ae942d45a51757a"
+   ],
+   "parts": [
+    {
+     "centers": "d7ab2543c3c16578",
+     "labels": "0b95c61d1b9c6efa"
+    },
+    {
+     "centers": "d7ab2543c3c16578",
+     "labels": "0b95c61d1b9c6efa"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "par-kmeans/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "43d8a3d3859f4143",
+    "43d8a3d3859f4143"
+   ],
+   "parts": [
+    {
+     "centers": "a12f222214253637",
+     "labels": "93c7da25ed5b748d"
+    },
+    {
+     "centers": "a12f222214253637",
+     "labels": "93c7da25ed5b748d"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "par-kmeans/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d4cc38e75f8e2d75",
+    "d4cc38e75f8e2d75"
+   ],
+   "parts": [
+    {
+     "centers": "040e877ca6dde80a",
+     "labels": "0492b06d130b75ea"
+    },
+    {
+     "centers": "040e877ca6dde80a",
+     "labels": "0492b06d130b75ea"
+    }
+   ],
+   "infer": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-predict",
+    "n/a:no-predict"
+   ],
+   "batch_verdict": "N/A"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad/wt-kmsqrt/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.13.15",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "9570a9e8c1d2087ebed7a7f5c4c986a411ffe1daabdee82fd9f6c97e36ed4b40",
+    "size": 2721184
+   }
+  ]
+ }
+}

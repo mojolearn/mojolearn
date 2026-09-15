@@ -44,9 +44,11 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
                            on the RAW norms), then `raft::argmin_op`'s total
                            order (lowest value, then lowest key), a
                            selection no fold shape can move. The `sqrt` of
-                           the L2-sqrt metric is the kernel's stdlib
-                           `sqrt`, kept as such; the Python surface never
-                           asks for that metric.
+                           the L2-sqrt metric is `identical_sqrt` on the
+                           kernel's final write (DEVIATION 2715); the
+                           Python surface reaches it through
+                           `metric="l2_sqrt_expanded"` (the kmeans-sqrt
+                           lane).
   `host_sum_device`        `_sum_device`, `kmeans.mojo:157`:
                            `sum_partials_kernel` over `min(256, ceil(n /
                            TPB))` blocks, each lane's grid-strided chain
@@ -125,9 +127,9 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
                            the guards in their words, the two scales, the
                            unit or supplied weights, the fit, then the
                            FRESH assignment against the returned centroids
-                           with the estimator's own row norms (which take
-                           the metric's `sqrt` flag there, as that entry
-                           does).
+                           with the estimator's own row norms (squared for
+                           both L2 metrics, rooted for cosine alone,
+                           DEVIATION 2716).
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` makes every quantized
 centroid-sum cell carry ONE EXTRA UNIT (`q + 1` in `host_accumulate`), so
@@ -140,7 +142,7 @@ why this family's arm is a unit and not an order. Read back by
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the kmeans lane is the measurement.
 """
-from std.math import ceil, log, sqrt
+from std.math import ceil, log
 from std.memory import bitcast
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -407,7 +409,10 @@ def host_assign(
                 val = dist
                 key = UInt32(col)
         if is_sqrt:
-            val = sqrt(val)
+            # DEVIATION 2715: the kernel's root is `identical_sqrt` now. The
+            # host libm root is correctly rounded too, so this moves no bit;
+            # it keeps the mirror statement for statement.
+            val = identical_sqrt(val)
         min_dist[row] = val
         labels[row] = key
 
@@ -1199,8 +1204,9 @@ def host_kmeans_fit(
     )
 
     # fit_predict's FRESH assignment against the returned centroids, with
-    # the estimator's own row norms (`take_sqrt` follows the metric there).
-    var x_norm = host_row_norms(x, n, d, host_metric_is_sqrt(metric))
+    # the estimator's own row norms: squared for both L2 metrics, rooted for
+    # cosine alone (DEVIATION 2716, `cluster/estimator.mojo`).
+    var x_norm = host_row_norms(x, n, d, metric == METRIC_COSINE_EXPANDED)
     var c_norm = host_row_norms(centroids, k, d, metric == METRIC_COSINE_EXPANDED)
     var min_dist = List[Float32](length=n, fill=Float32(0.0))
     host_assign(

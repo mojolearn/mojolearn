@@ -124,6 +124,7 @@ on:
       - "bench/results/identity_break/2026-09-14_47-lanes/**"
       - "bench/results/identity_break/2026-09-14_136-lanes/**"
       - "bench/results/identity_break/2026-09-14_166-lanes/**"
+      - "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/**"
       - "bench/results/forest_host/**"
       - ".github/workflows/cpu-identity-gate.yml"
 
@@ -237,6 +238,7 @@ jobs:
             /bench/results/identity_break/2026-09-14_47-lanes/
             /bench/results/identity_break/2026-09-14_136-lanes/
             /bench/results/identity_break/2026-09-14_166-lanes/
+            /bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -411,8 +413,13 @@ jobs:
       # IDENTICAL x3 and ONE DIVERGENT, kmeans-sqrt/wide, where the H100
       # inertia stands alone (docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md).
       # --diff exits 1 on that cell, so the step requires exit 1 AND the exact
-      # summary tokens AND that row: a fix, a second divergence, a diff that
-      # printed nothing, or fewer cells changes a token and fails the step.
+      # summary tokens AND that row: a second divergence, a diff that printed
+      # nothing, or fewer cells changes a token and fails the step. The cell is
+      # EXPLAINED AND FIXED since 9fde8f5f7 (NVIDIA's approximate sqrt in the
+      # min-reduce kernels, DEVIATION 2715; that record's kmeans-sqrt labels are
+      # also wrong on every column, DEVIATION 2716). These committed JSONs are
+      # the 1eea14f80 bytes and keep their count; the kmeans lanes' current
+      # cells are the kmeans-sqrt fix record, asserted two steps below.
       - name: identity_break --diff over the three committed GPU columns (require 3)
         if: always()
         run: |
@@ -441,6 +448,31 @@ jobs:
           fi
           grep -F 'REQUIRE FAIL gemm-pinned/base train' "$GATE_OUT/diff_gpu4_control.txt"
           echo "control OK: --require-columns 4 refused three columns"
+
+      # The kmeans lanes after the kmeans-sqrt fix (DEVIATIONS 2715 and 2716,
+      # bench/results/identity_break/2026-09-14_kmeans-sqrt-fix): the three fixed
+      # columns diff IDENTICAL on all 72 cells, and the unfixed columns of the
+      # same boxes must still read the one NVIDIA inertia cell DIVERGENT, so the
+      # record cannot pass by carrying identical files.
+      - name: identity_break --diff over the kmeans-sqrt fix record (fixed IDENTICAL, unfixed DIVERGENT)
+        if: always()
+        run: |
+          R=bench/results/identity_break/2026-09-14_kmeans-sqrt-fix
+          st=0
+          python3 tools/identity_break.py --diff $R/apple-m4.json $R/nvidia-h100-sm_90a.json \
+            $R/amd-mi325x-gfx942.json --require-columns 3 > "$GATE_OUT/diff_kmsqrt_fixed.txt" 2>&1 || st=$?
+          cat "$GATE_OUT/diff_kmsqrt_fixed.txt"
+          [ "$st" = 0 ] || { echo "fixed kmeans columns: --diff exited $st" >&2; exit 1; }
+          grep -F 'summary: IDENTICAL=72' "$GATE_OUT/diff_kmsqrt_fixed.txt"
+          grep -F 'require-columns 3 over' "$GATE_OUT/diff_kmsqrt_fixed.txt" | grep -F ': OK'
+          st=0
+          python3 tools/identity_break.py --diff $R/unfixed/apple-m4.json $R/unfixed/nvidia-h100-sm_90a.json \
+            $R/unfixed/amd-mi325x-gfx942.json $R/unfixed/nvidia-rtx-4090-sm_89.json --require-columns 4 \
+            > "$GATE_OUT/diff_kmsqrt_unfixed.txt" 2>&1 || st=$?
+          cat "$GATE_OUT/diff_kmsqrt_unfixed.txt"
+          grep -F 'summary: DIVERGENT=1, IDENTICAL=8' "$GATE_OUT/diff_kmsqrt_unfixed.txt"
+          grep -E '^\| kmeans-sqrt/wide +\| DIVERGENT +\| parts differ: inertia; agree: centers,labels,scales' "$GATE_OUT/diff_kmsqrt_unfixed.txt"
+          [ "$st" = 1 ] || { echo "unfixed kmeans-sqrt columns: expected --diff to exit 1, got $st" >&2; exit 1; }
 
       # THE FOURTH COLUMN, THE PLUMBING SMOKE. Two lanes, one fixture, one
       # repeat, on this CPU, through the CPU-only package. Every cell must

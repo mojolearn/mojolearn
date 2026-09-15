@@ -1,0 +1,47 @@
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | nvidia-rtx-4090-sm_89 |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| kmeans-sqrt/base             | IDENTICAL x4 | 961a4ac1fc219750 | 961a4ac1fc219750 | 961a4ac1fc219750 | 961a4ac1fc219750 |
+| kmeans-sqrt/denormal         | IDENTICAL x4 | a5bb4d058f6890f9 | a5bb4d058f6890f9 | a5bb4d058f6890f9 | a5bb4d058f6890f9 |
+| kmeans-sqrt/denormal_ftz     | IDENTICAL x4 | a5bb4d058f6890f9 | a5bb4d058f6890f9 | a5bb4d058f6890f9 | a5bb4d058f6890f9 |
+| kmeans-sqrt/dupes            | IDENTICAL x4 | dc76e2a953a5f8f9 | dc76e2a953a5f8f9 | dc76e2a953a5f8f9 | dc76e2a953a5f8f9 |
+| kmeans-sqrt/hashed           | IDENTICAL x4 | 452b7908b692b238 | 452b7908b692b238 | 452b7908b692b238 | 452b7908b692b238 |
+| kmeans-sqrt/negative         | IDENTICAL x4 | 1f638840b30ec449 | 1f638840b30ec449 | 1f638840b30ec449 | 1f638840b30ec449 |
+| kmeans-sqrt/odd              | IDENTICAL x4 | f352d565acba8219 | f352d565acba8219 | f352d565acba8219 | f352d565acba8219 |
+| kmeans-sqrt/ties             | IDENTICAL x4 | d3feb924d2221a46 | d3feb924d2221a46 | d3feb924d2221a46 | d3feb924d2221a46 |
+| kmeans-sqrt/wide             | DIVERGENT  | parts differ: inertia; agree: centers,labels,scales | 152655441c24b80a | 8c66b352864fd354 | 152655441c24b80a |
+
+summary: DIVERGENT=1, IDENTICAL=8
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | nvidia-rtx-4090-sm_89 |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| kmeans-sqrt/base             | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/base             | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/denormal         | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/denormal         | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/denormal_ftz     | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/denormal_ftz     | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/dupes            | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/dupes            | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/hashed           | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/hashed           | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/negative         | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/negative         | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/odd              | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/odd              | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/ties             | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/ties             | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/wide             | infer  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/wide             | batch  | N/A          | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+
+summary (infer/model): N/A=18
+summary (batch): N/A=9
+require-columns 4 over ['kmeans-sqrt']: OK

@@ -432,7 +432,11 @@ def _cho_solve_columns(
     # involved: the device-to-device form diverged on two MI300X for every
     # factor above 1 MiB (n >= 513) in the columns owned by device 1, and
     # passed when the owner's copies were read back before the solve
-    # (bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/).
+    # (bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/). The owner's
+    # kernel read the previous contents of the target memory after the copy
+    # and a drain of both contexts, a platform behavior of those MI300X
+    # (bench/results/multi_gpu/2026-09-15/peer-copy-mi300x/; repro:
+    # training/checks/peer_copy_check.mojo PEERSOLVE l_first at n=513).
     var host_l = ctx.enqueue_create_host_buffer[DType.float32](n * n)
     var host_b = ctx.enqueue_create_host_buffer[DType.float32](n * nrhs)
     var lv = l.create_sub_buffer[DType.float32](0, n * n)

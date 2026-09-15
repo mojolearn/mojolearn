@@ -1,0 +1,39 @@
+==============================================================================
+IDENTITY TRACE DIFF
+==============================================================================
+  A = bench/results/e1g/2026-09-15_005009-nvidia-h100-ivf-euclidean/remote/cards/ivf-identical.ivf_check.sqrt.card.a
+  B = bench/results/e1g/2026-09-15_010314-nvidia-h100-ivf-euclidean-b/remote/cards/ivf-identical.ivf_check.sqrt.card.a
+
+STEP 1 -- PARSE
+  A: 71 record(s), 3 comment line(s), 1 blank line(s)
+  B: 71 record(s), 3 comment line(s), 1 blank line(s)
+
+STEP 1b -- DUMP INTEGRITY (re-hash every .bin found)
+
+STEP 2 -- ALIGNMENT (tag sequence, computed BEFORE any hash compare)
+  matched stage pairs: 71
+  unmatched in A: 0    unmatched in B: 0
+  TAG SEQUENCES ARE IDENTICAL.
+
+STEP 3 -- HASH WALK over 71 matched pair(s)
+  32 matched pair(s) agreed before the first divergence.
+
+  Context, the last 3 stage(s) that were still IDENTICAL on both sides:
+    OK  ivf.quantizer.restart00.init.centroids
+    OK  ivf.quantizer.restart00.iter01.centroid_norm
+    OK  ivf.quantizer.restart00.iter01.labels
+
+  FIRST DIVERGENCE: ivf.quantizer.restart00.iter01.min_dist
+    A: seq=32     dtype=f32 count=64         hash=bc715994e9084fe7
+    B: seq=32     dtype=f32 count=64         hash=444eef9f4e1dd5e8
+
+STEP 4 -- CELL LEVEL (requires a .bin dump on BOTH sides)
+  A dump: NOT USABLE -- no dump found (tried ivf-identical.ivf_check.sqrt.card.a.32.ivf.quantizer.restart00.iter01.min_dist.bin and bench/results/e1g/2026-09-15_005009-nvidia-h100-ivf-euclidean/remote/cards/ivf-identical.ivf_check.sqrt.card.a.32.*.bin)
+  B dump: NOT USABLE -- no dump found (tried ivf-identical.ivf_check.sqrt.card.a.32.ivf.quantizer.restart00.iter01.min_dist.bin and bench/results/e1g/2026-09-15_010314-nvidia-h100-ivf-euclidean-b/remote/cards/ivf-identical.ivf_check.sqrt.card.a.32.*.bin)
+  Cell-level comparison SKIPPED: a dump is missing or ambiguous on
+  at least one side. Which cells differ, and whether the difference
+  is flush-to-zero or ULP noise, is UNKNOWN from this run.
+
+==============================================================================
+RESULT: DIVERGENT.
+==============================================================================

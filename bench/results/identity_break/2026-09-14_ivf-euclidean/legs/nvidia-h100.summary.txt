@@ -1,0 +1,46 @@
+commit=76a170dcf1ee3ccdee97f4e5d591cbaa82628339 archs=sm_90a nproc=224 jobs=16
+vendor_label=nvidia-nvidia-h100-80gb-hbm3-sm_90a
+== build-ivf-identical exit 0 seconds 52
+== run-ivf-identical exit 0 seconds 1
+check_nprobe_equals_nlists_is_brute_force OK [IDENTICAL]: 120 slots, distances AND indices bit for bit against neighbors/ knn_search's TILED arm; every query scored all 320 candidates
+  REPORT recall@k=5 n_probes=1 of 6 = 0.8166666666666667  (1286 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=2 of 6 = 0.9833333333333333  (2607 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=3 of 6 = 1.0  (3911 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=4 of 6 = 1.0  (5187 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=6 of 6 = 1.0  (7680 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+check_card_is_emitted OK [IDENTICAL]: 78 records, 15 ivf.* stages plus 63 ivf.quantizer.* stages, two runs record-identical
+check_l2_sqrt_is_the_root_of_l2 OK [IDENTICAL]: centre norms squared; one index under both metrics at n_probes 2 and 6 gives the same ids and the root of every squared distance; the L2SqrtExpanded build matches the rooted tiled brute force at n_probe == n_lists and oracle_ivf_search(is_sqrt=True) at n_probes 3, 120 slots each; card 71 records, two runs record-identical
+ivf_check mode=IDENTICAL ALL OK
+ivf-identical 1e7c1702fe7266a4343eb17788e6d787  /tmp/ivf_check.card.a
+ivf-identical 1e7c1702fe7266a4343eb17788e6d787  /tmp/ivf_check.card.b
+ivf-identical 1250edd6e8da0824848e06237f7aaef5  /tmp/ivf_check.sqrt.card.a
+ivf-identical 1250edd6e8da0824848e06237f7aaef5  /tmp/ivf_check.sqrt.card.b
+== build-ivf-fast exit 0 seconds 54
+== run-ivf-fast exit 0 seconds 2
+check_nprobe_equals_nlists_is_brute_force REPORT [FAST]: 112 of 120 distances and 0 indices differ from the tiled brute force. A REPORT and not an assertion: the FAST distances come from MAX's matmul, called at m=1 here and m=n_queries there, and the FAST selector resolves a tie by atomic arrival.
+check_empty_list OK [FAST]: list 2 empty, all 6 probed, candidate counts exact, IVF_SAB_EMPTY_COUNTS_ONE overcounts to 321; the 112 value differences against brute force are a REPORT under FAST (see check_nprobe_equals_nlists_is_brute_force)
+  REPORT recall@k=5 n_probes=1 of 6 = 0.8166666666666667  (1286 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=2 of 6 = 0.9833333333333333  (2607 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=3 of 6 = 1.0  (3911 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=4 of 6 = 1.0  (5187 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+  REPORT recall@k=5 n_probes=6 of 6 = 1.0  (7680 candidate cells scored of 7680 a brute force would score).  THIS LINE IS A REPORT, not an assertion, and the cell count is not a speedup.
+check_card_is_emitted OK [FAST]: 78 records, 15 ivf.* stages plus 63 ivf.quantizer.* stages, two runs record-identical
+check_l2_sqrt_is_the_root_of_l2 REPORT [FAST]: 2 of the IDENTICAL assertions differ (a REPORT here: the FAST matmul's per-shape k-split and the selector's arrival-order ties); card 71 records, two runs record-identical
+  (c) L2SqrtExpanded build at n_probe == n_lists vs tiled brute force: 112 of 120 slots differ; first: slot 1 L2SqrtExpanded (0x3f80ae59, 124) vs root of the squared (0x3f80b5df, 124)
+  (d) n_probes=3 vs oracle_ivf_search(is_sqrt=True): 43 of 120 slots differ; first: slot 1 device (0x3f80ae59, 124) oracle (0x3f80ae55, 124)
+ivf_check mode=FAST ALL OK
+ivf-fast a8310dbe0eb0d71a8ac4062ccaa5a5cf  /tmp/ivf_check.card.a
+ivf-fast a8310dbe0eb0d71a8ac4062ccaa5a5cf  /tmp/ivf_check.card.b
+ivf-fast af1ae79acc1bf9817bf6618cfe1da699  /tmp/ivf_check.sqrt.card.a
+ivf-fast af1ae79acc1bf9817bf6618cfe1da699  /tmp/ivf_check.sqrt.card.b
+== build_ivf exit 0 seconds 28
+63127187dfe11d2aea6ec5357a57f61915eed0ea3b35e87befd28c2bf2be7a8a  python/mojolearn/identical/_mojolearn_ivf.so
+== test_ivf_surface exit 0 seconds 2
+test_ivf_surface: GREEN under numeric_mode=identical, 25 checks. One box, one vendor; no bit is claimed for any other.
+== identity_break exit 0 seconds 9
+cells=18 stable=18 moved=0 refused=0
+infer: stable=18
+model: n/a=18
+batch: stable=18
+wrote /root/gemm_leg_out/identity_break.nvidia-nvidia-h100-80gb-hbm3-sm_90a.json
+body seconds 148

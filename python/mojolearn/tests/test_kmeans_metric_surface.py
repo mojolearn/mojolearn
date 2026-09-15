@@ -23,6 +23,24 @@ def _x(seed=0):
     return np.ascontiguousarray((rng.random((512, 4), dtype=np.float32) * 4.0).astype(np.float32))
 
 
+def _wide(seed=1):
+    rng = np.random.default_rng(seed)
+    x = rng.standard_normal((512, 4)).astype(np.float32) * np.logspace(-2, 2, 4).astype(np.float32)
+    return np.ascontiguousarray(x.astype(np.float32))
+
+
+def _label_not_argmin(x, centers, labels):
+    """Rows whose label is not the float64 argmin of the squared distance
+    to the returned centers, beyond a relative 1e-4 of float32 round-off."""
+    xd = np.asarray(x, dtype=np.float64)
+    c = np.asarray(centers, dtype=np.float64)
+    d2 = ((xd[:, None, :] - c[None, :, :]) ** 2).sum(-1)
+    lab = np.asarray(labels).astype(np.int64)
+    chosen = d2[np.arange(len(xd)), lab]
+    best = d2.min(1)
+    return int(np.sum(chosen > best + 1e-4 * np.maximum(best, 1.0)))
+
+
 def _bits_same(a, b):
     a, b = np.ascontiguousarray(np.asarray(a)), np.ascontiguousarray(np.asarray(b))
     return a.shape == b.shape and np.array_equal(a.view(np.uint32), b.view(np.uint32))
@@ -41,6 +59,15 @@ def arm_metric(rep):
     sq = KMeans(n_clusters=4, random_state=3, metric="l2_sqrt_expanded").fit(x)
     rep.check("METRIC", np.asarray(sq.cluster_centers_).shape == (4, 4) and np.isfinite(sq.inertia_), "'l2_sqrt_expanded' fits", sq.inertia_)
     rep.report_only("METRIC", sq.inertia_ == base.inertia_, "l2_sqrt_expanded inertia vs the squared arm (expected to MOVE: the root is taken)")
+    # DEVIATION 2716: `labels_` is the argmin to the returned centers under
+    # BOTH L2 metrics (the root is monotone). The final assignment used to
+    # take ROOTED row norms under 'l2_sqrt_expanded', which clamped most
+    # rows of a wide-magnitude fixture to 0 and gave them label 0.
+    for name, xs in (("uniform [0, 4)", x), ("columns 1e-2 to 1e2", _wide())):
+        for metric in ("l2_expanded", "l2_sqrt_expanded"):
+            m = KMeans(n_clusters=4, random_state=3, metric=metric).fit(xs)
+            bad = _label_not_argmin(xs, m.cluster_centers_, m.labels_)
+            rep.check("METRIC", bad == 0, f"{metric} on {name}: every label is the argmin to the returned centers", f"{bad} of {len(xs)} are not")
     rep.raises("METRIC", Exception, "L2Expanded or L2SqrtExpanded", "metric='cosine' is routed and REFUSED BY NAME on the Mojo host (kmeans_params.mojo::validate)",
                KMeans(n_clusters=4, metric="cosine").fit, x)
     rep.raises("METRIC", Exception, "L2Expanded or L2SqrtExpanded", "metric='cosine_expanded' the same", KMeans(n_clusters=4, metric="cosine_expanded").fit, x)

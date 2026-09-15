@@ -31,6 +31,16 @@ NEW = {
     "_mojolearn_ivf": ("build_ivf.sh", "python/mojolearn/_ivf_impl.py"),
     "_mojolearn_embedding": ("build_embedding.sh", "python/mojolearn/embedding.py"),
 }
+#: the availability flag each workstream D binding exports, as
+#: python/mojolearn/_parallel_worker.py checks it before its driver runs
+PARALLEL_FLAGS = {
+    "kernel_methods": "kernel_methods_rows_parallel_available",
+    "mixture": "gmm_parallel_available",
+    "hdbscan": "hdbscan_rows_parallel_available",
+    "resample": "resample_ranges_parallel_available",
+    "ivf": None,
+    "embedding": None,
+}
 CLASSES = ("Cholesky", "KernelRidge", "Nystroem", "RBFSampler", "GaussianMixture", "HDBSCAN", "IVFIndex", "Embedding")
 LANE_BODIES = ("cholesky", "kernel_methods", "mixture", "hdbscan", "resample", "ivf", "training_primitives", "kmeans")
 
@@ -83,8 +93,19 @@ def test_binding_exports_match_python_calls():
         assert called, (py, "no calls found")
         assert called <= exported, (binding, sorted(called - exported))
         stem = binding.rsplit("/", 1)[1][len("_mojolearn_"):-len(".mojo")]
-        for suffix in ("_vendor", "_numeric_mode", "_parallel_available"):
+        for suffix in ("_vendor", "_numeric_mode"):
             assert stem + suffix in exported, (binding, stem + suffix)
+        # A multi-GPU availability flag must name a driver that reads it. The
+        # generic `<stem>_parallel_available` names returned 1 with no driver
+        # behind them and were removed on 2026-09-15; the flags the ordered
+        # drivers check are the ones below, and IVF and Embedding have none.
+        assert stem + "_parallel_available" not in exported, (binding, "stale flag", stem + "_parallel_available")
+        flag = PARALLEL_FLAGS[stem]
+        if flag is None:
+            assert not any(e.endswith("_parallel_available") for e in exported), (binding, sorted(exported))
+        else:
+            assert flag in exported, (binding, flag)
+            assert f"'{flag}'" in _read("python/mojolearn/_parallel_worker.py"), (flag, "no driver reads it")
     gp = _exports("bindings/_mojolearn_gp.mojo")
     chol = _calls("python/mojolearn/_cholesky_impl.py", r"_extension\(\)\.(\w+)\(")
     assert chol and chol <= gp, sorted(chol - gp)

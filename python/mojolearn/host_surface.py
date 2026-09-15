@@ -89,7 +89,10 @@ BUILDER = "bindings/build_host_family.sh"
 #: columns, the AMD column MI325X again) is the one; it carries one DIVERGENT
 #: training cell, kmeans-sqrt/wide (the H100 inertia stands alone,
 #: docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md), on a lane no
-#: CPU column covers, and the workflow asserts that count exactly.
+#: CPU column covers, and the workflow asserts that count exactly. That cell is
+#: fixed since 9fde8f5f7 (DEVIATIONS 2715 and 2716); the kmeans lanes' cells
+#: after the fix are bench/results/identity_break/2026-09-14_kmeans-sqrt-fix,
+#: which the workflow asserts IDENTICAL x3 in its own step.
 TRAINING_GPU_COLUMNS = (
     "bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json",
     "bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json",

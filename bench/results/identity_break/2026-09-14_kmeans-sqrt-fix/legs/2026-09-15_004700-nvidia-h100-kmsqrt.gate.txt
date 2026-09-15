@@ -1,0 +1,32 @@
+started=2026-09-15T00:50:56Z commit=9fde8f5f703ef88e1258ebe1909c230a2ab4f4e3 base=e2d770ba8b616034b564e82e864d09b23f8e132b
+device=NVIDIA H100 80GB HBM3, 9.0 
+gpu_archs_resolved=sm_90a label=nvidia-h100-sm_90a
+unfixed files swapped in: 1 stdlib-sqrt lines in the fused kernel
+build_unfixed exit=0 seconds=46 so_sha=8415b2a3c612bc8f
+probe_unfixed exit=0
+U PROBE wide l2_sqrt_expanded: inertia_bits=000000e0e4f28d41 inertia=62807196.0 inertia_h=1a7e4ac5b8c0caaf centers_h=b20229152b8003ca labels_h=cf7cc99cd1e1e019 labels_not_argmin=9675
+U PROBE wide l2_expanded: inertia_bits=000000a0ecc34c42 inertia=247092297728.0 inertia_h=83d0ac4a83bdeb20 centers_h=36757e3724096239 labels_h=3704ad2d740173bf labels_not_argmin=0
+U PROBE base l2_sqrt_expanded: inertia_bits=00000060e4b6f140 inertia=72558.2734375 inertia_h=92564a0100fcaaf1 centers_h=bc1b96498842c52a labels_h=2f80c7468722e0dc labels_not_argmin=4
+U PROBE base l2_expanded: inertia_bits=00000080d69d1041 inertia=272245.625 inertia_h=cb03afedb1f62c6b centers_h=aba63b1367499b63 labels_h=c62648b3c0e6f056 labels_not_argmin=0
+identity_unfixed exit=0
+fixed files restored: 1 identical_sqrt lines in the fused kernel
+build_fixed exit=0 seconds=44 so_sha=86134faf82a932a5
+probe_fixed exit=0
+F PROBE wide l2_sqrt_expanded: inertia_bits=00000000e5f28d41 inertia=62807200.0 inertia_h=52ea06cbbcc24144 centers_h=b20229152b8003ca labels_h=ff38991f8651dce2 labels_not_argmin=0
+F PROBE wide l2_expanded: inertia_bits=000000a0ecc34c42 inertia=247092297728.0 inertia_h=83d0ac4a83bdeb20 centers_h=36757e3724096239 labels_h=3704ad2d740173bf labels_not_argmin=0
+F PROBE base l2_sqrt_expanded: inertia_bits=00000060e4b6f140 inertia=72558.2734375 inertia_h=92564a0100fcaaf1 centers_h=bc1b96498842c52a labels_h=48c68cf28593fe75 labels_not_argmin=0
+F PROBE base l2_expanded: inertia_bits=00000080d69d1041 inertia=272245.625 inertia_h=cb03afedb1f62c6b centers_h=aba63b1367499b63 labels_h=c62648b3c0e6f056 labels_not_argmin=0
+identity_fixed exit=0 seconds=24
+--- /root/gemm_leg_out/kmsqrt/logs/identity_break_fixed.log
+cells=72 stable=72 moved=0 refused=0
+infer: n/a=72
+model: n/a=72
+batch: n/a=72
+wrote /root/gemm_leg_out/kmsqrt/identity_break.nvidia-h100-sm_90a.json
+--- /root/gemm_leg_out/kmsqrt/logs/identity_break_unfixed.log
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: n/a=9
+wrote /root/gemm_leg_out/kmsqrt/identity_break.nvidia-h100-sm_90a.unfixed.json
+finished=2026-09-15T00:52:57Z

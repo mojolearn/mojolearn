@@ -78,7 +78,6 @@ changing anything about that order.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cluster.impl.detail.kmeans_common import metric_is_sqrt
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.identity_trace import IdentityTrace
@@ -93,6 +92,7 @@ from ivf.impl.neighbors.ivf_common import (
     calc_chunk_indices,
     n_samples_from_chunks,
     postprocess_neighbors,
+    postprocess_distances,
     postprocess_distances_is_identity,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import (
@@ -166,11 +166,19 @@ def _expanded_distances(
     m: Int,
     n: Int,
     d: Int,
-    is_sqrt: Bool,
     tile_tpb: Int,
     expand_tpb: Int,
 ) raises:
     """`z[m x n] = ||q_i||^2 + ||y_j||^2 - 2 q_i . y_j`, mode-dispatched.
+
+    ALWAYS THE SQUARED DISTANCE: both kernels get `is_sqrt = 0`. Their
+    search scores the coarse step and the candidates squared under
+    `L2Expanded` and `L2SqrtExpanded` alike (`ivf_flat_search.cuh:110-162`
+    has no root, and the interleaved scan roots a value only as its local
+    top-k STORES it, `interleaved_scan_impl.cuh:204` with
+    `tag_post_process_sqrt`, `ivf_flat_interleaved_scan_jit.cuh:279-290`).
+    So both selections run on squared keys and the root is applied to the
+    `k` selected distances afterwards (`postprocess_distances`).
 
     A COPY OF `tiled_brute_force_knn`'s dispatch
     (`neighbors/impl/detail/knn_brute_force.mojo:170-205`),
@@ -197,7 +205,7 @@ def _expanded_distances(
             Int32(m),
             Int32(n),
             Int32(d),
-            Int32(1 if is_sqrt else 0),
+            Int32(0),
             grid_dim=((cells + tile_tpb - 1) // tile_tpb, 1, 1),
             block_dim=(tile_tpb, 1, 1),
         )
@@ -215,7 +223,7 @@ def _expanded_distances(
             y_norm.unsafe_ptr(),
             Int32(m),
             Int32(n),
-            Int32(1 if is_sqrt else 0),
+            Int32(0),
             grid_dim=((cells + expand_tpb - 1) // expand_tpb, 1, 1),
             block_dim=(expand_tpb, 1, 1),
         )
@@ -390,8 +398,9 @@ def ivf_flat_search_traced(
         ivf.cand_counts     [n_queries], the candidate count per query
         ivf.cand_idx        the candidates' ORIGINAL ids, all queries
                             concatenated in query order
-        ivf.cand_dist       the candidate distances, same order
-        ivf.out_dist        [n_queries, k]
+        ivf.cand_dist       the candidate distances, same order, SQUARED
+                            under both metrics (the selection key)
+        ivf.out_dist        [n_queries, k], rooted under L2SqrtExpanded
         ivf.out_idx         [n_queries, k]
 
     Every tag names a position in the algorithm and none carries a block
@@ -402,12 +411,11 @@ def ivf_flat_search_traced(
     """
     ivf_search_params_validate(sp, index.n_lists, n_queries, k)
     ivf_validate_data(queries, n_queries, index.dim, "queries")
-    _ = postprocess_distances_is_identity(index.metric)
+    var dist_is_identity = postprocess_distances_is_identity(index.metric)
 
     var dim = index.dim
     var n_lists = index.n_lists
     var n_probes = sp.n_probes
-    var is_sqrt = metric_is_sqrt(index.metric)
 
     if n_probes > IVF_SELECT_LIMIT:
         raise Error(
@@ -446,14 +454,14 @@ def ivf_flat_search_traced(
     var dlist_norm = ctx.enqueue_create_buffer[DType.float32](index.n_rows)
     ctx.synchronize()
 
-    compute_row_norms(ctx, dq, dq_norm, n_queries, dim, is_sqrt)
+    compute_row_norms(ctx, dq, dq_norm, n_queries, dim)
     # THE CANDIDATE NORMS ARE COMPUTED OVER `list_data`, NOT OVER THE
     # ORIGINAL ROWS, AND THAT IS BIT-EXACT RATHER THAN CLOSE.
     # `row_norm_kernel` is one block per row reading only that row, so
     # permuting the rows permutes the outputs and changes no float. This is
     # what lets `check_nprobe_equals_nlists_is_brute_force` compare against
     # a `knn_search` whose norms were taken over the unpermuted matrix.
-    compute_row_norms(ctx, dlist_data, dlist_norm, index.n_rows, dim, is_sqrt)
+    compute_row_norms(ctx, dlist_data, dlist_norm, index.n_rows, dim)
     ctx.synchronize()
     if trace.enabled:
         trace.record_device(ctx, "ivf.query_norm", dq_norm, n_queries)
@@ -463,7 +471,7 @@ def ivf_flat_search_traced(
     ctx.synchronize()
     _expanded_distances(
         ctx, dcoarse, dq, 0, dcenters, dq_norm, dcenter_norm,
-        n_queries, n_lists, dim, is_sqrt, tile_tpb, expand_tpb,
+        n_queries, n_lists, dim, tile_tpb, expand_tpb,
     )
     ctx.synchronize()
     if trace.enabled:
@@ -600,7 +608,7 @@ def ivf_flat_search_traced(
 
         _expanded_distances(
             ctx, dcand_dist, dq, q, dcand_vec, dq_norm, dcand_norm,
-            1, n_cand, dim, is_sqrt, tile_tpb, expand_tpb,
+            1, n_cand, dim, tile_tpb, expand_tpb,
         )
         ctx.synchronize()
 
@@ -614,6 +622,12 @@ def ivf_flat_search_traced(
         var sel_pos = download_u32(ctx, dsel_idx, k)
         var sel_orig = postprocess_neighbors(sel_pos, cand_orig, k)
         sort_slots_by_distance_then_index(sel_dist, sel_orig, 0, k)
+        # The root, if the metric wants one, AFTER the order is fixed on
+        # the squared keys (their store-time `post_process`). `sqrt` is
+        # monotone, so the rooted row is still ascending; two squared
+        # values that root to one float keep their squared order.
+        if not dist_is_identity:
+            postprocess_distances(sel_dist, index.metric)
 
         for i in range(k):
             out_dist.append(sel_dist[i])
