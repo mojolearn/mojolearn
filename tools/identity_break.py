@@ -294,8 +294,11 @@ a two-GPU box, or two sequential legs on one box type) joins the parts with
     python3 tools/identity_break.py --merge part_a.json part_b.json --json column.json
 
 which refuses parts that differ in vendor, commit, mode, repeats, fixtures,
-held-out bytes, batch protocol, par_devices or loaded binding digests, and a
-cell two parts carry differently (2026-09-14 night). Parts from two legs
+held-out bytes, batch protocol, par_devices, the host object or binding
+digests (the loaded GPU bindings, and on a CPU column the host binding files
+since 2026-09-15), and a cell two parts carry differently (2026-09-14 night).
+The CPU identity gate splits its covered lanes across processes this way
+(tools/cpu_identity_gate_check.py run-column). Parts from two legs
 (two builds of the same commit) need `--allow-separate-builds`, and the
 merged JSON then says `merged_separate_builds: true` and keeps each part's
 binding digests.
@@ -305,7 +308,8 @@ docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.3). On an install whose
 `mojolearn.vendor()` is 'cpu' (no GPU set, a host binding under
 mojolearn/host/ built), `--vendor` defaults to `cpu-<cpu model slug>` read
 from the machine, the JSON gains a `host` object (cpu model, arch, the host
-bindings built and what each reads back as its kernel-matrix column), and a
+bindings built, each file's sha256, and what each reads back as its
+kernel-matrix column), and a
 lane whose family has no host fit records REFUSED with the by-name sentence
 "no CPU implementation of <binding>.<function> yet", never a hash of
 something else. Two provenance rules apply to EVERY column since the same
@@ -452,9 +456,21 @@ def host_record(ml):
     families = {}
     for basename in _backend.host_families_built():
         prefix = basename[len("_mojolearn_"):]
+        # The file's bytes (2026-09-15, lane/cpu-training-gate-budget). The
+        # host bindings load by path, so `package.bindings` (the loaded
+        # `mojolearn._mojolearn*` modules) never lists them, and a CPU column
+        # was tied to no binding bytes at all; `--merge` reads these digests
+        # to refuse parts that ran different builds.
+        digest = {}
+        try:
+            path = _backend.host_module_path(basename)
+            with open(path, "rb") as fh:
+                digest = dict(sha256=hashlib.sha256(fh.read()).hexdigest(), size=os.path.getsize(path))
+        except OSError as exc:
+            digest = dict(sha256_error=f"{type(exc).__name__}: {exc}"[:200])
         try:
             m = _backend.load_host_module(basename)
-            fam = dict(column=str(getattr(m, prefix + "_column")()))
+            fam = dict(column=str(getattr(m, prefix + "_column")()), **digest)
             detected = getattr(m, prefix + "_detected_column", None)
             if detected is not None:
                 fam["detected_column"] = str(detected())
@@ -462,7 +478,7 @@ def host_record(ml):
             if sab is not None:
                 fam["sabotage"] = bool(sab())
         except Exception as exc:
-            fam = dict(error=f"{type(exc).__name__}: {exc}"[:300])
+            fam = dict(error=f"{type(exc).__name__}: {exc}"[:300], **digest)
         families[basename] = fam
     columns = sorted(set(f.get("column", "unreadable") for f in families.values()))
     return dict(
@@ -5113,6 +5129,29 @@ MERGE_SAME = ("vendor", "commit", "mode", "repeats", "heldout_seed", "fixtures",
     f"{part}_{k}" for part in EXTRA_PARTS for k in ("protocol", "sabotage"))
 
 
+def _build_digests(j):
+    """The binding bytes one column part ran: every loaded GPU binding
+    (`package.bindings`) and, on a CPU column, every host binding file
+    (`host.families[*].sha256`, recorded since 2026-09-15). Sorted
+    (module, sha256) pairs; empty when the part recorded neither."""
+    dig = [(b["module"], b["sha256"]) for b in (j.get("package") or {}).get("bindings", [])]
+    dig += [("host:" + name, fam["sha256"]) for name, fam in ((j.get("host") or {}).get("families") or {}).items()
+            if fam.get("sha256")]
+    return sorted(dig)
+
+
+def _host_without_digests(j):
+    """A CPU part's `host` object with the per-binding bytes removed, so two
+    parts of one machine compare equal on everything but the build."""
+    host = j.get("host")
+    if not host:
+        return host
+    host = dict(host)
+    host["families"] = {name: {k: v for k, v in fam.items() if k not in ("sha256", "size")}
+                        for name, fam in (host.get("families") or {}).items()}
+    return host
+
+
 def merge(paths, out, allow_separate_builds=False):
     """ONE column from the parts a leg split across processes (two
     one-device processes on a two-GPU box, 2026-09-14 night). Refuses parts
@@ -5137,8 +5176,11 @@ def merge(paths, out, allow_separate_builds=False):
         if pk.get("par_devices") != fk.get("par_devices"):
             raise SystemExit(f"REFUSING --merge: {p} ran par_devices={pk.get('par_devices')!r}, "
                              f"{parts[0][0]} ran {fk.get('par_devices')!r}")
-        dig = sorted((b["module"], b["sha256"]) for b in pk.get("bindings", []))
-        same_build = dig and dig == sorted((b["module"], b["sha256"]) for b in fk.get("bindings", []))
+        if json.dumps(_host_without_digests(j), sort_keys=True) != json.dumps(_host_without_digests(first), sort_keys=True):
+            raise SystemExit(f"REFUSING --merge: {p} differs from {parts[0][0]} on 'host' (the machine, "
+                             "the host bindings built or what they read back)")
+        dig = _build_digests(j)
+        same_build = dig and dig == _build_digests(first)
         if not same_build and not (allow_separate_builds and dig):
             raise SystemExit(f"REFUSING --merge: {p} loaded different (or unrecorded) binding bytes than "
                              f"{parts[0][0]}; the parts of one column must run one build")
@@ -5166,9 +5208,7 @@ def merge(paths, out, allow_separate_builds=False):
     record["merged_from"] = [dict(file=os.path.basename(p), cells=len(j["cells"]), complete=j.get("complete"),
                                   platform=j.get("platform"), bindings=(j.get("package") or {}).get("bindings"))
                              for p, j in parts]
-    record["merged_separate_builds"] = len(set(json.dumps(sorted((b["module"], b["sha256"]) for b in
-                                                                 (j.get("package") or {}).get("bindings", [])))
-                                               for _, j in parts)) > 1
+    record["merged_separate_builds"] = len(set(json.dumps(_build_digests(j)) for _, j in parts)) > 1
     with open(out, "w") as fh:
         json.dump(record, fh, indent=1)
     print(f"merged {len(parts)} parts, {len(cells)} cells, complete={record['complete']} -> {out}")
