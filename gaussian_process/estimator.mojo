@@ -63,23 +63,16 @@ not a number to quietly raise**; the way to express a larger ridge under
 IDENTICAL is to apply the pinned one more than once and record how many
 times, and the way to change the value is a v2 of the Cholesky profile.
 
-HYPERPARAMETER OPTIMIZATION IS NOT IMPLEMENTED
------------------------------------------------
-**DEVIATION 1761.** `optimizer` accepts the single value `"none"`, which is
-this file's spelling of scikit-learn's `optimizer=None` (`_gpr.py:299`:
-`if self.optimizer is not None and self.kernel_.n_dims > 0`). Everything
-else, `"fmin_l_bfgs_b"` (sklearn's DEFAULT) included, is refused by name.
-
-The reason is not effort. An optimizer's ITERATION COUNT is data dependent,
-so the convergence test is itself part of the arithmetic: two vendors that
-agree bit for bit on every single L-BFGS step still diverge if the test that
-stops the loop is not itself identical, because one takes 41 steps and the
-other 42 and the answers are two different models. Making that test
-identical means pinning the line search, the gradient's own fold, the
-scaling of `theta`, and the tolerance comparison, and it means a gate that
-can tell a converged run from a lucky one. None of that is written, so the
-honest state is a refusal with the closure condition named, not a loop that
-usually agrees.
+HYPERPARAMETER OPTIMIZATION LIVES OUTSIDE THIS ONE-SHOT FIT
+-----------------------------------------------------------
+`gpr_fit_host` still accepts only `optimizer="none"` (DEVIATION 1761's
+refusal, kept at this entry): it fits the kernel it is handed. The optimizer
+(2026-09-15) evaluates `gpr_lml_grad_host` below at each candidate kernel
+(DEVIATION 2880: the likelihood, and its gradient through the identical
+Cholesky and one pinned fold) and runs its state machine in
+`python/mojolearn/_gp_optimizer.py` (DEVIATION 2881), whose every stop rule
+reads those bits alone, so the iteration count is the same on every column.
+The Python surface then calls this fit once with the optimized kernel.
 
 A CALLER THAT KEEPS ITS MATRICES ON THE DEVICE should call
 `gaussian_process/checks/kernels.mojo::gp_kernel_matrix` and the Cholesky
@@ -125,6 +118,8 @@ from gaussian_process.checks.kernels import (
     gp_predictive_variance,
     gp_validate_kernel,
 )
+from gaussian_process.checks.kernel_gradient import gp_kernel_matrix_grad
+from gaussian_process.host.gp_theta import gp_free_count, gp_lml_gradient_fold
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -860,6 +855,93 @@ def gp_log_marginal_likelihood_value(
     var half_n = ftz(identical_mul(Float32(-0.5), Float32(n)))
     var t3 = ftz(identical_mul(half_n, gp_log_2pi()))
     return ftz(ftz(t1 + t2) + t3)
+
+
+@fieldwise_init
+struct GPLmlGrad(Movable):
+    """The log marginal likelihood and its gradient at one kernel
+    (DEVIATION 2880). `info != 0` means the factorization failed: `lml` is
+    +0.0 and `grad` all +0.0, and the caller reads that as scikit-learn's
+    `(-inf, zeros)` (`_gpr.py:593`)."""
+
+    var lml: Float32
+    var grad: List[Float32]
+    var info: Int
+
+
+def gpr_lml_grad_host(
+    x: List[Float32],
+    n_train: Int,
+    n_features: Int,
+    y: List[Float32],
+    kernel: GPKernelSpec,
+    free: List[Int32],
+    alpha: Float32,
+    elem_tpb: Int = GP_ELEM_TPB,
+) raises -> GPLmlGrad:
+    """scikit-learn `log_marginal_likelihood(theta, eval_gradient=True)`
+    (`_gpr.py:575-653`) at the kernel handed in, whose FREE leaves are
+    flagged one per postfix node (DEVIATION 2880).
+
+        K, dK   = kernel(X, eval_gradient=True)   device, kernel_gradient.mojo
+        L       = cholesky(K + alpha I)           cholesky_factor_host
+        alpha_  = cho_solve(L, y)                 cholesky_solve_host
+        lml     = gp_log_marginal_likelihood_value, fit's own
+        K_inv   = cho_solve(L, eye)               cholesky_solve_host, n rhs
+        grad    = gp_lml_gradient_fold            gp_theta.mojo, host serial
+
+    K here is bit for bit the K `gpr_fit_host` builds (the same value
+    launches), so the likelihood at the optimizer's answer is the fit's.
+    No card stage is recorded: the optimizer evaluates many kernels and a
+    card of them would be a function of the iteration count."""
+    gp_validate_data(x, n_train, n_features, String("X"))
+    gp_validate_targets(y, n_train)
+    gp_validate_kernel(kernel, n_features)
+    gp_validate_alpha(alpha)
+    var n = n_train
+    var cells = n * n
+    var n_free = gp_free_count(kernel.kinds, kernel.ls_len, free)
+
+    var ctx = DeviceContext()
+    var dx = _upload(ctx, x)
+    var dls = _upload(ctx, _length_scale_table(kernel))
+    var dk = ctx.enqueue_create_buffer[DType.float32](cells)
+    var dstack = ctx.enqueue_create_buffer[DType.float32](
+        gp_kernel_stack_floats(n, n)
+    )
+    var dgrad = ctx.enqueue_create_buffer[DType.float32](max(n_free * cells, 1))
+    ctx.synchronize()
+    _ = gp_kernel_matrix_grad(
+        ctx, dk, dx, dls, dstack, dgrad, n, n_features, kernel, free, elem_tpb
+    )
+    ctx.synchronize()
+    var k_host = _download(ctx, dk, cells)
+    var g_host = _download(ctx, dgrad, max(n_free * cells, 1))
+    _ = dx^
+    _ = dls^
+    _ = dk^
+    _ = dstack^
+    _ = dgrad^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+
+    var factor = cholesky_factor_host(k_host, n, alpha)
+    if factor.info != 0:
+        return GPLmlGrad(
+            Float32(0.0),
+            List[Float32](length=n_free, fill=Float32(0.0)),
+            factor.info,
+        )
+    var dual = cholesky_solve_host(factor, y, 1)
+    var logdet = cholesky_logdet_host(factor)
+    var ydotalpha = _y_dot_alpha(y, dual, n, GP_SAB_NONE)
+    var lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n)
+    var eye = List[Float32](length=cells, fill=Float32(0.0))
+    for i in range(n):
+        eye[i * n + i] = Float32(1.0)
+    var kinv = cholesky_solve_host(factor, eye, n)
+    var grad = gp_lml_gradient_fold(dual, kinv, g_host, n, n_free)
+    return GPLmlGrad(lml, grad^, 0)
 
 
 def gpr_log_marginal_likelihood(model: GPRegressor) raises -> Float32:

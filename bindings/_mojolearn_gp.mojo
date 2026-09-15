@@ -83,7 +83,12 @@ THE GIL is released around every device call, and nothing inside a
 """
 
 from std.os import abort
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
+from gaussian_process.host.gp_theta import (
+    gp_log64,
+    gp_restart_uniform,
+    gp_theta_param,
+)
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -109,6 +114,7 @@ from gaussian_process.checks.kernels import (
 from gaussian_process.estimator import (
     GPRegressor,
     gpr_fit_host,
+    gpr_lml_grad_host,
     gpr_predict_host,
     gpr_sample_y_host,
 )
@@ -1061,6 +1067,125 @@ def gpc_predict_binding(
     return PythonObject(rc)
 
 
+# ===========================================================================
+# KERNEL HYPERPARAMETER OPTIMIZATION (lane/gp-optimizer, 2026-09-15).
+# The optimizer's state machine is python/mojolearn/_gp_optimizer.py
+# (DEVIATION 2881); what it cannot do identically in Python float64 lives
+# here: the likelihood and its gradient (DEVIATION 2880), the log and exp of
+# the hyperparameters, and the Philox restart draws.
+# ===========================================================================
+
+
+def _gpr_lml_grad_run(
+    x: List[Float32],
+    y: List[Float32],
+    spec: GPKernelSpec,
+    free: List[Int32],
+    n_train: Int,
+    n_features: Int,
+    alpha: Float32,
+    gp: MutPointer[Float64, MutUntrackedOrigin],
+    sp: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> Int:
+    """The GIL-free half of `gpr_lml_grad_binding`."""
+    var r = gpr_lml_grad_host(x, n_train, n_features, y, spec, free, alpha)
+    for i in range(len(r.grad)):
+        gp.unsafe_store(i, Float64(r.grad[i]))
+    sp.unsafe_store(0, Float64(r.info))
+    sp.unsafe_store(1, Float64(r.lml))
+    return r.info
+
+
+def gpr_lml_grad_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`log_marginal_likelihood(theta, eval_gradient=True)` at the kernel
+    handed in (DEVIATION 2880). Returns LAPACK's `info`.
+
+    `addrs`, in this exact order (mirrored in `python/mojolearn/_gp_impl.py`
+    and `bindings/_mojolearn_gp_host.mojo`):
+
+        0  x               n_train * n_features float32, read
+        1  y               n_train float32, read
+        2  kinds           n_nodes int32, read
+        3  kparams         n_nodes float32, read
+        4  ls_len          n_nodes int32, read
+        5  ls              max(n_ls, 1) float32, read
+        6  free            n_nodes int32 (0 fixed, 1 free), read
+        7  grad_out        max(n_free, 1) float64, WRITTEN (float32 widened)
+        8  scalars_out     2 float64, WRITTEN: info, lml
+
+    `params`: 0 n_train, 1 n_features, 2 n_nodes, 3 n_ls, 4 alpha.
+    """
+    if len(addrs) != 9:
+        raise Error(
+            "gpr_lml_grad: addrs must contain 9 addresses (x, y, kinds,"
+            " kparams, ls_len, ls, free, grad_out, scalars_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 5:
+        raise Error(
+            "gpr_lml_grad: params must contain 5 values (n_train, n_features,"
+            " n_nodes, n_ls, alpha), got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_nodes = Int(py=params[2])
+    var n_ls = Int(py=params[3])
+    var alpha = Float32(Float64(py=params[4]))
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4]), Int(py=addrs[5]),
+        n_nodes, n_ls, String("gpr_lml_grad"),
+    )
+    var free = read_i32(Int(py=addrs[6]), max(0, n_nodes))
+    var gp = _f64_ptr(Int(py=addrs[7]))
+    var sp = _f64_ptr(Int(py=addrs[8]))
+    var x = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    var info = 0
+    with GILReleased(Python()):
+        info = _gpr_lml_grad_run(x, y, spec, free, n_train, n_features, alpha, gp, sp)
+    return PythonObject(info)
+
+
+def gp_log64_binding(values: PythonObject) raises -> PythonObject:
+    """`identical_log64` over a list of floats: theta of hyperparameter values
+    and bounds (DEVIATION 2880)."""
+    var out = Python.list()
+    for i in range(len(values)):
+        out.append(PythonObject(gp_log64(Float64(py=values[i]))))
+    return out
+
+
+def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
+    """`Float32(identical_exp64(theta))` over a list, widened back to Python
+    floats: the float32 hyperparameters that run at theta (DEVIATION 2880)."""
+    var out = Python.list()
+    for i in range(len(values)):
+        out.append(PythonObject(Float64(gp_theta_param(Float64(py=values[i])))))
+    return out
+
+
+def gp_restart_uniforms_binding(params: PythonObject) raises -> PythonObject:
+    """The restart draws (DEVIATION 2881): `params` = n_restarts, n_dims,
+    random_state low 32 bits, high 32 bits; returns n_restarts * n_dims
+    doubles in [0, 1), restart r's dimension j at r * n_dims + j."""
+    if len(params) != 4:
+        raise Error(
+            "gp_restart_uniforms: params must contain 4 values (n_restarts,"
+            " n_dims, seed_lo, seed_hi), got " + String(len(params))
+        )
+    var nr = Int(py=params[0])
+    var nd = Int(py=params[1])
+    var seed = (UInt64(Int(py=params[3])) << 32) | UInt64(Int(py=params[2]))
+    var out = Python.list()
+    for r in range(nr):
+        for j in range(nd):
+            out.append(PythonObject(gp_restart_uniform(seed, r, j)))
+    return out
+
+
 def gp_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
@@ -1075,6 +1200,10 @@ def PyInit__mojolearn_gp() abi("C") -> PythonObject:
         m.def_function[gpr_fit_binding]("gpr_fit")
         m.def_function[gpr_predict_binding]("gpr_predict")
         m.def_function[gpr_sample_y_binding]("gpr_sample_y")
+        m.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
+        m.def_function[gp_log64_binding]("gp_log64")
+        m.def_function[gp_theta_params_binding]("gp_theta_params")
+        m.def_function[gp_restart_uniforms_binding]("gp_restart_uniforms")
         m.def_function[gpc_fit_binding]("gpc_fit")
         m.def_function[gpc_predict_binding]("gpc_predict")
         # The Cholesky door (workstream D, 2026-09-14).
