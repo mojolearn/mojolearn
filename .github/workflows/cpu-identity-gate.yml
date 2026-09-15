@@ -92,6 +92,11 @@ on:
       - "cluster/host/kmeans_oracle.mojo"
       - "metrics/host/metrics_oracle.mojo"
       - "spectral/host/spectral_oracle.mojo"
+      - "umap/host/umap_oracle.mojo"
+      - "umap/sparse_graph.mojo"
+      - "umap/graph.mojo"
+      - "umap/curve.mojo"
+      - "umap/params.mojo"
       - "preprocessing/host/scaler_oracle.mojo"
       - "glm/host/qn_oracle.mojo"
       - "ensemble/host/rf_oracle.mojo"
@@ -486,8 +491,9 @@ jobs:
       # subsequence, in gpr_oracle by walking the scaled distance's
       # feature axis descending, in gbdt_oracle by adding 1.0 to the
       # Newton leaf walker's Hessian regularizer, in gbdt_oracle_rmse by
-      # adding 1.0 to the searcher's leaf regularizer, and in arima_oracle by
-      # doubling the finite-difference step);
+      # adding 1.0 to the searcher's leaf regularizer, in arima_oracle by
+      # doubling the finite-difference step, and in umap_oracle by keying
+      # every negative draw one epoch late);
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the

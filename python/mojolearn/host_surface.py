@@ -238,13 +238,21 @@ TRAINING_LANE_NAMES = {
     "arima": "ARIMA",
     "arima-011": "differenced ARIMA",
     "arima-seasonal-c": "seasonal ARIMA",
+    # The umap host lane (lane/cpu-training-umap-b, 2026-09-14): UMAP fits
+    # and transforms through umap/host/umap_oracle.mojo, exported under the
+    # GPU binding's names from the metrics host binding. The fit's optimizer
+    # is the IDENTICAL DEVICE epoch fold (kernel-matrix row
+    # umap_device_optimizer_for) restated vertex by vertex, not the serial
+    # host loop, which produces different bits. On the M4 host path, one
+    # core: all nine train and nine infer cells IDENTICAL x4 against the
+    # 136-lane record, the sabotage build DIVERGENT on all eighteen.
+    "umap": "UMAP",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "UMAP",
     "the neural blocks",
     "gradient boosting training other than symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss",
 )
@@ -428,30 +436,37 @@ FAMILIES = (
         # metrics family's first host binding. It routes `_mojolearn_metrics`
         # on a CPU-only install and carries the five metrics the identity
         # harness's metrics lane computes plus the four label metrics that
-        # share their integer kernels; the spectral, UMAP and remaining
-        # metric entries stay absent and refuse by name.
+        # share their integer kernels; the spectral entries joined in the
+        # same batch and the UMAP entries on lane/cpu-training-umap-b
+        # (umap_fit_transform, umap_transform, umap_numeric_mode); the
+        # remaining metric entries stay absent and refuse by name.
         family="metrics",
         binding="_mojolearn_metrics_host",
         routes="_mojolearn_metrics",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("metrics", "spectral", "spectral-precomputed"),
+        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
-            "SpectralClustering",
+            "SpectralClustering", "UMAP",
             "metrics.accuracy_score", "metrics.adjusted_rand_score",
             "metrics.entropy", "metrics.mutual_info_score",
             "metrics.homogeneity_score", "metrics.completeness_score",
             "metrics.v_measure_score", "metrics.r2_score",
             "metrics.silhouette_score", "metrics.silhouette_samples",
         ),
-        display="the label, r2 and silhouette metrics and spectral clustering",
+        display="the label, r2 and silhouette metrics, spectral clustering and UMAP",
         host_modules=(
             "metrics/host/metrics_oracle.mojo",
             "spectral/host/spectral_oracle.mojo",
             "cluster/host/kmeans_oracle.mojo",
             "core/knn_host_predict.mojo",
+            "umap/host/umap_oracle.mojo",
+            "umap/sparse_graph.mojo",
+            "umap/graph.mojo",
+            "umap/curve.mojo",
+            "umap/params.mojo",
         ),
         exports=(
             "metrics_host_numeric_mode", "metrics_host_vendor",
@@ -460,6 +475,7 @@ FAMILIES = (
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
             "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
+            "umap_fit_transform", "umap_transform", "umap_numeric_mode",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
