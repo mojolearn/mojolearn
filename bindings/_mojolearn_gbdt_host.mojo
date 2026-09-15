@@ -118,6 +118,7 @@ from gbdt.host.gbdt_oracle_losses import (
     GBDT_OBJ_PAIR_LOGIT,
     GBDT_OBJ_QUANTILE,
     GBDT_OBJ_QUERY_RMSE,
+    GBDT_OBJ_QUERY_SOFTMAX,
     GBDT_OBJ_TWEEDIE,
     GBDT_OBJ_YETI_RANK,
     GbdtHostLoss,
@@ -258,6 +259,8 @@ def _pointwise_objective(loss: String) -> Int:
         return GBDT_OBJ_PAIR_LOGIT
     if loss == String("YetiRank"):
         return GBDT_OBJ_YETI_RANK
+    if loss == String("QuerySoftMax"):
+        return GBDT_OBJ_QUERY_SOFTMAX
     return -1
 
 
@@ -317,6 +320,12 @@ def _resolve_pointwise_loss(
     elif objective == GBDT_OBJ_CROSSENTROPY:
         newton = 10
         gradient = 40
+    elif objective == GBDT_OBJ_QUERY_SOFTMAX:
+        # `GetEstimationMethodDefaults`' QuerySoftMax case
+        # (`catboost_options.cpp:100-105`): Gradient at 100, Newton at 10
+        method = GBDT_LEAF_GRADIENT
+        newton = 10
+        gradient = 100
     elif objective == GBDT_OBJ_PAIR_LOGIT:
         # `GetEstimationMethodDefaults`' PairLogit case
         # (`catboost_options.cpp:120-125`), as `gbdt/options/catboost_options.mojo`
@@ -578,10 +587,11 @@ def gbdt_fit_binding(
             + ") values, got "
             + String(len(params))
         )
-    if len(strs) != 4:
+    if len(strs) != 4 and len(strs) != 5:
         raise Error(
             "gbdt_fit: strs must hold [loss, bootstrap_type, od_type,"
-            " nan_mode], got " + String(len(strs))
+            " nan_mode] and optionally the ranking loss parameters, got "
+            + String(len(strs))
         )
     var xp = f32_ptr(Int(py=x_addr))
     var yp = f32_ptr(Int(py=y_addr))
@@ -639,11 +649,11 @@ def gbdt_fit_binding(
                 "group_id: the group sizes cover " + String(covered)
                 + " rows of " + String(tail_rows)
             )
-        if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit") and tail_loss != String("YetiRank"):
+        if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit") and tail_loss != String("YetiRank") and tail_loss != String("QuerySoftMax"):
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
-                " (QueryRMSE, PairLogit and YetiRank are trained here;"
-                " QuerySoftMax and QueryCrossEntropy are not implemented);"
+                " (QueryRMSE, QuerySoftMax, PairLogit and YetiRank are trained"
+                " here; QueryCrossEntropy is not implemented);"
                 " loss='" + tail_loss + "' does not use it, so it is refused by"
                 " name rather than carried and ignored"
             )
@@ -680,7 +690,7 @@ def gbdt_fit_binding(
                 " 922-942)"
             )
         raise Error("Cannot generate pairs for data without groups")
-    if tail_loss == String("QueryRMSE") or tail_loss == String("PairLogit") or tail_loss == String("YetiRank"):
+    if tail_loss == String("QueryRMSE") or tail_loss == String("PairLogit") or tail_loss == String("YetiRank") or tail_loss == String("QuerySoftMax"):
         # `TDocParallelSplit` (`gpu_data/doc_parallel_dataset.h:26-38`): the
         # pool's queries only with fewer groups than rows, otherwise every
         # row a query of one (`TWithoutQueriesGrouping`)
@@ -797,7 +807,7 @@ def gbdt_fit_binding(
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton, or Gradient under Lossguide)")
     if is_pointwise and leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (Gradient, Newton or Exact)")
-    if (loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank")) and bootstrap_type != String("") and bootstrap_type != String("No"):
+    if (loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank") or loss == String("QuerySoftMax")) and bootstrap_type != String("") and bootstrap_type != String("No"):
         raise Error(
             "loss='" + loss + "' with a bootstrap is not implemented here:"
             " the reference samples whole queries for querywise targets,"
@@ -941,6 +951,22 @@ def gbdt_fit_binding(
     if loss_border >= Float32(0.0):
         border = loss_border
 
+    # the ranking loss parameters (`strs[4]`), as `bindings/_mojolearn_gbdt.mojo`
+    # reads them; the reference's defaults when absent
+    var loss_lambda = Float64(0.01)
+    var loss_beta = Float64(1.0)
+    var loss_permutations = 10
+    var loss_decay = Float64(0.85)
+    if len(strs) == 5:
+        loss_lambda = Float64(py=strs[4][0])
+        loss_beta = Float64(py=strs[4][1])
+        loss_permutations = Int(py=strs[4][2])
+        loss_decay = Float64(py=strs[4][3])
+    if loss == String("YetiRank") and loss_permutations < 1:
+        raise Error(
+            "YetiRank permutations must be positive, got "
+            + String(loss_permutations)
+        )
     var p = GbdtHostParams(
         border_count, border_build_max_samples, n_estimators, max_depth,
         learning_rate, l2_leaf_reg, random_seed, nan_mode, border, iterations,
@@ -1016,6 +1042,8 @@ def gbdt_fit_binding(
             var pw_model = gbdt_losses_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
                 host_pair_winners, host_pair_losers, host_pair_weights,
+                Float32(loss_lambda), Float32(loss_beta), loss_permutations,
+                Float32(loss_decay),
             )
             text = gbdt_host_model_text(pw_model)
             losses = pw_model.losses.copy()

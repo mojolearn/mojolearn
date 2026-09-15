@@ -46,7 +46,8 @@ REUSED = ("gbdt/gpu_util/kernel/random_gen.mojo", "gbdt/lapack/linear_system.moj
           # the learning-to-rank targets the losses oracle routes (2026-09-15)
           "gbdt/data/pairs.mojo", "gbdt/data/yeti_rank_tasks.mojo",
           "gbdt/host/gbdt_oracle_query.mojo", "gbdt/host/gbdt_oracle_pair.mojo",
-          "gbdt/host/gbdt_oracle_yeti.mojo")
+          "gbdt/host/gbdt_oracle_yeti.mojo",
+          "gbdt/host/gbdt_oracle_query_softmax.mojo")
 
 
 def _read(rel):
@@ -79,6 +80,7 @@ def test_oracles_import_no_gpu_module():
         "gbdt.gpu_data.feature_blocks", "gbdt.gpu_data.grid_policy",
         "gbdt.gpu_util.kernel.random_gen", "gbdt.host.gbdt_oracle",
         "gbdt.host.gbdt_oracle_pair", "gbdt.host.gbdt_oracle_query",
+        "gbdt.host.gbdt_oracle_query_softmax",
         "gbdt.host.gbdt_oracle_yeti", "std.math", "std.memory",
     ], _imports(LOSSES)
     assert _imports(MULTI) == [

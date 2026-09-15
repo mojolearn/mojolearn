@@ -531,6 +531,11 @@ TRAINING_LANE_NAMES = {
     # permutations restated in gbdt/host/gbdt_oracle_yeti.mojo over the task
     # table of gbdt/data/yeti_rank_tasks.mojo, from the same binding.
     "gbdt-yeti-rank": "gradient boosting with the YetiRank ranking loss on query groups",
+    # lane/gbdt-rest (2026-09-15): the QuerySoftMax ranking loss and the
+    # ranking losses' CatBoost loss parameters train through
+    # gbdt/host/gbdt_oracle_losses.mojo with the softmax target restated in
+    # gbdt/host/gbdt_oracle_query_softmax.mojo, from the same binding.
+    "gbdt-query-softmax": "gradient boosting with the QuerySoftMax ranking loss and the ranking loss parameters",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -1614,6 +1619,7 @@ FAMILIES = (
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
+            "gbdt-query-softmax",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1621,7 +1627,7 @@ FAMILIES = (
             "GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor",
             "model_selection.cross_val_score", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="gradient boosting on symmetric trees with the pointwise, multiclass, QueryRMSE, PairLogit and YetiRank losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
+        display="gradient boosting on symmetric trees with the pointwise, multiclass, QueryRMSE, QuerySoftMax, PairLogit and YetiRank losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
@@ -1631,6 +1637,7 @@ FAMILIES = (
             "gbdt/host/gbdt_oracle_query.mojo", "gbdt/host/gbdt_oracle_pair.mojo",
             "gbdt/data/pairs.mojo",
             "gbdt/host/gbdt_oracle_yeti.mojo", "gbdt/data/yeti_rank_tasks.mojo",
+            "gbdt/host/gbdt_oracle_query_softmax.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(

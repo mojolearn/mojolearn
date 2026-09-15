@@ -363,6 +363,17 @@ Linux legs are OWED before this heading reads published.
   which takes the loss's default (0 for YetiRank, 3.0 for every other loss, the value it was); an
   explicit value is used as given. New identity lane `gbdt-yeti-rank` with a batch part. Apple M4
   Metal and CPU columns only; NVIDIA and AMD are owed to the release record.
+- New `loss="QuerySoftMax"` for `GradientBoosting`, the softmax ranking loss of the CatBoost
+  reference (`query_softmax.cu` through the querywise target and the pointwise oracle), on the same
+  arm as QueryRMSE: each query's predictions become a softmax, centered by the query's maximum
+  approx, and the loss is the weighted cross entropy against the grades. It takes the reference's
+  defaults, `lambda` 0.01 and `beta` 1.0 (`loss_description.cpp:209-222`) and Gradient leaves at 100
+  iterations (`catboost_options.cpp:100-105`), and refuses a nonpositive total weighted target in
+  their words. The ranking losses' CatBoost loss parameters are now on the wrapper:
+  `loss_lambda` and `loss_beta` for QuerySoftMax, `loss_permutations` and `loss_decay` for YetiRank
+  (`loss_description.cpp:181-193`), each refused by name where its loss does not read it, and the
+  defaults send exactly what every earlier fit sent. New identity lane `gbdt-query-softmax` with a
+  batch part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed to the release record.
 - The host (CPU) bindings `python/mojolearn/host_surface.py` marks `ships_in_wheel` ship in
   both wheels under `mojolearn/host/`: ten families, byte_lm, forest, tokenizer, neural, core,
   linalg, estimators, metrics, svm and forecast. The other seventeen families the manifest

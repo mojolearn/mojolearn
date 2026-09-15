@@ -342,6 +342,12 @@ struct GbdtFitParams(Copyable, Movable):
     var min_child_hessian: Float64
     #: Numeric per-tree feature fraction, independent portable sampling stream.
     var feature_fraction: Float64
+    #: QuerySoftMax's `lambda` and `beta`, YetiRank's `permutations` and
+    #: `decay`, at the reference's defaults (`loss_description.cpp:181-222`)
+    var loss_lambda: Float64
+    var loss_beta: Float64
+    var loss_permutations: Int
+    var loss_decay: Float64
 
 
 def default_gbdt_fit_params() -> GbdtFitParams:
@@ -378,6 +384,8 @@ def default_gbdt_fit_params() -> GbdtFitParams:
         List[Float32](),
         # grow_policy SymmetricTree, max_leaves unset, min_data_in_leaf 1
         String("SymmetricTree"), -1, 1, Float64(-1), Float64(-1), Float64(1),
+        # the ranking loss parameters at their defaults
+        Float64(0.01), Float64(1.0), 10, Float64(0.85),
     )
 
 
@@ -575,6 +583,10 @@ def gbdt_fit(
         min_split_gain=params.min_split_gain,
         min_child_hessian=params.min_child_hessian,
         feature_fraction=params.feature_fraction,
+        loss_lambda=params.loss_lambda,
+        loss_beta=params.loss_beta,
+        loss_permutations=params.loss_permutations,
+        loss_decay=params.loss_decay,
         x_borrow=x_borrow,
         group_sizes=group_sizes,
         pair_winners=pair_winners,

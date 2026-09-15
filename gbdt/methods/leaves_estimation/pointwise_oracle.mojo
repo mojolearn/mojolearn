@@ -129,6 +129,10 @@ from gbdt.targets.kernel.yeti_rank import (
     YetiRankTargetBuffers,
     launch_yeti_rank_with,
 )
+from gbdt.targets.kernel.query_softmax import (
+    QuerySoftMaxTargetBuffers,
+    launch_query_softmax_with,
+)
 from gbdt.data.permutation import TRandom
 from std.sys.compile import is_defined
 
@@ -331,6 +335,10 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: the seed of that call's task streams (`querywise_targets_impl.h:214`;
     #: the stream is the fit's per-tree draw, see `doc_parallel_boosting.mojo`)
     var yeti_rng: TRandom
+    #: the QuerySoftMax grouping, parameters and scratch, present only for
+    #: QuerySoftMax: the querywise der calcer over the query softmax
+    #: (`gbdt/targets/kernel/query_softmax.mojo`)
+    var softmax: Optional[QuerySoftMaxTargetBuffers]
 
     def point_dim(self) -> Int:
         return self.bin_count * self.single_bin_dim
@@ -428,6 +436,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 and not self.query.__bool__()
                 and not self.pairs.__bool__()
                 and not self.yeti.__bool__()
+                and not self.softmax.__bool__()
             )
         if defer_shift:
             self.pending_shift = True
@@ -504,7 +513,15 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # querywise der calcer (`permutation_der_calcer.h:192-205`),
             # the point read back to row order through `query.inverse`
             # and the der/der2 planes written at each row's bin position.
-            if self.yeti.__bool__():
+            if self.softmax.__bool__():
+                # QuerySoftMax: `ApproximateAt` through the querywise der
+                # calcer, der and der2 at each row's bin position
+                launch_query_softmax_with[True, False](
+                    self.ctx, self.softmax.value(), self.d_cursor, True,
+                    self.d_eval_stats, self.d_fv, True,
+                    self.d_mag_dummy, False,
+                )
+            elif self.yeti.__bool__():
                 # YetiRank: one `NextUniformL` per evaluation seeds the
                 # call's task streams (`querywise_targets_impl.h:213-229`)
                 launch_yeti_rank_with[True](
@@ -1053,6 +1070,7 @@ def make_bin_optimized_oracle(
     var pairs: Optional[PairwiseTargetBuffers] = None,
     var yeti: Optional[YetiRankTargetBuffers] = None,
     yeti_seed: UInt64 = UInt64(0),
+    var softmax: Optional[QuerySoftMaxTargetBuffers] = None,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -1081,7 +1099,7 @@ def make_bin_optimized_oracle(
             )
         cursor_dim = num_classes
         single_bin_dim = num_classes
-    if (query.__bool__() or pairs.__bool__() or yeti.__bool__()) and estimation_method == LEAF_ESTIMATION_EXACT:
+    if (query.__bool__() or pairs.__bool__() or yeti.__bool__() or softmax.__bool__()) and estimation_method == LEAF_ESTIMATION_EXACT:
         # `ComputeExactValue`'s querywise arm
         # (`targets/permutation_der_calcer.h:206-216`), their message
         raise Error(
@@ -1293,4 +1311,5 @@ def make_bin_optimized_oracle(
         fv_blocks,
         yeti^,
         TRandom(yeti_seed),
+        softmax^,
     )

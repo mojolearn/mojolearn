@@ -136,6 +136,7 @@ LOSSES = (
     "Tweedie",
     "Huber",
     "QueryRMSE",
+    "QuerySoftMax",
     "PairLogit",
     "YetiRank",
 )
@@ -597,6 +598,22 @@ class GradientBoosting(NumericModeMixin):
         `Lq`'s q, `Huber`'s delta, `Tweedie`'s variance_power.
     loss_border : float, optional
         `Logloss`'s target threshold, default 0.5.
+    loss_lambda, loss_beta : float, optional
+        `QuerySoftMax`'s `lambda` (default 0.01) and `beta` (default 1.0),
+        CatBoost's own loss parameters (`loss_description.cpp:209-222`).
+        Given with any other loss they would be ignored, so they are
+        refused by name. **`lambda` enters the SECOND derivative only**
+        (`query_softmax.cu:182`), so it is inert at this loss's own
+        defaults, Gradient leaves (whose Hessian is the leaf's weight sum)
+        under a Cosine score (whose weight plane is the row weight); it
+        moves the model under `leaf_estimation_method='Newton'`. `beta`
+        scales the approxes inside the softmax and moves every fit.
+    loss_permutations : int, optional
+    loss_decay : float, optional
+        `YetiRank`'s `permutations` (default 10) and `decay` (default
+        0.85) (`loss_description.cpp:181-193`), refused with any other
+        loss for the same reason. `loss_permutations` must be positive:
+        the reference divides each pair weight by it.
     leaf_estimation_method : {'Newton','Gradient','Exact','Simple'}, optional
         None (default) means the LOSS decides, per CatBoost. 'Newton' is
         refused for Quantile, MAE, LogLinQuantile, MAPE and Lq with q < 2,
@@ -780,6 +797,10 @@ class GradientBoosting(NumericModeMixin):
         min_split_gain=None,
         min_child_hessian=None,
         feature_fraction=1.0,
+        loss_lambda=None,
+        loss_beta=None,
+        loss_permutations=None,
+        loss_decay=None,
     ):
         if loss not in LOSSES:
             raise ValueError(
@@ -791,6 +812,33 @@ class GradientBoosting(NumericModeMixin):
                 raise ValueError(
                     f"mojolearn: {loss} requires {py_name}= "
                     f"(CatBoost's {cb_name!r}, which it makes mandatory)"
+                )
+        for _pname, _pvalue, _owner in (
+            ("loss_lambda", loss_lambda, "QuerySoftMax"),
+            ("loss_beta", loss_beta, "QuerySoftMax"),
+            ("loss_permutations", loss_permutations, "YetiRank"),
+            ("loss_decay", loss_decay, "YetiRank"),
+        ):
+            if _pvalue is None:
+                continue
+            if loss != _owner:
+                raise ValueError(
+                    f"mojolearn: {_pname} is CatBoost's {_owner} loss parameter; "
+                    f"with loss={loss!r} it would be ignored, so it is refused"
+                )
+            if _pname == "loss_permutations":
+                if (isinstance(_pvalue, bool)
+                        or not isinstance(_pvalue, numbers.Integral)
+                        or int(_pvalue) < 1):
+                    raise ValueError(
+                        "mojolearn: loss_permutations must be a positive "
+                        f"integer, got {_pvalue!r}"
+                    )
+            elif (isinstance(_pvalue, bool)
+                    or not isinstance(_pvalue, numbers.Real)
+                    or not math.isfinite(float(_pvalue))):
+                raise ValueError(
+                    f"mojolearn: {_pname} must be a finite number, got {_pvalue!r}"
                 )
         if bootstrap_type is not None and bootstrap_type not in BOOTSTRAP_TYPES:
             raise ValueError(
@@ -1019,6 +1067,10 @@ class GradientBoosting(NumericModeMixin):
                 )
 
         self.loss = loss
+        self.loss_lambda = loss_lambda
+        self.loss_beta = loss_beta
+        self.loss_permutations = loss_permutations
+        self.loss_decay = loss_decay
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.learning_rate = learning_rate
@@ -1273,7 +1325,14 @@ class GradientBoosting(NumericModeMixin):
         come from a stream of `random_state` kept apart from the searcher's,
         so its trees cannot match the reference's GPU bit for bit, and
         `loss_curve_` is zero, as the reference's YetiRank target writes no
-        value. `subgroup_id` is read by no loss here and is refused by name.
+        value. `loss="QuerySoftMax"` reads the groups on the same arm, at
+        the reference's defaults (`lambda` 0.01, `beta` 1.0, Gradient
+        leaves at 100 iterations, `catboost_options.cpp:100-105`): each
+        query's predictions become a softmax and the loss is the weighted
+        cross entropy against the grades, so the targets must be
+        nonnegative with a positive total, which the reference refuses
+        otherwise in the words used here. `subgroup_id` is read by no loss
+        here and is refused by name.
 
         `sample_weight` is a per-row weight, `None` meaning all ones. It
         MULTIPLIES with `class_weights` where both are given, which is
@@ -1464,6 +1523,19 @@ class GradientBoosting(NumericModeMixin):
             self.od_type or "",
             self.nan_mode,
         ]
+        # THE RANKING LOSS PARAMETERS ride as one list of four numbers after
+        # the four spellings, and only for the two losses that read them, so
+        # every other fit sends the layout it always sent. Unset takes the
+        # reference's default: lambda 0.01 and beta 1.0
+        # (`loss_description.cpp:209-222`), permutations 10 and decay 0.85
+        # (`:181-193`). A Python float reaches `Float64(py=)` exactly.
+        if self.loss in ("QuerySoftMax", "YetiRank"):
+            strs.append([
+                0.01 if self.loss_lambda is None else float(self.loss_lambda),
+                1.0 if self.loss_beta is None else float(self.loss_beta),
+                10 if self.loss_permutations is None else int(self.loss_permutations),
+                0.85 if self.loss_decay is None else float(self.loss_decay),
+            ])
 
         # THE EVAL ADDRESSES ARE UNREAD WHEN params[20] IS 0, and the
         # learn buffer stands in so nothing has to allocate a throwaway --

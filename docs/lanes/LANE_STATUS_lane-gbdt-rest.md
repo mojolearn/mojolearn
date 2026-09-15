@@ -54,16 +54,176 @@ Counts: **(a) 10, (b) 13, (c) 5.**
 
 1. QuerySoftMax (params lambda 0.01, beta 1.0; Gradient leaves at 100
    iterations by default, catboost_options.cpp:100-105).
-2. Loss parameters in CatBoost's spelling for the ranking losses
-   (YetiRank permutations and decay, QuerySoftMax lambda and beta).
-3. MultiRMSE. 4. RMSEWithUncertainty. 5. MultiCrossEntropy.
+2. The ranking loss parameters, as wrapper keywords beside the existing
+   `loss_q` and `loss_delta` (YetiRank permutations and decay,
+   QuerySoftMax lambda and beta). DONE with item 1.
+3. RMSEWithUncertainty. 4. MultiRMSE. 5. MultiCrossEntropy.
 6. l2_leaf_reg=0 substitution. 7. max_pairs.
+
+**Items 3 and 4 were REORDERED after reading both sides (2026-09-15).**
+MultiRMSE and MultiCrossEntropy take a genuinely two-dimensional target:
+the reference sets `NumClasses = TargetData->GetTargetDimension()`
+(`multiclass_targets.h:155`), while `y` is one-dimensional in every layer
+here (`as_f32_c(y, ndim=1)` in the wrapper, one float32 buffer across the
+ABI, `train(y: List[Float32])`), so each needs a new n_rows x targetCount
+target surface through the wrapper, both bindings, `train`, the target
+upload and both oracles. RMSEWithUncertainty does not: it keeps the
+one-dimensional target and only widens the approx to two planes
+(`NumClasses = 2`, `multiclass_targets.h:158-160`), and the saved-model
+path already carries that -- `predict` branches on `approx_dim_ > 1`
+rather than on the loss, `model_text` stores `dim` per weak model, and the
+host loader reads `approx_dim` from the text and uses the loss name only
+for `is_classifier`. Its extension points are therefore the objective
+code, the `approx_dim` rule (`gbdt/train.mojo:1971-1975`), the oracle's
+`cursor_dim` / `single_bin_dim` (`pointwise_oracle.mojo:1081-1101`), the
+two kernels (`RMSEWithUncertaintyValAndFirstDerImpl` and the
+`SecondDerRow` rows: row 0 the weight, row 1 `[0, 2 w miss^2 exp(min(-2 a1,
+70))]`) with a host twin, and the predict shape rule.
 
 Not planned in this lane, with reasons above: the pairwise learner family
 (QueryCrossEntropy, PairLogitPairwise, YetiRankPairwise, rows 9, 10, 11, 13),
 the GPU metric kernels (rows 4, 10) behind a missing eval metric surface, and
 Wilcoxon (row 14).
 
+## STATE (2026-09-15, read this first)
+
+Item 1 (QuerySoftMax and the ranking loss parameters) is IMPLEMENTED and
+PROVEN ON CPU ONLY. Its Metal column is OWED and so is everything that
+compares against it. Nothing from this lane has been merged to main.
+
+The Apple M4 Metal GPU was degraded that evening by a command-queue leak
+(AGXCommandQueue at 6754 against a limit of 512, about 6400 with no live
+creator process); every GBDT Metal fit ran roughly 20x slow and a machine
+restart was the clearing action. The coordinator stopped Metal work before the
+restart, so the Metal half of the proof was deliberately not taken. Resume it
+on a healthy machine with the commands below.
+
+- Branch: `lane/gbdt-rest`; its tip carries item 1. Base: origin/main
+  `a76c02d27`. Triage commit: `2355b6a27`.
+- Record so far: `bench/results/identity_break/2026-09-15_gbdt-query-softmax/`
+  (`cpu-apple-m4.json` plus a README that states plainly what is owed).
+- Drivers and raw logs, outside the repo because /private/tmp does not
+  survive a restart: `~/mojolearn-evidence/gbdt-rest-2026-09-15/`
+  (`rest_evidence.sh`, `run_lanes_rest.sh`, `build_gbdt_rest.sh`,
+  `query_softmax_reference.py`, the two build logs, the attempt's logs).
+- Bindings built from this tree (sha256): Metal GBDT
+  `88055dbf6d34c0bb...`, GBDT host `26b6a71ee3390be2...`. They live in the
+  scratchpad and are probably gone after the restart; rebuild them.
+
+## THE TRAP THAT WASTED THE FIRST ATTEMPT
+
+The first Metal column read REFUSED on every cell with
+`ImportError: the base binding has no transpose_f32`. That is NOT a defect in
+this lane: a fresh worktree has no `python/mojolearn/identical/` at all, and
+copying only `_mojolearn_gbdt.so` into it leaves the package without the BASE
+`_mojolearn` extension, which is where `transpose_f32` lives
+(`bindings/_mojolearn.mojo:1647`, added by `485caa24b`). `nm` cannot answer
+this question: Mojo `def_function` exports are registered at module init, not
+as exported C symbols, so check with an import, not with `nm`. Place a
+COMPLETE identical set in the worktree before any Metal column.
+
+## Owed, with the exact commands
+
+Let `WT` be the lane worktree, `HD` a host dir, `HDS` a sabotage host dir.
+
+    # 0. worktree and a COMPLETE binding set (the trap above)
+    cd /Users/andrewhendel/CascadeProjects/mojolearn
+    git worktree add $WT lane/gbdt-rest
+    mkdir -p $WT/python/mojolearn/identical $HD $HDS
+    cp /Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn/identical/*.so $WT/python/mojolearn/identical/
+    cp /Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn/host/_mojolearn_core_host.so $HD/
+    cp /Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn/host/_mojolearn_core_host.so $HDS/
+
+    # 1. this lane's two bindings, one core each (about 350 s and 125 s)
+    cd $WT
+    MOJOLEARN_NUMERIC_MODE=identical nice -n 19 sh bindings/build_gbdt.sh
+    # build_gbdt.sh writes python/mojolearn/identical/_mojolearn_gbdt.so in place
+    MOJOLEARN_GBDT_HOST_OUTDIR=$HD nice -n 19 sh bindings/build_gbdt_host.sh
+    MOJOLEARN_GBDT_HOST_OUTDIR=$HDS MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" \
+        nice -n 19 sh bindings/build_gbdt_host.sh
+
+    export MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=$WT/python
+    export OMP_NUM_THREADS=1 MOJOLEARN_CPU_THREADS=1 MODULAR_THREAD_BUSY_WAIT_US=0
+    PY=/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python
+    BENCH_PY=/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/bench/bin/python
+
+    # 2. OWED: the Metal column for the new lane (exclusive Metal slot)
+    $PY tools/identity_break.py --lanes gbdt-query-softmax --fixtures base,ties,odd \
+        --repeats 2 --vendor apple-m4 --json metal-new.json
+
+    # 3. the CPU column (identical/ moved aside so the CPU route is taken)
+    mv python/mojolearn/identical python/mojolearn/identical.aside
+    MOJOLEARN_HOST_DIR=$HD $PY tools/identity_break.py --lanes gbdt-query-softmax \
+        --fixtures base,ties,odd --repeats 2 --vendor cpu-apple-m4 --json cpu-new.json
+    mv python/mojolearn/identical.aside python/mojolearn/identical
+    # already taken on 2026-09-15 and recorded: cells=3 stable=3 moved=0 refused=0,
+    # infer/model/batch stable=3 (bench/results/.../cpu-apple-m4.json)
+
+    # 4. OWED: the diff that is the identity claim
+    $PY tools/identity_break.py --diff metal-new.json cpu-new.json \
+        --require-columns 2 --lanes gbdt-query-softmax
+
+    # 5. OWED: batch sabotage on Metal, must read batch_moved
+    MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1 $PY tools/identity_break.py \
+        --lanes gbdt-query-softmax --fixtures base --repeats 1 --vendor apple-m4 \
+        --json metal-batchsab.json
+
+    # 6. OWED: the host sabotage column, must read DIVERGENT on every new cell
+    mv python/mojolearn/identical python/mojolearn/identical.aside
+    MOJOLEARN_HOST_ALLOW_SABOTAGE=1 MOJOLEARN_HOST_DIR=$HDS $PY tools/identity_break.py \
+        --lanes gbdt-query-softmax --fixtures base,ties,odd --repeats 1 \
+        --vendor cpu-apple-m4 --json cpu-sab.json
+    mv python/mojolearn/identical.aside python/mojolearn/identical
+    $PY tools/identity_break.py --diff metal-new.json cpu-sab.json --lanes gbdt-query-softmax
+
+    # 7. OWED: the BASE-FIXTURE spot check of the existing GBDT lanes (small on
+    #    purpose, memory scope-lane-evidence-small), Metal then CPU, then against
+    #    the committed stage 4 Metal columns
+    OLD=gbdt-symmetric,gbdt-rmse,gbdt-depthwise,gbdt-lossguide,gbdt-multiclass,gbdt-onevsall,gbdt-parametric-losses,gbdt-query-rmse,gbdt-pair-logit,gbdt-yeti-rank
+    $PY tools/identity_break.py --lanes $OLD --fixtures base --repeats 1 \
+        --vendor apple-m4 --json metal-old.json
+    # CPU: the same with identical/ aside, MOJOLEARN_HOST_DIR=$HD, --vendor cpu-apple-m4
+    $PY tools/identity_break.py --diff metal-old.json cpu-old.json
+    $PY tools/identity_break.py --diff \
+        bench/results/identity_break/2026-09-15_gbdt-yeti-rank/apple-m4.earlier-18-lanes.json \
+        bench/results/identity_break/2026-09-15_gbdt-yeti-rank/apple-m4.json \
+        metal-old.json
+
+    # 8. OWED: the test route on Metal (the CPU route already reads 21 passed)
+    $PY -m pytest python/mojolearn/tests/test_gbdt_query_softmax.py \
+        python/mojolearn/tests/test_gbdt_yeti_rank.py \
+        python/mojolearn/tests/test_gbdt_query_rmse.py \
+        python/mojolearn/tests/test_host_surface.py -q -p no:cacheprovider
+
+    # 9. OWED: the CatBoost 1.2.10 CPU QuerySoftMax comparison (quality only)
+    QS=~/mojolearn-evidence/gbdt-rest-2026-09-15/query_softmax_reference.py
+    PYTHONPATH=$WT/python:$WT/tools $PY $QS ours ours-reference.json
+    PYTHONPATH=$WT/tools $BENCH_PY $QS catboost catboost-reference.json
+    $PY $QS compare ours-reference.json catboost-reference.json
+
+Put every json, log and diff under
+`bench/results/identity_break/2026-09-15_gbdt-query-softmax/` and rewrite that
+README with the measured verdicts, replacing its OWED section.
+
+## Merging item 1, once the Metal half is in hand
+
+    $PY tools/docs_facts.py --check
+    $PY packaging/wheel_ci.py pins .
+    $PY packaging/wheel_ci.py inventory python/mojolearn
+    git merge origin/main        # 6 commits ahead as of a76c02d27
+    git push origin HEAD:main    # main only, 0.8.7; then confirm it landed
+
 ## Progress
 
 - Triage committed (this file).
+- **Item 1 and item 2 done together (QuerySoftMax and the ranking loss
+  parameters).** `gbdt/targets/kernel/query_softmax.mojo` (the four reference
+  kernels and their launcher), `gbdt/host/gbdt_oracle_query_softmax.mojo` (the
+  same order on the host), the querywise wiring in `doc_parallel_boosting`,
+  `pointwise_oracle`, `train`, both bindings and `gbdt_oracle_losses`, and
+  `loss_lambda` / `loss_beta` / `loss_permutations` / `loss_decay` on
+  `GradientBoosting`, carried as a fifth `strs` entry so no numeric ABI tail
+  moves. Identity lane `gbdt-query-softmax` (defaults, both QuerySoftMax
+  parameters, and a YetiRank fit with its two), tests in
+  `test_gbdt_query_softmax`. Rows removed from the TSV: the YetiRank loss
+  parameter row, and query_softmax.cu from the ranking family row.

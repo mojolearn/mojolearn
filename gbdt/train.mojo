@@ -183,6 +183,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MULTICLASS_OVA,
     OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUERY_RMSE,
+    OBJECTIVE_QUERY_SOFTMAX,
     OBJECTIVE_YETI_RANK,
     OBJECTIVE_RMSE,
     objective_from_name,
@@ -704,6 +705,14 @@ def train(
     loss_delta: Float32 = Float32(-1.0),
     loss_variance_power: Float32 = Float32(-1.0),
     loss_border: Float32 = Float32(-1.0),
+    # the ranking loss parameters, at the reference's defaults: QuerySoftMax's
+    # `lambda` and `beta` (`loss_description.cpp:209-222`), YetiRank's
+    # `permutations` and `decay` (`:181-193`). Each is read by its own loss
+    # only; the wrapper refuses one given with another loss.
+    loss_lambda: Float64 = 0.01,
+    loss_beta: Float64 = 1.0,
+    loss_permutations: Int = 10,
+    loss_decay: Float64 = 0.85,
     leaf_estimation_iterations: Int = -1,
     leaf_estimation_method: Int = -1,
     class_weights: List[Float32] = List[Float32](),
@@ -1038,9 +1047,18 @@ def train(
     var objective_code = objective_from_name(loss)
     var is_pair_logit = objective_code == OBJECTIVE_PAIR_LOGIT
     var is_yeti_rank = objective_code == OBJECTIVE_YETI_RANK
+    var is_query_softmax = objective_code == OBJECTIVE_QUERY_SOFTMAX
     var is_querywise = (
         objective_code == OBJECTIVE_QUERY_RMSE or is_pair_logit or is_yeti_rank
+        or is_query_softmax
     )
+    if is_yeti_rank and loss_permutations < 1:
+        # the reference divides each pair weight by the count
+        # (`yeti_rank_pointwise.cu`); zero would write inf, so it is refused
+        raise Error(
+            "YetiRank permutations must be positive, got "
+            + String(loss_permutations)
+        )
     if len(group_sizes) > 0:
         var covered = 0
         for g in range(len(group_sizes)):
@@ -1057,8 +1075,8 @@ def train(
         if not is_querywise:
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
-                " (QueryRMSE, PairLogit and YetiRank are trained here;"
-                " QuerySoftMax and QueryCrossEntropy are not implemented);"
+                " (QueryRMSE, QuerySoftMax, PairLogit and YetiRank are trained"
+                " here; QueryCrossEntropy is not implemented);"
                 " loss='" + loss + "' does not use it, so it is refused by"
                 " name rather than carried and ignored"
             )
@@ -2015,6 +2033,10 @@ def train(
         pair_winners=pair_list.winners.copy(),
         pair_losers=pair_list.losers.copy(),
         pair_weights=pair_list.weights.copy(),
+        query_softmax_lambda=Float32(loss_lambda),
+        query_softmax_beta=Float32(loss_beta),
+        yeti_permutations=loss_permutations,
+        yeti_decay=Float32(loss_decay),
     )
     host_times.stop_host("train_fit_with_test", t_phase)
     t_phase = host_times.start()

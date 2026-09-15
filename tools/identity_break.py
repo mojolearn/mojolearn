@@ -1987,6 +1987,37 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda est: (est.predict(Xh),))
 
 
+@lane("gbdt-query-softmax")
+def _(ml, X, yc, yr, Xh=None):
+    """QuerySoftMax (learning to rank, the softmax over each query) on the
+    gbdt-query-rmse queries and grades: 5 depth-4 symmetric trees at the
+    reference's defaults (lambda 0.01, beta 1.0, Gradient leaves at 100
+    iterations, which is what makes this lane's fits the expensive ones: one
+    hundred walker evaluations per tree over 20,000 rows), a second fit of 5
+    depth-4 trees at loss_lambda=0.05 and
+    loss_beta=2.0 under Newton leaves (lambda enters der2 alone, so Gradient
+    leaves never read it), and a YetiRank fit of 5 depth-4 trees at
+    loss_permutations=3 and loss_decay=0.9, so the loss parameters of both
+    ranking losses are hashed beside the default ones. Unweighted: the host
+    column refuses sample_weight. Predict is row-wise, so the held-out probe
+    and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=5, max_depth=4, loss="QuerySoftMax").fit(
+        X, rel, group_id=g)
+    p = ml.GradientBoosting(n_estimators=5, max_depth=4, loss="QuerySoftMax",
+                            loss_lambda=0.05, loss_beta=2.0,
+                            leaf_estimation_method="Newton").fit(X, rel, group_id=g)
+    y = ml.GradientBoosting(n_estimators=5, max_depth=4, loss="YetiRank",
+                            loss_permutations=3, loss_decay=0.9).fit(X, rel, group_id=g)
+    return _fit(dict(predict=_h(m.predict(X)),
+                     loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     params_predict=_h(p.predict(X)),
+                     params_loss_curve=_h(np.asarray(p.loss_curve_, dtype=np.float64)),
+                     yeti_params_predict=_h(y.predict(X))),
+                m, lambda est: (est.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -4223,7 +4254,8 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
-            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank")
+            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
+            "gbdt-query-softmax")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")

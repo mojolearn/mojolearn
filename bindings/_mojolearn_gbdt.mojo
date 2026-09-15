@@ -248,7 +248,11 @@ def gbdt_fit_binding(
     for 0.46% of float32 values, and a class weight is a user's number,
     not ours to round.
 
-    `strs` is `[loss, bootstrap_type, od_type, nan_mode]`, their
+    `strs` is `[loss, bootstrap_type, od_type, nan_mode]`, optionally
+    followed by one list of four numbers, `[lambda, beta, permutations,
+    decay]` (QuerySoftMax's and YetiRank's loss parameters, Python floats
+    that reach `Float64(py=)` exactly; absent means the reference's
+    defaults 0.01, 1.0, 10, 0.85). The four strings are their
     `ELossFunction`, `EBootstrapType`, `EOverfittingDetectorType` and
     `ENanMode` spellings. An empty `bootstrap_type` means none, and an
     empty `od_type` means UNSET -- which is not the same as `None`: their
@@ -293,10 +297,11 @@ def gbdt_fit_binding(
             + ") values, got "
             + String(len(params))
         )
-    if len(strs) != 4:
+    if len(strs) != 4 and len(strs) != 5:
         raise Error(
             "gbdt_fit: strs must hold [loss, bootstrap_type, od_type,"
-            " nan_mode], got " + String(len(strs))
+            " nan_mode] and optionally the ranking loss parameters, got "
+            + String(len(strs))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
@@ -383,6 +388,17 @@ def gbdt_fit_binding(
                 pair_losers.append(pp.unsafe_load(2 * q + 1))
                 pair_weights.append(pw.unsafe_load(q))
 
+    # the ranking loss parameters (`strs[4]`), the reference's defaults when
+    # absent
+    var loss_lambda = Float64(0.01)
+    var loss_beta = Float64(1.0)
+    var loss_permutations = 10
+    var loss_decay = Float64(0.85)
+    if len(strs) == 5:
+        loss_lambda = Float64(py=strs[4][0])
+        loss_beta = Float64(py=strs[4][1])
+        loss_permutations = Int(py=strs[4][2])
+        loss_decay = Float64(py=strs[4][3])
     var fp = GbdtFitParams(
         Int(py=params[4]),
         Int(py=params[5]),
@@ -421,6 +437,10 @@ def gbdt_fit_binding(
         min_split_gain,
         min_child_hessian,
         feature_fraction,
+        loss_lambda,
+        loss_beta,
+        loss_permutations,
+        loss_decay,
     )
     var n_eval_rows = Int(py=params[20])
 

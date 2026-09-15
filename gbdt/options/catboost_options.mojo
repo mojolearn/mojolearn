@@ -53,6 +53,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUANTILE,
     OBJECTIVE_QUERY_RMSE,
+    OBJECTIVE_QUERY_SOFTMAX,
     OBJECTIVE_RMSE,
     OBJECTIVE_TWEEDIE,
     OBJECTIVE_YETI_RANK,
@@ -1327,6 +1328,11 @@ def get_estimation_method_defaults(
         method = LEAF_ESTIMATION_NEWTON
         newton = 1
         gradient = 1
+    elif f == OBJECTIVE_QUERY_SOFTMAX:
+        # `:100-105`: Gradient at 100 iterations, Newton at 10
+        method = LEAF_ESTIMATION_GRADIENT
+        newton = 10
+        gradient = 100
     elif f == OBJECTIVE_PAIR_LOGIT:
         # `:120-125`
         method = LEAF_ESTIMATION_NEWTON

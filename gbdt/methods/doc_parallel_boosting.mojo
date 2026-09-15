@@ -149,6 +149,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MULTICLASS_OVA,
     OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUERY_RMSE,
+    OBJECTIVE_QUERY_SOFTMAX,
     OBJECTIVE_YETI_RANK,
     OBJECTIVE_RMSE,
     deterministic_sum_lanes_kernel,
@@ -170,6 +171,11 @@ from gbdt.targets.kernel.query_rmse import (
     QuerywiseTargetBuffers,
     launch_query_rmse_with,
     make_querywise_target_buffers,
+)
+from gbdt.targets.kernel.query_softmax import (
+    QuerySoftMaxTargetBuffers,
+    launch_query_softmax_with,
+    make_query_softmax_target_buffers,
 )
 from gbdt.gpu_data.kernel.query_helper import launch_inverse_permutation
 
@@ -679,6 +685,9 @@ def _estimate_and_apply(
     # the seed of this task's YetiRank evaluation stream (one draw of the
     # fit's YetiRank stream per tree); read only with `yeti`
     yeti_seed: UInt64 = UInt64(0),
+    # the QuerySoftMax grouping, parameters and scratch (handle views); None
+    # otherwise
+    var softmax: Optional[QuerySoftMaxTargetBuffers] = None,
 ) raises:
     """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
     plus the `AppendModels` that follows it, for ONE (dataset, cursor).
@@ -797,6 +806,9 @@ def _estimate_and_apply(
     if yeti.__bool__():
         # the same inverse bin order, for the YetiRank der calcer
         launch_inverse_permutation(ctx, row_index, yeti.value().query.inverse, n_rows)
+    if softmax.__bool__():
+        # the same inverse bin order, for the QuerySoftMax der calcer
+        launch_inverse_permutation(ctx, row_index, softmax.value().query.inverse, n_rows)
     var oracle = make_bin_optimized_oracle(
         ctx, n_rows, n_leaves, sizes,
         g_target.copy(), g_weights.copy(), g_cursor.copy(),
@@ -814,6 +826,7 @@ def _estimate_and_apply(
         pairs^,
         yeti^,
         yeti_seed,
+        softmax^,
     )
     # `TDocParallelLeavesEstimator::Estimate`
     # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES
@@ -1045,6 +1058,15 @@ def fit_with_test(
     pair_winners: List[UInt32] = List[UInt32](),
     pair_losers: List[UInt32] = List[UInt32](),
     pair_weights: List[Float32] = List[Float32](),
+    # the QuerySoftMax loss parameters, `lambda` and `beta` as the kernel's
+    # floats (`loss_description.cpp:209-222`); read by
+    # `objective=OBJECTIVE_QUERY_SOFTMAX` only
+    query_softmax_lambda: Float32 = Float32(0.01),
+    query_softmax_beta: Float32 = Float32(1.0),
+    # the YetiRank loss parameters (`loss_description.cpp:181-193`); read by
+    # `objective=OBJECTIVE_YETI_RANK` only
+    yeti_permutations: Int = 10,
+    yeti_decay: Float32 = Float32(0.85),
 ) raises -> FitResult:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -1386,15 +1408,36 @@ def fit_with_test(
         yeti_buffers = Optional(
             make_yeti_rank_target_buffers(
                 ctx, group_sizes, n_rows, targets, weights, has_weights,
-                10, Float32(0.85),
+                yeti_permutations, yeti_decay,
             )
         )
-    if not (is_querywise or is_pair_logit or is_yeti_rank) and (
+    # ---- the SOFTMAX querywise target (QuerySoftMax) ----
+    # `TQuerywiseTargetsImpl`'s `InitQuerySoftmax` arm
+    # (`gbdt/targets/kernel/query_softmax.mojo`), on the same arm as QueryRMSE.
+    var is_query_softmax = objective == OBJECTIVE_QUERY_SOFTMAX
+    var softmax_buffers = Optional[QuerySoftMaxTargetBuffers]()
+    if is_query_softmax:
+        var has_test_rows = test.__bool__() and test.value().n_rows > 0
+        if non_symmetric or use_pointwise_searcher or perm_count > 1 or has_test_rows:
+            raise Error(
+                "QuerySoftMax is implemented for the SymmetricTree greedy"
+                " searcher at one permutation with no eval set; this fit asked"
+                " for another arm"
+            )
+        softmax_buffers = Optional(
+            make_query_softmax_target_buffers(
+                ctx, group_sizes, n_rows, targets, weights, has_weights,
+                query_softmax_lambda, query_softmax_beta,
+            )
+        )
+        # `ComputeStats`' QuerySoftMax weight (`querywise_targets_impl.h:100-103`)
+        loss_norm = softmax_buffers.value().total_weighted_target
+    if not (is_querywise or is_pair_logit or is_yeti_rank or is_query_softmax) and (
         len(group_sizes) > 0 or len(pair_winners) > 0
     ):
         raise Error(
             "fit_with_test: group_sizes and pairs are read by the QueryRMSE,"
-            " PairLogit and YetiRank objectives only, got objective "
+            " QuerySoftMax, PairLogit and YetiRank objectives only, got objective "
             + String(objective)
         )
 
@@ -1441,9 +1484,9 @@ def fit_with_test(
         )
         boot_param = bagging_temperature
     var bootstrap_on = boot_kind >= 0
-    if (is_querywise or is_pair_logit or is_yeti_rank) and bootstrap_on:
+    if (is_querywise or is_pair_logit or is_yeti_rank or is_query_softmax) and bootstrap_on:
         raise Error(
-            "QueryRMSE, PairLogit and YetiRank with a bootstrap are not implemented here:"
+            "QueryRMSE, QuerySoftMax, PairLogit and YetiRank with a bootstrap are not implemented here:"
             " the reference samples whole queries for querywise targets"
         )
 
@@ -1720,6 +1763,19 @@ def fit_with_test(
             else:
                 launch_pair_logit_with[False, False](
                     ctx, pair_buffers.value(), lcur, False,
+                    stats, fv_part, True, mag_part, mags_in_mse,
+                )
+        elif is_query_softmax:
+            # the search planes of `query_softmax.mojo`, whose weight plane
+            # follows `secondDerAsWeights`' meaning (the PairLogit DEVIATION)
+            if second_order:
+                launch_query_softmax_with[False, True](
+                    ctx, softmax_buffers.value(), lcur, False,
+                    stats, fv_part, True, mag_part, mags_in_mse,
+                )
+            else:
+                launch_query_softmax_with[False, False](
+                    ctx, softmax_buffers.value(), lcur, False,
                     stats, fv_part, True, mag_part, mags_in_mse,
                 )
         elif is_yeti_rank:
@@ -2260,6 +2316,9 @@ def fit_with_test(
                     var p_est = Optional[PairwiseTargetBuffers]()
                     if is_pair_logit:
                         p_est = Optional(pair_buffers.value().handles())
+                    var s_est = Optional[QuerySoftMaxTargetBuffers]()
+                    if is_query_softmax:
+                        s_est = Optional(softmax_buffers.value().handles())
                     var y_est = Optional[YetiRankTargetBuffers]()
                     var y_seed = UInt64(0)
                     if is_yeti_rank:
@@ -2284,6 +2343,7 @@ def fit_with_test(
                         p_est^,
                         y_est^,
                         y_seed,
+                        s_est^,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
@@ -2428,6 +2488,11 @@ def fit_with_test(
         final_blocks = pair_buffers.value().blocks()
         launch_pair_logit_with[False, False](
             ctx, pair_buffers.value(), cursor, False,
+            stats, fv_part, True, mag_part, False,
+        )
+    elif is_query_softmax:
+        launch_query_softmax_with[False, False](
+            ctx, softmax_buffers.value(), cursor, False,
             stats, fv_part, True, mag_part, False,
         )
     elif is_yeti_rank:

@@ -102,6 +102,13 @@ from gbdt.host.gbdt_oracle_query import (
     query_rmse_search_pass,
     query_rmse_value,
 )
+from gbdt.host.gbdt_oracle_query_softmax import (
+    HostQuerySoftMax,
+    query_softmax_eval,
+    query_softmax_host_total,
+    query_softmax_search_pass,
+    query_softmax_value,
+)
 from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.data.permutation import TRandom
@@ -150,6 +157,9 @@ comptime GBDT_OBJ_PAIR_LOGIT = 15
 #: `OBJECTIVE_YETI_RANK` (`pointwise_targets.mojo`), the sampled-permutation
 #: querywise target of `gbdt/host/gbdt_oracle_yeti.mojo`
 comptime GBDT_OBJ_YETI_RANK = 16
+#: `OBJECTIVE_QUERY_SOFTMAX` (`pointwise_targets.mojo`), the softmax querywise
+#: target of `gbdt/host/gbdt_oracle_query_softmax.mojo`
+comptime GBDT_OBJ_QUERY_SOFTMAX = 17
 
 #: `LEAF_ESTIMATION_*` (`gbdt/options/catboost_options.mojo:269-271`).
 comptime GBDT_LEAF_GRADIENT = 0
@@ -551,6 +561,10 @@ def _walker_estimate(
     pairs: Optional[HostPairs] = None,
     yeti_tasks: Optional[YetiRankTasks] = None,
     yeti_seed: UInt64 = UInt64(0),
+    softmax_lambda: Float32 = Float32(0.01),
+    softmax_beta: Float32 = Float32(1.0),
+    yeti_permutations: Int = 10,
+    yeti_decay: Float32 = Float32(0.85),
 ) raises -> List[Float32]:
     """`newton_like_walker_estimate` with AnyImprovement
     (`descent_helpers.mojo:198-285`, `step_estimator.mojo:50-72`), the TWIN
@@ -569,13 +583,20 @@ def _walker_estimate(
     # this tree's YetiRank evaluation stream (`pointwise_oracle.mojo`'s
     # `yeti_rng`): one draw per evaluation
     var yeti_rng = TRandom(yeti_seed)
+    # the QuerySoftMax parameters (the loss weight is not read by an evaluation)
+    var sm = HostQuerySoftMax(softmax_lambda, softmax_beta, Float64(0.0))
     _oracle_move_to(cur_point, current_point, bins, g_cursor, n_rows)
     if loss.objective == GBDT_OBJ_YETI_RANK:
         yeti_rank_eval(
             targets_rows, List[Float32](), False, g_cursor, row_index,
-            group_sizes, yeti_tasks.value(), yeti_rng.next_uniform_l(), 10,
-            Float32(0.85), offsets, sizes, n_rows, lambda_reg, cur_value,
-            cur_grad, cached_der2,
+            group_sizes, yeti_tasks.value(), yeti_rng.next_uniform_l(),
+            yeti_permutations, yeti_decay, offsets, sizes, n_rows, lambda_reg,
+            cur_value, cur_grad, cached_der2,
+        )
+    elif loss.objective == GBDT_OBJ_QUERY_SOFTMAX:
+        query_softmax_eval(
+            targets_rows, g_cursor, row_index, group_sizes, offsets, sizes,
+            n_rows, sm, lambda_reg, cur_value, cur_grad, cached_der2,
         )
     elif loss.objective == GBDT_OBJ_PAIR_LOGIT:
         pair_logit_eval(
@@ -616,8 +637,14 @@ def _walker_estimate(
                 yeti_rank_eval(
                     targets_rows, List[Float32](), False, g_cursor, row_index,
                     group_sizes, yeti_tasks.value(), yeti_rng.next_uniform_l(),
-                    10, Float32(0.85), offsets, sizes, n_rows, lambda_reg,
-                    next_value, next_grad, cached_der2,
+                    yeti_permutations, yeti_decay, offsets, sizes, n_rows,
+                    lambda_reg, next_value, next_grad, cached_der2,
+                )
+            elif loss.objective == GBDT_OBJ_QUERY_SOFTMAX:
+                query_softmax_eval(
+                    targets_rows, g_cursor, row_index, group_sizes, offsets,
+                    sizes, n_rows, sm, lambda_reg, next_value, next_grad,
+                    cached_der2,
                 )
             elif loss.objective == GBDT_OBJ_PAIR_LOGIT:
                 pair_logit_eval(
@@ -809,6 +836,10 @@ def _estimate_leaves_for_loss(
     pairs: Optional[HostPairs] = None,
     yeti_tasks: Optional[YetiRankTasks] = None,
     yeti_seed: UInt64 = UInt64(0),
+    softmax_lambda: Float32 = Float32(0.01),
+    softmax_beta: Float32 = Float32(1.0),
+    yeti_permutations: Int = 10,
+    yeti_decay: Float32 = Float32(0.85),
 ) raises -> List[Float32]:
     """`_estimate_and_apply`'s estimate (`doc_parallel_boosting.mojo:
     698-797`): the gathers by the row index, then Exact or the walker."""
@@ -832,7 +863,7 @@ def _estimate_leaves_for_loss(
     return _walker_estimate(
         loss, g_target, g_cursor, bins, offsets, sizes, weights_cpu, n_rows,
         l2_leaf_reg, targets, row_index, group_sizes, pairs, yeti_tasks,
-        yeti_seed,
+        yeti_seed, softmax_lambda, softmax_beta, yeti_permutations, yeti_decay,
     )
 
 
@@ -852,6 +883,10 @@ def gbdt_losses_host_fit(
     pair_winners: List[UInt32] = List[UInt32](),
     pair_losers: List[UInt32] = List[UInt32](),
     pair_weights: List[Float32] = List[Float32](),
+    query_softmax_lambda: Float32 = Float32(0.01),
+    query_softmax_beta: Float32 = Float32(1.0),
+    yeti_permutations: Int = 10,
+    yeti_decay: Float32 = Float32(0.85),
 ) raises -> GbdtHostModel:
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
@@ -860,6 +895,7 @@ def gbdt_losses_host_fit(
         loss.objective == GBDT_OBJ_QUERY_RMSE
         or loss.objective == GBDT_OBJ_PAIR_LOGIT
         or loss.objective == GBDT_OBJ_YETI_RANK
+        or loss.objective == GBDT_OBJ_QUERY_SOFTMAX
     ) and len(group_sizes) < 1:
         raise Error("the querywise host fit needs the query sizes")
     # the YetiRank task table (`InitYetiRank`'s query size refusal inside) and
@@ -892,6 +928,12 @@ def gbdt_losses_host_fit(
         var hp = host_pairs(ordered.winners, ordered.losers, ordered.weights, n_rows)
         loss_norm = hp.prep.total
         pairs = Optional(hp^)
+    # the QuerySoftMax loss weight (`InitQuerySoftmax`'s refusal inside), as
+    # `make_query_softmax_target_buffers` takes it
+    var softmax = HostQuerySoftMax(query_softmax_lambda, query_softmax_beta, Float64(0.0))
+    if loss.objective == GBDT_OBJ_QUERY_SOFTMAX:
+        softmax.total_weighted_target = query_softmax_host_total(y)
+        loss_norm = softmax.total_weighted_target
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
@@ -961,8 +1003,12 @@ def gbdt_losses_host_fit(
             # the tree's first YetiRank draw, as the device's search pass
             yeti_rank_search_pass(
                 y, List[Float32](), False, cursor, group_sizes,
-                yeti_tasks.value(), yeti_rand.next_uniform_l(), 10,
-                Float32(0.85), n_rows, stats, fv_part, mag_part,
+                yeti_tasks.value(), yeti_rand.next_uniform_l(), yeti_permutations,
+                yeti_decay, n_rows, stats, fv_part, mag_part,
+            )
+        elif loss.objective == GBDT_OBJ_QUERY_SOFTMAX:
+            query_softmax_search_pass(
+                y, cursor, group_sizes, n_rows, softmax, stats, fv_part, mag_part
             )
         elif loss.objective == GBDT_OBJ_PAIR_LOGIT:
             pair_logit_search_pass(
@@ -1202,6 +1248,7 @@ def gbdt_losses_host_fit(
         var estimated = _estimate_leaves_for_loss(
             loss, y, cursor, row_index, offsets, sizes, n_rows,
             params.l2_leaf_reg, group_sizes, pairs, yeti_tasks, yeti_tree_seed,
+            query_softmax_lambda, query_softmax_beta, yeti_permutations, yeti_decay,
         )
         if loss.objective == GBDT_OBJ_PAIR_LOGIT or loss.objective == GBDT_OBJ_YETI_RANK:
             # `MakeZeroAverage` (`doc_parallel_leaves_estimator.cpp:25-37`),
@@ -1237,6 +1284,11 @@ def gbdt_losses_host_fit(
     if loss.objective == GBDT_OBJ_YETI_RANK:
         # the device's final pass writes 0.0 partials and takes no draw
         losses.append(-Float64(Float32(0.0)) / Float64(n_rows))
+    elif loss.objective == GBDT_OBJ_QUERY_SOFTMAX:
+        var s_fv = query_softmax_value(y, cursor, group_sizes, n_rows, softmax)
+        losses.append(
+            -Float64(_deterministic_sum_lanes(s_fv, 1, len(s_fv))[0]) / loss_norm
+        )
     elif loss.objective == GBDT_OBJ_PAIR_LOGIT:
         var p_fv = pair_logit_value(pairs.value(), cursor)
         losses.append(
