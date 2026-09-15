@@ -29,7 +29,7 @@
 #   --vcpu N             vCPUs (default 8)       --flavors cpu3c,cpu5c
 #   --lease MIN          on-pod self-delete after MIN minutes (default 60)
 #   --jobs N             MOJOLEARN_BUILD_JOBS for --build (default 8; keyed)
-#   --image IMG          default runpod/base:0.6.3-cpu (keyed)
+#   --image IMG          default runpod/base:1.3.1-ubuntu2204 (keyed)
 #   --disk GB            container disk (default 40)
 #   --out DIR            results (default <worktree>/bench/results/runpod_cpu/<stamp>-<lane>)
 #   --no-bincache        build from source         --no-envcache  plain pixi install
@@ -70,7 +70,7 @@ SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLeve
 
 LANE=""; CMD=""; CMD_FILE=""; WORKTREE=""; INCLUDES=""; BUILD=""; SAB_BUILD=""
 SAB_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1"; ENVS="default"; VCPU=8; FLAVORS="cpu3c,cpu5c"
-LEASE=60; JOBS=8; IMAGE="runpod/base:0.6.3-cpu"; DISK=40; OUT=""; BINCACHE=1; ENVCACHE=1
+LEASE=60; JOBS=8; IMAGE="runpod/base:1.3.1-ubuntu2204"; DISK=40; OUT=""; BINCACHE=1; ENVCACHE=1
 MAX_PODS=2; RENT=0
 
 say() { printf '[%s cpu-leg] %s\n' "$(date +%T)" "$*"; }
@@ -370,6 +370,16 @@ for E in $(echo "@ENVS@" | tr , ' '); do
     if [ "$st" = miss ] && [ "$rc" = 0 ] && [ "$pv" = "$PIXIVER" ]; then echo "$E" >> "$C/envs_to_upload"; fi
 done
 "$R/.pixi/envs/default/bin/python3" -c 'import numpy, sys; print(sys.version.split()[0], numpy.__version__)' >> "$OUT/box.txt" 2>&1
+# AN ENV THAT INSTALLS IS NOT AN ENV THAT RUNS. On 2026-09-15 `pixi install
+# --locked` succeeded on a glibc 2.31 image whose mojo then could not load
+# (GLIBC_2.35 not found), and both envs were uploaded. Nothing uploads unless
+# the toolchain answers here.
+if "$R/.pixi/envs/default/bin/mojo" --version >> "$OUT/box.txt" 2>&1; then
+    note "toolchain	ok	$("$R/.pixi/envs/default/bin/mojo" --version 2>&1 | head -1)"
+else
+    note "toolchain	BROKEN	mojo --version failed; no env is uploaded"
+    : > "$C/envs_to_upload"
+fi
 ph env_end
 
 ph build_start

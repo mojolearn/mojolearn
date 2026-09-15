@@ -41,7 +41,7 @@ import bincache as bc  # noqa: E402
 SCHEMA_ENV = "mojolearn-runpod-cpu-env-v1"
 PREFIX = "runpod-cpu/v1"
 PLATFORM = "linux-64"
-DEFAULT_IMAGE = "runpod/base:0.6.3-cpu"
+DEFAULT_IMAGE = "runpod/base:1.3.1-ubuntu2204"
 DEFAULT_PIXI = "0.77.0"
 DEFAULT_BOX_REPO = "/root/mojolearn"
 
