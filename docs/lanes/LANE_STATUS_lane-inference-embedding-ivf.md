@@ -20,7 +20,24 @@ and CPU. No GPU box rented; Mac work one core.
   9 of 9 train and 9 of 9 owed).
 - Tests: `python/mojolearn/tests/test_cholesky_cpu_inference.py`.
 
-## Stage 1 design: embedding lookup and IVF search from saved GPU state
+## Stage 1: embedding lookup and IVF search from saved GPU state (done)
+
+- The IVF build and search are two binding calls (`ivf_flat_build`,
+  `ivf_flat_search`) on the GPU and reference host bindings, with the contract
+  in `bindings/ivf_index_arrays.mojo` and the arrays admitted by
+  `ivf_validate_index_arrays`.
+- `IVFIndex` and `Embedding` save and load. New shipped families
+  `ivf_search` and `embedding_infer` serve the routes. `SEARCH_LOOKUP_RECORDED`
+  names the Metal recording.
+- Evidence: `bench/results/identity_break/2026-09-15_ivf-embedding-cpu-inference/README.md`.
+  - train, infer and batch are IDENTICAL on 36 cells each, against the three
+    GPU columns plus new Metal and CPU columns.
+  - The IVF model cells are OWED x2 (18); the embedding model cells are n/a.
+  - Sabotage moved 35 of 36 train cells and 18 of 18 owed cells.
+  - The saved-model gate matched 27 fixtures with only the shipped bindings,
+    matched them again on an installed wheel, and saw the sabotage mismatch.
+
+## Stage 1 design as written before the work
 
 Gate: `git merge-base --is-ancestor origin/lane/cpu-training-embedding-ivf
 origin/main`. That branch adds the embedding and ivf host families as
@@ -97,4 +114,8 @@ Behavior here:
 ## Owed
 
 - Stage 0 model cells on Apple, NVIDIA and AMD: the next release record.
-- Stage 1 and 2: not started; stage 1 waits on the gate above.
+- Stage 1 IVF model cells on Apple, NVIDIA and AMD: the next release record.
+- The CPU identity gate workflow builds neither shipped inference family and
+  does not check `SEARCH_LOOKUP_RECORDED`. That is owed to the workflow's
+  owner; this lane does not edit workflows.
+- Stage 2 (`IVFIndex.extend`): in progress.

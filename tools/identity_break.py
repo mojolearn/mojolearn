@@ -756,12 +756,19 @@ class Fit(dict):
     arguments and reads only the dict; that contract is unchanged."""
     est = None
     probe = "n/a:function"
+    #: An `n/a:<reason>` for the model column of a lane whose saved file
+    #: holds only what the lane passed in (lane/inference-embedding-ivf-
+    #: cholesky, 2026-09-15): the Embedding table is the caller's weight, so
+    #: its file hash is not arithmetic and no host sabotage can move it. The
+    #: saved-table lookup is tools/classical_host_gate.py's embedding lane.
+    model_na = None
 
 
-def _fit(parts, est=None, probe="n/a:function"):
+def _fit(parts, est=None, probe="n/a:function", model_na=None):
     f = Fit(parts)
     f.est = est
     f.probe = probe
+    f.model_na = model_na
     return f
 
 
@@ -2740,7 +2747,7 @@ def _(ml, X, yc, yr, Xh=None):
     dw_nopad = np.asarray(ml.Embedding(V, Dm, weight=w).backward(ids, dy))
     idh = (_ids(Xh, 1, T).reshape(T) % V).astype(np.int32)
     return _fit(dict(fwd=_h(y), dw=_h(dw), dw_nopad=_h(dw_nopad)),
-                e, lambda m: (np.asarray(m.forward(idh)),))
+                e, lambda m: (np.asarray(m.forward(idh)),), model_na="n/a:input-table")
 
 
 @lane("embedding-sort")
@@ -2771,7 +2778,7 @@ def _(ml, X, yc, yr, Xh=None):
                 np.asarray(ml.Embedding(V, Dm, weight=w).backward(ids, dy)))
     idh = (_ids(Xh, 1, T).reshape(T) % V).astype(np.int32)
     return _fit(dict(fwd=_h(y), dw=_h(dw), dw_nopad=_h(dw_nopad)),
-                e, lambda m: (np.asarray(m.forward(idh)),))
+                e, lambda m: (np.asarray(m.forward(idh)),), model_na="n/a:input-table")
 
 
 @lane("kmeans-sqrt")
@@ -5771,6 +5778,10 @@ def _probe_fit_host(fit, name):
             reload = _h(*fit.probe(getattr(type(fit.est), load)(path)))
     except Exception as exc:
         return None, None, None, f"model: {type(exc).__name__}: {exc}"
+    if fit.model_na:
+        # The same n/a as `_probe_fit` (Fit.model_na): the host answer is
+        # still the infer cell, the file of caller-given bytes is not a cell.
+        return infer, fit.model_na, None, None
     return infer, model, reload, None
 
 
@@ -5788,6 +5799,8 @@ def _probe_fit(fit, name):
         infer = _h(*fit.probe(fit.est))
     except Exception as exc:
         return None, None, None, f"infer: {type(exc).__name__}: {exc}"
+    if fit.model_na:
+        return infer, fit.model_na, None, None
     if not _has_save_load(fit.est):
         return infer, "n/a:no-save", None, None
     save, load, suffix = _save_load(fit.est)

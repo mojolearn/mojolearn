@@ -1,0 +1,33 @@
+{
+  "commit": "d5265152bc05e9acc9c1d38bfbe8a53ba712f3a9",
+  "estimator": "Embedding",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "odd",
+  "lane": "embedding",
+  "model_sha256": "49a51682a11fd050bc0be8679ea169c03248b3138a072e8d58c48c9603673388",
+  "numeric_mode": "identical",
+  "predictions": {
+    "forward": {
+      "dtype": "float32",
+      "sha256": "d76820e4cf55b07c1bcc94e30b0b8ed1e5fcaa2979920b36ee1def7c63e82ad2",
+      "shape": [
+        512,
+        16
+      ]
+    },
+    "identity_hash": "9532e67b65b07c0b",
+    "seconds": 0.002967
+  },
+  "recorded_at": "2026-09-15T13:29:57-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "a000619abf2e78b511b82f4a2ba73ce0a68c0d919f5f66f0f49f3c1b00e9ad0a"
+}

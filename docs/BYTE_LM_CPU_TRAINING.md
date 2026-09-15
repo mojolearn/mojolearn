@@ -392,7 +392,9 @@ byte LM's. Each also builds from source through
 | mamba | `_mojolearn_mamba_host.so` | `_mojolearn_mamba` | mamba2, mamba2-dtlimit, mamba1, mamba3 | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_mamba_host.sh` |
 | arima | `_mojolearn_arima_host.so` | `_mojolearn_arima` | arima, arima-011, arima-seasonal-c, par-arima | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_arima_host.sh` |
 | embedding | `_mojolearn_embedding_host.so` | `_mojolearn_embedding` | embedding, embedding-sort | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_embedding_host.sh` |
+| embedding_infer | `_mojolearn_embedding_infer_host.so` | `_mojolearn_embedding` when its reference binding is not built | no | Embedding (embedding) | tools/classical_host_gate.py and tools/identity_break.py | yes |
 | ivf | `_mojolearn_ivf_host.so` | `_mojolearn_ivf` | ivf, ivf-euclidean | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_ivf_host.sh` |
+| ivf_search | `_mojolearn_ivf_search_host.so` | `_mojolearn_ivf` when its reference binding is not built | no | IVFIndex (ivf, ivf-euclidean) | tools/classical_host_gate.py and tools/identity_break.py | yes |
 | forecast | `_mojolearn_forecast_host.so` | `_mojolearn_arima` when its reference binding is not built | no | ARIMA (arima, arima-011, arima-seasonal-c) | tools/classical_host_gate.py and tools/identity_break.py | yes |
 | transformer | `_mojolearn_transformer_host.so` | `_mojolearn_transformer` | transformer, transformer-window | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_transformer_host.sh` |<!--/fact-->
 
