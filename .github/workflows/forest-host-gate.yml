@@ -67,32 +67,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # GitHub does not let a workflow choose Intel or AMD for x86-64; Azure
-        # assigns the host. So x86-64 runs as several independent draws on two
-        # images, each report records the CPU it got, and a vendor enters the
-        # certified table only from a report that names it.
+        # One environment per CPU OS/architecture; no repeated x86 draws.
         include:
           - runner: ubuntu-24.04-arm
             slot: arm64
             label: ARM64 Linux (Azure Cobalt 100)
           - runner: macos-15
             slot: macos15
-            label: Apple M1 macOS (hosted)
+            label: Apple silicon macOS (hosted)
           - runner: ubuntu-24.04
             slot: x86-a
-            label: x86-64 Linux draw a (24.04)
-          - runner: ubuntu-24.04
-            slot: x86-b
-            label: x86-64 Linux draw b (24.04)
-          - runner: ubuntu-24.04
-            slot: x86-c
-            label: x86-64 Linux draw c (24.04)
-          - runner: ubuntu-22.04
-            slot: x86-d
-            label: x86-64 Linux draw d (22.04)
-          - runner: ubuntu-22.04
-            slot: x86-e
-            label: x86-64 Linux draw e (22.04)
+            label: x86-64 Linux (24.04)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     permissions:
@@ -163,7 +148,7 @@ jobs:
       - uses: prefix-dev/setup-pixi@v0.10.1
         with:
           run-install: true
-          cache: false
+          cache: true
 
       - name: Build the CPU binding (production)
         run: |
