@@ -70,3 +70,18 @@ backward pass and the optimizer step, long sequences (neither Mamba chunk
 boundary is crossed; the window-8 transformer ring is), other lanes, and the
 AMD column. The CPU column is a probe on unmerged host bindings and must be
 rerun from main once lane/cpu-training-mamba, -transformer and -samba merge.
+
+## Post-merge smoke (restart, 2026-09-15 about 11:10 ET)
+
+After merging origin/main (450423c95, the routine CPU gate change, which also
+touched `identity_break.py`'s `--merge` and host record), the harness was rerun
+on the M4, one core, shared machine, with a Metal identical set whose 23
+binding sha256 values equal this column's `package.bindings` (copied, not
+rebuilt). Lanes transformer, mamba2, samba and byte-lm, fixture base, one
+repeat: `diff.post-merge-smoke.txt` diffs it against `apple-m4.json` and
+`nvidia-h100-sm_90a.json` and every base cell reads IDENTICAL x3, including
+`rlpair` (41c065998015307c, f4abbd5451ff5172, 8ae8dda8ba22a4aa,
+75d10aa264b7a173). The same lanes under `MOJOLEARN_IDENTITY_RLPAIR_SABOTAGE=1`
+exit 1 and `diff.post-merge-smoke.rlpair-sabotage.txt` reads
+`summary (rlpair): RLPAIR_MOVED=4`. The JSONs are
+`apple-m4.post-merge-smoke.json` and `apple-m4.post-merge-smoke.rlpair-sabotage.json`.
