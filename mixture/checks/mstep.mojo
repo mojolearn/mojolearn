@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The M-step: the weighted moments, and the precision Cholesky that can fail.
 
-NO REFERENCE FILE. See `mixture/checks/estep.mojo`'s header for the upstream
+NO REFERENCE FILE. See `mixture/checks/estep.mojo`'s header for the reference
 finding: cuML, cuVS and RAFT have no Gaussian mixture model at their pins, so
 `ENGINEERING_RULES.md` 0b points at nothing here and
 `sklearn/mixture/_gaussian_mixture.py` is the SEMANTICS ORACLE only.

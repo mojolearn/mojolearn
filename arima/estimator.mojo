@@ -21,7 +21,7 @@ THREE ENTRY POINTS, AND THEY ARE THE WHOLE PUBLIC DOOR
     arima_predict_ptr_host   `ARIMA.predict(start, end)` (`arima.pyx:615`)
                              with `level = None` and no exog.
     arima_forecast_ptr_host  `ARIMA.forecast(nsteps)` (`arima.pyx:770`),
-                             which upstream is `predict(n_obs, n_obs +
+                             which the reference spells `predict(n_obs, n_obs +
                              nsteps)` and is that here too.
 
 EVERY OUTPUT SIZE IS A FUNCTION OF `(batch_size, n_obs, order, n_steps)`
@@ -337,7 +337,7 @@ def arima_fit_ptr_host(
     `estimate_x0` produced, same packing. Neither is on cuML's Python
     surface. They are here because a fit that goes wrong is nearly always a
     fit that started wrong, and `estimate_x0` is the half of this lane with
-    no upstream oracle.
+    no reference oracle.
 
     `stats_ptr` is written with `2 * batch_size` float32, in this exact
     order:
@@ -525,7 +525,7 @@ def arima_forecast_ptr_host(
     k: Int,
     n_exog: Int,
 ) raises -> Int:
-    """`ARIMA.forecast(nsteps)` (`arima.pyx:770-838`), which upstream is
+    """`ARIMA.forecast(nsteps)` (`arima.pyx:770-838`), which in the reference is
     literally `self.predict(self.n_obs, self.n_obs + nsteps, ...)` and is
     that here too. Returns `n_steps * batch_size`.
 

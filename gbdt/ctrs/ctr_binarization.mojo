@@ -17,7 +17,7 @@ Reference: three CatBoost sources (CatBoost `54a8143a`):
 
 ## WHY THIS FILE IS NOT `grid_creator/binarization.mojo`
 
-It should be. `TUniformBinarizer` lives in the same upstream file as
+It should be. `TUniformBinarizer` lives in the same reference file as
 `GreedyLogSum` and `MinEntropy`, so `gbdt/grid_creator/binarization.mojo`
 is its mirror address. It is here because that file is owned by another
 lane in this round and a two-lane edit of one file is a merge conflict, not

@@ -5,7 +5,7 @@
 Supported contract: quantized numeric/one-hot columns, explicit permutation,
 zero starting point, no bootstrap, one Newton step, one GPU. Each fold owns
 its cursor; only EstimateSamples enters its leaf oracle. Quality rows enter
-structure scoring, as upstream requires, but never that fold's estimation.
+structure scoring, as the reference requires, but never that fold's estimation.
 The separately estimated all-row model is the only model exported.
 
 Reuses the existing GPU fold searcher and Newton oracle. The additional

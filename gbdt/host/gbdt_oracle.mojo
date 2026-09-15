@@ -31,8 +31,9 @@ outside it (bindings/_mojolearn_gbdt_host.mojo, `_refuse`):
 
   grow_policy SymmetricTree, loss Logloss (any loss_border),
   score_function Cosine, leaf_estimation_method Newton (any iteration count),
-  no bootstrap, no sample_weight, no class_weights, no cat_features or
-  one_hot_features, no eval_set and no overfitting detector,
+  no bootstrap, no sample_weight, no class_weights, no CTR categorical
+  column (one-hot columns are carried, `one_hot_in` below and
+  gbdt/host/gbdt_oracle_onehot.mojo), no eval_set and no overfitting detector,
   random_strength 0, the greedy searcher (use_pointwise_searcher False),
   boost_from_average unset or False, feature_fraction 1, and no
   feature with exactly one border (the BINARY histogram policy, whose
@@ -1304,9 +1305,17 @@ def gbdt_host_fit(
     n_rows: Int,
     n_features: Int,
     params: GbdtHostParams,
+    one_hot_in: List[Bool] = List[Bool](),
 ) raises -> GbdtHostModel:
     """`train` then `fit_with_test` on the covered configuration (see the
-    module docstring for what that is and what mirrors what)."""
+    module docstring for what that is and what mirrors what).
+
+    `one_hot_in` (empty for none) names the ONE-HOT columns
+    (gbdt/host/gbdt_oracle_onehot.mojo resolves them from the flags): their
+    grid is `_quantize_training_columns`' one-hot arm (`gbdt/train.mojo:
+    1990-2002`, borders `code + 0.5` below the largest code, folds `maxc + 1`
+    or 0, AsIs), the layout carries the flag, the scan skips them and the
+    split is an equality, as the device fit does."""
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
@@ -1321,6 +1330,26 @@ def gbdt_host_fit(
         params.border_build_max_samples, params.random_seed, params.nan_mode,
     )
     var one_hot = List[Bool](length=n_features, fill=False)
+    if len(one_hot_in) == n_features:
+        for f in range(n_features):
+            if not one_hot_in[f]:
+                continue
+            one_hot[f] = True
+            var maxc = 0
+            for r in range(n_rows):
+                var c = Int(x_colmajor[f * n_rows + r])
+                if c > maxc:
+                    maxc = c
+            if maxc > 254:
+                raise Error("one-hot feature " + String(f) + " has more than 255 categories")
+            var bs = List[Float32]()
+            for c in range(maxc):
+                bs.append(Float32(c) + Float32(0.5))
+            grid.fold_counts[f] = len(bs) + 1 if len(bs) > 0 else 0
+            grid.borders[f] = bs^
+            grid.nan_treatment[f] = NAN_TREATMENT_AS_IS
+    elif len(one_hot_in) != 0:
+        raise Error("one_hot flags must be empty or one per feature")
     var layout = build_layout(grid.fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
     for b in range(len(blocks)):

@@ -35,7 +35,7 @@ A 1-D `y` is accepted and treated as ONE series, because refusing it would
 be pedantry; the returned arrays stay 2-D with a leading 1 either way, so no
 shape here is ever a function of what the input's rank happened to be.
 
-THE DATA GOES TO `fit`, NOT TO THE CONSTRUCTOR. Both upstreams put it in the
+THE DATA GOES TO `fit`, NOT TO THE CONSTRUCTOR. Both references put it in the
 constructor (`ARIMA(endog, order=...)` in cuML, `ARIMA(y, order=...)` in
 statsmodels). This package's other twenty-six estimators take their data in
 `fit`, and an ARIMA that did not would be the only class here you could not
@@ -43,7 +43,7 @@ clone, re-use on a second batch, or hand to anything expecting the house
 shape.
 
 EVERY KNOB IS ON THE CONSTRUCTOR AND `fit` TAKES ONLY DATA, which is the
-other divergence from both upstreams: `method` and `maxiter` are `fit`
+other divergence from both references: `method` and `maxiter` are `fit`
 arguments there and constructor arguments here, for the same reason.
 
 WHAT IS NOT HERE
@@ -243,7 +243,7 @@ class ARIMA(NumericModeMixin):
                                     unimplemented end to end, `ARIMAParams` has
                                     no `beta` field anywhere in the lane
         verbose           refused   `_arima_impl.py`, for anything truthy.
-                                    Upstream it selects LOG LINES; this implementation
+                                    In the reference it selects LOG LINES; this implementation
                                     prints none, so accepting it would be
                                     accepting-and-ignoring
         output_type       refused   `_arima_impl.py`. A cuML-internal
@@ -288,7 +288,7 @@ class ARIMA(NumericModeMixin):
                                     gradient to zero, so this is not a knob
                                     a caller may turn
 
-    THE DEFAULT ORDER IS (1, 0, 0) AND IT IS NEITHER UPSTREAM'S. cuML's is
+    THE DEFAULT ORDER IS (1, 0, 0) AND IT IS NEITHER REFERENCE'S. cuML's is
     (1, 1, 1) and statsmodels' is (0, 0, 0), and the two cannot both be
     honored. (0, 0, 0) is not even reachable here: with `trend=None` it
     resolves to `k = 1` and fits a mean, and with `trend='n'` it is an order
@@ -300,7 +300,7 @@ class ARIMA(NumericModeMixin):
 
     DEVIATION 993: `trend` IS THIS CLASS'S SPELLING OF cuML's
     `fit_intercept`, AND THE DEFAULT IS statsmodels' RULE, NOT cuML's.
-    Upstream has a boolean `fit_intercept` defaulting to True, whatever `d`
+    cuML has a boolean `fit_intercept` defaulting to True, whatever `d`
     is. statsmodels has `trend`, and `trend=None` there resolves to 'c' when
     the series is not differenced and to 'n' when it is. This class takes
     statsmodels' spelling and statsmodels' default rule, so
@@ -380,7 +380,7 @@ class ARIMA(NumericModeMixin):
         produced, in the same packing. Neither is on cuML's Python surface.
         They are here because a fit that goes wrong is nearly always a fit
         that started wrong and `estimate_x0` is the half of this lane with
-        no upstream oracle.
+        no reference oracle.
     n_obs_, batch_size_ : int
     k_ : int
         0 or 1, what `trend` resolved to.
@@ -642,7 +642,7 @@ class ARIMA(NumericModeMixin):
         get silently wrong by one. `predict(0, n_obs)` gives every in-sample
         prediction; statsmodels' equivalent is `predict(0, n_obs - 1)`.
 
-        `end=None` means `n_obs`, as upstream. `end > n_obs` extends into a
+        `end=None` means `n_obs`, as in the reference. `end > n_obs` extends into a
         forecast, which is what `forecast` is a name for.
 
         PREDICTIONS BEFORE `d + s * D` ARE NaN, and that is a value rather

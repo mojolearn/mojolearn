@@ -3,12 +3,12 @@
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
 """The IDENTICAL FP32 GEMM oracle: the contract, written out, on the host.
 
-**NO REFERENCE FILE, and it replaces no upstream call.** RAFT's standalone matrix
+**NO REFERENCE FILE, and it replaces no reference call.** RAFT's standalone matrix
 product is `raft/linalg/gemm.hpp` -> `detail/cublaslt_wrappers.hpp` ->
 cuBLASLt, a CLOSED library with no source to mirror (`ENGINEERING_RULES.md` 0b-i:
 "where the path their dispatch actually takes calls a CLOSED library we
 cannot read or implementation -- cuBLAS, cuSOLVER -- call the MAX equivalent, because
-there is nothing to implement"). There is therefore no upstream reference
+there is nothing to implement"). There is therefore no reference
 implementation of a matrix product ANYWHERE in cuML, cuVS or RAFT to check
 against, and this file is what stands in for one. The call it replaces, in
 this repository's own terms, is `core/gemm.mojo::gemm_nt` / `gemm_tn` /

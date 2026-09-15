@@ -5,9 +5,9 @@
     pixi run mojo run -I . ensemble/checks/split_check.mojo
 
 NO CUML COUNTERPART -- this is a check, and cuML has no equivalent of it.
-It covers `ensemble/decisiontree/batched_levelalgo/split.mojo`, which
-mirrors `split.cuh` at rapidsai/cuml `v26.08.00`
-(`265b9da6a0e75dbef071a3168398b993a5ff6f0e`).
+It covers `ensemble/decisiontree/batched_levelalgo/split.mojo`.
+Reference: `split.cuh` (rapidsai/cuml `v26.08.00`,
+`265b9da6a0e75dbef071a3168398b993a5ff6f0e`).
 
 WHY THIS FILE IS SHAPED THE WAY IT IS. This repository's most expensive
 lesson is that a check whose expected value is the same in every cell

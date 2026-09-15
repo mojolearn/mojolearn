@@ -5,7 +5,7 @@
 
 The implementation is `solver/` (DEVIATIONS 610-613 and 880); `solver/README.md`,
 `solver/NOT_IMPLEMENTED.tsv` are the record. The
-upstream is cuML pinned at `v26.08.00` = `265b9da`, and every line number
+reference is cuML pinned at `v26.08.00` = `265b9da`, and every line number
 cited in this file was read in that checkout.
 
 These classes are not re-exported from `mojolearn/__init__.py` by this file;

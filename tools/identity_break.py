@@ -102,7 +102,8 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             the part carries no `batch_verdict` and reads NOT-COMPARED.
             The n/a reasons are transductive as for infer, fit-refused (kmeans-cosine, no fitted model), function
             (metrics, resampling, cross-validation), no-batch-axis
-            (tokenizer), optimizer-step and training-step (the batch IS the
+            (the tokenizer in records before 2026-09-15, when
+            GPT2Tokenizer.encode_batch gave it documents as rows), optimizer-step and training-step (the batch IS the
             arithmetic of a step), no-model (a trainer lane that returns
             no estimator) and batch-dependent-by-contract (UMAP.transform,
             whose module says query batching may change results). A method
@@ -1594,9 +1595,15 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-categorical-ctr")
 def _(ml, X, yc, yr, Xh=None):
-    """A CTR feature and a one-hot feature (disjoint: cat_features makes
-    its own one-hot decision) with two CTR permutations, on the coded
-    columns of _coded."""
+    """A categorical feature and a one-hot feature (disjoint: cat_features
+    makes its own one-hot decision) with permutation_count=2, on the coded
+    columns of _coded. NO CTR IS BUILT HERE: _coded's column 0 holds two
+    categories, at or below the GPU one_hot_max_size of 2, so train makes it
+    a one-hot column, no permutation-dependent feature exists and the fit
+    runs one permutation (the Apple column's model texts on all nine
+    fixtures carry no ctr record, dumped on the M4 2026-09-15). This lane
+    measures the one-hot categorical arm; a CTR column needs a source with
+    more than two categories."""
     m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", cat_features=[0],
                             one_hot_features=[1], permutation_count=2,
                             ctr_estimation_permutation_id=0).fit(_coded(X), yc)
@@ -4051,10 +4058,32 @@ _batch_decl(_batch_permutation_lane, "permutation-test")
 _batch_decl("n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form "
             "folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; "
             "no per-sample output exists to compare an i_first range against)", "monte-carlo")
-_batch_decl("n/a:no-batch-api (GPT2Tokenizer has encode_bytes, encode, decode_bytes and decode over ONE stream, "
-            "python/mojolearn/tokenizer.py:143-205, and no list-of-documents entry; byte-level BPE over a "
-            "concatenation is not the concatenation of the pieces' encodings, and decode_bytes returns no "
-            "per-id byte lengths to split its output by)", "tokenizer")
+def _batch_tokenizer(ml, e, Xh):
+    """GPT2Tokenizer.encode_batch and decode_bytes_batch
+    (lane/inference-tokenizer-neural, 2026-09-15). A row of the held-out
+    slice is one document: its 8 * d float64 bytes, so a batch is 64
+    documents of binary text with every byte value in reach. Each
+    document's ids in the whole batch must be its ids alone and in any
+    split; the decode call reads the whole batch's ids back.
+    MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1 in the binding swaps ids across
+    document boundaries and must read BATCH_MOVED."""
+    R = np.ascontiguousarray(Xh[:64])
+    ids_rows = [np.asarray(i, dtype=np.int32)
+                for i in e.encode_batch([r.tobytes() for r in R], allow_endoftext=True)]
+
+    def enc(r):
+        return (_PerRow(np.asarray(i, dtype=np.int32)
+                        for i in e.encode_batch([row.tobytes() for row in r], allow_endoftext=True)),)
+
+    def dec(r):
+        return (_PerRow(np.frombuffer(b, dtype=np.uint8)
+                        for b in e.decode_bytes_batch([ids_rows[int(k)].tolist() for k in r[:, 0]])),)
+
+    return [_BatchRows("encode_batch", R, enc),
+            _BatchRows("decode_bytes_batch", np.arange(len(R), dtype=np.int64).reshape(-1, 1), dec)]
+
+
+_batch_decl(_batch_tokenizer, "tokenizer")
 _batch_decl(_batch_optim_sgd, "optim-sgd")
 _batch_decl(_batch_optim_adam, "optim-adam-clip")
 _batch_decl("n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a "

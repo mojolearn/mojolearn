@@ -5,11 +5,11 @@
 ## Provenance
 
 - [ ] Original `original` work; the file names the call or need it serves.
-- [ ] Derived/implemented work; exact upstream file, commit and license are below,
+- [ ] Derived/implemented work; exact reference file, commit and license are below,
       and `NOT_IMPLEMENTED.tsv` are updated.
 - [ ] No implementation code changed.
 
-Upstream details:
+Reference details:
 
 ## Numerical impact
 

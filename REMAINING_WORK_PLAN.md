@@ -212,8 +212,8 @@ to round 13 and corrected to **10 intentional-at-audit / 10 source-identified /
 Both paper variants rebuilt successfully after the correction.
 
 - [ ] After the active LM campaign, refresh the historical 209-case matrix
-  sequentially using [REFUSAL_SEQUENTIAL_EXECUTION.md](docs/REFUSAL_SEQUENTIAL_EXECUTION.md)
-  and [REFUSAL_PORT_PLAN.md](docs/REFUSAL_PORT_PLAN.md). The 27 old refusal rows
+  sequentially using [REFUSAL_SEQUENTIAL_EXECUTION.md](docs/REFUSAL_SEQUENTIAL_EXECUTION.md).
+  The 27 old refusal rows
   are not 27 current missing features: several are implemented and others
   are invalid combinations or intentional algorithm refusals. Keep kd-tree
   unsupported; retain the two explicit CPU tree rows as host evidence.

@@ -22,7 +22,7 @@ IMPLEMENTED"; `LpUnexpanded` is implemented now (`neighbors/impl/distance/detail
 distance_ops.mojo`), so the argument is forwarded to the distance dispatch
 and VALIDATED there by value (DEVIATION 552: p must be finite, positive
 and normal). A non-Lp metric still accepts and discards it, which is what
-every `distance_impl` overload but one does upstream (`distance.cuh:193`,
+every `distance_impl` overload but one does in the reference (`distance.cuh:193`,
 `DataT)  // unused`).
 """
 

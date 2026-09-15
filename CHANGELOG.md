@@ -18,6 +18,14 @@ Linux legs are OWED before this heading reads published.
   M4 CPU column: train, infer and batch IDENTICAL x4 against the 166-lane record, the new
   saved-factor model cells OWED to the release record, the sabotage build DIVERGENT on every
   train and owed cell.
+- New `GPT2Tokenizer.encode_batch(documents, allow_endoftext=False)`, `decode_batch` and
+  `decode_bytes_batch`. `encode_batch` is one call into the tokenizer host binding
+  (`gpt2_encode_batch`) that encodes each document alone, so every document's ids equal
+  `encode` on it; the decode calls loop over `decode_bytes`. The `tokenizer` identity lane
+  now carries batch cells over 64 documents instead of `n/a`; its train and infer hashes
+  are unchanged against the three committed GPU columns. A new
+  `-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1` build must read BATCH_MOVED. Apple M4 CPU
+  column only; the GPU columns' batch cells are owed to the release record.
 - New `mojolearn.metrics.fowlkes_mallows_score`, mirroring scikit-learn's definition (cuML
   has none): the device integer contingency matrix, exact Int64 pair counts, then
   `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, 0.0 when `tk == 0` (no samples, one sample,

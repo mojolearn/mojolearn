@@ -57,7 +57,7 @@ References below name functions, with line numbers at this candidate revision. `
 
 `mamba3_block_forward` rejects B<=0 or L<=0 before any stage consumer, then rejects stage/call/state shape disagreement. Thus an L=0 caller cannot read uninitialized reports, and admitted calls always have T>0 and C>=1. For L=1 decode and arbitrary admitted q0, only new-token outputs are allocated at M; their producer offsets subtract q0. Q is 32 or 64, divisible by the tiled token width 8, so a tile never crosses a chunk boundary. Partial final tiles mask only non-output lanes. Dacs, seg_l and qk_s explicitly write their padded tails; increment folds retain structural padded zeros. Buffered-prefix/new-token assembly still uses zero-initialized adt_work, sig_work, dt_work, rotq_work, rotk_work and v_work. Recurrent theta/h, pending state, and unused buffered capacity retain their original initialization and update rules.
 
-This proof is for admitted, unsabotaged calls. Deliberately armed upstream-recurrence sabotage can skip producers; the public binding already refuses sabotage builds. The proof does not turn skipped-producer negative-control configurations into supported scratch consumers.
+This proof is for admitted, unsabotaged calls. Deliberately armed reference-recurrence sabotage can skip producers; the public binding already refuses sabotage builds. The proof does not turn skipped-producer negative-control configurations into supported scratch consumers.
 
 ## Allocation lifetime
 
