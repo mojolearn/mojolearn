@@ -8,11 +8,23 @@ models and multi-device records are not routine release requirements.
 Existing evidence and exposed APIs remain intact. A three-vendor record does
 not newly certify every architecture or multi-device behavior.
 
+## Verification frequency
+
+Routine pushes run CPU inference against committed expected bytes, metrics
+regression tests, binding readback, and two small plumbing lanes. They do not
+run the broad CPU training suite or rent GPUs. The full CPU reference suite
+runs weekly on Sunday, through workflow_dispatch, and as a reusable workflow
+required by both publication jobs in release-provenance.yml. Production GPU
+certification remains release-only with one Apple, one AMD and one NVIDIA.
+The byte-LM and forest inference workflows now also use three CPU environments
+and cache their Pixi environments. The already-published byte-LM trainer keeps
+its existing focused compatibility checks.
+
 ## Work removed and work retained
 
-- Production: every covered lane, all nine fixtures, two repeats, including
+- Full certification production: every covered lane, all nine fixtures, two repeats, including
   the existing training, inference, model and batch comparisons.
-- Sabotage: every covered lane and all nine fixtures, one repeat. This checks
+- Full certification sabotage: every covered lane and all nine fixtures, one repeat. This checks
   rejection of altered arithmetic; production still checks repeat stability.
 - Independent lane shards run on at most four workers per CI runner. Each
   worker uses one host thread. Local development remains one worker/core.
@@ -72,17 +84,18 @@ for both. The merge from 590c11c86 changes documentation only.
 
 Andrew's intended direction, discussed September 15, is small development
 checks, occasional broad CPU bitwise verification, and public CPU inference.
-This speedup does not yet change test frequency or public API boundaries.
+Test frequency now follows that direction. Public API and wheel boundaries
+remain unchanged; separating shared training/inference bindings requires
+additional implementation and installed-wheel tests.
 The follow-up work is:
 
 1. Separate internal CPU training verification builds from public CPU
    inference operations and wheel exports. Preserve the CPU training code as
    an oracle; define inference support by actual load/predict/transform/forward
    capabilities rather than by the existence of a CPU fit implementation.
-2. Run small affected-code and public inference checks on relevant pushes.
-   Move broad training identity certification to a schedule when numerical
-   source changed and to release qualification. Shared numerical changes need
-   appropriately broad checks before acceptance.
+2. Further narrow the routine inference screen by affected family if needed.
+   Broad training identity certification has moved off pushes to weekly, manual
+   and pre-publication runs. Shared numerical changes can request a full run.
 3. Test wheel loading, inference identity, batching and clear unsupported
    operation errors; align documentation and the support manifest with the
    public boundary.
@@ -94,3 +107,12 @@ LanguageModelHostTrainer. The broader 117-lane CPU training expansion is on
 main and is included by its future wheel configuration, but is not in those
 published wheels. Preserve the already-shipped trainer's compatibility or
 explicitly deprecate it when changing the product boundary.
+
+## Immediate promotion requested
+
+Andrew explicitly requested immediate main promotion after the local checks
+and ARM64 hosted gate passed, while the old full macOS/x86 jobs were still
+running. The cadence changes were checked by parsing every workflow and shell
+step, docs facts, packaging pins/inventory and the gate regression tests.
+Their first hosted routine-inference run remains verification to observe,
+not a result claimed by this document.

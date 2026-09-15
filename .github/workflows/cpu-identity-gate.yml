@@ -40,6 +40,9 @@
 name: CPU identity gate
 
 on:
+  workflow_call:
+  schedule:
+    - cron: "17 5 * * 0"
   workflow_dispatch:
   push:
     branches:
@@ -163,7 +166,7 @@ on:
 
 # Superseded branch runs only. Each main run has its own group.
 concurrency:
-  group: cpu-identity-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.run_id || 'branch' }}
+  group: cpu-identity-${{ github.event_name == 'push' && 'inference' || 'full' }}-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.run_id || 'branch' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions: {}
@@ -238,6 +241,9 @@ jobs:
     env:
       MOJOLEARN_COMMIT: ${{ github.sha }}
       MOJOLEARN_GATE_COMMIT: ${{ github.sha }}
+      # Pushes verify inference plus small plumbing cases. Full training
+      # identity is weekly, explicitly dispatched, or called by a release.
+      FULL_CPU_VERIFY: ${{ github.event_name != 'push' }}
       OMP_NUM_THREADS: "1"
       MOJOLEARN_CPU_THREADS: "1"
       MOJOLEARN_NUMERIC_MODE: identical
@@ -318,6 +324,14 @@ jobs:
       # not checked out fails here, before a build is spent.
       - name: Gate orchestration regression tests
         run: python3 -m unittest discover -s tools -p test_cpu_identity_gate.py -v
+
+      - name: Verification scope
+        run: |
+          if [ "$FULL_CPU_VERIFY" = true ]; then
+            echo "### Full CPU reference certification: all training lanes and fixtures" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Routine CPU inference and plumbing checks; full training certification not run" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: CPU surface manifest
         run: |
@@ -499,7 +513,7 @@ jobs:
       # the 1eea14f80 bytes and keep their count; the kmeans lanes' current
       # cells are the kmeans-sqrt fix record, asserted two steps below.
       - name: identity_break --diff over the three committed GPU columns (require 3)
-        if: always()
+        if: always() && env.FULL_CPU_VERIFY == 'true'
         run: |
           st=0
           python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 3 \
@@ -516,7 +530,7 @@ jobs:
       # no CPU column has covered must FAIL. If it passes, --require-columns
       # is not reading what it claims to.
       - name: identity_break --diff must refuse a fourth column that is not there
-        if: always()
+        if: always() && env.FULL_CPU_VERIFY == 'true'
         run: |
           set -o pipefail
           if python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 4 --lanes gemm-pinned \
@@ -533,7 +547,7 @@ jobs:
       # same boxes must still read the one NVIDIA inertia cell DIVERGENT, so the
       # record cannot pass by carrying identical files.
       - name: identity_break --diff over the kmeans-sqrt fix record (fixed IDENTICAL, unfixed DIVERGENT)
-        if: always()
+        if: always() && env.FULL_CPU_VERIFY == 'true'
         run: |
           R=bench/results/identity_break/2026-09-14_kmeans-sqrt-fix
           st=0
@@ -594,7 +608,7 @@ jobs:
       # Empty COVERED_LANES runs nothing and says so; that is a statement about
       # phase 1, not a pass.
       - name: The CPU column, covered lanes (every fixture)
-        if: always()
+        if: always() && env.FULL_CPU_VERIFY == 'true'
         timeout-minutes: 50
         run: |
           set -o pipefail
@@ -682,14 +696,21 @@ jobs:
             exit 0
           fi
           rm -rf "${{ runner.temp }}/host-sab"
-          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host_sab.log"
-          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host_sab.log"
-          for family in $HOST_FAMILIES; do
+          if [ "$FULL_CPU_VERIFY" = true ]; then
+            MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host_sab.log"
+            MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host_sab.log"
+            sabotage_families="$HOST_FAMILIES"
+          else
+            # The recorded classical inference checks use these three families.
+            # Forest inference has its separate sabotage build above.
+            sabotage_families="core estimators svm"
+          fi
+          for family in $sabotage_families; do
             MOJOLEARN_BUILD_JOBS=2 sh "bindings/build_${family}_host.sh" 2>&1 | tee "$GATE_OUT/build_${family}_host_sab.log"
           done
 
       - name: The CPU column, covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE
-        if: always()
+        if: always() && env.FULL_CPU_VERIFY == 'true'
         timeout-minutes: 50
         run: |
           set -o pipefail
