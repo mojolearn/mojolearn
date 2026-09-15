@@ -1,0 +1,2 @@
+GPT2Tokenizer() refused: mojolearn: GPT2Tokenizer needs a vocabulary, and mojolearn ships none. Load one you obtained yourself: GPT2Tokenizer.from_files(encoder_json, vocab_bpe) with the encoder.json and vocab.bpe that OpenAI publishes with its GPT-2 release, GPT2Tokenizer.from_ranks_file(path) with a rank<TAB>hex file, or GPT2Tokenizer.from_token_bytes(tokens)
+synthetic n_vocab 513 eot 512 ids [308, 267, 32, 448, 32, 512]

@@ -739,6 +739,26 @@ FIXTURES = ["base", "ties", "hashed", "wide", "denormal", "denormal_ftz", "dupes
 
 LANES = {}
 
+#: LANES WHOSE INPUT CHANGED AFTER RECORDS WERE TAKEN (2026-09-15). A column
+#: records these as `lane_revisions`; `diff` and the verify reference table
+#: (python/mojolearn/_verify_reference.py) treat a column whose revision of a
+#: lane is not this one as carrying NO cell for that lane, so its cells read
+#: OWED to the next record rather than DIVERGENT against hashes of different
+#: input. Bump a lane's revision when its fixture or vocabulary changes.
+#:   tokenizer  synthetic-vocab-1: the GPT-2 table left the tree; the lane
+#:              loads the synthetic vocabulary (python/mojolearn/
+#:              _tokenizer_synthetic.py). Host integer code, so one hash per
+#:              cell on every device class; the GPU columns are owed at the
+#:              next release record.
+LANE_REVISIONS = {"tokenizer": "synthetic-vocab-1"}
+
+
+def stale_revision_lanes(record):
+    """The LANE_REVISIONS lanes whose revision in `record` (a column JSON) is
+    not this harness's, sorted."""
+    have = record.get("lane_revisions") or {}
+    return sorted(name for name, rev in LANE_REVISIONS.items() if have.get(name) != rev)
+
 
 def lane(name):
     def deco(fn):
@@ -1787,6 +1807,25 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda est: (est.predict(Xh),))
 
 
+@lane("gbdt-yeti-rank")
+def _(ml, X, yc, yr, Xh=None):
+    """YetiRank (learning to rank, sampled permutations on query groups): 20
+    depth-6 symmetric trees on the gbdt-query-rmse queries and grades, and a
+    second fit of 8 depth-4 trees at random_state=7, so the hash covers the
+    derivative draws' stream as well as the task tables. Unweighted: the host
+    column refuses sample_weight on every loss. YetiRank has no loss value
+    (the target writes 0), so `loss_curve_` is hashed only to pin that.
+    Predict is row-wise, so the held-out probe and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
+    e = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="YetiRank", random_state=7).fit(
+        X, rel, group_id=g)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     seeded_predict=_h(e.predict(X))),
+                m, lambda est: (est.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -2431,17 +2470,24 @@ def _(ml, X, yc, yr, Xh=None):
     """GPT2Tokenizer (python/mojolearn/tokenizer.py), host integers and
     tables through _mojolearn_tokenizer_host; no float arithmetic, so
     cross-vendor identity is by construction and what this measures is
-    that the SAME binary bytes were built on every box. The fixture bytes
-    are the first 4,096 bytes of X viewed as bytes (the byte-lm lane's
-    derivation without _ids' modulus), encoded with <|endoftext|> allowed,
-    then decoded back; the held-out probe encodes Xh's first 4,096 bytes
+    that the SAME binary bytes were built on every box. mojolearn ships no
+    vocabulary, so the lane loads the synthetic one mojolearn trains itself
+    (python/mojolearn/_tokenizer_synthetic.py, 512 ranks) at revision
+    LANE_REVISIONS["tokenizer"]. The fixture bytes are the first 4,096 bytes
+    of X viewed as bytes (the byte-lm lane's derivation without _ids'
+    modulus), encoded with <|endoftext|> allowed, then decoded back; the
+    held-out probe encodes Xh's first 4,096 bytes
     (docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md section 3)."""
-    tok = ml.GPT2Tokenizer()
+    tok = ml.tokenizer.GPT2Tokenizer._synthetic()
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     ids = np.asarray(tok.encode_bytes(raw, allow_endoftext=True), dtype=np.int32)
     back = np.frombuffer(tok.decode_bytes(ids.tolist()), dtype=np.uint8)
-    assert back.tobytes() == raw, "tokenizer lane: decode(encode(x)) != x"
-    return _fit(dict(ids=_h(ids), decoded=_h(back), n_vocab=_h(np.int64(tok.n_vocab))),
+    # The round trip is a hashed part, not an assertion (2026-09-15): a
+    # sabotaged binary must read DIVERGENT, and a raise would read REFUSED,
+    # which the owed check (tools/cpu_identity_gate_check.py owed) does not
+    # count as a catch. A production column hashes roundtrip=1 everywhere.
+    roundtrip = np.int64(1 if back.tobytes() == raw else 0)
+    return _fit(dict(ids=_h(ids), decoded=_h(back), roundtrip=_h(roundtrip), n_vocab=_h(np.int64(tok.n_vocab))),
                 tok, lambda e: (np.asarray(e.encode_bytes(np.ascontiguousarray(Xh).tobytes()[:4096],
                                                           allow_endoftext=True), dtype=np.int32),))
 
@@ -4009,7 +4055,7 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
-            "gbdt-query-rmse", "gbdt-pair-logit")
+            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 
@@ -6044,7 +6090,7 @@ def _run_reference(args):
                       heldout=heldout_hashes, cells=cells, complete=complete,
                       skipped=sorted(skip), batch_protocol=batch_protocol,
                       batch_sabotage=batch_sabotage, rlpair_protocol=rlpair_protocol,
-                      rlpair_sabotage=rlpair_sabotage)
+                      rlpair_sabotage=rlpair_sabotage, lane_revisions=dict(LANE_REVISIONS))
         host_infer = _host_infer_lanes()
         if host_infer is not None:
             record["host_infer"] = "all" if host_infer is True else sorted(host_infer)
@@ -6410,6 +6456,14 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
         with open(p) as fh:
             j = json.load(fh)
         cols.append((j.get("vendor") or os.path.basename(p), j))
+    for name, j in cols:
+        stale = stale_revision_lanes(j)
+        dropped = [k for k in j["cells"] if k.split("/")[0] in stale]
+        if dropped:
+            for k in dropped:
+                del j["cells"][k]
+            print(f"NOTE: column {name} hashed {', '.join(stale)} at an older lane revision "
+                  f"(LANE_REVISIONS); its {len(dropped)} cell(s) there are not compared and read as absent")
     keys = sorted(set(k for _, j in cols for k in j["cells"]))
     if require_lanes:
         # --lanes SCOPES the diff (2026-09-14 night): the verdicts, the
@@ -6625,7 +6679,7 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
 
 #: the keys every part of one column must agree on before --merge joins them
 MERGE_SAME = ("vendor", "commit", "mode", "repeats", "heldout_seed", "fixtures", "heldout",
-              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage") + tuple(
+              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage", "lane_revisions") + tuple(
     f"{part}_{k}" for part in EXTRA_PARTS for k in ("protocol", "sabotage"))
 
 

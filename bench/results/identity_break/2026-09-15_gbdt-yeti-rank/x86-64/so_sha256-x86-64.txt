@@ -1,0 +1,2 @@
+502d5fbc9a560c5fca90d955d51447dfa85c345af7365fa4ae661b54ee26f21d  python/mojolearn/host/_mojolearn_core_host.so
+d2861a31f9470f023cd4565cacfd3f112805351d62015be21f11c7f1906b6f40  python/mojolearn/host/_mojolearn_gbdt_host.so

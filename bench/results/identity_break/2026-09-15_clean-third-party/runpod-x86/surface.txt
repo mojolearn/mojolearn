@@ -1,0 +1,5 @@
+SKIP test_user_supplied_gpt2_files: MOJOLEARN_GPT2_ENCODER_JSON and MOJOLEARN_GPT2_VOCAB_BPE do not name the GPT-2 files
+test_tokenizer_surface: GREEN. 22 of 23 checks on this host (1 skipped): 22 exact id sequences and round trips against the synthetic vocabulary's
+Python encoder through the Python door, merges, byte fallback, Unicode classes, both
+readings of <|endoftext|>, batch encoding, the rank-file and spelled-file loaders, and
+every refusal by name. It says nothing about another box.

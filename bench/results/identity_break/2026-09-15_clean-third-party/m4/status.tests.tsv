@@ -1,0 +1,11 @@
+surface	0
+surface-no-gpt2-files	0
+surface-sabotage	1
+manifest	0
+check-tokenizer	0
+identity-1	0
+identity-2	0
+identity-sabotage	0
+diff-repeat	0
+diff-record	0
+diff-sabotage	0

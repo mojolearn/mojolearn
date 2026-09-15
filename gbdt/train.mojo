@@ -183,6 +183,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MULTICLASS_OVA,
     OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUERY_RMSE,
+    OBJECTIVE_YETI_RANK,
     OBJECTIVE_RMSE,
     objective_from_name,
 )
@@ -1036,7 +1037,10 @@ def train(
     # border is computed.
     var objective_code = objective_from_name(loss)
     var is_pair_logit = objective_code == OBJECTIVE_PAIR_LOGIT
-    var is_querywise = objective_code == OBJECTIVE_QUERY_RMSE or is_pair_logit
+    var is_yeti_rank = objective_code == OBJECTIVE_YETI_RANK
+    var is_querywise = (
+        objective_code == OBJECTIVE_QUERY_RMSE or is_pair_logit or is_yeti_rank
+    )
     if len(group_sizes) > 0:
         var covered = 0
         for g in range(len(group_sizes)):
@@ -1053,7 +1057,7 @@ def train(
         if not is_querywise:
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
-                " (QueryRMSE and PairLogit are trained here; YetiRank,"
+                " (QueryRMSE, PairLogit and YetiRank are trained here;"
                 " QuerySoftMax and QueryCrossEntropy are not implemented);"
                 " loss='" + loss + "' does not use it, so it is refused by"
                 " name rather than carried and ignored"
@@ -1796,7 +1800,19 @@ def train(
         loss_desc,
         method_override=leaf_estimation_method,
         iterations_override=leaf_estimation_iterations,
+        l2_override=l2_leaf_reg,
     )
+    # `GradientBoosting(l2_leaf_reg=None)` resolves to the loss's default in
+    # the wrapper (`catboost_options.cpp:34-37`, 3.0; 0 for YetiRank,
+    # `:166-172`), so `l2_leaf_reg` arrives here nonnegative and the override
+    # returns it unchanged, as the fit always read it.
+    var resolved_l2 = estimation.l2_reg
+    if is_yeti_rank and resolved_l2 == Float32(0.0):
+        # `if (treeConfig.L2Reg == 0.0f) { treeConfig.L2Reg = 1e-20f; }`
+        # (`catboost_options.cpp:357-359`). The reference applies it to every
+        # loss; here only to YetiRank, whose default reaches it. For the other
+        # losses an explicit 0 is NOT IMPLEMENTED (gbdt/NOT_IMPLEMENTED.tsv).
+        resolved_l2 = Float32(1e-20)
 
     # `TCatBoostOptions::SetLeavesEstimationDefault`'s sibling for
     # sampling (`catboost_options.cpp:779-800`), the two lines of it this
@@ -1955,7 +1971,7 @@ def train(
         # `trace=trace`: the later arguments here are positional, and a
         # positional argument may not follow a keyword one)
         n_estimators, trace, learning_rate,
-        l2_leaf_reg, True,
+        resolved_l2, True,
         bootstrap_bayesian=bootstrap_bayesian,
         bagging_temperature=bagging_temperature,
         bootstrap_type=boot_kind,

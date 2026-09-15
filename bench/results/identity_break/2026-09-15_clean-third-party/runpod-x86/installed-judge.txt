@@ -1,0 +1,1 @@
+installed table /tmp/tgt/mojolearn/verify_reference/table.json judge over the installed wheel's tokenizer cells: {'OWED': 27}
