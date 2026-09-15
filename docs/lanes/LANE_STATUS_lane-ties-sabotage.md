@@ -23,8 +23,10 @@ recordings; then the saved-model sabotage step requires every fixture.
 - One RunPod CPU pod (`tools/runpod_cpu_leg.sh`, lane tag `ties-sabotage`):
   old arms (origin/main sources rebuilt on the pod) then new arms; per lane and
   fixture counts; production diff against the committed records; owed check;
-  gate on the new rule. Command file in the session scratchpad
-  (`ties_leg_cmd.sh`); results under `bench/results/identity_break/2026-09-15_ties-sabotage`.
+  gate on the new rule. Rented at 1475db274 (22:32 ET, lease 170 min, the pod
+  deletes itself). The command is `bench/results/identity_break/2026-09-15_ties-sabotage/leg_cmd.tmpl.sh`
+  with `@@OLD_B64@@` replaced by a base64 tgz of origin/main's two oracle files, and
+  `leg_args.sh` holds the leg arguments. Results go under that directory.
 - If a recording lane other than the six fails `--every-fixture`, name it with
   `--lane-rule-only` in the workflow and list it here.
 - Merge to main: docs_facts --check, wheel_ci pins, test_cpu_identity_gate.
