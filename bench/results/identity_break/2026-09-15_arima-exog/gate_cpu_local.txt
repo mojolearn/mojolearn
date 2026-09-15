@@ -1,0 +1,19 @@
+=== gate check, --package-root before the subcommand
+check arima-exog-seasonal wide ar EQUAL gpu aa40fa16bbb1b651466debe671fd1f7993a99b9ffc98ecd1d258e68853d496b9 host aa40fa16bbb1b651466debe671fd1f7993a99b9ffc98ecd1d258e68853d496b9
+check arima-exog-seasonal wide beta EQUAL gpu b7822f65ee1a5333afcd498ce1aeab1aa3bd0bc7ae55b65875052031bf875ded host b7822f65ee1a5333afcd498ce1aeab1aa3bd0bc7ae55b65875052031bf875ded
+check arima-exog-seasonal wide forecast EQUAL gpu a5af08d3382e79192dd1a62970d22742566c830723d6f990c5fd25482cde4367 host a5af08d3382e79192dd1a62970d22742566c830723d6f990c5fd25482cde4367
+check arima-exog-seasonal wide params EQUAL gpu 1a44d6efb1d1c91c539d794c1f951eb40b437129d3d9fcc471839040263312fe host 1a44d6efb1d1c91c539d794c1f951eb40b437129d3d9fcc471839040263312fe
+check arima-exog-seasonal wide predict_in_sample EQUAL gpu e9b248f66cebb54743d20bbbb2eff08b58cd1c8299f45d6884e43dddd795b218 host e9b248f66cebb54743d20bbbb2eff08b58cd1c8299f45d6884e43dddd795b218
+check arima-exog-seasonal wide predict_straddle EQUAL gpu 9453888984cf56458769b0a2a360329f5231a6a809fb5e080eab25d971257a01 host 9453888984cf56458769b0a2a360329f5231a6a809fb5e080eab25d971257a01
+check arima-exog-seasonal wide sar EQUAL gpu 4e945a14044f16be120b76843e52e9e62c934506d178d83b85d8741a8fe0cf5d host 4e945a14044f16be120b76843e52e9e62c934506d178d83b85d8741a8fe0cf5d
+check arima-exog-seasonal wide sigma2 EQUAL gpu edd943c4daa22b82969b0d480dbe632799884620379fa85d577f1d5c06635c6c host edd943c4daa22b82969b0d480dbe632799884620379fa85d577f1d5c06635c6c
+check arima-exog-seasonal wide identity_hash EQUAL gpu 2e93bf12d7b45b77 host 2e93bf12d7b45b77
+gate verdict IDENTICAL (18 fixtures, 0 GPU columns, exit 0)
+=== recordings test, from the WORKTREE
+.                                                                        [100%]
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteLMSession has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 143 deselected, 1 warning in 0.25s
