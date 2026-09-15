@@ -116,6 +116,17 @@ on:
       - "training/checks/loss_oracle.mojo"
       - "training/checks/optimizer_oracle.mojo"
       - "arima/impl/tsa/arima_common.mojo"
+      - "kernel_methods/host/km_host_oracle.mojo"
+      - "kernel_methods/checks/random_features.mojo"
+      - "mixture/host/gmm_host_oracle.mojo"
+      - "hdbscan/host/hdbscan_host_oracle.mojo"
+      - "hdbscan/impl/detail/condense.mojo"
+      - "hdbscan/impl/detail/extract.mojo"
+      - "hdbscan/impl/detail/utils.mojo"
+      - "hdbscan/impl/detail/stabilities.mojo"
+      - "hdbscan/impl/condensed_hierarchy.mojo"
+      - "hdbscan/checks/hdbscan_sabotage.mojo"
+      - "hdbscan/checks/mutual_reachability_dense.mojo"
       - "spectral/checks/symmetric_eig_host.mojo"
       - "core/knn_host_predict.mojo"
       - "cluster/host/kmeans_oracle.mojo"
@@ -554,8 +565,11 @@ jobs:
       # feature axis descending, in gbdt_oracle by adding 1.0 to the
       # Newton leaf walker's Hessian regularizer, in gbdt_oracle_rmse by
       # adding 1.0 to the searcher's leaf regularizer, in arima_oracle by
-      # doubling the finite-difference step, and in umap_oracle by keying
-      # every negative draw one epoch late);
+      # doubling the finite-difference step, in umap_oracle by keying
+      # every negative draw one epoch late, and in hdbscan_host_oracle by
+      # reading every core distance one neighbor early; the kernel_methods
+      # and mixture host families move through gemm_oracle's descending
+      # leaf);
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the

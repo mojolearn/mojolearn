@@ -338,6 +338,25 @@ TRAINING_LANE_NAMES = {
     # IDENTICAL x4 on the seven runners, the sabotage build DIVERGENT on all
     # eighteen; the 166-lane record carries the same umap hashes.
     "umap": "UMAP",
+    # CPU training for the workstream D estimators
+    # (lane/cpu-training-d-estimators, 2026-09-15). The Cholesky door through
+    # the gp host binding's cholesky_factor and cholesky_solve (the factor is
+    # now chol_host_potrf over chol_host_factor_lower, same bits); KernelRidge,
+    # Nystroem and RBFSampler through kernel_methods/host/km_host_oracle.mojo;
+    # GaussianMixture through mixture/host/gmm_host_oracle.mojo; HDBSCAN
+    # through hdbscan/host/hdbscan_host_oracle.mojo (the Boruvka round count
+    # included). On the M4's CPU column (one core, shared machine) every
+    # train, infer and batch cell of the eight lanes read IDENTICAL x4
+    # against the 166-lane record's three GPU columns before the gate ran,
+    # and each family's sabotage build read DIVERGENT on every train cell.
+    "cholesky": "the Cholesky factorization and solve",
+    "rbf-sampler": "random Fourier features",
+    "kernel-ridge": "kernel ridge",
+    "nystroem": "the Nystroem kernel approximation",
+    "gmm": "the Gaussian mixture",
+    "gmm-random-init": "the Gaussian mixture with a random start",
+    "hdbscan": "HDBSCAN",
+    "hdbscan-leaf": "HDBSCAN with leaf selection",
     # The forest variant lanes (lane/cpu-training-forest-variants,
     # 2026-09-15). rf-clf-entropy-log2-noboot was already served by
     # ensemble/host/rf_oracle.mojo (entropy, log2 features, no bootstrap, the
@@ -780,16 +799,17 @@ FAMILIES = (
         # family's host binding. It routes `_mojolearn_gp` on a CPU-only
         # install with the GPU binding's gpr_fit and gpr_predict and the
         # Cholesky door workstream D put on the same binding
-        # (cholesky_factor, cholesky_solve, cholesky_profile_jitter; the
-        # cholesky lane is not declared covered because the 136-lane record
-        # predates it). gp_parallel_available stays absent, so the ordered
+        # (cholesky_factor, cholesky_solve, cholesky_profile_jitter). The
+        # cholesky lane, which the 136-lane record predated, is covered since
+        # lane/cpu-training-d-estimators (2026-09-15) against the 166-lane
+        # record. gp_parallel_available stays absent, so the ordered
         # multi-GPU driver refuses by name.
         family="gp",
         binding="_mojolearn_gp_host",
         routes="_mojolearn_gp",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard"),
+        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "cholesky"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianProcessRegressor", "Cholesky"),
@@ -804,6 +824,108 @@ FAMILIES = (
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
             "gpr_fit", "gpr_predict", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # CPU training for the workstream D estimators
+        # (lane/cpu-training-d-estimators, 2026-09-15): the kernel methods
+        # family's host binding. It routes `_mojolearn_kernel_methods` on a
+        # CPU-only install with the GPU binding's fit, predict and transform
+        # names for KernelRidge, Nystroem and RBFSampler at the linear and
+        # rbf kernels; the polynomial, sigmoid and laplacian kernels refuse
+        # by name, and kernel_methods_rows_parallel_available stays absent,
+        # so the multi-GPU driver refuses by name.
+        family="kernel_methods",
+        binding="_mojolearn_kernel_methods_host",
+        routes="_mojolearn_kernel_methods",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("rbf-sampler", "kernel-ridge", "nystroem"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("KernelRidge", "Nystroem", "RBFSampler"),
+        display="kernel ridge, the Nystroem approximation and random Fourier features",
+        host_modules=(
+            "kernel_methods/host/km_host_oracle.mojo",
+            "kernel_methods/checks/random_features.mojo",
+            "cholesky/host/chol_oracle.mojo",
+            "decomposition/host/pca_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "kernel_methods_host_numeric_mode", "kernel_methods_host_vendor",
+            "kernel_methods_host_column", "kernel_methods_host_sabotage",
+            "kernel_methods_vendor", "kernel_methods_numeric_mode",
+            "kernel_ridge_fit", "kernel_ridge_predict", "nystroem_fit",
+            "nystroem_transform", "rbf_sampler_fit", "rbf_sampler_transform",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # CPU training for the workstream D estimators
+        # (lane/cpu-training-d-estimators, 2026-09-15): the Gaussian mixture
+        # family's host binding. It routes `_mojolearn_mixture` on a CPU-only
+        # install with the GPU binding's fit and scoring names;
+        # gmm_parallel_available stays absent, so the multi-GPU driver
+        # refuses by name.
+        family="mixture",
+        binding="_mojolearn_mixture_host",
+        routes="_mojolearn_mixture",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("gmm", "gmm-random-init"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("GaussianMixture",),
+        display="the Gaussian mixture",
+        host_modules=(
+            "mixture/host/gmm_host_oracle.mojo",
+            "cluster/host/kmeans_oracle.mojo",
+            "cholesky/host/chol_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "mixture_host_numeric_mode", "mixture_host_vendor",
+            "mixture_host_column", "mixture_host_sabotage",
+            "mixture_vendor", "mixture_numeric_mode", "gmm_fit",
+            "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
+            "gmm_score_bic_aic",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # CPU training for the workstream D estimators
+        # (lane/cpu-training-d-estimators, 2026-09-15): the HDBSCAN family's
+        # host binding. It routes `_mojolearn_hdbscan` on a CPU-only install
+        # with the GPU binding's fit name; hdbscan_rows_parallel_available
+        # stays absent, so the multi-GPU driver refuses by name.
+        family="hdbscan",
+        binding="_mojolearn_hdbscan_host",
+        routes="_mojolearn_hdbscan",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("hdbscan", "hdbscan-leaf"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("HDBSCAN",),
+        display="HDBSCAN",
+        host_modules=(
+            "hdbscan/host/hdbscan_host_oracle.mojo",
+            "core/knn_host_predict.mojo",
+            "hierarchy/checks/linkage_oracle.mojo",
+            "hdbscan/impl/detail/condense.mojo",
+            "hdbscan/impl/detail/extract.mojo",
+            "hdbscan/impl/detail/utils.mojo",
+            "hdbscan/impl/condensed_hierarchy.mojo",
+        ),
+        exports=(
+            "hdbscan_host_numeric_mode", "hdbscan_host_vendor",
+            "hdbscan_host_column", "hdbscan_host_sabotage",
+            "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
