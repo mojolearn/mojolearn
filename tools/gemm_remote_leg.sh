@@ -4406,6 +4406,15 @@ RELEASE_SOURCE
     MOJOLEARN_STAGE_KEYS="${MOJOLEARN_STAGE_KEYS-corpus/enwik8/input.txt corpus/pile_github/input.txt}" \
         sh tools/stage_from_r2.sh "$SSH_TARGET" > "$OUT/stage.log" 2>&1 || true
     leg_say "$(tail -1 "$OUT/stage.log")"
+    # lane/r2-binding-cache (2026-09-15), DEFAULT OFF. MOJOLEARN_BINCACHE=1
+    # hands the box presigned URLs for tools/bincache.py; a body opts in per
+    # binding with `python3 tools/bincache.py build bindings/build_X.sh`.
+    # Never on a qualification leg: a release keeps "verify on a box that did
+    # not build it" literal, and its wheels never pass through the cache.
+    if [ "${MOJOLEARN_BINCACHE:-0}" = 1 ] && [ "$LEG_QUALIFY" != 1 ]; then
+        sh tools/bincache_leg.sh stage "$SSH_TARGET" "runpod:$IMAGE" > "$OUT/bincache_stage.log" 2>&1 || true
+        leg_say "$(tail -1 "$OUT/bincache_stage.log")"
+    fi
     if [ "$NVIDIA_CAMPAIGN" = 6 ]; then
         leg_ssh 'python3 /root/mojolearn/tools/training_validation_admit.py --inventory-root /root/mojolearn' > "$OUT/source_inventory_preship_remote.json" || leg_die "Remote compact source inventory unavailable"
         cmp "$OUT/source_inventory_local.json" "$OUT/source_inventory_preship_remote.json" || leg_die "Compact source differs before data/model launch"
@@ -4676,6 +4685,12 @@ leg_fetch() {
     mkdir -p "$OUT/remote"
     leg_ssh 'cd /root/gemm_leg_out && tar czf - .' | ( cd "$OUT/remote" && tar xzf - ) \
         || echo "  FETCH FAILED -- the remote log is /root/gemm_leg_out"
+    # lane/r2-binding-cache: the Mac copies what the box uploaded to its
+    # content address; the box never holds a credential that could.
+    if [ "${MOJOLEARN_BINCACHE:-0}" = 1 ] && [ -f "$OUT/remote/bincache/uploads.tsv" ]; then
+        sh tools/bincache_leg.sh promote "$OUT/remote/bincache" > "$OUT/bincache_promote.log" 2>&1 || true
+        echo "  $(tail -1 "$OUT/bincache_promote.log")"
+    fi
     if [ "$PAYLOAD" = "phase8" ]; then
         leg_fetch_e1dir || FETCH_RED=1
     fi
