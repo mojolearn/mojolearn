@@ -3,11 +3,11 @@
 """The work-item and workload structs the builder hands every kernel, plus
 their bin search.
 
-MIRRORS `cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels.cuh`
+Reference: `cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels.cuh`
 at rapidsai/cuml `v26.08.00` (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`),
 checked out read-only at `~/CascadeProjects/upstream/cuml-v26.08.00`.
 
-Their file is a header of declarations plus four small definitions. The
+The reference file is a header of declarations plus four small definitions. The
 declarations (`:96-104`, `:106-114`, `:135-147`, `:149-160`) are the four
 kernel launchers, whose bodies live in `builder_kernels_impl.cuh` and are
 implemented in `builder_kernels_impl.mojo`. What is HERE is everything that has
@@ -45,7 +45,7 @@ returns an aligned pointer per allocation, so the carve-and-align step has
 nothing to do. Price of declining it: none in behaviour; the shared-memory
 SIZE their `computeSharedMemoryConfig` computes still includes their
 alignment padding (`builder.cuh:531`: `sizeof(BinT) + sizeof(DataT)`), and
-that padding is transcribed rather than dropped, so the two implementations
+that padding is kept rather than dropped, so the two implementations
 still agree on whether a given configuration fits in shared memory. Dropping
 the padding would have been an "improvement" that silently changes which
 path their dispatch takes.
@@ -98,17 +98,17 @@ pack a `BinT` into a homogeneous `double` buffer for
 (`builder.cuh:246`). This is a single-device library, so that branch is
 unreachable by construction and the plan above already scoped it out.
 Price of declining it: multi-GPU RF is not available. Two further reasons
-it could not be transcribed as written even if it were wanted: the buffer
+it could not be implemented as written even if it were wanted: the buffer
 is `double`, and this device has no float64; and their own comment at
 `:169-171` justifies the packing by exact integer representation up to
 2^53, an argument that does not survive the narrowing.
 
-NOT A DEVIATION, recorded because the number looks arbitrary and is not
-ours: `lower_bound`'s clamping. Their comment at `:115-117` states it
+NOT A DEVIATION, recorded because the number looks arbitrary and comes
+from the reference: `lower_bound`'s clamping. Their comment at `:115-117` states it
 directly -- "Values outside the quantile range are clamped to the edge
 bins: values below the first quantile return 0, and values above the last
 quantile return len - 1." The loop searches `[0, len-1]` rather than
-`[0, len]`, which is what produces the upper clamp, and it is transcribed
+`[0, len]`, which is what produces the upper clamp, and it is kept
 exactly. This differs from `std::lower_bound`, and a reader who assumes
 standard semantics will get the last bin wrong.
 =================================================================
@@ -204,7 +204,7 @@ def sample_features_kernel(
     stood in for -- `thrust::for_each` over a counting iterator materializes
     no sequence, and neither does this.
 
-    Their body, transcribed line for line:
+    The reference body:
 
         node_idx     = sample_idx / k
         column_index = sample_idx % k
@@ -279,7 +279,7 @@ def sample_features_kernel(
     numeric conversion is a VALUE conversion, and assume a chained one is
     not a conversion at all, until measured.
 
-    Redundant work, transcribed rather than hoisted: every one of a node's
+    Redundant work, kept rather than hoisted: every one of a node's
     `k` threads rebuilds the whole bijection -- 48 LCG draws and a 24-round
     cycle walk -- because their lambda constructs a fresh `shuffle_iterator`
     per `sample_idx` (`:90-92`). Hoisting it per node would be a deviation

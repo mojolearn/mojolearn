@@ -133,7 +133,7 @@ from core.segmented_sort import segmented_sort_keys_f32
 # `clang++ -O0 -std=c++17` on this machine and run. These are its stdout.
 #
 # THE ORACLE IS NOT IN THE REPOSITORY. It is a scratchpad artifact, and
-# the numbers are transcribed here so this file stands alone. If the
+# the numbers are recorded here so this file stands alone. If the
 # generator is ever touched, rebuild it rather than adjusting these.
 
 
@@ -244,7 +244,7 @@ def _expect_rows(seed: Int, global_rows: Int) -> List[UInt64]:
 
 
 def reference_bin_index(bin: Int, sample_count: Int, max_n_bins: Int) -> Int:
-    """`quantiles.cuh:90` and `:94-95`, transcribed a SECOND TIME.
+    """`quantiles.cuh:90` and `:94-95`, written a SECOND TIME.
 
     THIS FUNCTION EXISTS BECAUSE A SABOTAGE CAUGHT ITS ABSENCE. The
     first version of this file imported `quantile_bin_index` from
@@ -255,7 +255,7 @@ def reference_bin_index(bin: Int, sample_count: Int, max_n_bins: Int) -> Int:
     the thing it checks verifies that the mechanism is consistent with
     itself and nothing else.
 
-    So it is transcribed again, from their source rather than from ours,
+    So it is written again, from the reference source rather than from this implementation,
     and spelled differently on purpose: `Int(x)` truncates toward zero,
     which for the strictly positive `x` here is `floor`, and the
     half-test is written as an addition rather than a branch on `floor`.

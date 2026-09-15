@@ -39,7 +39,7 @@ implementations of the same descent:
                    on `FunctionValue <= nextFuncValue` (NON-STRICT,
                    maximizing), loss measured by the target kernel's
                    unnormalized `functionValue`
-    ours           the GPU one, followed statement for statement
+    ours           the GPU one, same steps in the same order
                    (`gbdt/methods/leaves_estimation/descent_helpers.mojo`)
 
 Both walk the same Newton direction, halve the same step, and run the same

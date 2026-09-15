@@ -256,7 +256,7 @@ def check_sign_convention(ctx: DeviceContext) raises -> Int:
     ctx.enqueue_copy(dst_ptr=h_b.unsafe_ptr(), src_buf=d_bin)
     ctx.synchronize()
 
-    # THE REAL REDUCE, transcribed from the depthwise driver's own loop so
+    # THE REAL REDUCE, spelled as in the depthwise driver's own loop so
     # this gate cannot pass against a private variant of it.
     var leaves = List[TLeaf]()
     var our_gain = List[Float32]()

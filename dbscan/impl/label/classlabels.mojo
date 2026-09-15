@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`make_monotonic`: renumber labels onto a monotonically increasing set.
 
-FOLLOWS `raft/label/detail/classlabels.cuh::make_monotonic` and
-`map_label_kernel` at RAFT `661a3b8`. Replaced in its unique-value step; see
+Reference: `raft/label/detail/classlabels.cuh::make_monotonic` and
+`map_label_kernel` (RAFT `661a3b8`). Replaced in its unique-value step; see
 deviation 33.
 
 WHY THIS IS NOT OPTIONAL, WHICH `dbscan/NOT_IMPLEMENTED.tsv` GOT WRONG

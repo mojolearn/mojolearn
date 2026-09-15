@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A tree whose leaves do NOT all share one split list.
 
-FOLLOWS `catboost/cuda/models/non_symmetric_tree.h` (and its one-function
-`non_summetric_tree.cpp` -- their spelling of the basename, kept only in
-this citation) at CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/models/non_symmetric_tree.h` (and its one-function
+`non_summetric_tree.cpp` -- the reference spelling of the basename, kept only in
+this citation) (CatBoost `54a8143a`).
 
 This is the model `EGrowPolicy::Depthwise` and `EGrowPolicy::Lossguide`
 build, where `SymmetricTree` builds `TObliviousTreeModel`. The searcher is
@@ -122,8 +122,8 @@ struct TNonSymmetricTreeStructure(Copyable, Movable):
     def visit_bins(self) raises -> List[TVisitedLeaf]:
         """`VisitBinsImpl` (`non_symmetric_tree.h:57-114`), the walk copied.
 
-        Their iterative pre-order walk with an explicit node stack and an
-        `unwind` flag, statement for statement. It is worth resisting the
+        The reference's iterative pre-order walk with an explicit node stack and an
+        `unwind` flag, step for step. It is worth resisting the
         urge to rewrite it as recursion: the flag encodes WHICH CHILD we
         came back from, and getting that wrong produces a tree whose leaves
         are all reachable and whose PATHS are wrong, which no leaf count and

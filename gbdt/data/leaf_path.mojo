@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The route from the root to one leaf, which is what a non-symmetric tree is.
 
-FOLLOWS `catboost/cuda/data/leaf_path.h` at CatBoost `54a8143a`.
-Followed statement for statement.
+Reference: `catboost/cuda/data/leaf_path.h` (CatBoost `54a8143a`).
 
 An oblivious tree needs no such thing: every leaf of a level shares one split,
 so `TObliviousTreeStructure` is a list of splits and a leaf is an index into

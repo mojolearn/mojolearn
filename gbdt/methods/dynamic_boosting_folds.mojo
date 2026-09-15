@@ -3,14 +3,14 @@
 """The FOLD machinery of CatBoost's ORDERED boosting: `CreateFolds` and the
 fold/permutation structures immediately around it.
 
-FOLLOWS `catboost/cuda/methods/dynamic_boosting.h` at CatBoost `54a8143a`,
+Reference: `catboost/cuda/methods/dynamic_boosting.h` (CatBoost `54a8143a`),
 lines `:75-119` (`TFold`, `TFoldAndPermutationStorage`), `:177-185`
 (`MinEstimationSize`), `:189-223` (`CreateFolds`) and `:283-289` / `:573-575`
 (the permutation counts the fold grid is sized by). Supporting reads:
 `catboost/cuda/gpu_data/samples_grouping.h:13-127` (`IQueriesGrouping` and its
 two implementations), `catboost/cuda/utils/helpers.h:3-6` (`CeilDivide`),
 `catboost/libs/helpers/math_utils.h:14-16` (`NCB::IntLog2`),
-`catboost/cuda/cuda_lib/slice.h:9` (`TSlice`). Followed statement for statement.
+`catboost/cuda/cuda_lib/slice.h:9` (`TSlice`).
 
 WHY THIS FILE IS ITS OWN THING, AND WHY IT NEEDS NO GPU
 ------------------------------------------------------
@@ -80,16 +80,16 @@ WHAT THIS FILE DELIBERATELY DOES NOT IMPLEMENTATION
   `GetTarget(permutationId)` accessor. Nothing in it is fold arithmetic.
 
 ================================ DEVIATION 110 ========================
-THEIRS: `IQueriesGrouping` (`samples_grouping.h:13-26`) is an abstract class
+REFERENCE: `IQueriesGrouping` (`samples_grouping.h:13-26`) is an abstract class
 with five pure virtuals and two implementations, `TWithoutQueriesGrouping`
 (`:28-58`) and `TQueriesGrouping` (`:60-...`). `CreateFolds` takes it by
 `const&` and dispatches virtually.
 
-OURS: one struct with a `kind` tag, built by `IQueriesGrouping.without_queries`
+HERE: one struct with a `kind` tag, built by `IQueriesGrouping.without_queries`
 or `IQueriesGrouping.queries`, dispatching on the tag. `ENGINEERING_RULES` rule 4
 names this workaround: Mojo has no dynamic trait objects, and a tagged union
 is what their worker switches on anyway. NOT ARITHMETIC -- every one of the
-five accessors is transcribed branch for branch below.
+five accessors is implemented branch for branch below.
 
 Two members of `TQueriesGrouping` are NOT built: the pair vectors
 (`FlatQueryPairs`, `QueryPairWeights`, `QueryPairOffsets`), which only
@@ -102,12 +102,12 @@ that is already permuted.
 ======================================================================
 
 ================================ DEVIATION 111 ========================
-THEIRS: `ui32` throughout `MinEstimationSize` and `CreateFolds`, `ui64` inside
+REFERENCE: `ui32` throughout `MinEstimationSize` and `CreateFolds`, `ui64` inside
 `TSlice`, and one narrowing cast that matters --
 `static_cast<ui32>(minEstimationSize * growthRate)` (`:211`, `:217`), a
 `double` multiply truncated toward zero and then wrapped to 32 bits.
 
-OURS: `Int` (signed, 64-bit) throughout, matching `gbdt/gpu_lib/slice.mojo`,
+HERE: `Int` (signed, 64-bit) throughout, matching `gbdt/gpu_lib/slice.mojo`,
 which already stores `TSlice` bounds as `Int` and declares that departure.
 `Int(Float64)` truncates toward zero, so the truncation is the same; what is
 NOT the same is the wrap. Theirs wraps at 2^32, which for
@@ -132,12 +132,12 @@ expression in `float` and is deliberately kept in float there.
 ======================================================================
 
 ================================ DEVIATION 112 ========================
-THEIRS: `CreateFolds`' growth loop (`:215-222`) has no iteration bound. It
+REFERENCE: `CreateFolds`' growth loop (`:215-222`) has no iteration bound. It
 terminates because `NextQueryOffsetForLine` is strictly increasing below
 `sampleCount` in both of their groupings, so `QualityEvaluateSamples.Right`
 gains at least 1 per pass and is clamped at `sampleCount`.
 
-OURS: the same loop with `max_iterations = sample_count + 2` and a `raise` if
+HERE: the same loop with `max_iterations = sample_count + 2` and a `raise` if
 it is exceeded. The bound is not a tuning knob -- it is the length of the
 longest sequence their own termination argument permits, since the right edge
 is a strictly increasing integer in `[1, sample_count]`.
@@ -291,7 +291,7 @@ struct IQueriesGrouping(Copyable, Movable):
         (`samples_grouping.h:62-105`), given groups already in their final
         order.
 
-        Their loop is transcribed for the three vectors that survive
+        The reference loop is implemented for the three vectors that survive
         DEVIATION 110:
 
             QuerySizes[groupId]   = groupInfo.GetSize();
@@ -299,7 +299,7 @@ struct IQueriesGrouping(Copyable, Movable):
             QueryIds[groupStartIdx + j] = groupIdx;   for j in [0, size)
             groupStartIdx += groupInfo.GetSize();
 
-        Their two `CB_ENSURE`s are transcribed with them: `"Error: empty
+        The reference's two `CB_ENSURE`s are kept with them: `"Error: empty
         group"` (`:80`) and `"Error: all groups have size 1"` (`:103`), the
         latter counting groups of size > 1 across the whole pool.
         """
@@ -428,8 +428,8 @@ series fits under it."""
 
 
 def min_estimation_size(doc_count: Int, min_fold_size: Int) -> Int:
-    """Their `MinEstimationSize(ui32 docCount)` (`dynamic_boosting.h
-    :177-185`), transcribed branch for branch:
+    """`MinEstimationSize(ui32 docCount)` (`dynamic_boosting.h
+    :177-185`), branch for branch:
 
         if (docCount < 500) {
             return 1;
@@ -477,7 +477,7 @@ def create_folds(
     min_fold_size: Int,
     dev_count: Int,
 ) raises -> List[TFold]:
-    """Their `CreateFolds` (`dynamic_boosting.h:189-223`), transcribed.
+    """`CreateFolds` (`dynamic_boosting.h:189-223`).
 
     Their signature is `CreateFolds(ui32 sampleCount, double growthRate,
     const IQueriesGrouping&)`; `Config.BoostingType`, `Config.MinFoldSize` and
@@ -702,7 +702,7 @@ def learn_permutation_count(permutation_count: Int) -> Int:
 
     `:574` spells the same value as `estimationPermutation ?
     estimationPermutation : 1`, which is equal because `estimationPermutation
-    == permutationCount - 1`. Both spellings transcribed; this is the first.
+    == permutationCount - 1`. Both spellings appear in the reference; this is the first.
 
     This is the number of rows `PermutationFolds` and `Cursor.FoldData` are
     resized to (`:576-578`), so `create_folds` is called exactly this many
@@ -715,7 +715,7 @@ def learn_permutation_count(permutation_count: Int) -> Int:
 
 
 def learn_permutation_id(random_value: Int, learn_permutation_count_in: Int) -> Int:
-    """`dynamic_boosting.h:287-289`, transcribed AS WRITTEN:
+    """`dynamic_boosting.h:287-289`, AS WRITTEN:
 
         const ui32 learnPermutationId = learnPermutationCount > 1
             ? static_cast<const ui32>(Random.NextUniformL() %
@@ -730,8 +730,8 @@ def learn_permutation_id(random_value: Int, learn_permutation_count_in: Int) -> 
     adds the model back to all three (`:447-465`). It is only the STRUCTURE
     SEARCH that never sees it.
 
-    This is transcribed, not corrected. `ENGINEERING_RULES` 0b: copy, do not
-    improve. Whether the `- 1` is deliberate or a typo in their tree is not
+    This is kept, not corrected. `ENGINEERING_RULES` 0b: copy, do not
+    improve. Whether the `- 1` is deliberate or a typo in the reference is not
     this implementation's question to answer, and an implementation that quietly used
     `% learnPermutationCount` would train a different model from CatBoost on
     the default configuration.

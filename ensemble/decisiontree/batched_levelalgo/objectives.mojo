@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The split criteria: Gini, Entropy, MSE, Poisson, Gamma, InverseGaussian.
 
-MIRRORS `cpp/src/decisiontree/batched-levelalgo/objectives.cuh` at
+Reference: `cpp/src/decisiontree/batched-levelalgo/objectives.cuh` at
 rapidsai/cuml `v26.08.00` (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`),
 checked out read-only at `~/CascadeProjects/upstream/cuml-v26.08.00`.
 
@@ -94,9 +94,9 @@ instantiations, so the constraint is exactly their domain written down.
 
 DEVIATION 113. `raft::log` BECOMES `std.math.log`, ON THE DEVICE, WHERE
 THE RECORDED FIX IS UNAVAILABLE.
-THEIRS: `raft::log` in `EntropyGain` (`:99`, `:107`, `:113`),
+REFERENCE: `raft::log` in `EntropyGain` (`:99`, `:107`, `:113`),
 `PoissonGain` (`:255-257`) and `GammaGain` (`:283-285`).
-OURS: `std.math.log`.
+HERE: `std.math.log`.
 This repository has a recorded defect for exactly this substitution:
 `std.math.log` carries ~5e-8 ABSOLUTE error against libm, measured at
 w = 840 as 5656.057589200282 against libm's 5656.057589153382, and that
@@ -216,9 +216,9 @@ row 12's closure.
 
 DEVIATION 406 (2026-08-23). ROW 12 CLOSED, SO THE 405 REFUSE IS UPGRADED
 TO A REAL RUN.
-THEIRS: `raft::log` in `EntropyGain`, `PoissonGain` and `GammaGain`, as
+REFERENCE: `raft::log` in `EntropyGain`, `PoissonGain` and `GammaGain`, as
 recorded in DEVIATION 113.
-OURS: `_log_seam` (defined below the imports with 405's two seams),
+HERE: `_log_seam` (defined below the imports with 405's two seams),
 which is `numerics.identical_log`. Under NUMERIC_FAST the wrapper IS
 `std.math.log` verbatim, so the default build's bits are DEVIATION
 113's, unchanged and re-gated (`objectives_check`, `criteria_check`,

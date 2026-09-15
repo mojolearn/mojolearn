@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The four kernels behind `ELeavesEstimation::Exact` on their GPU.
 
-FOLLOWS `catboost/cuda/methods/kernel/exact_estimation.cu` at CatBoost
-`54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/exact_estimation.cu` (CatBoost
+`54a8143a`).
 
 WHAT EXACT IS. For MAE, MAPE and Quantile the second derivative is
 identically zero, so a Newton step is meaningless and even the Gradient

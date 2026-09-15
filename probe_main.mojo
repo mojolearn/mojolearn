@@ -293,8 +293,8 @@ def show_matrix() raises:
             " when the lane width moves; it did not"
         )
 
-    # `slice_offset` transcribes their `512 * (threadIdx.x / 32) + (tid & 24)`
-    # with the 32 and the 512 as LITERALS, because that is how their file
+    # `slice_offset` computes the reference's `512 * (threadIdx.x / 32) + (tid & 24)`
+    # with the 32 and the 512 as LITERALS, because that is how the reference file
     # writes it. Those literals are only correct while the lane width IS 32.
     # CatBoost never had to care, since they build for CUDA alone. We claim
     # three vendors, so the day the column moves to AMD this is the line that

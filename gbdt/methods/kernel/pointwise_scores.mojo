@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost's POINTWISE split scorer and its five score calcers, implemented.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_scores.cu` (698 lines) and
-`catboost/cuda/methods/kernel/score_calcers.cuh` (188 lines) at CatBoost
-`54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_scores.cu` (698 lines) and
+`catboost/cuda/methods/kernel/score_calcers.cuh` (188 lines) (CatBoost
+`54a8143a`).
 
 WHICH FAMILY THIS IS
 --------------------
@@ -96,9 +96,9 @@ UNWIRED. Nothing in this repository calls any of it yet. The callers are
 `archive/plans/UNWIRED.md` already carries the whole pointwise family; this file joins it.
 Gated in isolation by `checks/pointwise_scores_check.mojo`.
 
-FOUR THINGS UPSTREAM DOES NOT AGREE WITH ITSELF ABOUT
-------------------------------------------------------
-All four are transcribed as written. They are recorded because a reader who
+FOUR THINGS THE REFERENCE DOES NOT AGREE WITH ITSELF ABOUT
+----------------------------------------------------------
+All four are kept as the reference has them. They are recorded because a reader who
 "fixes" any of them has forked the algorithm.
 
 1. `denumSqr` is seeded `1e-20f` in `FindOptimalSplitCosineImpl` (`:344`)
@@ -1167,8 +1167,8 @@ def _block_argmin_and_store[
     THE BARRIER IS OUTSIDE THE `if (tid < s)`, which is what makes it legal
     and what makes it portable (`archive/reference/PORTING.md` 11 and 92: a threadgroup
     barrier reached by only some threads is undefined, and on Metal it does
-    not merely warn). Their `ScanHistogramsImpl` in the same family gets
-    this wrong; this loop gets it right, so it follow statement for statements unchanged.
+    not merely warn). The reference `ScanHistogramsImpl` in the same family gets
+    this wrong; this loop gets it right, so it is kept unchanged.
 
     ON A TIE THE SMALLER INDEX WINS. See the module docstring.
 
@@ -1271,7 +1271,7 @@ def gather_histograms_by_leaves_kernel[
     schedule they chose.
 
     THE z AXIS IS DEAD -- see the module docstring's fifth finding. The
-    `threadIdx.z * BLOCK_SIZE` term is transcribed and is always 0.
+    `threadIdx.z * BLOCK_SIZE` term is kept and is always 0.
     """
     var bin_feature_count = Int(bin_feature_count_in)
     var leaf_count = Int(leaf_count_in)

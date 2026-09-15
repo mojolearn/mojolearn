@@ -2,17 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Single linkage: connectivities -> sorted MST -> dendrogram -> labels.
 
-FOLLOWS `cuvs/cpp/src/cluster/detail/single_linkage.cuh`, cuVS `94c2819`:
-`build_dist_linkage` (`:139-205`) and `single_linkage` (`:227-269`).
+Reference: `build_dist_linkage` (`:139-205`) and `single_linkage` (`:227-269`),
+`cuvs/cpp/src/cluster/detail/single_linkage.cuh` (cuVS `94c2819`).
 `build_mr_linkage` (`:50-118`, the mutual-reachability linkage HDBSCAN
 uses) is NOT implemented here and is listed in `hierarchy/NOT_IMPLEMENTED.tsv`.
-Followed statement for statement, their order.
+Steps run in the reference's order.
 
 `single_linkage_output` (`cuvs/cluster/agglomerative.hpp`) is the struct of
 out-pointers plus `m`, `n_clusters`, `n_leaves`, `n_connected_components`;
-ours carries the same fields over two caller-owned device buffers.
+this implementation carries the same fields over two caller-owned device buffers.
 
-THE KNOBS THAT ARE NOT THEIRS. `tile_tpb`, `mst_tpb`, `extract_tpb` are
+THE KNOBS THE REFERENCE DOES NOT HAVE. `tile_tpb`, `mst_tpb`, `extract_tpb` are
 block sizes (their launches take them from device properties or template
 defaults) and `sabotage` selects a check arm; all four default to the
 production values and exist so `linkage_check.mojo` can prove the output

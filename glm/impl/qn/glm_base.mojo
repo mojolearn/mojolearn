@@ -3,7 +3,7 @@
 """`linearFwd`, `linearBwd`, `GLMDims`, `GLMBase::getLossAndDZ`/`loss_grad`,
 `GLMWithData`: the objective the L-BFGS solver calls.
 
-FOLLOWS `cuml/cpp/src/glm/qn/glm_base.cuh` at cuML `00094f7`. Dense
+Reference: `cuml/cpp/src/glm/qn/glm_base.cuh` (cuML `00094f7`). Dense
 row-major `X`, no sample weights (`add_sample_weights` and the weighted arm
 of `getLossAndDZ` are refused by name in `qn.mojo`). `C == 1` is the path
 below, kernel for kernel; `C > 1` (the softmax objective) dispatches on

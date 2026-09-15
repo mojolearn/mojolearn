@@ -94,7 +94,7 @@ re-derivation shares no line with the shipping `split_tie_rank`."""
 
 
 def _tie_rank_ref(tree_id: UInt32, node_id: UInt32, colid: UInt32) -> UInt32:
-    """DEVIATION 463's rank, INDEPENDENTLY transcribed: fnv1a32 from the
+    """DEVIATION 463's rank, INDEPENDENTLY restated: fnv1a32 from the
     basis over (salt, tree, node, colid), then murmur3's fmix32. The oracle
     computes the same value through `split_tie_salt_for` + `split_tie_rank`;
     two expressions of one arithmetic, the way `split_reduce_check` holds

@@ -27,10 +27,10 @@ The sequence, `:130-231`:
      (`:220-231`), one thread per entry.
 
 ============ DEVIATION 776: reduce_by_key -> A PER-ROW ASCENDING FOLD ======
-THEIRS: `thrust::reduce_by_key` over the row-sorted values (`:212-217`), a
+REFERENCE: `thrust::reduce_by_key` over the row-sorted values (`:212-217`), a
 segmented reduction whose within-segment combination order is thrust's (a
 decoupled look-back scan with warp-width tiles: vendor and launch shaped).
-OURS: `degree_kernel`, one thread per row, `acc = ftz(acc + v)` seeded
+HERE: `degree_kernel`, one thread per row, `acc = ftz(acc + v)` seeded
 `+0.0` over the row's entries in sorted (ascending column) order, the order
 the COO is in after `coo_sort`. A pure function of the canonical COO, the
 same on every vendor, no block shape anywhere in it. For the kNN graph the

@@ -3,7 +3,7 @@
 """`olsFit`: the entry point, its guards, its SAMPLE WEIGHTS and its SOLVER
 DISPATCH.
 
-FOLLOWS `cuml/cpp/src/glm/ols.cuh::olsFit` at cuML `00094f7`. Partial.
+Reference: `olsFit`, `cuml/cpp/src/glm/ols.cuh` (cuML `00094f7`). Partial.
 
 WHY THIS FILE EXISTS, AND IT IS NOT A WRAPPER
 ---------------------------------------------

@@ -25,7 +25,7 @@ THEREFORE `shuffle = true` (cuML Python `selection='random'`) IS REFUSED BY
 NAME in both modes at `cd_fit`, and only `initShuffle`'s identity
 permutation is here. DEVIATION 611 was reserved for an exact implementation
 (`mt19937` is fully specified; libstdc++'s `std::shuffle` would have to be
-transcribed and named as THE algorithm) and is NOT spent:
+implemented exactly and named as THE algorithm) and is NOT spent:
 `solver/NOT_IMPLEMENTED.tsv` carries the entry.
 """
 

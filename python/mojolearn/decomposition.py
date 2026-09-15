@@ -182,7 +182,7 @@ class PCA(NumericModeMixin):
     sqrt(n_samples_-1)/s, equivalent in real arithmetic to
     1/sqrt(explained_variance_). The order is pinned FP32 multiply, then
     divide, with FTZ seams; it is not a promise to match another spelling's
-    rounded bits. Following the existing cuML-derived skip-zero contract,
+    rounded bits. Following the existing skip-zero contract (the same threshold as cuML),
     s < float32(1e-10) skips the singular division (inverse skips its
     multiplication), retaining the sample-count scale. Degenerate columns
     therefore do not promise unit variance. Nonfinite data/model arrays and
@@ -479,7 +479,7 @@ class PCA(NumericModeMixin):
 
 
 class TruncatedSVD(NumericModeMixin):
-    """Uncentered truncated SVD on the GPU, mirroring cuML's `tsvdFit`
+    """Uncentered truncated SVD on the GPU. Reference: cuML's `tsvdFit`
     (Gram matrix + the same device Jacobi eigensolver PCA uses).
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by
