@@ -1,0 +1,7 @@
+installed from wheel/target/mojolearn/__init__.py vendor cpu
+GaussianMixture fit refused: mojolearn: public CPU estimators support inference from saved models; 
+HDBSCAN fit refused: mojolearn: public CPU estimators support inference from saved models; 
+RadiusNeighbors fit refused: mojolearn: public CPU estimators support inference from saved models; 
+IsolationForest fit refused: mojolearn: public CPU estimators support inference from saved models; 
+gmm host_model -> HostGaussianMixture binds mojolearn._host._mojolearn_mixture_infer_host gmm_fit absent
+hdbscan host_model -> HostHDBSCAN binds mojolearn._host._mojolearn_hdbscan_infer_host hdbscan_fit absent

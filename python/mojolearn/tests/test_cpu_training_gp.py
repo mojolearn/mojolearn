@@ -50,8 +50,10 @@ def test_manifest_declares_the_gp_family():
     assert fam["routes"] == "_mojolearn_gp"
     # The cholesky lane joined this family on lane/cpu-training-d-estimators
     # (ad7a1b933) and moved to the linalg family with public CPU Cholesky
-    # inference; gp-normalize-y joined on lane/cpu-training-small-gaps.
-    assert fam["training_lanes"] == LANES + ("gp-normalize-y",)
+    # inference; gp-normalize-y joined on lane/cpu-training-small-gaps and the
+    # classifier's lanes on lane/gaussian-process-classifier
+    # (tests/test_gpc_surface.py).
+    assert fam["training_lanes"] == LANES + ("gp-normalize-y", "gpc", "gpc-multiclass")
     for module in (GP_ORACLE, CHOL_ORACLE):
         assert module in fam["host_modules"] and (ROOT / module).is_file()
     assert (ROOT / host_surface.build_shim("gp")).is_file()
@@ -73,11 +75,15 @@ def test_binding_registers_the_gpu_names():
         assert f'("{name}")' in gpu, f"{name} is not a GPU binding name"
         assert name in exports, f"the manifest does not list {name} for gp"
     assert '("gp_parallel_available")' not in src, "gp_parallel_available must stay absent so it refuses by name"
-    # The address and params contract, word for word.
+    # The address and params contract, word for word. The host predict entries
+    # live in bindings/gp_host_predict.mojo since lane/inference-neighbors-density
+    # moved them there (the gp host binding imports and registers them), so the
+    # host side of the contract is that module and the binding read together.
+    host = src + _read("bindings/gp_host_predict.mojo")
     for sentence in ("addrs must contain 9 addresses", "params must contain 5 values",
                      "addrs must contain 12 addresses", "params must contain 7 values",
                      "params must contain 6 values (n, nrhs, info,"):
-        assert sentence in src and sentence in gpu, sentence
+        assert sentence in host and sentence in gpu, sentence
 
 
 def test_oracles_import_no_gpu_and_no_device_module():

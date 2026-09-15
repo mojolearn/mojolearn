@@ -341,3 +341,73 @@ def gather_candidate_norms(
             )
         out.append(list_norm[s])
     return out^
+
+
+def extend_list_layout(
+    offsets: List[Int32],
+    list_indices: List[UInt32],
+    list_data: List[Float32],
+    n_rows: Int,
+    dim: Int,
+    n_lists: Int,
+    new_labels: List[UInt32],
+    new_x: List[Float32],
+    n_new: Int,
+) raises -> ListLayout:
+    """`ivf_flat::extend`'s list resize and insert (`ivf_flat_build.cuh:
+    180-345`) over this CSR layout, with the arrival order removed
+    (lane/inference-embedding-ivf-cholesky, 2026-09-15).
+
+    The new rows take the ids `n_rows, n_rows + 1, ...` in the order given,
+    and each goes to the END of its list. Every stored id in a list is below
+    `n_rows` and every new one is at or above it, so each list stays
+    ASCENDING in the original id (DEVIATION 1783) with no merge. The result is
+    therefore exactly `build_list_layout` over the concatenated rows with the
+    concatenated labels: a function of the set of rows and their labels, not
+    of how the new rows were cut into `extend` calls. Integers and copies
+    only; no float is computed here.
+
+    Raises on a label outside `[0, n_lists)`, as `build_list_layout` does.
+    """
+    if len(offsets) != n_lists + 1 or len(list_indices) != n_rows or len(list_data) != n_rows * dim:
+        raise Error("extend_list_layout: the index arrays disagree with n_rows, dim and n_lists")
+    if len(new_labels) != n_new or len(new_x) != n_new * dim:
+        raise Error(
+            "extend_list_layout: new_labels has " + String(len(new_labels))
+            + " entries and new_x " + String(len(new_x)) + " values, expected "
+            + String(n_new) + " and " + String(n_new * dim)
+        )
+    var added = List[Int32](length=n_lists, fill=Int32(0))
+    for j in range(n_new):
+        var l = Int(new_labels[j])
+        if l < 0 or l >= n_lists:
+            raise Error(
+                "extend_list_layout: new row " + String(j) + " carries label "
+                + String(l) + ", outside [0, " + String(n_lists) + ")"
+            )
+        added[l] = added[l] + Int32(1)
+    var total = n_rows + n_new
+    var new_offsets = List[Int32](capacity=n_lists + 1)
+    new_offsets.append(Int32(0))
+    for l in range(n_lists):
+        var size = (offsets[l + 1] - offsets[l]) + added[l]
+        new_offsets.append(new_offsets[l] + size)
+    var out_indices = List[UInt32](length=total, fill=UInt32(0))
+    var out_data = List[Float32](length=total * dim, fill=Float32(0.0))
+    var cursor = List[Int32](capacity=n_lists)
+    for l in range(n_lists):
+        var dst = Int(new_offsets[l])
+        for s in range(Int(offsets[l]), Int(offsets[l + 1])):
+            out_indices[dst] = list_indices[s]
+            for f in range(dim):
+                out_data[dst * dim + f] = list_data[s * dim + f]
+            dst += 1
+        cursor.append(Int32(dst))
+    for j in range(n_new):
+        var l = Int(new_labels[j])
+        var slot = Int(cursor[l])
+        cursor[l] = cursor[l] + Int32(1)
+        out_indices[slot] = UInt32(n_rows + j)
+        for f in range(dim):
+            out_data[slot * dim + f] = new_x[j * dim + f]
+    return ListLayout(n_lists, total, dim, new_offsets^, out_indices^, out_data^)

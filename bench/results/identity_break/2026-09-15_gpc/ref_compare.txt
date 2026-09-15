@@ -1,0 +1,40 @@
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+vendor metal mode identical
+fixture  lane  max|proba diff|  |lml diff|  label agreement  n_iter
+base          bin  6.661e-07  5.645e-05  64/64  6
+base          mc   9.935e-07  6.209e-06  64/64  [7, 6, 8]
+ties          bin  7.284e-08  5.425e-06  64/64  6
+ties          mc   1.379e-07  2.713e-07  64/64  [7, 5, 6]
+hashed        bin  1.697e-07  5.669e-06  64/64  6
+hashed        mc   2.832e-07  2.656e-05  64/64  [8, 6, 7]
+wide          bin  5.773e-05  2.789e-05  64/64  3
+wide          mc   1.586e-04  5.463e-05  64/64  [6, 4, 6]
+denormal      bin  2.320e-06  3.921e-06  64/64  6
+denormal      mc   1.011e-05  1.402e-05  64/64  [7, 7, 8]
+denormal_ftz  bin  2.320e-06  3.921e-06  64/64  6
+denormal_ftz  mc   1.011e-05  1.402e-05  64/64  [7, 7, 8]
+dupes         bin  6.661e-07  5.645e-05  64/64  6
+dupes         mc   9.935e-07  6.209e-06  64/64  [7, 6, 8]
+odd           bin  4.303e-07  2.471e-05  64/64  6
+odd           mc   1.850e-06  1.531e-05  64/64  [7, 8, 7]
+negative      bin  2.009e-06  6.388e-06  64/64  7
+negative      mc   7.210e-06  6.681e-06  64/64  [7, 6, 8]
+WORST bin: max|proba diff| 5.773e-05, max|lml diff| 5.645e-05, labels 576/576
+WORST mc: max|proba diff| 1.586e-04, max|lml diff| 5.463e-05, labels 576/576

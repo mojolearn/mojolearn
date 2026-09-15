@@ -40,7 +40,8 @@ NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
 import warnings
 
-from . import _backend
+from . import _backend, _serialize
+from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
@@ -55,6 +56,22 @@ SELECTION_EOM = 0
 SELECTION_LEAF = 1
 
 _METRICS = {"euclidean": METRIC_L2_SQRT_EXPANDED, "l2": METRIC_L2_SQRT_EXPANDED}
+
+#: The model file (the neighbors and density inference lane, 2026-09-15):
+#: what `approximate_predict` reads and nothing else. `raw_data` `<f4`
+#: (n, d) as fitted, `core_distances` `<f4`, `labels` `<i4`, the prediction
+#: data's `parents` `<i4`, `lambdas` `<f4`, `deaths` `<f4`,
+#: `selected_clusters` `<i4`, `index_into_children` `<i4`, `exemplar_idx` `<i4`
+#: and `exemplar_label_offsets` `<i4` (the last three and `parents` are what
+#: membership_vector and all_points_membership_vectors read), `ints` `<i8`
+#: [n_features_in_, n_clusters_, n_outliers_, n_boruvka_rounds_,
+#: n_condensed_clusters_, n_edges, min_cluster_size, min_samples (-1 for
+#: None), max_cluster_size, allow_single_cluster, n_exemplars], `reals` `<f8`
+#: [alpha, cluster_selection_epsilon],
+#: `metric` and `cluster_selection_method` as text. A model fitted without
+#: prediction_data=True has nothing to save and is refused by name.
+_HDBSCAN_FORMAT = "mojolearn-hdbscan-2"
+_HDBSCAN_INTS = 11
 _SELECTION = {"eom": SELECTION_EOM, "leaf": SELECTION_LEAF}
 
 
@@ -263,6 +280,90 @@ class HDBSCAN(NumericModeMixin):
 
     def fit_predict(self, X, y=None):
         return self.fit(X).labels_
+
+    def save(self, path):
+        """Write what `approximate_predict` reads to `path` as an npz
+        (`_HDBSCAN_FORMAT`). `mojolearn.host_model(path)` predicts held-out
+        points from it on a CPU with no GPU."""
+        pd = _check_clusterer(self, "HDBSCAN.save")
+        from .linear_model import _saved_mode
+        if not isinstance(self.metric, str) or not isinstance(self.cluster_selection_method, str):
+            raise ValueError("mojolearn HDBSCAN.save: metric and cluster_selection_method must be names")
+        n_sel = int(self.n_clusters_)
+        return _serialize.write_npz(path, {
+            "format": _HDBSCAN_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "metric": self.metric,
+            "cluster_selection_method": self.cluster_selection_method,
+            "raw_data": self._raw_data,
+            "core_distances": self.core_distances_,
+            "labels": self.labels_,
+            "parents": pd["parents"],
+            "lambdas": pd["lambdas"],
+            "deaths": pd["deaths"],
+            "selected_clusters": pd["selected_clusters"][:max(n_sel, 1)],
+            "index_into_children": pd["index_into_children"],
+            "exemplar_idx": pd["exemplar_idx"],
+            "exemplar_label_offsets": pd["exemplar_label_offsets"],
+            "ints": Array.from_list([
+                int(self.n_features_in_), n_sel, int(self.n_outliers_), int(self.n_boruvka_rounds_),
+                int(self.n_condensed_clusters_), int(pd["n_edges"]), int(self.min_cluster_size),
+                -1 if self.min_samples is None else int(self.min_samples), int(self.max_cluster_size),
+                1 if self.allow_single_cluster else 0, int(pd["n_exemplars"]),
+            ], "<i8"),
+            "reals": Array.from_list([float(self.alpha), float(self.cluster_selection_epsilon)], "<f8"),
+        })
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`; `approximate_predict` accepts the
+        result. Every array at its saved dtype, never cast."""
+        from .linear_model import _check_saved_by, _restore_mode
+        arrays = _serialize.read_npz(path, _HDBSCAN_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        ints = _serialize.exact(arrays, "ints", "<i8")
+        reals = _serialize.exact(arrays, "reals", "<f8")
+        if ints.size != _HDBSCAN_INTS or reals.size != 2:
+            raise ValueError(f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, "
+                             f"{_HDBSCAN_INTS} and 2 are needed")
+        (d, n_sel, n_out, n_rounds, n_cond, n_edges, mcs, ms, maxcs, single, n_ex) = (
+            int(ints[i]) for i in range(_HDBSCAN_INTS))
+        obj = cls(min_cluster_size=mcs, min_samples=None if ms == -1 else ms,
+                  cluster_selection_epsilon=float(reals[1]), max_cluster_size=maxcs,
+                  metric=_serialize.scalar_str(arrays, "metric"), alpha=float(reals[0]),
+                  cluster_selection_method=_serialize.scalar_str(arrays, "cluster_selection_method"),
+                  allow_single_cluster=bool(single), prediction_data=True)
+        _restore_mode(obj, arrays)
+        raw = _serialize.exact(arrays, "raw_data", "<f4")
+        if raw.ndim != 2 or raw.shape[1] != d or raw.shape[0] < 2:
+            raise ValueError(f"mojolearn: {path!r} raw_data has shape {tuple(raw.shape)}, ints say {d} features")
+        n = int(raw.shape[0])
+        want = dict(core_distances=("<f4", n), labels=("<i4", n), parents=("<i4", n_edges),
+                    lambdas=("<f4", n_edges), deaths=("<f4", n_cond),
+                    selected_clusters=("<i4", max(n_sel, 1)), index_into_children=("<i4", n_edges + 1),
+                    exemplar_idx=("<i4", max(n_ex, 1)), exemplar_label_offsets=("<i4", n_sel + 1))
+        got = {}
+        for name, (dtype, size) in want.items():
+            a = _serialize.exact(arrays, name, dtype)
+            if a.ndim != 1 or a.size != size:
+                raise ValueError(f"mojolearn: {path!r} {name} holds {a.size} values, {size} are needed")
+            got[name] = a
+        obj.n_features_in_ = d
+        obj.labels_ = got["labels"]
+        obj.core_distances_ = got["core_distances"]
+        obj.n_clusters_ = n_sel
+        obj.n_outliers_ = n_out
+        obj.n_boruvka_rounds_ = n_rounds
+        obj.n_condensed_clusters_ = n_cond
+        obj._raw_data = raw
+        obj._prediction_data = dict(n_edges=n_edges, n_condensed=n_cond, n_exemplars=n_ex,
+                                    parents=got["parents"], lambdas=got["lambdas"],
+                                    deaths=got["deaths"], selected_clusters=got["selected_clusters"],
+                                    index_into_children=got["index_into_children"],
+                                    exemplar_idx=got["exemplar_idx"],
+                                    exemplar_label_offsets=got["exemplar_label_offsets"])
+        return obj
 
 
 def _check_clusterer(clusterer, where):

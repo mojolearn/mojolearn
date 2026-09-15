@@ -1,0 +1,78 @@
+{
+  "commit": "c6c6f79b075f2c00544977a1e94d47fdcf89f711",
+  "estimator": "IVFIndex",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "negative",
+  "lane": "ivf-extend",
+  "model_sha256": "fd1e311bb478d0243f80d17ec4069947d1c9502e20c316ada21d31087218f4f2",
+  "numeric_mode": "identical",
+  "predictions": {
+    "extend_list_indices": {
+      "dtype": "<i4",
+      "sha256": "dd1045c2e18d50626b48f0a58df53614202e9f75d4acd83823e5279d7bdbbc5e",
+      "shape": [
+        4160
+      ]
+    },
+    "extend_lists": {
+      "dtype": "<i4",
+      "sha256": "db7d708c679c131ffbf44979c1e6f97a7f89975a09eb856338592499fc4536ea",
+      "shape": [
+        64
+      ]
+    },
+    "identity_hash": "d5badddd236f4f6f",
+    "list_data": {
+      "dtype": "<f4",
+      "sha256": "655f425034b5757e048f0969a42cec8c5e080d5f731371573db32628095588d1",
+      "shape": [
+        4096,
+        16
+      ]
+    },
+    "list_indices": {
+      "dtype": "<i4",
+      "sha256": "30a996f4c75db63b56c631239fa7701de666d692cfa6afb090bab1cdfadf4259",
+      "shape": [
+        4096
+      ]
+    },
+    "search_after_extend_ids": {
+      "dtype": "<i4",
+      "sha256": "0535ce98c5213574a11b2b8461c2b881d17328fc4d8e173b633a96e541da3c6b",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_distances": {
+      "dtype": "<f4",
+      "sha256": "b5b36216fdc3dd2e0896aff3fd6c51f9e875a6a9b6368da136b1389be555a266",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_second_batch_ids": {
+      "dtype": "<i4",
+      "sha256": "1f3edac84ca366ef6bada4b3f4e8753ecb4e68767010d07d1916b9e7b93ccbb7",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "seconds": 2.313525
+  },
+  "recorded_at": "2026-09-15T13:58:45-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "847c388bfeba3f3c07afd7ef560fc8a4f09111dfa48339717efd190e64ce72cf"
+}

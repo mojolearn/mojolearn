@@ -1,0 +1,23 @@
+  ok    SHAPE      float32 (n_rows, n_samples)
+  ok    SHAPE      every draw is finite
+  ok    SHAPE      the default is one draw, still two-dimensional as the reference's
+  ok    REPEAT     two calls with one random_state give the same bits
+  ok    REPEAT     another random_state gives other draws
+  ok    REPEAT     the key's high word reaches the stream
+  ok    REPEAT     the largest random_state is a valid key
+  ok    REPEAT     draw s does not depend on n_samples (the normals are position-mapped)
+  ok    MOMENTS    the draw mean is within 6 standard errors of predict's mean
+  ok    MOMENTS    the draw std is within 8 percent of predict's std
+  ok    REFERENCE  normalize_y=False: the draw covariance is within 0.08 correlation units of the reference's
+  ok    REFERENCE  normalize_y=False: the draw mean is within 6 standard errors of the reference's mean
+  ok    REFERENCE  normalize_y=True: the draw covariance is within 0.08 correlation units of the reference's
+  ok    REFERENCE  normalize_y=True: the draw mean is within 6 standard errors of the reference's mean
+  ok    REFUSE     sample_y before fit
+  ok    REFUSE     n_samples=0 is refused by name in Mojo
+  ok    REFUSE     a float n_samples
+  ok    REFUSE     random_state=None (the key is an int)
+  ok    REFUSE     a negative random_state
+  ok    REFUSE     a query with the wrong width
+  ok    REFUSE     the NOT_IMPLEMENTED row for sample_y is gone
+
+test_gp_sample_y: GREEN under numeric_mode=identical, 21 checks. One box, one vendor; no bit is claimed for any other.

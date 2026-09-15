@@ -1,0 +1,13 @@
+IDENTICAL 27
+{
+ "_mojolearn": "/tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_core_host.so",
+ "_mojolearn_arima": "/tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_forecast_host.so",
+ "_mojolearn_embedding": "/tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_embedding_infer_host.so",
+ "_mojolearn_estimators": "/tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_estimators_host.so",
+ "_mojolearn_ivf": "/tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_ivf_search_host.so",
+ "_mojolearn_kernel_methods": "/tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_estimators_host.so",
+ "_mojolearn_metrics": "/tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_metrics_host.so",
+ "_mojolearn_preprocessing": "/tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_estimators_host.so",
+ "_mojolearn_solver": "/tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_estimators_host.so",
+ "_mojolearn_svm": "/tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_svm_host.so"
+}

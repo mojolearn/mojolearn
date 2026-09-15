@@ -1,0 +1,32 @@
+{
+  "commit": "59cbcedd2b3c7bb809ffd3b28dc26a2d7791c8fa",
+  "estimator": "RadiusNeighbors",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "dupes",
+  "lane": "radius",
+  "model_sha256": "5167cd08ec11b8bd2d65e300a37fbee0d28204d4d0d6569fc078ac6e95b440c3",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "469e7731aa72a0fd",
+    "radius_neighbors_counts": {
+      "dtype": "int64",
+      "sha256": "5d192ef6e30c82ad7f5ccfac1fa7afadfb81d68e3628e4d8332c8b0995e6833e",
+      "shape": [
+        64
+      ]
+    },
+    "seconds": 0.020673
+  },
+  "recorded_at": "2026-09-15T12:40:31-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "e31c19919dd0d22a22c740be1b69d4029a2203b50921ee428a485970456fcfa7"
+}

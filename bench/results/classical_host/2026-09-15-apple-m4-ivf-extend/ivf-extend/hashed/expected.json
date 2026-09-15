@@ -1,0 +1,78 @@
+{
+  "commit": "c6c6f79b075f2c00544977a1e94d47fdcf89f711",
+  "estimator": "IVFIndex",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "hashed",
+  "lane": "ivf-extend",
+  "model_sha256": "e96813401e1670f08c6ab900889c277b9d7c1b980f8c2b44b912f69fc494a1bb",
+  "numeric_mode": "identical",
+  "predictions": {
+    "extend_list_indices": {
+      "dtype": "<i4",
+      "sha256": "940a13ff9f6dee20db1428a416f4c95d39ba1abf08d74a1db8edc758a5a4e8df",
+      "shape": [
+        4160
+      ]
+    },
+    "extend_lists": {
+      "dtype": "<i4",
+      "sha256": "e034a9c82357e38361183e93c1e81c854ebe43fac004fb59600ae27608499000",
+      "shape": [
+        64
+      ]
+    },
+    "identity_hash": "9d0f275ae985056d",
+    "list_data": {
+      "dtype": "<f4",
+      "sha256": "8acd7a1576e21f241ac3e615ef89cc8d20a208c1fa2d152b7e1d7db8cf983d86",
+      "shape": [
+        4096,
+        16
+      ]
+    },
+    "list_indices": {
+      "dtype": "<i4",
+      "sha256": "e61f29b4f4f839a7b9d235a4ef7fd17e17e1825644e9bc9e2440f8ea6a333e3e",
+      "shape": [
+        4096
+      ]
+    },
+    "search_after_extend_ids": {
+      "dtype": "<i4",
+      "sha256": "6d771235a09ebef84b9f53da4fd5ae4e8eb204193de0eda8247fa4bfbec67ba5",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_distances": {
+      "dtype": "<f4",
+      "sha256": "cfb9b4d64363fe9e951d0078a44bf9181eadc1bb10b483def7fc03601cc6fa52",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_second_batch_ids": {
+      "dtype": "<i4",
+      "sha256": "7ac96476567d958382496f19a8864871f1b48834bb4b4e51ac895723361949f6",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "seconds": 3.060681
+  },
+  "recorded_at": "2026-09-15T13:57:55-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "610f791343247286a120f012f4d03fb2d0bbc4500feb992df2fb844a344e4986"
+}

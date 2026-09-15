@@ -1,0 +1,56 @@
+............................................F........................... [ 51%]
+...........................................FF......................      [100%]
+=================================== FAILURES ===================================
+______________ test_binding_exports_exactly_the_manifest[mixture] ______________
+
+name = 'mixture'
+
+    @pytest.mark.parametrize("name", host_surface.families())
+    def test_binding_exports_exactly_the_manifest(name):
+        exported = _exports_in_source(name)
+        assert exported, f"no def_function registrations found in {host_surface.binding_source(name)}"
+        listed = list(host_surface.family(name)["exports"])
+>       assert sorted(exported) == sorted(listed), (
+            f"{name}: binding exports {sorted(set(exported) - set(listed))} the manifest does not list; "
+            f"manifest lists {sorted(set(listed) - set(exported))} the binding does not export"
+        )
+E       AssertionError: mixture: binding exports ['gmm_sample'] the manifest does not list; manifest lists [] the binding does not export
+E       assert ['gmm_fit', '...samples', ...] == ['gmm_fit', '..._column', ...]
+E         
+E         At index 3 diff: 'gmm_sample' != 'gmm_score_bic_aic'
+E         Left contains one more item: 'mixture_vendor'
+E         Use -v to get more diff
+
+python/mojolearn/tests/test_host_surface.py:70: AssertionError
+______________________ test_recordings_and_columns_exist _______________________
+
+    def test_recordings_and_columns_exist():
+        for rel in (host_surface.CLASSICAL_RECORDED + host_surface.FORECAST_RECORDED + host_surface.CLASSICAL_GPU_COLUMNS
+                    + (host_surface.FOREST_RECORDED_ROOT,)):
+>           assert (ROOT / rel).exists(), f"the manifest names {rel}, which is not in the tree"
+E           AssertionError: the manifest names bench/results/classical_host/2026-09-13-apple-m4, which is not in the tree
+E           assert False
+E            +  where False = exists()
+E            +    where exists = (PosixPath('/root/mojolearn') / 'bench/results/classical_host/2026-09-13-apple-m4').exists
+
+python/mojolearn/tests/test_host_surface.py:206: AssertionError
+_______________________ test_training_gpu_columns_exist ________________________
+
+    def test_training_gpu_columns_exist():
+        """The record must not lag the surface: the training gate diffs the CPU
+        column against these three files with --require-columns 4, and a column
+        that is not in the tree is a gate that cannot run, not a pass."""
+        missing = [rel for rel in host_surface.TRAINING_GPU_COLUMNS if not (ROOT / rel).exists()]
+>       assert missing == [], f"the manifest names training GPU columns not in the tree: {missing}"
+E       AssertionError: the manifest names training GPU columns not in the tree: ['bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json', 'bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json', 'bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json']
+E       assert ['bench/resul...-gfx942.json'] == []
+E         
+E         Left contains 3 more items, first extra item: 'bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json'
+E         Use -v to get more diff
+
+python/mojolearn/tests/test_host_surface.py:214: AssertionError
+=========================== short test summary info ============================
+FAILED python/mojolearn/tests/test_host_surface.py::test_binding_exports_exactly_the_manifest[mixture]
+FAILED python/mojolearn/tests/test_host_surface.py::test_recordings_and_columns_exist
+FAILED python/mojolearn/tests/test_host_surface.py::test_training_gpu_columns_exist
+3 failed, 136 passed in 0.62s

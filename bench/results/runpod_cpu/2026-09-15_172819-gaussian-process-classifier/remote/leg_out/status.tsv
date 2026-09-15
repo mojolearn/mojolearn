@@ -1,0 +1,4 @@
+build	core	0	0
+build	gp	0	1
+sabotage-build	core	0	0
+sabotage-build	gp	0	1

@@ -1,0 +1,26 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=52a4e4a638c1e1e27f7886d8f99ac1343507d74f
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=3b1b2d6f6f584aee208f7b4ac8de305b4c86608c
+| lane/fixture                 | verdict    | cpu-apple-m4     | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| gbdt-pair-logit/base         | DIVERGENT  | parts differ: predict,loss_curve,explicit_predict,explicit_loss_curve; agree: - | dd8e7a425b657410 |
+| gbdt-pair-logit/odd          | DIVERGENT  | parts differ: predict,loss_curve,explicit_predict,explicit_loss_curve; agree: - | 6b4a46eeb834e2e0 |
+| gbdt-pair-logit/ties         | DIVERGENT  | parts differ: predict,loss_curve,explicit_predict,explicit_loss_curve; agree: - | 76ffda356c72de21 |
+
+summary: DIVERGENT=3
+
+| lane/fixture                 | column | verdict      | cpu-apple-m4     | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| gbdt-pair-logit/base         | infer  | DIVERGENT    | 916d4f0f79d1277f | 5ede762eea5fe00c |
+| gbdt-pair-logit/base         | model  | DIVERGENT    | cfcb870dc3b7d6fa | 8af4d84f9e7c4739 |
+| gbdt-pair-logit/base         | batch  | DIVERGENT    | c459fa28e16a0794 | ec33a79bc32b2a59 |
+| gbdt-pair-logit/odd          | infer  | DIVERGENT    | ad7b849614270d86 | 32022c09b1cf9493 |
+| gbdt-pair-logit/odd          | model  | DIVERGENT    | f4bccde2bdc33c91 | 3562b5b666ebb0ad |
+| gbdt-pair-logit/odd          | batch  | DIVERGENT    | b3a226552e3f3ce8 | 77539de88abb29c6 |
+| gbdt-pair-logit/ties         | infer  | DIVERGENT    | 09f9cf51864eb743 | 94970681fc447121 |
+| gbdt-pair-logit/ties         | model  | DIVERGENT    | 11730346a61ad6dd | db15afac90669b08 |
+| gbdt-pair-logit/ties         | batch  | DIVERGENT    | 748df688cc3a6a55 | c8d9043c15c0356d |
+
+summary (infer/model): DIVERGENT=6
+summary (batch): DIVERGENT=3
+summary (rlpair): 

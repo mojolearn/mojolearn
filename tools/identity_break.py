@@ -284,7 +284,7 @@ evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15, then `gmm-sample` and `gmm-random-init-sample` for GaussianMixture.sample the same day). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15, then `gmm-sample` and `gmm-random-init-sample` for GaussianMixture.sample the same day, then `gp-sample-y` and `gp-sample-y-normalize` for GaussianProcessRegressor.sample_y). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -304,7 +304,7 @@ sampler, a solver, a metric, a reduction).
                gbdt-multiclass gbdt-onevsall gbdt-parametric-losses
                gbdt-lossguide-newtoncosine gbdt-pointwise-l2-bayesian-eval
                gbdt-exact-mae gbdt-categorical-ctr gbdt-nan-modes gbdt-adapter-clf
-               gbdt-adapter-reg gbdt-query-rmse iforest-tuned (last, with iforest)
+               gbdt-adapter-reg gbdt-query-rmse gbdt-pair-logit iforest-tuned (last, with iforest)
       neural   mamba2-dtlimit transformer-window byte-lm-resident
                byte-lm-host-infer-threaded (the SHIPPED default arm; the
                2026-09-13 lane pins the reference arm) samba-untied-dropout-accum
@@ -340,6 +340,8 @@ sampler, a solver, a metric, a reduction).
       par-cholesky par-kernel-ridge par-nystroem par-rbf-sampler
     2026-09-15 (GaussianMixture.sample, DEVIATIONS 2791 and 2792)
       gmm-sample gmm-random-init-sample
+    2026-09-15 (GaussianProcessRegressor.sample_y, DEVIATION 2793)
+      gp-sample-y gp-sample-y-normalize
     2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
       ivf embedding
     2026-09-14 night (fix/ivf-l2sqrt, metric='euclidean' no longer refused)
@@ -756,12 +758,19 @@ class Fit(dict):
     arguments and reads only the dict; that contract is unchanged."""
     est = None
     probe = "n/a:function"
+    #: An `n/a:<reason>` for the model column of a lane whose saved file
+    #: holds only what the lane passed in (lane/inference-embedding-ivf-
+    #: cholesky, 2026-09-15): the Embedding table is the caller's weight, so
+    #: its file hash is not arithmetic and no host sabotage can move it. The
+    #: saved-table lookup is tools/classical_host_gate.py's embedding lane.
+    model_na = None
 
 
-def _fit(parts, est=None, probe="n/a:function"):
+def _fit(parts, est=None, probe="n/a:function", model_na=None):
     f = Fit(parts)
     f.est = est
     f.probe = probe
+    f.model_na = model_na
     return f
 
 
@@ -1231,6 +1240,45 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(alpha=_h(m.alpha_), L=_h(m.L_), lml=_h(np.float64(m.log_marginal_likelihood_value_)),
                      mean=_h(mean), std=_h(std)),
                 m, lambda e: e.predict(Xh[:64, :4], return_std=True))
+
+
+def _gpc_three_classes(X):
+    """Three balanced classes for the first 256 rows: the stable rank of the
+    labels' own score (columns 3 and 4, `labels_for`'s rule) cut in thirds,
+    so every fixture, `negative` and `ties` included, hands the one-vs-rest
+    lane three classes."""
+    s = (X[:256, 3] + np.float32(0.5) * X[:256, 4]).astype(np.float32)
+    y3 = np.empty(256, dtype=np.int64)
+    y3[np.argsort(s, kind="stable")] = (np.arange(256) * 3) // 256
+    return y3
+
+
+def _gpc_parts(m, q):
+    fits = m.estimators_
+    return dict(L=_h(*[e.L_ for e in fits]), pi=_h(*[e.pi_ for e in fits]), W_sr=_h(*[e.W_sr_ for e in fits]),
+                lml=_h(np.array([e.log_marginal_likelihood_value_ for e in fits] +
+                                [m.log_marginal_likelihood_value_], dtype=np.float64)),
+                n_iter=_h(np.array([e.n_iter_ for e in fits], dtype=np.int64)),
+                predict=_h(m.predict(q)), proba=_h(m.predict_proba(q)))
+
+
+@lane("gpc")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessClassifier, binary, optimizer=None (DEVIATION 1761):
+    the Laplace fit's Newton loop, whose iteration count is on the card
+    (DEVIATION 2830), sized like the gp lane. The model column is the saved
+    classifier and its reload."""
+    m = ml.GaussianProcessClassifier(kernel=ml.ConstantKernel(1.0) * ml.RBF(1.0)).fit(X[:256, :4], yc[:256])
+    return _fit(_gpc_parts(m, X[256:320, :4]), m, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
+
+
+@lane("gpc-multiclass")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessClassifier one-vs-rest over three classes
+    (DEVIATION 2833) with a Matern nu=1.5 kernel scaled by a constant."""
+    k = ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5)
+    m = ml.GaussianProcessClassifier(kernel=k).fit(X[:256, :4], _gpc_three_classes(X))
+    return _fit(_gpc_parts(m, X[256:320, :4]), m, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
 
 
 @lane("umap")
@@ -1708,6 +1756,35 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="QueryRMSE").fit(X, rel, group_id=g)
     return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64))),
                 m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-pair-logit")
+def _(ml, X, yc, yr, Xh=None):
+    """PairLogit (learning to rank, pairwise derivatives on query groups):
+    20 depth-6 symmetric trees on the gbdt-query-rmse queries and grades with
+    the pairs generated from them, and a second fit of 8 trees given explicit
+    `pairs` and `pairs_weight` (every third generated-style pair of the first
+    40 queries, hashed weights), so both input paths are hashed. Predict is
+    row-wise, so the held-out probe and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="PairLogit").fit(X, rel, group_id=g)
+    pairs = []
+    begin = 0
+    for q in range(40):
+        size = int(np.count_nonzero(g == q))
+        for a in range(begin, begin + size):
+            for b in range(a + 1, begin + size):
+                if rel[a] != rel[b] and (a + b) % 3 == 0:
+                    pairs.append((a, b) if rel[a] > rel[b] else (b, a))
+        begin += size
+    pw = _hw((len(pairs),), "gbdt-pair-logit:pairs_weight", 0.5, 2.0)
+    e = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="PairLogit").fit(
+        X, rel, group_id=g, pairs=pairs, pairs_weight=pw)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     explicit_predict=_h(e.predict(X)),
+                     explicit_loss_curve=_h(np.asarray(e.loss_curve_, dtype=np.float64))),
+                m, lambda est: (est.predict(Xh),))
 
 
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
@@ -2242,6 +2319,30 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.predict(Xh[:64, :4], return_std=True))
 
 
+def _gp_sample_y_lane(normalize_y):
+    def body(ml, X, yc, yr, Xh=None):
+        k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+        y = yr[:256]
+        if normalize_y:
+            y = np.ascontiguousarray(yr[:256] + np.float32(50.0)).astype(np.float32)
+        m = ml.GaussianProcessRegressor(kernel=k, normalize_y=normalize_y).fit(X[:256, :4], y)
+        s = m.sample_y(X[256:320, :4], n_samples=3, random_state=11)
+        _same_bytes("sample_y(n_samples=3)", s, "sample_y(n_samples=3) again",
+                    m.sample_y(X[256:320, :4], n_samples=3, random_state=11))
+        return _fit(dict(sample=_h(s)), m,
+                    lambda e: (e.sample_y(Xh[:64, :4], n_samples=4, random_state=2 ** 40 + 5),))
+    body.__doc__ = (f"GaussianProcessRegressor.sample_y (2026-09-15) on the gp{'-normalize-y' if normalize_y else ''} "
+                    "lane's fit: train hashes sample_y over 64 rows, 3 draws, held to a second call bit for bit; "
+                    "infer hashes 4 draws over 64 held-out rows with a key whose high word is set. The posterior "
+                    "covariance is factored by the identical Cholesky at 2^-20 and the normals are position-mapped "
+                    "Philox (DEVIATION 2793). Separate lanes so the gp lanes' recorded cells do not move.")
+    return body
+
+
+lane("gp-sample-y")(_gp_sample_y_lane(False))
+lane("gp-sample-y-normalize")(_gp_sample_y_lane(True))
+
+
 for _name, _nu, _ls in (("matern12", 0.5, 1.0), ("matern32", 1.5, 1.0), ("matern52-ard", 2.5, [1.0, 2.0, 0.5, 4.0])):
     lane(f"gp-{_name}")(_gp_lane(_nu, _ls))
 
@@ -2646,6 +2747,33 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
 
 
+@lane("ivf-extend")
+def _(ml, X, yc, yr, Xh=None):
+    """IVFIndex.extend (python/mojolearn/_ivf_impl.py; lane/inference-embedding-
+    ivf-cholesky stage 2, 2026-09-15), cuVS ivf_flat::extend with fixed
+    centres. The `ivf` lane's index (16 lists, random_state 3) built on rows
+    0..3072, extended by rows 3072..4096 in ONE call and, from a clone of the
+    same built index, in TWO calls split at 3584: the two extended indexes
+    must be the same bytes, and the new rows' lists the same, or the train
+    cell reads REFUSED naming the array. Then 64 queries with 4 probes. Train
+    hashes the extended CSR arrays, the new rows' lists and the search; the
+    model column saves the extended index; the probe searches 64 held-out
+    rows."""
+    base = ml.IVFIndex(n_lists=16, n_probes=4, n_neighbors=8, random_state=3).fit(X[:3072])
+    one = base._clone().extend(X[3072:4096])
+    two = base._clone().extend(X[3072:3584])
+    first = np.asarray(two.extend_labels_).copy()
+    two.extend(X[3584:4096])
+    for name in ("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_"):
+        _same_bytes(f"one-call extend {name}", getattr(one, name), f"two-call extend {name}", getattr(two, name))
+    _same_bytes("one-call new-row lists", one.extend_labels_, "two-call new-row lists",
+                np.concatenate([first, np.asarray(two.extend_labels_)]))
+    d, i = one.search(X[4096:4160])
+    return _fit(dict(offsets=_h(one.list_offsets_), carry=_h(one.list_indices_), data=_h(one.list_data_),
+                     lists=_h(one.extend_labels_), dist=_h(d), idx=_h(i), cand=_h(one.n_candidates_)),
+                one, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
+
+
 @lane("embedding")
 def _(ml, X, yc, yr, Xh=None):
     """Embedding (python/mojolearn/embedding.py), profile
@@ -2672,7 +2800,7 @@ def _(ml, X, yc, yr, Xh=None):
     dw_nopad = np.asarray(ml.Embedding(V, Dm, weight=w).backward(ids, dy))
     idh = (_ids(Xh, 1, T).reshape(T) % V).astype(np.int32)
     return _fit(dict(fwd=_h(y), dw=_h(dw), dw_nopad=_h(dw_nopad)),
-                e, lambda m: (np.asarray(m.forward(idh)),))
+                e, lambda m: (np.asarray(m.forward(idh)),), model_na="n/a:input-table")
 
 
 @lane("embedding-sort")
@@ -2703,7 +2831,7 @@ def _(ml, X, yc, yr, Xh=None):
                 np.asarray(ml.Embedding(V, Dm, weight=w).backward(ids, dy)))
     idh = (_ids(Xh, 1, T).reshape(T) % V).astype(np.int32)
     return _fit(dict(fwd=_h(y), dw=_h(dw), dw_nopad=_h(dw_nopad)),
-                e, lambda m: (np.asarray(m.forward(idh)),))
+                e, lambda m: (np.asarray(m.forward(idh)),), model_na="n/a:input-table")
 
 
 @lane("kmeans-sqrt")
@@ -3846,7 +3974,7 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
-            "gbdt-query-rmse")
+            "gbdt-query-rmse", "gbdt-pair-logit")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 
@@ -3905,6 +4033,9 @@ def _batch_hdbscan(ml, e, Xh):
 _batch_decl(_batch_hdbscan, "hdbscan", "hdbscan-leaf")
 
 
+_batch_decl(_rows_calls("predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gpc", "gpc-multiclass")
+
+
 def _batch_kneighbors(ml, e, Xh):
     return [_BatchRows("kneighbors", Xh[:64], lambda r: tuple(e.kneighbors(r)))]
 
@@ -3954,6 +4085,12 @@ def _batch_gp(ml, e, Xh):
 
 
 _batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp", "gp-normalize-y")
+# GaussianProcessRegressor.sample_y factors the posterior covariance over ALL
+# the rows of one call, so a row's draw depends on every other row asked with
+# it: splitting the rows changes the covariance, by the reference's contract
+# (gaussian_process/checks/sample_y.mojo, DEVIATION 2793)
+_batch_decl("n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+            "gp-sample-y", "gp-sample-y-normalize")
 # UMAP.transform is batch-dependent BY ITS OWN CONTRACT: umap/transform.mojo's
 # module docstring says "Query batching may change results (global sigma
 # floor, edge weighting and RNG ordinals)", and the part measured it on the
@@ -4339,6 +4476,19 @@ def _batch_embedding(ml, e, Xh):
 
 
 _batch_decl(_batch_ivf, "ivf", "ivf-euclidean")
+
+
+def _batch_ivf_extend(ml, e, Xh):
+    """extend is row-wise in the new rows' LISTS: a row's list comes from the
+    fixed centres alone, so each held-out row extended alone, and in pieces,
+    must name the list it names inside the whole batch of 64. Every call
+    extends a fresh clone of the fitted index; the ids are not compared,
+    because a row's id is its position in the extension by contract."""
+    return [_BatchRows("extend (new-row lists)", Xh[:64],
+                       lambda r: (np.asarray(e._clone().extend(r).extend_labels_),))]
+
+
+_batch_decl(_batch_ivf_extend, "ivf-extend")
 _batch_decl(_batch_embedding, "embedding", "embedding-sort")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
 _batch_decl(_batch_training_primitives, "training-primitives")
@@ -5646,6 +5796,67 @@ def _has_save_load(est):
     return _save_load(est) is not None
 
 
+#: PUBLIC CPU INFERENCE (lane/inference-gbdt-modes, 2026-09-15). `1` for
+#: every lane, or a comma list of lanes: the infer cell is the held-out probe
+#: asked of `mojolearn.host_model(<the saved file>)` (HostForest, HostGBDT or
+#: a classical host model, the shipped wheel families) instead of the fitted
+#: estimator, and the model cell hashes that file. The reload cell stays the
+#: estimator class's own `load`, so a host answer that differs from the
+#: class's reads RELOAD-MOVED here as well as DIVERGENT against the GPU
+#: columns. A file host_model refuses reads REFUSED. The JSON records the
+#: lanes under `host_infer`.
+HOST_INFER_ENV = "MOJOLEARN_IDENTITY_HOST_INFER"
+
+
+def _host_infer_lanes():
+    raw = os.environ.get(HOST_INFER_ENV, "").strip()
+    if not raw or raw == "0":
+        return None
+    return True if raw == "1" else set(p.strip() for p in raw.split(",") if p.strip())
+
+
+def _host_infer_on(name):
+    lanes = _host_infer_lanes()
+    return lanes is True or (lanes is not None and name in lanes)
+
+
+def _probe_fit_host(fit, name):
+    """`_probe_fit` under HOST_INFER_ENV: save, then predict through
+    `host_model`. Same return shape."""
+    if not _has_save_load(fit.est):
+        return None, None, None, "infer: host infer asked of an estimator with no save"
+    save, load, suffix = _save_load(fit.est)
+    from mojolearn._forest_host import binary_path, host_model
+    try:
+        with tempfile.TemporaryDirectory(prefix="identity_break_host_") as tmp:
+            path = os.path.join(tmp, f"{name}{suffix}")
+            getattr(fit.est, save)(path)
+            model = _hfile(path)
+            try:
+                host = host_model(path)
+                # THE BINARY THAT PREDICTED IS THE ONE NAMED (2026-09-15): host_record
+                # loads MOJOLEARN_HOST_DIR's forest binding under the module name
+                # _forest_host reuses from sys.modules, so a MOJOLEARN_FOREST_HOST_BINARY
+                # pointing elsewhere (a sabotage build) was silently not the one asked,
+                # and a forest sabotage column read IDENTICAL on a RunPod x86 pod.
+                bound = getattr(getattr(host, "_binding", None), "__file__", None)
+                if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
+                        os.path.realpath(bound) != os.path.realpath(binary_path())):
+                    raise RuntimeError(f"the forest binding in this process is {bound}, "
+                                       f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+                infer = _h(*fit.probe(host_model(path)))
+            except Exception as exc:
+                return None, None, None, f"infer (host_model): {type(exc).__name__}: {exc}"
+            reload = _h(*fit.probe(getattr(type(fit.est), load)(path)))
+    except Exception as exc:
+        return None, None, None, f"model: {type(exc).__name__}: {exc}"
+    if fit.model_na:
+        # The same n/a as `_probe_fit` (Fit.model_na): the host answer is
+        # still the infer cell, the file of caller-given bytes is not a cell.
+        return infer, fit.model_na, None, None
+    return infer, model, reload, None
+
+
 def _probe_fit(fit, name):
     """The infer and model columns of ONE fit. Returns (infer, model, reload,
     error) where infer and model are a hash or an `n/a:<reason>` string,
@@ -5654,10 +5865,14 @@ def _probe_fit(fit, name):
     stage that raised leaves its column None, which reads REFUSED."""
     if not callable(fit.probe):
         return fit.probe, "n/a:no-save", None, None
+    if _host_infer_on(name):
+        return _probe_fit_host(fit, name)
     try:
         infer = _h(*fit.probe(fit.est))
     except Exception as exc:
         return None, None, None, f"infer: {type(exc).__name__}: {exc}"
+    if fit.model_na:
+        return infer, fit.model_na, None, None
     if not _has_save_load(fit.est):
         return infer, "n/a:no-save", None, None
     save, load, suffix = _save_load(fit.est)
@@ -5794,6 +6009,9 @@ def _run_reference(args):
                       skipped=sorted(skip), batch_protocol=batch_protocol,
                       batch_sabotage=batch_sabotage, rlpair_protocol=rlpair_protocol,
                       rlpair_sabotage=rlpair_sabotage)
+        host_infer = _host_infer_lanes()
+        if host_infer is not None:
+            record["host_infer"] = "all" if host_infer is True else sorted(host_infer)
         for part in extra:
             record[f"{part}_protocol"] = _part_protocol(part, args.batch_alone)
             record[f"{part}_sabotage"] = extra_sabotage[part] or False

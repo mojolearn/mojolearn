@@ -1,0 +1,3 @@
+/tmp/wv/lib/python3.14/site-packages/mojolearn/__init__.py
+/tmp/wv/lib/python3.14/site-packages/mojolearn/host
+['_mojolearn_embedding_infer_host', '_mojolearn_ivf_search_host']

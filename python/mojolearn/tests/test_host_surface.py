@@ -120,6 +120,36 @@ def test_sabotage_define_reaches_each_binding():
         )
 
 
+#: The fit entry points an inference-only binding must never name, by family
+#: (the neighbors and density inference lane, 2026-09-15).
+#: Mojo compiles only what a binding reaches, so a source that names none of
+#: these ships none of them; bench/results/identity_break/
+#: 2026-09-15_inference-iforest-gmm-hdbscan/fit_symbols.txt shows the built
+#: files agree.
+_FIT_NAMES = {
+    "mixture_infer": ("gmmh_fit", "gmm_fit", "gmmh_m_step", "gmmh_initial_resp"),
+    "hdbscan_infer": ("hdbh_fit", "hdbscan_fit", "generate_prediction_data"),
+    "gp_infer": ("gpr_host_fit", "gpr_fit", "gpc_host_fit", "gpc_fit", "chol_host_potrf", "cholesky_factor"),
+}
+
+
+def _mojo_code(text):
+    """Mojo source with its triple-quoted strings and `#` comments removed,
+    so a docstring saying what a binding leaves out is not read as code."""
+    text = re.sub(r'"""[\s\S]*?"""', "", text)
+    return re.sub(r"#[^\n]*", "", text)
+
+
+def test_inference_only_bindings_name_no_fit():
+    for name, fits in _FIT_NAMES.items():
+        f = host_surface.family(name)
+        texts = [_mojo_code(_read(host_surface.binding_source(name)))]
+        texts += [_mojo_code(_read(m)) for m in f["host_modules"] if m.startswith("bindings/")]
+        for fit in fits:
+            hits = [t for t in texts if re.search(rf"\b{fit}\b", t)]
+            assert not hits, f"{name}: {fit} is named in its binding sources"
+
+
 def test_host_modules_exist():
     for f in host_surface.FAMILIES:
         for m in f["host_modules"]:
@@ -201,7 +231,9 @@ def test_forest_kinds_are_the_forest_gate_kinds():
 
 
 def test_recordings_and_columns_exist():
-    for rel in (host_surface.CLASSICAL_RECORDED + host_surface.FORECAST_RECORDED + host_surface.CLASSICAL_GPU_COLUMNS
+    for rel in (host_surface.CLASSICAL_RECORDED + host_surface.FORECAST_RECORDED + host_surface.INFERENCE_ONLY_RECORDED
+                + host_surface.SEARCH_LOOKUP_RECORDED
+                + host_surface.CLASSICAL_GPU_COLUMNS
                 + (host_surface.FOREST_RECORDED_ROOT,)):
         assert (ROOT / rel).exists(), f"the manifest names {rel}, which is not in the tree"
 
@@ -229,7 +261,12 @@ def test_inference_routes_ship_and_carry_no_fit():
     `_backend` reads the table from the manifest."""
     from mojolearn import _backend
     routes = host_surface.inference_routes()
-    assert routes == {"_mojolearn_arima": "_mojolearn_forecast_host"}
+    assert routes == {
+        "_mojolearn_arima": "_mojolearn_forecast_host",
+        # lane/inference-embedding-ivf-cholesky (2026-09-15)
+        "_mojolearn_ivf": "_mojolearn_ivf_search_host",
+        "_mojolearn_embedding": "_mojolearn_embedding_infer_host",
+    }
     assert _backend._HOST_INFERENCE_MODULES == routes
     shipped = set(host_surface.wheel_bindings())
     for route, binding in routes.items():
@@ -274,7 +311,15 @@ def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
             "_mojolearn_neural_host"} <= shipped
     assert set(host_surface.wheel_families()) == {
         "byte_lm", "forest", "tokenizer", "neural", "core", "linalg", "estimators", "metrics", "svm", "forecast",
+        "mixture_infer", "hdbscan_infer", "gp_infer",
+        "embedding_infer", "ivf_search",
     }
+    # The inference-only families ship; the reference families whose
+    # scoring and prediction entries they carry do not.
+    for inference, reference in (("mixture_infer", "mixture"), ("hdbscan_infer", "hdbscan"), ("gp_infer", "gp")):
+        assert host_surface.family(inference)["ships_in_wheel"] and host_surface.family(inference)["routes"] is None
+        assert not host_surface.family(reference)["ships_in_wheel"]
+        assert host_surface.family(inference)["training_lanes"] == ()
     assert len(host_surface.families()) > len(host_surface.wheel_families())
     assert host_surface.training_gpu_column_record() == host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 2)[1]
     for rel, token in (

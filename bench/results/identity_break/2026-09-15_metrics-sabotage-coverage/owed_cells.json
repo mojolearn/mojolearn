@@ -1,0 +1,268 @@
+{
+ "columns": [
+  "apple-m4",
+  "nvidia-h100-sm_90a",
+  "amd-mi325x-gfx942",
+  "cpu-amd-epyc-7713-64-core-processor"
+ ],
+ "require_columns": 4,
+ "lanes": [
+  "metrics",
+  "metrics-classification",
+  "metrics-fowlkes-mallows"
+ ],
+ "owed": [
+  {
+   "lane": "metrics-fowlkes-mallows",
+   "fixture": "base",
+   "part": "train",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-fowlkes-mallows",
+   "fixture": "denormal",
+   "part": "train",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-fowlkes-mallows",
+   "fixture": "denormal_ftz",
+   "part": "train",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-fowlkes-mallows",
+   "fixture": "dupes",
+   "part": "train",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-fowlkes-mallows",
+   "fixture": "hashed",
+   "part": "train",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-fowlkes-mallows",
+   "fixture": "negative",
+   "part": "train",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-fowlkes-mallows",
+   "fixture": "odd",
+   "part": "train",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-fowlkes-mallows",
+   "fixture": "ties",
+   "part": "train",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-fowlkes-mallows",
+   "fixture": "wide",
+   "part": "train",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-classification",
+   "fixture": "base",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-classification",
+   "fixture": "denormal",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-classification",
+   "fixture": "denormal_ftz",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-classification",
+   "fixture": "dupes",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-classification",
+   "fixture": "hashed",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-classification",
+   "fixture": "negative",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-classification",
+   "fixture": "odd",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-classification",
+   "fixture": "ties",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "metrics-classification",
+   "fixture": "wide",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-7713-64-core-processor"
+   ],
+   "real_hashes": 1
+  }
+ ]
+}

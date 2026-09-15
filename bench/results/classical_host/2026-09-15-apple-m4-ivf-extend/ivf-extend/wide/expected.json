@@ -1,0 +1,78 @@
+{
+  "commit": "c6c6f79b075f2c00544977a1e94d47fdcf89f711",
+  "estimator": "IVFIndex",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "wide",
+  "lane": "ivf-extend",
+  "model_sha256": "c9793933012960e569f59f5edf1fbf3dc55ef83c24b14bfb495f94eebe6a2215",
+  "numeric_mode": "identical",
+  "predictions": {
+    "extend_list_indices": {
+      "dtype": "<i4",
+      "sha256": "f8d8a6999ac2b6331725cf36c2fe538caa955acb95e185bf27c1aabc1ae497b8",
+      "shape": [
+        4160
+      ]
+    },
+    "extend_lists": {
+      "dtype": "<i4",
+      "sha256": "86b9753470d4233bf4954be3075e394652ab418fd13ab88aeba6106ecedbb0fb",
+      "shape": [
+        64
+      ]
+    },
+    "identity_hash": "c6fd06dc0c84cdd5",
+    "list_data": {
+      "dtype": "<f4",
+      "sha256": "55443286b64a4b85edd8bbe260cb65c4d396254d9ec9bf7c54f680db4e541e7e",
+      "shape": [
+        4096,
+        16
+      ]
+    },
+    "list_indices": {
+      "dtype": "<i4",
+      "sha256": "962febd6e95ca5c54cb7374fa8722a8a7bb97f1c90c720fa47f4e3d2957efecc",
+      "shape": [
+        4096
+      ]
+    },
+    "search_after_extend_ids": {
+      "dtype": "<i4",
+      "sha256": "49ea04e8da633404ce3d4eedb70e3639c35c32868327e597af2c55b4b8f057e7",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_distances": {
+      "dtype": "<f4",
+      "sha256": "45ca8c54c2e1b3bc843e0952216b0bec5a69e714fa72725641ded174a3976c40",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_second_batch_ids": {
+      "dtype": "<i4",
+      "sha256": "4f0ca2b0a1a0dbb662d3966f46478e60ffa3474dc29a8941297fecfa7a4d535b",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "seconds": 3.281732
+  },
+  "recorded_at": "2026-09-15T13:58:04-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "59d135742b776f0076a22efd2c8bcd684bffe06ee5664c2790f22f21e8be72bf"
+}
