@@ -9,7 +9,8 @@ import release_wheel_content_audit as content
 
 NOTICE = ('mojolearn\nCopyright 2026 Andrew Hendel\n\n'
           'Licensed under the Apache License, Version 2.0. See LICENSE.\n\n'
-          'MAX (R) and Mojo (R) are trademarks of Modular, Inc., used under license.\n\n'
+          'MAX (R) and Mojo (R) are trademarks of Modular, Inc. mojolearn is an\n'
+          'independent project, not endorsed by Modular, Inc.\n\n'
           'Modular components\n------------------\n'
           'licensed by Modular Inc under the Apache License v2.0 with LLVM Exceptions\n'
           'under the Modular MAX Community License\n')
@@ -70,6 +71,13 @@ class ContentAudit(unittest.TestCase):
         members = clean_members()
         members['mojolearn-9.9.9.dist-info/licenses/NOTICE'] = trimmed
         self.assertTrue(self.run_audit(members, notice=trimmed)['notice'])
+
+    def test_notice_claiming_a_trademark_license_is_refused_even_when_equal(self):
+        claimed = NOTICE.replace('are trademarks of Modular, Inc.', 'are trademarks of Modular, Inc., used under license')
+        self.assertIn('used under license', claimed)
+        members = clean_members()
+        members['mojolearn-9.9.9.dist-info/licenses/NOTICE'] = claimed
+        self.assertTrue(self.run_audit(members, notice=claimed)['notice'])
 
     def test_tokenizer_module_name_is_not_data(self):
         members = clean_members()
