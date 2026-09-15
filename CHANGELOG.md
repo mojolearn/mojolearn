@@ -10,6 +10,16 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- New `KMeans.transform` and `KMeans.fit_transform`, with cuML's `KMeans.transform` as the
+  reference: the distance from every row to every fitted center under the model's `metric`
+  (squared for the default `'euclidean'`, cuVS `L2Expanded`; the root for
+  `'l2_sqrt_expanded'`), float32 `(n_samples, n_clusters)`. Each cell is the fused
+  assignment kernel's cell, so the distance at `predict`'s label is the row minimum bit for
+  bit. On the GPU binding and the CPU core host binding; cosine refuses by name as its fit
+  does. The seven fitting k-means lanes add `transform` to their infer and batch cells.
+  Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the release
+  record.
+
 - New `mojolearn.metrics.fowlkes_mallows_score`, mirroring scikit-learn's definition (cuML
   has none): the device integer contingency matrix, exact Int64 pair counts, then
   `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, 0.0 when `tk == 0` (no samples, one sample,

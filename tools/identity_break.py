@@ -46,9 +46,10 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             (DBSCAN, agglomerative, spectral: `fit` and `fit_predict`, and
             SpectralClustering.predict raises NotImplementedError by
             design); KMeans answered no-predict until 2026-09-15, when
-            `predict` arrived (no `transform`) and its lanes' probe became
-            `predict` on the held-out rows, with `predict` on the training
-            rows held to `labels_`; function means the lane is not an estimator
+            `predict` arrived and its lanes' probe became `predict` on the
+            held-out rows, with `predict` on the training rows held to
+            `labels_`; `transform` joined the probe later that day, with
+            `transform(X)` at `labels_` held to each row's minimum; function means the lane is not an estimator
             (linalg, metrics). THE FORECASTERS (holtwinters, arima; the
             infer probes of 2026-09-14) take no new rows, so their held-out
             axis is TIME: the infer column hashes the forecast beyond the
@@ -814,12 +815,19 @@ def _km_probe(X, Xh):
     assignment (cluster/estimator.mojo::kmeans_predict and
     cluster/host/kmeans_oracle.mojo::host_kmeans_predict); where it is not,
     the probe raises naming the pair and only the infer cell reads REFUSED.
+    `transform` (2026-09-15, cluster/estimator.mojo::kmeans_transform) is
+    asked too: each cell is the fused kernel's cell, so `transform(X)` at
+    `labels_` must be every training row's minimum bit for bit, and the
+    held-out distances are hashed beside the held-out labels.
     Only the held-out rows are hashed, never the training-row output, and
     the train column hashes the fit's own attributes, so no train cell
     moves."""
     def probe(e):
         _same_bytes("predict(X)", e.predict(X), "labels_", e.labels_)
-        return (e.predict(Xh),)
+        t = np.asarray(e.transform(X))
+        at_label = t[np.arange(t.shape[0]), np.asarray(e.labels_, dtype=np.int64)]
+        _same_bytes("transform(X)[i, labels_[i]]", at_label, "transform(X).min(axis=1)", t.min(axis=1))
+        return (e.predict(Xh), e.transform(Xh))
     return probe
 
 
@@ -3671,8 +3679,8 @@ def _batch_iforest(ml, e, Xh):
 
 _batch_decl(_batch_iforest, "iforest", "iforest-tuned", "par-iforest")
 
-_batch_decl(_rows_calls("predict"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted", "kmeans-sqrt",
-            "kmeans-classic-pp", "par-kmeans")
+_batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
+            "kmeans-sqrt", "kmeans-classic-pp", "par-kmeans")
 # cosine fit is refused by name, so there is no fitted model to ask
 _batch_decl("n/a:fit-refused", "kmeans-cosine")
 # The transductive clustering lanes (read 2026-09-15 against the Python
