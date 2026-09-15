@@ -529,6 +529,13 @@ TRAINING_LANE_NAMES = {
     # trees concatenate in ID order.
     "par-forest": "the tree-range-sharded random forest classifier",
     "par-forest-et": "the tree-range-sharded Extra Trees regressor",
+    # Wave 2, par-mlp: ParallelNeuralTrainer sends one mlp_gradient request
+    # per logical shard (three of 64 rows) and one mlp_update that folds
+    # them in shard order in Python and steps the optimizer, on the
+    # training host binding. The update pool is cooperative and is admitted
+    # on CPU only at one device, where the GPU binding's range split is the
+    # plain path; two devices refuse by name.
+    "par-mlp": "the small MLP trained over ordered logical gradient shards",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -1177,7 +1184,7 @@ FAMILIES = (
         routes="_mojolearn_training",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives"),
+        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "par-mlp"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
