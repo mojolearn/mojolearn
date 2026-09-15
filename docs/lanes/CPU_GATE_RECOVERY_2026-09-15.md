@@ -43,6 +43,31 @@ at the starting surface to 117 x 9 x (2 + 1) x 3 = 9,477, about 68% fewer.
 That excludes compilation and other tests and is not a wall-time claim.
 Parallelism further reduces elapsed time subject to CPU/memory contention.
 
+## OWED cells: CPU cells no GPU record hashes yet
+
+GPU records are taken only at PyPI releases, so a CPU lane can merge a cell
+part (train, infer, model, batch) that the committed GPU columns do not
+hash. The full gate's diff (`identity_break.py --diff ... --require-columns 4
+--owed-json owed_cells.json`) reads such a part `OWED xK` instead of failing
+the four-column requirement. OWED is derived per column, never listed by
+hand. A part is OWED only when all of the following hold:
+
+- Every column without a hash for it has no cell (a lane not in that
+  record), no such part, or an n/a value.
+- No column reads REFUSED, MOVED or BATCH_MOVED on it. A GPU column that
+  refuses a cell the CPU hashes still fails.
+- The CPU column hashes it STABLE over two or more repeats.
+- Every column that has a hash agrees. A recorded hash that differs is still
+  DIVERGENT and fails.
+
+In the sabotage step, `cpu_identity_gate_check.py owed` requires every owed
+part to move between the production and `MOJOLEARN_HOST_SABOTAGE` CPU
+columns. A part that does not move, or is refused or absent under sabotage,
+fails. The summary prints `OWED=N` beside `IDENTICAL`, and `owed_cells.json`
+(lane, fixture, part, missing columns) is the exact list the next release
+record must take. The pinned greps over the committed GPU columns alone are
+unchanged, because OWED applies only with `--owed-json`.
+
 ## Validation
 
 `python3 -m unittest discover -s tools -p test_cpu_identity_gate.py -v`

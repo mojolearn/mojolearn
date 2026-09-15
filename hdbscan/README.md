@@ -2,7 +2,10 @@
 
 GPU HDBSCAN derived from cuML, cuVS, and RAFT.
 
-The lane covers the graph, minimum-spanning-tree, hierarchy, condensed-tree, and labeling stages.
+The lane covers the graph, minimum-spanning-tree, hierarchy, condensed-tree, and labeling stages,
+and, since 2026-09-15, cuML's prediction data and `approximate_predict` for held-out points
+(`impl/prediction_data.mojo`, `impl/detail/predict.mojo`, the host restatement in
+`host/hdbscan_host_oracle.mojo`). Soft membership vectors are not implemented.
 Supported and refused behavior is defined by `NOT_IMPLEMENTED.tsv`.
 The checks, rather than old investigation prose, define current status.
 
