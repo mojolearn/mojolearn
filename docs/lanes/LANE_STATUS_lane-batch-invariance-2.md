@@ -9,23 +9,19 @@ sequence batches (the new `lengths=` argument and part `ragged`, `--ragged`).
 - python/mojolearn/_ragged.py and `lengths=` on TransformerBlock, Mamba1/2/3Block,
   SambaStack forward, the byte LM trainer and LanguageModelInference logits and
   next_bytes. Contract text: transformer contract 7.5, a section in each Mamba
-  contract. Tests: python/mojolearn/tests/test_ragged_lengths.py (20 pass on
-  Metal, 14 pass and 6 skip by name on the CPU-only install; two sabotages of
-  the copies each fail it).
+  contract. Tests: python/mojolearn/tests/test_ragged_lengths.py.
 - identity_break.py: batchgrad, batchscale, ragged parts, opt-in, their own
-  JSON keys and `summary (<part>):` lines; three commits, one per part.
-- M4 smoke (base fixture) green for all three parts; sabotage arms seen to fail.
+  JSON keys and `summary (<part>):` lines.
+- Record at 1cc7a2f47: bench/results/identity_break/2026-09-15_batch2/ (Apple M4,
+  one H100, one MI325X; both boxes rented before the 10:30 ET rule and verified
+  deleted). Reviewed on restart; see its README, section "Review findings".
+- Restart (2026-09-15 about 11:15 ET), after merging origin/main, M4, one core:
+  six lanes on base read IDENTICAL x4 against the record, the Apple sabotage arm
+  moves every hashed cell of all four parts, test_ragged_lengths 20 passed (with the
+  agent's CPU host byte LM binding copied in; 19 passed and 1 skipped by name
+  without it).
 
-## Running / owed
-- the full M4 record (every fixture, two repeats) for the lanes the parts
-  declare, the CPU-only host column for the byte LM host lanes
-- one H100 leg (RunPod) and one AMD leg (DigitalOcean MI325X or Hot Aisle
-  single GPU) at the branch head, the three-column diff under
-  bench/results/identity_break/2026-09-15_batch2/
-- the CPU identity gate on the branch, then merge to main
-
-## Next commands
-    W=<worktree>; cd $W
-    MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \
-      --lanes <declared lanes> --batch-grad --batch-scale --ragged --vendor apple-m4 --json apple-m4.json
-    python3 tools/identity_break.py --diff apple-m4.json nvidia-h100.json amd-mi325x.json
+## Owed
+- The CPU identity gate on the merged head, then merge to main.
+- The CPU-only column for byte-lm-host-infer and -threaded.
+- AMD and NVIDIA columns at a later commit: the next release record only.
