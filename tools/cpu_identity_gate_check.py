@@ -37,6 +37,16 @@ section 3.4), as a tool that runs on a laptop too.
              requires every listed part to MOVE between the production CPU
              column and the MOJOLEARN_HOST_SABOTAGE column. Exit 1 on a part
              that did not move, is refused or absent under sabotage.
+  build-list the host binding lists the gate builds, read back and builds
+             again for the sabotage set, against the manifest
+             (python/mojolearn/host_surface.py, 2026-09-15). Every family the
+             manifest declares (the full verification) or every family whose
+             binding ships in the wheel (routine) must be in --families and in
+             --sabotage-families, each must have its build shim, and
+             --readback must name exactly the --families bindings. Exit 1
+             names each binding left out: on 2026-09-15 the workflow built
+             byte_lm, forest, tokenizer and the routed families only and
+             missed seven shipped bindings.
 
 Exit 0: every check holds. 1: a check failed. 2: the tool could not run.
 """
@@ -326,6 +336,53 @@ def do_run_column(args):
     return 1 if bad else 0
 
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _split(text):
+    return [t for t in text.replace(",", " ").split() if t]
+
+
+def load_manifest(path=None):
+    """host_surface.py by path: the package cannot import before a binding
+    is built."""
+    import runpy
+    return runpy.run_path(path or os.path.join(ROOT, "python", "mojolearn", "host_surface.py"))
+
+
+def build_list_errors(manifest, families, sabotage, readback, scope, root=ROOT):
+    """Every way the gate's build lists fall short of the manifest."""
+    declared = manifest["families"]()
+    binding = {f["family"]: f["binding"] for f in manifest["FAMILIES"]}
+    required = declared if scope == "full" else manifest["wheel_families"]()
+    errors = []
+    for name in families + sabotage:
+        if name not in binding:
+            errors.append(f"{name} is not a family the manifest declares")
+    for label, have in (("the production build", families), ("the sabotage build", sabotage)):
+        for name in required:
+            if name not in have:
+                errors.append(f"{label} leaves out {binding[name]} (family {name})")
+    for name in dict.fromkeys(families + sabotage):
+        if name in binding and not os.path.isfile(os.path.join(root, manifest["build_shim"](name))):
+            errors.append(f"family {name} has no build shim {manifest['build_shim'](name)}")
+    built = sorted(binding[n] for n in families if n in binding)
+    if sorted(readback) != built:
+        errors.append(f"the read-back list {sorted(readback)} is not the production build {built}")
+    return errors
+
+
+def do_build_list(args):
+    manifest = load_manifest(args.manifest)
+    families, sabotage, readback = _split(args.families), _split(args.sabotage_families), _split(args.readback)
+    errors = build_list_errors(manifest, families, sabotage, readback, args.scope)
+    for e in errors:
+        print(f"build-list FAIL: {e}")
+    print(f"build-list {'FAIL' if errors else 'OK'}: {len(families)} production, {len(sabotage)} sabotage "
+          f"families, scope {args.scope}")
+    return 1 if errors else 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -349,7 +406,16 @@ def main(argv=None):
     rc.add_argument("--jobs", type=int, default=0, help="shards running at once (default: --shards)")
     rc.add_argument("--heartbeat", type=float, default=120.0, help="seconds between progress lines")
     rc.add_argument("extra", nargs="*", help="after --, arguments passed to every identity_break shard")
+    bl = sub.add_parser("build-list", help="the gate's build lists must cover every host binding the manifest declares")
+    bl.add_argument("--families", required=True, help="families built for the production set, space or comma separated")
+    bl.add_argument("--sabotage-families", required=True, help="families built for the sabotage set")
+    bl.add_argument("--readback", required=True, help="host binding basenames the read-back step names")
+    bl.add_argument("--scope", choices=("full", "routine"), required=True,
+                    help="full: every declared family; routine: every family that ships in the wheel")
+    bl.add_argument("--manifest", default=None, help="host_surface.py to read (default: this checkout's)")
     args = ap.parse_args(argv)
+    if args.cmd == "build-list":
+        return do_build_list(args)
     if args.cmd == "readback":
         return do_readback(args)
     if args.cmd == "owed":

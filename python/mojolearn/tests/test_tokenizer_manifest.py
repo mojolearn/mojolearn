@@ -60,7 +60,13 @@ def test_cpu_identity_gate_builds_the_binding():
     """The gate reads back EVERY declared binding, so a declared family the
     workflow does not build is a gate that fails on the first runner."""
     text = _read(".github/workflows/cpu-identity-gate.yml")
-    assert "sh bindings/build_tokenizer_host.sh" in text
+    # Since 2026-09-15 the gate builds every family the manifest declares in
+    # one loop (`for family in $BUILD_FAMILIES`, from --families or
+    # --wheel-families), and cpu_identity_gate_check.py build-list fails
+    # the manifest step when that list leaves one out.
+    assert 'sh "bindings/build_${family}_host.sh"' in text
+    assert "--wheel-families" in text and "build-list" in text
+    assert "tokenizer" in host_surface.wheel_families()
 
 
 def test_binding_source_reads_the_sabotage_define():
