@@ -3,8 +3,9 @@ Copyright 2026 Andrew Hendel
 
 Licensed under the Apache License, Version 2.0. See LICENSE.
 
-MAX (R) and Mojo (R) are trademarks of Modular, Inc., used under license.
-This project is not operated or endorsed by Modular, Inc.
+MAX (R) and Mojo (R) are trademarks of Modular, Inc. mojolearn is an
+independent project. It is not a product of Modular, Inc., and it is not
+endorsed, approved or validated by Modular, Inc.
 
 Modular components
 ------------------
@@ -19,3 +20,10 @@ AsyncRT and KGEN runtime libraries), redistributed unmodified in object code
 form under the Modular MAX Community License, last modified August 18, 2026
 (https://www.modular.com/legal/community). Those components are Copyright
 Modular Inc and remain subject to that license.
+
+As the Modular MAX Community License asks, for the MAX components in the
+binary wheels: MAX is licensed by Modular Inc under the Modular MAX Community
+License; mojolearn redistributes it unmodified. Copyright Modular Inc. IN NO
+EVENT SHALL MODULAR INC BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH USE OF MAX OR ANY DERIVATIVE WORK THEREOF.
