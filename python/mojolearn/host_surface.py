@@ -587,6 +587,17 @@ TRAINING_LANE_NAMES = {
     # The sliding window is the same oracles' window argument.
     "transformer": "the Transformer block",
     "transformer-window": "the sliding-window Transformer block",
+    # The Samba stack lanes (lane/cpu-training-samba, 2026-09-15). SambaStack
+    # is Python over the training, mamba and transformer bindings; the one
+    # operation it reached with no host entry was the neural RNG (the
+    # initializers and dropout), now the training host binding's neural_rng
+    # over core/philox_neural.mojo written out by tools/mamba_host_gen.py. On
+    # the M4, one core, shared machine: all 18 train, 36 infer and model and
+    # 18 batch cells IDENTICAL x4 against the 166-lane record before the gate
+    # ran, the MOJOLEARN_HOST_SABOTAGE set DIVERGENT on every one, and a
+    # throwaway dropout-mask arm DIVERGENT on samba-untied-dropout-accum only.
+    "samba": "the Samba stack",
+    "samba-untied-dropout-accum": "the Samba stack with untied embeddings, dropout, accumulation, clipping and a cosine schedule",
     # The byte LM host lanes (lane/cpu-training-host-only-lanes, 2026-09-15).
     # Host code on every box, so the 166-lane record's three columns are the
     # host CPUs of the Apple M4, the H100 box and the MI325X box, IDENTICAL x3
@@ -674,7 +685,6 @@ ADAPTED_MODULES = {
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "the Samba blocks",
     "gradient boosting training outside its declared lanes (CTR categorical features, and sample weights, eval sets and the pointwise searcher outside the gbdt-pointwise-l2-bayesian-eval configuration, among them)",
 )
 
@@ -1413,27 +1423,36 @@ FAMILIES = (
         # optimizers and cross_entropy on their own) run unchanged;
         # lane/cpu-training-misc batch 3 (2026-09-15) adds clip_grad_norm,
         # accumulate, accumulation_is_aligned and the embedding, RMSNorm and
-        # linear forward and backward. The Samba operations, the neural RNG
-        # and the multi-GPU probes stay absent and refuse by name.
+        # linear forward and backward; lane/cpu-training-samba (2026-09-15)
+        # adds neural_rng (core/philox_neural.mojo's kernel as
+        # tools/mamba_host_gen.py writes it out for the host), the last
+        # operation SambaStack reaches that was missing, so the samba lanes
+        # train on the CPU through this family with the mamba and
+        # transformer families' blocks. The multi-GPU probes stay absent and
+        # refuse by name.
         family="training",
         binding="_mojolearn_training_host",
         routes="_mojolearn_training",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "par-mlp"),
+        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "par-mlp",
+                        "samba", "samba-untied-dropout-accum"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
             "SmallMLPTrainer", "SGD", "Adam", "AdamW", "cross_entropy", "clip_grad_norm_",
             "accumulate_grads", "embedding_forward", "embedding_backward", "rms_norm_forward",
-            "rms_norm_backward", "linear_forward", "linear_backward",
+            "rms_norm_backward", "linear_forward", "linear_backward", "training.Generator",
+            "SambaConfig", "SambaStack",
         ),
-        display="the small MLP trainer, the optimizers, the gradient clip, the cross-entropy loss and the training primitives",
+        display="the small MLP trainer, the optimizers, the gradient clip, the cross-entropy loss, the training primitives, the neural random stream and the Samba stack",
         host_modules=(
             "training/host/mlp_oracle.mojo",
             "training/checks/loss_oracle.mojo",
             "training/checks/optimizer_oracle.mojo",
             "training/host/samba_ops_oracle.mojo",
+            "mamba/host/gen/philox_neural.mojo",
+            "mamba/host/gen/philox.mojo",
             "embedding/checks/embedding_oracle.mojo",
             "gemm/host/gemm_oracle.mojo",
         ),
@@ -1445,6 +1464,7 @@ FAMILIES = (
             "clip_grad_norm", "accumulate", "accumulation_is_aligned",
             "embedding_forward", "embedding_backward", "rms_norm_forward",
             "rms_norm_backward", "linear_forward", "linear_backward",
+            "neural_rng",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
