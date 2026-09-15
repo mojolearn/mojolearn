@@ -145,6 +145,27 @@ to 06, and the merge; a finished part is skipped when rerun):
 (`scripts/mac_slot.sh` is the saved copy of the session's Metal and CPU slot helper; the
 lock directory `/tmp/mojolearn-metal-slot` does not survive the restart, which is correct.)
 
+## Linux wheel packed, audited and in R2 (2026-09-15 19:12)
+
+Packed from the three db9047b9f sets and proofs with  at release tip
+76d6e8a8a (, , ,
+, ).
+
+-  packed: 15 of 15 host bindings carried once,
+  byte-identical across the three legs; payload  db9047b9f, 
+  empty, 87 extensions, identity COMMIT witness db9047b9f.
+- : auditwheel repaired to manylinux_2_35_x86_64, PASSED,  entries 0.
+- : 214 files unchanged, receipt .
+- **Final Linux wheel** ,
+  sha256 , 70,862,796 bytes,
+  214 members, 15 host bindings, 4 identity column files.
+- Content audit PASSED on the final Linux wheel and the macOS wheel: NOTICE byte-equal to the
+  release branch NOTICE with no "used under license", no GPT-2 table, fixture or vocabulary,
+  no vendored environment,  imports and declares its bindings.
+- In R2 at  (uploaded in 7 s,
+  round-trip sha256 matched). Record legs fetch it with a presigned GET minted by
+  .
+
 ## Pending steps, in order
 
 1. DONE: byte compare of the 15 host bindings across the three Linux sets at db9047b9f
