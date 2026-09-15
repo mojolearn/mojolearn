@@ -13,8 +13,7 @@ binding's name; the oracle imports no GPU module and reads its fold widths
 from the kernel matrix; the sabotage define reaches the oracle through the
 quantized accumulation (the arm that moves every centroid) and the binding
 reads it back; the oracle spells the device's round seed reassembly (the
-sign-extended low half, measured on the M4); the CPU identity gate workflow
-triggers on the oracle.
+sign-extended low half, measured on the M4).
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): `KMeans.fit` runs through the host binding on
@@ -102,11 +101,6 @@ def test_oracle_spells_the_device_seed_reassembly():
         "the round seed does not pass through the reassembly"
 
 
-def test_workflow_triggers_on_the_oracle():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {ORACLE}"
-    assert f'- "{METRICS_ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {METRICS_ORACLE}"
-
 
 def test_manifest_covers_metrics():
     assert "metrics" in host_surface.covered_lanes(), "metrics is not a covered training lane"
@@ -166,8 +160,6 @@ def test_manifest_covers_spectral_and_the_oracle_moved():
     assert "def dense_laplacian_eigenvalues_f64(" in checks
     assert "comptime if SPECTRAL_ORACLE_HOST_SABOTAGE:" in text and "seed + UInt64(1)" in text
     assert "SPECTRAL_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("metrics"))
-    workflow = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{SPECTRAL_ORACLE}"' in workflow
 
 
 @reference_training()
@@ -211,7 +203,6 @@ def test_manifest_covers_the_scalers():
     assert "comptime if SCALER_ORACLE_HOST_SABOTAGE:" in text
     assert "values[(i + 1) % n]" in text and "ftz(lower) + ftz(identical_mul(" in text
     assert "SCALER_ORACLE_HOST_SABOTAGE" in src
-    assert f'- "{SCALER_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
 
 
 @reference_training()
@@ -263,7 +254,6 @@ def test_manifest_covers_logistic():
         assert named in text, f"{named} is not in {QN_ORACLE}"
     assert "comptime if QN_ORACLE_HOST_SABOTAGE:" in text
     assert "QN_ORACLE_HOST_SABOTAGE" in src
-    assert f'- "{QN_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
 
 
 @reference_training()

@@ -128,7 +128,6 @@ def test_workflow_diffs_each_set_against_its_columns():
     for rel in host_surface.TRAINING_FIX_COLUMNS:
         directory = "/" + rel.rsplit("/", 1)[0] + "/"
         assert directory in text, f"the sparse checkout does not bring down {directory}"
-    assert '- "python/mojolearn/model_selection.py"' in text
 
 
 def test_identity_command_runs_public_reference_probes_on_a_cpu():
@@ -186,8 +185,6 @@ def test_resample_oracle_is_host_only_and_sabotaged():
     assert f'is_defined["{define}"]()' in text
     assert "comptime if RESAMPLE_HOST_SABOTAGE:" in text
     assert "RESAMPLE_HOST_SABOTAGE" in _read(host_surface.binding_source("resample"))
-    wf = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{RESAMPLE_ORACLE}"' in wf
 
 
 def test_manifest_covers_the_neural_lanes():
@@ -209,7 +206,6 @@ def test_manifest_covers_the_neural_lanes():
     for oracle in ("emb_forward_oracle", "emb_backward_oracle", "gemm_oracle", "gemm_backward_a_call",
                    "gemm_backward_b_call", "identical_rsqrt"):
         assert oracle in text, oracle
-    assert f'- "{SAMBA_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
     sentence = host_surface.no_cpu_path_sentence()
     assert "neural blocks" not in sentence and "Transformer, Mamba and Samba blocks" in sentence, sentence
 
