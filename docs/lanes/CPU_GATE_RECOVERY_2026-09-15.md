@@ -37,7 +37,17 @@ Parallelism further reduces elapsed time subject to CPU/memory contention.
 checks sharding and negative controls without compiling bindings. The host
 surface tests, docs facts, packaging pins and package inventory also pass
 locally. CI must verify real production and sabotage runs on all three hosts
-before merging. Compare queue, build, production and sabotage step durations
+before merging. Additional local validation at 08b50887a used the gate-budget
+branch's host binaries (Mojo sources, build scripts and lockfile unchanged),
+copied into an isolated evidence directory. All 117 lanes on the base fixture
+with two repeats passed in 181 seconds, one core, M4, shared machine. OLS and
+ridge serial versus sharded runs read IDENTICAL x2 for training, inference,
+model and batch; corrupting OLS produced DIVERGENT=1 and exit 1. The full
+117-lane base-fixture serial/sharded comparison also passed: train
+IDENTICAL=117; inference/model IDENTICAL=145, N/A=89; batch IDENTICAL=93,
+N/A=24, with require-columns 2 satisfied.
+
+Compare queue, build, production and sabotage step durations
 against run 34970403640; cold and warm cache times must be distinguished.
 
 ## Follow-up work
@@ -47,3 +57,40 @@ records; no fixture dimensions or edge cases change here. Dependency-aware
 branch selection needs a complete dependency map and fail-closed fallback.
 Neither is required to land this reduction in repeated work. The separate R2
 binding-cache lane remains responsible for portable remote GPU build caching.
+
+## Hosted evidence
+
+CPU identity run [34978769155](https://github.com/mojolearn/mojolearn/actions/runs/34978769155)
+at 08b50887a: ARM64 passed the entire cold-cache job in 21m 23s, including
+production (7m 31s) and sabotage execution (3m 46s). The earlier main run
+34970403640 took 28m 05s for ARM64 production alone. Packaging run
+34978769232 and community-health run 34978769199 passed. macOS and x86
+were still running when these notes were committed; main promotion must wait
+for both. The merge from 590c11c86 changes documentation only.
+
+## Proposed CPU product boundary
+
+Andrew's intended direction, discussed September 15, is small development
+checks, occasional broad CPU bitwise verification, and public CPU inference.
+This speedup does not yet change test frequency or public API boundaries.
+The follow-up work is:
+
+1. Separate internal CPU training verification builds from public CPU
+   inference operations and wheel exports. Preserve the CPU training code as
+   an oracle; define inference support by actual load/predict/transform/forward
+   capabilities rather than by the existence of a CPU fit implementation.
+2. Run small affected-code and public inference checks on relevant pushes.
+   Move broad training identity certification to a schedule when numerical
+   source changed and to release qualification. Shared numerical changes need
+   appropriately broad checks before acceptance.
+3. Test wheel loading, inference identity, batching and clear unsupported
+   operation errors; align documentation and the support manifest with the
+   public boundary.
+
+The actual PyPI 0.8.5 macOS and Linux wheels were downloaded and their SHA256
+verified against PyPI metadata. Both contain only the byte-LM host binary;
+`_HOST_MODULES` is empty. Both publicly export LanguageModelInference and
+LanguageModelHostTrainer. The broader 117-lane CPU training expansion is on
+main and is included by its future wheel configuration, but is not in those
+published wheels. Preserve the already-shipped trainer's compatibility or
+explicitly deprecate it when changing the product boundary.
