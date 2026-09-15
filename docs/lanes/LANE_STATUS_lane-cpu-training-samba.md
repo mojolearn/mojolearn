@@ -1,41 +1,43 @@
 # Lane status: lane/cpu-training-samba (CPU training for samba and samba-untied-dropout-accum)
 
-Updated 2026-09-15 by the cpumamba13 agent (re-pointed to Samba by the orchestrator).
+Updated 2026-09-15 by the cpusamba agent (launched as cpumamba13, re-pointed to Samba by the orchestrator).
 
 ## Base
 
-- Branch from origin/lane/cpu-training-mamba (the mamba host family, gate owed) with
-  origin/lane/cpu-training-transformer merged in (the transformer host family, gate 34969598898).
-  Neither is on main yet. Merge origin/main into this branch as they land.
+- Built on origin/lane/cpu-training-mamba (the mamba host family) with
+  origin/lane/cpu-training-transformer (the transformer host family, gate 34969598898) and origin/main
+  merged in. Neither peer branch is on main yet; this branch cannot merge to main before both do.
 
 ## Done
 
-- `neural_rng` added to `bindings/_mojolearn_training_host.mojo`, over
-  `mamba/host/gen/philox_neural.mojo` and `mamba/host/gen/philox.mojo`, which
-  `tools/mamba_host_gen.py` now generates from `core/philox_neural.mojo` and `core/philox.mojo`.
-  That was the only missing piece: SambaStack is Python over the training, mamba and transformer bindings.
-- On the M4 (one core, shared machine), training host built from this tree and the mamba, core
-  and transformer host bindings copied from the peers' builds: samba and samba-untied-dropout-accum,
-  nine fixtures, two repeats, read `summary: IDENTICAL=18`, `summary (infer/model): IDENTICAL=36`,
-  `summary (batch): IDENTICAL=18`, `require-columns 4 ... OK` against TRAINING_GPU_COLUMNS.
+- `neural_rng` in `bindings/_mojolearn_training_host.mojo`, over `mamba/host/gen/philox_neural.mojo`
+  and `mamba/host/gen/philox.mojo`, which `tools/mamba_host_gen.py` generates from
+  `core/philox_neural.mojo` and `core/philox.mojo`. That was the only missing piece: SambaStack is
+  Python over the training, mamba and transformer bindings.
+- Declared: training family training_lanes, exports and host_modules; TRAINING_LANE_NAMES; NO_CPU_PATH
+  drops the Samba blocks; docs regenerated; gate workflow paths; tests
+  (python/mojolearn/tests/test_cpu_training_samba.py new).
+- Evidence (M4, one core, all four families built from 4cc3609e2):
+  bench/results/identity_break/2026-09-15_cpu-samba/. IDENTICAL=18 train, 36 infer/model, 18 batch,
+  require-columns 4 OK; sabotage set DIVERGENT on every cell; a dropout-mask arm DIVERGENT on the
+  dropout lane only.
 
-## Owed, in order
+## Running
 
-1. Sabotage build of the four families (`-D MOJOLEARN_HOST_SABOTAGE=1`) must read DIVERGENT; a
-   throwaway RNG-only sabotage must also move the samba cells.
-2. Rebuild core, training, mamba and transformer host bindings from this tree into a fresh dir and
-   rerun both lanes for the committed evidence (bench/results/identity_break/2026-09-15_cpu-samba/).
-3. Declare: host_surface training family (exports gain `neural_rng`, host_modules gain the two
-   philox gens, training_lanes gain the two samba lanes), NO_CPU_PATH drops "the Samba blocks",
-   `python3 tools/docs_facts.py --write`, test_cpu_training_misc follows, new test module, gate
-   workflow paths for core/philox*.mojo.
-4. Push, seven-runner CPU identity gate, merge to main after the mamba and transformer branches land.
+- The seven-runner CPU identity gate on this branch (push of the merge with main). Check with
+  `gh run list --branch lane/cpu-training-samba -L 5`.
 
-## Commands (scripts in the orchestrator scratchpad, cpusamba/)
+## Next commands
 
-    SP=<orchestrator scratchpad>
-    $SP/cpusamba/build_set.sh $SP/cpusamba/<fresh dir> "" core training mamba transformer
-    $SP/cpusamba/run_lanes.sh $SP/cpusamba/<dir> <tag> samba,samba-untied-dropout-accum
-    # diff: python3 tools/identity_break.py --diff $(python3 python/mojolearn/host_surface.py --training-gpu-columns) <cpu json> --require-columns 4 --lanes samba,samba-untied-dropout-accum
+1. When the gate is green AND origin/main carries lane/cpu-training-mamba and
+   lane/cpu-training-transformer: `git fetch origin && git merge origin/main`, resolve lists and spans
+   (`python3 tools/docs_facts.py --write` then `--check`), rerun
+   `python3 packaging/wheel_ci.py pins .`, `python3 packaging/wheel_ci.py inventory python/mojolearn python/mojolearn_diagnostics.py`
+   and the host_surface, misc, mamba, transformer and samba test modules, then
+   `git push origin HEAD:lane/cpu-training-samba && git push origin HEAD:main`.
+2. After merging, move untracked evidence to ~/mojolearn-evidence/cpusamba/ and remove the worktree.
+
+Local scripts (orchestrator scratchpad, cpusamba/): `build_set.sh <fresh dir> "" core training mamba transformer`,
+`run_lanes.sh <dir> <tag> samba,samba-untied-dropout-accum`.
 
 No boxes rented.
