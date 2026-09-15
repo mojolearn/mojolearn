@@ -6,6 +6,44 @@ their allocations; callers retain both contexts through every copy and join.
 """
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.info import has_amd_gpu_accelerator
+
+
+def transfer_bytes[dt: DType](source_ctx: DeviceContext, target_ctx: DeviceContext,
+                             mut source: DeviceBuffer[dt], mut target: DeviceBuffer[dt],
+                             cells: Int, cross_device: Bool) raises:
+    """Copy `cells` elements of `source` into `target`.
+
+    AMD (HIP) CROSS-DEVICE COPIES ARE STAGED THROUGH HOST MEMORY. On two
+    RunPod MI300X (SR-IOV virtual functions) a kernel on the target device,
+    launched after `enqueue_copy_to` and `synchronize()` on BOTH contexts,
+    read cells the copy had not yet written: their bytes were the previous
+    contents of that memory (training/checks/peer_copy_check.mojo PEERSOLVE;
+    bench/results/multi_gpu/2026-09-15/peer-copy-mi300x/). The same source
+    on two H100s never did. Staging reads the source into pinned host memory
+    through the source context and writes it through the target context, so
+    the target context's own drain covers the write. A same-device copy, and
+    every copy on other vendors, stays a device copy.
+    """
+    if len(source) < cells or len(target) < cells:
+        raise Error("transfer_bytes: a buffer is shorter than the copy")
+    comptime if has_amd_gpu_accelerator():
+        if cross_device:
+            var host = source_ctx.enqueue_create_host_buffer[dt](cells)
+            var sv = source.create_sub_buffer[dt](0, cells)
+            source_ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=sv)
+            source_ctx.synchronize()
+            var tv = target.create_sub_buffer[dt](0, cells)
+            target_ctx.enqueue_copy(dst_buf=tv, src_ptr=host.unsafe_ptr())
+            target_ctx.synchronize()
+            _ = tv^
+            _ = sv^
+            _ = host^
+            return
+    # Unchanged from the call sites this replaces: the device copy and a
+    # drain of the source context.
+    source.enqueue_copy_to(target)
+    source_ctx.synchronize()
 
 
 def peer_clone[dt: DType](source_ctx: DeviceContext, target_ctx: DeviceContext,
