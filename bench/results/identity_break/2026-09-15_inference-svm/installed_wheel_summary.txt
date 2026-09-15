@@ -1,0 +1,29 @@
+staged host bindings:
+total 1208
+drwxr-xr-x 2 root root    100 Sep 15 17:51 .
+drwxr-xr-x 6 root root   4096 Sep 15 17:51 ..
+-rwxr-xr-x 1 root root 594488 Sep 15 17:51 _mojolearn_core_host.so
+-rwxr-xr-x 1 root root 231328 Sep 15 17:51 _mojolearn_linalg_host.so
+-rwxr-xr-x 1 root root 399480 Sep 15 17:51 _mojolearn_svm_host.so
+wheel exit 0
+total 1092
+drwxr-xr-x 2 root root      55 Sep 15 17:51 .
+drwxr-xr-x 5 root root      43 Sep 15 17:51 ..
+-rw-r--r-- 1 root root 1116331 Sep 15 17:51 mojolearn-0.8.5-py3-none-linux_x86_64.whl
+member mojolearn/host/_mojolearn_core_host.so 594488
+member mojolearn/host/_mojolearn_linalg_host.so 231328
+member mojolearn/host/_mojolearn_svm_host.so 399480
+unpacked /root/wheel/dist/mojolearn-0.8.5-py3-none-linux_x86_64.whl
+installed from /root/wheel/target/mojolearn vendor cpu
+wheel check exit 0
+gate verdict IDENTICAL (36 fixtures, 3 GPU columns, exit 0)
+     27 check svc-linear EQUAL
+     27 check svc-poly EQUAL
+     18 check svr EQUAL
+     18 check svr-linear EQUAL
+     27 column svc-linear EQUAL
+     27 column svc-poly ABSENT
+     27 column svr EQUAL
+     27 column svr-linear EQUAL
+wheel sabotage check exit 0
+gate verdict EXPECTED MISMATCH SEEN (36 fixtures, 3 GPU columns, exit 0)

@@ -36,6 +36,19 @@ as the control. All nine fixtures. No GPU box was rented.
 - Saved-model check on the sabotage set: `gate verdict EXPECTED MISMATCH SEEN`,
   identity_hash DIFFER on 9 of 9 fixtures for each of the four lanes, `ties` included.
 
+- Installed test wheel (pod 17bjtecv9n3dfk, from the pushed main commit): a wheel built
+  with python-build in the `pkg` env, staged with the svm, core and linalg host bindings
+  (`mojolearn-0.8.5-py3-none-linux_x86_64.whl`, 1,116,331 bytes), unpacked into an isolated
+  target with no identical set (`vendor cpu`, mojolearn imported from the target):
+  `gate verdict IDENTICAL (36 fixtures, 3 GPU columns, exit 0)`; with the sabotage svm
+  binding, `EXPECTED MISMATCH SEEN`. Files `classical_host_check_installed_wheel.txt`,
+  `classical_host_check_installed_wheel_sabotage.txt`, `installed_wheel_summary.txt`.
+- Confirmation after the push (pod p5pd398w7ssu9j, merge 4666be65a): every verdict above
+  repeated. `test_host_model_svm` passed there; `test_host_surface`'s
+  `test_recordings_and_columns_exist` failed only because the leg does not ship every
+  recording directory, and `test_svr_surface` fails on a CPU-only install because it
+  calls `fit`, which the public CPU boundary refuses (it is a Metal module).
+
 ## Sabotage arms
 
 Before this lane the svm host sabotage was the GEMM leaf walked descending plus the
