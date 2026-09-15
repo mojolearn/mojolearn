@@ -82,9 +82,23 @@ import it.
   `bench/results/identity_break/2026-09-15_inference-gbdt-modes/`.
 - `test_gbdt_host_modes` (7) and `test_host_surface` (110) pass on the M4;
   the runtime test ran (not skipped) against those bindings.
-- Pending on one RunPod CPU pod: the x86 column, the forest sabotage column
-  (`-D MOJOLEARN_FOREST_HOST_SABOTAGE=1`, must read DIVERGENT) and the
-  installed-wheel check (`tools/inf_gbdt_wheel_models.py`).
+- x86, RunPod CPU pod 2bbnf9dh15m8kg (AMD EPYC 4564P, verified deleted,
+  $0.03), bindings built there from b2ac52fa2: the same diff reads train
+  IDENTICAL=36, infer/model IDENTICAL=72, batch IDENTICAL=36, 0 OWED.
+- Installed test wheel, pod hikr33gb9v4fnz (verified deleted, $0.016): a
+  wheel carrying only `_mojolearn_forest_host.so` under `mojolearn/host/`,
+  unpacked into an isolated target, predicted the 36 saved models through its
+  `host_model` with IDENTICAL=36 against all three GPU columns (mojolearn
+  imported from the target); with the forest sabotage binary, DIFFER=36.
+- The first forest sabotage identity column (same pod) read IDENTICAL and was
+  removed as inert: host_record had loaded the production forest binding from
+  `MOJOLEARN_HOST_DIR` under the module name `_forest_host` reuses.
+  `_probe_fit_host` now refuses a host model bound to any file other than
+  `MOJOLEARN_FOREST_HOST_BINARY`. A third pod reruns the sabotage column
+  with the sabotage forest as the only forest binary in the process, plus the
+  old mixed layout, which must now read REFUSED.
+- `wheel_ci pins`, `wheel_ci inventory` and `docs_facts --check` exit 0 at
+  6beb3d394.
 
 ## Not public, and why
 
