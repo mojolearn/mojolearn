@@ -43,7 +43,8 @@ calls; `weight` is never updated by this module.
 
 NO SPEED CLAIM.
 """
-from . import _backend
+from . import _backend, _serialize
+from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes
 from ._mode import NumericModeMixin
 
@@ -51,6 +52,9 @@ _MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
 _NO_PADDING = -1
 #: ORDER MATCHES embedding/checks/embedding_sort.mojo's PLAN_SCAN = 0, PLAN_SORT = 1.
 _PLAN_CODE = {"scan": 0, "sort": 1}
+#: The saved-table format tag (`save`, `load`, `mojolearn.host_model`;
+#: lane/inference-embedding-ivf-cholesky, 2026-09-15).
+_EMBEDDING_FORMAT = "mojolearn-embedding-1"
 
 
 class Embedding(NumericModeMixin):
@@ -187,6 +191,11 @@ class Embedding(NumericModeMixin):
         carried accumulator (contract 7.4): its bits are copied and the fold
         continues from them; `grad` itself is not modified.
         """
+        # The gradient is training: on a CPU-only install it runs only inside
+        # the internal reference context (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md);
+        # the shipped embedding_infer binding carries no backward at all.
+        from ._cpu_reference import require_training
+        require_training(self)
         flat, shape = self._ids(ids)
         t, d, v = int(flat.size), self.embedding_dim, self.num_embeddings
         g, _ = as_f32_c(dy, ndim=None, name="dy")
@@ -211,6 +220,48 @@ class Embedding(NumericModeMixin):
             [v, d, t, pad, accumulate, _PLAN_CODE[self.plan]],
         )
         return dw.reshape((v, d))
+
+    # -- saved tables (lane/inference-embedding-ivf-cholesky, 2026-09-15) ---
+
+    def save(self, path):
+        """Write the table to `path` as an npz: `weight` `<f4` (V, d),
+        `meta` `<i8` [V, d, padding_idx or -1], `plan` and the tier. A loaded
+        table looks ids up (`forward`); on a CPU-only install that is public
+        inference through `_mojolearn_embedding_infer_host`, which carries no
+        backward."""
+        from .decomposition import _saved_mode
+        arrays = {
+            "format": _EMBEDDING_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "plan": str(self.plan),
+            "weight": self.weight,
+            "meta": Array.from_list(
+                [int(self.num_embeddings), int(self.embedding_dim),
+                 _NO_PADDING if self.padding_idx is None else int(self.padding_idx)],
+                "<i8",
+            ),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a table written by `save`, dtype and shape checked, nothing
+        cast."""
+        from .decomposition import _check_saved_by, _restore_mode
+        arrays = _serialize.read_npz(path, _EMBEDDING_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 3:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
+        v, d, pad = (int(meta[i]) for i in range(3))
+        weight = _serialize.exact(arrays, "weight", "<f4")
+        if tuple(weight.shape) != (v, d):
+            raise ValueError(f"mojolearn: {path!r} weight has shape {tuple(weight.shape)}, not {(v, d)}")
+        obj = cls(v, d, padding_idx=None if pad == _NO_PADDING else pad, weight=weight,
+                  plan=_serialize.scalar_str(arrays, "plan"))
+        _restore_mode(obj, arrays)
+        return obj
 
 
 __all__ = ["Embedding"]

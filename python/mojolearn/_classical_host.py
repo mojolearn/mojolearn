@@ -53,6 +53,8 @@ import hashlib
 from . import _backend, _serialize
 from ._arima_impl import ARIMA, _ARIMA_FORMAT
 from ._cholesky_impl import _CHOLESKY_FORMAT, HostCholesky
+from ._ivf_impl import IVFIndex, _IVF_FORMAT
+from .embedding import Embedding, _EMBEDDING_FORMAT
 from ._gpc_impl import _GPC_FORMAT, HostGaussianProcessClassifier
 from ._solver_impl import ElasticNet, Lasso, _CD_FORMAT
 from ._svm_impl import SVC, SVR, _SVC_FORMAT, _SVR_FORMAT
@@ -86,6 +88,8 @@ _HOST_BASENAMES = {
     "_mojolearn_svm": "_mojolearn_svm_host",
     "_mojolearn": "_mojolearn_core_host",
     "_mojolearn_arima": "_mojolearn_forecast_host",
+    "_mojolearn_ivf": "_mojolearn_ivf_search_host",
+    "_mojolearn_embedding": "_mojolearn_embedding_infer_host",
     "_mojolearn_metrics": "_mojolearn_metrics_host",
     "_mojolearn_preprocessing": _HOST_BASENAME,
     "_mojolearn_solver": _HOST_BASENAME,
@@ -336,6 +340,19 @@ class HostRBFSampler(_HostBound, RBFSampler):
     _HOST_ARRAYS = ("random_weights_", "random_offset_")
 
 
+class HostIVFIndex(_HostBound, IVFIndex):
+    """A saved IVF-Flat index on the search inference binding, which exports
+    `ivf_flat_search` and no build (lane/inference-embedding-ivf-cholesky,
+    2026-09-15)."""
+    _HOST_ARRAYS = ("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_")
+
+
+class HostEmbedding(_HostBound, Embedding):
+    """A saved embedding table on the lookup inference binding, which
+    exports `embedding_forward` and no backward."""
+    _HOST_ARRAYS = ("weight",)
+
+
 #: format tag -> (estimator name, host class). A file whose `estimator`
 #: member names another class is refused by that class's own `load`.
 _FORMATS = {
@@ -363,6 +380,8 @@ _FORMATS = {
     # A saved Cholesky factor (lane/inference-embedding-ivf-cholesky,
     # 2026-09-15): `HostCholesky` solves on `_mojolearn_linalg_host`.
     _CHOLESKY_FORMAT: {"Cholesky": HostCholesky},
+    _IVF_FORMAT: {"IVFIndex": HostIVFIndex},
+    _EMBEDDING_FORMAT: {"Embedding": HostEmbedding},
     # A saved GaussianProcessClassifier (lane/gaussian-process-classifier,
     # 2026-09-15): predicts on `_mojolearn_gp_host`.
     _GPC_FORMAT: {"GaussianProcessClassifier": HostGaussianProcessClassifier},

@@ -187,7 +187,9 @@ def metrics_host_column_binding() raises -> PythonObject:
 def metrics_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary was built with -D MOJOLEARN_HOST_SABOTAGE=1 (the
     gate's negative control): every slab tree's chunk boundaries shifted by
-    one value, which moves r2 and the silhouette, and the spectral
+    one value, a perturbed value read by accuracy, the adjusted Rand index,
+    entropy, mutual information, r2 and the silhouette
+    (`metrics/host/metrics_oracle.mojo`, THE NEGATIVE CONTROL), and the spectral
     recluster seeded one draw off, and every UMAP negative draw keyed one
     epoch late; refused outside the gate as one set."""
     return PythonObject(

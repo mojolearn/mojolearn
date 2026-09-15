@@ -147,10 +147,17 @@ from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
+    OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUERY_RMSE,
     OBJECTIVE_RMSE,
     deterministic_sum_lanes_kernel,
     launch_approximate,
+)
+from gbdt.targets.kernel.pair_logit import (
+    PairwiseTargetBuffers,
+    launch_pair_logit_with,
+    make_pairwise_target_buffers,
+    pair_blocks,
 )
 from gbdt.targets.kernel.query_rmse import (
     QuerywiseTargetBuffers,
@@ -658,6 +665,8 @@ def _estimate_and_apply(
     # the QueryRMSE grouping and scratch (handle views onto the fit's own
     # buffers); None for every pointwise and multiclass loss
     var query: Optional[QuerywiseTargetBuffers] = None,
+    # the PairLogit pairs and scratch (handle views); None otherwise
+    var pairs: Optional[PairwiseTargetBuffers] = None,
 ) raises:
     """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
     plus the `AppendModels` that follows it, for ONE (dataset, cursor).
@@ -770,6 +779,9 @@ def _estimate_and_apply(
         # bin order, position -> row, so the inverse maps each row to the
         # position the oracle's gathered cursor holds it at.
         launch_inverse_permutation(ctx, row_index, query.value().inverse, n_rows)
+    if pairs.__bool__():
+        # the same inverse bin order, for the pairwise der calcer
+        launch_inverse_permutation(ctx, row_index, pairs.value().inverse, n_rows)
     var oracle = make_bin_optimized_oracle(
         ctx, n_rows, n_leaves, sizes,
         g_target.copy(), g_weights.copy(), g_cursor.copy(),
@@ -784,6 +796,7 @@ def _estimate_and_apply(
         leaf_estimation_method,
         num_classes,
         query^,
+        pairs^,
     )
     # `TDocParallelLeavesEstimator::Estimate`
     # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES
@@ -988,6 +1001,12 @@ def fit_with_test(
     # `objective=OBJECTIVE_QUERY_RMSE` only (`gbdt/train.mojo::train` resolves
     # it, `TWithoutQueriesGrouping` included)
     group_sizes: List[UInt32] = List[UInt32](),
+    # the PairLogit pairs in the device order, winner row, loser row and
+    # weight per pair (`gbdt/train.mojo::train` generates or checks them);
+    # read by `objective=OBJECTIVE_PAIR_LOGIT` only
+    pair_winners: List[UInt32] = List[UInt32](),
+    pair_losers: List[UInt32] = List[UInt32](),
+    pair_weights: List[Float32] = List[Float32](),
 ) raises -> FitResult:
     """Their `Fit` (`doc_parallel_boosting.h:302`), one permutation.
 
@@ -1248,6 +1267,9 @@ def fit_with_test(
     var part_blocks = mse_blocks
     if multilogit_blocks(n_rows) > part_blocks:
         part_blocks = multilogit_blocks(n_rows)
+    # PairLogit's value partials are per 256 PAIRS (`pair_logit.mojo`)
+    if objective == OBJECTIVE_PAIR_LOGIT and pair_blocks(len(pair_winners)) > part_blocks:
+        part_blocks = pair_blocks(len(pair_winners))
     var fv_part = ctx.enqueue_create_buffer[DType.float32](part_blocks)
     var mag_part = ctx.enqueue_create_buffer[DType.float32](
         2 * part_blocks
@@ -1273,10 +1295,32 @@ def fit_with_test(
                 ctx, group_sizes, n_rows, targets, weights, has_weights
             )
         )
-    elif len(group_sizes) > 0:
+    # ---- the PAIRWISE-DERIVATIVE querywise target (PairLogit) ----
+    # `TQuerywiseTargetsImpl`'s `InitPairLogit` arm over the pairs
+    # (`gbdt/targets/kernel/pair_logit.mojo`), on the same arm as QueryRMSE.
+    # The caller already replaced `weights` with the per-row pair weights.
+    var is_pair_logit = objective == OBJECTIVE_PAIR_LOGIT
+    var pair_buffers = Optional[PairwiseTargetBuffers]()
+    var loss_norm = Float64(n_rows)
+    if is_pair_logit:
+        var has_test_rows = test.__bool__() and test.value().n_rows > 0
+        if non_symmetric or use_pointwise_searcher or perm_count > 1 or has_test_rows:
+            raise Error(
+                "PairLogit is implemented for the SymmetricTree greedy"
+                " searcher at one permutation with no eval set; this fit asked"
+                " for another arm"
+            )
+        pair_buffers = Optional(
+            make_pairwise_target_buffers(
+                ctx, pair_winners, pair_losers, pair_weights, n_rows
+            )
+        )
+        # `ComputeStats`' PairLogit weight (`querywise_targets_impl.h:98-101`)
+        loss_norm = pair_buffers.value().pairs_total_weight
+    elif not is_querywise and (len(group_sizes) > 0 or len(pair_winners) > 0):
         raise Error(
-            "fit_with_test: group_sizes are read by the QueryRMSE objective"
-            " only, got objective " + String(objective)
+            "fit_with_test: group_sizes and pairs are read by the QueryRMSE"
+            " and PairLogit objectives only, got objective " + String(objective)
         )
 
     # THE FIXED-POINT BOUND, for every build whose histogram quantizes: the
@@ -1322,10 +1366,10 @@ def fit_with_test(
         )
         boot_param = bagging_temperature
     var bootstrap_on = boot_kind >= 0
-    if is_querywise and bootstrap_on:
+    if (is_querywise or is_pair_logit) and bootstrap_on:
         raise Error(
-            "QueryRMSE with a bootstrap is not implemented here: the reference"
-            " samples whole queries for querywise targets"
+            "QueryRMSE and PairLogit with a bootstrap are not implemented here:"
+            " the reference samples whole queries for querywise targets"
         )
 
     var boot_seeds: DeviceBuffer[DType.uint64]
@@ -1590,6 +1634,19 @@ def fit_with_test(
                 ctx, query_buffers.value(), lcur, False,
                 stats, fv_part, True, mag_part, mags_in_mse,
             )
+        elif is_pair_logit:
+            # the search planes of `pair_logit.mojo`, whose weight plane
+            # follows `secondDerAsWeights`' meaning (the DEVIATION block there)
+            if second_order:
+                launch_pair_logit_with[False, True](
+                    ctx, pair_buffers.value(), lcur, False,
+                    stats, fv_part, True, mag_part, mags_in_mse,
+                )
+            else:
+                launch_pair_logit_with[False, False](
+                    ctx, pair_buffers.value(), lcur, False,
+                    stats, fv_part, True, mag_part, mags_in_mse,
+                )
         elif second_order:
             # `secondDerAsWeights=true`: plane 0 becomes `weight * der2`
             # (`pointwise_target_impl.h:193-201`); plane 1 stays
@@ -1615,13 +1672,16 @@ def fit_with_test(
         var fv_blocks = mse_blocks
         if objective == OBJECTIVE_MULTICLASS:
             fv_blocks = multilogit_blocks(n_rows)
+        var mag_blocks = fv_blocks
+        if is_pair_logit:
+            fv_blocks = pair_buffers.value().blocks()
         ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
             fv_part.unsafe_ptr(), Int32(fv_blocks), fv.unsafe_ptr(),
             grid_dim=1, block_dim=256,
         )
         if mags_in_mse:
             ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
-                mag_part.unsafe_ptr(), Int32(fv_blocks),
+                mag_part.unsafe_ptr(), Int32(mag_blocks),
                 mags.unsafe_ptr(),
                 grid_dim=1, block_dim=256,
             )
@@ -2112,6 +2172,9 @@ def fit_with_test(
                     var q_est = Optional[QuerywiseTargetBuffers]()
                     if is_querywise:
                         q_est = Optional(query_buffers.value().handles())
+                    var p_est = Optional[PairwiseTargetBuffers]()
+                    if is_pair_logit:
+                        p_est = Optional(pair_buffers.value().handles())
                     _estimate_and_apply(
                         ctx, n_rows, approx_dim, len(sizes), sizes,
                         leaf_offsets,
@@ -2127,6 +2190,7 @@ def fit_with_test(
                         + ".leaves.estimated",
                         est_ws,
                         q_est^,
+                        p_est^,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
@@ -2232,7 +2296,7 @@ def fit_with_test(
             # `size()` counts either shape (the non-symmetric ensemble's
             # trees are in `non_symmetric_models`)
             if model.size() > 1:
-                losses.append(-v / Float64(n_rows))
+                losses.append(-v / loss_norm)
 
     loop_times.stop_host("fit_total", t_loop)
     loop_times.report()
@@ -2265,6 +2329,12 @@ def fit_with_test(
     elif is_querywise:
         launch_query_rmse_with[False](
             ctx, query_buffers.value(), cursor, False,
+            stats, fv_part, True, mag_part, False,
+        )
+    elif is_pair_logit:
+        final_blocks = pair_buffers.value().blocks()
+        launch_pair_logit_with[False, False](
+            ctx, pair_buffers.value(), cursor, False,
             stats, fv_part, True, mag_part, False,
         )
     else:
@@ -2326,7 +2396,7 @@ def fit_with_test(
             )
         )
     losses.append(
-        -Float64(h_fv.unsafe_ptr().unsafe_load(0)) / Float64(n_rows)
+        -Float64(h_fv.unsafe_ptr().unsafe_load(0)) / loss_norm
     )
     # DEVIATION 74, MEASURED RATHER THAN ARGUED. A nonzero count means
     # some leaf's Hessian was not positive definite, Cholesky stopped, and

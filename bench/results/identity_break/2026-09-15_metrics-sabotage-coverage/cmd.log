@@ -1,0 +1,18 @@
+== host dir before
+python/mojolearn/host:
+_mojolearn_core_host.so
+_mojolearn_metrics_host.so
+
+python/mojolearn/host-sabotage:
+_mojolearn_metrics_host.so
+== production column
+prod exit 0
+== new sabotage column
+sab-new exit 0
+== old sabotage build (origin/main metrics_oracle.mojo)
+0
+(0 expected: old oracle in place)
+old build exit 0
+== old sabotage column
+sab-old exit 0
+done

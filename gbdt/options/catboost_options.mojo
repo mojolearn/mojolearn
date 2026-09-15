@@ -50,6 +50,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
     OBJECTIVE_POISSON,
+    OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUANTILE,
     OBJECTIVE_QUERY_RMSE,
     OBJECTIVE_RMSE,
@@ -1325,6 +1326,11 @@ def get_estimation_method_defaults(
         method = LEAF_ESTIMATION_NEWTON
         newton = 1
         gradient = 1
+    elif f == OBJECTIVE_PAIR_LOGIT:
+        # `:120-125`
+        method = LEAF_ESTIMATION_NEWTON
+        newton = 10
+        gradient = 40
     elif f == OBJECTIVE_TWEEDIE:
         # `:221-231`. THE GPU ARM: twenty iterations, where their CPU
         # takes one. We are a GPU, so twenty.
