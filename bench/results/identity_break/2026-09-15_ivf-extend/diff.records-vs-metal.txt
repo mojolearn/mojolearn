@@ -1,0 +1,120 @@
+NOTE: --lanes scopes this diff to 3 lane(s); 0 other lane(s) the JSONs carry are not compared
+| lane/fixture                 | verdict    | arm64            | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-gfx942       | arm64            |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| ivf-euclidean/base           | IDENTICAL x4 | c96b7d6a7ed08e9b | c96b7d6a7ed08e9b | c96b7d6a7ed08e9b | c96b7d6a7ed08e9b |
+| ivf-euclidean/denormal       | IDENTICAL x4 | bc555903de75c40e | bc555903de75c40e | bc555903de75c40e | bc555903de75c40e |
+| ivf-euclidean/denormal_ftz   | IDENTICAL x4 | bc555903de75c40e | bc555903de75c40e | bc555903de75c40e | bc555903de75c40e |
+| ivf-euclidean/dupes          | IDENTICAL x4 | eb269ad65df502ed | eb269ad65df502ed | eb269ad65df502ed | eb269ad65df502ed |
+| ivf-euclidean/hashed         | IDENTICAL x4 | cdff352d363caa07 | cdff352d363caa07 | cdff352d363caa07 | cdff352d363caa07 |
+| ivf-euclidean/negative       | IDENTICAL x4 | db3db68bcb7ef398 | db3db68bcb7ef398 | db3db68bcb7ef398 | db3db68bcb7ef398 |
+| ivf-euclidean/odd            | IDENTICAL x4 | ec9020ff5b2a6c07 | ec9020ff5b2a6c07 | ec9020ff5b2a6c07 | ec9020ff5b2a6c07 |
+| ivf-euclidean/ties           | IDENTICAL x4 | 2167394d0c80cc41 | 2167394d0c80cc41 | 2167394d0c80cc41 | 2167394d0c80cc41 |
+| ivf-euclidean/wide           | IDENTICAL x4 | d62c258ac8282595 | d62c258ac8282595 | d62c258ac8282595 | d62c258ac8282595 |
+| ivf-extend/base              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | ba53c112142a07c4 |
+| ivf-extend/denormal          | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 60a84eeca95632ba |
+| ivf-extend/denormal_ftz      | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 5aadb50ae8c47074 |
+| ivf-extend/dupes             | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 1585900d93cb8c88 |
+| ivf-extend/hashed            | ONE-COLUMN | (not run)        | (not run)        | (not run)        | f669e9076c62ef24 |
+| ivf-extend/negative          | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 38f0489facb80eaa |
+| ivf-extend/odd               | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 940ef92d230837ed |
+| ivf-extend/ties              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 0da4a663917d249c |
+| ivf-extend/wide              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | b215fd8f707cd94c |
+| ivf/base                     | IDENTICAL x4 | e14f27972422d4e0 | e14f27972422d4e0 | e14f27972422d4e0 | e14f27972422d4e0 |
+| ivf/denormal                 | IDENTICAL x4 | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 |
+| ivf/denormal_ftz             | IDENTICAL x4 | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 |
+| ivf/dupes                    | IDENTICAL x4 | c9eaf39f6e83e625 | c9eaf39f6e83e625 | c9eaf39f6e83e625 | c9eaf39f6e83e625 |
+| ivf/hashed                   | IDENTICAL x4 | 6c061012dc979df5 | 6c061012dc979df5 | 6c061012dc979df5 | 6c061012dc979df5 |
+| ivf/negative                 | IDENTICAL x4 | 9a7f19689600453e | 9a7f19689600453e | 9a7f19689600453e | 9a7f19689600453e |
+| ivf/odd                      | IDENTICAL x4 | 26b26d7e4be5c50a | 26b26d7e4be5c50a | 26b26d7e4be5c50a | 26b26d7e4be5c50a |
+| ivf/ties                     | IDENTICAL x4 | b9d8790b40b5a6ac | b9d8790b40b5a6ac | b9d8790b40b5a6ac | b9d8790b40b5a6ac |
+| ivf/wide                     | IDENTICAL x4 | 8ee39ab9ae510966 | 8ee39ab9ae510966 | 8ee39ab9ae510966 | 8ee39ab9ae510966 |
+
+summary: IDENTICAL=18, ONE-COLUMN=9
+
+| lane/fixture                 | column | verdict      | arm64            | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-gfx942       | arm64            |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| ivf-euclidean/base           | infer  | IDENTICAL x4 | f6f71f391727d74a | f6f71f391727d74a | f6f71f391727d74a | f6f71f391727d74a |
+| ivf-euclidean/base           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2c7ef8ed2b7dc541 |
+| ivf-euclidean/base           | batch  | IDENTICAL x4 | 0d3b322b4f251d85 | 0d3b322b4f251d85 | 0d3b322b4f251d85 | 0d3b322b4f251d85 |
+| ivf-euclidean/denormal       | infer  | IDENTICAL x4 | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c |
+| ivf-euclidean/denormal       | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 095ed72f60fec6ce |
+| ivf-euclidean/denormal       | batch  | IDENTICAL x4 | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 |
+| ivf-euclidean/denormal_ftz   | infer  | IDENTICAL x4 | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c |
+| ivf-euclidean/denormal_ftz   | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 5c190ab95e7501cd |
+| ivf-euclidean/denormal_ftz   | batch  | IDENTICAL x4 | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 |
+| ivf-euclidean/dupes          | infer  | IDENTICAL x4 | 5fb3dd756fa6a835 | 5fb3dd756fa6a835 | 5fb3dd756fa6a835 | 5fb3dd756fa6a835 |
+| ivf-euclidean/dupes          | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1d65036f19dde9e9 |
+| ivf-euclidean/dupes          | batch  | IDENTICAL x4 | 5fef40b00c474a24 | 5fef40b00c474a24 | 5fef40b00c474a24 | 5fef40b00c474a24 |
+| ivf-euclidean/hashed         | infer  | IDENTICAL x4 | 7d8a8506eeb9a78e | 7d8a8506eeb9a78e | 7d8a8506eeb9a78e | 7d8a8506eeb9a78e |
+| ivf-euclidean/hashed         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1c67c6b91b2e570b |
+| ivf-euclidean/hashed         | batch  | IDENTICAL x4 | a69643bf03ceccb2 | a69643bf03ceccb2 | a69643bf03ceccb2 | a69643bf03ceccb2 |
+| ivf-euclidean/negative       | infer  | IDENTICAL x4 | eacf2587f37d56cb | eacf2587f37d56cb | eacf2587f37d56cb | eacf2587f37d56cb |
+| ivf-euclidean/negative       | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 65dfdf6d49abc120 |
+| ivf-euclidean/negative       | batch  | IDENTICAL x4 | 1a302ceb75994c6f | 1a302ceb75994c6f | 1a302ceb75994c6f | 1a302ceb75994c6f |
+| ivf-euclidean/odd            | infer  | IDENTICAL x4 | 247b6a2b733e9ff2 | 247b6a2b733e9ff2 | 247b6a2b733e9ff2 | 247b6a2b733e9ff2 |
+| ivf-euclidean/odd            | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 997e755024716b18 |
+| ivf-euclidean/odd            | batch  | IDENTICAL x4 | 4960b29bcd792dc0 | 4960b29bcd792dc0 | 4960b29bcd792dc0 | 4960b29bcd792dc0 |
+| ivf-euclidean/ties           | infer  | IDENTICAL x4 | 6ce659c7ea10311d | 6ce659c7ea10311d | 6ce659c7ea10311d | 6ce659c7ea10311d |
+| ivf-euclidean/ties           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 3632c01ae6112aca |
+| ivf-euclidean/ties           | batch  | IDENTICAL x4 | a22713485f1d9568 | a22713485f1d9568 | a22713485f1d9568 | a22713485f1d9568 |
+| ivf-euclidean/wide           | infer  | IDENTICAL x4 | ee34cd995ead59ba | ee34cd995ead59ba | ee34cd995ead59ba | ee34cd995ead59ba |
+| ivf-euclidean/wide           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 74da9b4decbbf211 |
+| ivf-euclidean/wide           | batch  | IDENTICAL x4 | 36fcc86c5ffc7e96 | 36fcc86c5ffc7e96 | 36fcc86c5ffc7e96 | 36fcc86c5ffc7e96 |
+| ivf-extend/base              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 21a84397fed9cb7b |
+| ivf-extend/base              | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 6814e84fcb72ca37 |
+| ivf-extend/base              | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f8873bb27104a23d |
+| ivf-extend/denormal          | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 3da4f22de1f06f6e |
+| ivf-extend/denormal          | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 7a4a7782b32da3a0 |
+| ivf-extend/denormal          | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 42bb0c222dffe2b7 |
+| ivf-extend/denormal_ftz      | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 3da4f22de1f06f6e |
+| ivf-extend/denormal_ftz      | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 4defe96aca4c8e11 |
+| ivf-extend/denormal_ftz      | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 42bb0c222dffe2b7 |
+| ivf-extend/dupes             | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 802c8f83c4e8dddd |
+| ivf-extend/dupes             | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 667918778ad720e3 |
+| ivf-extend/dupes             | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 08c451b2a76060be |
+| ivf-extend/hashed            | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 9d0f275ae985056d |
+| ivf-extend/hashed            | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e96813401e1670f0 |
+| ivf-extend/hashed            | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | a190e25ce473d410 |
+| ivf-extend/negative          | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | d5badddd236f4f6f |
+| ivf-extend/negative          | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | fd1e311bb478d024 |
+| ivf-extend/negative          | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 39b741e505d5bbed |
+| ivf-extend/odd               | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | a8b712ff1a5e3ef1 |
+| ivf-extend/odd               | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 26b97c27cd22d526 |
+| ivf-extend/odd               | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | ec78ed4aa6252665 |
+| ivf-extend/ties              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | ee7fa6ee3ed98541 |
+| ivf-extend/ties              | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 0d954140e0a9c674 |
+| ivf-extend/ties              | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | bf5209af86975a47 |
+| ivf-extend/wide              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | c6fd06dc0c84cdd5 |
+| ivf-extend/wide              | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | c9793933012960e5 |
+| ivf-extend/wide              | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 15d08301b9a4107b |
+| ivf/base                     | infer  | IDENTICAL x4 | fd6eed35b1338d17 | fd6eed35b1338d17 | fd6eed35b1338d17 | fd6eed35b1338d17 |
+| ivf/base                     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | dcfefe31adc21c6c |
+| ivf/base                     | batch  | IDENTICAL x4 | 6baf3cfbde509312 | 6baf3cfbde509312 | 6baf3cfbde509312 | 6baf3cfbde509312 |
+| ivf/denormal                 | infer  | IDENTICAL x4 | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf |
+| ivf/denormal                 | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c3a1727313e23983 |
+| ivf/denormal                 | batch  | IDENTICAL x4 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 |
+| ivf/denormal_ftz             | infer  | IDENTICAL x4 | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf |
+| ivf/denormal_ftz             | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1f2b8dd1cf726bc0 |
+| ivf/denormal_ftz             | batch  | IDENTICAL x4 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 |
+| ivf/dupes                    | infer  | IDENTICAL x4 | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 |
+| ivf/dupes                    | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 3163ed44a2b28c07 |
+| ivf/dupes                    | batch  | IDENTICAL x4 | 99ec531fb8ae409f | 99ec531fb8ae409f | 99ec531fb8ae409f | 99ec531fb8ae409f |
+| ivf/hashed                   | infer  | IDENTICAL x4 | 49c22df302ee0334 | 49c22df302ee0334 | 49c22df302ee0334 | 49c22df302ee0334 |
+| ivf/hashed                   | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 9d809fde4ffc96cc |
+| ivf/hashed                   | batch  | IDENTICAL x4 | 648bf9fc3764372d | 648bf9fc3764372d | 648bf9fc3764372d | 648bf9fc3764372d |
+| ivf/negative                 | infer  | IDENTICAL x4 | 71333eccc89915b1 | 71333eccc89915b1 | 71333eccc89915b1 | 71333eccc89915b1 |
+| ivf/negative                 | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | ec79d31b3169a984 |
+| ivf/negative                 | batch  | IDENTICAL x4 | 9786387eb7123b42 | 9786387eb7123b42 | 9786387eb7123b42 | 9786387eb7123b42 |
+| ivf/odd                      | infer  | IDENTICAL x4 | 1e0c2401db49a53d | 1e0c2401db49a53d | 1e0c2401db49a53d | 1e0c2401db49a53d |
+| ivf/odd                      | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2ab1fd5fac4563e2 |
+| ivf/odd                      | batch  | IDENTICAL x4 | 8149b10d16c8ebaa | 8149b10d16c8ebaa | 8149b10d16c8ebaa | 8149b10d16c8ebaa |
+| ivf/ties                     | infer  | IDENTICAL x4 | c62b1be91d40fc43 | c62b1be91d40fc43 | c62b1be91d40fc43 | c62b1be91d40fc43 |
+| ivf/ties                     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2254dcdb3f209c1d |
+| ivf/ties                     | batch  | IDENTICAL x4 | 166f61a6e1f346b8 | 166f61a6e1f346b8 | 166f61a6e1f346b8 | 166f61a6e1f346b8 |
+| ivf/wide                     | infer  | IDENTICAL x4 | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 |
+| ivf/wide                     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 809bc63c73b2c093 |
+| ivf/wide                     | batch  | IDENTICAL x4 | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 |
+
+summary (infer/model): IDENTICAL=18, ONE-COLUMN=36
+summary (batch): IDENTICAL=18, ONE-COLUMN=9
+summary (rlpair): 

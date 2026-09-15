@@ -81,6 +81,19 @@ Linux legs are OWED before this heading reads published.
   grow from 12 to 29, adding the ols, ridge and logistic option variants. On a CPU-only
   install `StandardScaler.fit`, `MinMaxScaler.fit`, `Lasso.fit` and `ElasticNet.fit` now
   refuse by name outside the internal reference scope, as every other estimator fit does.
+- New `IVFIndex.extend(X)`, with cuVS `ivf_flat::extend` (fixed centres) as the reference.
+  - The new rows are assigned to the built index's fixed centres by the build's own
+    assignment and tie rule, then appended to their lists under the ids `n_rows_`,
+    `n_rows_ + 1`, and so on. `extend_labels_` names each row's list.
+  - Extending by a set of rows in one call, or in several calls in the same order,
+    gives the same index bytes, so a search after it is the same everywhere.
+  - It runs on the GPU binding and on the CPU host bindings, the shipped
+    `_mojolearn_ivf_search_host` included, so a GPU-built index saved and loaded
+    on a CPU can be extended there.
+  - Caller-chosen ids and `adaptive_centers` are not implemented.
+  - New identity lane `ivf-extend` with a batch declaration. Apple M4 Metal and
+    RunPod x86 CPU columns only; the NVIDIA and AMD cells are owed to the release
+    record. Evidence: bench/results/identity_break/2026-09-15_ivf-extend/.
 - Public CPU inference for saved `IVFIndex` indexes and `Embedding` tables.
   - `IVFIndex.fit` now builds the index and `search` answers from it, as two
     binding calls. The train, infer and batch hashes are unchanged against

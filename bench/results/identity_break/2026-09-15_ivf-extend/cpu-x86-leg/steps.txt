@@ -1,0 +1,16 @@
+== bindings
+== cpu column
+cpu column exit 0
+== host sabotage column
+host sabotage column exit 0
+== batch sabotage column
+batch sabotage column exit 1
+== saved-model gate, the shipped search binding only
+check search binding exit 0
+check search binding sabotage exit 0
+== pytest
+pytest exit 0
+== installed wheel
+wheel build exit 0
+check installed wheel exit 0
+wheel check binaries exit 0
