@@ -307,6 +307,12 @@ jobs:
             *) target=none ;;
           esac
           echo "MOJOLEARN_TARGET_CPU=$target" >> "$GITHUB_ENV"
+          # The covered-lanes steps split their lanes into one identity_break
+          # process per CPU the runner reports (tools/cpu_identity_gate_check.py
+          # run-column); the one-core rule is the developer Mac's, not CI's.
+          shards="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)"
+          echo "GATE_SHARDS=$shards" >> "$GITHUB_ENV"
+          echo "identity_break shards on this runner: $shards"
           python3 -m pip install --quiet numpy
           ls bench/results/forest_host/ bench/results/identity_break/2026-09-13_three-columns/
 
@@ -556,7 +562,15 @@ jobs:
             --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_smoke_check.log"
 
       # THE FOURTH COLUMN, THE COVERED LANES. Every fixture, two repeats, then
-      # the four-way diff with --require-columns 4 on exactly those lanes:
+      # the four-way diff with --require-columns 4 on exactly those lanes.
+      # The lanes run as GATE_SHARDS parallel identity_break processes joined
+      # by identity_break --merge (tools/cpu_identity_gate_check.py
+      # run-column, 2026-09-15): at 2cf5562b1 one process took 24 to 30
+      # minutes per step and two runners hit the job's 60-minute limit (run
+      # 34956243867). Every lane still runs every fixture and repeat; the
+      # merge refuses parts that ran a different machine, commit, fixture set
+      # or host binding bytes, and any shard exiting non-zero fails the step.
+      # The diffs read
       # RECORD_COVERED_LANES against GPU_COLUMNS, and FIX_COVERED_LANES (the
       # covered lanes whose record cells predate a fix on every column,
       # kmeans-sqrt) against FIX_COLUMNS, the same boxes after the fix
@@ -572,7 +586,7 @@ jobs:
             echo "no identity_break lane has a CPU implementation yet (COVERED_LANES is empty); phase 1 of docs/lanes/BRIEF_cpu_training_2026-09-13.md adds the first (gemm-pinned). Nothing run, nothing certified." | tee "$GATE_OUT/cpu_column.log"
             exit 0
           fi
-          python3 tools/identity_break.py --lanes "$COVERED_LANES" \
+          python3 tools/cpu_identity_gate_check.py run-column --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
             --json "$GATE_OUT/cpu-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_column.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
             --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" \
@@ -625,15 +639,17 @@ jobs:
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
-      # covered lanes, and the four-way diff must exit non-zero with
+      # covered lanes (sharded as above; the build is its own step since
+      # 2026-09-15 so the run step's time is the lanes'), and the four-way
+      # diff must exit non-zero with
       # DIVERGENT on them. Every covered cell must still be STABLE (a wrong
       # answer, not a refusal). A fixture on which the moved fold is exact
       # (gemm-pinned/ties, an integer grid) stays IDENTICAL; the requirement
       # is DIVERGENT in the summary, not on every cell. Empty COVERED_LANES
       # skips it with the same statement as above.
-      - name: The CPU column, covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE
+      - name: Build the sabotage host set (MOJOLEARN_HOST_SABOTAGE)
         if: always()
-        timeout-minutes: 50
+        timeout-minutes: 20
         env:
           MOJOLEARN_BYTE_LM_HOST_OUTDIR: ${{ runner.temp }}/host-sab
           MOJOLEARN_FOREST_HOST_OUTDIR: ${{ runner.temp }}/host-sab
@@ -644,16 +660,33 @@ jobs:
         run: |
           set -o pipefail
           if [ -z "$COVERED_LANES" ]; then
-            echo "no covered lane, no sabotage arm to run (COVERED_LANES is empty)" | tee "$GATE_OUT/cpu_sabotage.log"
+            echo "no covered lane, no sabotage host set to build (COVERED_LANES is empty)"
             exit 0
           fi
+          rm -rf "${{ runner.temp }}/host-sab"
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host_sab.log"
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host_sab.log"
           for family in $HOST_FAMILIES; do
             MOJOLEARN_BUILD_JOBS=2 sh "bindings/build_${family}_host.sh" 2>&1 | tee "$GATE_OUT/build_${family}_host_sab.log"
           done
+
+      - name: The CPU column, covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE
+        if: always()
+        timeout-minutes: 50
+        run: |
+          set -o pipefail
+          if [ -z "$COVERED_LANES" ]; then
+            echo "no covered lane, no sabotage arm to run (COVERED_LANES is empty)" | tee "$GATE_OUT/cpu_sabotage.log"
+            exit 0
+          fi
+          # Every routed family, the byte LM and the forest binding must be in
+          # the sabotage set: a missing one would load nothing and read
+          # REFUSED, which the diff below would count as a catch.
+          for b in _mojolearn_byte_lm_host _mojolearn_forest_host $HOST_BINDINGS; do
+            [ -f "${{ runner.temp }}/host-sab/$b.so" ] || { echo "the sabotage host set lacks $b.so" >&2; exit 1; }
+          done
           export MOJOLEARN_HOST_DIR="${{ runner.temp }}/host-sab" MOJOLEARN_HOST_ALLOW_SABOTAGE=1
-          python3 tools/identity_break.py --lanes "$COVERED_LANES" \
+          python3 tools/cpu_identity_gate_check.py run-column --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
             --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
             --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
