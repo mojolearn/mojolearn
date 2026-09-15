@@ -36,8 +36,10 @@ create the pod.
 
 ## What a rented run does
 
-1. Pre-flight. It refuses if a pod with the same lane tag is live, or if two
-   `mojolearn-cpu-*` pods are already live.
+1. Pre-flight. It refuses if a pod with the same lane tag is live, or if the cap of
+   `mojolearn-cpu-*` pods is already live (default 8, `--max-pods N` or
+   `MOJOLEARN_RUNPOD_CPU_MAX_PODS`, at most 12; raised from 2 on Sep 15 when a dozen lanes
+   queued behind the proof's limit).
 2. A Mac dead-man is armed BEFORE the create. It deletes the pod by id, or by
    name, after the lease plus the ready timeout plus ten minutes.
 3. Create. The cost per hour is printed from the create response.

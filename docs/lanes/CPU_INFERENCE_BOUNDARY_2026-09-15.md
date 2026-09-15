@@ -64,3 +64,24 @@ change. Earlier full hosted run 34978769155 passed on all three CPU hosts.
 - The results above are unchanged by either. The new cells are in
   `bench/results/identity_break/2026-09-15_tokenizer-batch` and
   `2026-09-15_neural-inference`.
+
+## Forecasting, UMAP transform and full-SVD PCA (lane/inference-forecast-umap-pca, 2026-09-15)
+
+- Saved ARIMA models (`ARIMA.save`/`load`, format `mojolearn-arima-1`) predict in sample and
+  out of sample, forecast and answer the fitted attributes on a CPU with no GPU. The fit stays
+  a reference build: the new host family `forecast` ships `_mojolearn_forecast_host`, which
+  registers `arima_predict` and `arima_forecast` from `bindings/arima_host_predict.mojo` and no
+  fit. The manifest's `serves` key routes `_mojolearn_arima` to it on a CPU-only install when
+  the reference `_mojolearn_arima_host` is not built (`host_surface.inference_routes()`,
+  `_backend._HOST_INFERENCE_MODULES`). With the neural family above, ten host families ship.
+- Saved UMAP embeddings (`UMAP.save`/`load`, format `mojolearn-umap-1`) transform through the
+  already shipped metrics host binding. The transform's answer depends on the query batch
+  (umap/transform.mojo: the batch mean sigma floor, the batch maximum edge weight and the
+  batch-position negative-sample draws), so the CPU claim is the GPU's bytes for the same batch.
+- `pca-full-whiten` joins the inference lanes: a saved `svd_solver='full'` whitened PCA
+  transforms and inverse transforms through the estimators host binding.
+- `ExponentialSmoothing.fit` refuses on a CPU-only install outside `reference_training()`; it
+  is not a `NumericModeMixin`, so the mixin's guard never reached it and it used to run.
+- Holt-Winters saved-model inference waits for the line search change to its fit, which moves
+  its fitted parameters and hashes.
+- Evidence: bench/results/identity_break/2026-09-15_inference-forecast-umap-pca/README.md.
