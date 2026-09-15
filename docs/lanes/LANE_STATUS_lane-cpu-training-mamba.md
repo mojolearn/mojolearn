@@ -32,8 +32,21 @@
   host_surface.py TRAINING_LANE_NAMES (both sides kept) and NO_CPU_PATH (now "the Samba blocks"),
   the gate workflow (main's file, no push trigger), test_cpu_training_misc's sentence assertion
   ("Samba blocks"); test_cpu_training_transformer's sentence assertion now expects "Samba blocks".
-  The mamba family is ships_in_wheel=False (training-only reference build). Counts at the merge head
-  are in its commit message.
+  The mamba family is ships_in_wheel=False (training-only reference build).
+- main's wording pass changed docstrings in six generator sources, so mamba/host/gen/ was regenerated
+  (`python3 tools/mamba_host_gen.py --write`; the diff is docstring prose only; `--check` read STALE on
+  five files before and passes after). origin/main 115eb51ec then merged in as e292e0f19 (generated
+  spans only).
+- M4, one core, shared machine, at e292e0f19 (`lane_merge_checks.sh wt-mamba
+  mamba2,mamba2-dtlimit,mamba1,mamba3 "core mamba" mamba "test_host_surface test_cpu_inference_boundary
+  test_cpu_training_mamba test_cpu_training_transformer test_cpu_training_misc"`: core and mamba host
+  bindings built into a fresh directory, identity_break diffed against the 166-lane record with
+  --require-columns 4): IDENTICAL=36 train, IDENTICAL=36 infer (N/A=36 model), IDENTICAL=36 batch,
+  require-columns 4 OK (341 s); test_host_surface 106 passed, test_cpu_inference_boundary 8,
+  test_cpu_training_mamba 7, test_cpu_training_transformer 8, test_cpu_training_misc 14;
+  mamba_host_gen --check, docs_facts --check, wheel_ci pins and inventory pass.
+  The -D MOJOLEARN_HOST_SABOTAGE=1 mamba arm at the same head read DIVERGENT=36 train, 35 infer (mamba1/negative
+  infer IDENTICAL, as in the committed sabotage diff) and 36 batch.
 
 ## Running
 - Nothing. Pushed with [skip ci] until Codex's routine gate (08b50887a) is on
