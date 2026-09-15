@@ -44,8 +44,16 @@ VOCAB_BASENAMES = frozenset({'vocab.json', 'merges.txt', 'encoder.json', 'vocab.
 ENV_PARTS = frozenset({'.venv', 'venv', '.pixi', 'site-packages', '__pypackages__'})
 
 
+#: Phrases the NOTICE must not carry. "used under license" claimed a trademark
+#: license the Modular MAX Community License does not grant outside hosted
+#: commercial MAX services (main f2806635b).
+NOTICE_FORBIDDEN = ('used under license',)
+
+
 def notice_problems(notice_text):
-    return [f'NOTICE lacks the {label} ({needle!r})' for label, needle in NOTICE_PARTS if needle not in notice_text]
+    problems = [f'NOTICE lacks the {label} ({needle!r})' for label, needle in NOTICE_PARTS if needle not in notice_text]
+    problems += [f'NOTICE carries {phrase!r}' for phrase in NOTICE_FORBIDDEN if phrase in notice_text]
+    return problems
 
 
 def audit(wheel, notice_path):
