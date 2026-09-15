@@ -22,6 +22,12 @@
   IDENTICAL=18, N/A=18`, `summary (batch): IDENTICAL=18`, `require-columns 4 ... : OK`; the sabotage build read
   DIVERGENT=18 on all three. docs_facts --check and wheel_ci pins pass. Pushed with [skip ci] until Codex's routine
   gate (08b50887a, lane/cpu-training-routine-speed) is on main, which replaces gate-budget as the gate fix.
+- Routine gate on main (450423c95) merged in as 764495e56, no conflicts. Merge criteria (Sep 15): routine push gate
+  green on the head plus a one-core M4 run. Rerun at 764495e56, M4, one core: `bash run_lane.sh wt-transformer <out>
+  transformer,transformer-window transformer` (build_host_family.sh transformer into a fresh dir, identity_break
+  --lanes transformer,transformer-window, --diff against the 166-lane record --require-columns 4) read IDENTICAL=18
+  train, IDENTICAL=18 infer (N/A=18), IDENTICAL=18 batch, require-columns 4 OK; the -D MOJOLEARN_HOST_SABOTAGE=1 arm
+  read DIVERGENT=18 on all three.
 - Not merged to main. Plan: once the routine gate is on origin/main, merge origin/main into this branch, push (the gate
   queues), and merge to main when that run is green.
 
