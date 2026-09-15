@@ -1,0 +1,133 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 2 lane(s); 163 other lane(s) the JSONs carry are not compared
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    arm64: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    arm64: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    arm64: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    arm64: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    arm64: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    arm64: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    arm64: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    arm64: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    arm64: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    arm64: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    arm64: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    arm64: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    arm64: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    arm64: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd1ba686494256660'}
+    arm64: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    arm64: None
+| lane/fixture                 | verdict    | apple-m4         | arm64            |
+|------------------------------|------------|------------------|------------------|
+| holtwinters-multiplicative/base | IDENTICAL x2 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 |
+| holtwinters-multiplicative/denormal | ONE-COLUMN | db35c88da059e9e1 | (not run)        |
+| holtwinters-multiplicative/denormal_ftz | ONE-COLUMN | db35c88da059e9e1 | (not run)        |
+| holtwinters-multiplicative/dupes | ONE-COLUMN | d49a5a62e2e56bb6 | (not run)        |
+| holtwinters-multiplicative/hashed | ONE-COLUMN | b4527085a076f4fe | (not run)        |
+| holtwinters-multiplicative/negative | ONE-COLUMN | cbf95f4b980df3c4 | (not run)        |
+| holtwinters-multiplicative/odd | ONE-COLUMN | 55b8c755b3169576 | (not run)        |
+| holtwinters-multiplicative/ties | ONE-COLUMN | 8ea8adf3ce3677e9 | (not run)        |
+| holtwinters-multiplicative/wide | ONE-COLUMN | e6cdbd540175f484 | (not run)        |
+| holtwinters/base             | IDENTICAL x2 | 9781c2061a287937 | 9781c2061a287937 |
+| holtwinters/denormal         | ONE-COLUMN | db35c88da059e9e1 | (not run)        |
+| holtwinters/denormal_ftz     | ONE-COLUMN | db35c88da059e9e1 | (not run)        |
+| holtwinters/dupes            | ONE-COLUMN | 9781c2061a287937 | (not run)        |
+| holtwinters/hashed           | ONE-COLUMN | 66f688c307cabc3b | (not run)        |
+| holtwinters/negative         | ONE-COLUMN | 8fa4116875bdf59c | (not run)        |
+| holtwinters/odd              | ONE-COLUMN | 8fb4dd76d8080a46 | (not run)        |
+| holtwinters/ties             | ONE-COLUMN | b2a5df45db1395b0 | (not run)        |
+| holtwinters/wide             | ONE-COLUMN | 560cdc45a69cc987 | (not run)        |
+
+summary: IDENTICAL=2, ONE-COLUMN=16
+
+| lane/fixture                 | column | verdict      | apple-m4         | arm64            |
+|------------------------------|--------|--------------|------------------|------------------|
+| holtwinters-multiplicative/base | infer  | IDENTICAL x2 | 733c9600a564ad92 | 733c9600a564ad92 |
+| holtwinters-multiplicative/base | model  | ONE-COLUMN   | n/a:no-save      | b8a024b882e689d8 |
+| holtwinters-multiplicative/base | batch  | IDENTICAL x2 | 68a40b58dc692b32 | 68a40b58dc692b32 |
+| holtwinters-multiplicative/denormal | infer  | ONE-COLUMN   | 5e7dba822d698dd4 | (not run)        |
+| holtwinters-multiplicative/denormal | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters-multiplicative/denormal | batch  | ONE-COLUMN   | 0b25b078a96b247e | (not run)        |
+| holtwinters-multiplicative/denormal_ftz | infer  | ONE-COLUMN   | 5e7dba822d698dd4 | (not run)        |
+| holtwinters-multiplicative/denormal_ftz | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters-multiplicative/denormal_ftz | batch  | ONE-COLUMN   | 0b25b078a96b247e | (not run)        |
+| holtwinters-multiplicative/dupes | infer  | ONE-COLUMN   | 733c9600a564ad92 | (not run)        |
+| holtwinters-multiplicative/dupes | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters-multiplicative/dupes | batch  | ONE-COLUMN   | 68a40b58dc692b32 | (not run)        |
+| holtwinters-multiplicative/hashed | infer  | ONE-COLUMN   | 4c14823c8b1dbcd7 | (not run)        |
+| holtwinters-multiplicative/hashed | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters-multiplicative/hashed | batch  | ONE-COLUMN   | 17d71141dbd7a3c6 | (not run)        |
+| holtwinters-multiplicative/negative | infer  | ONE-COLUMN   | 462c8ebc8d2efa04 | (not run)        |
+| holtwinters-multiplicative/negative | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters-multiplicative/negative | batch  | ONE-COLUMN   | 60acbb07363d6af3 | (not run)        |
+| holtwinters-multiplicative/odd | infer  | ONE-COLUMN   | 899a6730dedaa535 | (not run)        |
+| holtwinters-multiplicative/odd | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters-multiplicative/odd | batch  | ONE-COLUMN   | 2793fec672ddc457 | (not run)        |
+| holtwinters-multiplicative/ties | infer  | ONE-COLUMN   | 54aab1a29ccacdfe | (not run)        |
+| holtwinters-multiplicative/ties | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters-multiplicative/ties | batch  | ONE-COLUMN   | da0498edc9d73bae | (not run)        |
+| holtwinters-multiplicative/wide | infer  | ONE-COLUMN   | c0221c39c93138de | (not run)        |
+| holtwinters-multiplicative/wide | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters-multiplicative/wide | batch  | ONE-COLUMN   | 97d1ce7117d1cb95 | (not run)        |
+| holtwinters/base             | infer  | IDENTICAL x2 | f930b5ed0ef2c318 | f930b5ed0ef2c318 |
+| holtwinters/base             | model  | ONE-COLUMN   | n/a:no-save      | 386ea9716a68db57 |
+| holtwinters/base             | batch  | IDENTICAL x2 | 093a7898c986d9bc | 093a7898c986d9bc |
+| holtwinters/denormal         | infer  | ONE-COLUMN   | 5e7dba822d698dd4 | (not run)        |
+| holtwinters/denormal         | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters/denormal         | batch  | ONE-COLUMN   | 0b25b078a96b247e | (not run)        |
+| holtwinters/denormal_ftz     | infer  | ONE-COLUMN   | 5e7dba822d698dd4 | (not run)        |
+| holtwinters/denormal_ftz     | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters/denormal_ftz     | batch  | ONE-COLUMN   | 0b25b078a96b247e | (not run)        |
+| holtwinters/dupes            | infer  | ONE-COLUMN   | f930b5ed0ef2c318 | (not run)        |
+| holtwinters/dupes            | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters/dupes            | batch  | ONE-COLUMN   | 093a7898c986d9bc | (not run)        |
+| holtwinters/hashed           | infer  | ONE-COLUMN   | bfa4a149ae74602c | (not run)        |
+| holtwinters/hashed           | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters/hashed           | batch  | ONE-COLUMN   | f064bf24785a3ab0 | (not run)        |
+| holtwinters/negative         | infer  | ONE-COLUMN   | c03b71a1af7f0d5c | (not run)        |
+| holtwinters/negative         | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters/negative         | batch  | ONE-COLUMN   | 9c696ef56c5a8db9 | (not run)        |
+| holtwinters/odd              | infer  | ONE-COLUMN   | baeea8494596eeb9 | (not run)        |
+| holtwinters/odd              | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters/odd              | batch  | ONE-COLUMN   | 7428081677199491 | (not run)        |
+| holtwinters/ties             | infer  | ONE-COLUMN   | a48df2766423502f | (not run)        |
+| holtwinters/ties             | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters/ties             | batch  | ONE-COLUMN   | 91f206e60b961689 | (not run)        |
+| holtwinters/wide             | infer  | ONE-COLUMN   | 5df1cfaa8f4b4e78 | (not run)        |
+| holtwinters/wide             | model  | N/A          | n/a:no-save      | (not run)        |
+| holtwinters/wide             | batch  | ONE-COLUMN   | 1121af8980a0f61f | (not run)        |
+
+summary (infer/model): IDENTICAL=2, N/A=16, ONE-COLUMN=18
+summary (batch): IDENTICAL=2, ONE-COLUMN=16
+summary (rlpair): 

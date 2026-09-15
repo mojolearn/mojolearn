@@ -1,0 +1,3 @@
+vendor metal mode identical
+additive ok; in-sample residual rms 0.0001254327507922426
+multiplicative ok; in-sample residual rms 0.07156219333410263
