@@ -347,7 +347,8 @@ sampler, a solver, a metric, a reduction).
     2026-09-15 (lane/embedding-owed, PLAN_SORT through Embedding(plan="sort"))
       embedding-sort
     2026-09-15 (lane/cpu-training-small-gaps)
-      metrics-fowlkes-mallows gbdt-adapter-score-weighted rf-score-weighted
+      metrics-fowlkes-mallows gbdt-adapter-score-weighted rf-score-weighted svc-poly
+      gp-normalize-y
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -2067,6 +2068,17 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
 
+@lane("svc-poly")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC(kernel='poly') (lane/cpu-training-small-gaps, 2026-09-15): the
+    identical linear Gram, then kernel_methods' polynomial epilogue (one fused
+    multiply-add, an ascending repeated product; DEVIATION 1663) at degree 3,
+    gamma 0.1 and coef0 1.0. Sized like the svc lane."""
+    m = ml.SVC(C=1.0, kernel="poly", degree=3, gamma=0.1, coef0=1.0, max_iter=200).fit(X[:2000], yc[:2000])
+    return _fit(dict(decision=_h(m.decision_function(X[2000:2256])), predict=_h(m.predict(X[2000:2256]))),
+                m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+
 @lane("svr-linear")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.SVR(C=1.0, kernel="linear", epsilon=0.1, max_iter=200).fit(X[:2000], yr[:2000])
@@ -2211,6 +2223,23 @@ def _gp_lane(nu, length_scale):
                     m, lambda e: e.predict(Xh[:64, :4], return_std=True))
     body.__doc__ = f"Matern nu={nu} length_scale={length_scale}: a kernel node kind the gp lane never launches; the vector length scale is the ARD divide loop."
     return body
+
+
+@lane("gp-normalize-y")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessRegressor(normalize_y=True) (lane/cpu-training-small-gaps,
+    2026-09-15): the gp lane's kernel and slices with y centered and scaled by
+    StandardScaler's pinned folds before the fit, and the predictive mean and
+    std scaled back on the host. The target is shifted by 50 so the mean is
+    not near zero."""
+    k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+    y = np.ascontiguousarray(yr[:256] + np.float32(50.0)).astype(np.float32)
+    m = ml.GaussianProcessRegressor(kernel=k, normalize_y=True).fit(X[:256, :4], y)
+    mean, std = m.predict(X[256:320, :4], return_std=True)
+    return _fit(dict(alpha=_h(m.alpha_), L=_h(m.L_), lml=_h(np.float64(m.log_marginal_likelihood_value_)),
+                     y_stats=_h(np.float32([m._y_train_mean, m._y_train_std])),
+                     mean=_h(mean), std=_h(std)),
+                m, lambda e: e.predict(Xh[:64, :4], return_std=True))
 
 
 for _name, _nu, _ls in (("matern12", 0.5, 1.0), ("matern32", 1.5, 1.0), ("matern52-ard", 2.5, [1.0, 2.0, 0.5, 4.0])):
@@ -3909,7 +3938,7 @@ _batch_decl(_rows_calls("predict", sl=slice(0, 256), min_batch=2, refusal=CD_PRE
 _batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "logistic", "logistic-l1", "logistic-elasticnet",
             "logistic-unpenalized-no-intercept", "par-logistic")
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 256)), "logistic-multiclass")
-_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "svc", "svc-linear", "par-svm")
+_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "svc", "svc-linear", "par-svm", "svc-poly")
 _batch_decl(_rows_calls("score_samples", sl=(slice(0, 256), slice(0, 4))), "kde", "kde-weighted",
             "kde-tophat-sqeuclidean", "kde-epanechnikov-l1", "kde-exponential-chebyshev",
             "kde-cosine-minkowski")
@@ -3924,7 +3953,7 @@ def _batch_gp(ml, e, Xh):
     return [_BatchRows("predict(return_std=True)", Xh[:64, :4], lambda r: tuple(e.predict(r, return_std=True)))]
 
 
-_batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp")
+_batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp", "gp-normalize-y")
 # UMAP.transform is batch-dependent BY ITS OWN CONTRACT: umap/transform.mojo's
 # module docstring says "Query batching may change results (global sigma
 # floor, edge weighting and RNG ordinals)", and the part measured it on the

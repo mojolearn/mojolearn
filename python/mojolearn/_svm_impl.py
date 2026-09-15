@@ -50,6 +50,7 @@ import os
 import sys
 
 import math
+import numbers
 
 from . import _backend
 from . import _serialize
@@ -80,6 +81,15 @@ _KERNEL_PRECOMPUTED = 4
 
 _KERNELS = {"linear": _KERNEL_LINEAR, "rbf": _KERNEL_RBF}
 
+# SVC also carries POLYNOMIAL (lane/cpu-training-small-gaps, 2026-09-15): the
+# identical linear Gram, then kernel_methods' polynomial_epilogue_kernel
+# (DEVIATION 1663). SVR keeps _KERNELS and refuses 'poly' by name.
+_SVC_KERNELS = dict(_KERNELS, poly=_KERNEL_POLYNOMIAL)
+
+#: DEVIATION 1663's cap, kernel_methods/impl/distance/kernel_matrices.mojo::KM_MAX_DEGREE
+#: and svm/impl/svm_parameter.mojo::SVM_MAX_POLY_DEGREE.
+_MAX_POLY_DEGREE = 32
+
 # The names cuML accepts that this implementation does not, and the reason each is
 # refused. Refused BY NAME rather than silently downgraded to 'rbf'.
 _REFUSED_KERNELS = {
@@ -107,6 +117,12 @@ _REFUSED_KERNELS = {
         "predict arm are both unimplemented (svm/NOT_IMPLEMENTED.tsv)"
     ),
 }
+
+# SVC's refusals: the shared table less 'poly', which SVC implements.
+_SVC_REFUSED_KERNELS = {k: v for k, v in _REFUSED_KERNELS.items() if k != "poly"}
+_SVC_REFUSED_KERNELS["polynomial"] = (
+    "cuML and scikit-learn spell this kernel 'poly', which SVC implements"
+)
 
 _EXT_NAME = "_mojolearn_svm"
 _PKG = __name__.rsplit(".", 1)[0]
@@ -202,17 +218,25 @@ class SVC(NumericModeMixin):
         C               honored   the penalty. Must be finite and positive;
                                   a non-finite C is refused by name
                                   (DEVIATION 636)
-        kernel          honored   'linear' and 'rbf' only. 'poly',
-                                  'sigmoid' and 'precomputed' are cuML's
-                                  other three and each is REFUSED BY NAME
-                                  with what is missing
+        kernel          honored   'linear', 'rbf' and 'poly'. 'poly' is the
+                                  identical linear Gram then
+                                  `(gamma * K + coef0) ** degree` as
+                                  kernel_methods' DEVIATION 1663 epilogue
+                                  (one fused multiply-add, an ascending
+                                  repeated product). 'sigmoid' and
+                                  'precomputed' are REFUSED BY NAME with
+                                  what is missing
         gamma           honored   a finite float >= 0, or the string 'auto'
                                   (= 1 / n_features, cuML's `_get_gamma`).
                                   'scale' is REFUSED -- see DEVIATION 870
                                   below, and note it is cuML's default
-        degree          refused   read only by POLYNOMIAL, which is refused
-        coef0           refused   read only by POLYNOMIAL and TANH, both
-                                  refused
+        degree          honored   with kernel='poly': an integer in
+                                  [0, 32] (DEVIATION 1663). With any other
+                                  kernel only the default 3 is accepted,
+                                  since nothing would read it
+        coef0           honored   with kernel='poly': a finite float. With
+                                  any other kernel only the default 0.0
+                                  is accepted
         tol             honored   the stopping tolerance; must be finite and
                                   positive (DEVIATION 636)
         cache_size      honored   ONLY as the prediction buffer, see
@@ -343,16 +367,16 @@ class SVC(NumericModeMixin):
         if not isinstance(kernel, str):
             raise ValueError("mojolearn SVC: kernel is a name")
         k = kernel.lower()
-        if k in _REFUSED_KERNELS:
+        if k in _SVC_REFUSED_KERNELS:
             raise NotImplementedError(
                 f"mojolearn SVC: kernel={kernel!r} is refused; "
-                + _REFUSED_KERNELS[k]
+                + _SVC_REFUSED_KERNELS[k]
             )
-        if k not in _KERNELS:
+        if k not in _SVC_KERNELS:
             raise ValueError(
                 f"mojolearn SVC: kernel={kernel!r} is not a kernel name; "
-                f"this implementation carries {sorted(_KERNELS)} and refuses cuML's "
-                f"other three by name ({sorted(_REFUSED_KERNELS)})"
+                f"this implementation carries {sorted(_SVC_KERNELS)} and refuses "
+                f"the others by name ({sorted(_SVC_REFUSED_KERNELS)})"
             )
         if isinstance(gamma, str):
             g = gamma.lower()
@@ -382,19 +406,36 @@ class SVC(NumericModeMixin):
                     f"kernel, got {gamma!r} (DEVIATION 636; scikit-learn's own "
                     "constraint is gamma >= 0)"
                 )
-        if degree != 3:
-            raise NotImplementedError(
-                f"mojolearn SVC: degree={degree!r} is refused; it is read only "
-                "by the POLYNOMIAL kernel, which is not implemented. Passing it "
-                "with a implemented kernel would be a parameter accepted and "
-                "ignored"
-            )
-        if coef0 != 0.0:
-            raise NotImplementedError(
-                f"mojolearn SVC: coef0={coef0!r} is refused; it is read only "
-                "by the POLYNOMIAL and TANH kernels, neither of which is "
-                "implemented"
-            )
+        if k == "poly":
+            if isinstance(degree, bool) or not isinstance(degree, numbers.Integral):
+                raise TypeError(
+                    f"mojolearn SVC: degree={degree!r} must be an integer; the "
+                    "polynomial power is an ascending repeated product (DEVIATION 1663)"
+                )
+            degree = int(degree)
+            if not 0 <= degree <= _MAX_POLY_DEGREE:
+                raise ValueError(
+                    f"mojolearn SVC: degree must be in [0, {_MAX_POLY_DEGREE}], got "
+                    f"{degree!r} (DEVIATION 1663)"
+                )
+            coef0 = float(coef0)
+            if not math.isfinite(coef0):
+                raise ValueError(
+                    f"mojolearn SVC: coef0 must be finite, got {coef0!r} (DEVIATION 636)"
+                )
+        else:
+            if degree != 3:
+                raise NotImplementedError(
+                    f"mojolearn SVC: degree={degree!r} is refused with kernel={k!r}; "
+                    "it is read only by kernel='poly'. Passing it with another kernel "
+                    "would be a parameter accepted and ignored"
+                )
+            if coef0 != 0.0:
+                raise NotImplementedError(
+                    f"mojolearn SVC: coef0={coef0!r} is refused with kernel={k!r}; it "
+                    "is read only by kernel='poly' (TANH, which also reads it, is not "
+                    "implemented)"
+                )
         C = float(C)
         if not math.isfinite(C):
             raise ValueError(
@@ -519,9 +560,9 @@ class SVC(NumericModeMixin):
             addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_fit_binding.
             # n_rows, n_features, kernel, gamma, C, tol, max_iter,
-            # nochange_steps
-            [n_rows, n_cols, _KERNELS[self.kernel], gamma, self.C, self.tol,
-             self.max_iter, self.nochange_steps],
+            # nochange_steps, degree, coef0
+            [n_rows, n_cols, _SVC_KERNELS[self.kernel], gamma, self.C, self.tol,
+             self.max_iter, self.nochange_steps, int(self.degree), float(self.coef0)],
         )
         n_support = int(n_support)
         # `np.float32(...)`: one rounding of the float64 slot to binary32.
@@ -591,11 +632,12 @@ class SVC(NumericModeMixin):
             addr(out, name="out"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_predict_binding.
             # n_rows, n_features, n_support, b, classes[0], classes[1],
-            # kernel, gamma, predict_class, cache_size_mib
+            # kernel, gamma, predict_class, cache_size_mib, degree, coef0
             [n_rows, self.n_features_in_, self.n_support_,
              float(self.intercept_[0]), float(self._label0),
-             float(self._label1), _KERNELS[self.kernel], self._gamma,
-             1 if predict_class else 0, self.cache_size],
+             float(self._label1), _SVC_KERNELS[self.kernel], self._gamma,
+             1 if predict_class else 0, self.cache_size,
+             int(self.degree), float(self.coef0)],
         )
         return out
 
@@ -659,6 +701,9 @@ class SVC(NumericModeMixin):
                 "<i8",
             ),
         }
+        if self.kernel == "poly":
+            # Only for poly, so every linear and rbf file keeps its bytes.
+            arrays["coef0"] = Array.from_list([float(self.coef0)], "<f8")
         return _serialize.write_npz(path, arrays)
 
     @classmethod
@@ -674,6 +719,13 @@ class SVC(NumericModeMixin):
         if hyper.size != 4:
             raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, 4 are needed")
         gamma_setting = _serialize.scalar_str(arrays, "gamma")
+        kernel_setting = _serialize.scalar_str(arrays, "kernel")
+        coef0 = 0.0
+        if kernel_setting == "poly":
+            coef0_arr = _serialize.exact(arrays, "coef0", "<f8")
+            if coef0_arr.size != 1:
+                raise ValueError(f"mojolearn: {path!r} coef0 must hold one float64")
+            coef0 = float(coef0_arr[0])
         obj = cls(
             C=float(hyper[0]),
             kernel=_serialize.scalar_str(arrays, "kernel"),
@@ -683,6 +735,7 @@ class SVC(NumericModeMixin):
             max_iter=int(meta[3]),
             nochange_steps=int(meta[4]),
             degree=int(meta[5]),
+            coef0=coef0,
         )
         _restore_mode(obj, arrays)
         nf, n_support = int(meta[0]), int(meta[1])

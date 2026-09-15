@@ -116,6 +116,8 @@ def svc_fit_binding(
         5  tol             (float)
         6  max_iter        (-1 = no limit, cuML's default)
         7  nochange_steps
+        8  degree          (POLYNOMIAL only; 3 otherwise)
+        9  coef0           (float; POLYNOMIAL only; 0 otherwise)
 
     The OUTPUT buffers are worst-case sized by the caller, because
     `n_support` is not known until the solve finishes (DEVIATION 873):
@@ -138,9 +140,9 @@ def svc_fit_binding(
     rest by name. `max_outer_iter` is pinned at -1, which is what cuML's
     own Python layer does (`svm_base.pyx:371`).
     """
-    if len(params) != 8:
+    if len(params) != 10:
         raise Error(
-            "svc_fit: params must contain 8 values, got " + String(len(params))
+            "svc_fit: params must contain 10 values, got " + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
@@ -156,6 +158,8 @@ def svc_fit_binding(
     var tol = Float64(py=params[5])
     var max_iter = Int(py=params[6])
     var nochange_steps = Int(py=params[7])
+    var degree = Int(py=params[8])
+    var coef0 = Float64(py=params[9])
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svc_fit: n_rows and n_features must both be positive")
     var y = List[Float32]()
@@ -166,7 +170,7 @@ def svc_fit_binding(
         # and stages the caller's buffer, which `_svm_impl.py` holds alive.
         res = svc_fit_host_borrowed(
             xp, y, n_rows, n_cols, kernel, gamma, c, tol, max_iter,
-            nochange_steps,
+            nochange_steps, degree, coef0,
         )
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
     for i in range(res.n_support):
@@ -205,6 +209,8 @@ def svc_predict_binding(
         9  cache_size_mib  (float; their `param.cache_size` at the
                             `SVC::predict` call site -- the prediction
                             BATCH knob, launch-invariant by gate)
+        10 degree          (POLYNOMIAL only; 3 otherwise)
+        11 coef0           (float; POLYNOMIAL only; 0 otherwise)
 
     Slot 7 is the trap in this list. `gamma` here must be the value the
     FIT resolved, not the constructor's, or the kernel matrix at predict
@@ -212,9 +218,9 @@ def svc_predict_binding(
     answer is quietly wrong. `_svm_impl.py` stores it as `_gamma` at fit
     and passes that, which is what cuML does (`svm_base.pyx:464, 532`).
     """
-    if len(params) != 10:
+    if len(params) != 12:
         raise Error(
-            "svc_predict: params must contain 10 values, got " + String(len(params))
+            "svc_predict: params must contain 12 values, got " + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var op = _f32_ptr(Int(py=out_addr))
@@ -228,6 +234,8 @@ def svc_predict_binding(
     var gamma = Float64(py=params[7])
     var predict_class = Int(py=params[8]) != 0
     var buffer_mib = Float64(py=params[9])
+    var degree = Int(py=params[10])
+    var coef0 = Float64(py=params[11])
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svc_predict: n_rows and n_features must both be positive")
     if n_support < 0:
@@ -245,7 +253,7 @@ def svc_predict_binding(
     with GILReleased(Python()):
         out = svc_predict_host(
             x, n_rows, n_cols, support, dual, n_support, b, label0, label1,
-            kernel, gamma, predict_class, buffer_mib,
+            kernel, gamma, predict_class, buffer_mib, degree, coef0,
         )
     copy_f32(out.unsafe_ptr(), op, n_rows)
     return PythonObject(n_rows)

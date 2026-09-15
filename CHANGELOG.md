@@ -90,6 +90,20 @@ Linux legs are OWED before this heading reads published.
   reads IDENTICAL (nine fixtures each), and a `-D MOJOLEARN_HOST_SABOTAGE=1` build of the new
   binding reads DIVERGENT on all 27 infer and 27 batch cells with every train cell unchanged.
   Training on the CPU stays internal to the verifier.
+- `SVC(kernel='poly', degree, gamma, coef0)`, which was refused by name. The SVM Gram matrix is
+  the identical linear GEMM followed by the kernel_methods polynomial epilogue (one fused
+  multiply-add, then an ascending repeated product, DEVIATION 1663), so a negative base is
+  legal; `degree` is an integer in [0, 32] and `coef0` any finite float. The svm host binding
+  and its oracle carry the same arm, both bindings take `degree` and `coef0` in the fit and
+  predict parameter lists, and saved poly models record `coef0`. New `svc-poly` identity lane
+  (train, infer, model and batch). SVR still refuses 'poly'. Apple M4 Metal and CPU columns
+  only; NVIDIA and AMD columns are owed to the release record.
+- `GaussianProcessRegressor(normalize_y=True)`, which was refused. It follows the scikit-learn
+  reference: y is centered and scaled by StandardScaler's pinned Float32 folds before the fit
+  (a zero standard deviation scales by one), and the predictive mean and std are scaled back
+  with one correctly rounded binary32 operation each on the host. New `gp-normalize-y`
+  identity lane. Apple M4 Metal and CPU columns only; NVIDIA and AMD columns are owed to the
+  release record.
 - `score(X, y, sample_weight=...)` on `GradientBoostingClassifier`, `GradientBoostingRegressor`,
   the random forests and the Extra Trees, and `sample_weight` on `metrics.accuracy_score` and
   `metrics.r2_score`, all of which refused weights. They follow scikit-learn's reference definitions of weighted
