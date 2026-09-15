@@ -115,12 +115,33 @@ TRAINING_GPU_COLUMNS = (
 #: this list the day TRAINING_GPU_COLUMNS names a record taken after its
 #: fix. `python -m mojolearn identity` diffs against TRAINING_GPU_COLUMNS
 #: alone, so on a CPU-only install it runs `record_covered_lanes()`.
+#:
+#: The same list also carries covered lanes the record does not have at all
+#: (lane/cpu-training-embedding-ivf, 2026-09-15): embedding and
+#: embedding-sort, whose three GPU columns are
+#: bench/results/identity_break/2026-09-15_embedding-sort (Apple M4, H100,
+#: MI325X at ba4a108bb and e2d770ba8), and ivf and ivf-euclidean, whose three
+#: are bench/results/identity_break/2026-09-14_ivf-euclidean (Apple M4, H100,
+#: MI300X at 76a170dcf, after the L2SqrtExpanded fix). `identity_break --diff`
+#: takes every JSON here at once: a column that lacks a lane reads "(not
+#: run)" on its cells and is not counted, so each of these lanes rests on
+#: its own record's three GPU hashes plus the CPU column's, which
+#: `--require-columns 4` demands, and a JSON that carried a lane it should
+#: not would add a fifth hash to the cell rather than hide one. They leave
+#: this list the day TRAINING_GPU_COLUMNS names a record that carries them
+#: (lane/identity-record-next's 178-lane record does).
 TRAINING_FIX_COLUMNS = (
     "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json",
     "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/nvidia-h100-sm_90a.json",
     "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/amd-mi325x-gfx942.json",
+    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.apple-m4.json",
+    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.nvidia-nvidia-h100-80gb-hbm3-sm_90a.json",
+    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.amd-gfx942.json",
+    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.apple-m4.json",
+    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.nvidia-nvidia-h100-80gb-hbm3-sm_90a.json",
+    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.amd-mi300x-gfx942.json",
 )
-TRAINING_FIX_LANES = ("kmeans-sqrt",)
+TRAINING_FIX_LANES = ("kmeans-sqrt", "embedding", "embedding-sort", "ivf", "ivf-euclidean")
 
 #: The GPU columns the classical INFERENCE gate compares each host identity
 #: hash against (tools/classical_host_gate.py check --gpu-column).
@@ -440,6 +461,11 @@ TRAINING_LANE_NAMES = {
     # CPU column (one core) before the gate ran, the sabotage build
     # DIVERGENT on every cell.
     "gbdt-categorical-ctr": "gradient boosting with one-hot categorical columns",
+    # lane/gbdt-learning-to-rank stage 2 (2026-09-15): the QueryRMSE ranking
+    # loss on query groups trains through gbdt/host/gbdt_oracle_losses.mojo
+    # with the querywise target restated in gbdt/host/gbdt_oracle_query.mojo,
+    # from the same binding.
+    "gbdt-query-rmse": "gradient boosting with the QueryRMSE ranking loss on query groups",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -620,13 +646,45 @@ TRAINING_LANE_NAMES = {
     # on CPU only at one device, where the GPU binding's range split is the
     # plain path; two devices refuse by name.
     "par-mlp": "the small MLP trained over ordered logical gradient shards",
+    # The Embedding layer and IVFIndex (lane/cpu-training-embedding-ivf,
+    # 2026-09-15). Embedding's gather and fold, both execution plans, the
+    # padding row and the microbatch carry, through
+    # embedding/host/embedding_host.mojo (the device launch restated, not
+    # the contract's oracle) in the embedding family's own host binding.
+    # Their GPU cells are not in the 166-lane record; they are diffed against
+    # TRAINING_EXTRA_RECORDS below.
+    "embedding": "the Embedding layer",
+    "embedding-sort": "the Embedding layer on its sorted execution plan",
+    # IVFIndex's build and search through ivf/host/ivf_host.mojo (the k-means
+    # quantizer through cluster/host/kmeans_oracle.mojo) in the ivf family's
+    # own host binding, under both L2 metrics.
+    "ivf": "the IVF-Flat index",
+    "ivf-euclidean": "the IVF-Flat index under euclidean distance",
+    # The GPU byte LM trainer's lanes (same branch): SmallByteLanguageModelTrainer,
+    # stateless and on its resident session, whose single-device entries a
+    # CPU-only install serves from the byte LM host binding's step, loss and
+    # logits (ADAPTED_MODULES below). Both lanes are in the 166-lane record.
+    "byte-lm": "the byte LM trainer",
+    "byte-lm-resident": "the byte LM trainer on its resident session",
+}
+
+#: GPU binding families a CPU-only install serves through a Python adapter
+#: over a host binding loaded by path, rather than through a routed host
+#: binding exporting the GPU names (lane/cpu-training-embedding-ivf,
+#: 2026-09-15). `_backend.binding(name)` returns `<module>.binding()` when
+#: the family's host binding is built, and the installed stub refuses by
+#: name when it is not. The byte LM trainer's GPU binding carries a resident
+#: session ABI and multi-GPU entries a Mojo host binding would have to
+#: restate as state; the adapter holds the session's bookkeeping and the
+#: CPU byte LM binding's step, loss and logits hold all of the arithmetic.
+ADAPTED_MODULES = {
+    "_mojolearn_byte_lm": dict(family="byte_lm", module="_byte_lm_trainer_host"),
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "the Embedding layer",
     "gradient boosting training outside its declared lanes (CTR categorical features, and sample weights, eval sets and the pointwise searcher outside the gbdt-pointwise-l2-bayesian-eval configuration, among them)",
 )
 
@@ -654,10 +712,17 @@ FAMILIES = (
         # branch); this family's own define moves the two inference lanes
         # and not the training step, which the byte LM CPU gate's
         # wrong-gradient build covers.
-        training_lanes=("byte-lm-host-infer", "byte-lm-host-infer-threaded", "byte-lm-host-train"),
+        # lane/cpu-training-embedding-ivf (2026-09-15): the GPU trainer's two
+        # lanes, through python/mojolearn/_byte_lm_trainer_host.py
+        # (ADAPTED_MODULES). Loaded through _backend.load_host_module for
+        # them, so the CPU identity gate's sabotage set (built with
+        # MOJOLEARN_HOST_SABOTAGE, gemm_oracle's descending leaf) reaches
+        # them, and byte_lm_host_sabotage reports that arm too.
+        training_lanes=("byte-lm-host-infer", "byte-lm-host-infer-threaded", "byte-lm-host-train",
+                        "byte-lm", "byte-lm-resident"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LanguageModelInference", "LanguageModelHostTrainer"),
+        classes=("LanguageModelInference", "LanguageModelHostTrainer", "SmallByteLanguageModelTrainer"),
         display="the byte LM forward pass and one training step",
         host_modules=(
             "training/byte_lm_host.mojo",
@@ -672,7 +737,7 @@ FAMILIES = (
             "byte_lm_host_train_step", "all_finite_f32", "all_finite_f64",
             "cast_f64_to_f32",
         ),
-        gate=".github/workflows/byte-lm-cpu-gate.yml",
+        gate=".github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
     ),
     dict(
@@ -813,7 +878,7 @@ FAMILIES = (
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
-            "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict",
+            "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "knn_classify_neighbors", "knn_regress_neighbors",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
@@ -1313,6 +1378,7 @@ FAMILIES = (
             "gbdt-ordered-rmse", "gbdt-feature-freq",
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
+            "gbdt-query-rmse",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1320,13 +1386,14 @@ FAMILIES = (
             "GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor",
             "model_selection.cross_val_score", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="gradient boosting on symmetric trees with the pointwise and multiclass losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
+        display="gradient boosting on symmetric trees with the pointwise, multiclass and QueryRMSE losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
             "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
             "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
             "gbdt/host/gbdt_oracle_pointwise.mojo", "gbdt/host/gbdt_oracle_onehot.mojo",
+            "gbdt/host/gbdt_oracle_query.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(
@@ -1489,6 +1556,68 @@ FAMILIES = (
             "arima_host_numeric_mode", "arima_host_vendor", "arima_host_column",
             "arima_host_sabotage", "arima_vendor", "arima_numeric_mode",
             "arima_fit", "arima_predict", "arima_forecast",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # lane/cpu-training-embedding-ivf (2026-09-15): the Embedding
+        # layer's host binding. It routes `_mojolearn_embedding` on a
+        # CPU-only install with the GPU binding's whole surface
+        # (embedding_forward, embedding_backward and the two read-backs),
+        # the refusals in its words and order.
+        family="embedding",
+        binding="_mojolearn_embedding_host",
+        routes="_mojolearn_embedding",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("embedding", "embedding-sort"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("Embedding",),
+        display="the Embedding layer",
+        host_modules=(
+            "embedding/host/embedding_host.mojo",
+            "embedding/checks/embedding_oracle.mojo",
+        ),
+        exports=(
+            "embedding_host_numeric_mode", "embedding_host_vendor",
+            "embedding_host_column", "embedding_host_sabotage",
+            "embedding_vendor", "embedding_numeric_mode",
+            "embedding_forward", "embedding_backward",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # lane/cpu-training-embedding-ivf (2026-09-15): IVFIndex's host
+        # binding. It routes `_mojolearn_ivf` on a CPU-only install with the
+        # GPU binding's whole surface (ivf_flat_build_and_search and the two
+        # read-backs): the build's k-means quantizer through the k-means
+        # lane's host restatement, the CSR layout and probe merge the device
+        # path already runs on the host, and the pinned distance tile and
+        # the identical top-k restated.
+        family="ivf",
+        binding="_mojolearn_ivf_host",
+        routes="_mojolearn_ivf",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("ivf", "ivf-euclidean"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("IVFIndex",),
+        display="the IVF-Flat index",
+        host_modules=(
+            "ivf/host/ivf_host.mojo",
+            "cluster/host/kmeans_oracle.mojo",
+            "ivf/checks/list_layout.mojo",
+            "ivf/impl/neighbors/ivf_common.mojo",
+            "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo",
+        ),
+        exports=(
+            "ivf_host_numeric_mode", "ivf_host_vendor", "ivf_host_column",
+            "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
+            "ivf_flat_build_and_search",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
@@ -1780,6 +1909,7 @@ def as_dict():
         wheel_bindings=wheel_bindings(),
         forest_recorded_root=FOREST_RECORDED_ROOT,
         no_cpu_path=list(NO_CPU_PATH),
+        adapted_modules={k: dict(v) for k, v in ADAPTED_MODULES.items()},
     )
 
 

@@ -31,6 +31,25 @@ The wrong-gradient build got 8 of 10 arrays wrong and 2 right, and the 2 right
 are the loss: a backward-only corruption leaves the forward exact and then
 propagates from the gradient into both moments and the updated parameters. The
 gate named the tensor, `block0.w_q` element 0, with both bit patterns.
+- The GPU trainer class on a CPU-only install, for the internal verifier only
+  (2026-09-15, lane/cpu-training-embedding-ivf). Inside
+  `_cpu_reference.reference_training()` (which `tools/identity_break.py` enters),
+  `SmallByteLanguageModelTrainer` and its alias `LanguageModelTrainer`,
+  stateless or `resident=True`, run through
+  `python/mojolearn/_byte_lm_trainer_host.py`, which serves the GPU binding's
+  single-device entries (the step, evaluation, logits and the resident session)
+  over this binding's step, loss and reference-path logits and holds no
+  arithmetic; the multi-GPU entries are absent and refuse by name. Outside that
+  scope the class refuses on a CPU-only install, as every public CPU fit does;
+  `LanguageModelHostTrainer` stays the published CPU trainer. The `byte-lm` and
+  `byte-lm-resident` identity_break lanes (three AdamW steps at weight decay
+  0.01, the exported gradient, the logits, the checkpoint bytes and the batch
+  part) read IDENTICAL x4 on all 72 train, infer, model and batch cells against
+  the 166-lane record's Apple M4, NVIDIA H100 and AMD MI325X columns on the
+  M4's CPU column (one core), and a build with `-D MOJOLEARN_HOST_SABOTAGE=1`
+  (the host GEMM oracle's descending leaf) reads DIVERGENT on all 72. Before
+  that change `byte_lm_host_sabotage` did not report that arm, and such a build
+  loaded outside the gate reading clean.
 
 ## What this does NOT say
 
@@ -349,7 +368,7 @@ byte LM's. Each also builds from source through
 
 <!--fact:host_surface_table-->| family | binding under `mojolearn/host/` | routes (CPU-only install) | internal CPU reference lanes | predicts on a CPU from a saved model | gate | in a wheel |
 |---|---|---|---|---|---|---|
-| byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train | LanguageModelInference, LanguageModelHostTrainer | .github/workflows/byte-lm-cpu-gate.yml | yes |
+| byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train, byte-lm, byte-lm-resident | LanguageModelInference, LanguageModelHostTrainer, SmallByteLanguageModelTrainer | .github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | forest | `_mojolearn_forest_host.so` | loaded by path | no | RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor, GradientBoosting (rf_classifier, rf_regressor, et_classifier, et_regressor, gbdt_symmetric, gbdt_depthwise, gbdt_lossguide, gbdt_rmse) | tools/forest_host_gate.py (.github/workflows/forest-host-gate.yml) | yes |
 | tokenizer | `_mojolearn_tokenizer_host.so` | loaded by path | no | GPT2Tokenizer | pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py | yes |
 | neural | `_mojolearn_neural_host.so` | loaded by path | no | MLPInference, TransformerBlockInference | python/mojolearn/tests/test_neural_inference.py and tools/identity_break.py (mlp, transformer, transformer-window) | yes |
@@ -367,11 +386,13 @@ byte LM's. Each also builds from source through
 | kernel_methods | `_mojolearn_kernel_methods_host.so` | `_mojolearn_kernel_methods` | rbf-sampler, kernel-ridge, nystroem | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_kernel_methods_host.sh` |
 | mixture | `_mojolearn_mixture_host.so` | `_mojolearn_mixture` | gmm, gmm-random-init | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_mixture_host.sh` |
 | hdbscan | `_mojolearn_hdbscan_host.so` | `_mojolearn_hdbscan` | hdbscan, hdbscan-leaf | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_hdbscan_host.sh` |
-| gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric, gbdt-rmse, gbdt-depthwise, gbdt-lossguide, cross-val, gbdt-nan-modes, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-parametric-losses, gbdt-exact-mae, gbdt-lossguide-newtoncosine, gbdt-multiclass, gbdt-onevsall, gbdt-ordered-rmse, gbdt-feature-freq, gbdt-pointwise-l2-bayesian-eval, gbdt-categorical-ctr, gbdt-adapter-score-weighted | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_gbdt_host.sh` |
+| gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric, gbdt-rmse, gbdt-depthwise, gbdt-lossguide, cross-val, gbdt-nan-modes, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-parametric-losses, gbdt-exact-mae, gbdt-lossguide-newtoncosine, gbdt-multiclass, gbdt-onevsall, gbdt-ordered-rmse, gbdt-feature-freq, gbdt-pointwise-l2-bayesian-eval, gbdt-categorical-ctr, gbdt-adapter-score-weighted, gbdt-query-rmse | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_gbdt_host.sh` |
 | training | `_mojolearn_training_host.so` | `_mojolearn_training` | mlp, optim-sgd, optim-adam-clip, cross-entropy-arms, training-primitives, par-mlp, samba, samba-untied-dropout-accum | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_training_host.sh` |
 | resample | `_mojolearn_resample_host.so` | `_mojolearn_resample` | bootstrap, permutation-test, monte-carlo | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_resample_host.sh` |
 | mamba | `_mojolearn_mamba_host.so` | `_mojolearn_mamba` | mamba2, mamba2-dtlimit, mamba1, mamba3 | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_mamba_host.sh` |
 | arima | `_mojolearn_arima_host.so` | `_mojolearn_arima` | arima, arima-011, arima-seasonal-c, par-arima | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_arima_host.sh` |
+| embedding | `_mojolearn_embedding_host.so` | `_mojolearn_embedding` | embedding, embedding-sort | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_embedding_host.sh` |
+| ivf | `_mojolearn_ivf_host.so` | `_mojolearn_ivf` | ivf, ivf-euclidean | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_ivf_host.sh` |
 | forecast | `_mojolearn_forecast_host.so` | `_mojolearn_arima` when its reference binding is not built | no | ARIMA (arima, arima-011, arima-seasonal-c) | tools/classical_host_gate.py and tools/identity_break.py | yes |
 | transformer | `_mojolearn_transformer_host.so` | `_mojolearn_transformer` | transformer, transformer-window | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_transformer_host.sh` |<!--/fact-->
 

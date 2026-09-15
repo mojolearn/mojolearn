@@ -181,7 +181,9 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_LOGLOSS,
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
+    OBJECTIVE_QUERY_RMSE,
     OBJECTIVE_RMSE,
+    objective_from_name,
 )
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_IS,
@@ -1012,12 +1014,14 @@ def train(
         )
     if len(y) != n_rows:
         raise Error("y size mismatch")
-    # ---- group_id: the grouping is checked, then refused by name ----
-    # Every loss this implementation trains is pointwise and reads no query
-    # structure. CatBoost's readers of the grouping are the querywise and
-    # pairwise targets (`cuda/targets/querywise_targets_impl.h`,
-    # `pair_logit_pairwise.h`), none of which is implemented yet, so a
-    # grouping arriving here is refused rather than carried and ignored.
+    # ---- the pool grouping (`group_sizes`) and the querywise gate ----
+    # QueryRMSE is the one loss here that reads the grouping; CatBoost's
+    # other readers (the pairwise and the remaining querywise targets,
+    # `cuda/targets/querywise_targets_impl.h`, `pair_logit_pairwise.h`) are
+    # not implemented, so a grouping arriving with any other loss is refused
+    # rather than carried and ignored. Everything here is decided before a
+    # border is computed.
+    var is_querywise = objective_from_name(loss) == OBJECTIVE_QUERY_RMSE
     if len(group_sizes) > 0:
         var covered = 0
         for g in range(len(group_sizes)):
@@ -1031,13 +1035,71 @@ def train(
                 "group_id: the group sizes cover " + String(covered)
                 + " rows of " + String(n_rows)
             )
-        raise Error(
-            "group_id is read only by the querywise and pairwise losses"
-            " (QueryRMSE, PairLogit, YetiRank, QuerySoftMax,"
-            " QueryCrossEntropy), which this implementation does not train"
-            " yet; loss='" + loss + "' does not use it, so it is refused by"
-            " name rather than carried and ignored"
-        )
+        if not is_querywise:
+            raise Error(
+                "group_id is read only by the querywise and pairwise losses"
+                " (QueryRMSE is trained here; PairLogit, YetiRank,"
+                " QuerySoftMax and QueryCrossEntropy are not implemented);"
+                " loss='" + loss + "' does not use it, so it is refused by"
+                " name rather than carried and ignored"
+            )
+    # `TDocParallelSplit` (`gpu_data/doc_parallel_dataset.h:26-38`): the
+    # pool's queries only when it has group ids AND fewer groups than rows;
+    # otherwise `TWithoutQueriesGrouping` (`gpu_data/samples_grouping.h:
+    # 28-54`), every row a query of one. A QueryRMSE fit on that grouping
+    # has every query mean equal to its row's residual, so every derivative
+    # is zero and the trees carry zero leaves: the reference's behavior for
+    # a groupwise loss given no groups, kept as it is.
+    var query_sizes = List[UInt32]()
+    if is_querywise:
+        if len(group_sizes) > 0 and len(group_sizes) < n_rows:
+            query_sizes = group_sizes.copy()
+        else:
+            query_sizes.resize(n_rows, UInt32(1))
+        # what the querywise arm of this implementation does not restate yet,
+        # refused by name
+        if policy != GROW_SYMMETRIC:
+            raise Error(
+                "loss='QueryRMSE' is implemented on SymmetricTree only here;"
+                " grow_policy=" + grow_policy_name(policy) + " is refused"
+                " (the reference registers it, querywise_non_symmetric.cpp:5-14)"
+            )
+        if use_pointwise_searcher:
+            raise Error(
+                "loss='QueryRMSE' with use_pointwise_searcher is not"
+                " implemented here; the greedy subsets searcher only"
+            )
+        for f in range(len(cat_features)):
+            if cat_features[f]:
+                raise Error(
+                    "loss='QueryRMSE' with cat_features is not implemented"
+                    " here: the reference shuffles whole queries for its CTR"
+                    " permutations (permutation.cpp:9-11,"
+                    " GenerateQueryDocsOrder), which this implementation does"
+                    " not restate"
+                )
+        for f in range(len(one_hot)):
+            if one_hot[f]:
+                raise Error(
+                    "loss='QueryRMSE' with one_hot_features is not implemented"
+                    " here"
+                )
+        if len(eval_y) > 0 or len(eval_x_colmajor) > 0:
+            raise Error(
+                "loss='QueryRMSE' with eval_set is not implemented here: the"
+                " held-out loss needs the eval pool's own grouping"
+            )
+        if len(class_weights) > 0:
+            raise Error("class_weights do not apply to loss='QueryRMSE'")
+        if bootstrap_bayesian or (
+            bootstrap_type != String("") and bootstrap_type != String("No")
+        ):
+            raise Error(
+                "loss='QueryRMSE' with a bootstrap is not implemented here:"
+                " the reference samples whole queries for querywise targets,"
+                " which this implementation does not restate; use"
+                " bootstrap_type='No'"
+            )
     # Validate dense class codes before class-weight indexing or allocating
     # prediction planes. The later objective check was too late to protect
     # MakeClassificationWeights (reference data_providers.cpp:162-168).
@@ -1878,6 +1940,7 @@ def train(
         min_split_gain=min_split_gain,
         min_child_hessian=min_child_hessian,
         feature_fraction=feature_fraction,
+        group_sizes=query_sizes,
     )
     host_times.stop_host("train_fit_with_test", t_phase)
     t_phase = host_times.start()

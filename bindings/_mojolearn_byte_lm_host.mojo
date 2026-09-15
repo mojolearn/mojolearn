@@ -28,6 +28,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 # because the host backward routing already calls into this module; the probe
 # measured that a CPU-only build of it compiles (exit 0 on seven runners).
 from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE
+# lane/cpu-training-embedding-ivf (2026-09-15): the host GEMM oracle's own
+# negative control, `-D MOJOLEARN_HOST_SABOTAGE=1` (every leaf walked
+# descending), which the CPU identity gate's sabotage set passes to every
+# host build. It reaches the training step and the logits through
+# gemm_oracle, so a build carrying it computes wrong answers and must read
+# back as a sabotage build too.
+from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host import (
     byte_host_logits,
@@ -117,7 +124,7 @@ def byte_lm_host_sabotage_binding() raises -> PythonObject:
     back as clean, and `_byte_lm_host.py` refuses a sabotage build on exactly
     this answer, so the refusal would not have fired. Either family is a
     sabotage build and this says so."""
-    return PythonObject(byte_host_sabotage_compiled() or ANY_BWD_SABOTAGE)
+    return PythonObject(byte_host_sabotage_compiled() or ANY_BWD_SABOTAGE or GEMM_ORACLE_HOST_SABOTAGE)
 
 
 def byte_lm_host_profile_binding(shape: PythonObject) raises -> PythonObject:

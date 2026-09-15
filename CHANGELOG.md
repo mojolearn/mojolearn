@@ -10,6 +10,15 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- New `KMeans.transform` and `KMeans.fit_transform`, with cuML's `KMeans.transform` as the
+  reference: the distance from every row to every fitted center under the model's `metric`
+  (squared for the default `'euclidean'`, cuVS `L2Expanded`; the root for
+  `'l2_sqrt_expanded'`), float32 `(n_samples, n_clusters)`. Each cell is the fused
+  assignment kernel's cell, so the distance at `predict`'s label is the row minimum bit for
+  bit. On the GPU binding and the CPU core host binding; cosine refuses by name as its fit
+  does. The seven fitting k-means lanes add `transform` to their infer and batch cells.
+  Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the release
+  record.
 - Public CPU inference for saved ARIMA models, UMAP embeddings and the whitened full-SVD PCA.
   `ARIMA.save`/`load` and `UMAP.save`/`load` are new; `mojolearn.host_model(path)`, or the
   classes on a CPU-only install, predict (in sample and out of sample), forecast and read the
@@ -89,9 +98,18 @@ Linux legs are OWED before this heading reads published.
 - `GradientBoosting.fit` takes `group_id`, CatBoost's Pool argument: one string or integer id per
   row (an integer compares by its decimal spelling, as their Pool hashes it), each group's rows
   consecutive or the fit raises "group Ids are not consecutive". The grouping crosses into the GPU
-  binding and the GBDT host binding as run lengths, and every loss this implementation trains
-  refuses it BY NAME there, because no querywise loss is implemented yet. `subgroup_id` and `pairs`
-  are refused by name in Python. A fit without them sends the same parameter layout as before.
+  binding and the GBDT host binding as run lengths. `loss="QueryRMSE"` reads it; every other loss
+  refuses it BY NAME. `subgroup_id` and `pairs` are refused by name in Python. A fit without them
+  sends the same parameter layout as before.
+- New `loss="QueryRMSE"` for `GradientBoosting`, the first learning-to-rank loss, with the CatBoost
+  reference's querywise target (`query_rmse.cu`, the group means and ids of `query_helper.cu`, the
+  querywise der calcer's inverse bin order in leaf estimation) on the GPU and restated in the GBDT
+  host binding for the CPU reference column. SymmetricTree with the greedy searcher, Newton leaves at
+  one iteration by default; a bootstrap, categorical features, an eval set, the pointwise searcher
+  and the non-symmetric policies are refused by name. Without `group_id` every row is its own
+  query, as in the reference, so the fit learns nothing. Prediction is the ordinary row-wise raw
+  score, so saved-model CPU inference covers it. New identity lane `gbdt-query-rmse` with a batch
+  part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed to the release record.
 - Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
   namely the byte LM's, the forest's, the tokenizer's and the twelve routed families (core,
   linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp, arima), fifteen in
