@@ -10,6 +10,21 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- New `SpectralClustering(prediction_data=True)`, `SpectralClustering.predict`, `save` and `load`
+  (`mojolearn-spectral-1`) (lane/spectral-predict, DEVIATION 2860, new capability that neither cuML
+  nor scikit-learn has).
+  - **Method.** The Nystrom out-of-sample extension of Bengio et al. (NIPS 2003), then the fit's
+    own k-means assignment (ties to the lowest centroid index).
+  - **New row's affinity.** For `nearest_neighbors`: its `n_neighbors` nearest training rows at
+    0.5, the fit's symmetrization of a one-way edge. For `precomputed`: the caller's
+    `(n_new, n_train)` affinity.
+  - **Threshold.** A used column with `|1 + theta| < 1e-3` is refused by name.
+  - **The fit.** It copies the eigenpairs, degree scaling and centroids out; no arithmetic is
+    added, and `prediction_data=False` fits as before.
+  - **Where it runs.** On the GPU binding and the CPU metrics host binding, which ships, so
+    `mojolearn.host_model(path)` predicts on a CPU-only install.
+  - **Not promised.** `predict(X_train) == labels_`; the evidence measures the rate
+    (bench/results/identity_break/2026-09-15_spectral-predict).
 - Public CPU inference from a saved model for `GaussianProcessRegressor` (every kernel the fit
   accepts, `normalize_y` included), `GaussianProcessClassifier` (binary and one-vs-rest) and
   `GaussianMixture.sample` (lane/inference-neighbors-density). `GaussianProcessRegressor` gains

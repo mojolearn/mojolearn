@@ -954,21 +954,17 @@ def spectral_predict_binding(
     state.centroids = _load_f32(Int(py=addrs[5]), n_clusters * k)
     var olp = _i32_ptr(Int(py=addrs[6]))
     var oep = _f32_ptr(Int(py=addrs[7]))
-    var labels = List[Int32]()
-    var embedding = List[Float32]()
     with GILReleased(Python()):
         var out = spectral_predict_host(
             input, train_x, n_train, n_queries, n_features, k, n_clusters,
             n_neighbors, affinity, state,
         )
-        labels = out.labels^
-        embedding = out.embedding^
-    if len(labels) != n_queries or len(embedding) != n_queries * k:
-        raise Error("spectral_predict: the kernel returned the wrong number of outputs")
-    for i in range(n_queries):
-        olp.unsafe_store(i, labels[i])
-    for i in range(n_queries * k):
-        oep.unsafe_store(i, embedding[i])
+        if len(out.labels) != n_queries or len(out.embedding) != n_queries * k:
+            raise Error("spectral_predict: the kernel returned the wrong number of outputs")
+        for i in range(n_queries):
+            olp.unsafe_store(i, out.labels[i])
+        for i in range(n_queries * k):
+            oep.unsafe_store(i, out.embedding[i])
     return PythonObject(0)
 
 
