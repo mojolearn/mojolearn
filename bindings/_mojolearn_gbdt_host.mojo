@@ -82,6 +82,25 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_fit,
     gbdt_host_model_text,
 )
+from gbdt.host.gbdt_oracle_losses import (
+    GBDT_BOOT_BERNOULLI,
+    GBDT_BOOT_POISSON,
+    GBDT_LEAF_EXACT,
+    GBDT_LEAF_GRADIENT,
+    GBDT_LEAF_NEWTON,
+    GBDT_OBJ_CROSSENTROPY,
+    GBDT_OBJ_EXPECTILE,
+    GBDT_OBJ_HUBER,
+    GBDT_OBJ_LOGLINQUANTILE,
+    GBDT_OBJ_LQ,
+    GBDT_OBJ_MAE,
+    GBDT_OBJ_MAPE,
+    GBDT_OBJ_POISSON,
+    GBDT_OBJ_QUANTILE,
+    GBDT_OBJ_TWEEDIE,
+    GbdtHostLoss,
+    gbdt_losses_host_fit,
+)
 from gbdt.host.gbdt_oracle_rmse import (
     gbdt_rmse_host_fit,
     gbdt_rmse_host_model_text,
@@ -169,6 +188,127 @@ def _refuse(what: String) raises:
         " categoricals or eval set), see"
         " gbdt/host/gbdt_oracle.mojo, gbdt/host/gbdt_oracle_rmse.mojo and"
         " gbdt/host/gbdt_oracle_depthwise.mojo"
+    )
+
+
+def _pointwise_objective(loss: String) -> Int:
+    """`objective_from_name` (`gbdt/targets/kernel/pointwise_targets.mojo:
+    83-123`) for the losses `gbdt_oracle_losses.mojo` restates; -1 else."""
+    if loss == String("CrossEntropy"):
+        return GBDT_OBJ_CROSSENTROPY
+    if loss == String("Quantile"):
+        return GBDT_OBJ_QUANTILE
+    if loss == String("MAE"):
+        return GBDT_OBJ_MAE
+    if loss == String("LogLinQuantile"):
+        return GBDT_OBJ_LOGLINQUANTILE
+    if loss == String("MAPE"):
+        return GBDT_OBJ_MAPE
+    if loss == String("Poisson"):
+        return GBDT_OBJ_POISSON
+    if loss == String("Lq"):
+        return GBDT_OBJ_LQ
+    if loss == String("Expectile"):
+        return GBDT_OBJ_EXPECTILE
+    if loss == String("Tweedie"):
+        return GBDT_OBJ_TWEEDIE
+    if loss == String("Huber"):
+        return GBDT_OBJ_HUBER
+    return -1
+
+
+def _resolve_pointwise_loss(
+    objective: Int,
+    name: String,
+    loss_alpha: Float32,
+    loss_q: Float32,
+    loss_delta: Float32,
+    loss_variance_power: Float32,
+    method_override: Int,
+    iterations_override: Int,
+    bootstrap_type: String,
+    subsample: Float32,
+) raises -> GbdtHostLoss:
+    """What `train` resolves for these losses, restated because the option
+    modules import a kernel module: `make_loss_description` and `validate`
+    (`gbdt/options/loss_description.mojo:110-219`), `kernel_alpha` and
+    `get_alpha`, `get_estimation_method_defaults`, `use_exact_leaves`,
+    `set_leaves_estimation_default` and `ensure_newton_is_available`
+    (`gbdt/options/catboost_options.mojo:1247-1499`), and the bootstrap
+    parameter (`gbdt/train.mojo:1660-1690`, `DEFAULT_SUBSAMPLE` 0.66)."""
+    var has_alpha = loss_alpha >= Float32(0.0)
+    var estimator_alpha = loss_alpha if has_alpha else Float32(0.5)
+    if objective == GBDT_OBJ_LQ and not (loss_q >= Float32(0.0)):
+        raise Error("Param q is mandatory for Lq loss")
+    if objective == GBDT_OBJ_HUBER and not (loss_delta >= Float32(0.0)):
+        raise Error("For Huber delta parameter is mandatory")
+    if objective == GBDT_OBJ_TWEEDIE and not (loss_variance_power >= Float32(0.0)):
+        raise Error("For Tweedie variance_power parameter is mandatory")
+    if objective == GBDT_OBJ_EXPECTILE and not has_alpha:
+        raise Error("Param alpha is mandatory for expectile loss")
+    var kernel_alpha = Float32(0.0)
+    if objective == GBDT_OBJ_MAE:
+        kernel_alpha = Float32(0.5)
+    elif objective == GBDT_OBJ_LQ:
+        kernel_alpha = loss_q
+    elif objective == GBDT_OBJ_HUBER:
+        kernel_alpha = loss_delta
+    elif objective == GBDT_OBJ_TWEEDIE:
+        kernel_alpha = loss_variance_power
+    elif objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_LOGLINQUANTILE or objective == GBDT_OBJ_EXPECTILE:
+        kernel_alpha = estimator_alpha
+    var method = GBDT_LEAF_NEWTON
+    var newton = 1
+    var gradient = 1
+    if objective == GBDT_OBJ_LQ:
+        if loss_q < Float32(2.0):
+            method = GBDT_LEAF_GRADIENT
+    elif objective == GBDT_OBJ_MAE or objective == GBDT_OBJ_MAPE or objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_LOGLINQUANTILE:
+        method = GBDT_LEAF_GRADIENT
+    elif objective == GBDT_OBJ_EXPECTILE:
+        newton = 5
+        gradient = 10
+    elif objective == GBDT_OBJ_POISSON:
+        newton = 10
+    elif objective == GBDT_OBJ_CROSSENTROPY:
+        newton = 10
+        gradient = 40
+    elif objective == GBDT_OBJ_TWEEDIE:
+        newton = 20
+        gradient = 20
+    if objective == GBDT_OBJ_MAE or objective == GBDT_OBJ_MAPE or objective == GBDT_OBJ_QUANTILE:
+        method = GBDT_LEAF_EXACT
+        newton = 1
+        gradient = 1
+    if method_override >= 0:
+        method = method_override
+    var iterations = 1
+    if method == GBDT_LEAF_NEWTON:
+        iterations = newton
+    elif method == GBDT_LEAF_GRADIENT:
+        iterations = gradient
+    if iterations_override >= 0:
+        iterations = iterations_override
+    if method == GBDT_LEAF_NEWTON:
+        if objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_MAE or objective == GBDT_OBJ_LOGLINQUANTILE or objective == GBDT_OBJ_MAPE:
+            raise Error("Newton leaves estimation method is not supported for " + name + " loss function")
+        if objective == GBDT_OBJ_LQ and loss_q < Float32(2.0):
+            raise Error("Newton leaves estimation method is not supported for Lq loss function with q < 2")
+    if method == GBDT_LEAF_EXACT and not (
+        objective == GBDT_OBJ_MAE or objective == GBDT_OBJ_MAPE or objective == GBDT_OBJ_QUANTILE
+    ):
+        raise Error("Only MAPE, MAE and Quantile are supported for Exact leaves estimation on GPU")
+    var boot_kind = -1
+    var boot_param = Float32(0.0)
+    if bootstrap_type == String("Bernoulli"):
+        boot_kind = GBDT_BOOT_BERNOULLI
+        boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    elif bootstrap_type == String("Poisson"):
+        boot_kind = GBDT_BOOT_POISSON
+        boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    return GbdtHostLoss(
+        objective, kernel_alpha, estimator_alpha, method, iterations,
+        boot_kind, boot_param,
     )
 
 
@@ -287,8 +427,13 @@ def gbdt_fit_binding(
 
     # ---- what the host fit does not restate, refused by name ----
     var is_rmse = loss == String("RMSE")
-    if loss != String("Logloss") and not is_rmse:
+    # the pointwise losses of gbdt/host/gbdt_oracle_losses.mojo
+    var pw_objective = _pointwise_objective(loss)
+    var is_pointwise = pw_objective >= 0
+    if loss != String("Logloss") and not is_rmse and not is_pointwise:
         _refuse("loss='" + loss + "'")
+    if is_pointwise and grow_code != 0:
+        _refuse("loss='" + loss + "' under grow_policy code " + String(grow_code) + " (Depthwise or Lossguide)")
     if is_rmse and leaf_iterations >= 0 and leaf_iterations != 1:
         _refuse(
             "leaf_estimation_iterations=" + String(leaf_iterations)
@@ -313,10 +458,15 @@ def gbdt_fit_binding(
             _refuse("min_child_hessian=" + String(min_child_hessian))
         if min_data_in_leaf != 1:
             _refuse("min_data_in_leaf=" + String(min_data_in_leaf) + " under Depthwise or Lossguide")
-    if leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON:
+    if not is_pointwise and leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton)")
+    if is_pointwise and leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT:
+        _refuse("leaf_estimation_method code " + String(leaf_method) + " (Gradient, Newton or Exact)")
     if bootstrap_type != String("") and bootstrap_type != String("No"):
-        _refuse("bootstrap_type='" + bootstrap_type + "'")
+        if not is_pointwise or (
+            bootstrap_type != String("Poisson") and bootstrap_type != String("Bernoulli")
+        ):
+            _refuse("bootstrap_type='" + bootstrap_type + "' under loss='" + loss + "'")
     if n_weights != 0:
         _refuse("sample_weight")
     if n_class_weights != 0:
@@ -441,6 +591,15 @@ def gbdt_fit_binding(
         border_count, border_build_max_samples, n_estimators, max_depth,
         learning_rate, l2_leaf_reg, random_seed, nan_mode, border, iterations,
     )
+    var pw_loss = GbdtHostLoss(-1, Float32(0), Float32(0), -1, -1, -1, Float32(0))
+    if is_pointwise:
+        pw_loss = _resolve_pointwise_loss(
+            pw_objective, loss,
+            Float32(Float64(py=params[11])), Float32(Float64(py=params[12])),
+            Float32(Float64(py=params[13])), Float32(Float64(py=params[14])),
+            leaf_method, leaf_iterations, bootstrap_type,
+            Float32(Float64(py=params[19])),
+        )
     var x_address = Int(py=x_addr)
     var y_address = Int(py=y_addr)
     _ = xp
@@ -450,7 +609,7 @@ def gbdt_fit_binding(
     var best_iteration = 0
     var stopped_early = False
     var has_nan = False
-    if is_rmse or grow_code != 0:
+    if is_rmse or grow_code != 0 or is_pointwise:
         # NaN is measured on the symmetric Logloss fit only (gbdt-nan-modes)
         var xs = f32_ptr(x_address)
         for i in range(n_rows * n_features):
@@ -460,14 +619,21 @@ def gbdt_fit_binding(
                 break
     if has_nan:
         _refuse(
-            "an X carrying NaN under loss='RMSE' or grow_policy code "
+            "an X carrying NaN under loss='" + loss + "' and grow_policy code "
             + String(grow_code) + " (NaN is measured on SymmetricTree with"
             " Logloss only, the gbdt-nan-modes lane)"
         )
     with GILReleased(Python()):
         var x = read_f32(x_address, n_rows * n_features)
         var y = read_f32(y_address, n_rows)
-        if is_rmse:
+        if is_pointwise:
+            # gbdt/host/gbdt_oracle_losses.mojo
+            var pw_model = gbdt_losses_host_fit(x, y, n_rows, n_features, p, pw_loss)
+            text = gbdt_host_model_text(pw_model)
+            losses = pw_model.losses.copy()
+            best_iteration = pw_model.best_iteration
+            stopped_early = pw_model.stopped_early
+        elif is_rmse:
             # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:
             # 1597-1600`): unset is True for RMSE
             var fit = gbdt_rmse_host_fit(
