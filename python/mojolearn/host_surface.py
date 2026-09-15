@@ -168,6 +168,18 @@ CLASSICAL_RECORDED = (
     # lanes are owed to the next release record; their infer cells in the
     # 166-lane record are the cross-vendor comparison until then.
     "bench/results/classical_host/2026-09-15-apple-m4-linear-kernel",
+    # lane/inference-forecast-umap-pca (2026-09-15): pca-full-whiten and umap,
+    # recorded on the M4's Metal set; both bind families the gate builds.
+    "bench/results/classical_host/2026-09-15-apple-m4-umap-pca",
+)
+
+#: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
+#: checked with `tools/classical_host_gate.py check` like CLASSICAL_RECORDED
+#: but kept apart from it: they bind `_mojolearn_forecast_host`, a family
+#: with no route, which the CPU identity gate workflow does not build today.
+#: The workflow reading this list is owed to its owner.
+FORECAST_RECORDED = (
+    "bench/results/classical_host/2026-09-15-apple-m4-arima",
 )
 
 #: The forest inference recordings: every directory under this root whose
@@ -916,7 +928,7 @@ FAMILIES = (
             "logistic-elasticnet", "logistic-unpenalized-no-intercept",
             "standard-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
             "minmax-scaler", "minmax-scaler-clip", "lasso", "elasticnet",
-            "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler",
+            "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler", "pca-full-whiten",
         ),
         forest_kinds=(),
         classes=(
@@ -924,7 +936,7 @@ FAMILIES = (
             "PCA", "KernelDensity", "DBSCAN", "StandardScaler", "MinMaxScaler",
             "Lasso", "ElasticNet", "KernelRidge", "Nystroem", "RBFSampler",
         ),
-        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening, kernel density, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
+        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
@@ -966,7 +978,12 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
                         "metrics-fowlkes-mallows"),
-        inference_lanes=(),
+        # UMAP.transform from a saved embedding (lane/inference-forecast-
+        # umap-pca, 2026-09-15). Its answer depends on the query batch by the
+        # transform's contract, so the claim is the GPU's bytes for the same
+        # batch; `inference_display` says so in the README sentence.
+        inference_lanes=("umap",),
+        inference_display="UMAP transform of a saved embedding (the GPU's bytes for the same query batch; a row's embedding depends on the batch it is asked in)",
         forest_kinds=(),
         classes=(
             "SpectralClustering", "UMAP",
@@ -1492,8 +1509,9 @@ FAMILIES = (
         # Workstream E (lane/cpu-training-arima, 2026-09-14): batched
         # ARIMA's host binding. It routes `_mojolearn_arima` on a CPU-only
         # install with the GPU binding's whole surface (fit, predict,
-        # forecast); p, q or P above 1, any Q, d + D of 2, p + q + k of 0
-        # and an in-sample prediction refuse by name. par-arima is declared
+        # forecast); p, q or P above 1, any Q, d + D of 2 and p + q + k of 0
+        # refuse by name (an in-sample prediction runs since 2026-09-15, and
+        # the forecast family below ships the prediction half). par-arima is declared
         # since lane/cpu-training-par-classical (2026-09-15): fit_arima's
         # series shards run as host fits in their own workers.
         family="arima",
@@ -1576,6 +1594,36 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
+    ),
+    dict(
+        # lane/inference-forecast-umap-pca (2026-09-15): public CPU inference
+        # for saved ARIMA models, with no fit in the binary. The reference
+        # arima family above carries the whole fit and stays out of the
+        # wheels; this binding registers arima_predict and arima_forecast
+        # from the same source (bindings/arima_host_predict.mojo) and ships.
+        # `routes` is None because `_mojolearn_arima` routes to the reference
+        # binding when it is built; `serves` names the route this binding
+        # takes when it is not (`_backend._HOST_INFERENCE_MODULES`), which is
+        # an installed CPU-only wheel.
+        family="forecast",
+        binding="_mojolearn_forecast_host",
+        routes=None,
+        serves=("_mojolearn_arima",),
+        loaded_by="_backend._HOST_INFERENCE_MODULES and python/mojolearn/_classical_host.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("arima", "arima-011", "arima-seasonal-c"),
+        forest_kinds=(),
+        classes=("ARIMA",),
+        display="batched ARIMA prediction, in sample and out of sample, and forecasts",
+        host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict.mojo"),
+        exports=(
+            "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
+            "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
+            "arima_predict", "arima_forecast",
+        ),
+        gate="tools/classical_host_gate.py and tools/identity_break.py",
+        ships_in_wheel=True,
     ),
     dict(
         family="transformer",
@@ -1733,6 +1781,22 @@ def inference_lanes():
     return out
 
 
+def inference_routes():
+    """`_MODULES` name -> the inference-only host binding that serves it on
+    a CPU-only install when the route's reference binding is not built (the
+    `serves` key; lane/inference-forecast-umap-pca, 2026-09-15). A route may
+    be served by one such binding, and only a binding that ships."""
+    out = {}
+    for f in FAMILIES:
+        for route in f.get("serves", ()):
+            if route in out:
+                raise RuntimeError(f"host_surface: {route} is served by {out[route]} and {f['binding']}")
+            if not f["ships_in_wheel"]:
+                raise RuntimeError(f"host_surface: {f['binding']} serves {route} but does not ship")
+            out[route] = f["binding"]
+    return out
+
+
 def forest_kinds():
     return list(family("forest")["forest_kinds"])
 
@@ -1749,7 +1813,7 @@ def training_sentence():
 def inference_sentence():
     """The inference list as the README states it, one clause per family
     that serves a saved model."""
-    parts = [f["display"] for f in FAMILIES if f["inference_lanes"] or f["forest_kinds"]]
+    parts = [f.get("inference_display", f["display"]) for f in FAMILIES if f["inference_lanes"] or f["forest_kinds"]]
     return "; ".join(parts)
 
 
@@ -1783,8 +1847,14 @@ def markdown_table():
             predicts = ", ".join(f["classes"])
         else:
             predicts = "no"
+        if f["routes"]:
+            route = "`" + f["routes"] + "`"
+        elif f.get("serves"):
+            route = ", ".join("`" + r + "`" for r in f["serves"]) + " when its reference binding is not built"
+        else:
+            route = "loaded by path"
         rows.append(
-            f"| {f['family']} | `{f['binding']}.so` | {('`' + f['routes'] + '`') if f['routes'] else 'loaded by path'} "
+            f"| {f['family']} | `{f['binding']}.so` | {route} "
             f"| {trains} | {predicts} | {f['gate']} | {'yes' if f['ships_in_wheel'] else 'no, `' + build_shim(f['family']) + '`'} |"
         )
     return "\n".join(rows)
@@ -1796,12 +1866,14 @@ def as_dict():
         builder=BUILDER,
         families=[dict(f) for f in FAMILIES],
         routed=routed_modules(),
+        inference_routes=inference_routes(),
         covered_lanes=covered_lanes(),
         record_covered_lanes=record_covered_lanes(),
         fix_covered_lanes=fix_covered_lanes(),
         inference_lanes=inference_lanes(),
         forest_kinds=forest_kinds(),
         classical_recorded=list(CLASSICAL_RECORDED),
+        forecast_recorded=list(FORECAST_RECORDED),
         classical_gpu_columns=list(CLASSICAL_GPU_COLUMNS),
         training_gpu_columns=list(TRAINING_GPU_COLUMNS),
         training_fix_columns=list(TRAINING_FIX_COLUMNS),

@@ -82,8 +82,7 @@ after the GPU binding's own validation): `p`, `q` or `P` above 1 (the Jones
 recursion and `test_invparams` past one coefficient), any `Q` (the seasonal
 MA arms of the matrices kernel and the seasonal least squares with an AR
 pre-fit), `d + D == 2` (the second difference and `_undiff_kernel[True]`),
-`p + q + k == 0` (the seasonal-only arm of `start_params`), and an in-sample
-prediction (`start < n_obs`, `in_sample_prediction_kernel`). Every refused
+`p + q + k == 0` (the seasonal-only arm of `start_params`). Every refused
 arm is spelled on the device and none is reached by the three lanes, so the
 CPU identity gate could not hold a restatement of it to anything.
 
@@ -110,6 +109,16 @@ from checks.numerics import (
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
 comptime ARIMA_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+#: The inference negative control (lane/inference-forecast-umap-pca,
+#: 2026-09-15). The step sabotage above moves only a FIT, so a binding that
+#: serves prediction alone (`bindings/_mojolearn_forecast_host.mojo`) would
+#: build it and still answer the right bytes. Under either define every finite
+#: value `arima_host_predict` and `arima_host_forecast` return has its lowest
+#: bit flipped, one ulp, after all arithmetic.
+comptime ARIMA_ORACLE_PREDICT_SABOTAGE = (
+    is_defined["MOJOLEARN_HOST_SABOTAGE"]() or is_defined["MOJOLEARN_ARIMA_PREDICT_SABOTAGE"]()
+)
 
 #: DEVIATION 687, `ARIMA_FIT_H` (`batched_fit.mojo:148`), and the sabotage
 #: arm's doubled step.
@@ -652,6 +661,9 @@ def _numerical_stability(n: Int, mut a: InlineArray[Float32, AH_RD2_MAX]):
 struct KalmanHostOut(Movable):
     var loglike: List[Float32]
     var fc: List[Float32]
+    #: `d_pred` (`batched_kalman.mojo:496-502`), the one-step prediction at
+    #: every observation, series major at `bid * nobs + it`.
+    var pred: List[Float32]
 
 
 def _kalman(
@@ -802,6 +814,7 @@ def _kalman(
 
     var loglike = _zeros(batch_size)
     var fc = _zeros(max(1, fc_steps * batch_size))
+    var pred_all = _zeros(max(1, nobs * batch_size))
     var info1 = List[Int32](length=batch_size, fill=Int32(0))
     for bid in range(batch_size):
         # -- batched_kalman_loop_kernel (:425-604), n_diff = 0
@@ -831,6 +844,7 @@ def _kalman(
             # 1. v = y - Z*alpha
             var pred = Float32(0.0)
             pred = ftz(pred + l_alpha[0])
+            pred_all[b_ys + it] = pred
             var yt = ftz(ys[b_ys + it])
             var vs_it = ftz(yt - pred)
             # 2. F = Z*P*Z'
@@ -893,7 +907,7 @@ def _kalman(
                 + "log-likelihood); refused by name rather than carrying 1/F = inf into the gain "
                 + "(DEVIATION 677)"
             )
-    return KalmanHostOut(loglike=loglike^, fc=fc^)
+    return KalmanHostOut(loglike=loglike^, fc=fc^, pred=pred_all^)
 
 
 def _loglike_packed(
@@ -1663,4 +1677,74 @@ def arima_host_forecast(
     for bid in range(batch_size):
         for i in range(n_steps):
             out[bid * n_steps + i] = fc[n_steps * bid + i]
+    _predict_sabotage(out)
+    return out^
+
+
+def _predict_sabotage(mut out: List[Float32]):
+    """ARIMA_ORACLE_PREDICT_SABOTAGE: the lowest bit of every finite value."""
+    comptime if ARIMA_ORACLE_PREDICT_SABOTAGE:
+        for i in range(len(out)):
+            if isfinite(out[i]):
+                out[i] = bitcast[DType.float32](bitcast[DType.uint32](out[i]) ^ UInt32(1))
+
+
+def arima_host_predict(
+    y: List[Float32], params_packed: List[Float32], batch_size: Int, n_obs: Int,
+    start: Int, end: Int, order: ArimaHostOrder,
+) raises -> List[Float32]:
+    """`predict` (`batched_arima.mojo:287-348`) with `pre_diff = true` for
+    any `0 <= start < end` with `start <= n_obs` (lane/inference-forecast-umap-pca,
+    2026-09-15): the differencing or the copy, the filter's non-finite refusal
+    on its input, `unpack`, the filter with `num_steps = max(end - n_obs, 0)`
+    forecast steps, then `in_sample_prediction_kernel` (`:211-250`) over
+    `[start, min(n_obs, end))`: the canonical quiet NaN (DEVIATION 676) before
+    `res_offset = d + s * D`, the filter's one-step prediction when nothing
+    was differenced, and `ftz(y[i - period1] + pred[i - res_offset])` after
+    one difference; then `finalize_forecast` and `copy_forecast_kernel`
+    (`:261-277`) at offset `n_obs - start`. Series major, `(end - start) *
+    batch_size` values. `arima_host_refuse_unrestated` has refused `d + D >
+    1` before this is reached, so the two-difference arm is not restated."""
+    var diff = order.need_diff()
+    var n_obs_kf = n_obs - order.n_diff() if diff else n_obs
+    var order_kf = order.without_diff() if diff else order
+    var num_steps = end - n_obs if end > n_obs else 0
+    var y_kf = _prepare_data(y, batch_size, n_obs, order)
+    _refuse_non_finite(y_kf, n_obs_kf * batch_size, "y")
+    var params = _unpack(params_packed, order, batch_size)
+    var kf = _kalman(y_kf, n_obs_kf, params, order_kf, batch_size, num_steps)
+    var ld = end - start
+    var out = _zeros(ld * batch_size)
+    if start < n_obs:
+        var res_offset = order.n_diff() if diff else 0
+        var p_start = start if start > res_offset else res_offset
+        var p_end = n_obs if n_obs < end else end
+        var dD = order.d + order.D if diff else 0
+        var period1 = 1 if order.d != 0 else order.s
+        if dD > 1:
+            raise Error(
+                "arima host: in-sample prediction reached with d + D = " + String(dD)
+                + "; arima_host_refuse_unrestated refuses it first"
+            )
+        for bid in range(batch_size):
+            for i in range(res_offset - start):
+                out[bid * ld + i] = bitcast[DType.float32](UInt32(0x7FC00000))
+            for i in range(p_start, p_end):
+                var v: Float32
+                if dD == 0:
+                    v = ftz(kf.pred[bid * n_obs + i])
+                else:
+                    var a = ftz(y[bid * n_obs + i - period1])
+                    var b = ftz(kf.pred[bid * n_obs_kf + i - res_offset])
+                    v = ftz(a + b)
+                out[bid * ld + i - start] = v
+    if num_steps > 0:
+        var fc = kf.fc.copy()
+        if diff:
+            _finalize_forecast(fc, y, num_steps, batch_size, n_obs, n_obs, order)
+        var off = n_obs - start
+        for bid in range(batch_size):
+            for i in range(num_steps):
+                out[bid * ld + off + i] = fc[num_steps * bid + i]
+    _predict_sabotage(out)
     return out^
