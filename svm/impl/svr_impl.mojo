@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`svrFit` / `svrPredict`, the epsilon-SVR entry points, dense FP32.
 
-FOLLOWS `cuml/cpp/src/svm/svr_impl.cuh` + `svr.cu` at cuML v26.08.00,
+Reference: `cuml/cpp/src/svm/svr_impl.cuh` + `svr.cu` (cuML v26.08.00):
 `svrFitX` (dense) and the `SVR` class's `fit`. NOT implemented: `svrFitSparse`
 and the CSR arms, which this surface has no shape for at all, and the
 PRECOMPUTED kernel and the weighted `InitPenalty` arm behind
@@ -10,7 +10,7 @@ PRECOMPUTED kernel and the weighted `InitPenalty` arm behind
 
 WHAT `svrFit` IS, AND WHAT IT IS NOT
 ------------------------------------
-It is SHORTER than `svcFit`, and that is upstream's shape rather than a
+It is SHORTER than `svcFit`, and that is the reference shape rather than a
 gap here. `svr_impl.cuh:68` hands `y` straight to `SmoSolver::Solve`, so
 there is no `getUniquelabels`, no `getOvrlabels` and no `ovr_labels_kernel`
 on this path. The targets ARE the solver's `y`, continuous, and every

@@ -831,8 +831,8 @@ IDENTITY_PATHS row 40 closed on three vendors at `144aa5b` on 2026-08-23.
     transformer/corpus/                             the independent torch reference
     transformer/NOT_IMPLEMENTED.tsv                            scope
 
-The `impl/` path mirrors the upstream path exactly, as `mamba/impl/`
-does. IMPLEMENTED IS OURS; the derivative-work language belongs in `NOTICE`.
+The `impl/` path matches the reference path layout, as `mamba/impl/`
+does.
 
 ### 12.3 The deviation numbers
 

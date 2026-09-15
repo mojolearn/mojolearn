@@ -108,9 +108,9 @@ from extratrees.checks.pcg_rng import row_sample_seed
 
 
 def max_nodes(max_depth: Int32) -> Int:
-    """`builder.cuh:253-262`, transcribed including their cliff.
+    """`builder.cuh:253-262`, including the reference's cliff.
 
-    Theirs: a dense tree's node count for depth < 13, and a FIXED 8191 above
+    The reference: a dense tree's node count for depth < 13, and a FIXED 8191 above
     that -- which is `2^13 - 1`, the dense count for depth 12, not a bound on
     anything. It is a starting reservation, not a cap: their `sparsetree` is a
     `std::vector` and grows past it. Ours is a `List` and does the same, so the
@@ -559,7 +559,7 @@ struct NodeQueue[dtype: DType](Movable):
     def is_expandable(
         self, node: SparseTreeNode[Self.dtype], depth: Int32
     ) -> Bool:
-        """`builder.cuh:83-89`, transcribed test for test, in their order.
+        """`builder.cuh:83-89`, test for test, in the reference order.
 
         Note what is NOT here: no impurity test and no `min_samples_leaf`.
         Those live in `split_not_valid` and are applied to the SPLIT after it
@@ -594,7 +594,7 @@ struct NodeQueue[dtype: DType](Movable):
         stays true for every remaining item in the batch. Replacing the break
         with a continue leaves the check green, and that is not a hole in the
         check: the two are the same function. Their `break` is a shortcut, not
-        a semantic. Kept as theirs anyway (transcribe, do not tidy), and
+        a semantic. Kept as the reference writes it anyway (do not tidy), and
         recorded here so nobody re-derives it.
         """
         if len(work_items) != len(splits):
@@ -1090,7 +1090,7 @@ def train_classification(
 ) raises -> TreeMetaDataNode[DType.float32]:
     """One ExtraTree, end to end. `Builder::train`, `builder.cuh:344-359`.
 
-    Their loop, which this transcribes exactly::
+    The reference loop, which this matches exactly::
 
         NodeQueue queue(params, maxNodes(), n_sampled_rows, num_outputs);
         while (queue.HasWork()) {
@@ -1839,7 +1839,7 @@ def train_classification_bestfirst(
     """One ExtraTree grown BEST-FIRST. `BestFirstTreeBuilder::build`,
     `_tree.pyx:392-508`.
 
-    Their loop, which this transcribes with the two structural changes
+    The reference loop, which this matches except for the two structural changes
     DEVIATION BLOCK 466 states::
 
         rc = self._add_split_node(... root ...)
@@ -2005,7 +2005,7 @@ def gain_per_split(
 ) -> Float32:
     """`GiniObjectiveFunction::GainPerSplit`, `objectives.cuh:52-83`, on device.
 
-    Transcribed statement for statement, including the order the three terms
+    Matches the reference, including the order the three terms
     accumulate into `gain` and including their `invLen`/`invLeft`/`invRight`
     reciprocals rather than divisions -- float division and
     multiply-by-reciprocal are different roundings, and this quantity feeds
@@ -2027,10 +2027,10 @@ def gain_per_split(
     `GainPerSplit` inside `computeSplitKernel` and the host never sees a
     per-candidate gain. The first closure of 183 copied `status`,
     `n_total` and `acc_total` back per level -- `n_cells * (2 +
-    n_classes)` ints that their design never moves -- and formed the gain
+    n_classes)` ints that the reference never moves -- and formed the gain
     in `Float64` on the host. It was correct and it was the wrong shape,
     and the commit that introduced it argued "the cheaper fix moved less
-    code", which optimises for the porter rather than for the implementation.
+    code", which optimises for the author of the change rather than for the implementation.
 
     THIS FORM: the gain is computed here, in `Float32`, from their
     expression, and travels with the candidate into the reduction. The
@@ -2264,8 +2264,8 @@ def row_ids_sequence_kernel(
     THIS LANE BUILT IT AS A HOST `List` AND UPLOADED IT, once per tree.
     It could not be a wrong answer -- with `bootstrap=False` the value is
     the identity permutation and nothing is being decided -- but it is
-    one `n_rows` H2D copy per tree their design does not have, and rule 2
-    is about the SHAPE and not only about decisions. A mirror audit of
+    one `n_rows` H2D copy per tree the reference does not have, and rule 2
+    is about the SHAPE and not only about decisions. A reference audit of
     `doSplit` and `fit` found exactly three such drifts: the gain
     computed host-side (deviation 183, fixed), the feature sampler
     running host-side (deviation 195), and this one.
@@ -2546,7 +2546,7 @@ def sample_features_for_device[
     caller can see which arm ran and where.
 
     THE PRICE, stated: on a target without `double` the algo-L arm costs
-    one `work_items_size * k` H2D copy per level that their design does
+    one `work_items_size * k` H2D copy per level that the reference does
     not have. On CUDA and ROCm, where `double` exists, the same call
     takes the device kernel and the copy disappears -- the code is one
     source and the branch is a host-side capability query, never an
@@ -2749,7 +2749,7 @@ def make_level_workspace(
 ) raises -> LevelWorkspace:
     """`workspaceSize` + `assignWorkspace`, in one call.
 
-    `blocks` is `builder.cuh:230` transcribed:
+    `blocks` is `builder.cuh:230`:
     `1 + params.max_batch_size + dataset.n_sampled_rows / TPB_DEFAULT`.
     That is the bound because `n_blocks_dimx` is
     `sum_i ceil(count_i / tpb)` over the batch, `sum_i count_i <= n_rows`,
@@ -4037,7 +4037,7 @@ def train_forest_classification_device_timed(
     num_threads(n_streams)` over the tree loop, one CUDA stream per
     OpenMP thread (`randomforest.cuh:336-341`), n_streams=4 shipped.
     Metal has no streams (`ctx.create_stream()` is unsupported -- the
-    traps register), so their mechanism cannot be transcribed.
+    traps register), so their mechanism cannot be reproduced.
 
     OURS. The frontier batch itself spans trees. A `NodeWorkItem` never
     said which tree it belonged to -- the batch's tree id was a scalar

@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CatBoost's GPU random streams, implemented.
 
-FOLLOWS `catboost/cuda/cuda_util/kernel/random_gen.cuh` at `54a8143a`.
-Followed statement for statement.
+Reference: `catboost/cuda/cuda_util/kernel/random_gen.cuh` (CatBoost `54a8143a`).
 
 The generator is a pair of 16-bit multiply-with-carry streams packed into
 one u64 (`AdvanceSeed`), exactly as they wrote it; every kernel that draws

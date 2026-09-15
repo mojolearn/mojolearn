@@ -62,21 +62,9 @@
 name: Wheel CI
 
 on:
+  # No push trigger (Andrew, Sep 15 2026): CI is a light touch. This heavy check runs only by hand,
+  # on its schedule if it has one, or from the release workflow.
   workflow_dispatch:
-  push:
-    paths:
-      - "bindings/**"
-      - "packaging/**"
-      - "python/**"
-      - "CITATION.cff"
-      - "CHANGELOG.md"
-      - "tools/citation_metadata.py"
-      - "tools/docs_facts.py"
-      - ".github/workflows/wheel-ci.yml"
-      # The packaging tests live in tools/ but gate packaging/, so an edit to
-      # a test must trigger the job that runs it. packaging/** already covers
-      # the scripts they read.
-      - "tools/test_*.py"
 
 permissions: {}
 

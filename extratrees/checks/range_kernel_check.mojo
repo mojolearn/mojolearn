@@ -54,7 +54,7 @@ WHAT IS DELIBERATELY ADVERSARIAL ABOUT THE FIXTURE
 6. **Two NaN columns, built HERE and not in `fixtures.mojo`.** DEVIATION 150
    records that no fixture contains a missing value and DEVIATION 136 refuses
    NaN at the estimator boundary -- but `node_feature_min_max` HAS NaN
-   branches (`_partitioner.pyx:146-163`), the kernel transcribes them, and an
+   branches (`_partitioner.pyx:146-163`), the kernel implements them, and an
    unchecked branch is an unreached branch. Column 10 is NaN on a hash bit,
    scattered; column 11 is entirely NaN, which is the only column that
    reaches the all-missing sentinel of DEVIATION 163. `fixtures.mojo` is not
@@ -250,7 +250,7 @@ def main() raises:
 
     # ---------------------------------------------------------------------
     # The host oracle, per cell. `node_feature_min_max` is
-    # `_partitioner.pyx:129-165` transcribed, and it is the authority here.
+    # `_partitioner.pyx:129-165` restated, and it is the authority here.
     # ---------------------------------------------------------------------
     var dataset = Dataset(
         rebind[MutPointer[Float32, MutUntrackedOrigin]](flat.unsafe_ptr()),

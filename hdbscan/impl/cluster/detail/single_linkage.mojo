@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`build_mr_linkage`: the linkage in mutual reachability space.
 
-FOLLOWS `cuvs/cpp/src/cluster/detail/single_linkage.cuh::build_mr_linkage`
-(`:50-118`) at cuVS `94c2819`, the function `hierarchy/NOT_IMPLEMENTED.tsv` line
+Reference: `cuvs/cpp/src/cluster/detail/single_linkage.cuh::build_mr_linkage`
+(`:50-118`, cuVS `94c2819`), the function `hierarchy/NOT_IMPLEMENTED.tsv` line
 8 names as "HDBSCAN's linkage (core distances, mutual reachability), not
 single linkage's ... it is the ROADMAP's Phase 1 and would reuse this
 lane's mst_solver.mojo and agglomerative.mojo unchanged."
@@ -13,12 +13,12 @@ THAT CLAIM HELD. Nothing in `hierarchy/impl/sparse/solver/`,
 `hierarchy/impl/sparse/op/sort.mojo` or
 `hierarchy/checks/edge_order.mojo` was changed, copied or re-derived
 for this lane; they are IMPORTED. The one thing the claim did not say,
-and that this lane found, is that the GRAPH is not carried over: theirs
+and that this lane found, is that the GRAPH is not carried over: the reference's
 is a sparse k-NN COO whose MST is a forest, and the fix-up it needs is
 the part `hierarchy` records as NOT IMPLEMENTED. See DEVIATION 1600 in
 `hdbscan/checks/mutual_reachability_dense.mojo`.
 
-WHAT THEIR FUNCTION DOES, STEP FOR STEP (`:62-117`), AND WHAT OURS DOES
+WHAT THE REFERENCE FUNCTION DOES, STEP FOR STEP (`:62-117`), AND WHAT THIS ONE DOES
   `:64-79`   `mutual_reachability_graph(...)` -> indptr, core_dists, COO
              OURS: `compute_core_dists` (their `compute_knn` +
              `core_distances`, unchanged) then the DENSE transform,
@@ -212,10 +212,10 @@ def build_mr_linkage(
     # kernel writes temp_src[tid] = tid with the mutual-add tie broken on a
     # COLOR comparison, not a vertex one.
     #
-    # THERE IS NOTHING TO IMPLEMENTATION HERE. Their colors come from a round whose
+    # THERE IS NOTHING TO MATCH HERE. The reference colors come from a round whose
     # min-edge tie is a cuRAND draw (DEVIATION 620) feeding a sort documented
     # unstable (DEVIATION 621), so their condensed-tree numbering varies run
-    # to run on one GPU. An artifact is not a rule, and we cannot transcribe
+    # to run on one GPU. An artifact is not a rule, and we cannot reproduce
     # one. We therefore CHOOSE, and record the choice here.
     #
     # OURS. Left is the lower vertex index. condense.cuh:156-160 numbers with

@@ -226,7 +226,7 @@ def update_partition_sizes_kernel(
     sorted_bins: MutPointer[UInt32, MutAnyOrigin],
     size_in: Int32,
 ):
-    """`UpdatePartitionSizes` (`cuda_util/kernel/partitions.cu:14-38`), transcribed. **It READS `parts[b].Offset`, so the offsets kernel must have run first.** `Size` is computed as a difference against the offset, not counted."""
+    """`UpdatePartitionSizes` (`cuda_util/kernel/partitions.cu:14-38`). **It READS `parts[b].Offset`, so the offsets kernel must have run first.** `Size` is computed as a difference against the offset, not counted."""
     var size = Int(size_in)
     var part_count = UInt32(Int(part_count_in))
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -382,7 +382,7 @@ def update_bins_from_compressed_index_kernel(
     depth: UInt32,
     bins: MutPointer[UInt32, MutAnyOrigin],
 ):
-    """`UpdateBinsFromCompressedIndexImpl` (`gpu_data/kernel/split.cu:179-201`), transcribed."""
+    """`UpdateBinsFromCompressedIndexImpl` (`gpu_data/kernel/split.cu:179-201`)."""
     var size = Int(size_in)
     var value = bin_idx << feature_shift
     var mask = feature_mask << feature_shift

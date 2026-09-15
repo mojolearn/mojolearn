@@ -1806,7 +1806,7 @@ comptime FKNN_SMEM_BYTES = (FKNN_SMEM_PAGE_X + FKNN_SMEM_PAGE_Y) * 4
 
 
 def check_launch_config_values() raises:
-    """`launch_config_generator` at pinned inputs, against hand-transcribed
+    """`launch_config_generator` at pinned inputs, against hand-computed
     evaluations of `pairwise_distance_base.cuh:308-319` with the M4 numbers
     (10 cores x 12 blocks of 256 threads = minGridSize 120).
 

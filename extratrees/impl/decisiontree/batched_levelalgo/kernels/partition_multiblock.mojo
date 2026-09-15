@@ -9,8 +9,8 @@ THEIRS. `launchNodeSplitKernel` is `<<<work_items_size, TPB>>>`
 (`builder_kernels_impl.cuh:109-134`): ONE BLOCK PER NODE, and inside it
 `partitionSamples` (`:43-88`) walks two cursors down the node's range
 swapping misfits in pairs. `node_split_kernel` in
-`builder_kernels_impl.mojo` is that, transcribed, and DEVIATION 177
-recorded the shape as theirs and kept it.
+`builder_kernels_impl.mojo` is that, and DEVIATION 177
+recorded the shape as the reference's and kept it.
 
 WHY IT IS BEING CHANGED, MEASURED. That grid has `n_nodes` blocks, and
 the root level has ONE node. On covtype at 581,012 rows the root's

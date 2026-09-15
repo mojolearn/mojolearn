@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The row-sampling draws: Bayesian, Bernoulli and Poisson.
 
-FOLLOWS `BayesianBootstrapImpl` (`catboost/cuda/cuda_util/kernel/
+Reference: `BayesianBootstrapImpl` (`catboost/cuda/cuda_util/kernel/
 bootstrap.cu:35-49`), `UniformBootstrapImpl` (`:51-62`) and
 `PoissonBootstrapImpl` (`:7-19`), and the weight application around them
 (`gpu_data/bootstrap.h`: `BootstrappedWeights` fills ones, `Bootstrap`
@@ -70,7 +70,7 @@ a ones buffer, then `MultiplyVector` twice (der, weights). Ours folds the
 two multiplies into the draw loop -- the draw stream is UNCHANGED (same
 grid shape, same per-thread seed sequence, one draw per row) -- and, when
 the build quantizes (`fixed_point.mojo`), accumulates the two plane
-magnitudes their design never needs: the bootstrapped plane is what the
+magnitudes the reference never needs: the bootstrapped plane is what the
 histogram accumulates, a Bayesian weight reaches ~46 at the tail of
 `-log(u + 1e-20)`, and a scale bounded by the UN-bootstrapped magnitudes
 would overflow Int32 silently. Same block-reduce-plus-one-atomicAdd shape

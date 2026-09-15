@@ -4,8 +4,8 @@
 
 Profile `mojolearn.identical.cholesky.fp32.v1`. `A = L L^T` in place, lower
 triangular, row-major, contiguous. cuSOLVER's `potrf` with `uplo = LOWER`,
-except that there is no cuSOLVER source to follow statement for statement (DEVIATION 1631) so
-nothing here is an implementation and this file says so rather than citing a line
+except that there is no cuSOLVER source to read (DEVIATION 1631), so
+nothing here cites a reference line and this file says so rather than citing a line
 number it cannot have.
 
 **NO REFERENCE FILE.** cuML and cuVS do not implement Cholesky. Every Cholesky in
@@ -14,13 +14,13 @@ scann_avq.cuh:179-200` (`potrf` then `potrs`) is the only factorization from
 scratch in the two trees, and `cuml/src/solver/lars_impl.cuh:315-320` reaches
 RAFT's rank-one UPDATE, which is itself three cuBLAS calls around a host
 `std::sqrt`. cuSOLVER and cuBLAS are CLOSED; `archive/reference/VENDOR_LIBS.md`'s surviving
-exception says call the platform equivalent because there is nothing to implement,
+exception says call the platform equivalent because there is no source to read,
 and `IDENTITY_PATHS.md`'s opening rule says a mode has three moves. There is
 no MAX `potrf` to call, so the move here is not REPLACE-with-a-vendor-call
 and it is not REFUSE. It is: write the factorization with every numeric
 decision named, which is what this file is.
 
-The one thing in the RAPIDS trees that IS portable source and IS mirrored is
+The one thing in the RAPIDS trees that IS portable source and IS implemented here is
 `raft/linalg/detail/cholesky_r1_update.cuh`; it lives under
 `cholesky/impl/`.
 

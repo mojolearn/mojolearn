@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ScanVector` over `ui32`: the unsegmented device-wide prefix sum.
 
-FOLLOWS `catboost/cuda/cuda_util/kernel/scan.cu:10-19` (`NKernel::ScanVector`)
+Reference: `catboost/cuda/cuda_util/kernel/scan.cu:10-19` (`NKernel::ScanVector`)
 reached from `cuda_util/scan.h:14-60` (`TScanVectorKernel`, the
-`IsNonNegativeSegmentedScan == false` arm at `:52-58`) at CatBoost `54a8143a`.
+`IsNonNegativeSegmentedScan == false` arm at `:52-58`) (CatBoost `54a8143a`).
 
-Theirs is two lines:
+The reference is two lines:
 
     if (inclusive) return cub::DeviceScan::InclusiveSum(..., input, output, size, ...);
     else           return cub::DeviceScan::ExclusiveSum(..., input, output, size, ...);

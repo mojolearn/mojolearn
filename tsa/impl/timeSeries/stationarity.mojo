@@ -2,17 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The batched KPSS stationarity test (Kwiatkowski et al. 1992).
 
-FOLLOWS `cuml/cpp/src_prims/timeSeries/stationarity.cuh` at cuML 265b9da6
-(v26.08.00): `s2B_accumulation_kernel` (:81-102),
+Reference: `cuml/cpp/src_prims/timeSeries/stationarity.cuh` (cuML 265b9da6,
+v26.08.00): `s2B_accumulation_kernel` (:81-102),
 `kpss_stationarity_check_kernel` (:121-160), `_kpss_test` (:191-281),
 `kpss_test` (:300-336). The RAFT primitives that file
 calls -- `raft::stats::mean`, `raft::linalg::matrixVectorOp`,
 `raft::linalg::reduce` (sum, and sum of `L2Op` squares),
 `thrust::inclusive_scan_by_key` -- are written here at their call sites,
-as `core/column_stats.mojo` does for `pca_fit`; RAFT is not mirrored file
-for file in this tree.
+as `core/column_stats.mojo` does for `pca_fit`; this tree has no file per
+RAFT file.
 
-THE ALGORITHM, in their order (`stationarity.cuh:205-280`):
+THE ALGORITHM, in the reference order (`stationarity.cuh:205-280`):
 
     y_means[b]  = sum_t y[b,t] * (1/n)                    raft::stats::mean
     y_cent      = y - y_means[b]                           matrixVectorOp
@@ -27,15 +27,15 @@ THE ALGORITHM, in their order (`stationarity.cuh:205-280`):
     pvalue      = table 1 of the paper, linearly interpolated
     result[b]   = pvalue > pval_threshold
 
-Layout is theirs: column-major, series in columns, series `b` contiguous at
-`[b*n, (b+1)*n)`. Precision: their `DataT` is `float` or `double`; this is
+Layout: column-major, series in columns, series `b` contiguous at
+`[b*n, (b+1)*n)`. Precision: the reference `DataT` is `float` or `double`; this is
 the `float` instantiation (`stationarity.pyx:93`), and `double` is not
 offered because Metal has no Float64 (`arima/README.md`, DEVIATION 670).
 
 =============================================================================
 DEVIATION 671: THE FOLDS AND THE SCAN HAVE ONE SHAPE ON EVERY VENDOR
 =============================================================================
-THEIRS. Every per-series sum above is `raft::linalg::reduce<false,false>`
+REFERENCE. Every per-series sum above is `raft::linalg::reduce<false,false>`
 -> `coalescedReduction` (`raft/linalg/detail/coalesced_reduction-inl.cuh`),
 whose `add_op` arm is `coalescedSumThinKernel` for `n_obs <= 512` (and for
 larger `n_obs` when `batch_size >= 16 * numSMs`), else the CUB
@@ -49,7 +49,7 @@ warp width AND of the SM count (`coalescedReduction`'s dispatch reads
 decoupled-look-back scan, whose association tree is a function of the
 Thrust tile size and the block count.
 
-OURS. One block of `STATS_TPB` threads per series; thread `t` folds
+HERE. One block of `STATS_TPB` threads per series; thread `t` folds
 elements `t, t + STATS_TPB, ...` serially ascending (`x*x + acc` is one
 `identical_mul_add` under IDENTICAL), then `core/pinned_reduce.
 pinned_block_sum` -- `block.sum` under FAST, a lane-width-independent
@@ -70,11 +70,11 @@ so the gate has teeth.
 =============================================================================
 DEVIATION 672: 0/0 IN THE STATISTIC IS DEFINED, NOT COMPUTED
 =============================================================================
-THEIRS. A series that is constant after differencing has `y_cent == 0`
+REFERENCE. A series that is constant after differencing has `y_cent == 0`
 everywhere, so `s2A = s2B = eta = 0` and `kpss_stat = 0/0 = NaN`
 (`stationarity.cuh:144`); every `>=`/`<` on NaN is false, so `pvalue`
 keeps its seed `0.10` and the series is declared STATIONARY.
-OURS. The same DECISION, reached without a computed NaN: when
+HERE. The same DECISION, reached without a computed NaN: when
 `s2A/n + s2B == 0` the statistic is set to `0.0`, which interpolates to
 the same `pvalue = 0.10` (`0.0 < crit_vals[0]`, no branch taken). The
 statistic is a RECORDED STAGE of the card (`tsa.stat`) and a NaN payload

@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Cluster stabilities, and the two reductions that decide them.
 
-FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/detail/stabilities.cuh`
+Reference: `cuml-v26.08.00/cpp/src/hdbscan/detail/stabilities.cuh`
 (cuML `265b9da`): `compute_stabilities` (`:49-137`) and
 `get_stability_scores` (`:153-200`), plus
 `detail/kernels/stabilities.cuh::stabilities_functor` (`:22-49`).
-Followed statement for statement, their order, with two declared replacements.
+Steps run in the reference order, with two declared replacements.
 
 ======================================================================
 THE STABILITY SUM IS A SUMMATION ORDER. (IDENTITY hazard 3, second half.)

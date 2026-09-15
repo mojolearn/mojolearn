@@ -2314,7 +2314,7 @@ leg_diff_cards() {
 # destroy -- an orphan MI325X found by hand nineteen minutes later. Its
 # answer was a DETACHED dead-man armed BEFORE the create and keyed by NAME
 # rather than by an id the script might never learn. This is that answer,
-# ported to RunPod and to this file's key discipline.
+# adapted to RunPod and to this file's key discipline.
 #
 # THREE LAYERS, FAILING DIFFERENTLY:
 #   1. the on-pod watchdog. Survives this Mac entirely -- power, sleep,
@@ -2497,7 +2497,7 @@ leg_preflight() {
     tools/runpod_guard.sh list 2>&1 | sed 's/^/    /' || true
     _live=$(tools/runpod_guard.sh list 2>/dev/null | grep -c 'min left' || true)
     if [ "${_live:-0}" -gt 0 ] && [ "${LEG_ALLOW_CONCURRENT:-0}" = "1" ]; then
-        # DEVIATION 2210 (ported from the grid branch): --allow-concurrent covers
+        # DEVIATION 2210 (carried over from the grid branch): --allow-concurrent covers
         # recorded leases as well as pods; each leg terminates by its own pod id
         # and arms its own dead-man, and the caller owns confirming every lease
         # is gone.

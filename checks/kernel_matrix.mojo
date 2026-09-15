@@ -489,7 +489,7 @@ def column_shared_limit(column: Int) -> Int:
     if column == COLUMN_TRAINIUM:
         # The identical reading, not a vendor budget. An NKI kernel computes
         # in SBUF ("On-chip scratchpad SRAM that serves as a software-managed
-        # cache"); the per-partition size is not transcribed here, and no
+        # cache"); the per-partition size is not recorded here, and no
         # build compiles this row.
         return IDENTITY_FLOOR_SHARED_BYTES
     return IDENTITY_FLOOR_SHARED_BYTES  # BIT_IDENTICAL: frozen, not derived
@@ -1246,7 +1246,7 @@ def lib_gemm_kernel_body_for[column: Int]() -> Int:
 
 
 def lib_gemm_block_parallelism_trial_for[column: Int]() -> Int:
-    """SCHEDULING row (DEVIATION 2595, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 10): the `S` the `ksplit` TRIAL arm reads, so a leg can still force the arm on a column whose shipped row is 0. The shipped row wherever it is above 0 (NVIDIA 132, so the arm and the default split identically there). AMD 110, from a READING, not a measurement (DEVIATION 2591): the attention brief section 11.1 transcribes 110 CUs (pinned to the MI250X; the MI325X and MI300X counts are not in the repository) and resident blocks per CU as `min(2048 // 256, 65536 // page bytes)`; the shipped 128x128 GEMM block holds two 20,480 B pages (40,960 B), so one block per CU and 110 side by side. The MI300X leg's CONTROL pair `ctl_nt_1536x1408x768` / `ctl_nt_1664x1408x768` (`bench/gemm_step_price_main.mojo`) reads the real value. Every other column 0, meaning no reading: the arm then takes the finest split the workspace cap allows. The shipped build reads it nowhere."""
+    """SCHEDULING row (DEVIATION 2595, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 10): the `S` the `ksplit` TRIAL arm reads, so a leg can still force the arm on a column whose shipped row is 0. The shipped row wherever it is above 0 (NVIDIA 132, so the arm and the default split identically there). AMD 110, from a READING, not a measurement (DEVIATION 2591): the attention brief section 11.1 records 110 CUs (pinned to the MI250X; the MI325X and MI300X counts are not in the repository) and resident blocks per CU as `min(2048 // 256, 65536 // page bytes)`; the shipped 128x128 GEMM block holds two 20,480 B pages (40,960 B), so one block per CU and 110 side by side. The MI300X leg's CONTROL pair `ctl_nt_1536x1408x768` / `ctl_nt_1664x1408x768` (`bench/gemm_step_price_main.mojo`) reads the real value. Every other column 0, meaning no reading: the arm then takes the finest split the workspace cap allows. The shipped build reads it nowhere."""
     comptime shipped = lib_gemm_block_parallelism_for[column]()
     if shipped > 0:
         return shipped

@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`UpdatePartitionOffsets`: sorted bins to per-bin start offsets.
 
-FOLLOWS `catboost/cuda/cuda_util/kernel/partitions.cu` at CatBoost
-`54a8143a` -- the `TVecOffsetWriter` arm of `UpdatePartitionOffsets`
+Reference: `catboost/cuda/cuda_util/kernel/partitions.cu` (CatBoost
+`54a8143a`), the `TVecOffsetWriter` arm of `UpdatePartitionOffsets`
 (`:81-107`, kernel) and the `ui32*` entry that dispatches it (`:155-176`).
 The `TPartitionOffsetWriter` arm (writing `TDataPartition` records for the
 tree learner) has no caller in this implementation and is NOT IMPLEMENTED YET; the tree

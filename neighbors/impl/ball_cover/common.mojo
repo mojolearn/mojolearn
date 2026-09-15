@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random ball cover: the distance functors and the sort comparator.
 
-FOLLOWS `cuvs/src/neighbors/ball_cover/registers_types.cuh` (the `DistFunc`
-family) and `cuvs/src/neighbors/ball_cover/common.cuh` (`NNComp`) at cuVS
-`94c2819`. Followed statement for statement.
+Reference: `cuvs/src/neighbors/ball_cover/registers_types.cuh` (the `DistFunc`
+family) and `cuvs/src/neighbors/ball_cover/common.cuh` (`NNComp`) (cuVS
+`94c2819`).
 
-WHICH FUNCTOR ACTUALLY SHIPS, READ FROM THEIR CODEGEN
+WHICH FUNCTOR ACTUALLY SHIPS, READ FROM THE REFERENCE CODEGEN
 -----------------------------------------------------
 `src/neighbors/ball_cover/detail/ball_cover/registers_00_generate.py:116,148`
 instantiates `rbc_eps_pass` for exactly ONE combination:

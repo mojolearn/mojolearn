@@ -64,7 +64,7 @@ WHAT IS IN HERE
    expected quantities returned as DATA (`AnalyticFixture`), not as prose, so a
    later check can compare per cell.
 4. `partition` / `feature_min_max` / `is_constant_feature` -- the reference
-   predicates transcribed from the files cited above, so every check in this
+   predicates restated from the files cited above, so every check in this
    lane computes "what sklearn would say" the same way.
 
 THE ANALYTIC FIXTURES, IN CLOSED FORM
@@ -386,7 +386,7 @@ struct PartitionStats(Copyable, Movable):
 
 
 # ----------------------------------------------------------------------------
-# The reference predicates, transcribed from the cited lines
+# The reference predicates, restated from the cited lines
 # ----------------------------------------------------------------------------
 def feature_min_max(data: Dataset, col: Int) -> MinMax:
     """`_partitioner.pyx:129-165`, over ALL rows (a fixture is one node).

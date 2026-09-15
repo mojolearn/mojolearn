@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run this port's checks on a rented NVIDIA or AMD GPU.
+# Run this repository's checks on a rented NVIDIA or AMD GPU.
 #
 #   tools/remote_gpu.sh <user@host> [nvidia|amd]
 #
@@ -12,7 +12,7 @@
 # about those columns is currently ARITHMETIC, not a measurement, and the
 # matrix says so.
 #
-# That matters more here than it would elsewhere, because two of the port's
+# That matters more here than it would elsewhere, because two of the library's
 # deviations are justified by cross-vendor reasoning that has never run on
 # another vendor:
 #

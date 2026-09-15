@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Spectral clustering on the GPU, mirroring cuML's `SpectralClustering`.
+"""Spectral clustering on the GPU. Reference: cuML's `SpectralClustering`.
 
 The estimator is `SpectralClustering`. It is backed by `spectral/`, which
 implements cuML 26.08's `ML::SpectralClustering::fit_predict` down through
@@ -45,7 +45,7 @@ DEFAULT_SEED = 0
 def _coo_triples(A):
     """A precomputed affinity matrix as `(rows, cols, vals, n)` int32/float32.
 
-    Mirrors cuML's `spectral_clustering.pyx:306-312`, which accepts scipy or
+    Same behavior as cuML's `spectral_clustering.pyx:306-312`, which accepts scipy or
     cupy sparse in COO/CSR/CSC and calls `sp.coo_matrix(X)` on a dense
     input. Converting a dense matrix through COO DROPS EXACT ZEROS, which is
     theirs and is also what makes a dense input usable at all.
@@ -111,9 +111,9 @@ def _coo_triples(A):
 
 
 class SpectralClustering:
-    """Spectral clustering, mirroring cuML 26.08's `SpectralClustering`.
+    """Spectral clustering. Reference: cuML 26.08's `SpectralClustering`.
 
-    The pipeline is cuVS's: build a kNN connectivity graph (or take a
+    The pipeline (as in cuVS): build a kNN connectivity graph (or take a
     precomputed affinity matrix), form the NORMALIZED graph Laplacian,
     negate it, take the `n_components` largest algebraic eigenpairs of the
     negation with a thick-restart Lanczos, and run k-means on the resulting
@@ -201,7 +201,7 @@ class SpectralClustering:
     claimed five constants as this implementation's own: `ncv = min(n - k, max(2k+1,
     20))`, `max_iterations = 10 * n_samples`, the plumbed `tolerance`, the
     Jacobi sweep cap, and the `ncv` admissibility bound. THREE OF THE FIVE
-    WERE STRUCK on 2026-08-23. They are VERBATIM cuVS 26.08, down to the
+    WERE STRUCK on 2026-08-23. They are IDENTICAL to cuVS 26.08, down to the
     message string of the `RAFT_EXPECTS`; the claim was made while only a
     cuVS 25.08 checkout existed on the machine, and 25.08 spells them as
     literals. What remains ours is the host Jacobi's 60-sweep cap and this

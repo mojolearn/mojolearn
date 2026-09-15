@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Assign features to grouping policies and lay out the compressed index.
 
-FOLLOWS the layout half of
-`catboost/cuda/gpu_data/compressed_index_builder.h` at CatBoost `54a8143a`.
+Reference: the layout half of
+`catboost/cuda/gpu_data/compressed_index_builder.h` (CatBoost `54a8143a`).
 
 **This is the step that makes a MIXED dataset work**, and its absence is why
 this implementation's tree loop has only ever handled uniform binary features. Given a

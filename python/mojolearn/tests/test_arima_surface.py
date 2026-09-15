@@ -38,7 +38,7 @@ answer that is wrong the same way everywhere. Two arms are not:
     RECOVERY   the series are GENERATED from known coefficients, in this
                file, so the right answer existed before any of this code
                ran. It is the same generator `tsa/checks/fixtures.mojo`
-               uses, transcribed, at the same length and the same salt the
+               uses, restated, at the same length and the same salt the
                lane's own recovery gate uses, so a failure here and a
                failure there are the same failure.
     FORECAST   an AR(1) forecast has NO INNOVATION IN IT. The h-step

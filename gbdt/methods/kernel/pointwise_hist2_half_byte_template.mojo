@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TPointHistHalfByte<BlockSize>`: ONE accumulator, TWO kernels.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_half_byte_template.cuh`
-at CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_hist2_half_byte_template.cuh`
+(CatBoost `54a8143a`).
 
 This is the pointwise family's small-bin accumulator, and the thing to know
 before reading either kernel that uses it is that **there is only one of it**.
@@ -137,9 +137,9 @@ struct PointHistHalfByte[origin: MutOrigin](PointHist2):
     ):
         """Their constructor (`:26-34`).
 
-        NOTE THE ORDER: theirs zeroes, then `__syncthreads()`, then sets
+        NOTE THE ORDER: the reference zeroes, then `__syncthreads()`, then sets
         `Buffer`. The one-byte accumulators set `Buffer` before the sync.
-        Same effect, transcribed as written.
+        Same effect, kept in the reference order.
         """
         comptime assert PW_HB_BLOCK >= 512, (
             "TPointHistHalfByte::Reduce folds the warp slices under"

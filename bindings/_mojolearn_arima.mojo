@@ -52,7 +52,7 @@ reachable from every caller and not only from Python:
     r > 5                `validate_order`, cuML's Schur Lyapunov solver
     d + D > 2, s < 2,
     p q P Q > 8,
-    an empty order       `validate_order`, in cuML's own words
+    an empty order       `validate_order`, with the reference's message
     a non-finite series  `batched_arima.mojo::_refuse_non_finite`, with the
                          flat index of the offender
     float64              by dtype, DEVIATION 670. Metal exposes no Float64

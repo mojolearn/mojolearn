@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """LSD radix sort over `(bin, permutation position)`: their `ReorderBins`.
 
-FOLLOWS the path `TCtrBinBuilder` takes to put the rows in CTR order,
+Reference: the path `TCtrBinBuilder` takes to put the rows in CTR order,
 `catboost/cuda/ctrs/ctr_bins_builder.h:223`:
 
     GatherWithMask(Bins, DecompressedTempBins, Indices, Mask, Stream);

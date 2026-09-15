@@ -12,7 +12,7 @@ identical inputs. There is nothing accumulated to blame.
 
 This script removes the GPU, the implementation and Mojo from the question entirely. It
 recomputes the ROOT split in numpy directly from the oracle's own data, using
-the formulas transcribed from `catboost/cuda/methods/kernel/score_calcers.cuh`,
+the formulas in `catboost/cuda/methods/kernel/score_calcers.cuh`,
 and prints the argmax for each score function in float64 and float32.
 
 WHAT IT ESTABLISHES, and the L2 line is the important one
