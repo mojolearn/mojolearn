@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_gbdt` family, GradientBoosting on the
 gbdt-symmetric, gbdt-rmse, gbdt-depthwise and gbdt-lossguide lanes
-(workstream E batch 3, 2026-09-14; brief
+(workstream E batch 3, 2026-09-14) and the gbdt-nan-modes, gbdt-adapter-clf
+and gbdt-adapter-reg lanes (lane/cpu-training-gbdt-losses, 2026-09-15; brief
 docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 gbdt and the batch
 3 sections). `loss="RMSE"` fits through
 `gbdt/host/gbdt_oracle_rmse.mojo::gbdt_rmse_host_fit`.
@@ -25,13 +26,22 @@ THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for what this covers, so
 counted class-weight tail and optional float tail, the same four strings,
 the same five-element return), `gbdt_predict` and `gbdt_model_dim` (the
 model text in, as `bindings/_mojolearn_gbdt.mojo:410-450`), `gbdt_sigmoid`
-(its body), `gbdt_vendor` answering "cpu" and `gbdt_numeric_mode`.
+(its body), `gbdt_binary_probabilities` and `gbdt_binary_classes` (the
+classifier adapter's transforms, `bindings/_mojolearn_gbdt.mojo:107-130`
+over `gbdt/binary_prediction.mojo`'s kernel, restated per element),
+`gbdt_vendor` answering "cpu" and `gbdt_numeric_mode`.
 
 ABSENT, and so refused BY NAME through `_HostBinding`: `gbdt_predict_multi`
 (a multi-dimensional model), `gbdt_fit_ordered_rmse`,
-`gbdt_fit_two_level_feature_freq`, `gbdt_binary_probabilities` and
-`gbdt_binary_classes` (the adapters' device transforms),
-`gbdt_per_round_paths` and the two `*_parallel_available` probes.
+`gbdt_fit_two_level_feature_freq`, `gbdt_per_round_paths` and the two
+`*_parallel_available` probes.
+
+NaN IN X. The oracle's grid places the NaN border (`nan_mode` Min or Max,
+`_calc_quantization_phase_b`) and `_binarize_columns` substitutes the value
+before binning, which is the device fit's order, so an X carrying NaN trains
+through the same entries on SymmetricTree with Logloss (the gbdt-nan-modes
+lane). Under RMSE or a non-symmetric policy NaN is unmeasured and still
+refused by name.
 
 REFUSED BY NAME INSIDE `gbdt_fit`, with the sentence
 `cpu_identity_gate_check.py` requires ("no CPU implementation of"), every
@@ -58,7 +68,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_name,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, identical_exp64
+from checks.numerics import GLOBAL_NUMERIC_MODE, ftz, identical_exp64, identical_sigmoid
 from core.gbdt_host_predict import gbdt_host_predict
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_FALSE,
@@ -152,10 +162,11 @@ def _refuse(what: String) raises:
     raise Error(
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
         + "; the gbdt host binding trains the gbdt-symmetric, gbdt-rmse,"
-        " gbdt-depthwise and gbdt-lossguide lanes only (SymmetricTree with"
-        " Logloss or RMSE and Cosine, Depthwise with Logloss and Cosine,"
-        " Lossguide with Logloss and NewtonL2, Newton leaves, no bootstrap,"
-        " weights, categoricals, eval set or NaN), see"
+        " gbdt-depthwise, gbdt-lossguide, gbdt-nan-modes, gbdt-adapter-clf"
+        " and gbdt-adapter-reg lanes only (SymmetricTree with Logloss or RMSE"
+        " and Cosine, Depthwise with Logloss and Cosine, Lossguide with"
+        " Logloss and NewtonL2, Newton leaves, no bootstrap, weights,"
+        " categoricals or eval set), see"
         " gbdt/host/gbdt_oracle.mojo, gbdt/host/gbdt_oracle_rmse.mojo and"
         " gbdt/host/gbdt_oracle_depthwise.mojo"
     )
@@ -439,41 +450,48 @@ def gbdt_fit_binding(
     var best_iteration = 0
     var stopped_early = False
     var has_nan = False
-    with GILReleased(Python()):
-        var x = read_f32(x_address, n_rows * n_features)
+    if is_rmse or grow_code != 0:
+        # NaN is measured on the symmetric Logloss fit only (gbdt-nan-modes)
+        var xs = f32_ptr(x_address)
         for i in range(n_rows * n_features):
-            if x[i] != x[i]:
+            var v = xs.unsafe_load(i)
+            if v != v:
                 has_nan = True
                 break
-        if not has_nan:
-            var y = read_f32(y_address, n_rows)
-            if is_rmse:
-                # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:
-                # 1597-1600`): unset is True for RMSE
-                var fit = gbdt_rmse_host_fit(
-                    x, y, n_rows, n_features, p, boost_from_average != 0
-                )
-                text = gbdt_rmse_host_model_text(fit)
-                losses = fit.model.losses.copy()
-                best_iteration = fit.model.best_iteration
-                stopped_early = fit.model.stopped_early
-            elif grow_code == 0:
-                var model = gbdt_host_fit(x, y, n_rows, n_features, p)
-                text = gbdt_host_model_text(model)
-                losses = model.losses.copy()
-                best_iteration = model.best_iteration
-                stopped_early = model.stopped_early
-            else:
-                # Depthwise and Lossguide: gbdt/host/gbdt_oracle_depthwise.mojo
-                var tp = GbdtHostTreeParams(
-                    p, grow_code, ns_max_leaves, Float64(min_data_in_leaf),
-                    score_function,
-                )
-                var ns_model = gbdt_host_fit_non_symmetric(x, y, n_rows, n_features, tp)
-                text = gbdt_host_ns_model_text(ns_model)
-                losses = ns_model.losses.copy()
     if has_nan:
-        _refuse("an X carrying NaN (the nan_mode Min and Max arms)")
+        _refuse(
+            "an X carrying NaN under loss='RMSE' or grow_policy code "
+            + String(grow_code) + " (NaN is measured on SymmetricTree with"
+            " Logloss only, the gbdt-nan-modes lane)"
+        )
+    with GILReleased(Python()):
+        var x = read_f32(x_address, n_rows * n_features)
+        var y = read_f32(y_address, n_rows)
+        if is_rmse:
+            # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:
+            # 1597-1600`): unset is True for RMSE
+            var fit = gbdt_rmse_host_fit(
+                x, y, n_rows, n_features, p, boost_from_average != 0
+            )
+            text = gbdt_rmse_host_model_text(fit)
+            losses = fit.model.losses.copy()
+            best_iteration = fit.model.best_iteration
+            stopped_early = fit.model.stopped_early
+        elif grow_code == 0:
+            var model = gbdt_host_fit(x, y, n_rows, n_features, p)
+            text = gbdt_host_model_text(model)
+            losses = model.losses.copy()
+            best_iteration = model.best_iteration
+            stopped_early = model.stopped_early
+        else:
+            # Depthwise and Lossguide: gbdt/host/gbdt_oracle_depthwise.mojo
+            var tp = GbdtHostTreeParams(
+                p, grow_code, ns_max_leaves, Float64(min_data_in_leaf),
+                score_function,
+            )
+            var ns_model = gbdt_host_fit_non_symmetric(x, y, n_rows, n_features, tp)
+            text = gbdt_host_ns_model_text(ns_model)
+            losses = ns_model.losses.copy()
 
     var learn = Python.list()
     for i in range(len(losses)):
@@ -874,6 +892,60 @@ def gbdt_sigmoid_binding(
     return PythonObject(count)
 
 
+def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
+    raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`gbdt_binary_prediction_binding` (`bindings/_mojolearn_gbdt.mojo:
+    107-130`), the GradientBoostingClassifier adapter's two transforms, with
+    the same checks in the same words. The body is
+    `gbdt/binary_prediction.mojo::binary_prediction_kernel` restated per
+    element on the host: the probability pair
+    `[ftz(1 - p), p]` with `p = ftz(identical_sigmoid(ftz(margin)))`, and the
+    class code from the margin's sign and magnitude bits (strict raw > 0,
+    so a positive subnormal margin is class one on every column)."""
+    if len(params) != 1:
+        raise Error("binary prediction: params must contain n")
+    var n = Int(py=params[0])
+    if n <= 0 or n > 2147483647:
+        raise Error("binary prediction: positive n<=Int32.max required")
+    var rp = f32_ptr(Int(py=raw_addr))
+    var address = Int(py=out_addr)
+    if address == 0:
+        raise Error("binary prediction: null output")
+    var op = MutPointer[Scalar[dtype], MutUntrackedOrigin](unsafe_from_address=address)
+    # `binary_prediction_host`'s own refusal (`gbdt/binary_prediction.mojo:47-50`)
+    for i in range(n):
+        if not isfinite(rp.unsafe_load(i)):
+            raise Error("binary prediction: finite Float32 margins required")
+    var count = 2 * n if probabilities else n
+    with GILReleased(Python()):
+        for i in range(n):
+            var margin = rp.unsafe_load(i)
+            comptime if probabilities:
+                var positive = ftz(identical_sigmoid(ftz(margin)))
+                op.unsafe_store(2 * i, Scalar[dtype](ftz(Float32(1) - positive)))
+                op.unsafe_store(2 * i + 1, Scalar[dtype](positive))
+            else:
+                var bits = bitcast[DType.uint32](margin)
+                var is_positive = (bits & UInt32(0x80000000)) == 0 and (bits & UInt32(0x7fffffff)) != 0
+                op.unsafe_store(i, Scalar[dtype](Int32(1) if is_positive else Int32(0)))
+    return PythonObject(count)
+
+
+def gbdt_binary_probabilities_binding(
+    raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`[1 - p, p]` per margin, Float32 (see `gbdt_binary_prediction_binding`)."""
+    return gbdt_binary_prediction_binding[True, DType.float32](raw_addr, out_addr, params)
+
+
+def gbdt_binary_classes_binding(
+    raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """The Int32 class code per margin (see `gbdt_binary_prediction_binding`)."""
+    return gbdt_binary_prediction_binding[False, DType.int32](raw_addr, out_addr, params)
+
+
 @export
 def PyInit__mojolearn_gbdt_host() abi("C") -> PythonObject:
     try:
@@ -888,6 +960,8 @@ def PyInit__mojolearn_gbdt_host() abi("C") -> PythonObject:
         module.def_function[gbdt_predict_binding]("gbdt_predict")
         module.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         module.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
+        module.def_function[gbdt_binary_probabilities_binding]("gbdt_binary_probabilities")
+        module.def_function[gbdt_binary_classes_binding]("gbdt_binary_classes")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_gbdt_host: ", error))

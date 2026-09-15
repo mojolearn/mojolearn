@@ -300,6 +300,20 @@ TRAINING_LANE_NAMES = {
     # Gate run 34900811380, as above.
     "gbdt-depthwise": "gradient boosting on depthwise trees with the Logloss loss",
     "gbdt-lossguide": "gradient boosting on lossguide trees with the Logloss loss",
+    # CPU training for more GBDT lanes (lane/cpu-training-gbdt-losses,
+    # 2026-09-15), from the same binding. nan_mode Min and Max on an X that
+    # carries NaN: the oracle's grid already placed the NaN border and
+    # substituted the value, and the binding refused the NaN by name only.
+    # The two sklearn-style adapters: the regressor is RMSE at the adapter's
+    # defaults and needed no change; the classifier is Logloss plus the
+    # adapter's binary probability and class transforms, restated per
+    # element in the binding (gbdt/binary_prediction.mojo's kernel). On the
+    # M4's CPU column (one core) all 27 train, 36 infer and model and 27
+    # batch cells read IDENTICAL x4 against the 166-lane record, and the
+    # sabotage build DIVERGENT on every one of them.
+    "gbdt-nan-modes": "gradient boosting with the Min and Max NaN modes",
+    "gbdt-adapter-clf": "the gradient boosting classifier",
+    "gbdt-adapter-reg": "the gradient boosting regressor",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -327,7 +341,7 @@ TRAINING_LANE_NAMES = {
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
     "the neural blocks",
-    "gradient boosting training other than symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss",
+    "gradient boosting training other than symmetric trees with the Logloss or RMSE loss (either NaN mode, and the classifier and regressor adapters) and depthwise and lossguide trees with the Logloss loss",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -758,8 +772,11 @@ FAMILIES = (
         # host binding. It routes `_mojolearn_gbdt` on a CPU-only install
         # with the GPU binding's fit, predict, model-dim and sigmoid names;
         # gbdt_fit refuses by name every value outside the gbdt-symmetric,
-        # gbdt-rmse, gbdt-depthwise and gbdt-lossguide configurations, and the multi-dimensional predict, the ordered and
-        # FeatureFreq fits and the adapters' device transforms stay absent.
+        # gbdt-rmse, gbdt-depthwise, gbdt-lossguide, gbdt-nan-modes and
+        # adapter configurations; the multi-dimensional predict and the
+        # ordered and FeatureFreq fits stay absent. The classifier adapter's
+        # binary probability and class transforms are exported since
+        # 2026-09-15 (lane/cpu-training-gbdt-losses).
         # Not the forest host binding: that one is loaded by path under its
         # own names and takes the model as flat arrays.
         family="gbdt",
@@ -767,11 +784,14 @@ FAMILIES = (
         routes="_mojolearn_gbdt",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gbdt-symmetric", "gbdt-rmse", "gbdt-depthwise", "gbdt-lossguide"),
+        training_lanes=(
+            "gbdt-symmetric", "gbdt-rmse", "gbdt-depthwise", "gbdt-lossguide",
+            "gbdt-nan-modes", "gbdt-adapter-clf", "gbdt-adapter-reg",
+        ),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("GradientBoosting",),
-        display="gradient boosting on symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss",
+        classes=("GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor"),
+        display="gradient boosting on symmetric trees with the Logloss or RMSE loss (either NaN mode, and the classifier and regressor adapters) and depthwise and lossguide trees with the Logloss loss",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
@@ -781,6 +801,7 @@ FAMILIES = (
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid",
+            "gbdt_binary_probabilities", "gbdt_binary_classes",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
