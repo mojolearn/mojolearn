@@ -1298,7 +1298,9 @@ FAMILIES = (
             "mamba3_backward",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        ships_in_wheel=True,
+        # Training-only reference family: source builds for internal bitwise
+        # verification, not shipped (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
+        ships_in_wheel=False,
     ),
     dict(
         # Workstream E (lane/cpu-training-arima, 2026-09-14): batched

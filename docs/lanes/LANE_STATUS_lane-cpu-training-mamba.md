@@ -15,14 +15,25 @@
   claim corrected.
 
 - Restart (Sep 15 ~11:15 ET): gate run 34973248141 at ddd875cc8 was cancelled
-  (1h47m, the old job limit). origin/main (590c11c86) merged in with no
-  conflicts as 082fbb569. On the M4, one core, core and mamba host bindings
+  (1h47m, the old job limit). origin/main (450423c95, the routine CPU gate that
+  moved full training certification off pushes) merged in with no conflicts as
+  082fbb569; the [skip ci] commit 3cecb4238 said 590c11c86, which was wrong.
+  The runs below were repeated at 3cecb4238 with the same counts. On the M4, one core, core and mamba host bindings
   rebuilt from 082fbb569 into a fresh directory: `summary: IDENTICAL=36`,
   `summary (infer/model): IDENTICAL=36, N/A=36`, `summary (batch):
   IDENTICAL=36`, `require-columns 4 ... : OK` (204 s); a
   `-D MOJOLEARN_HOST_SABOTAGE=1` mamba build read DIVERGENT=36 train, 35 infer
   (mamba1/negative infer IDENTICAL, as in the committed sabotage diff) and 36
   batch. docs_facts --check and wheel_ci pins pass.
+
+- Merge rule (Andrew, Sep 15 afternoon): merge on one-core M4 evidence at the head, CI informational.
+  origin/main ee13e0d4b (public CPU inference only) merged as a7efe374a, then 6ad50f394 (with
+  lane/cpu-training-transformer). Conflicts: generated spans (taken from main, regenerated),
+  host_surface.py TRAINING_LANE_NAMES (both sides kept) and NO_CPU_PATH (now "the Samba blocks"),
+  the gate workflow (main's file, no push trigger), test_cpu_training_misc's sentence assertion
+  ("Samba blocks"); test_cpu_training_transformer's sentence assertion now expects "Samba blocks".
+  The mamba family is ships_in_wheel=False (training-only reference build). Counts at the merge head
+  are in its commit message.
 
 ## Running
 - Nothing. Pushed with [skip ci] until Codex's routine gate (08b50887a) is on

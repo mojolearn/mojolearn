@@ -120,8 +120,8 @@ moving the computation moves no bit; what it buys is that the kernel needs no
 storage that grows with `L`, which is what lets one thread own a whole
 sequence.
 
-**DEVIATION 723**: the entry point mirrors upstream's argument order and
-names but REFUSES four of the configurations they admit, each refused BY NAME
+**DEVIATION 723**: the entry point matches the reference's argument order and
+names but REFUSES four of the configurations the reference admits, each refused BY NAME
 at the door rather than implemented and left untested (`reached-but-inert`).
 `z` and `delta_bias` are presence flags and True raises, because S12 and S14
 are the block's recorded stages; `delta_softplus` True raises for the same

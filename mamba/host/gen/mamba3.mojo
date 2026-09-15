@@ -60,7 +60,7 @@ THE SABOTAGE ARMS THIS FILE OWNS (contract 8f):
     MOJOLEARN_MAMBA3_SABOTAGE_A_FLOOR_UNCLAMPED       S5's clamp dropped
     MOJOLEARN_MAMBA3_SABOTAGE_STEP_UPSTREAM_RECURRENCE  step_ref:119-137 in decode
 
-The step arm ENGAGES ONLY AT l == 1 (the mamba2 lesson, kept verbatim: an
+The step arm ENGAGES ONLY AT l == 1 (the mamba2 lesson, unchanged: an
 armed decode gate legitimately runs a prefill leg through this entry
 point first, and the arm must leave it untouched). While armed and
 engaged it uses the state's `pend_k`/`pend_v` buffers as the step_ref's

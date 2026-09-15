@@ -369,7 +369,7 @@ byte LM's. Each also builds from source through
 | gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric, gbdt-rmse, gbdt-depthwise, gbdt-lossguide, cross-val, gbdt-nan-modes, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-parametric-losses, gbdt-exact-mae, gbdt-lossguide-newtoncosine, gbdt-multiclass, gbdt-onevsall | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_gbdt_host.sh` |
 | training | `_mojolearn_training_host.so` | `_mojolearn_training` | mlp, optim-sgd, optim-adam-clip, cross-entropy-arms, training-primitives, samba, samba-untied-dropout-accum | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_training_host.sh` |
 | resample | `_mojolearn_resample_host.so` | `_mojolearn_resample` | bootstrap, permutation-test, monte-carlo | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_resample_host.sh` |
-| mamba | `_mojolearn_mamba_host.so` | `_mojolearn_mamba` | mamba2, mamba2-dtlimit, mamba1, mamba3 | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| mamba | `_mojolearn_mamba_host.so` | `_mojolearn_mamba` | mamba2, mamba2-dtlimit, mamba1, mamba3 | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_mamba_host.sh` |
 | arima | `_mojolearn_arima_host.so` | `_mojolearn_arima` | arima, arima-011, arima-seasonal-c, par-arima | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_arima_host.sh` |
 | transformer | `_mojolearn_transformer_host.so` | `_mojolearn_transformer` | transformer, transformer-window | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_transformer_host.sh` |<!--/fact-->
 
