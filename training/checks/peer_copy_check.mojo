@@ -103,14 +103,15 @@ comptime V_DIRTY_COPYK = 12 # V_COPYK after the same dirty buffer
 comptime V_HISTORY = 13     # V_OLD after a two-device Cholesky factorization in this process
 comptime V_HISTORY_COPYK = 14  # V_COPYK after the same factorization
 comptime V_CHUNKED = 15     # V_OLD with the factor copied device to device in chunks of at most 1 MiB
-comptime V_COUNT = 16
+comptime V_CHUNKED4 = 16    # V_CHUNKED with chunks of at most 4 MiB
+comptime V_COUNT = 17
 
 
 def variant_name(v: Int) -> String:
     var names: List[String] = [
         "old", "sleep", "readback", "l_host", "b_host", "back_host", "l_first",
         "serial", "prealloc", "root_rank0", "copyk", "dirty", "dirty_copyk",
-        "history", "history_copyk", "chunked",
+        "history", "history_copyk", "chunked", "chunked4MiB",
     ]
     return names[v]
 
@@ -338,6 +339,13 @@ def two_device_forward(lh: List[Float32], bh: List[Float32], n: Int, nrhs: Int, 
             device.synchronize()
             ctx.synchronize()
             _ = packed^
+        elif v == V_CHUNKED4:
+            var packed = chol_gather_columns(ctx, b, n, nrhs, first, width)
+            sb = peer_clone(ctx, device, packed)
+            sl = peer_clone_chunked(ctx, device, l, 1048576)
+            device.synchronize()
+            ctx.synchronize()
+            _ = packed^
         elif v == V_L_FIRST:
             var packed = chol_gather_columns(ctx, b, n, nrhs, first, width)
             sl = peer_clone(ctx, device, l)
@@ -380,9 +388,14 @@ def two_device_forward(lh: List[Float32], bh: List[Float32], n: Int, nrhs: Int, 
             var badl = 0
             var zeros = 0
             var sevens = 0
+            var firstl = -1
+            var lastl = -1
             for i in range(n * n):
                 if bitcast[DType.uint32](gotl[i]) != bitcast[DType.uint32](lh[i]):
                     badl += 1
+                    if firstl < 0:
+                        firstl = i
+                    lastl = i
                 if gotl[i] == Float32(0.0):
                     zeros += 1
                 if gotl[i] == Float32(7.25):
@@ -396,6 +409,8 @@ def two_device_forward(lh: List[Float32], bh: List[Float32], n: Int, nrhs: Int, 
             report.append(Float32(badb))
             report.append(Float32(zeros))
             report.append(Float32(sevens))
+            report.append(Float32(firstl))
+            report.append(Float32(lastl))
             _ = outl^
             _ = outb^
         _ = shards^
@@ -447,12 +462,13 @@ def peersolve(n: Int, nrhs: Int, variants: List[Int]) raises -> Int:
         if v == V_COPYK or v == V_DIRTY_COPYK or v == V_HISTORY_COPYK:
             var line = "PEERSOLVE n " + String(n) + " nrhs " + String(nrhs) + " variant " + variant_name(v)
             var bad_any = False
-            for rank in range(len(got) // 4):
-                line += " | rank " + String(rank) + " factor differing " + String(Int(got[rank * 4]))
-                line += " columns differing " + String(Int(got[rank * 4 + 1]))
-                line += " factor zeros " + String(Int(got[rank * 4 + 2]))
-                line += " factor sevens " + String(Int(got[rank * 4 + 3]))
-                if got[rank * 4] != Float32(0.0) or got[rank * 4 + 1] != Float32(0.0):
+            for rank in range(len(got) // 6):
+                line += " | rank " + String(rank) + " factor differing " + String(Int(got[rank * 6]))
+                line += " columns differing " + String(Int(got[rank * 6 + 1]))
+                line += " factor zeros " + String(Int(got[rank * 6 + 2]))
+                line += " factor sevens " + String(Int(got[rank * 6 + 3]))
+                line += " first cell " + String(Int(got[rank * 6 + 4])) + " last cell " + String(Int(got[rank * 6 + 5]))
+                if got[rank * 6] != Float32(0.0) or got[rank * 6 + 1] != Float32(0.0):
                     bad_any = True
             print(line)
             if bad_any:
@@ -486,11 +502,16 @@ comptime R_WAIT = 1         # R_IMMEDIATE plus 200 ms of host wall time before t
 comptime R_CHUNKED = 2      # the copy as sub-buffer copies of at most 262144 cells (1 MiB), each drained
 comptime R_CHUNK_HALF = 3   # the same at 131072 cells
 comptime R_OWNER_FIRST = 4  # drain the target context before the source context
-comptime R_COUNT = 5
+comptime R_FRESH = 5        # R_IMMEDIATE into a target never written before the copy
+comptime R_RECYCLED = 6     # R_FRESH after a same-size buffer on the owner was filled with 7.25 and freed
+comptime R_TWO_COPIES = 7   # R_RECYCLED, then a second small (513-cell) copy to the owner before the kernel
+comptime R_FRESH_CTX = 8    # R_RECYCLED with a new owner context created just before the copy
+comptime R_COUNT = 9
 
 
 def race_name(m: Int) -> String:
-    var names: List[String] = ["immediate", "wait200ms", "chunked1MiB", "chunked512KiB", "owner_first"]
+    var names: List[String] = ["immediate", "wait200ms", "chunked1MiB", "chunked512KiB", "owner_first",
+                               "fresh", "recycled", "two_copies", "fresh_ctx"]
     return names[m]
 
 
@@ -503,10 +524,20 @@ def race_trial(mut root: DeviceContext, mut owner: DeviceContext, n: Int, mode: 
     var src = root.enqueue_create_buffer[DType.float32](n)
     root.enqueue_copy(dst_buf=src, src_ptr=host.unsafe_ptr())
     root.synchronize()
-    var dst = owner.enqueue_create_buffer[DType.float32](n)
     var out = owner.enqueue_create_buffer[DType.float32](n)
-    owner.enqueue_function[fill_kernel](dst.unsafe_ptr(), Int32(n),
-        grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1))
+    if mode == R_RECYCLED or mode == R_TWO_COPIES or mode == R_FRESH_CTX:
+        var decoy = owner.enqueue_create_buffer[DType.float32](n)
+        owner.enqueue_function[fill_kernel](decoy.unsafe_ptr(), Int32(n),
+            grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1))
+        owner.synchronize()
+        _ = decoy^
+        owner.synchronize()
+    if mode == R_FRESH_CTX:
+        owner = DeviceContext(device_id=1)
+    var dst = owner.enqueue_create_buffer[DType.float32](n)
+    if mode < R_FRESH:
+        owner.enqueue_function[fill_kernel](dst.unsafe_ptr(), Int32(n),
+            grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1))
     owner.synchronize()
     if mode == R_CHUNKED or mode == R_CHUNK_HALF:
         var chunk = 262144 if mode == R_CHUNKED else 131072
@@ -523,6 +554,15 @@ def race_trial(mut root: DeviceContext, mut owner: DeviceContext, n: Int, mode: 
             off += m
     else:
         src.enqueue_copy_to(dst)
+        if mode == R_TWO_COPIES:
+            root.synchronize()
+            owner.synchronize()
+            var small_src = root.enqueue_create_buffer[DType.float32](513)
+            var small_dst = owner.enqueue_create_buffer[DType.float32](513)
+            owner.synchronize()
+            small_src.enqueue_copy_to(small_dst)
+            _ = small_dst^
+            _ = small_src^
         if mode == R_OWNER_FIRST:
             owner.synchronize()
             root.synchronize()
@@ -603,7 +643,7 @@ def main() raises:
         print("PEERSOLVE cases with a difference:", solve_failures)
     var trials = Int(String(getenv("MOJOLEARN_PEERCOPY_TRIALS", "8")))
     print("PEERRACE conditions with a difference:", peerrace(trials))
-    var repeat_variants: List[Int] = [V_OLD, V_L_FIRST, V_SERIAL, V_PREALLOC, V_CHUNKED, V_SLEEP]
+    var repeat_variants: List[Int] = [V_OLD, V_L_FIRST, V_SERIAL, V_PREALLOC, V_CHUNKED, V_CHUNKED4, V_COPYK]
     var repeat_ns: List[Int] = [513, 1024, 2048]
     var repeat_failures = 0
     for t in range(trials // 2):
