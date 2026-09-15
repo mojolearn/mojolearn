@@ -179,6 +179,12 @@ sys.modules[_hs_spec.name] = host_surface
 _hs_spec.loader.exec_module(host_surface)
 
 
+# How the packer reads a post-record file's BUILT copy for the allowlist check:
+# None means `git show <build commit>:<path>` in the source root. Tests whose
+# fixture root has no git history set a callable (source_root, commit, rel) -> bytes.
+post_record_reader = None
+
+
 def release_inventory(sets, proof_paths, version, source_root=REPO):
     """Bind the explicit release-linux3 payload to complete per-architecture builds.
 
@@ -243,11 +249,20 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                     for mode in TIERS for name in tier_names(mode, True)}
         if key in proofs or proof['extensions'] != expected or set(expected) != required:
             raise SystemExit('Duplicate, stale or incomplete architecture proof')
+        # 0.8.6: the vendor-neutral host binaries are compiled bytes too, and
+        # must be the ones this leg's proof recorded (`host_extension`), not
+        # merely equal across legs.
+        leg_hosts = next(hosts for v, a, _, _, _, hosts in sets if (v, a) == key) or {}
+        expected_host = {f'mojolearn/{key[0]}/{key[1]}/host/{name}.so': sha(path).hex()
+                         for name, path in leg_hosts.items()}
+        if proof.get('host_extension') != expected_host:
+            raise SystemExit(f'Host binding bytes differ from the {key[0]}/{key[1]} build proof')
         inventory = proof['source_inventory']
         if (not inventory or len(inventory) != len({p for p, _ in inventory})
                 or proof['source_sha256'] != hashlib.sha256(
                     json.dumps(inventory, separators=(',', ':')).encode()).hexdigest()):
             raise SystemExit('Invalid build source inventory')
+        current = {}
         for rel, digest in inventory:
             name = pathlib.PurePosixPath(rel)
             if name.is_absolute() or '..' in name.parts:
@@ -255,11 +270,18 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
             source = pathlib.Path(source_root) / rel
             if not source.resolve().is_relative_to(pathlib.Path(source_root).resolve()):
                 raise SystemExit('Build source escapes source root')
-            if sha(source).hex() != digest:
-                raise SystemExit('Current source differs from build: ' + rel)
+            current[rel] = sha(source).hex() if source.is_file() else None
         commit = proof.get('source_commit', '')
         if not re.fullmatch('[0-9a-f]{40}', commit):
             raise SystemExit('Missing full build commit')
+        # 0.8.6: only the post-record allowlist may differ from the build
+        # (tools/verify_linux_surface_qualification.py POST_RECORD_FILES).
+        import verify_linux_surface_qualification as _admission
+        try:
+            post_record = _admission.post_record_differences(inventory, current, source_root, commit,
+                                                             read_build=post_record_reader)
+        except ValueError as exc:
+            raise SystemExit(str(exc))
         commits.add(commit)
         inventories.append(inventory)
         proofs[key] = dict(sha256=hashlib.sha256(raw).hexdigest(),
@@ -269,6 +291,9 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
     return dict(schema='mojolearn.linux-payload.v1', version=version,
                 release_profile='alpha-api', assembly_profile=RELEASE_PROFILE,
                 source_commit=next(iter(commits)), source_inventory=inventories[0],
+                # 0.8.6: the post-record allowlisted files that differ from the
+                # build (empty when the checkout is the build commit's tree).
+                post_record_files=post_record,
                 sets={'/'.join(k): proofs[k] for k in sorted(proofs)},
                 extensions=payload,
                 optional_native={n: {
