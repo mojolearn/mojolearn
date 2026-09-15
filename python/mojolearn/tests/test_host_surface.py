@@ -221,6 +221,30 @@ def test_backend_routes_the_manifest():
         assert gpu_family in _backend._MODULES, f"{gpu_family} is routed but is not a _MODULES family"
 
 
+def test_inference_routes_ship_and_carry_no_fit():
+    """lane/inference-forecast-umap-pca (2026-09-15): an inference-only
+    binding that serves a route on a CPU-only install ships, serves a real
+    `_MODULES` family whose reference binding does not ship, registers the
+    reference binding's prediction names and no `*_fit` name, and
+    `_backend` reads the table from the manifest."""
+    from mojolearn import _backend
+    routes = host_surface.inference_routes()
+    assert routes == {"_mojolearn_arima": "_mojolearn_forecast_host"}
+    assert _backend._HOST_INFERENCE_MODULES == routes
+    shipped = set(host_surface.wheel_bindings())
+    for route, binding in routes.items():
+        assert route in _backend._MODULES
+        assert binding in shipped
+        reference = host_surface.routed_modules().get(route)
+        assert reference and reference not in shipped, f"{route}: the reference binding ships; no fallback is needed"
+        name = binding[len("_mojolearn_"):-len("_host")]
+        exported = _exports_in_source(name)
+        assert not [e for e in exported if e.endswith("_fit")], f"{binding} registers a fit: {exported}"
+        ref_exports = set(host_surface.family(reference[len("_mojolearn_"):-len("_host")])["exports"])
+        served = [e for e in exported if not e.startswith(name + "_host_")]
+        assert set(served) <= ref_exports, f"{binding} registers names its reference binding does not"
+
+
 def test_workflow_reads_the_manifest_not_literals():
     text = _read(".github/workflows/cpu-identity-gate.yml")
     for var in ("COVERED_LANES", "HOST_FAMILIES", "HOST_BINDINGS", "CLASSICAL_RECORDED"):
@@ -248,7 +272,7 @@ def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
     assert set(_backend._HOST_MODULES.values()) <= set(host_surface.bindings())
     assert {"_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host"} <= shipped
     assert set(host_surface.wheel_families()) == {
-        "byte_lm", "forest", "tokenizer", "core", "linalg", "estimators", "metrics", "svm",
+        "byte_lm", "forest", "tokenizer", "core", "linalg", "estimators", "metrics", "svm", "forecast",
     }
     assert len(host_surface.families()) > len(host_surface.wheel_families())
     assert host_surface.training_gpu_column_record() == host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 2)[1]

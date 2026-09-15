@@ -35,11 +35,20 @@ build unless MOJOLEARN_HOST_ALLOW_SABOTAGE=1.
 
 This module holds no arithmetic. What it promises is what the gate
 measured; the brief records on which CPUs that has passed.
+
+Since lane/inference-forecast-umap-pca (2026-09-15) also saved ARIMA models
+(`predict`, in sample and out of sample, `forecast` and the fitted
+attributes) through `mojolearn/host/_mojolearn_forecast_host.so`, the
+inference binding that carries no fit, and saved UMAP embeddings
+(`transform`, whose answer depends on the query batch by the transform's
+contract) through `mojolearn/host/_mojolearn_metrics_host.so`.
 """
 import hashlib
 
 from . import _backend, _serialize
+from ._arima_impl import ARIMA, _ARIMA_FORMAT
 from ._svm_impl import SVC, _SVC_FORMAT
+from ._umap_impl import UMAP, _UMAP_FORMAT
 from .decomposition import PCA, TruncatedSVD, _PCA_FORMAT, _TSVD_FORMAT
 from .density import KernelDensity, _KDE_FORMAT
 from .linear_model import (
@@ -56,6 +65,8 @@ _HOST_BASENAMES = {
     "_mojolearn_estimators": _HOST_BASENAME,
     "_mojolearn_svm": "_mojolearn_svm_host",
     "_mojolearn": "_mojolearn_core_host",
+    "_mojolearn_arima": "_mojolearn_forecast_host",
+    "_mojolearn_metrics": "_mojolearn_metrics_host",
 }
 
 
@@ -199,9 +210,24 @@ class HostKNeighborsRegressor(_HostKNN, KNeighborsRegressor):
     _HOST_ARRAYS = ("_index", "_y_cols")
 
 
+class HostARIMA(_HostBound, ARIMA):
+    """A saved ARIMA model on the forecast inference binding, which exports
+    `arima_predict` and `arima_forecast` and no `arima_fit`."""
+    _HOST_ARRAYS = ("_y", "params_")
+
+
+class HostUMAP(_HostBound, UMAP):
+    """A saved UMAP embedding on the metrics host binding. `transform`
+    answers the GPU's bytes for the same query batch; the answer for a row
+    depends on the batch it is asked in (umap/transform.mojo)."""
+    _HOST_ARRAYS = ("_transform_training", "_transform_embedding")
+
+
 #: format tag -> (estimator name, host class). A file whose `estimator`
 #: member names another class is refused by that class's own `load`.
 _FORMATS = {
+    _ARIMA_FORMAT: {"ARIMA": HostARIMA},
+    _UMAP_FORMAT: {"UMAP": HostUMAP},
     _LINEAR_FORMAT: {"LinearRegression": HostLinearRegression, "Ridge": HostRidge},
     _LOGISTIC_FORMAT: {"LogisticRegression": HostLogisticRegression},
     _TSVD_FORMAT: {"TruncatedSVD": HostTruncatedSVD},
