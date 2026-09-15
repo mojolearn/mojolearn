@@ -29,7 +29,8 @@ recordings; then the saved-model sabotage step requires every fixture.
   file). Needs a decision: a GPU record carrying those cells, or an owed rule
   for file hashes.
 
-## Remaining
+## Merged
 
-- Merge to main: docs_facts --check, wheel_ci pins, test_cpu_identity_gate; push
-  HEAD:main; remove the worktree.
+- Merged to main after docs_facts --check, wheel_ci pins and
+  test_cpu_identity_gate passed on the merged tree. Nothing remains but the
+  open owed question above.
