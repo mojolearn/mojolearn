@@ -5099,7 +5099,8 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
         return spec, None, notes
     flip = sabotage not in ("", "0", "serial")
     try:
-        calls = spec(ml, _public_est(name, fit.est, NEURAL_PUBLIC_PART_LANES), Xh)
+        # batchgrad differentiates the fitted block, which no inference class can
+        calls = spec(ml, fit.est if part == "batchgrad" else _public_est(name, fit.est, NEURAL_PUBLIC_PART_LANES), Xh)
         digest = hashlib.sha256()
         for call in calls:
             if isinstance(call, _BatchRows):

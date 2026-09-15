@@ -14,8 +14,15 @@ loaded by path like the byte LM's, the forest's and the tokenizer's:
                                 (the stateless prefill, full causal or a
                                 sliding window, ragged `lengths` included),
                                 from the block's nine named weights
+  `Mamba1BlockInference`,       the Mamba blocks' `forward` from a zero
+  `Mamba2BlockInference`,       state (ragged `lengths` included), from
+  `Mamba3BlockInference`        their named weights
+                                (lane/inference-neural-forward)
+  `SambaInference`              `SambaStack.forward`'s logits, from a
+                                `SambaStack.save_checkpoint` file or a
+                                config and its registry's weights
 
-Neither trains, and neither can: no optimizer, loss, backward or decode
+None trains, and none can: no optimizer, loss, backward or decode
 cache is exported by the binding. Training stays on a GPU (and, for internal
 verification only, on the source reference host bindings). The arithmetic is
 the same host functions the reference bindings call for the same steps, so
