@@ -1,0 +1,28 @@
+CatBoost 1.2.10 CPU reference vs our Metal fit
+
+base: 20000 rows, 2328 queries (reference 2328)
+  learn loss, ours vs their PairLogit metric, 20 iterations:
+    first  ours 0.673736137  reference 0.673735153  diff +9.841e-07
+    last   ours 0.467018328  reference 0.46699159  diff +2.674e-05
+    largest |diff| at iteration 7: +3.975e-05 (relative 6.988e-05)
+  final NDCG       ours 0.96819445  reference 0.96819445  diff -9.992e-16
+  final DCG        ours 7.34550971  reference 7.34550971  diff +7.105e-15
+  first 8 raw predictions, largest |diff| 4.644e-02
+
+odd: 12345 rows, 1438 queries (reference 1438)
+  learn loss, ours vs their PairLogit metric, 20 iterations:
+    first  ours 0.673151757  reference 0.673150247  diff +1.510e-06
+    last   ours 0.460495167  reference 0.46046927  diff +2.590e-05
+    largest |diff| at iteration 13: +3.051e-05 (relative 6.056e-05)
+  final NDCG       ours 0.969699884  reference 0.969699884  diff +7.772e-16
+  final DCG        ours 7.36648688  reference 7.36648688  diff -1.332e-14
+  first 8 raw predictions, largest |diff| 4.627e-02
+
+ties: 20000 rows, 2328 queries (reference 2328)
+  learn loss, ours vs their PairLogit metric, 20 iterations:
+    first  ours 0.651476648  reference 0.651476636  diff +1.212e-08
+    last   ours 0.33239673  reference 0.332395735  diff +9.947e-07
+    largest |diff| at iteration 17: +1.117e-06 (relative 3.214e-06)
+  final NDCG       ours 0.99678  reference 0.99678  diff -2.220e-16
+  final DCG        ours 12.6678036  reference 12.6678036  diff -5.329e-14
+  first 8 raw predictions, largest |diff| 5.629e-01

@@ -232,6 +232,7 @@ def test_forest_kinds_are_the_forest_gate_kinds():
 
 def test_recordings_and_columns_exist():
     for rel in (host_surface.CLASSICAL_RECORDED + host_surface.FORECAST_RECORDED + host_surface.INFERENCE_ONLY_RECORDED
+                + host_surface.SEARCH_LOOKUP_RECORDED
                 + host_surface.CLASSICAL_GPU_COLUMNS
                 + (host_surface.FOREST_RECORDED_ROOT,)):
         assert (ROOT / rel).exists(), f"the manifest names {rel}, which is not in the tree"
@@ -260,7 +261,12 @@ def test_inference_routes_ship_and_carry_no_fit():
     `_backend` reads the table from the manifest."""
     from mojolearn import _backend
     routes = host_surface.inference_routes()
-    assert routes == {"_mojolearn_arima": "_mojolearn_forecast_host"}
+    assert routes == {
+        "_mojolearn_arima": "_mojolearn_forecast_host",
+        # lane/inference-embedding-ivf-cholesky (2026-09-15)
+        "_mojolearn_ivf": "_mojolearn_ivf_search_host",
+        "_mojolearn_embedding": "_mojolearn_embedding_infer_host",
+    }
     assert _backend._HOST_INFERENCE_MODULES == routes
     shipped = set(host_surface.wheel_bindings())
     for route, binding in routes.items():
@@ -306,6 +312,7 @@ def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
     assert set(host_surface.wheel_families()) == {
         "byte_lm", "forest", "tokenizer", "neural", "core", "linalg", "estimators", "metrics", "svm", "forecast",
         "mixture_infer", "hdbscan_infer", "gp_infer",
+        "embedding_infer", "ivf_search",
     }
     # The inference-only families ship; the reference families whose
     # scoring and prediction entries they carry do not.

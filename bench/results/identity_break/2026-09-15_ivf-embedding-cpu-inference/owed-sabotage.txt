@@ -1,0 +1,19 @@
+owed ivf-euclidean/base model: production 2c7ef8ed2b7dc541 sabotage 65ff5553a259242f MOVED
+owed ivf-euclidean/denormal model: production 095ed72f60fec6ce sabotage f0cdbf5c755333fd MOVED
+owed ivf-euclidean/denormal_ftz model: production 5c190ab95e7501cd sabotage 807ac7d4fdf2c213 MOVED
+owed ivf-euclidean/dupes model: production 1d65036f19dde9e9 sabotage 3a9cc8201f02572b MOVED
+owed ivf-euclidean/hashed model: production 1c67c6b91b2e570b sabotage 9b00d87139953e1d MOVED
+owed ivf-euclidean/negative model: production 65dfdf6d49abc120 sabotage 653c166eb3bf3158 MOVED
+owed ivf-euclidean/odd model: production 997e755024716b18 sabotage 0a905ad9348bed32 MOVED
+owed ivf-euclidean/ties model: production 3632c01ae6112aca sabotage 441fd888195979d9 MOVED
+owed ivf-euclidean/wide model: production 74da9b4decbbf211 sabotage e7e6840323ba6218 MOVED
+owed ivf/base model: production dcfefe31adc21c6c sabotage 8be9721baf4bc593 MOVED
+owed ivf/denormal model: production c3a1727313e23983 sabotage 3bf5c4035097e768 MOVED
+owed ivf/denormal_ftz model: production 1f2b8dd1cf726bc0 sabotage 6edc73f973d5ad4d MOVED
+owed ivf/dupes model: production 3163ed44a2b28c07 sabotage a9eb68460d90a4d4 MOVED
+owed ivf/hashed model: production 9d809fde4ffc96cc sabotage 693757dd240b6558 MOVED
+owed ivf/negative model: production ec79d31b3169a984 sabotage cbd2f25ceda56d98 MOVED
+owed ivf/odd model: production 2ab1fd5fac4563e2 sabotage 3552a7183a2dfbfd MOVED
+owed ivf/ties model: production 2254dcdb3f209c1d sabotage 7424044bcde7c82c MOVED
+owed ivf/wide model: production 809bc63c73b2c093 sabotage 9e17286190ae60a2 MOVED
+owed verdict OK (18 of 18 owed cell part(s) moved, 0 failure(s))

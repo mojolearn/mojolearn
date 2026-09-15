@@ -126,6 +126,29 @@ Linux legs are OWED before this heading reads published.
   grow from 12 to 29, adding the ols, ridge and logistic option variants. On a CPU-only
   install `StandardScaler.fit`, `MinMaxScaler.fit`, `Lasso.fit` and `ElasticNet.fit` now
   refuse by name outside the internal reference scope, as every other estimator fit does.
+- Public CPU inference for saved `IVFIndex` indexes and `Embedding` tables.
+  - `IVFIndex.fit` now builds the index and `search` answers from it, as two
+    binding calls. The train, infer and batch hashes are unchanged against
+    the committed Apple, NVIDIA and AMD columns, on Metal and on the CPU.
+  - `IVFIndex.save` / `load` (`mojolearn-ivf-flat-1`) and `Embedding.save` /
+    `load` (`mojolearn-embedding-1`) carry GPU-built state to a CPU, and
+    `mojolearn.host_model` returns a host instance for either file.
+  - Two new host bindings ship in the wheels, `_mojolearn_ivf_search_host`
+    (search only) and `_mojolearn_embedding_infer_host` (lookup only). Each
+    serves its family on a CPU-only install that has no reference binding.
+  - `Embedding.backward` refuses on a CPU-only install outside the internal
+    verifier.
+  - Evidence: bench/results/identity_break/2026-09-15_ivf-embedding-cpu-inference/.
+- CPU inference from saved SVM models for `SVC(kernel='linear')`, `SVC(kernel='poly')`,
+  `SVR` and `SVR(kernel='linear')`: `SVR` gains `save` and `load` (format
+  `mojolearn-svr-1`), and `mojolearn.host_model(path)`, or the classes on a CPU-only
+  install, answer `decision_function` and `predict` through the shipped svm host binding's
+  `svc_predict` and `svr_predict`. No entry was added to that binding. The svm family's
+  saved-model lanes grow from one (`svc`) to five. The svm host sabotage build gains an
+  intercept arm in the fit and a decision arm in predict, so on an integer-grid fixture
+  such as `ties` a saved model's file and its predictions now move there too. Apple M4 Metal recording checked on an x86 CPU against the committed Apple,
+  NVIDIA and AMD columns; the SVR model cells and every `svc-poly` GPU cell are owed to the
+  release record.
 - Public CPU `Cholesky` inference. On a CPU-only install `Cholesky().fit(A)` factors a given
   matrix and `solve` answers from it, and `Cholesky.save` / `Cholesky.load` (or
   `mojolearn.host_model`, which returns a `HostCholesky`) carry a factor from a GPU box to a
@@ -216,6 +239,18 @@ Linux legs are OWED before this heading reads published.
   query, as in the reference, so the fit learns nothing. Prediction is the ordinary row-wise raw
   score, so saved-model CPU inference covers it. New identity lane `gbdt-query-rmse` with a batch
   part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed to the release record.
+- New `loss="PairLogit"` for `GradientBoosting`, the pairwise ranking loss of the CatBoost reference
+  (`pair_logit.cu` through the querywise target), on the same arm as QueryRMSE. Without `pairs` the
+  pairs are generated from `group_id` and the grades as the reference's default does (every two rows
+  of a query with different grades, the higher grade the winner); `fit(pairs=..., pairs_weight=...)`
+  takes explicit `[winner, loser]` row pairs inside groups. Two named DEVIATIONs: each row's pair
+  derivatives are summed in one fixed order where the reference sums them in thread arrival order,
+  and the search weight plane follows `secondDerAsWeights` as the pointwise target does, where the
+  reference's querywise branch has the two arms reversed (so at the default Cosine score the trees
+  can differ from the reference's GPU and follow its CPU weighting). `pairs` without `group_id`, the
+  `max_pairs` subsample and PairLogitPairwise are not implemented. New identity lane
+  `gbdt-pair-logit` with a batch part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed
+  to the release record.
 - The host (CPU) bindings `python/mojolearn/host_surface.py` marks `ships_in_wheel` ship in
   both wheels under `mojolearn/host/`: ten families, byte_lm, forest, tokenizer, neural, core,
   linalg, estimators, metrics, svm and forecast. The other seventeen families the manifest

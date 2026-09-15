@@ -32,7 +32,19 @@ from max.gpu.host import DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
-from ivf.estimator import ivf_flat_build_and_search_host
+from bindings.ivf_index_arrays import (
+    ivf_build_extents,
+    ivf_read_index_arrays,
+    ivf_search_extents,
+    ivf_write_index_arrays,
+    ivf_write_search_result,
+)
+from ivf.estimator import (
+    ivf_flat_build_and_search_host,
+    ivf_flat_build_host,
+    ivf_flat_search_host,
+)
+from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndex
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -178,6 +190,81 @@ def ivf_flat_build_and_search_binding(
     return PythonObject(0)
 
 
+# ===========================================================================
+# BUILD AND SEARCH AS TWO CALLS (lane/inference-embedding-ivf-cholesky,
+# 2026-09-15). The index crosses to Python as five arrays
+# (`bindings/ivf_index_arrays.mojo`), so `IVFIndex.fit` builds once,
+# `IVFIndex.save` writes the arrays and a CPU loads them. The build is
+# `ivf_flat_build_host` and the search `ivf_flat_search_host`, the two halves
+# `ivf_flat_build_and_search_host` calls, over host lists the upload copies,
+# so the split changes no bit. Each call writes its own identity card (policy
+# 3's caveat); the one-card entry above stays for the trace gates.
+# ===========================================================================
+
+
+def _ivf_build_run(
+    x: List[Float32], n: Int, dim: Int, n_lists: Int, iters: Int, metric: Int,
+    seed: UInt64,
+) raises -> IvfFlatIndex:
+    var ctx = DeviceContext()
+    var index = ivf_flat_build_host(ctx, x, n, dim, n_lists, iters, metric, seed)
+    ctx.synchronize()
+    # DEVIATION 1946: the context dies LAST.
+    _ = ctx^
+    return index^
+
+
+def ivf_flat_build_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`ivf_flat::build`, the index written to the caller's five buffers.
+    Returns 0. See `bindings/ivf_index_arrays.mojo` for the lists."""
+    var ext = ivf_build_extents(addrs, params, String("ivf_flat_build"))
+    var n = ext[0]
+    var dim = ext[1]
+    var n_lists = ext[2]
+    var x = read_f32(Int(py=addrs[0]), n * dim)
+    var index = _ivf_build_run(x, n, dim, n_lists, ext[3], ext[4], ext[5])
+    ivf_write_index_arrays(
+        addrs, index.n_rows, index.dim, index.n_lists, index.centers,
+        index.center_norms, index.list_offsets, index.list_indices,
+        index.list_data,
+    )
+    return PythonObject(0)
+
+
+def ivf_flat_search_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`ivf_flat::search` over a built index handed back as five arrays and
+    admitted by `ivf_validate_index_arrays`. Returns 0."""
+    var arrays = ivf_read_index_arrays(addrs, params, String("ivf_flat_search"))
+    var ext = ivf_search_extents(params)
+    var m = ext[0]
+    var k = ext[1]
+    var n_probes = ext[2]
+    var queries = read_f32(Int(py=addrs[5]), m * arrays.dim)
+    # `labels` is build workspace the search never reads; it is restored
+    # from the carried ids so the struct holds the assignment it describes.
+    var labels = List[UInt32](length=arrays.n_rows, fill=UInt32(0))
+    for l in range(arrays.n_lists):
+        for s in range(Int(arrays.offsets[l]), Int(arrays.offsets[l + 1])):
+            labels[Int(arrays.list_indices[s])] = UInt32(l)
+    var index = IvfFlatIndex(
+        arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
+        arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
+        arrays.list_indices.copy(), arrays.list_data.copy(), labels^,
+    )
+    var ctx = DeviceContext()
+    var r = ivf_flat_search_host(ctx, index, queries, m, k, n_probes)
+    ctx.synchronize()
+    ivf_write_search_result(addrs, r.distances, r.indices, r.n_candidates, m, k)
+    _ = r^
+    _ = index^
+    _ = ctx^
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
     try:
@@ -187,6 +274,8 @@ def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
         m.def_function[ivf_flat_build_and_search_binding](
             "ivf_flat_build_and_search"
         )
+        m.def_function[ivf_flat_build_binding]("ivf_flat_build")
+        m.def_function[ivf_flat_search_binding]("ivf_flat_search")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_ivf: ", e))

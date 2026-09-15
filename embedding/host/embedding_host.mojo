@@ -99,6 +99,12 @@ def host_embedding_forward(
         return
     for t in range(n_positions):
         var v = Int(ids[t])
+        comptime if EMBEDDING_HOST_SABOTAGE:
+            # THE FORWARD SABOTAGE ARM (lane/inference-embedding-ivf-cholesky,
+            # 2026-09-15): gather the NEXT row, wrong on purpose, so a saved
+            # table's CPU lookup (the shipped embedding_infer binding) is
+            # seen to fail its recorded bytes.
+            v = (v + 1) % cfg.vocab
         for j in range(width):
             yp.unsafe_store(t * width + j, ftz(ftz(weight[v * width + j])))
 
