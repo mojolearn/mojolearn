@@ -1,0 +1,1130 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.17.0-29-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-9655p-96-core-processor",
+ "commit": "a8e3a49c37ec20faf93e9e4671a5a0a5d8362e19",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "arima-exog/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2f628c52654e2724",
+    "2f628c52654e2724"
+   ],
+   "parts": [
+    {
+     "beta": "110f8011432c5427",
+     "ar": "7c33eaee24925bae",
+     "mu": "fe71cdf2f19e5183",
+     "sigma2": "50c9ac17de346183",
+     "forecast": "8ba434bdacc7018c"
+    },
+    {
+     "beta": "110f8011432c5427",
+     "ar": "7c33eaee24925bae",
+     "mu": "fe71cdf2f19e5183",
+     "sigma2": "50c9ac17de346183",
+     "forecast": "8ba434bdacc7018c"
+    }
+   ],
+   "infer": [
+    "47a42389a7c18a25",
+    "47a42389a7c18a25"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "270897d998bb6557",
+    "270897d998bb6557"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "47a42389a7c18a25",
+    "47a42389a7c18a25"
+   ],
+   "batch": [
+    "d840092861e7cf68",
+    "d840092861e7cf68"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2e313860637dab58",
+    "2e313860637dab58"
+   ],
+   "parts": [
+    {
+     "beta": "84225724698b30a8",
+     "ar": "fd44ef0286eb72b3",
+     "mu": "eb16e460f9ecb2c0",
+     "sigma2": "28bc9499dd1a84d7",
+     "forecast": "79a9d65f30ce6b4b"
+    },
+    {
+     "beta": "84225724698b30a8",
+     "ar": "fd44ef0286eb72b3",
+     "mu": "eb16e460f9ecb2c0",
+     "sigma2": "28bc9499dd1a84d7",
+     "forecast": "79a9d65f30ce6b4b"
+    }
+   ],
+   "infer": [
+    "0a54764aac3e8750",
+    "0a54764aac3e8750"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "af6358733525c1c0",
+    "af6358733525c1c0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0a54764aac3e8750",
+    "0a54764aac3e8750"
+   ],
+   "batch": [
+    "bdeada0870bfb5a6",
+    "bdeada0870bfb5a6"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f61694f0445b2d3d",
+    "f61694f0445b2d3d"
+   ],
+   "parts": [
+    {
+     "beta": "6ad1a3f1614025f3",
+     "ar": "fa01f482b9a791ba",
+     "mu": "c2259a4a2a4bc76e",
+     "sigma2": "3b8d098f55c90272",
+     "forecast": "6e00f5ac47394303"
+    },
+    {
+     "beta": "6ad1a3f1614025f3",
+     "ar": "fa01f482b9a791ba",
+     "mu": "c2259a4a2a4bc76e",
+     "sigma2": "3b8d098f55c90272",
+     "forecast": "6e00f5ac47394303"
+    }
+   ],
+   "infer": [
+    "d1f6dae58ca38fc6",
+    "d1f6dae58ca38fc6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7a8acb745895f97b",
+    "7a8acb745895f97b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d1f6dae58ca38fc6",
+    "d1f6dae58ca38fc6"
+   ],
+   "batch": [
+    "407326029acbf498",
+    "407326029acbf498"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a17b576410730c15",
+    "a17b576410730c15"
+   ],
+   "parts": [
+    {
+     "beta": "8a0c0662bf13ebc5",
+     "ar": "fb7676a23bad2763",
+     "mu": "85f11e5c905c0ab8",
+     "sigma2": "3d6923d939c4c478",
+     "forecast": "16fd28ebeb04b790"
+    },
+    {
+     "beta": "8a0c0662bf13ebc5",
+     "ar": "fb7676a23bad2763",
+     "mu": "85f11e5c905c0ab8",
+     "sigma2": "3d6923d939c4c478",
+     "forecast": "16fd28ebeb04b790"
+    }
+   ],
+   "infer": [
+    "fa4ad43b61573ad3",
+    "fa4ad43b61573ad3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f7dae018bf993756",
+    "f7dae018bf993756"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fa4ad43b61573ad3",
+    "fa4ad43b61573ad3"
+   ],
+   "batch": [
+    "9fe0205a307595c4",
+    "9fe0205a307595c4"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a540e07412fe0435",
+    "a540e07412fe0435"
+   ],
+   "parts": [
+    {
+     "beta": "534a49a56a61dff4",
+     "ar": "77478628e58e960c",
+     "mu": "e85425508f19ffc6",
+     "sigma2": "6b4250d5cc0660ef",
+     "forecast": "70243823299d1bc5"
+    },
+    {
+     "beta": "534a49a56a61dff4",
+     "ar": "77478628e58e960c",
+     "mu": "e85425508f19ffc6",
+     "sigma2": "6b4250d5cc0660ef",
+     "forecast": "70243823299d1bc5"
+    }
+   ],
+   "infer": [
+    "c6b5b3538692eba0",
+    "c6b5b3538692eba0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c3ab2dffbd90daa2",
+    "c3ab2dffbd90daa2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c6b5b3538692eba0",
+    "c6b5b3538692eba0"
+   ],
+   "batch": [
+    "86579187256ea38f",
+    "86579187256ea38f"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a540e07412fe0435",
+    "a540e07412fe0435"
+   ],
+   "parts": [
+    {
+     "beta": "534a49a56a61dff4",
+     "ar": "77478628e58e960c",
+     "mu": "e85425508f19ffc6",
+     "sigma2": "6b4250d5cc0660ef",
+     "forecast": "70243823299d1bc5"
+    },
+    {
+     "beta": "534a49a56a61dff4",
+     "ar": "77478628e58e960c",
+     "mu": "e85425508f19ffc6",
+     "sigma2": "6b4250d5cc0660ef",
+     "forecast": "70243823299d1bc5"
+    }
+   ],
+   "infer": [
+    "c6b5b3538692eba0",
+    "c6b5b3538692eba0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d31fdb6ed28b378b",
+    "d31fdb6ed28b378b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c6b5b3538692eba0",
+    "c6b5b3538692eba0"
+   ],
+   "batch": [
+    "86579187256ea38f",
+    "86579187256ea38f"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2f628c52654e2724",
+    "2f628c52654e2724"
+   ],
+   "parts": [
+    {
+     "beta": "110f8011432c5427",
+     "ar": "7c33eaee24925bae",
+     "mu": "fe71cdf2f19e5183",
+     "sigma2": "50c9ac17de346183",
+     "forecast": "8ba434bdacc7018c"
+    },
+    {
+     "beta": "110f8011432c5427",
+     "ar": "7c33eaee24925bae",
+     "mu": "fe71cdf2f19e5183",
+     "sigma2": "50c9ac17de346183",
+     "forecast": "8ba434bdacc7018c"
+    }
+   ],
+   "infer": [
+    "47a42389a7c18a25",
+    "47a42389a7c18a25"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "270897d998bb6557",
+    "270897d998bb6557"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "47a42389a7c18a25",
+    "47a42389a7c18a25"
+   ],
+   "batch": [
+    "d840092861e7cf68",
+    "d840092861e7cf68"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a724e4c3c77b9c2d",
+    "a724e4c3c77b9c2d"
+   ],
+   "parts": [
+    {
+     "beta": "16dce30161818de4",
+     "ar": "13bd88e75cca88d8",
+     "mu": "1fb173ca0b812ad3",
+     "sigma2": "ca5a21dfa983aa84",
+     "forecast": "f18878081bdde08a"
+    },
+    {
+     "beta": "16dce30161818de4",
+     "ar": "13bd88e75cca88d8",
+     "mu": "1fb173ca0b812ad3",
+     "sigma2": "ca5a21dfa983aa84",
+     "forecast": "f18878081bdde08a"
+    }
+   ],
+   "infer": [
+    "0d8696d7fda83e82",
+    "0d8696d7fda83e82"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ed44afca33203821",
+    "ed44afca33203821"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0d8696d7fda83e82",
+    "0d8696d7fda83e82"
+   ],
+   "batch": [
+    "a36825b2a47ca167",
+    "a36825b2a47ca167"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1a99c270f6b43778",
+    "1a99c270f6b43778"
+   ],
+   "parts": [
+    {
+     "beta": "6e043f76f2c81ae2",
+     "ar": "69ff23922541ac93",
+     "mu": "916f91644552ecfa",
+     "sigma2": "58c91bedb0b90afe",
+     "forecast": "f2fae5ee95b7fa35"
+    },
+    {
+     "beta": "6e043f76f2c81ae2",
+     "ar": "69ff23922541ac93",
+     "mu": "916f91644552ecfa",
+     "sigma2": "58c91bedb0b90afe",
+     "forecast": "f2fae5ee95b7fa35"
+    }
+   ],
+   "infer": [
+    "24118bc0349bd37f",
+    "24118bc0349bd37f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "88e854113c47b02e",
+    "88e854113c47b02e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "24118bc0349bd37f",
+    "24118bc0349bd37f"
+   ],
+   "batch": [
+    "3dc3207ebf330ebb",
+    "3dc3207ebf330ebb"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog-seasonal/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "716663af2f675e1e",
+    "716663af2f675e1e"
+   ],
+   "parts": [
+    {
+     "beta": "f66f17d98df35c4b",
+     "ar": "35138f1f81b5982f",
+     "sar": "5fa2c7d88021a7f9",
+     "sigma2": "382ffe29a5f4d9d4",
+     "forecast": "a5ece65cc11335d8"
+    },
+    {
+     "beta": "f66f17d98df35c4b",
+     "ar": "35138f1f81b5982f",
+     "sar": "5fa2c7d88021a7f9",
+     "sigma2": "382ffe29a5f4d9d4",
+     "forecast": "a5ece65cc11335d8"
+    }
+   ],
+   "infer": [
+    "0392c5518c63ed4d",
+    "0392c5518c63ed4d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6dd538a7ed348bcd",
+    "6dd538a7ed348bcd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0392c5518c63ed4d",
+    "0392c5518c63ed4d"
+   ],
+   "batch": [
+    "8cfb82c8b1e5204a",
+    "8cfb82c8b1e5204a"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog-seasonal/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "637a2f39d5d40eea",
+    "637a2f39d5d40eea"
+   ],
+   "parts": [
+    {
+     "beta": "3a71e1f81edc4206",
+     "ar": "d802c2439e13ac80",
+     "sar": "1d121cd073b46060",
+     "sigma2": "f1c488b21f90704c",
+     "forecast": "653cc5b36156caa1"
+    },
+    {
+     "beta": "3a71e1f81edc4206",
+     "ar": "d802c2439e13ac80",
+     "sar": "1d121cd073b46060",
+     "sigma2": "f1c488b21f90704c",
+     "forecast": "653cc5b36156caa1"
+    }
+   ],
+   "infer": [
+    "9a23b875558b8979",
+    "9a23b875558b8979"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "14bf7fc49e25c5bc",
+    "14bf7fc49e25c5bc"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9a23b875558b8979",
+    "9a23b875558b8979"
+   ],
+   "batch": [
+    "7f49a8b78175bfe2",
+    "7f49a8b78175bfe2"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog-seasonal/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ddb5e4a7881fb445",
+    "ddb5e4a7881fb445"
+   ],
+   "parts": [
+    {
+     "beta": "30ea79fe578d419c",
+     "ar": "70e6426e99ec0d7b",
+     "sar": "1fed08598dc19e2f",
+     "sigma2": "5c7586fa056e8009",
+     "forecast": "cea4f888b21f95e8"
+    },
+    {
+     "beta": "30ea79fe578d419c",
+     "ar": "70e6426e99ec0d7b",
+     "sar": "1fed08598dc19e2f",
+     "sigma2": "5c7586fa056e8009",
+     "forecast": "cea4f888b21f95e8"
+    }
+   ],
+   "infer": [
+    "92a5f3575f52162e",
+    "92a5f3575f52162e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "98dacdf7f83a0ea7",
+    "98dacdf7f83a0ea7"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "92a5f3575f52162e",
+    "92a5f3575f52162e"
+   ],
+   "batch": [
+    "8c9c124041fa0231",
+    "8c9c124041fa0231"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog-seasonal/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "69c50e293c60f173",
+    "69c50e293c60f173"
+   ],
+   "parts": [
+    {
+     "beta": "988c2df8ffc2d9c9",
+     "ar": "811f4e025c249ad3",
+     "sar": "7724d97d1f0332ca",
+     "sigma2": "4daa753eb239dbcd",
+     "forecast": "e82607a31953243a"
+    },
+    {
+     "beta": "988c2df8ffc2d9c9",
+     "ar": "811f4e025c249ad3",
+     "sar": "7724d97d1f0332ca",
+     "sigma2": "4daa753eb239dbcd",
+     "forecast": "e82607a31953243a"
+    }
+   ],
+   "infer": [
+    "2e93bf12d7b45b77",
+    "2e93bf12d7b45b77"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1fe0449adb2ddf02",
+    "1fe0449adb2ddf02"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2e93bf12d7b45b77",
+    "2e93bf12d7b45b77"
+   ],
+   "batch": [
+    "aa36d0df25f89009",
+    "aa36d0df25f89009"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog-seasonal/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "db005efa7d2bc517",
+    "db005efa7d2bc517"
+   ],
+   "parts": [
+    {
+     "beta": "1dc879a17a3844f4",
+     "ar": "607001119da0e6d3",
+     "sar": "12f70a877442358f",
+     "sigma2": "55091546be445640",
+     "forecast": "5292d7d2fb6bc1f9"
+    },
+    {
+     "beta": "1dc879a17a3844f4",
+     "ar": "607001119da0e6d3",
+     "sar": "12f70a877442358f",
+     "sigma2": "55091546be445640",
+     "forecast": "5292d7d2fb6bc1f9"
+    }
+   ],
+   "infer": [
+    "73bddff16649e238",
+    "73bddff16649e238"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "47916d777fdf7a1e",
+    "47916d777fdf7a1e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "73bddff16649e238",
+    "73bddff16649e238"
+   ],
+   "batch": [
+    "c366fcb72f5a1cde",
+    "c366fcb72f5a1cde"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog-seasonal/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "db005efa7d2bc517",
+    "db005efa7d2bc517"
+   ],
+   "parts": [
+    {
+     "beta": "1dc879a17a3844f4",
+     "ar": "607001119da0e6d3",
+     "sar": "12f70a877442358f",
+     "sigma2": "55091546be445640",
+     "forecast": "5292d7d2fb6bc1f9"
+    },
+    {
+     "beta": "1dc879a17a3844f4",
+     "ar": "607001119da0e6d3",
+     "sar": "12f70a877442358f",
+     "sigma2": "55091546be445640",
+     "forecast": "5292d7d2fb6bc1f9"
+    }
+   ],
+   "infer": [
+    "73bddff16649e238",
+    "73bddff16649e238"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "655c915176e34b1b",
+    "655c915176e34b1b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "73bddff16649e238",
+    "73bddff16649e238"
+   ],
+   "batch": [
+    "c366fcb72f5a1cde",
+    "c366fcb72f5a1cde"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog-seasonal/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "716663af2f675e1e",
+    "716663af2f675e1e"
+   ],
+   "parts": [
+    {
+     "beta": "f66f17d98df35c4b",
+     "ar": "35138f1f81b5982f",
+     "sar": "5fa2c7d88021a7f9",
+     "sigma2": "382ffe29a5f4d9d4",
+     "forecast": "a5ece65cc11335d8"
+    },
+    {
+     "beta": "f66f17d98df35c4b",
+     "ar": "35138f1f81b5982f",
+     "sar": "5fa2c7d88021a7f9",
+     "sigma2": "382ffe29a5f4d9d4",
+     "forecast": "a5ece65cc11335d8"
+    }
+   ],
+   "infer": [
+    "0392c5518c63ed4d",
+    "0392c5518c63ed4d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6dd538a7ed348bcd",
+    "6dd538a7ed348bcd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0392c5518c63ed4d",
+    "0392c5518c63ed4d"
+   ],
+   "batch": [
+    "8cfb82c8b1e5204a",
+    "8cfb82c8b1e5204a"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog-seasonal/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6ea94414246da114",
+    "6ea94414246da114"
+   ],
+   "parts": [
+    {
+     "beta": "d48172f58cf9ee0c",
+     "ar": "82f70436a2074ddd",
+     "sar": "97b0e1889fc04e18",
+     "sigma2": "81792ed1d6af81ef",
+     "forecast": "8df70df20173bb1e"
+    },
+    {
+     "beta": "d48172f58cf9ee0c",
+     "ar": "82f70436a2074ddd",
+     "sar": "97b0e1889fc04e18",
+     "sigma2": "81792ed1d6af81ef",
+     "forecast": "8df70df20173bb1e"
+    }
+   ],
+   "infer": [
+    "8600ec544f57bd54",
+    "8600ec544f57bd54"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "611c9b29cdf16288",
+    "611c9b29cdf16288"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8600ec544f57bd54",
+    "8600ec544f57bd54"
+   ],
+   "batch": [
+    "5a4988eab5262e8a",
+    "5a4988eab5262e8a"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "arima-exog-seasonal/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9e92d02b880f0954",
+    "9e92d02b880f0954"
+   ],
+   "parts": [
+    {
+     "beta": "64e44c3d6c2ab0f6",
+     "ar": "9b7d2b4440fe4d86",
+     "sar": "53ded7459fd3e1eb",
+     "sigma2": "1ac52e0ce58b1c02",
+     "forecast": "336d64b0185a52b6"
+    },
+    {
+     "beta": "64e44c3d6c2ab0f6",
+     "ar": "9b7d2b4440fe4d86",
+     "sar": "53ded7459fd3e1eb",
+     "sigma2": "1ac52e0ce58b1c02",
+     "forecast": "336d64b0185a52b6"
+    }
+   ],
+   "infer": [
+    "6fbe1b03160ddf99",
+    "6fbe1b03160ddf99"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6df61f9b0e3d912b",
+    "6df61f9b0e3d912b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "6fbe1b03160ddf99",
+    "6fbe1b03160ddf99"
+   ],
+   "batch": [
+    "3f405565a07aedbc",
+    "3f405565a07aedbc"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1"
+ },
+ "host": {
+  "cpu_model": "AMD EPYC 9655P 96-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gpc",
+   "gpc-multiclass",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sha256": "67d236ec1b8adeb0b31f2e93e1f0b97bad0fa0452062fed356a3b998b0df3921",
+    "size": 399224,
+    "sabotage": false
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "9417d2d7575daa38a8e5eeaddedc9f80f178d81fc4b9c2d71418ab8bbe1077d5",
+    "size": 313808,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ }
+}

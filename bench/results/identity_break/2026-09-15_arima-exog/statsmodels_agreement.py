@@ -16,6 +16,8 @@ the last bit and are not meant to:
     starting values (Hannan-Rissanen); mojolearn runs cuML's own L-BFGS from
     `estimate_x0` with a 2^-10 forward difference (DEVIATION 679, 687). Two
     optimizers stopping in the same basin stop at different points in it.
+  * statsmodels is run with `simple_differencing=False` so that its
+    forecasts are on the same scale as ours (see `theirs`).
   * The intercept is not the same parameter. cuML's `mu`, which this package
     spells `trend='c'`, is a STATE intercept: the filter does
     `alpha[n_diff] += mu` every step, so for an AR(1) the implied mean of the
@@ -98,10 +100,22 @@ def ours(case, y, exog, fut, h):
 
 def theirs(case, y, exog, fut, h):
     from statsmodels.tsa.statespace.sarimax import SARIMAX
+    # simple_differencing=False, AND THAT IS THE WHOLE POINT OF THIS LINE.
+    # With simple_differencing=True statsmodels fits AND PREDICTS on the
+    # DIFFERENCED series, so `forecast()` returns differences; this package
+    # undifferences its forecast back to the level (`finalize_forecast`).
+    # Comparing the two directly on a d > 0 model compares a difference
+    # against a level: measured, that read max_abs 4.38 on the seasonal case
+    # while every coefficient agreed to 1e-3, which is the signature of a
+    # scale mismatch in the COMPARISON, not a disagreement in the fit. With
+    # simple_differencing=False their forecast is on the level, as ours is.
+    # The cost is that their LIKELIHOOD is then the exact diffuse one while
+    # ours is the simple-differencing arm, which is one more reason the two
+    # cannot agree to the last bit, and is why this is reported, not tuned to.
     model = SARIMAX(y, exog=exog, order=case["order"],
                     seasonal_order=case["seasonal_order"],
                     trend="c" if case["trend"] == "c" else "n",
-                    simple_differencing=True)
+                    simple_differencing=False)
     res = model.fit(disp=False)
     named = dict(zip(res.param_names, np.asarray(res.params, dtype=np.float64)))
     beta = [named[k] for k in res.param_names if k.startswith("x")]

@@ -1,0 +1,27 @@
+== arima-exog (1,0,0) trend=n
+   beta true       [ 2.  -0.5]
+   beta ours       [ 1.9929899  -0.50649238]
+   beta statsmodels[ 1.99359064 -0.50629535]
+   beta            {'max_abs': 0.0006007392020899172, 'max_rel': 0.0003891440015553341}
+   ar              {'max_abs': 0.0009761568382069541, 'max_rel': 0.0016712387470589401}  ours [0.5831156373023987] theirs [np.float64(0.5840917941406056)]
+   forecast (16)   {'max_abs': 0.0014165715946434787, 'max_rel': 0.0026604802480946228}
+   sigma2 ours 0.255855, statsmodels 0.256203
+== arima-exog (1,0,0) trend=c
+   beta true       [ 2.  -0.5]
+   beta ours       [ 1.99315035 -0.50670785]
+   beta statsmodels[ 1.99354917 -0.50626761]
+   beta            {'max_abs': 0.00044023382632563113, 'max_rel': 0.0008695674279122259}
+   ar              {'max_abs': 0.0009279890822033732, 'max_rel': 0.0015887905289532955}  ours [0.5831572413444519] theirs [np.float64(0.5840852304266553)]
+   forecast (16)   {'max_abs': 0.0020384643595461327, 'max_rel': 0.012883689520925546}
+   intercept: ours mu (state) 0.000307092, implied mean 0.00073671; statsmodels 0.0007397
+   sigma2 ours 0.255925, statsmodels 0.256202
+== arima-exog-seasonal (1,1,0)(1,0,0,4)
+   beta true       [ 2.  -0.5]
+   beta ours       [ 1.99393356 -0.50483525]
+   beta statsmodels[ 1.99442889 -0.50426597]
+   beta            {'max_abs': 0.0005692825872751772, 'max_rel': 0.0011289331946418618}
+   ar              {'max_abs': 0.0046108485711029434, 'max_rel': 0.01841651925723245}  ours [-0.24575397372245789] theirs [np.float64(-0.25036482229356083)]
+   sar             {'max_abs': 0.0004565852288489075, 'max_rel': 0.005522308054571301}
+   forecast (16)   {'max_abs': 0.0017431781196165508, 'max_rel': 0.0033070109396582856}
+   sigma2 ours 0.303159, statsmodels 0.303598
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/arima-exog/ev/statsmodels_agreement.json

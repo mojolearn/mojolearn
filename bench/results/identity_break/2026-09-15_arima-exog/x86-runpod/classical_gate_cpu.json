@@ -1,0 +1,3424 @@
+{
+  "binaries": {
+    "_mojolearn": "/root/mojolearn/python/mojolearn/host/_mojolearn_core_host.so",
+    "_mojolearn_arima": "/root/mojolearn/python/mojolearn/host/_mojolearn_forecast_host.so",
+    "_mojolearn_embedding": "/root/mojolearn/python/mojolearn/host/_mojolearn_embedding_infer_host.so",
+    "_mojolearn_estimators": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_gp": "/root/mojolearn/python/mojolearn/host/_mojolearn_gp_infer_host.so",
+    "_mojolearn_hdbscan": "/root/mojolearn/python/mojolearn/host/_mojolearn_hdbscan_infer_host.so",
+    "_mojolearn_ivf": "/root/mojolearn/python/mojolearn/host/_mojolearn_ivf_search_host.so",
+    "_mojolearn_kernel_methods": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_metrics": "/root/mojolearn/python/mojolearn/host/_mojolearn_metrics_host.so",
+    "_mojolearn_mixture": "/root/mojolearn/python/mojolearn/host/_mojolearn_mixture_infer_host.so",
+    "_mojolearn_preprocessing": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_solver": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_svm": "/root/mojolearn/python/mojolearn/host/_mojolearn_svm_host.so",
+    "_mojolearn_tsa": "/root/mojolearn/python/mojolearn/host/_mojolearn_forecast_host.so"
+  },
+  "binary": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+  "checked_at": "2026-09-15T23:49:09+0000",
+  "commit": null,
+  "exit": 0,
+  "expect_mismatch": false,
+  "fixtures": [
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "c647b3bc7ef76c2b2fcce8259695ccdfda05bb9d07b0c85a7a33c55d31006991",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "c647b3bc7ef76c2b2fcce8259695ccdfda05bb9d07b0c85a7a33c55d31006991",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "3d5b2a604cd1914233b4e133e9b8df570ca1db6fc5e5dc4cf362970b9dec8ece",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "3d5b2a604cd1914233b4e133e9b8df570ca1db6fc5e5dc4cf362970b9dec8ece",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "ce4005d3612e8a5f9271fc5b3c12ed52ce3780320024227f1a6c43ad8b042784",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "ce4005d3612e8a5f9271fc5b3c12ed52ce3780320024227f1a6c43ad8b042784",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "7b813a4bd4f25dc2c5a60215ab3bb5b1e6c7b3c71e05dbced982a164bd3f3b75",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "7b813a4bd4f25dc2c5a60215ab3bb5b1e6c7b3c71e05dbced982a164bd3f3b75",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "936b39099c6430a93bf1a608363340d194e1d9925afbce55462c33c6cd74a954",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "936b39099c6430a93bf1a608363340d194e1d9925afbce55462c33c6cd74a954",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "70dfa9c3299f230071772516a8d2e960fd65f9ed668ee20a225eccc06175a136",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "70dfa9c3299f230071772516a8d2e960fd65f9ed668ee20a225eccc06175a136",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "aca22715db20d673b7cbc020911f62179222060383c37130a967462483de6445",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "aca22715db20d673b7cbc020911f62179222060383c37130a967462483de6445",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "95f19479680d730f0f31aa2366b9f289a7332581cdd0215ede511e2a20f1cfb4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "95f19479680d730f0f31aa2366b9f289a7332581cdd0215ede511e2a20f1cfb4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "47a42389a7c18a25",
+        "want": "47a42389a7c18a25"
+      },
+      "kind": "base",
+      "lane": "arima-exog",
+      "model_sha256": "270897d998bb65578a5dcd8b7d34066ce5a62ec096cea6776a329abe81117bc8",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.025939
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "b5e554bcc6a6810ebc48b30937dbeca9fe0bd985c2eda6c7c0c320e28d19e4a7",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "b5e554bcc6a6810ebc48b30937dbeca9fe0bd985c2eda6c7c0c320e28d19e4a7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "2d3bde2b745cc92e51370ca990931a5595a62a0668615baa0fe9d61984807995",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "2d3bde2b745cc92e51370ca990931a5595a62a0668615baa0fe9d61984807995",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "585e1abeb11ff3b9472b24404362df2acaebc9630faf1f234c9dc03ec5344e1b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "585e1abeb11ff3b9472b24404362df2acaebc9630faf1f234c9dc03ec5344e1b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "8e8c6405b27f1b1953eeb465145f76108bb81a15fac14454673962ca22d0ce3e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "8e8c6405b27f1b1953eeb465145f76108bb81a15fac14454673962ca22d0ce3e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "06e46e99cb02a7b84c638a4d8e906f274e926c5ca2ddb0f7bc327b0e5728dec5",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "06e46e99cb02a7b84c638a4d8e906f274e926c5ca2ddb0f7bc327b0e5728dec5",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "1eb5caf22973670a55a097bf18dedfd9a071d5f1e00b205f8205ff9d64fda5e3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "1eb5caf22973670a55a097bf18dedfd9a071d5f1e00b205f8205ff9d64fda5e3",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "4c00607e3b26c2358edc779f96a17e7dbd4e47babc638178fcc57aa48ae75fef",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "4c00607e3b26c2358edc779f96a17e7dbd4e47babc638178fcc57aa48ae75fef",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "a16ed621de115cfd678bf2bebecfb8400bab2167e3ec1e9f511ae74264ae3df1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "a16ed621de115cfd678bf2bebecfb8400bab2167e3ec1e9f511ae74264ae3df1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "c6b5b3538692eba0",
+        "want": "c6b5b3538692eba0"
+      },
+      "kind": "denormal",
+      "lane": "arima-exog",
+      "model_sha256": "c3ab2dffbd90daa2c61fa569467c2b758ca0bc3438b865bdfd40561bf98af4d8",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.00081
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "b5e554bcc6a6810ebc48b30937dbeca9fe0bd985c2eda6c7c0c320e28d19e4a7",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "b5e554bcc6a6810ebc48b30937dbeca9fe0bd985c2eda6c7c0c320e28d19e4a7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "2d3bde2b745cc92e51370ca990931a5595a62a0668615baa0fe9d61984807995",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "2d3bde2b745cc92e51370ca990931a5595a62a0668615baa0fe9d61984807995",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "585e1abeb11ff3b9472b24404362df2acaebc9630faf1f234c9dc03ec5344e1b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "585e1abeb11ff3b9472b24404362df2acaebc9630faf1f234c9dc03ec5344e1b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "8e8c6405b27f1b1953eeb465145f76108bb81a15fac14454673962ca22d0ce3e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "8e8c6405b27f1b1953eeb465145f76108bb81a15fac14454673962ca22d0ce3e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "06e46e99cb02a7b84c638a4d8e906f274e926c5ca2ddb0f7bc327b0e5728dec5",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "06e46e99cb02a7b84c638a4d8e906f274e926c5ca2ddb0f7bc327b0e5728dec5",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "1eb5caf22973670a55a097bf18dedfd9a071d5f1e00b205f8205ff9d64fda5e3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "1eb5caf22973670a55a097bf18dedfd9a071d5f1e00b205f8205ff9d64fda5e3",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "4c00607e3b26c2358edc779f96a17e7dbd4e47babc638178fcc57aa48ae75fef",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "4c00607e3b26c2358edc779f96a17e7dbd4e47babc638178fcc57aa48ae75fef",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "a16ed621de115cfd678bf2bebecfb8400bab2167e3ec1e9f511ae74264ae3df1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "a16ed621de115cfd678bf2bebecfb8400bab2167e3ec1e9f511ae74264ae3df1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "c6b5b3538692eba0",
+        "want": "c6b5b3538692eba0"
+      },
+      "kind": "denormal_ftz",
+      "lane": "arima-exog",
+      "model_sha256": "d31fdb6ed28b378b035ef423956f17a61c0e828dd67633cd06aac57f333b5415",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000921
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "c647b3bc7ef76c2b2fcce8259695ccdfda05bb9d07b0c85a7a33c55d31006991",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "c647b3bc7ef76c2b2fcce8259695ccdfda05bb9d07b0c85a7a33c55d31006991",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "3d5b2a604cd1914233b4e133e9b8df570ca1db6fc5e5dc4cf362970b9dec8ece",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "3d5b2a604cd1914233b4e133e9b8df570ca1db6fc5e5dc4cf362970b9dec8ece",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "ce4005d3612e8a5f9271fc5b3c12ed52ce3780320024227f1a6c43ad8b042784",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "ce4005d3612e8a5f9271fc5b3c12ed52ce3780320024227f1a6c43ad8b042784",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "7b813a4bd4f25dc2c5a60215ab3bb5b1e6c7b3c71e05dbced982a164bd3f3b75",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "7b813a4bd4f25dc2c5a60215ab3bb5b1e6c7b3c71e05dbced982a164bd3f3b75",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "936b39099c6430a93bf1a608363340d194e1d9925afbce55462c33c6cd74a954",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "936b39099c6430a93bf1a608363340d194e1d9925afbce55462c33c6cd74a954",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "70dfa9c3299f230071772516a8d2e960fd65f9ed668ee20a225eccc06175a136",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "70dfa9c3299f230071772516a8d2e960fd65f9ed668ee20a225eccc06175a136",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "aca22715db20d673b7cbc020911f62179222060383c37130a967462483de6445",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "aca22715db20d673b7cbc020911f62179222060383c37130a967462483de6445",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "95f19479680d730f0f31aa2366b9f289a7332581cdd0215ede511e2a20f1cfb4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "95f19479680d730f0f31aa2366b9f289a7332581cdd0215ede511e2a20f1cfb4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "47a42389a7c18a25",
+        "want": "47a42389a7c18a25"
+      },
+      "kind": "dupes",
+      "lane": "arima-exog",
+      "model_sha256": "270897d998bb65578a5dcd8b7d34066ce5a62ec096cea6776a329abe81117bc8",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000724
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "98cc59a03cb445fcd85b0e8e7ed8264fd0b79dd7e7260fca32567de65e5e78be",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "98cc59a03cb445fcd85b0e8e7ed8264fd0b79dd7e7260fca32567de65e5e78be",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "6d2ce0d1a08c4563928483e91b8d25f5f1806b65182d6f630860076ecf38c074",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "6d2ce0d1a08c4563928483e91b8d25f5f1806b65182d6f630860076ecf38c074",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "1c7e73ffd49167733cab7b7c5815fae6902db5734b3760a7c49a113907dd7cef",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "1c7e73ffd49167733cab7b7c5815fae6902db5734b3760a7c49a113907dd7cef",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "745600c818ad02f5bf799ef1717905dee47185e0370b6aabb4092ddd30370cb4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "745600c818ad02f5bf799ef1717905dee47185e0370b6aabb4092ddd30370cb4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "fc042759fd68a8016b724645f8cbba7edf131116ae47f49f246041aceb3cf66c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "fc042759fd68a8016b724645f8cbba7edf131116ae47f49f246041aceb3cf66c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "20c8b46ca000ab45d67596520d14ddd7996a5a4cf9c0bd6c8b5a787d48654d47",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "20c8b46ca000ab45d67596520d14ddd7996a5a4cf9c0bd6c8b5a787d48654d47",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "ccab82013c64da4b215c755b590c2eefe2f539c5595741675a05e416d214198e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "ccab82013c64da4b215c755b590c2eefe2f539c5595741675a05e416d214198e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "82a0a3911e4dcf8fe1363f815f17a5201e4942b60e313ca8f2123b0a8d4bbb06",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "82a0a3911e4dcf8fe1363f815f17a5201e4942b60e313ca8f2123b0a8d4bbb06",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "d1f6dae58ca38fc6",
+        "want": "d1f6dae58ca38fc6"
+      },
+      "kind": "hashed",
+      "lane": "arima-exog",
+      "model_sha256": "7a8acb745895f97bd9e7b4fbe18fd99525a363d5b4fa7c6acc5b503cab3ed29d",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000814
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "5f405bd55aa5ccc0a2f289280cb53e9622b2142acc62a95a9e19caafdbf4b32c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "5f405bd55aa5ccc0a2f289280cb53e9622b2142acc62a95a9e19caafdbf4b32c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "2743b868e6c2a94e096c185b7fe2a2d3cd8ca8a57df7aa9e9a13fe91d1c1a839",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "2743b868e6c2a94e096c185b7fe2a2d3cd8ca8a57df7aa9e9a13fe91d1c1a839",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "04dd33075204f2b8709d5c22a954f0c387e95635ec50698508ba5e4f1a8da8e9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "04dd33075204f2b8709d5c22a954f0c387e95635ec50698508ba5e4f1a8da8e9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "11ce4f7423dcdf4776e69116276aef278e314989670df050a42d10002938488d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "11ce4f7423dcdf4776e69116276aef278e314989670df050a42d10002938488d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "f6bbabcb96ec48493a1b9aa5d362b4ab7200d748e74401d71579b57f75ea253f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "f6bbabcb96ec48493a1b9aa5d362b4ab7200d748e74401d71579b57f75ea253f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "959d974ba594a889a215e99188b862901875940f3ccda2041e10f9691851ac25",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "959d974ba594a889a215e99188b862901875940f3ccda2041e10f9691851ac25",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "ad88470daec1d94b78d79f72abf034dded11148fff4acbec97a0d1769b964631",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "ad88470daec1d94b78d79f72abf034dded11148fff4acbec97a0d1769b964631",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "1c38f1a1289e6e6587529df5c7f330cfd0a4c23b1d4520770932efd412c55573",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "1c38f1a1289e6e6587529df5c7f330cfd0a4c23b1d4520770932efd412c55573",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "24118bc0349bd37f",
+        "want": "24118bc0349bd37f"
+      },
+      "kind": "negative",
+      "lane": "arima-exog",
+      "model_sha256": "88e854113c47b02e1f4d09a53e3d3f844d0d77c9e614ce3d31991729f63ae502",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000776
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "44bac594e297cfb13417670981d1d3092ce5a9c4d605bca2674cdb2dc3acc06f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "44bac594e297cfb13417670981d1d3092ce5a9c4d605bca2674cdb2dc3acc06f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "678d80d4e51e5c09b65b3bd5aca3f259ef63b04de738b5ec4e4ff9310155cdec",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "678d80d4e51e5c09b65b3bd5aca3f259ef63b04de738b5ec4e4ff9310155cdec",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "a9fa0aeb99f2eecbe93cfe86c6eeddc0e85b4eb020de0cd47ca4371ac3af25fa",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "a9fa0aeb99f2eecbe93cfe86c6eeddc0e85b4eb020de0cd47ca4371ac3af25fa",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "07738eb4fb2aa88174eed504710c713ab48d0db7d6e356e4d979efce322de412",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "07738eb4fb2aa88174eed504710c713ab48d0db7d6e356e4d979efce322de412",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "c43737178a184076e7c5214682cc41873589f86765a83068465af726bb54389a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "c43737178a184076e7c5214682cc41873589f86765a83068465af726bb54389a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "62e7c2b7854cfdc4ea9b26c1559ca1461a778400d584f91a66dcd352a9cd836c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "62e7c2b7854cfdc4ea9b26c1559ca1461a778400d584f91a66dcd352a9cd836c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "eec235b6bdac2eaf28d6057ba805b9ea83f45f7b458534355f35287b0fd0e6aa",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "eec235b6bdac2eaf28d6057ba805b9ea83f45f7b458534355f35287b0fd0e6aa",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "f9eae6ebdc843f5c51065101085ed4cdc9bf133cc4fd057e278e4c368da4285a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "f9eae6ebdc843f5c51065101085ed4cdc9bf133cc4fd057e278e4c368da4285a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "0d8696d7fda83e82",
+        "want": "0d8696d7fda83e82"
+      },
+      "kind": "odd",
+      "lane": "arima-exog",
+      "model_sha256": "ed44afca3320382149503ba772be0279b9e56279a27cfaa2b0e51eb02a2c3cd9",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000742
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "44e72e8c136adcdb939001871516c2206ec5898ef7782560b4ca2da026278f35",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "44e72e8c136adcdb939001871516c2206ec5898ef7782560b4ca2da026278f35",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "b687d58c1c07daa6435c0e5bf8cb332885c724ab91d5041817dbed6d3b83bc3a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "b687d58c1c07daa6435c0e5bf8cb332885c724ab91d5041817dbed6d3b83bc3a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "ab6ed446fd8966532e3b224bb812bd0876249ac506857b13ee345325ca750ee9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "ab6ed446fd8966532e3b224bb812bd0876249ac506857b13ee345325ca750ee9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "af363ec3464d295c91c850f892c57879b8953e2c91b27ba626f1156234d3fb13",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "af363ec3464d295c91c850f892c57879b8953e2c91b27ba626f1156234d3fb13",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "59aab4fef5c9790ea8aa54a9a1f5255b9b033f8393cb285586ec6eb7615f0687",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "59aab4fef5c9790ea8aa54a9a1f5255b9b033f8393cb285586ec6eb7615f0687",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "e2e00576900fa3873f3b89620fc5c3637a28995c56887d9b43886f70000c3f21",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "e2e00576900fa3873f3b89620fc5c3637a28995c56887d9b43886f70000c3f21",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "9df8e71488f77976403b248dc4204d364fbd87217cf78b6e243e1e2fbb5a5189",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "9df8e71488f77976403b248dc4204d364fbd87217cf78b6e243e1e2fbb5a5189",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "e028552a8cf9a7b0615dc7abb4140eca7c28108d34fdb208f328bba0cd526613",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "e028552a8cf9a7b0615dc7abb4140eca7c28108d34fdb208f328bba0cd526613",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "0a54764aac3e8750",
+        "want": "0a54764aac3e8750"
+      },
+      "kind": "ties",
+      "lane": "arima-exog",
+      "model_sha256": "af6358733525c1c07f2d96c99ce327fb13ea847622ceedf2148f4a8aff0e4365",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000817
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "50f128991f0c7ab468b7088e8f7032c3fe7db5f2e2a5764e33e4ad2abe141b9b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "50f128991f0c7ab468b7088e8f7032c3fe7db5f2e2a5764e33e4ad2abe141b9b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "26097d46e91b14050e97c9ce1e74eec8ce3381d4916453342b47e213dd041785",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "26097d46e91b14050e97c9ce1e74eec8ce3381d4916453342b47e213dd041785",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "707f4be6dd84735f6a0b26c5077922e09a53ea6b397cf11a5e8bd8bf3e314c22",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "707f4be6dd84735f6a0b26c5077922e09a53ea6b397cf11a5e8bd8bf3e314c22",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "c7b40a1051312c3c9e44f7e7f0ba6a90eef44c940332d37464defb8226c32683",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "c7b40a1051312c3c9e44f7e7f0ba6a90eef44c940332d37464defb8226c32683",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "45bef482c086c21148a08cea6f7b9f9f89d60546b0634e79c5b2021b82ed2809",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "45bef482c086c21148a08cea6f7b9f9f89d60546b0634e79c5b2021b82ed2809",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "0d7596fe72f4d9ffc43aa743557492b03799122bf6f68371cbe1fd1b4212bc3c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "0d7596fe72f4d9ffc43aa743557492b03799122bf6f68371cbe1fd1b4212bc3c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "19f0590f56c41a01680812b06e925eb88b1858aef6589db72f4a4a2458466ee4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "19f0590f56c41a01680812b06e925eb88b1858aef6589db72f4a4a2458466ee4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "5247d584e721f50a585a898de0aefeac6f29571c5811bc605eb2110f628592ba",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "5247d584e721f50a585a898de0aefeac6f29571c5811bc605eb2110f628592ba",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "fa4ad43b61573ad3",
+        "want": "fa4ad43b61573ad3"
+      },
+      "kind": "wide",
+      "lane": "arima-exog",
+      "model_sha256": "f7dae018bf9937561f94960cdc796ff85c65a9db7ca541cbca43900f7d57b3db",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000779
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "54d41ad696586df95fc3556b6d36f7daca07a1c1c22feea8c63de8891dac1cba",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "54d41ad696586df95fc3556b6d36f7daca07a1c1c22feea8c63de8891dac1cba",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "7bcae72c618845e579b5d57a2ad49362864e2edcfcf1dbb4e232e14e4e9d2c9c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "7bcae72c618845e579b5d57a2ad49362864e2edcfcf1dbb4e232e14e4e9d2c9c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "6810540e41b1b696a134e5a03c3efb1efa1ed29c7c6af3057de6bb4136762316",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "6810540e41b1b696a134e5a03c3efb1efa1ed29c7c6af3057de6bb4136762316",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "871624b50899aa1b2dbc6b8a3d530cd39eb4cbe47853b36155e460bd7af8b0ff",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "871624b50899aa1b2dbc6b8a3d530cd39eb4cbe47853b36155e460bd7af8b0ff",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "5a73cd6c629160a1992ecac05b1e1796c42143cf9460c0157b541a33b889ddb1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "5a73cd6c629160a1992ecac05b1e1796c42143cf9460c0157b541a33b889ddb1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "7485f59c069fc2e24b3ce3f058fcc7720650a443f53076b38a7268917d57bc19",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "7485f59c069fc2e24b3ce3f058fcc7720650a443f53076b38a7268917d57bc19",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sar",
+          "equal": true,
+          "got": "d4d870eb5f00ad7670cce41a702091733b6d2bc9fc53199ff9aec7c92b8bce06",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "d4d870eb5f00ad7670cce41a702091733b6d2bc9fc53199ff9aec7c92b8bce06",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "1ae72a1d8bf32c4d2603db66ed0d278856dd0d34613798f82b774d344d80ec8d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "1ae72a1d8bf32c4d2603db66ed0d278856dd0d34613798f82b774d344d80ec8d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "0392c5518c63ed4d",
+        "want": "0392c5518c63ed4d"
+      },
+      "kind": "base",
+      "lane": "arima-exog-seasonal",
+      "model_sha256": "6dd538a7ed348bcd8b99b9697b9440feb0f89150d44bbc325bb55498cda65db4",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.004267
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "2ff60864909d9c85fecb2d6fbdaf39302ce2f721469262d7e757fcc25ab2ca48",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "2ff60864909d9c85fecb2d6fbdaf39302ce2f721469262d7e757fcc25ab2ca48",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "e34c429be7e7a375f9e7d2404c681ed499b03cab640f360f7d85891465b013a6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "e34c429be7e7a375f9e7d2404c681ed499b03cab640f360f7d85891465b013a6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "6720af649bb8b0b1b3edaf33935e33e2b38409b282152f98d3e2c987ed05af02",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "6720af649bb8b0b1b3edaf33935e33e2b38409b282152f98d3e2c987ed05af02",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "6901d6c672e304517e7014f1c060b6e7c58986467dd15d8ba2d4923805186113",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "6901d6c672e304517e7014f1c060b6e7c58986467dd15d8ba2d4923805186113",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "d024d5ff943f675dc63867d5ef533dc5e118c35c94c938e972c2ea0786f3a154",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "d024d5ff943f675dc63867d5ef533dc5e118c35c94c938e972c2ea0786f3a154",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "145544ea4e9b762b615a9fe711e067996327f85ad8b37e7503cde7bc79c019b0",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "145544ea4e9b762b615a9fe711e067996327f85ad8b37e7503cde7bc79c019b0",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sar",
+          "equal": true,
+          "got": "4ed7ba6213bbbbc0d2321fc7f71ffa9cab000ee97f10c3cc15de670c20d7f5aa",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "4ed7ba6213bbbbc0d2321fc7f71ffa9cab000ee97f10c3cc15de670c20d7f5aa",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "a8a788edf586cb900b5a611db2edbba057143a6cdf39dbd6a71aa55acef72017",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "a8a788edf586cb900b5a611db2edbba057143a6cdf39dbd6a71aa55acef72017",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "73bddff16649e238",
+        "want": "73bddff16649e238"
+      },
+      "kind": "denormal",
+      "lane": "arima-exog-seasonal",
+      "model_sha256": "47916d777fdf7a1ef57c1b3f9c9da5f9e34d6dbc0f7be5fab867b0f36da89e5c",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.004359
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "2ff60864909d9c85fecb2d6fbdaf39302ce2f721469262d7e757fcc25ab2ca48",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "2ff60864909d9c85fecb2d6fbdaf39302ce2f721469262d7e757fcc25ab2ca48",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "e34c429be7e7a375f9e7d2404c681ed499b03cab640f360f7d85891465b013a6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "e34c429be7e7a375f9e7d2404c681ed499b03cab640f360f7d85891465b013a6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "6720af649bb8b0b1b3edaf33935e33e2b38409b282152f98d3e2c987ed05af02",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "6720af649bb8b0b1b3edaf33935e33e2b38409b282152f98d3e2c987ed05af02",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "6901d6c672e304517e7014f1c060b6e7c58986467dd15d8ba2d4923805186113",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "6901d6c672e304517e7014f1c060b6e7c58986467dd15d8ba2d4923805186113",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "d024d5ff943f675dc63867d5ef533dc5e118c35c94c938e972c2ea0786f3a154",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "d024d5ff943f675dc63867d5ef533dc5e118c35c94c938e972c2ea0786f3a154",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "145544ea4e9b762b615a9fe711e067996327f85ad8b37e7503cde7bc79c019b0",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "145544ea4e9b762b615a9fe711e067996327f85ad8b37e7503cde7bc79c019b0",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sar",
+          "equal": true,
+          "got": "4ed7ba6213bbbbc0d2321fc7f71ffa9cab000ee97f10c3cc15de670c20d7f5aa",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "4ed7ba6213bbbbc0d2321fc7f71ffa9cab000ee97f10c3cc15de670c20d7f5aa",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "a8a788edf586cb900b5a611db2edbba057143a6cdf39dbd6a71aa55acef72017",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "a8a788edf586cb900b5a611db2edbba057143a6cdf39dbd6a71aa55acef72017",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "73bddff16649e238",
+        "want": "73bddff16649e238"
+      },
+      "kind": "denormal_ftz",
+      "lane": "arima-exog-seasonal",
+      "model_sha256": "655c915176e34b1b061d2bc42fe1dd97e31996ee2c5dfbb4b8b844e0f3de85dd",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.004204
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "54d41ad696586df95fc3556b6d36f7daca07a1c1c22feea8c63de8891dac1cba",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "54d41ad696586df95fc3556b6d36f7daca07a1c1c22feea8c63de8891dac1cba",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "7bcae72c618845e579b5d57a2ad49362864e2edcfcf1dbb4e232e14e4e9d2c9c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "7bcae72c618845e579b5d57a2ad49362864e2edcfcf1dbb4e232e14e4e9d2c9c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "6810540e41b1b696a134e5a03c3efb1efa1ed29c7c6af3057de6bb4136762316",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "6810540e41b1b696a134e5a03c3efb1efa1ed29c7c6af3057de6bb4136762316",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "871624b50899aa1b2dbc6b8a3d530cd39eb4cbe47853b36155e460bd7af8b0ff",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "871624b50899aa1b2dbc6b8a3d530cd39eb4cbe47853b36155e460bd7af8b0ff",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "5a73cd6c629160a1992ecac05b1e1796c42143cf9460c0157b541a33b889ddb1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "5a73cd6c629160a1992ecac05b1e1796c42143cf9460c0157b541a33b889ddb1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "7485f59c069fc2e24b3ce3f058fcc7720650a443f53076b38a7268917d57bc19",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "7485f59c069fc2e24b3ce3f058fcc7720650a443f53076b38a7268917d57bc19",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sar",
+          "equal": true,
+          "got": "d4d870eb5f00ad7670cce41a702091733b6d2bc9fc53199ff9aec7c92b8bce06",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "d4d870eb5f00ad7670cce41a702091733b6d2bc9fc53199ff9aec7c92b8bce06",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "1ae72a1d8bf32c4d2603db66ed0d278856dd0d34613798f82b774d344d80ec8d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "1ae72a1d8bf32c4d2603db66ed0d278856dd0d34613798f82b774d344d80ec8d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "0392c5518c63ed4d",
+        "want": "0392c5518c63ed4d"
+      },
+      "kind": "dupes",
+      "lane": "arima-exog-seasonal",
+      "model_sha256": "6dd538a7ed348bcd8b99b9697b9440feb0f89150d44bbc325bb55498cda65db4",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.00428
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "ad5831ddc795984f9fc3aaa431a1691482f6da1daec340e8f7f78a78d95556f8",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "ad5831ddc795984f9fc3aaa431a1691482f6da1daec340e8f7f78a78d95556f8",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "2e559a6d8cbe0d2c370670f5bad792975aa931e113a495c6a24f89f2d5adda02",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "2e559a6d8cbe0d2c370670f5bad792975aa931e113a495c6a24f89f2d5adda02",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "0a68608cbf85836af4603a9712dc4448938bde8e444cecb437b2f4195983bf84",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "0a68608cbf85836af4603a9712dc4448938bde8e444cecb437b2f4195983bf84",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "63d0ad68fdeebf4942c8a2c3acceef9a901c051e503921b4369b83f327f7565f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "63d0ad68fdeebf4942c8a2c3acceef9a901c051e503921b4369b83f327f7565f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "987a12326e9bc462850c55dfdb224796fa4a4f5c591ba237dd3037d6dd51bf41",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "987a12326e9bc462850c55dfdb224796fa4a4f5c591ba237dd3037d6dd51bf41",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "33cc9ad92afa9c3460dd24c2a5ebfa103aed96464c06bec9a9da64d5663fc9e6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "33cc9ad92afa9c3460dd24c2a5ebfa103aed96464c06bec9a9da64d5663fc9e6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sar",
+          "equal": true,
+          "got": "2e5ab4121019e7dd37c2db450a0ee1b634ed4ffa97588e65679b520be5e41f3f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "2e5ab4121019e7dd37c2db450a0ee1b634ed4ffa97588e65679b520be5e41f3f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "f6872fbda1a2b2606e1747e604f2a46ed6c4863e9c62d521eba0947a1508e87d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "f6872fbda1a2b2606e1747e604f2a46ed6c4863e9c62d521eba0947a1508e87d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "92a5f3575f52162e",
+        "want": "92a5f3575f52162e"
+      },
+      "kind": "hashed",
+      "lane": "arima-exog-seasonal",
+      "model_sha256": "98dacdf7f83a0ea74b3d48bf8fb0dc02f7175d216cda0bade655efe66f54e57a",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.004442
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "8e5e00e8b319d1f567ba1df22784bbbd7206b318fb2661289b6e1466d720a6d9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "8e5e00e8b319d1f567ba1df22784bbbd7206b318fb2661289b6e1466d720a6d9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "719b0588e21ea73e7de92ffd1b032e99b51c95bdd01aa3867a1e7fddec9c58b1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "719b0588e21ea73e7de92ffd1b032e99b51c95bdd01aa3867a1e7fddec9c58b1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "1ac4b0a65aa8452ff3ef934a65df4f86e5129c63b6b00a99f1c1950aa72e3c43",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "1ac4b0a65aa8452ff3ef934a65df4f86e5129c63b6b00a99f1c1950aa72e3c43",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "221c8cd41db280d0675280371ab6b12cad42d90c1256c53d381f5b957d069d82",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "221c8cd41db280d0675280371ab6b12cad42d90c1256c53d381f5b957d069d82",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "4aad9c74390d71be7388699ab11bb6fd4e11750b885f0322dc680777971b4a42",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "4aad9c74390d71be7388699ab11bb6fd4e11750b885f0322dc680777971b4a42",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "0f2d23435c38800cd3171544e602f257157ba2b1fbbde3d0b2fdf62d9e3d28be",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "0f2d23435c38800cd3171544e602f257157ba2b1fbbde3d0b2fdf62d9e3d28be",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sar",
+          "equal": true,
+          "got": "67609f6beefe0a0bcbefd60f50994bed63007ebf880662712fd75ef66842cd4e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "67609f6beefe0a0bcbefd60f50994bed63007ebf880662712fd75ef66842cd4e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "dd3991d2c3d78d8b82e802ad26ae5944c1e079cf301cf550c2bfdc099738658d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "dd3991d2c3d78d8b82e802ad26ae5944c1e079cf301cf550c2bfdc099738658d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "6fbe1b03160ddf99",
+        "want": "6fbe1b03160ddf99"
+      },
+      "kind": "negative",
+      "lane": "arima-exog-seasonal",
+      "model_sha256": "6df61f9b0e3d912bc61d9eadf5c633e8fad6038996ff2b094ccd660fdc9eb109",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.004203
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "f899bd44b732d4222fb79b1179123a17382dd2143291ccd299f33a55364ea896",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "f899bd44b732d4222fb79b1179123a17382dd2143291ccd299f33a55364ea896",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "9c11628fc93b33f813420bb5d673073fa93c2516357a9f374bef9e5239d37f12",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "9c11628fc93b33f813420bb5d673073fa93c2516357a9f374bef9e5239d37f12",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "7d8f8a24cccb4b96d16ff7355016a4ae4df064b0dee8a313b127f76ad9cc5aa0",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "7d8f8a24cccb4b96d16ff7355016a4ae4df064b0dee8a313b127f76ad9cc5aa0",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "865c9a93f7021fbf58d48be2dce3d1f3a6340e098713d2bfad95e28585fe13d5",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "865c9a93f7021fbf58d48be2dce3d1f3a6340e098713d2bfad95e28585fe13d5",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "f0ba28f0403754555b7dd0be218a784324308883f50fe3fc1430ac9d8667cc34",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "f0ba28f0403754555b7dd0be218a784324308883f50fe3fc1430ac9d8667cc34",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "0bc8046cd564a66635fbbc2dd9c7dd34b277efa99acc10334ac185398fc8f660",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "0bc8046cd564a66635fbbc2dd9c7dd34b277efa99acc10334ac185398fc8f660",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sar",
+          "equal": true,
+          "got": "593bc667790658ce206adf6cd2fd660599519ae6b6fb1073bc4672c440ae7b66",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "593bc667790658ce206adf6cd2fd660599519ae6b6fb1073bc4672c440ae7b66",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "0644a8dd501c95399dacebd991223daa1ab6778492e2b5e97337a58580e353ad",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "0644a8dd501c95399dacebd991223daa1ab6778492e2b5e97337a58580e353ad",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "8600ec544f57bd54",
+        "want": "8600ec544f57bd54"
+      },
+      "kind": "odd",
+      "lane": "arima-exog-seasonal",
+      "model_sha256": "611c9b29cdf162880f47054ab350ed9e50fcfe3ed1abd4818ccb069587f72abf",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.004278
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "0c69166f23463c0be244231f71610b654d8793076f11ff74102e2c565a1efae2",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "0c69166f23463c0be244231f71610b654d8793076f11ff74102e2c565a1efae2",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "cfcf7d1adee97e20a9254781bbf4cb64da71c12ad65c63ec7eea3555a9cda352",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "cfcf7d1adee97e20a9254781bbf4cb64da71c12ad65c63ec7eea3555a9cda352",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "a3422905682330ca40da1ba4aae18ef66e3e7fbda5376ab43b258915ef008a27",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "a3422905682330ca40da1ba4aae18ef66e3e7fbda5376ab43b258915ef008a27",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "111f04d7c9fa39d2d1726d3be419d5efc187b27f84363e454746f4b38b4d2379",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "111f04d7c9fa39d2d1726d3be419d5efc187b27f84363e454746f4b38b4d2379",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "52e10f07f9ec7b8cc03ce57340da88cd7d9fe8b326e380180e9b565ce193caf1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "52e10f07f9ec7b8cc03ce57340da88cd7d9fe8b326e380180e9b565ce193caf1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "c200ce643a7d7a5525eceeef57b13fa94e2ae189a487a84273d3722eca959393",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "c200ce643a7d7a5525eceeef57b13fa94e2ae189a487a84273d3722eca959393",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sar",
+          "equal": true,
+          "got": "e7ed18dee967260312cac409e367efb522468c47ebcc7bc7b8a5491275d20bea",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "e7ed18dee967260312cac409e367efb522468c47ebcc7bc7b8a5491275d20bea",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "d88b069469982ae8ef93eb275c594712e4b1b9a437b694aadd05010ea61b227c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "d88b069469982ae8ef93eb275c594712e4b1b9a437b694aadd05010ea61b227c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "9a23b875558b8979",
+        "want": "9a23b875558b8979"
+      },
+      "kind": "ties",
+      "lane": "arima-exog-seasonal",
+      "model_sha256": "14bf7fc49e25c5bcd4a0fef434eb941c671763be52fc9e87239e8210af41cd50",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.004664
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "aa40fa16bbb1b651466debe671fd1f7993a99b9ffc98ecd1d258e68853d496b9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "aa40fa16bbb1b651466debe671fd1f7993a99b9ffc98ecd1d258e68853d496b9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "b7822f65ee1a5333afcd498ce1aeab1aa3bd0bc7ae55b65875052031bf875ded",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "b7822f65ee1a5333afcd498ce1aeab1aa3bd0bc7ae55b65875052031bf875ded",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "a5af08d3382e79192dd1a62970d22742566c830723d6f990c5fd25482cde4367",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "a5af08d3382e79192dd1a62970d22742566c830723d6f990c5fd25482cde4367",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "1a44d6efb1d1c91c539d794c1f951eb40b437129d3d9fcc471839040263312fe",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            5
+          ],
+          "want": "1a44d6efb1d1c91c539d794c1f951eb40b437129d3d9fcc471839040263312fe",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            5
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "e9b248f66cebb54743d20bbbb2eff08b58cd1c8299f45d6884e43dddd795b218",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "e9b248f66cebb54743d20bbbb2eff08b58cd1c8299f45d6884e43dddd795b218",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "9453888984cf56458769b0a2a360329f5231a6a809fb5e080eab25d971257a01",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "9453888984cf56458769b0a2a360329f5231a6a809fb5e080eab25d971257a01",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sar",
+          "equal": true,
+          "got": "4e945a14044f16be120b76843e52e9e62c934506d178d83b85d8741a8fe0cf5d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "4e945a14044f16be120b76843e52e9e62c934506d178d83b85d8741a8fe0cf5d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "edd943c4daa22b82969b0d480dbe632799884620379fa85d577f1d5c06635c6c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "edd943c4daa22b82969b0d480dbe632799884620379fa85d577f1d5c06635c6c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "2e93bf12d7b45b77",
+        "want": "2e93bf12d7b45b77"
+      },
+      "kind": "wide",
+      "lane": "arima-exog-seasonal",
+      "model_sha256": "1fe0449adb2ddf023cdda76bfbceb3d9d3c2006703ebc4d75ad277028a3d8815",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.004206
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "06acb59b90f5532376a37a4e066b7107937336c342b5bd26c0a892cf43193fc3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "06acb59b90f5532376a37a4e066b7107937336c342b5bd26c0a892cf43193fc3",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "8c2e40bf3752b34194f8c75cdafe52c1f608923ba3852df211980249ee9b74c8",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "8c2e40bf3752b34194f8c75cdafe52c1f608923ba3852df211980249ee9b74c8",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "d7484219f3bb6cbe9767e04609fa61fbeb263c0ba063cdd5289853b338727d36",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "d7484219f3bb6cbe9767e04609fa61fbeb263c0ba063cdd5289853b338727d36",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "ba8c5928b073146c4a90bf60827d9fdfdc8cc35ed39e9c12624958baec48f343",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            3
+          ],
+          "want": "ba8c5928b073146c4a90bf60827d9fdfdc8cc35ed39e9c12624958baec48f343",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            3
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "a7b0d58f28d5cf2affc6e3038ef3be081df0c2f3a7bb8cca32852998c155419e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "a7b0d58f28d5cf2affc6e3038ef3be081df0c2f3a7bb8cca32852998c155419e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "41c9f349c1d7fb8d54120638cafa14ca76d9240667a3a0312a292cf6be401a2b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "41c9f349c1d7fb8d54120638cafa14ca76d9240667a3a0312a292cf6be401a2b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "4c1ebb2104ed1c1d75f7a8d4efbd12ce1cc00e31ce53d35b1a6ddd59d7288bb6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "4c1ebb2104ed1c1d75f7a8d4efbd12ce1cc00e31ce53d35b1a6ddd59d7288bb6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "9f76be0396a666ca",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "9f76be0396a666ca",
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": true,
+          "infer": "9f76be0396a666ca",
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "9f76be0396a666ca",
+        "want": "9f76be0396a666ca"
+      },
+      "kind": "base",
+      "lane": "arima",
+      "model_sha256": "6ae822845884aedf4b6b48e8ea50a9afd40a437c63e9a45a61589cbbec0fa562",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000524
+    },
+    {
+      "cases": [
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "4b06c4f7e006a8770e8673c2f33b2550e5520246a1df0546a273ebc3fd7384ad",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "4b06c4f7e006a8770e8673c2f33b2550e5520246a1df0546a273ebc3fd7384ad",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "ma",
+          "equal": true,
+          "got": "612d29e310aeeec1fedb08aa4374ba5d919ea8dd50070baff497f07c506f8dfa",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "612d29e310aeeec1fedb08aa4374ba5d919ea8dd50070baff497f07c506f8dfa",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "70a1c512524421ba0a262223a0a6f785bacf50b07ddf54937778b25b7ae97e75",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "70a1c512524421ba0a262223a0a6f785bacf50b07ddf54937778b25b7ae97e75",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "8cc6f86b99b129e1c5aa807d1ee158830931a1bc18106118f9596c9f20b8dd55",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "8cc6f86b99b129e1c5aa807d1ee158830931a1bc18106118f9596c9f20b8dd55",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "4126afac8caeb4336f1c88a80899a6535f96ffbd0d3a19d9e59fc4eb449be13a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "4126afac8caeb4336f1c88a80899a6535f96ffbd0d3a19d9e59fc4eb449be13a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "10923934f457f589b91a2885269678a88b43f6c235a36424d03ba33705b5166d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "10923934f457f589b91a2885269678a88b43f6c235a36424d03ba33705b5166d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "436e34843e2d7277",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "436e34843e2d7277",
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": true,
+          "infer": "436e34843e2d7277",
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "436e34843e2d7277",
+        "want": "436e34843e2d7277"
+      },
+      "kind": "base",
+      "lane": "arima-011",
+      "model_sha256": "d10f42f4fa3ab9cb4e409e184592c1693a681f3b8e72b55070c5dee2e0e0a5cc",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000776
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "693cd25921518f6f7ae3cced90d8ff94b69aa117162e87b01ba82187880aafea",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "693cd25921518f6f7ae3cced90d8ff94b69aa117162e87b01ba82187880aafea",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": true,
+          "got": "0b435ea84ae834a48101cd9f490109bfbc7628dd686f0753e1b8e5dff3f1f36d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "0b435ea84ae834a48101cd9f490109bfbc7628dd686f0753e1b8e5dff3f1f36d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "6c8c1aa8481c20a3b1a543577ef4543e05babd9ad84d0f7d0014436a556efd98",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "6c8c1aa8481c20a3b1a543577ef4543e05babd9ad84d0f7d0014436a556efd98",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "7bab7462710e06cc49386694eb76843a6ce21e698d4c360ed4e4bc318b1b5afa",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            4
+          ],
+          "want": "7bab7462710e06cc49386694eb76843a6ce21e698d4c360ed4e4bc318b1b5afa",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            4
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": true,
+          "got": "fa70ae24fe995b248a48160cf617d8d0f628d770c23e6c839fddae966bfd106e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "fa70ae24fe995b248a48160cf617d8d0f628d770c23e6c839fddae966bfd106e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": true,
+          "got": "8ca2aad0108de215c968b3030c29a1737979aa0d98b3b300e9f4521c7737df46",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "8ca2aad0108de215c968b3030c29a1737979aa0d98b3b300e9f4521c7737df46",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sar",
+          "equal": true,
+          "got": "4e5d4bb262a929de9dff8abf54c0b04c52bdd45599ae805570c444a65b3044d7",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "4e5d4bb262a929de9dff8abf54c0b04c52bdd45599ae805570c444a65b3044d7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "4c36473b52fa080c5d22b14c02ef9c605c15f2785d9d26c346dc3687b58dafde",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "4c36473b52fa080c5d22b14c02ef9c605c15f2785d9d26c346dc3687b58dafde",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "51863aef53c592d2",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "nvidia-h100-sm_90a.json",
+          "equal": true,
+          "infer": "51863aef53c592d2",
+          "vendor": "nvidia-h100-sm_90a"
+        },
+        {
+          "column": "amd-mi325x-gfx942.json",
+          "equal": true,
+          "infer": "51863aef53c592d2",
+          "vendor": "amd-mi325x-gfx942"
+        }
+      ],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": true,
+        "got": "51863aef53c592d2",
+        "want": "51863aef53c592d2"
+      },
+      "kind": "base",
+      "lane": "arima-seasonal-c",
+      "model_sha256": "4b68b52e2c4312b5b749e77e9526f1b5fa0d6597b37c9d2e9da6ec0aaeb786df",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.003969
+    }
+  ],
+  "gpu_columns": [
+    "apple-m4.json",
+    "nvidia-h100-sm_90a.json",
+    "amd-mi325x-gfx942.json"
+  ],
+  "host": {
+    "cpu": "AMD EPYC 9655P 96-Core Processor",
+    "family": "26",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "2",
+    "python": "3.14.7",
+    "release": "6.17.0-29-generic",
+    "stepping": "1",
+    "system": "Linux",
+    "vendor": "AuthenticAMD"
+  },
+  "unmoved": [
+    "arima-exog/base",
+    "arima-exog/denormal",
+    "arima-exog/denormal_ftz",
+    "arima-exog/dupes",
+    "arima-exog/hashed",
+    "arima-exog/negative",
+    "arima-exog/odd",
+    "arima-exog/ties",
+    "arima-exog/wide",
+    "arima-exog-seasonal/base",
+    "arima-exog-seasonal/denormal",
+    "arima-exog-seasonal/denormal_ftz",
+    "arima-exog-seasonal/dupes",
+    "arima-exog-seasonal/hashed",
+    "arima-exog-seasonal/negative",
+    "arima-exog-seasonal/odd",
+    "arima-exog-seasonal/ties",
+    "arima-exog-seasonal/wide",
+    "arima/base",
+    "arima-011/base",
+    "arima-seasonal-c/base"
+  ],
+  "vendor": "cpu",
+  "verdict": "IDENTICAL"
+}

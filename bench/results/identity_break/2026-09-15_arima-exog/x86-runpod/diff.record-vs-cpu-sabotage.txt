@@ -1,0 +1,161 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 2 lane(s); 165 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_forecast_host'] commit=a8e3a49c37ec20faf93e9e4671a5a0a5d8362e19
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| arima-exog-seasonal/base     | ONE-COLUMN | (not run)        | (not run)        | (not run)        | a076d04f969daeca |
+| arima-exog-seasonal/denormal | ONE-COLUMN | (not run)        | (not run)        | (not run)        | ab2d72177cb4ca0e |
+| arima-exog-seasonal/denormal_ftz | ONE-COLUMN | (not run)        | (not run)        | (not run)        | ab2d72177cb4ca0e |
+| arima-exog-seasonal/dupes    | ONE-COLUMN | (not run)        | (not run)        | (not run)        | a076d04f969daeca |
+| arima-exog-seasonal/hashed   | ONE-COLUMN | (not run)        | (not run)        | (not run)        | df092ab853b6f1c4 |
+| arima-exog-seasonal/negative | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 9cabd78c8ec35a81 |
+| arima-exog-seasonal/odd      | ONE-COLUMN | (not run)        | (not run)        | (not run)        | e7e245b5ef62c13e |
+| arima-exog-seasonal/ties     | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 2130197720462237 |
+| arima-exog-seasonal/wide     | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 51337e16e1d8af36 |
+| arima-exog/base              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | d46e237ca40bf67d |
+| arima-exog/denormal          | ONE-COLUMN | (not run)        | (not run)        | (not run)        | dd70c32656d3b418 |
+| arima-exog/denormal_ftz      | ONE-COLUMN | (not run)        | (not run)        | (not run)        | dd70c32656d3b418 |
+| arima-exog/dupes             | ONE-COLUMN | (not run)        | (not run)        | (not run)        | d46e237ca40bf67d |
+| arima-exog/hashed            | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 551b46c727b513b0 |
+| arima-exog/negative          | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 7a3ebbc59c8753fc |
+| arima-exog/odd               | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 0b9d4b36839c1cab |
+| arima-exog/ties              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | c903b04ba074dd05 |
+| arima-exog/wide              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 9c37fb6e5a7ff072 |
+
+summary: ONE-COLUMN=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| arima-exog-seasonal/base     | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 48871bb4a59d93a7 |
+| arima-exog-seasonal/base     | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 6ffa0716e9cbf36c |
+| arima-exog-seasonal/base     | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 61ffbe4823b4efda |
+| arima-exog-seasonal/denormal | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 39aefbc5171c7f48 |
+| arima-exog-seasonal/denormal | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | ebcb3f0acf75295f |
+| arima-exog-seasonal/denormal | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 317525855aaecf96 |
+| arima-exog-seasonal/denormal_ftz | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 39aefbc5171c7f48 |
+| arima-exog-seasonal/denormal_ftz | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | d5dc031c0ede7bb0 |
+| arima-exog-seasonal/denormal_ftz | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 317525855aaecf96 |
+| arima-exog-seasonal/dupes    | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 48871bb4a59d93a7 |
+| arima-exog-seasonal/dupes    | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 6ffa0716e9cbf36c |
+| arima-exog-seasonal/dupes    | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 61ffbe4823b4efda |
+| arima-exog-seasonal/hashed   | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 5c2d2ece34ea4cbb |
+| arima-exog-seasonal/hashed   | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | c385b3cf925795cc |
+| arima-exog-seasonal/hashed   | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 2b17aa2140d7c8fe |
+| arima-exog-seasonal/negative | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 24aae079045662df |
+| arima-exog-seasonal/negative | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 1579e21fc1e7ca58 |
+| arima-exog-seasonal/negative | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | fb0bcaf600efe781 |
+| arima-exog-seasonal/odd      | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 146849e89b937a18 |
+| arima-exog-seasonal/odd      | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 799f0387a3c0a160 |
+| arima-exog-seasonal/odd      | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 99bc15bd6a9f1bcc |
+| arima-exog-seasonal/ties     | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 15832d4e6f6b72b6 |
+| arima-exog-seasonal/ties     | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | fc411756ef1718d2 |
+| arima-exog-seasonal/ties     | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e8f4a370d05b1ddb |
+| arima-exog-seasonal/wide     | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e6a0a311bd0cc87a |
+| arima-exog-seasonal/wide     | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 0c6c7a4b4921fb14 |
+| arima-exog-seasonal/wide     | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | ed74c54e8786b8db |
+| arima-exog/base              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 13df2fb0d7959157 |
+| arima-exog/base              | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | fc6107a5fddb8002 |
+| arima-exog/base              | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | efb3756565409fed |
+| arima-exog/denormal          | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f869c7f607ea8014 |
+| arima-exog/denormal          | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f2608bf0b1591206 |
+| arima-exog/denormal          | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 9f93ac0bb868689e |
+| arima-exog/denormal_ftz      | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f869c7f607ea8014 |
+| arima-exog/denormal_ftz      | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | d7462ca30bcd8533 |
+| arima-exog/denormal_ftz      | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 9f93ac0bb868689e |
+| arima-exog/dupes             | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 13df2fb0d7959157 |
+| arima-exog/dupes             | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | fc6107a5fddb8002 |
+| arima-exog/dupes             | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | efb3756565409fed |
+| arima-exog/hashed            | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 77cd0b5d1c2cc3b0 |
+| arima-exog/hashed            | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 11aba6874911c951 |
+| arima-exog/hashed            | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 4f23bc41a5c2631e |
+| arima-exog/negative          | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | d2a7dcac1b558519 |
+| arima-exog/negative          | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | dd245ec928a3baa2 |
+| arima-exog/negative          | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | d4d8ecb3d932defc |
+| arima-exog/odd               | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 01be160591bb0fa2 |
+| arima-exog/odd               | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f94adb7c0f767e21 |
+| arima-exog/odd               | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | d1a584857e979a08 |
+| arima-exog/ties              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | b4ab869bfa9d5f11 |
+| arima-exog/ties              | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 9a8036eb84aefb51 |
+| arima-exog/ties              | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 9ed348801ee75299 |
+| arima-exog/wide              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 286a2e39e95dfa51 |
+| arima-exog/wide              | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | b4c81bd735dd8607 |
+| arima-exog/wide              | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 4f9cfd2b22c54ca3 |
+
+summary (infer/model): ONE-COLUMN=36
+summary (batch): ONE-COLUMN=18
+summary (rlpair): 
+REQUIRE FAIL arima-exog-seasonal/base train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/denormal train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/denormal_ftz train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/dupes train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/hashed train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/negative train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/odd train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/ties train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/wide train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/base train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/denormal train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/denormal_ftz train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/dupes train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/hashed train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/negative train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/odd train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/ties train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/wide train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/denormal_ftz infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/denormal_ftz batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/dupes infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/dupes batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/hashed infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/hashed batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/negative infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/negative batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/wide infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog-seasonal/wide batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/denormal_ftz infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/denormal_ftz batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/dupes infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/dupes batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/hashed infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/hashed batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/negative infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/negative batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/wide infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-exog/wide batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 4 over ['arima-exog', 'arima-exog-seasonal']: 72 short
