@@ -398,6 +398,7 @@ done
 for f in $(echo "@SABBUILD@" | tr , ' '); do
     t=$(date +%s)
     env MOJOLEARN_BUILD_EXTRA_DEFINES="@SABDEFINES@" MOJOLEARN_HOST_OUTDIR=python/mojolearn/host-sabotage \
+        MOJOLEARN_FOREST_HOST_OUTDIR=python/mojolearn/host-sabotage MOJOLEARN_BYTE_LM_HOST_OUTDIR=python/mojolearn/host-sabotage \
         MOJOLEARN_BINCACHE_NEGATIVE=1 "$PY" tools/bincache.py build "bindings/build_${f}_host.sh" > "$OUT/build_sabotage_$f.log" 2>&1
     printf 'sabotage-build\t%s\t%s\t%s\n' "$f" "$?" "$(( $(date +%s) - t ))" >> "$OUT/status.tsv"
 done

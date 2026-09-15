@@ -89,6 +89,11 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.gpu_util.kernel.random_gen import next_poisson_f, next_uniform_f
+from gbdt.host.gbdt_oracle_query import (
+    query_rmse_eval,
+    query_rmse_search_pass,
+    query_rmse_value,
+)
 from gbdt.host.gbdt_oracle import (
     GBDT_FLOAT32_MAX,
     GBDT_MSE_BLOCK,
@@ -125,6 +130,9 @@ comptime GBDT_OBJ_LQ = 8
 comptime GBDT_OBJ_EXPECTILE = 9
 comptime GBDT_OBJ_TWEEDIE = 10
 comptime GBDT_OBJ_HUBER = 11
+#: `OBJECTIVE_QUERY_RMSE` (`pointwise_targets.mojo`), the querywise target of
+#: `gbdt/host/gbdt_oracle_query.mojo`
+comptime GBDT_OBJ_QUERY_RMSE = 14
 
 #: `LEAF_ESTIMATION_*` (`gbdt/options/catboost_options.mojo:269-271`).
 comptime GBDT_LEAF_GRADIENT = 0
@@ -520,6 +528,9 @@ def _walker_estimate(
     weights_cpu: List[Float64],
     n_rows: Int,
     l2_leaf_reg: Float32,
+    targets_rows: List[Float32] = List[Float32](),
+    row_index: List[Int] = List[Int](),
+    group_sizes: List[Int] = List[Int](),
 ) raises -> List[Float32]:
     """`newton_like_walker_estimate` with AnyImprovement
     (`descent_helpers.mojo:198-285`, `step_estimator.mojo:50-72`), the TWIN
@@ -536,10 +547,16 @@ def _walker_estimate(
     var cur_grad = List[Float64]()
     var cached_der2 = List[Float64]()
     _oracle_move_to(cur_point, current_point, bins, g_cursor, n_rows)
-    _loss_eval(
-        loss, g_target, g_cursor, offsets, sizes, n_rows, lambda_reg,
-        cur_value, cur_grad, cached_der2,
-    )
+    if loss.objective == GBDT_OBJ_QUERY_RMSE:
+        query_rmse_eval(
+            targets_rows, g_cursor, row_index, group_sizes, offsets, sizes,
+            n_rows, lambda_reg, cur_value, cur_grad, cached_der2,
+        )
+    else:
+        _loss_eval(
+            loss, g_target, g_cursor, offsets, sizes, n_rows, lambda_reg,
+            cur_value, cur_grad, cached_der2,
+        )
     var cur_hess = _second_derivatives(loss.method, weights_cpu, lambda_reg, cached_der2)
     var direction = _diagonal_direction(cur_grad, cur_hess)
 
@@ -560,10 +577,17 @@ def _walker_estimate(
             var next_point = _walker_move(cur_point, direction, step)
             _regularize(weights_cpu, next_point)
             _oracle_move_to(next_point, current_point, bins, g_cursor, n_rows)
-            _loss_eval(
-                loss, g_target, g_cursor, offsets, sizes, n_rows, lambda_reg,
-                next_value, next_grad, cached_der2,
-            )
+            if loss.objective == GBDT_OBJ_QUERY_RMSE:
+                query_rmse_eval(
+                    targets_rows, g_cursor, row_index, group_sizes, offsets,
+                    sizes, n_rows, lambda_reg, next_value, next_grad,
+                    cached_der2,
+                )
+            else:
+                _loss_eval(
+                    loss, g_target, g_cursor, offsets, sizes, n_rows,
+                    lambda_reg, next_value, next_grad, cached_der2,
+                )
             if function_value <= next_value:
                 cur_hess = _second_derivatives(loss.method, weights_cpu, lambda_reg, cached_der2)
                 cur_point = next_point.copy()
@@ -734,6 +758,7 @@ def _estimate_leaves_for_loss(
     sizes: List[Int],
     n_rows: Int,
     l2_leaf_reg: Float32,
+    group_sizes: List[Int] = List[Int](),
 ) raises -> List[Float32]:
     """`_estimate_and_apply`'s estimate (`doc_parallel_boosting.mojo:
     698-797`): the gathers by the row index, then Exact or the walker."""
@@ -756,7 +781,7 @@ def _estimate_leaves_for_loss(
         )
     return _walker_estimate(
         loss, g_target, g_cursor, bins, offsets, sizes, weights_cpu, n_rows,
-        l2_leaf_reg,
+        l2_leaf_reg, targets, row_index, group_sizes,
     )
 
 
@@ -772,9 +797,13 @@ def gbdt_losses_host_fit(
     n_features: Int,
     params: GbdtHostParams,
     loss: GbdtHostLoss,
+    group_sizes: List[Int] = List[Int](),
 ) raises -> GbdtHostModel:
     """`train` then `fit_with_test` on the covered configurations (see the
-    module docstring)."""
+    module docstring). `group_sizes` is read by QueryRMSE alone, already
+    resolved to their `TWithoutQueriesGrouping` rule by the binding."""
+    if loss.objective == GBDT_OBJ_QUERY_RMSE and len(group_sizes) < 1:
+        raise Error("the QueryRMSE host fit needs the query sizes")
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
@@ -837,7 +866,12 @@ def gbdt_losses_host_fit(
 
     for iteration in range(params.n_estimators):
         # ---- the gradients, the learn loss and the magnitudes ----
-        _loss_search_pass(loss, y, cursor, n_rows, stats, fv_part, mag_part)
+        if loss.objective == GBDT_OBJ_QUERY_RMSE:
+            query_rmse_search_pass(
+                y, cursor, group_sizes, n_rows, stats, fv_part, mag_part
+            )
+        else:
+            _loss_search_pass(loss, y, cursor, n_rows, stats, fv_part, mag_part)
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var fixed_scale: Float32
         if bootstrap_on:
@@ -1061,7 +1095,7 @@ def gbdt_losses_host_fit(
         # ---- the estimation task and `AppendModels` ----
         var estimated = _estimate_leaves_for_loss(
             loss, y, cursor, row_index, offsets, sizes, n_rows,
-            params.l2_leaf_reg,
+            params.l2_leaf_reg, group_sizes,
         )
         for leaf in range(n_live):
             for k in range(sizes[leaf]):
@@ -1080,7 +1114,13 @@ def gbdt_losses_host_fit(
             if iteration + 1 > 1:
                 losses.append(-v / Float64(n_rows))
 
-    losses.append(-Float64(_loss_value(loss, y, cursor, n_rows)) / Float64(n_rows))
+    if loss.objective == GBDT_OBJ_QUERY_RMSE:
+        var q_fv = query_rmse_value(y, cursor, group_sizes, n_rows)
+        losses.append(
+            -Float64(_deterministic_sum_lanes(q_fv, 1, len(q_fv))[0]) / Float64(n_rows)
+        )
+    else:
+        losses.append(-Float64(_loss_value(loss, y, cursor, n_rows)) / Float64(n_rows))
     return GbdtHostModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
