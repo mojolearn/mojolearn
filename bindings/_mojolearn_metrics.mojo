@@ -841,7 +841,7 @@ def spectral_fit_predict_dataset_state_binding(
     centroids (`spectral/host/spectral_predict_host.mojo`). Labels and
     embedding are the same call's.
 
-    `addrs`, in this exact order (mirrored in `_spectral_impl.py`): x,
+    `addrs`, in this exact order (matched in `_spectral_impl.py`): x,
     labels, embedding, eigenvalues (k f32), eigenvectors (n x k f32), diag
     (n f32), centroids (n_clusters x k f32). `params`: the eight of
     `spectral_fit_predict_dataset`. Returns `n_out`."""
@@ -924,7 +924,7 @@ def spectral_predict_binding(
     """`SpectralClustering.predict` (DEVIATION 2860; the rule is stated in
     `spectral/host/spectral_predict_host.mojo`).
 
-    `addrs`, in this exact order (mirrored in `_spectral_impl.py`): input
+    `addrs`, in this exact order (matched in `_spectral_impl.py`): input
     (queries n_queries x n_features, or the precomputed affinity n_queries x
     n_train), training rows (n_train x n_features; 0 for precomputed),
     eigenvalues (k), eigenvectors (n_train x k), diag (n_train), centroids

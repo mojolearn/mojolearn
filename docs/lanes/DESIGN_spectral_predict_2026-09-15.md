@@ -77,4 +77,35 @@ CPU spelling). The device spelling is `spectral/impl/spectral_predict.mojo`.
 
 ## Results
 
-Filled in from the evidence directory.
+### Training-row agreement
+
+This is `predict(X_train) == labels_` on the identity lanes' own fits. It was
+measured on the x86 CPU reference at 7e072251b (RunPod CPU pod); the fit and
+predict arithmetic did not change after that commit.
+
+- `spectral` is `X[:2000, :4]`, 9 fixtures.
+- `spectral-precomputed` is the `_affinity` of `X[:1000, :4]`, predicted on
+  that same matrix.
+- In the `1 + theta` column, the first value is the trivial column's.
+
+| fixture | spectral | spectral-precomputed | spectral `1 + theta` |
+|---|---|---|---|
+| base | 1965/2000 (0.9825) | 998/1000 (0.998) | 1.0, 0.967, 0.965, 0.964 |
+| ties | 1972/2000 (0.9860) | 996/1000 (0.996) | 1.0, 0.977, 0.973, 0.972 |
+| hashed | 1964/2000 (0.9820) | 999/1000 (0.999) | 1.0, 0.979, 0.978, 0.976 |
+| wide | 1986/2000 (0.9930) | 997/1000 (0.997) | 1.0, 0.999, 0.996, 0.992 |
+| denormal | 1997/2000 (0.9985) | 1000/1000 (1.000) | 1.0, 1.0, 1.0, 1.0 |
+| denormal_ftz | 1997/2000 (0.9985) | 1000/1000 (1.000) | 1.0, 1.0, 1.0, 1.0 |
+| dupes | 1965/2000 (0.9825) | 998/1000 (0.998) | 1.0, 0.967, 0.965, 0.964 |
+| odd | 1966/2000 (0.9830) | 1000/1000 (1.000) | 1.0, 0.967, 0.966, 0.964 |
+| negative | 1961/2000 (0.9805) | 998/1000 (0.998) | 1.0, 0.979, 0.977, 0.973 |
+
+- **Totals.** `spectral` agrees on 17773 of 18000 training rows (0.9874).
+  `spectral-precomputed` agrees on 8986 of 9000 (0.9984).
+- **Embedding gap.** The largest `|extension - embedding_|` on training rows
+  is 1.5e-3 to 2.2e-3 (`spectral`) and 3e-4 to 1.1e-2 (precomputed).
+- **Threshold margin.** The smallest `|1 + theta|` on any lane is 0.43
+  (precomputed), far above the 1e-3 threshold.
+
+Identity columns, sabotage and the installed wheel: see
+`bench/results/identity_break/2026-09-15_spectral-predict/README.md`.
