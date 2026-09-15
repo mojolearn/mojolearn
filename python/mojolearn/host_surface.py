@@ -480,6 +480,11 @@ TRAINING_LANE_NAMES = {
     # TRAINING_EXTRA_RECORDS below.
     "embedding": "the Embedding layer",
     "embedding-sort": "the Embedding layer on its sorted execution plan",
+    # IVFIndex's build and search through ivf/host/ivf_host.mojo (the k-means
+    # quantizer through cluster/host/kmeans_oracle.mojo) in the ivf family's
+    # own host binding, under both L2 metrics.
+    "ivf": "the IVF-Flat index",
+    "ivf-euclidean": "the IVF-Flat index under euclidean distance",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -1204,6 +1209,39 @@ FAMILIES = (
             "embedding_host_column", "embedding_host_sabotage",
             "embedding_vendor", "embedding_numeric_mode",
             "embedding_forward", "embedding_backward",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # lane/cpu-training-embedding-ivf (2026-09-15): IVFIndex's host
+        # binding. It routes `_mojolearn_ivf` on a CPU-only install with the
+        # GPU binding's whole surface (ivf_flat_build_and_search and the two
+        # read-backs): the build's k-means quantizer through the k-means
+        # lane's host restatement, the CSR layout and probe merge the device
+        # path already runs on the host, and the pinned distance tile and
+        # the identical top-k restated.
+        family="ivf",
+        binding="_mojolearn_ivf_host",
+        routes="_mojolearn_ivf",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("ivf", "ivf-euclidean"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("IVFIndex",),
+        display="the IVF-Flat index",
+        host_modules=(
+            "ivf/host/ivf_host.mojo",
+            "cluster/host/kmeans_oracle.mojo",
+            "ivf/checks/list_layout.mojo",
+            "ivf/impl/neighbors/ivf_common.mojo",
+            "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo",
+        ),
+        exports=(
+            "ivf_host_numeric_mode", "ivf_host_vendor", "ivf_host_column",
+            "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
+            "ivf_flat_build_and_search",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
