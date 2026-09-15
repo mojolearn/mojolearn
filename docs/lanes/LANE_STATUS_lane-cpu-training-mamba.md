@@ -14,9 +14,20 @@
   (`bench/results/mamba_backward_oracle_host/2026-09-15/`); `mamba/README.md`
   claim corrected.
 
+- Restart (Sep 15 ~11:15 ET): gate run 34973248141 at ddd875cc8 was cancelled
+  (1h47m, the old job limit). origin/main (590c11c86) merged in with no
+  conflicts as 082fbb569. On the M4, one core, core and mamba host bindings
+  rebuilt from 082fbb569 into a fresh directory: `summary: IDENTICAL=36`,
+  `summary (infer/model): IDENTICAL=36, N/A=36`, `summary (batch):
+  IDENTICAL=36`, `require-columns 4 ... : OK` (204 s); a
+  `-D MOJOLEARN_HOST_SABOTAGE=1` mamba build read DIVERGENT=36 train, 35 infer
+  (mamba1/negative infer IDENTICAL, as in the committed sabotage diff) and 36
+  batch. docs_facts --check and wheel_ci pins pass.
+
 ## Running
-- CPU identity gate run 34973248141 at ddd875cc8 (queued at 13:09Z). No boxes
-  rented.
+- Nothing. Pushed with [skip ci] until Codex's routine gate (08b50887a) is on
+  main; then this branch gates after lane/cpu-training-transformer merges. No
+  boxes rented.
 
 ## Next commands
 1. `gh run view 34973248141 --json jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'`
