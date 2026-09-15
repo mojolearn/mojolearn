@@ -98,6 +98,7 @@ from bindings.host_helpers import (
     column_mean_f64_binding,
     gather_f64_binding,
     gather_i64_binding,
+    probability_rows_f32_binding,
     scale_rows_f32_binding,
 )
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
@@ -1002,6 +1003,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[column_mean_f64_binding]("column_mean_f64")
         module.def_function[center_columns_f32_binding]("center_columns_f32")
         module.def_function[scale_rows_f32_binding]("scale_rows_f32")
+        module.def_function[probability_rows_f32_binding]("probability_rows_f32")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))

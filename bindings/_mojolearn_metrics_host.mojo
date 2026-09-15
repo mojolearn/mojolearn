@@ -46,12 +46,17 @@ the spectral oracle for the initialization, and the IDENTICAL device epoch
 fold restated vertex by vertex); `python/mojolearn/_umap_impl.py` runs
 unchanged.
 
-The GPU binding's OTHER entries (`rand_score`, `roc_auc_score`,
-`precision_recall_curve`, `log_loss`, `confusion_matrix`,
-`precision_recall_fscore`, the three regression errors, `kl_divergence`,
-`trustworthiness` and `graph_parallel_available`) are
-deliberately ABSENT here, so every lane that reaches them keeps refusing BY
-NAME through `_HostBinding` until a lane lands them.
+THE METRICS-CLASSIFICATION LANE (2026-09-14) adds the GPU binding's
+remaining metric entries under their names and params lists: `rand_score`,
+`roc_auc_score`, `precision_recall_curve`, `log_loss`, `confusion_matrix`,
+`precision_recall_fscore`, `mean_squared_error`, `mean_absolute_error`,
+`root_mean_squared_error`, `kl_divergence` and `trustworthiness`, over
+`metrics/host/classification_oracle.mojo` (the log loss's probability
+check, `probability_rows_f32`, is in the core host binding).
+
+The GPU binding's OTHER entries (`graph_parallel_available`) are deliberately ABSENT here, so every lane that
+reaches them keeps refusing BY NAME through `_HostBinding` until a lane
+lands them.
 """
 from std.math import isfinite
 from std.os import abort
@@ -85,6 +90,19 @@ from metrics.host.metrics_oracle import (
     host_r2_score,
     host_silhouette,
     host_v_measure,
+)
+from metrics.host.classification_oracle import (
+    MAX_CONFUSION_CLASSES,
+    MAX_PRF_CLASSES,
+    host_binary_ranking,
+    host_confusion_matrix_f32,
+    host_confusion_matrix_i64,
+    host_kl_divergence,
+    host_log_loss,
+    host_precision_recall_fscore,
+    host_rand_score,
+    host_regression_error,
+    host_trustworthiness,
 )
 
 
@@ -530,6 +548,282 @@ def spectral_fit_predict_graph_binding(
 
 
 # ===========================================================================
+# The metrics-classification lane (2026-09-14): the GPU binding's remaining
+# metric entries, same names, same address contracts and params lists, over
+# metrics/host/classification_oracle.mojo. Validation is the GPU binding's
+# and metrics/estimator.mojo's, in their order and words.
+# ===========================================================================
+
+
+def rand_score_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::rand_index` on the host (DEVIATION 652). `params`:
+    `0 n`."""
+    _want(String("rand_score"), params, 1)
+    var n = _index(params[0])
+    var yt = read_i32(_index(y_true_addr), max(0, n))
+    var yp = read_i32(_index(y_pred_addr), max(0, n))
+    var out = Float64(0.0)
+    with GILReleased(Python()):
+        _check_pair(yt, yp, n)
+        out = host_rand_score(yt, yp, n)
+    return PythonObject(out)
+
+
+def _regression_error_entry(
+    y_true_addr: PythonObject, y_pred_addr: PythonObject, params: PythonObject,
+    absolute: Bool, root: Bool,
+) raises -> PythonObject:
+    _want(String("regression_error"), params, 1)
+    var n = _index(params[0])
+    var y = read_f32(_index(y_true_addr), max(0, n))
+    var prediction = read_f32(_index(y_pred_addr), max(0, n))
+    var result = Float32(0.0)
+    with GILReleased(Python()):
+        _check_float_pair(y, prediction, n)
+        for i in range(n):
+            if not isfinite(y[i]) or not isfinite(prediction[i]):
+                raise Error("regression_error: inputs must be finite Float32")
+        result = host_regression_error(y, prediction, n, absolute, root)
+    return PythonObject(Float64(result))
+
+
+def mean_squared_error_binding(
+    y_true_addr: PythonObject, y_pred_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`regression_error[False, False]` on the host. `params`: `0 n`."""
+    return _regression_error_entry(y_true_addr, y_pred_addr, params, False, False)
+
+
+def mean_absolute_error_binding(
+    y_true_addr: PythonObject, y_pred_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`regression_error[True, False]` on the host. `params`: `0 n`."""
+    return _regression_error_entry(y_true_addr, y_pred_addr, params, True, False)
+
+
+def root_mean_squared_error_binding(
+    y_true_addr: PythonObject, y_pred_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`regression_error[False, True]` on the host. `params`: `0 n`."""
+    return _regression_error_entry(y_true_addr, y_pred_addr, params, False, True)
+
+
+def _binary_ranking_checked(
+    y: List[Int32], scores: List[Float32], n: Int, curve: Bool,
+) raises -> Tuple[List[Float32], Int]:
+    """`binary_ranking_host[curve]`, `metrics/estimator.mojo`: the length,
+    label and finiteness checks, the both-classes refusal for the AUC."""
+    if n <= 0 or n > 2147483647 or len(y) < n or len(scores) < n:
+        raise Error("binary ranking: invalid input length")
+    var has_zero = False
+    var has_one = False
+    for i in range(n):
+        if y[i] == 0:
+            has_zero = True
+        elif y[i] == 1:
+            has_one = True
+        else:
+            raise Error("binary ranking: labels must encode 0 or 1")
+        if not isfinite(scores[i]):
+            raise Error("binary ranking: scores must be finite")
+    if not curve:
+        if not has_zero or not has_one:
+            raise Error("roc_auc_score: both classes required")
+    return host_binary_ranking(y, scores, n, curve)
+
+
+def roc_auc_score_binding(
+    true_addr: PythonObject, score_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Binary ROC AUC on the host. `params`: `0 n`; one float32 written."""
+    _want(String("roc_auc_score"), params, 1)
+    var n = _index(params[0])
+    if n <= 0 or n > 2147483647:
+        raise Error("roc_auc_score: invalid n")
+    var y = read_i32(_index(true_addr), n)
+    var scores = read_f32(_index(score_addr), n)
+    var output = f32_ptr(_index(out_addr))
+    with GILReleased(Python()):
+        var result = _binary_ranking_checked(y, scores, n, False)
+        output[0] = result[0][0]
+    return PythonObject(1)
+
+
+def precision_recall_curve_binding(
+    true_addr: PythonObject, score_addr: PythonObject, precision_addr: PythonObject,
+    recall_addr: PythonObject, threshold_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Binary PR curve on the host. `params`: `0 n`; writes `m + 1`
+    precisions and recalls and `m` thresholds, returns `m`."""
+    _want(String("precision_recall_curve"), params, 1)
+    var n = _index(params[0])
+    if n <= 0 or n > 2147483647:
+        raise Error("precision_recall_curve: invalid n")
+    var y = read_i32(_index(true_addr), n)
+    var scores = read_f32(_index(score_addr), n)
+    var precision = f32_ptr(_index(precision_addr))
+    var recall = f32_ptr(_index(recall_addr))
+    var thresholds = f32_ptr(_index(threshold_addr))
+    var m = 0
+    with GILReleased(Python()):
+        var result = _binary_ranking_checked(y, scores, n, True)
+        m = result[1]
+        for i in range(m + 1):
+            precision[i] = result[0][i]
+            recall[i] = result[0][n + 1 + i]
+        for i in range(m):
+            thresholds[i] = result[0][2 * (n + 1) + i]
+    return PythonObject(m)
+
+
+def log_loss_binding(
+    true_addr: PythonObject, probabilities_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Log loss on the host. `params`: `0 n, 1 k, 2 normalize`; one float32
+    written."""
+    _want(String("log_loss"), params, 3)
+    var n = _index(params[0])
+    var k = _index(params[1])
+    var normalize = _index(params[2])
+    if n <= 0 or n > 2147483647 or k < 2 or k > 2147483647 // n:
+        raise Error("log_loss: invalid input dimensions")
+    var y = read_i32(_index(true_addr), n)
+    var probability = read_f32(_index(probabilities_addr), n * k)
+    var out = f32_ptr(_index(out_addr))
+    with GILReleased(Python()):
+        if len(y) < n or len(probability) < n * k or normalize < 0 or normalize > 1:
+            raise Error("log_loss: invalid input length or normalization")
+        for i in range(n):
+            if Int(y[i]) < 0 or Int(y[i]) >= k:
+                raise Error("log_loss: encoded label out of range")
+        for i in range(n * k):
+            if not isfinite(probability[i]) or probability[i] < 0 or probability[i] > 1:
+                raise Error("log_loss: probabilities must be finite and within [0,1]")
+        out[0] = host_log_loss(y, probability, n, k, normalize)
+    return PythonObject(1)
+
+
+def _check_classification(y: List[Int32], p: List[Int32], n: Int, k: Int, matrix: Bool) raises:
+    """`_check_classification[matrix]`, `metrics/estimator.mojo`."""
+    _check_pair(y, p, n)
+    var cap = MAX_CONFUSION_CLASSES if matrix else MAX_PRF_CLASSES
+    if n > 2147483647 or k <= 0 or k > cap:
+        raise Error("classification metrics: count or class allocation bound exceeded")
+    var minimum = -1 if matrix else 0
+    for i in range(n):
+        if Int(y[i]) < minimum or Int(y[i]) >= k or Int(p[i]) < minimum or Int(p[i]) >= k:
+            raise Error("classification metrics: encoded label out of range")
+
+
+def confusion_matrix_binding(
+    true_addr: PythonObject, pred_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Confusion counts on the host. `params`: `0 n, 1 n_classes,
+    2 normalization`; normalization 0 writes Int64 counts, 1 (true), 2
+    (pred) and 3 (all) write Float32 ratios. Returns `k * k`."""
+    _want(String("confusion_matrix"), params, 3)
+    var n = _index(params[0])
+    var k = _index(params[1])
+    var normalization = _index(params[2])
+    var address = _index(out_addr)
+    if address == 0:
+        raise Error("confusion_matrix: null output")
+    var y = read_i32(_index(true_addr), max(0, n))
+    var p = read_i32(_index(pred_addr), max(0, n))
+    if normalization == 0:
+        var output = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
+        with GILReleased(Python()):
+            _check_classification(y, p, n, k, True)
+            var values = host_confusion_matrix_i64(y, p, n, k, normalization)
+            for i in range(len(values)):
+                output[i] = values[i]
+    else:
+        var output = f32_ptr(address)
+        with GILReleased(Python()):
+            _check_classification(y, p, n, k, True)
+            var values = host_confusion_matrix_f32(y, p, n, k, normalization)
+            for i in range(len(values)):
+                output[i] = values[i]
+    return PythonObject(k * k)
+
+
+def precision_recall_fscore_binding(
+    true_addr: PythonObject, pred_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Precision, recall and F1 on the host. `params`: `0 n, 1 k,
+    2 average (0 None, 1 binary, 2 micro, 3 macro, 4 weighted), 3 pos_idx,
+    4 zero_division, 5 n_selected`; writes `3 * width + 3` float32 values
+    and returns that count."""
+    _want(String("precision_recall_fscore"), params, 6)
+    var n = _index(params[0])
+    var k = _index(params[1])
+    var average = _index(params[2])
+    var positive = _index(params[3])
+    var zero = _index(params[4])
+    var selected = _index(params[5])
+    var y = read_i32(_index(true_addr), max(0, n))
+    var p = read_i32(_index(pred_addr), max(0, n))
+    var output = f32_ptr(_index(out_addr))
+    var written = 0
+    with GILReleased(Python()):
+        _check_classification(y, p, n, k, False)
+        var values = host_precision_recall_fscore(y, p, n, k, average, positive, zero, selected)
+        for i in range(len(values)):
+            output[i] = values[i]
+        written = len(values)
+    return PythonObject(written)
+
+
+def kl_divergence_binding(
+    p_addr: PythonObject,
+    q_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::kl_divergence` on the host, the float overload
+    (DEVIATIONS 653, 658), not normalized. `params`: `0 n`."""
+    _want(String("kl_divergence"), params, 1)
+    var n = _index(params[0])
+    var p = read_f32(_index(p_addr), max(0, n))
+    var q = read_f32(_index(q_addr), max(0, n))
+    var out = Float32(0.0)
+    with GILReleased(Python()):
+        _check_float_pair(p, q, n)
+        out = host_kl_divergence(p, q, n)
+    return PythonObject(Float64(out))
+
+
+def trustworthiness_binding(
+    x_addr: PythonObject,
+    x_embedded_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ML::Metrics::trustworthiness_score<float, L2SqrtUnexpanded>` on the
+    host (DEVIATION 655). `params`: `0 n, 1 m, 2 d, 3 n_neighbors,
+    4 batch_size`."""
+    _want(String("trustworthiness"), params, 5)
+    var n = _index(params[0])
+    var m = _index(params[1])
+    var d = _index(params[2])
+    var n_neighbors = _index(params[3])
+    var batch_size = _index(params[4])
+    var x = read_f32(_index(x_addr), max(0, n * m))
+    var emb = read_f32(_index(x_embedded_addr), max(0, n * d))
+    var out = Float64(0.0)
+    with GILReleased(Python()):
+        if n <= 0 or m <= 0 or d <= 0:
+            raise Error(
+                "trustworthiness: n, n_features and n_components must all be"
+                " positive, got " + String(n) + ", " + String(m) + ", " + String(d)
+            )
+        out = host_trustworthiness(x, emb, n, m, d, n_neighbors, batch_size)
+    return PythonObject(out)
+
+
+# ===========================================================================
 # Group F: UMAP fit_transform and transform.
 # ===========================================================================
 
@@ -657,6 +951,17 @@ def PyInit__mojolearn_metrics_host() abi("C") -> PythonObject:
         module.def_function[v_measure_score_binding]("v_measure_score")
         module.def_function[r2_score_binding]("r2_score")
         module.def_function[silhouette_binding]("silhouette")
+        module.def_function[rand_score_binding]("rand_score")
+        module.def_function[mean_squared_error_binding]("mean_squared_error")
+        module.def_function[mean_absolute_error_binding]("mean_absolute_error")
+        module.def_function[root_mean_squared_error_binding]("root_mean_squared_error")
+        module.def_function[roc_auc_score_binding]("roc_auc_score")
+        module.def_function[precision_recall_curve_binding]("precision_recall_curve")
+        module.def_function[log_loss_binding]("log_loss")
+        module.def_function[confusion_matrix_binding]("confusion_matrix")
+        module.def_function[precision_recall_fscore_binding]("precision_recall_fscore")
+        module.def_function[kl_divergence_binding]("kl_divergence")
+        module.def_function[trustworthiness_binding]("trustworthiness")
         module.def_function[spectral_fit_predict_dataset_binding]("spectral_fit_predict_dataset")
         module.def_function[spectral_fit_predict_graph_binding]("spectral_fit_predict_graph")
         module.def_function[umap_fit_transform_binding]("umap_fit_transform")
