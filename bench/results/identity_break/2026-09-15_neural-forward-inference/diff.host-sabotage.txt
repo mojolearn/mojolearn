@@ -1,0 +1,736 @@
+NOTE: --lanes scopes this diff to 10 lane(s); 16 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+| lane/fixture                 | verdict    | apple-m4         | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| byte-lm-resident/base        | DIVERGENT  | parts differ: loss,params,grads,logits; agree: - | 4094f29d7499d189 | 4094f29d7499d189 | 9bd534f6f997348d |
+| byte-lm-resident/denormal    | DIVERGENT  | parts differ: loss,params,grads,logits; agree: - | f433ba682ec9d3a3 | f433ba682ec9d3a3 | 087032203f3a2b5b |
+| byte-lm-resident/denormal_ftz | DIVERGENT  | parts differ: loss,params,grads,logits; agree: - | 724fd18c8144f388 | 724fd18c8144f388 | 64e8c4633abb5986 |
+| byte-lm-resident/dupes       | DIVERGENT  | parts differ: loss,params,grads,logits; agree: - | 960769cfbcc39557 | 960769cfbcc39557 | 8fe2aead4054e41d |
+| byte-lm-resident/hashed      | DIVERGENT  | parts differ: loss,params,grads,logits; agree: - | 88e68038f4c71cb4 | 88e68038f4c71cb4 | 75563fba53dd2764 |
+| byte-lm-resident/negative    | DIVERGENT  | parts differ: loss,params,grads,logits; agree: - | 85edbd989ddbfed0 | 85edbd989ddbfed0 | ecdaa98f2fc06401 |
+| byte-lm-resident/odd         | DIVERGENT  | parts differ: loss,params,grads,logits; agree: - | 4094f29d7499d189 | 4094f29d7499d189 | 9bd534f6f997348d |
+| byte-lm-resident/ties        | DIVERGENT  | parts differ: loss,params,grads,logits; agree: - | f52820f3ff7cdeb1 | f52820f3ff7cdeb1 | 60c34fe6102d3620 |
+| byte-lm-resident/wide        | DIVERGENT  | parts differ: loss,params,grads,logits; agree: - | 95b8d710bed9afe5 | 95b8d710bed9afe5 | 6477bd6ed6c02956 |
+| byte-lm/base                 | DIVERGENT  | parts differ: loss,params,logits; agree: - | f9a8d760f503f795 | f9a8d760f503f795 | 9b64e6df58a1d48a |
+| byte-lm/denormal             | DIVERGENT  | parts differ: loss,params,logits; agree: - | 9f7725f93b3c2400 | 9f7725f93b3c2400 | dad13097f62a95d6 |
+| byte-lm/denormal_ftz         | DIVERGENT  | parts differ: loss,params,logits; agree: - | 65bde5a2fb67dfdb | 65bde5a2fb67dfdb | 7b02ffdc29006167 |
+| byte-lm/dupes                | DIVERGENT  | parts differ: loss,params,logits; agree: - | 9d9fe9205064bac3 | 9d9fe9205064bac3 | 91ea015af52695dd |
+| byte-lm/hashed               | DIVERGENT  | parts differ: loss,params,logits; agree: - | e1937509a223711e | e1937509a223711e | 86985fa98b301452 |
+| byte-lm/negative             | DIVERGENT  | parts differ: loss,params,logits; agree: - | 2ac343da560e4d31 | 2ac343da560e4d31 | 9a6b457d63a1eb06 |
+| byte-lm/odd                  | DIVERGENT  | parts differ: loss,params,logits; agree: - | f9a8d760f503f795 | f9a8d760f503f795 | 9b64e6df58a1d48a |
+| byte-lm/ties                 | DIVERGENT  | parts differ: loss,params,logits; agree: - | b6939352795ff292 | b6939352795ff292 | cd717af21b31d266 |
+| byte-lm/wide                 | DIVERGENT  | parts differ: loss,params,logits; agree: - | f06570ace1982aab | f06570ace1982aab | 438c3618d1763f13 |
+| mamba1/base                  | IDENTICAL x4 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 |
+| mamba1/denormal              | IDENTICAL x4 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 |
+| mamba1/denormal_ftz          | IDENTICAL x4 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 | b7b8e653d7d0f153 |
+| mamba1/dupes                 | IDENTICAL x4 | 2ac98fad7386a721 | 2ac98fad7386a721 | 2ac98fad7386a721 | 2ac98fad7386a721 |
+| mamba1/hashed                | IDENTICAL x4 | 062931419c55ee5a | 062931419c55ee5a | 062931419c55ee5a | 062931419c55ee5a |
+| mamba1/negative              | IDENTICAL x4 | 0a83c66670f92b55 | 0a83c66670f92b55 | 0a83c66670f92b55 | 0a83c66670f92b55 |
+| mamba1/odd                   | IDENTICAL x4 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 | 1609902abaf80a04 |
+| mamba1/ties                  | IDENTICAL x4 | c821893bfb5ba46c | c821893bfb5ba46c | c821893bfb5ba46c | c821893bfb5ba46c |
+| mamba1/wide                  | IDENTICAL x4 | 0e7b2cee60a53003 | 0e7b2cee60a53003 | 0e7b2cee60a53003 | 0e7b2cee60a53003 |
+| mamba2-dtlimit/base          | IDENTICAL x4 | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf |
+| mamba2-dtlimit/denormal      | IDENTICAL x4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 |
+| mamba2-dtlimit/denormal_ftz  | IDENTICAL x4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 | 5686523944c0f4f4 |
+| mamba2-dtlimit/dupes         | IDENTICAL x4 | 04cf69094de5328f | 04cf69094de5328f | 04cf69094de5328f | 04cf69094de5328f |
+| mamba2-dtlimit/hashed        | IDENTICAL x4 | 6cff59b5b34681ab | 6cff59b5b34681ab | 6cff59b5b34681ab | 6cff59b5b34681ab |
+| mamba2-dtlimit/negative      | IDENTICAL x4 | caba9face6653ba0 | caba9face6653ba0 | caba9face6653ba0 | caba9face6653ba0 |
+| mamba2-dtlimit/odd           | IDENTICAL x4 | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf | b9e7928a2a4d30cf |
+| mamba2-dtlimit/ties          | IDENTICAL x4 | 70a5916600842982 | 70a5916600842982 | 70a5916600842982 | 70a5916600842982 |
+| mamba2-dtlimit/wide          | IDENTICAL x4 | 911465156f47fed2 | 911465156f47fed2 | 911465156f47fed2 | 911465156f47fed2 |
+| mamba2/base                  | IDENTICAL x4 | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e |
+| mamba2/denormal              | IDENTICAL x4 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 |
+| mamba2/denormal_ftz          | IDENTICAL x4 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 | a143926e29ac0813 |
+| mamba2/dupes                 | IDENTICAL x4 | c565acd587b39ab2 | c565acd587b39ab2 | c565acd587b39ab2 | c565acd587b39ab2 |
+| mamba2/hashed                | IDENTICAL x4 | 2689cc3187df61fd | 2689cc3187df61fd | 2689cc3187df61fd | 2689cc3187df61fd |
+| mamba2/negative              | IDENTICAL x4 | 3506202ab66d8a1f | 3506202ab66d8a1f | 3506202ab66d8a1f | 3506202ab66d8a1f |
+| mamba2/odd                   | IDENTICAL x4 | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e |
+| mamba2/ties                  | IDENTICAL x4 | 48a4bec7b6f6e4f6 | 48a4bec7b6f6e4f6 | 48a4bec7b6f6e4f6 | 48a4bec7b6f6e4f6 |
+| mamba2/wide                  | IDENTICAL x4 | 0d1022f692c144dd | 0d1022f692c144dd | 0d1022f692c144dd | 0d1022f692c144dd |
+| mamba3/base                  | IDENTICAL x4 | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a |
+| mamba3/denormal              | IDENTICAL x4 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 |
+| mamba3/denormal_ftz          | IDENTICAL x4 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 | d506465b344d39d6 |
+| mamba3/dupes                 | IDENTICAL x4 | 59a1567b027ac450 | 59a1567b027ac450 | 59a1567b027ac450 | 59a1567b027ac450 |
+| mamba3/hashed                | IDENTICAL x4 | 6535988e7df6b7c8 | 6535988e7df6b7c8 | 6535988e7df6b7c8 | 6535988e7df6b7c8 |
+| mamba3/negative              | IDENTICAL x4 | 467cfdf1eeb3a1c6 | 467cfdf1eeb3a1c6 | 467cfdf1eeb3a1c6 | 467cfdf1eeb3a1c6 |
+| mamba3/odd                   | IDENTICAL x4 | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a | 63de4bf6b9f8262a |
+| mamba3/ties                  | IDENTICAL x4 | 4bad5909ae635933 | 4bad5909ae635933 | 4bad5909ae635933 | 4bad5909ae635933 |
+| mamba3/wide                  | IDENTICAL x4 | 07f2064c0243e8c2 | 07f2064c0243e8c2 | 07f2064c0243e8c2 | 07f2064c0243e8c2 |
+| samba-untied-dropout-accum/base | IDENTICAL x4 | 4610c84719bc1a25 | 4610c84719bc1a25 | 4610c84719bc1a25 | 4610c84719bc1a25 |
+| samba-untied-dropout-accum/denormal | IDENTICAL x4 | 70a608ce179e03dd | 70a608ce179e03dd | 70a608ce179e03dd | 70a608ce179e03dd |
+| samba-untied-dropout-accum/denormal_ftz | IDENTICAL x4 | eb0dc6c31a737411 | eb0dc6c31a737411 | eb0dc6c31a737411 | eb0dc6c31a737411 |
+| samba-untied-dropout-accum/dupes | IDENTICAL x4 | 9a7b9c31419aa4b9 | 9a7b9c31419aa4b9 | 9a7b9c31419aa4b9 | 9a7b9c31419aa4b9 |
+| samba-untied-dropout-accum/hashed | IDENTICAL x4 | 18a317bc4260eb9a | 18a317bc4260eb9a | 18a317bc4260eb9a | 18a317bc4260eb9a |
+| samba-untied-dropout-accum/negative | IDENTICAL x4 | 42e27eabc8c4706f | 42e27eabc8c4706f | 42e27eabc8c4706f | 42e27eabc8c4706f |
+| samba-untied-dropout-accum/odd | IDENTICAL x4 | 4610c84719bc1a25 | 4610c84719bc1a25 | 4610c84719bc1a25 | 4610c84719bc1a25 |
+| samba-untied-dropout-accum/ties | IDENTICAL x4 | 603f4c03dcbe47c9 | 603f4c03dcbe47c9 | 603f4c03dcbe47c9 | 603f4c03dcbe47c9 |
+| samba-untied-dropout-accum/wide | IDENTICAL x4 | 70d8b0c335b40464 | 70d8b0c335b40464 | 70d8b0c335b40464 | 70d8b0c335b40464 |
+| samba/base                   | IDENTICAL x4 | 037e7701daa7fc7c | 037e7701daa7fc7c | 037e7701daa7fc7c | 037e7701daa7fc7c |
+| samba/denormal               | IDENTICAL x4 | 97c929c9824ede42 | 97c929c9824ede42 | 97c929c9824ede42 | 97c929c9824ede42 |
+| samba/denormal_ftz           | IDENTICAL x4 | 2dc833bbce3de194 | 2dc833bbce3de194 | 2dc833bbce3de194 | 2dc833bbce3de194 |
+| samba/dupes                  | IDENTICAL x4 | daa904c0d89aefde | daa904c0d89aefde | daa904c0d89aefde | daa904c0d89aefde |
+| samba/hashed                 | IDENTICAL x4 | 0fb42364f4c84411 | 0fb42364f4c84411 | 0fb42364f4c84411 | 0fb42364f4c84411 |
+| samba/negative               | IDENTICAL x4 | 8c6bfc3b26396833 | 8c6bfc3b26396833 | 8c6bfc3b26396833 | 8c6bfc3b26396833 |
+| samba/odd                    | IDENTICAL x4 | 037e7701daa7fc7c | 037e7701daa7fc7c | 037e7701daa7fc7c | 037e7701daa7fc7c |
+| samba/ties                   | IDENTICAL x4 | e02c7412e926a415 | e02c7412e926a415 | e02c7412e926a415 | e02c7412e926a415 |
+| samba/wide                   | IDENTICAL x4 | 68e2e32002737938 | 68e2e32002737938 | 68e2e32002737938 | 68e2e32002737938 |
+| transformer-window/base      | IDENTICAL x4 | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d |
+| transformer-window/denormal  | IDENTICAL x4 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 |
+| transformer-window/denormal_ftz | IDENTICAL x4 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 | 4f8ec13b57260957 |
+| transformer-window/dupes     | IDENTICAL x4 | 44fa7ec52d690ee9 | 44fa7ec52d690ee9 | 44fa7ec52d690ee9 | 44fa7ec52d690ee9 |
+| transformer-window/hashed    | IDENTICAL x4 | af2bffef90669cb5 | af2bffef90669cb5 | af2bffef90669cb5 | af2bffef90669cb5 |
+| transformer-window/negative  | IDENTICAL x4 | e1f21e879b6d8fa9 | e1f21e879b6d8fa9 | e1f21e879b6d8fa9 | e1f21e879b6d8fa9 |
+| transformer-window/odd       | IDENTICAL x4 | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d | 49ffb2316f238e6d |
+| transformer-window/ties      | IDENTICAL x4 | 4cc1690c572f7931 | 4cc1690c572f7931 | 4cc1690c572f7931 | 4cc1690c572f7931 |
+| transformer-window/wide      | IDENTICAL x4 | 44a2b49da1619c85 | 44a2b49da1619c85 | 44a2b49da1619c85 | 44a2b49da1619c85 |
+| transformer/base             | IDENTICAL x4 | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 295d4e62d4c78b14 |
+| transformer/denormal         | IDENTICAL x4 | da87cbc4fb93d086 | da87cbc4fb93d086 | da87cbc4fb93d086 | da87cbc4fb93d086 |
+| transformer/denormal_ftz     | IDENTICAL x4 | da87cbc4fb93d086 | da87cbc4fb93d086 | da87cbc4fb93d086 | da87cbc4fb93d086 |
+| transformer/dupes            | IDENTICAL x4 | e48bc0a8545b1a29 | e48bc0a8545b1a29 | e48bc0a8545b1a29 | e48bc0a8545b1a29 |
+| transformer/hashed           | IDENTICAL x4 | 7d565e3a35324caa | 7d565e3a35324caa | 7d565e3a35324caa | 7d565e3a35324caa |
+| transformer/negative         | IDENTICAL x4 | 79d66e219ac996a9 | 79d66e219ac996a9 | 79d66e219ac996a9 | 79d66e219ac996a9 |
+| transformer/odd              | IDENTICAL x4 | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 295d4e62d4c78b14 |
+| transformer/ties             | IDENTICAL x4 | 251eb6369ef11d70 | 251eb6369ef11d70 | 251eb6369ef11d70 | 251eb6369ef11d70 |
+| transformer/wide             | IDENTICAL x4 | ecbe59229197362b | ecbe59229197362b | ecbe59229197362b | ecbe59229197362b |
+
+summary: DIVERGENT=18, IDENTICAL=72
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| byte-lm-resident/base        | infer  | DIVERGENT    | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f | 3492882b0a13f6dc |
+| byte-lm-resident/base        | model  | DIVERGENT    | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 | 8ee0a8ef26092454 |
+| byte-lm-resident/base        | batch  | DIVERGENT    | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d | ca81cd69e1a231d3 |
+| byte-lm-resident/base        | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm-resident/base        | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/base        | batchscale | DIVERGENT    | d5797719799d871d | d5797719799d871d | d5797719799d871d | b31979d1ad024b9e |
+| byte-lm-resident/base        | ragged | DIVERGENT    | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 | a9460ce8378a8f95 |
+| byte-lm-resident/denormal    | infer  | DIVERGENT    | 16c555cc1776f127 | 16c555cc1776f127 | 16c555cc1776f127 | d089db9d27047699 |
+| byte-lm-resident/denormal    | model  | DIVERGENT    | 90d95bea0a099246 | 90d95bea0a099246 | 90d95bea0a099246 | b907c842bc2f60b0 |
+| byte-lm-resident/denormal    | batch  | DIVERGENT    | 9a4f9d37b38b6127 | 9a4f9d37b38b6127 | 9a4f9d37b38b6127 | 18ad4b9ace724e7b |
+| byte-lm-resident/denormal    | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm-resident/denormal    | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/denormal    | batchscale | DIVERGENT    | 193793e4ae0cab88 | 193793e4ae0cab88 | 193793e4ae0cab88 | 9db71b1abeafaf26 |
+| byte-lm-resident/denormal    | ragged | DIVERGENT    | 397cbe2d51703d59 | 397cbe2d51703d59 | 397cbe2d51703d59 | 6b1d39acc69f261f |
+| byte-lm-resident/denormal_ftz | infer  | DIVERGENT    | 21c7e2e9e4e3c163 | 21c7e2e9e4e3c163 | 21c7e2e9e4e3c163 | 2495f021c6f0dcd6 |
+| byte-lm-resident/denormal_ftz | model  | DIVERGENT    | ff9e808d37f12ae2 | ff9e808d37f12ae2 | ff9e808d37f12ae2 | e1cf2a9d3b950ed4 |
+| byte-lm-resident/denormal_ftz | batch  | DIVERGENT    | 3e3cfcb8788e7cf3 | 3e3cfcb8788e7cf3 | 3e3cfcb8788e7cf3 | 020a43745287f51e |
+| byte-lm-resident/denormal_ftz | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm-resident/denormal_ftz | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/denormal_ftz | batchscale | DIVERGENT    | c72376fe922328df | c72376fe922328df | c72376fe922328df | 317642bdbeebcbe2 |
+| byte-lm-resident/denormal_ftz | ragged | DIVERGENT    | a6550ba7ad3bd554 | a6550ba7ad3bd554 | a6550ba7ad3bd554 | c8c73b13eb7c50ad |
+| byte-lm-resident/dupes       | infer  | DIVERGENT    | a76dcc66f0b0b3d6 | a76dcc66f0b0b3d6 | a76dcc66f0b0b3d6 | 7aa896d428760af1 |
+| byte-lm-resident/dupes       | model  | DIVERGENT    | 78870cb1fb90caf6 | 78870cb1fb90caf6 | 78870cb1fb90caf6 | 370d9670760666da |
+| byte-lm-resident/dupes       | batch  | DIVERGENT    | ad53b8960db92852 | ad53b8960db92852 | ad53b8960db92852 | 98db5e1d3f6b8088 |
+| byte-lm-resident/dupes       | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm-resident/dupes       | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/dupes       | batchscale | DIVERGENT    | 37ef89fa03fe5f1a | 37ef89fa03fe5f1a | 37ef89fa03fe5f1a | b003dc1323976ee0 |
+| byte-lm-resident/dupes       | ragged | DIVERGENT    | 723c9f8de59b128d | 723c9f8de59b128d | 723c9f8de59b128d | becc5a440dfad921 |
+| byte-lm-resident/hashed      | infer  | DIVERGENT    | d9a8ae1211de63a8 | d9a8ae1211de63a8 | d9a8ae1211de63a8 | 502dc478db58e903 |
+| byte-lm-resident/hashed      | model  | DIVERGENT    | 0fa0ffc6bdf7e8da | 0fa0ffc6bdf7e8da | 0fa0ffc6bdf7e8da | 81daf017a8f617d3 |
+| byte-lm-resident/hashed      | batch  | DIVERGENT    | 2a8fad887169cf0e | 2a8fad887169cf0e | 2a8fad887169cf0e | b30b92abb8538dde |
+| byte-lm-resident/hashed      | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm-resident/hashed      | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/hashed      | batchscale | DIVERGENT    | d0aa913541fabd9a | d0aa913541fabd9a | d0aa913541fabd9a | 146d206dd6e5ee3a |
+| byte-lm-resident/hashed      | ragged | DIVERGENT    | bca6020717597afa | bca6020717597afa | bca6020717597afa | 9582ef8f44ce34dd |
+| byte-lm-resident/negative    | infer  | DIVERGENT    | feaf17f14d1fa224 | feaf17f14d1fa224 | feaf17f14d1fa224 | ef3ae39ad315587a |
+| byte-lm-resident/negative    | model  | DIVERGENT    | a6aa56e3723d26e7 | a6aa56e3723d26e7 | a6aa56e3723d26e7 | 5f35b574cb301c39 |
+| byte-lm-resident/negative    | batch  | DIVERGENT    | 6daa8fd7fe40b602 | 6daa8fd7fe40b602 | 6daa8fd7fe40b602 | 2e00fb6047e2e160 |
+| byte-lm-resident/negative    | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm-resident/negative    | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/negative    | batchscale | DIVERGENT    | 21f9d38b29563d9e | 21f9d38b29563d9e | 21f9d38b29563d9e | b9db1a7fe28621b0 |
+| byte-lm-resident/negative    | ragged | DIVERGENT    | 820dbda443e05239 | 820dbda443e05239 | 820dbda443e05239 | 99b5a94516c47135 |
+| byte-lm-resident/odd         | infer  | DIVERGENT    | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f | 3492882b0a13f6dc |
+| byte-lm-resident/odd         | model  | DIVERGENT    | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 | 8ee0a8ef26092454 |
+| byte-lm-resident/odd         | batch  | DIVERGENT    | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d | ca81cd69e1a231d3 |
+| byte-lm-resident/odd         | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm-resident/odd         | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/odd         | batchscale | DIVERGENT    | 51efa1a6bad70fd4 | 51efa1a6bad70fd4 | 51efa1a6bad70fd4 | a444b47737e774aa |
+| byte-lm-resident/odd         | ragged | DIVERGENT    | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 | a9460ce8378a8f95 |
+| byte-lm-resident/ties        | infer  | DIVERGENT    | efab6527ef0195aa | efab6527ef0195aa | efab6527ef0195aa | 8968c839f2dff510 |
+| byte-lm-resident/ties        | model  | DIVERGENT    | 947981070e61e180 | 947981070e61e180 | 947981070e61e180 | 605591b75637e530 |
+| byte-lm-resident/ties        | batch  | DIVERGENT    | 4178e56fb2b92328 | 4178e56fb2b92328 | 4178e56fb2b92328 | 9b8f3fc9165f0464 |
+| byte-lm-resident/ties        | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm-resident/ties        | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/ties        | batchscale | DIVERGENT    | ec3a490b2ab22890 | ec3a490b2ab22890 | ec3a490b2ab22890 | 89fa60e13b692f4d |
+| byte-lm-resident/ties        | ragged | DIVERGENT    | 6646c27bf26cff39 | 6646c27bf26cff39 | 6646c27bf26cff39 | 2fa943164781494a |
+| byte-lm-resident/wide        | infer  | DIVERGENT    | d9cdc033be91d67a | d9cdc033be91d67a | d9cdc033be91d67a | 36fb0cb03aa7f7ef |
+| byte-lm-resident/wide        | model  | DIVERGENT    | 24cbda1caad25158 | 24cbda1caad25158 | 24cbda1caad25158 | 8b21bcbf6fc7eb9a |
+| byte-lm-resident/wide        | batch  | DIVERGENT    | 6d2986674bd92c94 | 6d2986674bd92c94 | 6d2986674bd92c94 | 1e27eefb0db69b7a |
+| byte-lm-resident/wide        | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm-resident/wide        | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/wide        | batchscale | DIVERGENT    | 145f7e4820523fac | 145f7e4820523fac | 145f7e4820523fac | a587b91abc2e4607 |
+| byte-lm-resident/wide        | ragged | DIVERGENT    | 44b32eafb5d4fc26 | 44b32eafb5d4fc26 | 44b32eafb5d4fc26 | f4ec8b07f1097f21 |
+| byte-lm/base                 | infer  | DIVERGENT    | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f | 3492882b0a13f6dc |
+| byte-lm/base                 | model  | DIVERGENT    | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 | 8ee0a8ef26092454 |
+| byte-lm/base                 | batch  | DIVERGENT    | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d | ca81cd69e1a231d3 |
+| byte-lm/base                 | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm/base                 | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/base                 | batchscale | DIVERGENT    | d5797719799d871d | d5797719799d871d | d5797719799d871d | b31979d1ad024b9e |
+| byte-lm/base                 | ragged | DIVERGENT    | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 | a9460ce8378a8f95 |
+| byte-lm/denormal             | infer  | DIVERGENT    | 16c555cc1776f127 | 16c555cc1776f127 | 16c555cc1776f127 | d089db9d27047699 |
+| byte-lm/denormal             | model  | DIVERGENT    | 90d95bea0a099246 | 90d95bea0a099246 | 90d95bea0a099246 | b907c842bc2f60b0 |
+| byte-lm/denormal             | batch  | DIVERGENT    | 9a4f9d37b38b6127 | 9a4f9d37b38b6127 | 9a4f9d37b38b6127 | 18ad4b9ace724e7b |
+| byte-lm/denormal             | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm/denormal             | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/denormal             | batchscale | DIVERGENT    | 193793e4ae0cab88 | 193793e4ae0cab88 | 193793e4ae0cab88 | 9db71b1abeafaf26 |
+| byte-lm/denormal             | ragged | DIVERGENT    | 397cbe2d51703d59 | 397cbe2d51703d59 | 397cbe2d51703d59 | 6b1d39acc69f261f |
+| byte-lm/denormal_ftz         | infer  | DIVERGENT    | 21c7e2e9e4e3c163 | 21c7e2e9e4e3c163 | 21c7e2e9e4e3c163 | 2495f021c6f0dcd6 |
+| byte-lm/denormal_ftz         | model  | DIVERGENT    | ff9e808d37f12ae2 | ff9e808d37f12ae2 | ff9e808d37f12ae2 | e1cf2a9d3b950ed4 |
+| byte-lm/denormal_ftz         | batch  | DIVERGENT    | 3e3cfcb8788e7cf3 | 3e3cfcb8788e7cf3 | 3e3cfcb8788e7cf3 | 020a43745287f51e |
+| byte-lm/denormal_ftz         | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm/denormal_ftz         | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/denormal_ftz         | batchscale | DIVERGENT    | c72376fe922328df | c72376fe922328df | c72376fe922328df | 317642bdbeebcbe2 |
+| byte-lm/denormal_ftz         | ragged | DIVERGENT    | a6550ba7ad3bd554 | a6550ba7ad3bd554 | a6550ba7ad3bd554 | c8c73b13eb7c50ad |
+| byte-lm/dupes                | infer  | DIVERGENT    | a76dcc66f0b0b3d6 | a76dcc66f0b0b3d6 | a76dcc66f0b0b3d6 | 7aa896d428760af1 |
+| byte-lm/dupes                | model  | DIVERGENT    | 78870cb1fb90caf6 | 78870cb1fb90caf6 | 78870cb1fb90caf6 | 370d9670760666da |
+| byte-lm/dupes                | batch  | DIVERGENT    | ad53b8960db92852 | ad53b8960db92852 | ad53b8960db92852 | 98db5e1d3f6b8088 |
+| byte-lm/dupes                | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm/dupes                | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/dupes                | batchscale | DIVERGENT    | 37ef89fa03fe5f1a | 37ef89fa03fe5f1a | 37ef89fa03fe5f1a | b003dc1323976ee0 |
+| byte-lm/dupes                | ragged | DIVERGENT    | 723c9f8de59b128d | 723c9f8de59b128d | 723c9f8de59b128d | becc5a440dfad921 |
+| byte-lm/hashed               | infer  | DIVERGENT    | d9a8ae1211de63a8 | d9a8ae1211de63a8 | d9a8ae1211de63a8 | 502dc478db58e903 |
+| byte-lm/hashed               | model  | DIVERGENT    | 0fa0ffc6bdf7e8da | 0fa0ffc6bdf7e8da | 0fa0ffc6bdf7e8da | 81daf017a8f617d3 |
+| byte-lm/hashed               | batch  | DIVERGENT    | 2a8fad887169cf0e | 2a8fad887169cf0e | 2a8fad887169cf0e | b30b92abb8538dde |
+| byte-lm/hashed               | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm/hashed               | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/hashed               | batchscale | DIVERGENT    | d0aa913541fabd9a | d0aa913541fabd9a | d0aa913541fabd9a | 146d206dd6e5ee3a |
+| byte-lm/hashed               | ragged | DIVERGENT    | bca6020717597afa | bca6020717597afa | bca6020717597afa | 9582ef8f44ce34dd |
+| byte-lm/negative             | infer  | DIVERGENT    | feaf17f14d1fa224 | feaf17f14d1fa224 | feaf17f14d1fa224 | ef3ae39ad315587a |
+| byte-lm/negative             | model  | DIVERGENT    | a6aa56e3723d26e7 | a6aa56e3723d26e7 | a6aa56e3723d26e7 | 5f35b574cb301c39 |
+| byte-lm/negative             | batch  | DIVERGENT    | 6daa8fd7fe40b602 | 6daa8fd7fe40b602 | 6daa8fd7fe40b602 | 2e00fb6047e2e160 |
+| byte-lm/negative             | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm/negative             | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/negative             | batchscale | DIVERGENT    | 21f9d38b29563d9e | 21f9d38b29563d9e | 21f9d38b29563d9e | b9db1a7fe28621b0 |
+| byte-lm/negative             | ragged | DIVERGENT    | 820dbda443e05239 | 820dbda443e05239 | 820dbda443e05239 | 99b5a94516c47135 |
+| byte-lm/odd                  | infer  | DIVERGENT    | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f | 3492882b0a13f6dc |
+| byte-lm/odd                  | model  | DIVERGENT    | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 | 8ee0a8ef26092454 |
+| byte-lm/odd                  | batch  | DIVERGENT    | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d | ca81cd69e1a231d3 |
+| byte-lm/odd                  | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm/odd                  | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/odd                  | batchscale | DIVERGENT    | 51efa1a6bad70fd4 | 51efa1a6bad70fd4 | 51efa1a6bad70fd4 | a444b47737e774aa |
+| byte-lm/odd                  | ragged | DIVERGENT    | f230913e438ed170 | f230913e438ed170 | f230913e438ed170 | a9460ce8378a8f95 |
+| byte-lm/ties                 | infer  | DIVERGENT    | efab6527ef0195aa | efab6527ef0195aa | efab6527ef0195aa | 8968c839f2dff510 |
+| byte-lm/ties                 | model  | DIVERGENT    | 947981070e61e180 | 947981070e61e180 | 947981070e61e180 | 605591b75637e530 |
+| byte-lm/ties                 | batch  | DIVERGENT    | 4178e56fb2b92328 | 4178e56fb2b92328 | 4178e56fb2b92328 | 9b8f3fc9165f0464 |
+| byte-lm/ties                 | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm/ties                 | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/ties                 | batchscale | DIVERGENT    | ec3a490b2ab22890 | ec3a490b2ab22890 | ec3a490b2ab22890 | 89fa60e13b692f4d |
+| byte-lm/ties                 | ragged | DIVERGENT    | 6646c27bf26cff39 | 6646c27bf26cff39 | 6646c27bf26cff39 | 2fa943164781494a |
+| byte-lm/wide                 | infer  | DIVERGENT    | d9cdc033be91d67a | d9cdc033be91d67a | d9cdc033be91d67a | 36fb0cb03aa7f7ef |
+| byte-lm/wide                 | model  | DIVERGENT    | 24cbda1caad25158 | 24cbda1caad25158 | 24cbda1caad25158 | 8b21bcbf6fc7eb9a |
+| byte-lm/wide                 | batch  | DIVERGENT    | 6d2986674bd92c94 | 6d2986674bd92c94 | 6d2986674bd92c94 | 1e27eefb0db69b7a |
+| byte-lm/wide                 | rlpair | RLPAIR_MOVED | (no column)      | (no column)      | (no column)      | RLPAIR_MOVED     |
+| byte-lm/wide                 | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/wide                 | batchscale | DIVERGENT    | 145f7e4820523fac | 145f7e4820523fac | 145f7e4820523fac | a587b91abc2e4607 |
+| byte-lm/wide                 | ragged | DIVERGENT    | 44b32eafb5d4fc26 | 44b32eafb5d4fc26 | 44b32eafb5d4fc26 | f4ec8b07f1097f21 |
+| mamba1/base                  | infer  | DIVERGENT    | 97e86b9db80719a7 | 97e86b9db80719a7 | 97e86b9db80719a7 | 287594d467b00080 |
+| mamba1/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/base                  | batch  | DIVERGENT    | fbb1f3233000006e | fbb1f3233000006e | fbb1f3233000006e | 9e31419e1fa90bea |
+| mamba1/base                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 3fd0b9d19f53c9c1 |
+| mamba1/base                  | batchgrad | IDENTICAL x4 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 |
+| mamba1/base                  | batchscale | DIVERGENT    | 5481e0dff3303591 | 5481e0dff3303591 | 5481e0dff3303591 | 391f299672dab181 |
+| mamba1/base                  | ragged | DIVERGENT    | e560b542fc558190 | e560b542fc558190 | e560b542fc558190 | 2aeec179608e9a97 |
+| mamba1/denormal              | infer  | DIVERGENT    | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 0d3d950925e49347 |
+| mamba1/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/denormal              | batch  | DIVERGENT    | a17b09e0f608dab7 | a17b09e0f608dab7 | a17b09e0f608dab7 | f2e58a684459a401 |
+| mamba1/denormal              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 7b0bbb310451668a |
+| mamba1/denormal              | batchgrad | IDENTICAL x4 | 6a7023d45d75092c | 6a7023d45d75092c | 6a7023d45d75092c | 6a7023d45d75092c |
+| mamba1/denormal              | batchscale | DIVERGENT    | 6cefa2fe4b8e937a | 6cefa2fe4b8e937a | 6cefa2fe4b8e937a | bc5909619c3cac1c |
+| mamba1/denormal              | ragged | DIVERGENT    | 820e4e6bfba11c24 | 820e4e6bfba11c24 | 820e4e6bfba11c24 | 719b643ef8a1937d |
+| mamba1/denormal_ftz          | infer  | DIVERGENT    | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 79e0f910c5525ef7 | 0d3d950925e49347 |
+| mamba1/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/denormal_ftz          | batch  | DIVERGENT    | a17b09e0f608dab7 | a17b09e0f608dab7 | a17b09e0f608dab7 | f2e58a684459a401 |
+| mamba1/denormal_ftz          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | deb7fd8a06a24ed9 |
+| mamba1/denormal_ftz          | batchgrad | IDENTICAL x4 | 6a7023d45d75092c | 6a7023d45d75092c | 6a7023d45d75092c | 6a7023d45d75092c |
+| mamba1/denormal_ftz          | batchscale | DIVERGENT    | 6cefa2fe4b8e937a | 6cefa2fe4b8e937a | 6cefa2fe4b8e937a | bc5909619c3cac1c |
+| mamba1/denormal_ftz          | ragged | DIVERGENT    | 820e4e6bfba11c24 | 820e4e6bfba11c24 | 820e4e6bfba11c24 | 719b643ef8a1937d |
+| mamba1/dupes                 | infer  | DIVERGENT    | 4f1ca2b3595ec583 | 4f1ca2b3595ec583 | 4f1ca2b3595ec583 | 8e0019f82a657963 |
+| mamba1/dupes                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/dupes                 | batch  | DIVERGENT    | 7eb2c68796e0f91a | 7eb2c68796e0f91a | 7eb2c68796e0f91a | 0477489d0120b325 |
+| mamba1/dupes                 | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 3fd0b9d19f53c9c1 |
+| mamba1/dupes                 | batchgrad | IDENTICAL x4 | d3d5d8870262f8b6 | d3d5d8870262f8b6 | d3d5d8870262f8b6 | d3d5d8870262f8b6 |
+| mamba1/dupes                 | batchscale | DIVERGENT    | b8fa64bb560de88e | b8fa64bb560de88e | b8fa64bb560de88e | e418b60fb6290ec9 |
+| mamba1/dupes                 | ragged | DIVERGENT    | 5a07ad1dafb81fb1 | 5a07ad1dafb81fb1 | 5a07ad1dafb81fb1 | 20af316bb914d272 |
+| mamba1/hashed                | infer  | DIVERGENT    | b2e6c1006bf3a5ce | b2e6c1006bf3a5ce | b2e6c1006bf3a5ce | 3b810d1094783dc8 |
+| mamba1/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/hashed                | batch  | DIVERGENT    | 29fc3810bca1e78a | 29fc3810bca1e78a | 29fc3810bca1e78a | e5769e8a44d7ab2a |
+| mamba1/hashed                | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 08398a6bfcc8570a |
+| mamba1/hashed                | batchgrad | IDENTICAL x4 | 02307cd514fceb2d | 02307cd514fceb2d | 02307cd514fceb2d | 02307cd514fceb2d |
+| mamba1/hashed                | batchscale | DIVERGENT    | d44c4d814a35d216 | d44c4d814a35d216 | d44c4d814a35d216 | 8cbbe1d21ec1f3d7 |
+| mamba1/hashed                | ragged | DIVERGENT    | 8fbfb081c0991539 | 8fbfb081c0991539 | 8fbfb081c0991539 | aa3f2807929aa090 |
+| mamba1/negative              | infer  | IDENTICAL x4 | c0e8d2045bc0faf6 | c0e8d2045bc0faf6 | c0e8d2045bc0faf6 | c0e8d2045bc0faf6 |
+| mamba1/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/negative              | batch  | DIVERGENT    | a48d8850d38c0e4c | a48d8850d38c0e4c | a48d8850d38c0e4c | d10241482c584a1b |
+| mamba1/negative              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 0f0f848b5a1a12e3 |
+| mamba1/negative              | batchgrad | IDENTICAL x4 | d337c6414d0c6b88 | d337c6414d0c6b88 | d337c6414d0c6b88 | d337c6414d0c6b88 |
+| mamba1/negative              | batchscale | DIVERGENT    | f1f293536dd10853 | f1f293536dd10853 | f1f293536dd10853 | 5b4c1e59cda855d2 |
+| mamba1/negative              | ragged | DIVERGENT    | 71baa8846a0294d9 | 71baa8846a0294d9 | 71baa8846a0294d9 | 482dcec170138baf |
+| mamba1/odd                   | infer  | DIVERGENT    | 97e86b9db80719a7 | 97e86b9db80719a7 | 97e86b9db80719a7 | 287594d467b00080 |
+| mamba1/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/odd                   | batch  | DIVERGENT    | fbb1f3233000006e | fbb1f3233000006e | fbb1f3233000006e | 9e31419e1fa90bea |
+| mamba1/odd                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 3fd0b9d19f53c9c1 |
+| mamba1/odd                   | batchgrad | IDENTICAL x4 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 |
+| mamba1/odd                   | batchscale | DIVERGENT    | 8f97528deb8aa655 | 8f97528deb8aa655 | 8f97528deb8aa655 | cddb48d6847bf27e |
+| mamba1/odd                   | ragged | DIVERGENT    | e560b542fc558190 | e560b542fc558190 | e560b542fc558190 | 2aeec179608e9a97 |
+| mamba1/ties                  | infer  | DIVERGENT    | 13aed38cf2e3c341 | 13aed38cf2e3c341 | 13aed38cf2e3c341 | 1aedd7b07841c52d |
+| mamba1/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/ties                  | batch  | DIVERGENT    | 23b7f12c8a228592 | 23b7f12c8a228592 | 23b7f12c8a228592 | 2a0722b84da6ed65 |
+| mamba1/ties                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 29e18589720b7474 |
+| mamba1/ties                  | batchgrad | IDENTICAL x4 | 606a5724ab5c0f41 | 606a5724ab5c0f41 | 606a5724ab5c0f41 | 606a5724ab5c0f41 |
+| mamba1/ties                  | batchscale | DIVERGENT    | dcb2a540e0d72eac | dcb2a540e0d72eac | dcb2a540e0d72eac | 46cd7e8f5f0e0a0f |
+| mamba1/ties                  | ragged | DIVERGENT    | 5abcb0b09ea615e3 | 5abcb0b09ea615e3 | 5abcb0b09ea615e3 | dbffc133bc3721f9 |
+| mamba1/wide                  | infer  | DIVERGENT    | 905c98cf2a276d1d | 905c98cf2a276d1d | 905c98cf2a276d1d | 2893a442ab568ff4 |
+| mamba1/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba1/wide                  | batch  | DIVERGENT    | e83173af858d8291 | e83173af858d8291 | e83173af858d8291 | 1e49549ef8d988d7 |
+| mamba1/wide                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8a4cd7a1b49c65a8 |
+| mamba1/wide                  | batchgrad | IDENTICAL x4 | 44ae6f0520c58bb3 | 44ae6f0520c58bb3 | 44ae6f0520c58bb3 | 44ae6f0520c58bb3 |
+| mamba1/wide                  | batchscale | DIVERGENT    | 54da89a0749a8c64 | 54da89a0749a8c64 | 54da89a0749a8c64 | 43b10726cbb58d42 |
+| mamba1/wide                  | ragged | DIVERGENT    | 93bf5f8aa3430649 | 93bf5f8aa3430649 | 93bf5f8aa3430649 | 5a27254a2c6992fe |
+| mamba2-dtlimit/base          | infer  | DIVERGENT    | 574842725ea2d43f | 574842725ea2d43f | 574842725ea2d43f | b45183b966b0b3fe |
+| mamba2-dtlimit/base          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/base          | batch  | DIVERGENT    | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | 5e22e2c84dd421e2 |
+| mamba2-dtlimit/base          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | fc40c30a5ef759e1 |
+| mamba2-dtlimit/base          | batchgrad | IDENTICAL x4 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 |
+| mamba2-dtlimit/base          | batchscale | DIVERGENT    | e2f29cd647bd434e | e2f29cd647bd434e | e2f29cd647bd434e | 423095e1dc7f3ad9 |
+| mamba2-dtlimit/base          | ragged | DIVERGENT    | 0fe25a2632347e16 | 0fe25a2632347e16 | 0fe25a2632347e16 | 5e19d799035da292 |
+| mamba2-dtlimit/denormal      | infer  | DIVERGENT    | a88b2984e2b61ecc | a88b2984e2b61ecc | a88b2984e2b61ecc | c2433840994a780c |
+| mamba2-dtlimit/denormal      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/denormal      | batch  | DIVERGENT    | fc87c19f72f968a4 | fc87c19f72f968a4 | fc87c19f72f968a4 | f54dffa3bfdcec8e |
+| mamba2-dtlimit/denormal      | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f8759cd70e5a991b |
+| mamba2-dtlimit/denormal      | batchgrad | IDENTICAL x4 | 6301d0357ff4a866 | 6301d0357ff4a866 | 6301d0357ff4a866 | 6301d0357ff4a866 |
+| mamba2-dtlimit/denormal      | batchscale | DIVERGENT    | 129e8ba500105487 | 129e8ba500105487 | 129e8ba500105487 | 49584ab9f10e4847 |
+| mamba2-dtlimit/denormal      | ragged | DIVERGENT    | 6c5dd05bef2b93a6 | 6c5dd05bef2b93a6 | 6c5dd05bef2b93a6 | 2d700f708fbcd8f5 |
+| mamba2-dtlimit/denormal_ftz  | infer  | DIVERGENT    | a88b2984e2b61ecc | a88b2984e2b61ecc | a88b2984e2b61ecc | c2433840994a780c |
+| mamba2-dtlimit/denormal_ftz  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/denormal_ftz  | batch  | DIVERGENT    | fc87c19f72f968a4 | fc87c19f72f968a4 | fc87c19f72f968a4 | f54dffa3bfdcec8e |
+| mamba2-dtlimit/denormal_ftz  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 14b7680b4a85314e |
+| mamba2-dtlimit/denormal_ftz  | batchgrad | IDENTICAL x4 | 6301d0357ff4a866 | 6301d0357ff4a866 | 6301d0357ff4a866 | 6301d0357ff4a866 |
+| mamba2-dtlimit/denormal_ftz  | batchscale | DIVERGENT    | 129e8ba500105487 | 129e8ba500105487 | 129e8ba500105487 | 49584ab9f10e4847 |
+| mamba2-dtlimit/denormal_ftz  | ragged | DIVERGENT    | 6c5dd05bef2b93a6 | 6c5dd05bef2b93a6 | 6c5dd05bef2b93a6 | 2d700f708fbcd8f5 |
+| mamba2-dtlimit/dupes         | infer  | DIVERGENT    | ce418d3c6ca799ae | ce418d3c6ca799ae | ce418d3c6ca799ae | 785cfa0ad37eeec7 |
+| mamba2-dtlimit/dupes         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/dupes         | batch  | DIVERGENT    | 14ae83f5c3e1998f | 14ae83f5c3e1998f | 14ae83f5c3e1998f | 0101af3cee76cd67 |
+| mamba2-dtlimit/dupes         | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | fc40c30a5ef759e1 |
+| mamba2-dtlimit/dupes         | batchgrad | IDENTICAL x4 | 3282e2d8d4f91249 | 3282e2d8d4f91249 | 3282e2d8d4f91249 | 3282e2d8d4f91249 |
+| mamba2-dtlimit/dupes         | batchscale | DIVERGENT    | 8fc7b3cccce77c49 | 8fc7b3cccce77c49 | 8fc7b3cccce77c49 | 49e6122140b1c67d |
+| mamba2-dtlimit/dupes         | ragged | DIVERGENT    | d8399deb8feb945d | d8399deb8feb945d | d8399deb8feb945d | 301e522f8e1d284d |
+| mamba2-dtlimit/hashed        | infer  | DIVERGENT    | f9184585ded42cc8 | f9184585ded42cc8 | f9184585ded42cc8 | bb6913d8f0a44c82 |
+| mamba2-dtlimit/hashed        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/hashed        | batch  | DIVERGENT    | 6251ed997aa6e1ff | 6251ed997aa6e1ff | 6251ed997aa6e1ff | f8dd2a37b887a06a |
+| mamba2-dtlimit/hashed        | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | d9aa90106508c6f4 |
+| mamba2-dtlimit/hashed        | batchgrad | IDENTICAL x4 | 7c7e39f70c6a2340 | 7c7e39f70c6a2340 | 7c7e39f70c6a2340 | 7c7e39f70c6a2340 |
+| mamba2-dtlimit/hashed        | batchscale | DIVERGENT    | 6587794eb21492f5 | 6587794eb21492f5 | 6587794eb21492f5 | 6000f2420170e886 |
+| mamba2-dtlimit/hashed        | ragged | DIVERGENT    | 44933e25e57279d7 | 44933e25e57279d7 | 44933e25e57279d7 | 3081dc74b8c441bc |
+| mamba2-dtlimit/negative      | infer  | DIVERGENT    | e71489aec1499756 | e71489aec1499756 | e71489aec1499756 | 730d297b7889e679 |
+| mamba2-dtlimit/negative      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/negative      | batch  | DIVERGENT    | 822a574e48d23549 | 822a574e48d23549 | 822a574e48d23549 | 40cbc3d68646a2b9 |
+| mamba2-dtlimit/negative      | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 835884c3c2618c53 |
+| mamba2-dtlimit/negative      | batchgrad | IDENTICAL x4 | 5e6136ab5ecd7e55 | 5e6136ab5ecd7e55 | 5e6136ab5ecd7e55 | 5e6136ab5ecd7e55 |
+| mamba2-dtlimit/negative      | batchscale | DIVERGENT    | 41a7fd6cd3fc1a1d | 41a7fd6cd3fc1a1d | 41a7fd6cd3fc1a1d | 77f859ce5bcf42dd |
+| mamba2-dtlimit/negative      | ragged | DIVERGENT    | 986898fbf71488b1 | 986898fbf71488b1 | 986898fbf71488b1 | 89434096ed312590 |
+| mamba2-dtlimit/odd           | infer  | DIVERGENT    | 574842725ea2d43f | 574842725ea2d43f | 574842725ea2d43f | b45183b966b0b3fe |
+| mamba2-dtlimit/odd           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/odd           | batch  | DIVERGENT    | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | af7b9d3840cf5ef4 | 5e22e2c84dd421e2 |
+| mamba2-dtlimit/odd           | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | fc40c30a5ef759e1 |
+| mamba2-dtlimit/odd           | batchgrad | IDENTICAL x4 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 |
+| mamba2-dtlimit/odd           | batchscale | DIVERGENT    | b8715636bb190b5d | b8715636bb190b5d | b8715636bb190b5d | add725388bc3dc47 |
+| mamba2-dtlimit/odd           | ragged | DIVERGENT    | 0fe25a2632347e16 | 0fe25a2632347e16 | 0fe25a2632347e16 | 5e19d799035da292 |
+| mamba2-dtlimit/ties          | infer  | DIVERGENT    | 6961b92c3565ded6 | 6961b92c3565ded6 | 6961b92c3565ded6 | eee3faa4fde7a3d5 |
+| mamba2-dtlimit/ties          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/ties          | batch  | DIVERGENT    | af6fcf1e9222cb76 | af6fcf1e9222cb76 | af6fcf1e9222cb76 | 3f8359ee1f0272a1 |
+| mamba2-dtlimit/ties          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | d17cd4c49bbf55b4 |
+| mamba2-dtlimit/ties          | batchgrad | IDENTICAL x4 | 1561179a532a5697 | 1561179a532a5697 | 1561179a532a5697 | 1561179a532a5697 |
+| mamba2-dtlimit/ties          | batchscale | DIVERGENT    | 82db40d087dd1829 | 82db40d087dd1829 | 82db40d087dd1829 | d6a120ec016ef00e |
+| mamba2-dtlimit/ties          | ragged | DIVERGENT    | f7efc342921c1098 | f7efc342921c1098 | f7efc342921c1098 | 564fb3cb94a7c9a6 |
+| mamba2-dtlimit/wide          | infer  | DIVERGENT    | c8604d7add29e134 | c8604d7add29e134 | c8604d7add29e134 | c3002d5fb4aa4233 |
+| mamba2-dtlimit/wide          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/wide          | batch  | DIVERGENT    | 93f22fa95029c3d8 | 93f22fa95029c3d8 | 93f22fa95029c3d8 | 807ddba9de9653c8 |
+| mamba2-dtlimit/wide          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | b96eaa63de60edcd |
+| mamba2-dtlimit/wide          | batchgrad | IDENTICAL x4 | 7b66b1a3a14acfb8 | 7b66b1a3a14acfb8 | 7b66b1a3a14acfb8 | 7b66b1a3a14acfb8 |
+| mamba2-dtlimit/wide          | batchscale | DIVERGENT    | ed66d3b94742f0fd | ed66d3b94742f0fd | ed66d3b94742f0fd | 76997a9b796c079a |
+| mamba2-dtlimit/wide          | ragged | DIVERGENT    | de5bdde294971ec3 | de5bdde294971ec3 | de5bdde294971ec3 | 310e0a8272c9c2e7 |
+| mamba2/base                  | infer  | DIVERGENT    | b0084ee171c0720f | b0084ee171c0720f | b0084ee171c0720f | 12732625355f735f |
+| mamba2/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/base                  | batch  | DIVERGENT    | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d0908964408a6571 |
+| mamba2/base                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f4abbd5451ff5172 |
+| mamba2/base                  | batchgrad | IDENTICAL x4 | 99cad63be0fb7239 | 99cad63be0fb7239 | 99cad63be0fb7239 | 99cad63be0fb7239 |
+| mamba2/base                  | batchscale | DIVERGENT    | f5c6c5c02917a956 | f5c6c5c02917a956 | f5c6c5c02917a956 | 7b8158ce4a922886 |
+| mamba2/base                  | ragged | DIVERGENT    | f1f44805dc9171e8 | f1f44805dc9171e8 | f1f44805dc9171e8 | 40eb3c972e939ed6 |
+| mamba2/denormal              | infer  | DIVERGENT    | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 7fb6952a4a9c774d |
+| mamba2/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/denormal              | batch  | DIVERGENT    | ce1a26dfa4587c15 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | dea2ec49e17c3b92 |
+| mamba2/denormal              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | c43d27b4d3607e26 |
+| mamba2/denormal              | batchgrad | IDENTICAL x4 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 |
+| mamba2/denormal              | batchscale | DIVERGENT    | a8a0984b5804dde6 | a8a0984b5804dde6 | a8a0984b5804dde6 | f61785828ee98466 |
+| mamba2/denormal              | ragged | DIVERGENT    | c6cfc709454fd6a4 | c6cfc709454fd6a4 | c6cfc709454fd6a4 | 4576781d15656ec3 |
+| mamba2/denormal_ftz          | infer  | DIVERGENT    | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 715e3b3d9ee219ba | 7fb6952a4a9c774d |
+| mamba2/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/denormal_ftz          | batch  | DIVERGENT    | ce1a26dfa4587c15 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | dea2ec49e17c3b92 |
+| mamba2/denormal_ftz          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 85aeeec8c5a056a1 |
+| mamba2/denormal_ftz          | batchgrad | IDENTICAL x4 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 | ce0a5a78bcd04f68 |
+| mamba2/denormal_ftz          | batchscale | DIVERGENT    | a8a0984b5804dde6 | a8a0984b5804dde6 | a8a0984b5804dde6 | f61785828ee98466 |
+| mamba2/denormal_ftz          | ragged | DIVERGENT    | c6cfc709454fd6a4 | c6cfc709454fd6a4 | c6cfc709454fd6a4 | 4576781d15656ec3 |
+| mamba2/dupes                 | infer  | DIVERGENT    | bc19a007224d9860 | bc19a007224d9860 | bc19a007224d9860 | 6c3a237beafb6b2e |
+| mamba2/dupes                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/dupes                 | batch  | DIVERGENT    | 82b6615b36847109 | 82b6615b36847109 | 82b6615b36847109 | 9fc5dc1848b7366e |
+| mamba2/dupes                 | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f4abbd5451ff5172 |
+| mamba2/dupes                 | batchgrad | IDENTICAL x4 | 30287f3369d63e43 | 30287f3369d63e43 | 30287f3369d63e43 | 30287f3369d63e43 |
+| mamba2/dupes                 | batchscale | DIVERGENT    | 8b9801efe8170524 | 8b9801efe8170524 | 8b9801efe8170524 | 07ff6afef2f21e47 |
+| mamba2/dupes                 | ragged | DIVERGENT    | c6240fc848bde00d | c6240fc848bde00d | c6240fc848bde00d | 760eaa99666ad7e4 |
+| mamba2/hashed                | infer  | DIVERGENT    | fa5cdfa7a8028ea4 | fa5cdfa7a8028ea4 | fa5cdfa7a8028ea4 | af95a2d09b59a10b |
+| mamba2/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/hashed                | batch  | DIVERGENT    | a824974d95e976a1 | a824974d95e976a1 | a824974d95e976a1 | cfddb10b2b3dfd90 |
+| mamba2/hashed                | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | ebd9a6af0f062bee |
+| mamba2/hashed                | batchgrad | IDENTICAL x4 | cc350cb47739345e | cc350cb47739345e | cc350cb47739345e | cc350cb47739345e |
+| mamba2/hashed                | batchscale | DIVERGENT    | 492b5c7545648f34 | 492b5c7545648f34 | 492b5c7545648f34 | 72daf016a2769077 |
+| mamba2/hashed                | ragged | DIVERGENT    | 758a09358b4de751 | 758a09358b4de751 | 758a09358b4de751 | ed86d19fa6040cf2 |
+| mamba2/negative              | infer  | DIVERGENT    | e47047c1022164fb | e47047c1022164fb | e47047c1022164fb | 7a66f5742f47e0d7 |
+| mamba2/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/negative              | batch  | DIVERGENT    | 5e4dc2619d55149f | 5e4dc2619d55149f | 5e4dc2619d55149f | 55d66f9c0b6bb090 |
+| mamba2/negative              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 08cdec93b208dfcc |
+| mamba2/negative              | batchgrad | IDENTICAL x4 | 2992677ebe413db5 | 2992677ebe413db5 | 2992677ebe413db5 | 2992677ebe413db5 |
+| mamba2/negative              | batchscale | DIVERGENT    | 9c78b8aeea6269b2 | 9c78b8aeea6269b2 | 9c78b8aeea6269b2 | 1e3f3ccbd1ef4b84 |
+| mamba2/negative              | ragged | DIVERGENT    | 2586664048028a83 | 2586664048028a83 | 2586664048028a83 | 0e12ee4b943ccb00 |
+| mamba2/odd                   | infer  | DIVERGENT    | b0084ee171c0720f | b0084ee171c0720f | b0084ee171c0720f | 12732625355f735f |
+| mamba2/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/odd                   | batch  | DIVERGENT    | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d0908964408a6571 |
+| mamba2/odd                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f4abbd5451ff5172 |
+| mamba2/odd                   | batchgrad | IDENTICAL x4 | 99cad63be0fb7239 | 99cad63be0fb7239 | 99cad63be0fb7239 | 99cad63be0fb7239 |
+| mamba2/odd                   | batchscale | DIVERGENT    | 71e5ec10135b32fb | 71e5ec10135b32fb | 71e5ec10135b32fb | e377b5116cfe6084 |
+| mamba2/odd                   | ragged | DIVERGENT    | f1f44805dc9171e8 | f1f44805dc9171e8 | f1f44805dc9171e8 | 40eb3c972e939ed6 |
+| mamba2/ties                  | infer  | DIVERGENT    | bbd1634ec2e78ddf | bbd1634ec2e78ddf | bbd1634ec2e78ddf | be91a924efd6ddd9 |
+| mamba2/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/ties                  | batch  | DIVERGENT    | 4b2801f8f573c8c8 | 4b2801f8f573c8c8 | 4b2801f8f573c8c8 | 3239e99c525b296a |
+| mamba2/ties                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f899efc2a35ec48a |
+| mamba2/ties                  | batchgrad | IDENTICAL x4 | d662c396d92de418 | d662c396d92de418 | d662c396d92de418 | d662c396d92de418 |
+| mamba2/ties                  | batchscale | DIVERGENT    | 9febb4c33c9d4b48 | 9febb4c33c9d4b48 | 9febb4c33c9d4b48 | 0fd4c1114008f114 |
+| mamba2/ties                  | ragged | DIVERGENT    | 8f0119a70131adcb | 8f0119a70131adcb | 8f0119a70131adcb | d5d9f8aace71ba4e |
+| mamba2/wide                  | infer  | DIVERGENT    | b67647742c88aaf1 | b67647742c88aaf1 | b67647742c88aaf1 | b9b6bfb1a00431c4 |
+| mamba2/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/wide                  | batch  | DIVERGENT    | 0a20d6f3d8237f24 | 0a20d6f3d8237f24 | 0a20d6f3d8237f24 | 224adc2e9645785c |
+| mamba2/wide                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 47957b59ac09a5d8 |
+| mamba2/wide                  | batchgrad | IDENTICAL x4 | 3151cfcc25d5c776 | 3151cfcc25d5c776 | 3151cfcc25d5c776 | 3151cfcc25d5c776 |
+| mamba2/wide                  | batchscale | DIVERGENT    | ff5f412bb3fd5328 | ff5f412bb3fd5328 | ff5f412bb3fd5328 | 66534518a279d511 |
+| mamba2/wide                  | ragged | DIVERGENT    | 9c1bcc53c4f2905a | 9c1bcc53c4f2905a | 9c1bcc53c4f2905a | 9c69821ede9820c7 |
+| mamba3/base                  | infer  | DIVERGENT    | 6d73873ffe222457 | 6d73873ffe222457 | 6d73873ffe222457 | 80b047e6226a4e6d |
+| mamba3/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/base                  | batch  | DIVERGENT    | a59631110897fda3 | a59631110897fda3 | a59631110897fda3 | db6cd68a01f3d954 |
+| mamba3/base                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8335131b23bae55d |
+| mamba3/base                  | batchgrad | IDENTICAL x4 | 292bbf6a571391a3 | 292bbf6a571391a3 | 292bbf6a571391a3 | 292bbf6a571391a3 |
+| mamba3/base                  | batchscale | DIVERGENT    | 509739cc35c73cb0 | 509739cc35c73cb0 | 509739cc35c73cb0 | 06c65dbfa36ea071 |
+| mamba3/base                  | ragged | DIVERGENT    | aa2a093f3670c2de | aa2a093f3670c2de | aa2a093f3670c2de | 991d3013a256c047 |
+| mamba3/denormal              | infer  | DIVERGENT    | 2092a683dc18e94b | 2092a683dc18e94b | 2092a683dc18e94b | af9268c7df4ab813 |
+| mamba3/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/denormal              | batch  | DIVERGENT    | 4182cf2b203fedea | 4182cf2b203fedea | 4182cf2b203fedea | 6808db6d5a177cf0 |
+| mamba3/denormal              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 4c9c87c7c49eccbd |
+| mamba3/denormal              | batchgrad | IDENTICAL x4 | 78db7df43245f472 | 78db7df43245f472 | 78db7df43245f472 | 78db7df43245f472 |
+| mamba3/denormal              | batchscale | DIVERGENT    | 89e5e31a5ebbe5fb | 89e5e31a5ebbe5fb | 89e5e31a5ebbe5fb | d1cabc7b8f4b4ab3 |
+| mamba3/denormal              | ragged | DIVERGENT    | 4ed7e9d569e75a4f | 4ed7e9d569e75a4f | 4ed7e9d569e75a4f | 41ec9f71ef8d1cf3 |
+| mamba3/denormal_ftz          | infer  | DIVERGENT    | 2092a683dc18e94b | 2092a683dc18e94b | 2092a683dc18e94b | af9268c7df4ab813 |
+| mamba3/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/denormal_ftz          | batch  | DIVERGENT    | 4182cf2b203fedea | 4182cf2b203fedea | 4182cf2b203fedea | 6808db6d5a177cf0 |
+| mamba3/denormal_ftz          | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | ee432f5df351f529 |
+| mamba3/denormal_ftz          | batchgrad | IDENTICAL x4 | 78db7df43245f472 | 78db7df43245f472 | 78db7df43245f472 | 78db7df43245f472 |
+| mamba3/denormal_ftz          | batchscale | DIVERGENT    | 89e5e31a5ebbe5fb | 89e5e31a5ebbe5fb | 89e5e31a5ebbe5fb | d1cabc7b8f4b4ab3 |
+| mamba3/denormal_ftz          | ragged | DIVERGENT    | 4ed7e9d569e75a4f | 4ed7e9d569e75a4f | 4ed7e9d569e75a4f | 41ec9f71ef8d1cf3 |
+| mamba3/dupes                 | infer  | DIVERGENT    | 572e878fb8e538ce | 572e878fb8e538ce | 572e878fb8e538ce | 8ad9e5ad08be43ff |
+| mamba3/dupes                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/dupes                 | batch  | DIVERGENT    | 605d8473f84fd235 | 605d8473f84fd235 | 605d8473f84fd235 | 89a14d31022e9a1f |
+| mamba3/dupes                 | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8335131b23bae55d |
+| mamba3/dupes                 | batchgrad | IDENTICAL x4 | 050c6b60f15665f4 | 050c6b60f15665f4 | 050c6b60f15665f4 | 050c6b60f15665f4 |
+| mamba3/dupes                 | batchscale | DIVERGENT    | 1db7c3474dfd5d6c | 1db7c3474dfd5d6c | 1db7c3474dfd5d6c | 8ca59ddd61f76e96 |
+| mamba3/dupes                 | ragged | DIVERGENT    | 46052e7560b7203a | 46052e7560b7203a | 46052e7560b7203a | 00d34e3434e6a8f7 |
+| mamba3/hashed                | infer  | DIVERGENT    | c1862ccad54884ed | c1862ccad54884ed | c1862ccad54884ed | 5f062ecf63bfe9cf |
+| mamba3/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/hashed                | batch  | DIVERGENT    | b922b29fdddfc3d6 | b922b29fdddfc3d6 | b922b29fdddfc3d6 | 0e80075cd0b35adc |
+| mamba3/hashed                | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 54338d80374d4535 |
+| mamba3/hashed                | batchgrad | IDENTICAL x4 | e5f2eacc692aa8dc | e5f2eacc692aa8dc | e5f2eacc692aa8dc | e5f2eacc692aa8dc |
+| mamba3/hashed                | batchscale | DIVERGENT    | 8a2a3cd88f6fcfbf | 8a2a3cd88f6fcfbf | 8a2a3cd88f6fcfbf | 5e6ccabd8faa4a76 |
+| mamba3/hashed                | ragged | DIVERGENT    | 2a3da811e51ed911 | 2a3da811e51ed911 | 2a3da811e51ed911 | 6f6165f610cbdcb7 |
+| mamba3/negative              | infer  | DIVERGENT    | 27f5cfbb4648281d | 27f5cfbb4648281d | 27f5cfbb4648281d | b22b968a8d938466 |
+| mamba3/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/negative              | batch  | DIVERGENT    | da761d278ab6655a | da761d278ab6655a | da761d278ab6655a | 5405d4923d164dba |
+| mamba3/negative              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 21d8a2cbf5d39256 |
+| mamba3/negative              | batchgrad | IDENTICAL x4 | c4695e3042bc5e5e | c4695e3042bc5e5e | c4695e3042bc5e5e | c4695e3042bc5e5e |
+| mamba3/negative              | batchscale | DIVERGENT    | d98940ae9f08f6ed | d98940ae9f08f6ed | d98940ae9f08f6ed | 22e5fd7b7f74c5f1 |
+| mamba3/negative              | ragged | DIVERGENT    | 79b1eae4fb165f88 | 79b1eae4fb165f88 | 79b1eae4fb165f88 | 0985ea86b3fd6ae8 |
+| mamba3/odd                   | infer  | DIVERGENT    | 6d73873ffe222457 | 6d73873ffe222457 | 6d73873ffe222457 | 80b047e6226a4e6d |
+| mamba3/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/odd                   | batch  | DIVERGENT    | a59631110897fda3 | a59631110897fda3 | a59631110897fda3 | db6cd68a01f3d954 |
+| mamba3/odd                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8335131b23bae55d |
+| mamba3/odd                   | batchgrad | IDENTICAL x4 | 292bbf6a571391a3 | 292bbf6a571391a3 | 292bbf6a571391a3 | 292bbf6a571391a3 |
+| mamba3/odd                   | batchscale | DIVERGENT    | 02d53e8b250733f1 | 02d53e8b250733f1 | 02d53e8b250733f1 | 1b559a8e4891a285 |
+| mamba3/odd                   | ragged | DIVERGENT    | aa2a093f3670c2de | aa2a093f3670c2de | aa2a093f3670c2de | 991d3013a256c047 |
+| mamba3/ties                  | infer  | DIVERGENT    | 1b23621d97f54640 | 1b23621d97f54640 | 1b23621d97f54640 | b1062239e52b60fb |
+| mamba3/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/ties                  | batch  | DIVERGENT    | a93eb5738c206655 | a93eb5738c206655 | a93eb5738c206655 | dcdc59a76501511b |
+| mamba3/ties                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | cd68b3cf1d7e2468 |
+| mamba3/ties                  | batchgrad | IDENTICAL x4 | f3bd46f553f22909 | f3bd46f553f22909 | f3bd46f553f22909 | f3bd46f553f22909 |
+| mamba3/ties                  | batchscale | DIVERGENT    | 51be49b4805d5896 | 51be49b4805d5896 | 51be49b4805d5896 | 57e2d01b0f87d261 |
+| mamba3/ties                  | ragged | DIVERGENT    | 8e058cc2a6b89c46 | 8e058cc2a6b89c46 | 8e058cc2a6b89c46 | 894786334560ba8a |
+| mamba3/wide                  | infer  | DIVERGENT    | 229127d013a0eeb7 | 229127d013a0eeb7 | 229127d013a0eeb7 | 754b6a18533e2448 |
+| mamba3/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba3/wide                  | batch  | DIVERGENT    | ac07fbd366e6fce2 | ac07fbd366e6fce2 | ac07fbd366e6fce2 | 1fa612855112f29b |
+| mamba3/wide                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f71f944d03be5153 |
+| mamba3/wide                  | batchgrad | IDENTICAL x4 | be0084453f949005 | be0084453f949005 | be0084453f949005 | be0084453f949005 |
+| mamba3/wide                  | batchscale | DIVERGENT    | 83ffd63d3622750f | 83ffd63d3622750f | 83ffd63d3622750f | 82718949e317eb87 |
+| mamba3/wide                  | ragged | DIVERGENT    | f6867acb0aad7f0e | f6867acb0aad7f0e | f6867acb0aad7f0e | 80edd989334be3f5 |
+| samba-untied-dropout-accum/base | infer  | DIVERGENT    | 43f7860a7ff7a633 | 43f7860a7ff7a633 | 43f7860a7ff7a633 | 98fdd09d6895c393 |
+| samba-untied-dropout-accum/base | model  | IDENTICAL x4 | 4c6bb23f04af6858 | 4c6bb23f04af6858 | 4c6bb23f04af6858 | 4c6bb23f04af6858 |
+| samba-untied-dropout-accum/base | batch  | DIVERGENT    | 94c79045f8d92d80 | 94c79045f8d92d80 | 94c79045f8d92d80 | 73d7e6800a5cb5b9 |
+| samba-untied-dropout-accum/base | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | a14b4cd9184a5a34 |
+| samba-untied-dropout-accum/base | batchgrad | IDENTICAL x4 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 |
+| samba-untied-dropout-accum/base | batchscale | DIVERGENT    | 9b780937c00cda02 | 9b780937c00cda02 | 9b780937c00cda02 | a06be44a502ae683 |
+| samba-untied-dropout-accum/base | ragged | DIVERGENT    | 5266053152ec7003 | 5266053152ec7003 | 5266053152ec7003 | e3ed9349d65d6d85 |
+| samba-untied-dropout-accum/denormal | infer  | DIVERGENT    | 24c7e0e923e369e0 | 24c7e0e923e369e0 | 24c7e0e923e369e0 | 93d90bf8a3a011b9 |
+| samba-untied-dropout-accum/denormal | model  | IDENTICAL x4 | 10a8d940bbce9051 | 10a8d940bbce9051 | 10a8d940bbce9051 | 10a8d940bbce9051 |
+| samba-untied-dropout-accum/denormal | batch  | DIVERGENT    | 52f4c864f4e177ed | 52f4c864f4e177ed | 52f4c864f4e177ed | d1b4a3dcdf913d4d |
+| samba-untied-dropout-accum/denormal | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 557fcb8ac104b01a |
+| samba-untied-dropout-accum/denormal | batchgrad | IDENTICAL x4 | dd94d6ce0f01b073 | dd94d6ce0f01b073 | dd94d6ce0f01b073 | dd94d6ce0f01b073 |
+| samba-untied-dropout-accum/denormal | batchscale | DIVERGENT    | e09efb4fd5971a12 | e09efb4fd5971a12 | e09efb4fd5971a12 | ddc6e40565127e7f |
+| samba-untied-dropout-accum/denormal | ragged | DIVERGENT    | 1c4331af10529d7f | 1c4331af10529d7f | 1c4331af10529d7f | 5fa27e5ae0bd8876 |
+| samba-untied-dropout-accum/denormal_ftz | infer  | DIVERGENT    | d815951934e104a6 | d815951934e104a6 | d815951934e104a6 | f0968618a5270506 |
+| samba-untied-dropout-accum/denormal_ftz | model  | IDENTICAL x4 | 35a817ce8929a5d6 | 35a817ce8929a5d6 | 35a817ce8929a5d6 | 35a817ce8929a5d6 |
+| samba-untied-dropout-accum/denormal_ftz | batch  | DIVERGENT    | eb52194ccef805e4 | eb52194ccef805e4 | eb52194ccef805e4 | 4c44e330f5084b77 |
+| samba-untied-dropout-accum/denormal_ftz | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 743c668e023e6740 |
+| samba-untied-dropout-accum/denormal_ftz | batchgrad | IDENTICAL x4 | 49f70c4b208aded0 | 49f70c4b208aded0 | 49f70c4b208aded0 | 49f70c4b208aded0 |
+| samba-untied-dropout-accum/denormal_ftz | batchscale | DIVERGENT    | dc5f0c82e7ee9978 | dc5f0c82e7ee9978 | dc5f0c82e7ee9978 | 90d996e686d885fb |
+| samba-untied-dropout-accum/denormal_ftz | ragged | DIVERGENT    | 4aab3884613c0b41 | 4aab3884613c0b41 | 4aab3884613c0b41 | 6e1a847820350830 |
+| samba-untied-dropout-accum/dupes | infer  | DIVERGENT    | 3ca26c5ae1819ebc | 3ca26c5ae1819ebc | 3ca26c5ae1819ebc | 15a269c11eed513b |
+| samba-untied-dropout-accum/dupes | model  | IDENTICAL x4 | 4bea33bdf66a23bc | 4bea33bdf66a23bc | 4bea33bdf66a23bc | 4bea33bdf66a23bc |
+| samba-untied-dropout-accum/dupes | batch  | DIVERGENT    | 95236c32031b7ace | 95236c32031b7ace | 95236c32031b7ace | 8c6c59bb5973c2c7 |
+| samba-untied-dropout-accum/dupes | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 7f85526ff9bb0a7e |
+| samba-untied-dropout-accum/dupes | batchgrad | IDENTICAL x4 | 110dcd9ce98a7c10 | 110dcd9ce98a7c10 | 110dcd9ce98a7c10 | 110dcd9ce98a7c10 |
+| samba-untied-dropout-accum/dupes | batchscale | DIVERGENT    | d331883a71ba5ba7 | d331883a71ba5ba7 | d331883a71ba5ba7 | 28d024ef3dca9112 |
+| samba-untied-dropout-accum/dupes | ragged | DIVERGENT    | 63801d92a23251a1 | 63801d92a23251a1 | 63801d92a23251a1 | 4ecfc720e7f2126e |
+| samba-untied-dropout-accum/hashed | infer  | DIVERGENT    | 87796cb8024bd934 | 87796cb8024bd934 | 87796cb8024bd934 | 5aff613f2b2b410b |
+| samba-untied-dropout-accum/hashed | model  | IDENTICAL x4 | 148bfe51d04c1d98 | 148bfe51d04c1d98 | 148bfe51d04c1d98 | 148bfe51d04c1d98 |
+| samba-untied-dropout-accum/hashed | batch  | DIVERGENT    | 9e101ad04c649179 | 9e101ad04c649179 | 9e101ad04c649179 | e8f89b1e94bb877a |
+| samba-untied-dropout-accum/hashed | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 935b160b9a5d1ae1 |
+| samba-untied-dropout-accum/hashed | batchgrad | IDENTICAL x4 | 99a88af5db3ba4c4 | 99a88af5db3ba4c4 | 99a88af5db3ba4c4 | 99a88af5db3ba4c4 |
+| samba-untied-dropout-accum/hashed | batchscale | DIVERGENT    | a9d10a15a11cfd5a | a9d10a15a11cfd5a | a9d10a15a11cfd5a | a202fc31ffb04c21 |
+| samba-untied-dropout-accum/hashed | ragged | DIVERGENT    | 8f1fa87643603034 | 8f1fa87643603034 | 8f1fa87643603034 | 212115ef403995a6 |
+| samba-untied-dropout-accum/negative | infer  | DIVERGENT    | 55ec2d1c5eccef2d | 55ec2d1c5eccef2d | 55ec2d1c5eccef2d | 7b088d5151256956 |
+| samba-untied-dropout-accum/negative | model  | IDENTICAL x4 | ecaf3ac775bac83b | ecaf3ac775bac83b | ecaf3ac775bac83b | ecaf3ac775bac83b |
+| samba-untied-dropout-accum/negative | batch  | DIVERGENT    | dcc15ae7885b0699 | dcc15ae7885b0699 | dcc15ae7885b0699 | 44d27fc3172fb605 |
+| samba-untied-dropout-accum/negative | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | bd86f42f23ab1765 |
+| samba-untied-dropout-accum/negative | batchgrad | IDENTICAL x4 | 2a46376740cf4f17 | 2a46376740cf4f17 | 2a46376740cf4f17 | 2a46376740cf4f17 |
+| samba-untied-dropout-accum/negative | batchscale | DIVERGENT    | c4f69db31e4918fc | c4f69db31e4918fc | c4f69db31e4918fc | 8f8eb052000a3229 |
+| samba-untied-dropout-accum/negative | ragged | DIVERGENT    | 00673227cddf155d | 00673227cddf155d | 00673227cddf155d | 38933652ae1bf123 |
+| samba-untied-dropout-accum/odd | infer  | DIVERGENT    | 43f7860a7ff7a633 | 43f7860a7ff7a633 | 43f7860a7ff7a633 | 98fdd09d6895c393 |
+| samba-untied-dropout-accum/odd | model  | IDENTICAL x4 | 4c6bb23f04af6858 | 4c6bb23f04af6858 | 4c6bb23f04af6858 | 4c6bb23f04af6858 |
+| samba-untied-dropout-accum/odd | batch  | DIVERGENT    | 94c79045f8d92d80 | 94c79045f8d92d80 | 94c79045f8d92d80 | 73d7e6800a5cb5b9 |
+| samba-untied-dropout-accum/odd | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | a14b4cd9184a5a34 |
+| samba-untied-dropout-accum/odd | batchgrad | IDENTICAL x4 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 |
+| samba-untied-dropout-accum/odd | batchscale | DIVERGENT    | dde1e26eb972c8d8 | dde1e26eb972c8d8 | dde1e26eb972c8d8 | 92d532da43b5e781 |
+| samba-untied-dropout-accum/odd | ragged | DIVERGENT    | 5266053152ec7003 | 5266053152ec7003 | 5266053152ec7003 | e3ed9349d65d6d85 |
+| samba-untied-dropout-accum/ties | infer  | DIVERGENT    | bb32b8aebf4dc90e | bb32b8aebf4dc90e | bb32b8aebf4dc90e | b8a83b18804d304c |
+| samba-untied-dropout-accum/ties | model  | IDENTICAL x4 | 9818c749c2dfc7ea | 9818c749c2dfc7ea | 9818c749c2dfc7ea | 9818c749c2dfc7ea |
+| samba-untied-dropout-accum/ties | batch  | DIVERGENT    | 4130d70c2c138b0e | 4130d70c2c138b0e | 4130d70c2c138b0e | 0c2564b3ff5f7a68 |
+| samba-untied-dropout-accum/ties | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 9f6648df433827af |
+| samba-untied-dropout-accum/ties | batchgrad | IDENTICAL x4 | 80ecfdf5e1fd7965 | 80ecfdf5e1fd7965 | 80ecfdf5e1fd7965 | 80ecfdf5e1fd7965 |
+| samba-untied-dropout-accum/ties | batchscale | DIVERGENT    | cb351616dbbc93b2 | cb351616dbbc93b2 | cb351616dbbc93b2 | fdc82b4e04145a4a |
+| samba-untied-dropout-accum/ties | ragged | DIVERGENT    | ff6d591eb1482891 | ff6d591eb1482891 | ff6d591eb1482891 | ef7cb16e56c55a9d |
+| samba-untied-dropout-accum/wide | infer  | DIVERGENT    | 21601e087bd7d274 | 21601e087bd7d274 | 21601e087bd7d274 | 77783e7b88b441e7 |
+| samba-untied-dropout-accum/wide | model  | IDENTICAL x4 | 98b807c41ebff82a | 98b807c41ebff82a | 98b807c41ebff82a | 98b807c41ebff82a |
+| samba-untied-dropout-accum/wide | batch  | DIVERGENT    | fb9e91204daaf37e | fb9e91204daaf37e | fb9e91204daaf37e | 87325534a2d13c5c |
+| samba-untied-dropout-accum/wide | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | b1543091f6ddb627 |
+| samba-untied-dropout-accum/wide | batchgrad | IDENTICAL x4 | 3271e56a56b048ee | 3271e56a56b048ee | 3271e56a56b048ee | 3271e56a56b048ee |
+| samba-untied-dropout-accum/wide | batchscale | DIVERGENT    | 286affb39e9299ae | 286affb39e9299ae | 286affb39e9299ae | 86fc3aae3f32b981 |
+| samba-untied-dropout-accum/wide | ragged | DIVERGENT    | d88b904b4d7a835b | d88b904b4d7a835b | d88b904b4d7a835b | c4d39883aa6707ea |
+| samba/base                   | infer  | DIVERGENT    | 77db10c414ebd846 | 77db10c414ebd846 | 77db10c414ebd846 | ab48cb30e5bcfe28 |
+| samba/base                   | model  | IDENTICAL x4 | 674582804fcf1a50 | 674582804fcf1a50 | 674582804fcf1a50 | 674582804fcf1a50 |
+| samba/base                   | batch  | DIVERGENT    | aacbe0585755bc0f | aacbe0585755bc0f | aacbe0585755bc0f | 8e0e9bb0ac27a621 |
+| samba/base                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8ae8dda8ba22a4aa |
+| samba/base                   | batchgrad | IDENTICAL x4 | 6eafd29a27e3b376 | 6eafd29a27e3b376 | 6eafd29a27e3b376 | 6eafd29a27e3b376 |
+| samba/base                   | batchscale | DIVERGENT    | 0872a6f17bb82169 | 0872a6f17bb82169 | 0872a6f17bb82169 | 0d5f79c415affdbe |
+| samba/base                   | ragged | DIVERGENT    | eb391546ac70ae0c | eb391546ac70ae0c | eb391546ac70ae0c | b9eb17cf58e2e69f |
+| samba/denormal               | infer  | DIVERGENT    | ca618a38cf786fa4 | ca618a38cf786fa4 | ca618a38cf786fa4 | d2901e19c5e0d37f |
+| samba/denormal               | model  | IDENTICAL x4 | f7f05521e7cdfec7 | f7f05521e7cdfec7 | f7f05521e7cdfec7 | f7f05521e7cdfec7 |
+| samba/denormal               | batch  | DIVERGENT    | f5880effe032ad0f | f5880effe032ad0f | f5880effe032ad0f | 6b434cc3595b1172 |
+| samba/denormal               | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 87af7af2b081fddc |
+| samba/denormal               | batchgrad | IDENTICAL x4 | 66825be665b22b30 | 66825be665b22b30 | 66825be665b22b30 | 66825be665b22b30 |
+| samba/denormal               | batchscale | DIVERGENT    | 9c14caa774e24955 | 9c14caa774e24955 | 9c14caa774e24955 | bb88262d4a6df6ff |
+| samba/denormal               | ragged | DIVERGENT    | c6310b93e035d00e | c6310b93e035d00e | c6310b93e035d00e | fb170c6af821206e |
+| samba/denormal_ftz           | infer  | DIVERGENT    | b728af86ccc442fb | b728af86ccc442fb | b728af86ccc442fb | 2d8ddb2370a94ecb |
+| samba/denormal_ftz           | model  | IDENTICAL x4 | f34e7e4227d3ab4b | f34e7e4227d3ab4b | f34e7e4227d3ab4b | f34e7e4227d3ab4b |
+| samba/denormal_ftz           | batch  | DIVERGENT    | d765507d7d144423 | d765507d7d144423 | d765507d7d144423 | 80c7783212e22775 |
+| samba/denormal_ftz           | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | ee2093efea1daf9e |
+| samba/denormal_ftz           | batchgrad | IDENTICAL x4 | 17d748d11f46ed94 | 17d748d11f46ed94 | 17d748d11f46ed94 | 17d748d11f46ed94 |
+| samba/denormal_ftz           | batchscale | DIVERGENT    | aaa0373e794e177b | aaa0373e794e177b | aaa0373e794e177b | 894b378bb756e641 |
+| samba/denormal_ftz           | ragged | DIVERGENT    | af5e79e7727ed342 | af5e79e7727ed342 | af5e79e7727ed342 | 42f4f540263f34e2 |
+| samba/dupes                  | infer  | DIVERGENT    | 3bb2585d8a536f77 | 3bb2585d8a536f77 | 3bb2585d8a536f77 | 0ede72c0f36afd52 |
+| samba/dupes                  | model  | IDENTICAL x4 | 5113ff087cd1d774 | 5113ff087cd1d774 | 5113ff087cd1d774 | 5113ff087cd1d774 |
+| samba/dupes                  | batch  | DIVERGENT    | a77ce9563430eca6 | a77ce9563430eca6 | a77ce9563430eca6 | fe4b54400a42e7f2 |
+| samba/dupes                  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 2f241faee9373acb |
+| samba/dupes                  | batchgrad | IDENTICAL x4 | 327d0bfd2395a506 | 327d0bfd2395a506 | 327d0bfd2395a506 | 327d0bfd2395a506 |
+| samba/dupes                  | batchscale | DIVERGENT    | f8b3ff80eb16cf92 | f8b3ff80eb16cf92 | f8b3ff80eb16cf92 | 7fbe10673487b961 |
+| samba/dupes                  | ragged | DIVERGENT    | f5f3982764f18c9b | f5f3982764f18c9b | f5f3982764f18c9b | ab4e92cf67b66b87 |
+| samba/hashed                 | infer  | DIVERGENT    | b0b897d724d5a625 | b0b897d724d5a625 | b0b897d724d5a625 | 934fc17a557a972f |
+| samba/hashed                 | model  | IDENTICAL x4 | 284aef669039f101 | 284aef669039f101 | 284aef669039f101 | 284aef669039f101 |
+| samba/hashed                 | batch  | DIVERGENT    | 685cfa1d3a50b038 | 685cfa1d3a50b038 | 685cfa1d3a50b038 | 57cef73428798df9 |
+| samba/hashed                 | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | af0e02cacfad8270 |
+| samba/hashed                 | batchgrad | IDENTICAL x4 | 3868e1890bf25d35 | 3868e1890bf25d35 | 3868e1890bf25d35 | 3868e1890bf25d35 |
+| samba/hashed                 | batchscale | DIVERGENT    | 30ffca4eef8cfbbe | 30ffca4eef8cfbbe | 30ffca4eef8cfbbe | 0508cd2153ea38b6 |
+| samba/hashed                 | ragged | DIVERGENT    | aa231cea2adacc40 | aa231cea2adacc40 | aa231cea2adacc40 | 905bd437fc2312ec |
+| samba/negative               | infer  | DIVERGENT    | 3a11eda41792501b | 3a11eda41792501b | 3a11eda41792501b | 6e93779db1a13209 |
+| samba/negative               | model  | IDENTICAL x4 | bf0a203a904b24cf | bf0a203a904b24cf | bf0a203a904b24cf | bf0a203a904b24cf |
+| samba/negative               | batch  | DIVERGENT    | 87de84abeab25d86 | 87de84abeab25d86 | 87de84abeab25d86 | 97fb5496015e899e |
+| samba/negative               | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 1af4d714620deaf5 |
+| samba/negative               | batchgrad | IDENTICAL x4 | 6dc47e85c06129c7 | 6dc47e85c06129c7 | 6dc47e85c06129c7 | 6dc47e85c06129c7 |
+| samba/negative               | batchscale | DIVERGENT    | bb6fcbdc0822016b | bb6fcbdc0822016b | bb6fcbdc0822016b | 1e493280d9bc38e4 |
+| samba/negative               | ragged | DIVERGENT    | f0b62c34b66da60f | f0b62c34b66da60f | f0b62c34b66da60f | 1cd60e4a63bfa52e |
+| samba/odd                    | infer  | DIVERGENT    | 77db10c414ebd846 | 77db10c414ebd846 | 77db10c414ebd846 | ab48cb30e5bcfe28 |
+| samba/odd                    | model  | IDENTICAL x4 | 674582804fcf1a50 | 674582804fcf1a50 | 674582804fcf1a50 | 674582804fcf1a50 |
+| samba/odd                    | batch  | DIVERGENT    | aacbe0585755bc0f | aacbe0585755bc0f | aacbe0585755bc0f | 8e0e9bb0ac27a621 |
+| samba/odd                    | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 8ae8dda8ba22a4aa |
+| samba/odd                    | batchgrad | IDENTICAL x4 | 6eafd29a27e3b376 | 6eafd29a27e3b376 | 6eafd29a27e3b376 | 6eafd29a27e3b376 |
+| samba/odd                    | batchscale | DIVERGENT    | 0fc187985877bd57 | 0fc187985877bd57 | 0fc187985877bd57 | 68f192674b46402a |
+| samba/odd                    | ragged | DIVERGENT    | eb391546ac70ae0c | eb391546ac70ae0c | eb391546ac70ae0c | b9eb17cf58e2e69f |
+| samba/ties                   | infer  | DIVERGENT    | a777e99f0a27b647 | a777e99f0a27b647 | a777e99f0a27b647 | 6cf4c8d04b2746df |
+| samba/ties                   | model  | IDENTICAL x4 | 1e49500f833e02a1 | 1e49500f833e02a1 | 1e49500f833e02a1 | 1e49500f833e02a1 |
+| samba/ties                   | batch  | DIVERGENT    | ca83b11a24eb8695 | ca83b11a24eb8695 | ca83b11a24eb8695 | 18be67105abdd9f0 |
+| samba/ties                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | e4e74a603305d265 |
+| samba/ties                   | batchgrad | IDENTICAL x4 | 7da094a4bce624b4 | 7da094a4bce624b4 | 7da094a4bce624b4 | 7da094a4bce624b4 |
+| samba/ties                   | batchscale | DIVERGENT    | 4f412d22d8dd4784 | 4f412d22d8dd4784 | 4f412d22d8dd4784 | 5374b6e854274ba6 |
+| samba/ties                   | ragged | DIVERGENT    | 343d0e7ac3063750 | 343d0e7ac3063750 | 343d0e7ac3063750 | ca228ec507c21d5b |
+| samba/wide                   | infer  | DIVERGENT    | a9c9aafd145646b1 | a9c9aafd145646b1 | a9c9aafd145646b1 | b86635922ea1a23a |
+| samba/wide                   | model  | IDENTICAL x4 | 6adcd1530cd32c5e | 6adcd1530cd32c5e | 6adcd1530cd32c5e | 6adcd1530cd32c5e |
+| samba/wide                   | batch  | DIVERGENT    | 609a185bf1638192 | 609a185bf1638192 | 609a185bf1638192 | cb517e33a3c66c0b |
+| samba/wide                   | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | cb7ed4b4430e1283 |
+| samba/wide                   | batchgrad | IDENTICAL x4 | 87bfd07b0b3cb13d | 87bfd07b0b3cb13d | 87bfd07b0b3cb13d | 87bfd07b0b3cb13d |
+| samba/wide                   | batchscale | DIVERGENT    | b68a9569d43a4580 | b68a9569d43a4580 | b68a9569d43a4580 | 4f594c1343ea1f10 |
+| samba/wide                   | ragged | DIVERGENT    | a4753a0b93544243 | a4753a0b93544243 | a4753a0b93544243 | af95476ddbb3dce3 |
+| transformer-window/base      | infer  | DIVERGENT    | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 | 6d3cce5e3acb87de |
+| transformer-window/base      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/base      | batch  | DIVERGENT    | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 | ae6ecfa4f682d08e |
+| transformer-window/base      | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | c6f0e94cbc9ade59 |
+| transformer-window/base      | batchgrad | IDENTICAL x4 | 212351f26cf2ea25 | 212351f26cf2ea25 | 212351f26cf2ea25 | 212351f26cf2ea25 |
+| transformer-window/base      | batchscale | DIVERGENT    | 2792496c71904df4 | 2792496c71904df4 | 2792496c71904df4 | 3a2ff9ce989fc95a |
+| transformer-window/base      | ragged | DIVERGENT    | cc1926bc76441b0f | cc1926bc76441b0f | cc1926bc76441b0f | a28ad367431b99e9 |
+| transformer-window/denormal  | infer  | DIVERGENT    | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | f0a11d1b83f20677 |
+| transformer-window/denormal  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/denormal  | batch  | DIVERGENT    | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 | 586aec93e87b85e1 |
+| transformer-window/denormal  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | e6e8d4b4b5b5e46a |
+| transformer-window/denormal  | batchgrad | IDENTICAL x4 | 5f70e6d27d39b5de | 5f70e6d27d39b5de | 5f70e6d27d39b5de | 5f70e6d27d39b5de |
+| transformer-window/denormal  | batchscale | DIVERGENT    | bdf2f3c4ae71fd74 | bdf2f3c4ae71fd74 | bdf2f3c4ae71fd74 | b0f75e5a7faac639 |
+| transformer-window/denormal  | ragged | DIVERGENT    | 2b7e40b86782cb9c | 2b7e40b86782cb9c | 2b7e40b86782cb9c | 2522f5186cee8397 |
+| transformer-window/denormal_ftz | infer  | DIVERGENT    | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | f0a11d1b83f20677 |
+| transformer-window/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/denormal_ftz | batch  | DIVERGENT    | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 | 586aec93e87b85e1 |
+| transformer-window/denormal_ftz | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f27349ced3ee6254 |
+| transformer-window/denormal_ftz | batchgrad | IDENTICAL x4 | 5f70e6d27d39b5de | 5f70e6d27d39b5de | 5f70e6d27d39b5de | 5f70e6d27d39b5de |
+| transformer-window/denormal_ftz | batchscale | DIVERGENT    | bdf2f3c4ae71fd74 | bdf2f3c4ae71fd74 | bdf2f3c4ae71fd74 | b0f75e5a7faac639 |
+| transformer-window/denormal_ftz | ragged | DIVERGENT    | 2b7e40b86782cb9c | 2b7e40b86782cb9c | 2b7e40b86782cb9c | 2522f5186cee8397 |
+| transformer-window/dupes     | infer  | DIVERGENT    | c8727f6975c294a0 | c8727f6975c294a0 | c8727f6975c294a0 | 1493e7c0bee28ef3 |
+| transformer-window/dupes     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/dupes     | batch  | DIVERGENT    | 2609e898b7c93177 | 2609e898b7c93177 | 2609e898b7c93177 | d1cee9c7a2caa1d2 |
+| transformer-window/dupes     | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | c6f0e94cbc9ade59 |
+| transformer-window/dupes     | batchgrad | IDENTICAL x4 | 6a7752a8ad2e7e49 | 6a7752a8ad2e7e49 | 6a7752a8ad2e7e49 | 6a7752a8ad2e7e49 |
+| transformer-window/dupes     | batchscale | DIVERGENT    | c7ed428af4f7e6bf | c7ed428af4f7e6bf | c7ed428af4f7e6bf | 53fd9e07323dcbca |
+| transformer-window/dupes     | ragged | DIVERGENT    | c70bb87ba0b79ee3 | c70bb87ba0b79ee3 | c70bb87ba0b79ee3 | 90f6ef59edf4e67d |
+| transformer-window/hashed    | infer  | DIVERGENT    | 980b88a5ef026b11 | 980b88a5ef026b11 | 980b88a5ef026b11 | dab8d98c6148a221 |
+| transformer-window/hashed    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/hashed    | batch  | DIVERGENT    | 235440a27bc0150e | 235440a27bc0150e | 235440a27bc0150e | 937215b18f504c5f |
+| transformer-window/hashed    | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 3ed927cc1a04c983 |
+| transformer-window/hashed    | batchgrad | IDENTICAL x4 | e1e96857e9c912a4 | e1e96857e9c912a4 | e1e96857e9c912a4 | e1e96857e9c912a4 |
+| transformer-window/hashed    | batchscale | DIVERGENT    | 3db9693cdc916f29 | 3db9693cdc916f29 | 3db9693cdc916f29 | 769769039bc00c82 |
+| transformer-window/hashed    | ragged | DIVERGENT    | 04e41ddf58d11495 | 04e41ddf58d11495 | 04e41ddf58d11495 | 532148431f84e558 |
+| transformer-window/negative  | infer  | DIVERGENT    | 4d10337584b45e49 | 4d10337584b45e49 | 4d10337584b45e49 | 1711b3adb8a2640c |
+| transformer-window/negative  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/negative  | batch  | DIVERGENT    | bda185330c5accc5 | bda185330c5accc5 | bda185330c5accc5 | d4a6f323bbcb88a3 |
+| transformer-window/negative  | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 756fe43411985468 |
+| transformer-window/negative  | batchgrad | IDENTICAL x4 | 36281f513ad8f76b | 36281f513ad8f76b | 36281f513ad8f76b | 36281f513ad8f76b |
+| transformer-window/negative  | batchscale | DIVERGENT    | 56b9a0bce1fab958 | 56b9a0bce1fab958 | 56b9a0bce1fab958 | c11cf27fbb070e42 |
+| transformer-window/negative  | ragged | DIVERGENT    | ebcab46b3bf9fb43 | ebcab46b3bf9fb43 | ebcab46b3bf9fb43 | 57963a9f4c6e690d |
+| transformer-window/odd       | infer  | DIVERGENT    | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 | 6d3cce5e3acb87de |
+| transformer-window/odd       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/odd       | batch  | DIVERGENT    | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 | ae6ecfa4f682d08e |
+| transformer-window/odd       | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | c6f0e94cbc9ade59 |
+| transformer-window/odd       | batchgrad | IDENTICAL x4 | 212351f26cf2ea25 | 212351f26cf2ea25 | 212351f26cf2ea25 | 212351f26cf2ea25 |
+| transformer-window/odd       | batchscale | DIVERGENT    | b852899e3e7c4b9d | b852899e3e7c4b9d | b852899e3e7c4b9d | 601311a501442f10 |
+| transformer-window/odd       | ragged | DIVERGENT    | cc1926bc76441b0f | cc1926bc76441b0f | cc1926bc76441b0f | a28ad367431b99e9 |
+| transformer-window/ties      | infer  | DIVERGENT    | 22a7a20579fe94db | 22a7a20579fe94db | 22a7a20579fe94db | c19a977595d7217f |
+| transformer-window/ties      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/ties      | batch  | DIVERGENT    | 27cdeafedfb90f1a | 27cdeafedfb90f1a | 27cdeafedfb90f1a | 9b1d3d92085ffdaf |
+| transformer-window/ties      | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | cebcb9e7e839c5fd |
+| transformer-window/ties      | batchgrad | IDENTICAL x4 | eace7960b014bd0a | eace7960b014bd0a | eace7960b014bd0a | eace7960b014bd0a |
+| transformer-window/ties      | batchscale | DIVERGENT    | 4f8657e490d55da3 | 4f8657e490d55da3 | 4f8657e490d55da3 | 5e3f33fd63972af7 |
+| transformer-window/ties      | ragged | DIVERGENT    | a857139f896612a9 | a857139f896612a9 | a857139f896612a9 | 3dcb03d8f4be8c06 |
+| transformer-window/wide      | infer  | DIVERGENT    | 75cf7df2cce4aea9 | 75cf7df2cce4aea9 | 75cf7df2cce4aea9 | e01bb81b8b745026 |
+| transformer-window/wide      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/wide      | batch  | DIVERGENT    | 68798687c33a64ff | 68798687c33a64ff | 68798687c33a64ff | 7891decdc6d2bc03 |
+| transformer-window/wide      | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | ec1cc10a6b0298e7 |
+| transformer-window/wide      | batchgrad | IDENTICAL x4 | 052d53c67d5977f0 | 052d53c67d5977f0 | 052d53c67d5977f0 | 052d53c67d5977f0 |
+| transformer-window/wide      | batchscale | DIVERGENT    | 40c125fc58bef4dd | 40c125fc58bef4dd | 40c125fc58bef4dd | ccfb251d272b604b |
+| transformer-window/wide      | ragged | DIVERGENT    | 132703047789a4ae | 132703047789a4ae | 132703047789a4ae | e738b94515d2e925 |
+| transformer/base             | infer  | DIVERGENT    | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 | 07f9d37e77d87002 |
+| transformer/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/base             | batch  | DIVERGENT    | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 | 0b12906fcf644a41 |
+| transformer/base             | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 41c065998015307c |
+| transformer/base             | batchgrad | IDENTICAL x4 | 5185ee1be0a72be5 | 5185ee1be0a72be5 | 5185ee1be0a72be5 | 5185ee1be0a72be5 |
+| transformer/base             | batchscale | DIVERGENT    | dd733dfdaf480743 | dd733dfdaf480743 | dd733dfdaf480743 | a3896db997440bb0 |
+| transformer/base             | ragged | DIVERGENT    | bb97a92d33f296c6 | bb97a92d33f296c6 | bb97a92d33f296c6 | f74213c84461ef95 |
+| transformer/denormal         | infer  | DIVERGENT    | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be | d1f168584e9e1a72 |
+| transformer/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/denormal         | batch  | DIVERGENT    | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | 53dd0889d21e13ca |
+| transformer/denormal         | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 174e6a3a08b33eab |
+| transformer/denormal         | batchgrad | IDENTICAL x4 | c47919c0f5c78ce2 | c47919c0f5c78ce2 | c47919c0f5c78ce2 | c47919c0f5c78ce2 |
+| transformer/denormal         | batchscale | DIVERGENT    | 74eb2208c18d07ab | 74eb2208c18d07ab | 74eb2208c18d07ab | 6f52de8e35346d4c |
+| transformer/denormal         | ragged | DIVERGENT    | c640b8d2f2a2db5b | c640b8d2f2a2db5b | c640b8d2f2a2db5b | d902f6879a27c52a |
+| transformer/denormal_ftz     | infer  | DIVERGENT    | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be | d1f168584e9e1a72 |
+| transformer/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/denormal_ftz     | batch  | DIVERGENT    | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | 53dd0889d21e13ca |
+| transformer/denormal_ftz     | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 3e90019a6be2628a |
+| transformer/denormal_ftz     | batchgrad | IDENTICAL x4 | c47919c0f5c78ce2 | c47919c0f5c78ce2 | c47919c0f5c78ce2 | c47919c0f5c78ce2 |
+| transformer/denormal_ftz     | batchscale | DIVERGENT    | 74eb2208c18d07ab | 74eb2208c18d07ab | 74eb2208c18d07ab | 6f52de8e35346d4c |
+| transformer/denormal_ftz     | ragged | DIVERGENT    | c640b8d2f2a2db5b | c640b8d2f2a2db5b | c640b8d2f2a2db5b | d902f6879a27c52a |
+| transformer/dupes            | infer  | DIVERGENT    | cc0485bd3463891b | cc0485bd3463891b | cc0485bd3463891b | 72dcdfaf205c34af |
+| transformer/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/dupes            | batch  | DIVERGENT    | 4b51e3c2db7f9667 | 4b51e3c2db7f9667 | 4b51e3c2db7f9667 | 2dac2083ee6c5599 |
+| transformer/dupes            | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 41c065998015307c |
+| transformer/dupes            | batchgrad | IDENTICAL x4 | 95f387677893408d | 95f387677893408d | 95f387677893408d | 95f387677893408d |
+| transformer/dupes            | batchscale | DIVERGENT    | edf21e57a13d856f | edf21e57a13d856f | edf21e57a13d856f | f29e53c59e172276 |
+| transformer/dupes            | ragged | DIVERGENT    | 67919ad5d9cf64ef | 67919ad5d9cf64ef | 67919ad5d9cf64ef | 5a7bf67c86d70c4f |
+| transformer/hashed           | infer  | DIVERGENT    | 33aa6df81aac0bcd | 33aa6df81aac0bcd | 33aa6df81aac0bcd | 2d6dbb6822c186f1 |
+| transformer/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/hashed           | batch  | DIVERGENT    | 10988a93701693a8 | 10988a93701693a8 | 10988a93701693a8 | 4db1da4bb28c01e4 |
+| transformer/hashed           | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | d64e16e9457f1512 |
+| transformer/hashed           | batchgrad | IDENTICAL x4 | 0e60acf19fba3e74 | 0e60acf19fba3e74 | 0e60acf19fba3e74 | 0e60acf19fba3e74 |
+| transformer/hashed           | batchscale | DIVERGENT    | 1a444c7d5b568c7b | 1a444c7d5b568c7b | 1a444c7d5b568c7b | 1f43e6b114b8f7be |
+| transformer/hashed           | ragged | DIVERGENT    | 0f50152a3d44f8bf | 0f50152a3d44f8bf | 0f50152a3d44f8bf | 5c57868cf7772f11 |
+| transformer/negative         | infer  | DIVERGENT    | 0804b57610d9b1f5 | 0804b57610d9b1f5 | 0804b57610d9b1f5 | 2bf1485119797852 |
+| transformer/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/negative         | batch  | DIVERGENT    | 55ca8b3a54e10ffa | 55ca8b3a54e10ffa | 55ca8b3a54e10ffa | 27de71a8fe28a6f9 |
+| transformer/negative         | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 0b99fe53b0eaa46a |
+| transformer/negative         | batchgrad | IDENTICAL x4 | d2c6b30184854635 | d2c6b30184854635 | d2c6b30184854635 | d2c6b30184854635 |
+| transformer/negative         | batchscale | DIVERGENT    | 9f25cf7e36c84094 | 9f25cf7e36c84094 | 9f25cf7e36c84094 | 0693b30581def973 |
+| transformer/negative         | ragged | DIVERGENT    | d1381c4d94345cfb | d1381c4d94345cfb | d1381c4d94345cfb | 380e172afa388c71 |
+| transformer/odd              | infer  | DIVERGENT    | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 | 07f9d37e77d87002 |
+| transformer/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/odd              | batch  | DIVERGENT    | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 | 0b12906fcf644a41 |
+| transformer/odd              | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 41c065998015307c |
+| transformer/odd              | batchgrad | IDENTICAL x4 | 5185ee1be0a72be5 | 5185ee1be0a72be5 | 5185ee1be0a72be5 | 5185ee1be0a72be5 |
+| transformer/odd              | batchscale | DIVERGENT    | 55dc41466bacdf0d | 55dc41466bacdf0d | 55dc41466bacdf0d | 191cf83d656a36ee |
+| transformer/odd              | ragged | DIVERGENT    | bb97a92d33f296c6 | bb97a92d33f296c6 | bb97a92d33f296c6 | f74213c84461ef95 |
+| transformer/ties             | infer  | DIVERGENT    | f222fca146b15f94 | f222fca146b15f94 | f222fca146b15f94 | 0cdfdcf7e79a3a95 |
+| transformer/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/ties             | batch  | DIVERGENT    | 8548d6f52de06b7b | 8548d6f52de06b7b | 8548d6f52de06b7b | 42b2fafa1e1ed92b |
+| transformer/ties             | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | 88f6733750d71307 |
+| transformer/ties             | batchgrad | IDENTICAL x4 | 5480cd2fd1ec39e3 | 5480cd2fd1ec39e3 | 5480cd2fd1ec39e3 | 5480cd2fd1ec39e3 |
+| transformer/ties             | batchscale | DIVERGENT    | 6a4dbc3b09de1c75 | 6a4dbc3b09de1c75 | 6a4dbc3b09de1c75 | cb734e17f0a4a47f |
+| transformer/ties             | ragged | DIVERGENT    | 44e9b3e1e14edfb7 | 44e9b3e1e14edfb7 | 44e9b3e1e14edfb7 | afcf4e6986035ac3 |
+| transformer/wide             | infer  | DIVERGENT    | 976e818c75ac481c | 976e818c75ac481c | 976e818c75ac481c | 477d523e8a69477d |
+| transformer/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/wide             | batch  | DIVERGENT    | a487428103ce49a8 | a487428103ce49a8 | a487428103ce49a8 | 3f9de0dc9d751d87 |
+| transformer/wide             | rlpair | NOT-COMPARED | (no column)      | (no column)      | (no column)      | f7b820c4caf9e16d |
+| transformer/wide             | batchgrad | IDENTICAL x4 | f7322716ad07daec | f7322716ad07daec | f7322716ad07daec | f7322716ad07daec |
+| transformer/wide             | batchscale | DIVERGENT    | 10f7d48195d8481a | 10f7d48195d8481a | 10f7d48195d8481a | b84d3023aed23d86 |
+| transformer/wide             | ragged | DIVERGENT    | 75e48e29d314a73b | 75e48e29d314a73b | 75e48e29d314a73b | c36247c81d4962e3 |
+
+summary (infer/model): DIVERGENT=107, IDENTICAL=19, N/A=54
+summary (batch): DIVERGENT=90
+summary (rlpair): NOT-COMPARED=72, RLPAIR_MOVED=18
+summary (batchgrad): IDENTICAL=72, N/A=18
+summary (batchscale): DIVERGENT=90
+summary (ragged): DIVERGENT=90

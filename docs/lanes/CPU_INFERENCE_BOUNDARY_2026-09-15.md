@@ -86,6 +86,20 @@ change. Earlier full hosted run 34978769155 passed on all three CPU hosts.
   `bench/results/identity_break/2026-09-15_tokenizer-batch` and
   `2026-09-15_neural-inference`.
 
+## Mamba and Samba inference (lane/inference-neural-forward, 2026-09-15)
+
+- The `neural` family gains the Mamba-1, Mamba-2 and Mamba-3 zero-state forwards
+  (`Mamba1BlockInference`, `Mamba2BlockInference`, `Mamba3BlockInference`) and the Samba
+  stack's embedding gather, final RMSNorm and head (`SambaInference`, from a
+  `SambaStack.save_checkpoint` file). Still forward only: `nm` on the Linux build finds no
+  backward, optimizer, loss or decode symbol. The `mamba` family stays a source reference
+  build.
+- The byte LM already had its public class, `LanguageModelInference.from_checkpoint`, over
+  the shipped `byte_lm` family. What changed is the verifier: on a CPU column the byte-lm and
+  byte-lm-resident lanes' held-out, reload, batch, batchscale and ragged cells now come
+  from that class loaded from the trainer's exported checkpoint.
+- Evidence: `bench/results/identity_break/2026-09-15_neural-forward-inference/README.md`.
+
 ## Forecasting, UMAP transform and full-SVD PCA (lane/inference-forecast-umap-pca, 2026-09-15)
 
 - Saved ARIMA models (`ARIMA.save`/`load`, format `mojolearn-arima-1`) predict in sample and

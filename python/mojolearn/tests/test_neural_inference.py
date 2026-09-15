@@ -84,7 +84,9 @@ def test_binding_reads_back_cpu_identical(binding):
 def test_binding_exports_no_training_entry(binding):
     names = {n for n in dir(binding) if not n.startswith("_")}
     assert names == {"neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
-                     "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh"}, names
+                     "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
+                     "mamba1_forward_fresh", "mamba2_forward_fresh", "mamba3_forward_fresh",
+                     "embedding_forward", "rms_norm_forward", "linear_forward"}, names
 
 
 def test_mlp_logits_shape_rows_alone_and_checkpoint(binding):
@@ -208,3 +210,125 @@ def test_equals_the_reference_path_when_present(binding):
         a = np.asarray(ml.TransformerBlock(tw, n_heads=2, n_kv_heads=1, window=window).forward(x))
         b = np.asarray(ml.TransformerBlockInference(tw, n_heads=2, n_kv_heads=1, window=window).forward(x))
         assert a.tobytes() == b.tobytes(), window
+
+
+# ---------------------------------------------------------------- Mamba and Samba (lane/inference-neural-forward)
+
+def _mamba_weights(kind, dm=32, seed=21):
+    di = 2 * dm
+    rng = np.random.default_rng(seed)
+    if kind == "mamba1":
+        r = -(-dm // 16)
+        shapes = {"norm.weight": (dm,), "in_proj.weight": (2 * di, dm), "conv1d.weight": (di, 1, 4),
+                  "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
+                  "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)}
+        ones = ("norm.weight",)
+    elif kind == "mamba2":
+        nh = di // 64
+        cd, dip = di + 256, 2 * di + 256 + nh
+        shapes = {"block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "conv1d.weight": (cd, 1, 4),
+                  "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
+                  "out_proj.weight": (dm, di)}
+        ones = ("block_norm.weight", "norm.weight")
+    else:
+        nh = di // 64
+        shapes = {"block_norm.weight": (dm,), "in_proj.weight": (2 * di + 256 + 3 * nh + 32, dm),
+                  "dt_bias": (nh,), "B_norm.weight": (128,), "C_norm.weight": (128,), "B_bias": (nh, 128),
+                  "C_bias": (nh, 128), "D": (nh,), "out_proj.weight": (dm, di)}
+        ones = ("block_norm.weight", "B_norm.weight", "C_norm.weight")
+    return {n: (np.ones(s, np.float32) if n in ones else (rng.standard_normal(s) * 0.1).astype(np.float32))
+            for n, s in shapes.items()}
+
+
+_MAMBA = (("mamba1", "Mamba1BlockInference", {}), ("mamba2", "Mamba2BlockInference", {}),
+          ("mamba2", "Mamba2BlockInference", {"dt_limit": (0.01, 0.1)}), ("mamba3", "Mamba3BlockInference", {}))
+
+
+@pytest.mark.parametrize("kind,cls,kw", _MAMBA)
+def test_mamba_forward_rows_prefix_ragged_and_refusals(binding, kind, cls, kw):
+    blk = getattr(ml, cls)(_mamba_weights(kind), **kw)
+    x = np.random.default_rng(3).standard_normal((4, 16, 32)).astype(np.float32)
+    y = np.asarray(blk.forward(x))
+    assert y.shape == (4, 16, 32) and y.dtype == np.float32
+    for i in range(4):
+        assert np.asarray(blk.forward(x[i:i + 1])).tobytes() == y[i:i + 1].tobytes(), i
+    assert np.asarray(blk(np.ascontiguousarray(x[:, :7]))).tobytes() == np.ascontiguousarray(y[:, :7]).tobytes()
+    lengths = [16, 7, 1, 12]
+    yr = np.asarray(blk.forward(x, lengths=lengths))
+    for i, n in enumerate(lengths):
+        assert yr[i:i + 1, :n].tobytes() == np.asarray(blk.forward(np.ascontiguousarray(x[i:i + 1, :n]))).tobytes()
+        assert not yr[i, n:].any()
+    with pytest.raises(ValueError, match="carried state is not supported"):
+        blk.forward(x, state=object())
+    for call in (lambda: blk.step(x[:, :1], None), lambda: blk.allocate_state(1), lambda: blk.backward(x, x)):
+        with pytest.raises(NotImplementedError, match="zero-state forward only"):
+            call()
+
+
+def _samba_config(tied=True):
+    return ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64,
+                          tie_embeddings=tied)
+
+
+def _samba_weights(cfg, seed=5):
+    rng = np.random.default_rng(seed)
+    return {n: (rng.standard_normal(s) * 0.1).astype(np.float32) for n, s in cfg.registry()}
+
+
+@pytest.mark.parametrize("tied", (True, False))
+def test_samba_forward_rows_ragged_and_refusals(binding, tied):
+    cfg = _samba_config(tied)
+    inf = ml.SambaInference(cfg, _samba_weights(cfg))
+    ids = np.random.default_rng(7).integers(0, 256, (4, 16)).astype(np.int32)
+    y = np.asarray(inf.forward(ids))
+    assert y.shape == (4, 16, 256) and y.dtype == np.float32
+    for i in range(4):
+        assert np.asarray(inf.logits(ids[i:i + 1])).tobytes() == y[i:i + 1].tobytes(), i
+    lengths = [16, 3, 1, 9]
+    junk = ids.copy()
+    for i, n in enumerate(lengths):
+        junk[i, n:] = 999
+    yr = np.asarray(inf.forward(junk, lengths=lengths))
+    for i, n in enumerate(lengths):
+        assert yr[i:i + 1, :n].tobytes() == np.asarray(inf.forward(np.ascontiguousarray(ids[i:i + 1, :n]))).tobytes()
+        assert not yr[i, n:].any()
+    with pytest.raises(ValueError, match=r"\[0, vocab\)"):
+        inf.forward(np.full((1, 2), 256, np.int32))
+    with pytest.raises(ValueError, match="carried state is not supported"):
+        inf.forward(ids, state=object())
+    for name in ("step", "allocate_state", "loss", "train_step"):
+        with pytest.raises(NotImplementedError, match="stateless forward only"):
+            getattr(inf, name)(None, None)
+    w = _samba_weights(cfg)
+    w.pop("norm_f.weight")
+    with pytest.raises(ValueError, match="weight dict mismatch"):
+        ml.SambaInference(cfg, w)
+
+
+def test_mamba_samba_byte_lm_equal_the_reference_path_when_present(binding):
+    """A CPU identity column only: the source reference mamba, transformer
+    and training host bindings are there, and the byte LM host binding."""
+    try:
+        _backend.load_host_module("_mojolearn_mamba_host")
+    except ImportError:
+        pytest.skip("the source reference mamba host binding is not built here (a wheel has none)")
+    if not _reference_present():
+        pytest.skip("the source reference training and transformer host bindings are not built here")
+    from mojolearn._cpu_reference import reference_training
+    x = np.random.default_rng(13).standard_normal((2, 16, 32)).astype(np.float32)
+    for kind, cls, kw in _MAMBA:
+        w = _mamba_weights(kind, seed=17)
+        gpu_cls = getattr(ml, cls.replace("Inference", ""))
+        a = np.asarray(gpu_cls(w, **kw).forward(x))
+        b = np.asarray(getattr(ml, cls)(w, **kw).forward(x))
+        assert a.tobytes() == b.tobytes(), (kind, kw)
+    ids = np.random.default_rng(13).integers(0, 256, (2, 17)).astype(np.int32)
+    tmp = tempfile.mkdtemp()
+    for tied in (True, False):
+        with reference_training():
+            st = ml.SambaStack(_samba_config(tied), generator=ml.training.Generator(1), lr=1e-3)
+            st.train_step(ids[:, :-1], ids[:, 1:])
+        path = os.path.join(tmp, f"samba-{tied}.ckpt")
+        st.save_checkpoint(path)
+        assert (np.asarray(ml.SambaInference.from_checkpoint(path).forward(ids[:, :-1])).tobytes()
+                == np.asarray(st.forward(ids[:, :-1])).tobytes()), tied

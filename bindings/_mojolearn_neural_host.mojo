@@ -40,7 +40,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import copy_f32, f32_ptr, read_f32
+from bindings.hostptr import copy_f32, f32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -48,7 +48,18 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, gemm_oracle
+from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
+from mamba.checks.mamba_oracle import MambaState, mamba_block_oracle
+from mamba.checks.mamba2_fixture import M2_D_CONV, Mamba2Dims, Mamba2Weights
+from mamba.checks.mamba2_oracle import Mamba2State, mamba2_block_oracle
+from mamba.checks.mamba3_fixture import M3_D_STATE, Mamba3Dims, Mamba3Weights
+from mamba.checks.mamba3_oracle import Mamba3State, mamba3_block_oracle
 from training.host.mlp_oracle import host_mlp_bias_activation
+from training.host.samba_ops_oracle import (
+    host_samba_embedding_forward,
+    host_samba_linear_forward,
+    host_samba_rms_norm_forward,
+)
 from transformer.host.transformer_block_host import (
     transformer_host_forward,
     transformer_host_weights,
@@ -176,6 +187,173 @@ def transformer_forward_fresh_binding(
     return PythonObject(out_len)
 
 
+# ===========================================================================
+# Mamba-1, Mamba-2 and Mamba-3: the zero-state prefill, only y written
+# (lane/inference-neural-forward, 2026-09-15). The weights are read in the
+# `_mojolearn_mamba_host` order (`_m1_weights`, `_m2_weights`, `_m3_weights`
+# there), the state is the oracle's own zero construction, and the final
+# state and the report stages are discarded.
+# ===========================================================================
+
+
+def _shape3(params: PythonObject, n: Int, what: String) raises -> List[Int]:
+    if Int(py=len(params)) != n:
+        raise Error(what + ": expected " + String(n) + " parameters, got " + String(Int(py=len(params))))
+    var out = List[Int](capacity=3)
+    for i in range(3):
+        out.append(_index(params[i]))
+    if out[0] < 1 or out[1] < 1 or out[2] < 1:
+        raise Error(what + ": B, L and d_model must be positive")
+    return out^
+
+
+def mamba1_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """12 addresses (x, the ten `Mamba1Block` weights, y); params B, L,
+    d_model. Returns B * L * d_model, the cells written."""
+    var a = _addrs(addrs, 12, String("mamba1_forward_fresh"))
+    var s = _shape3(params, 3, String("mamba1_forward_fresh"))
+    var b = s[0]
+    var l = s[1]
+    var dm = s[2]
+    with GILReleased(Python()):
+        var dims = MambaDims.of(dm)
+        var di = dims.d_inner
+        var r = dims.dt_rank
+        var xr = dims.x_proj_rows()
+        var w = MambaWeights(dims)
+        w.norm_w = read_f32(a[1], dm)
+        w.w_in = read_f32(a[2], 2 * di * dm)
+        w.conv_w = read_f32(a[3], di * D_CONV)
+        w.conv_b = read_f32(a[4], di)
+        w.w_x = read_f32(a[5], xr * di)
+        w.w_dt = read_f32(a[6], di * r)
+        w.b_dt = read_f32(a[7], di)
+        w.a_log = read_f32(a[8], di * D_STATE)
+        w.d_skip = read_f32(a[9], di)
+        w.w_out = read_f32(a[10], dm * di)
+        var state = MambaState(b, w.dims)
+        var st = mamba_block_oracle(w, read_f32(a[0], b * l * dm), b, l, state)
+        copy_f32(st.residual_out.unsafe_ptr(), f32_ptr(a[11]), b * l * dm)
+    return PythonObject(b * l * dm)
+
+
+def mamba2_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """11 addresses (x, the nine `Mamba2Block` weights, y); params B, L,
+    d_model, dt_lo, dt_hi. Returns B * L * d_model."""
+    var a = _addrs(addrs, 11, String("mamba2_forward_fresh"))
+    var s = _shape3(params, 5, String("mamba2_forward_fresh"))
+    var b = s[0]
+    var l = s[1]
+    var dm = s[2]
+    var dt_lo = Float32(Float64(py=params[3]))
+    var dt_hi = Float32(Float64(py=params[4]))
+    with GILReleased(Python()):
+        var dims = Mamba2Dims.of(dm)
+        var di = dims.d_inner
+        var cd = dims.conv_dim()
+        var nh = dims.nheads
+        var dip = dims.d_in_proj()
+        var w = Mamba2Weights(dims)
+        w.norm_w = read_f32(a[1], dm)
+        w.w_in = read_f32(a[2], dip * dm)
+        w.conv_w = read_f32(a[3], cd * M2_D_CONV)
+        w.conv_b = read_f32(a[4], cd)
+        w.dt_bias = read_f32(a[5], nh)
+        w.a_log = read_f32(a[6], nh)
+        w.d_skip = read_f32(a[7], nh)
+        w.gnorm_w = read_f32(a[8], di)
+        w.w_out = read_f32(a[9], dm * di)
+        var state = Mamba2State(b, w.dims)
+        var st = mamba2_block_oracle(w, read_f32(a[0], b * l * dm), b, l, dt_lo, dt_hi, state)
+        copy_f32(st.residual_out.unsafe_ptr(), f32_ptr(a[10]), b * l * dm)
+    return PythonObject(b * l * dm)
+
+
+def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """11 addresses (x, the nine `Mamba3Block` weights, y); params B, L,
+    d_model. Returns B * L * d_model."""
+    var a = _addrs(addrs, 11, String("mamba3_forward_fresh"))
+    var s = _shape3(params, 3, String("mamba3_forward_fresh"))
+    var b = s[0]
+    var l = s[1]
+    var dm = s[2]
+    with GILReleased(Python()):
+        var dims = Mamba3Dims.of(dm)
+        var di = dims.d_inner
+        var nh = dims.nheads
+        var dip = dims.d_in_proj()
+        var w = Mamba3Weights(dims)
+        w.norm_w = read_f32(a[1], dm)
+        w.w_in = read_f32(a[2], dip * dm)
+        w.dt_bias = read_f32(a[3], nh)
+        w.bnorm_w = read_f32(a[4], M3_D_STATE)
+        w.cnorm_w = read_f32(a[5], M3_D_STATE)
+        w.b_bias = read_f32(a[6], nh * M3_D_STATE)
+        w.c_bias = read_f32(a[7], nh * M3_D_STATE)
+        w.d_skip = read_f32(a[8], nh)
+        w.w_out = read_f32(a[9], dm * di)
+        var state = Mamba3State(b, w.dims)
+        var st = mamba3_block_oracle(w, read_f32(a[0], b * l * dm), b, l, state)
+        copy_f32(st.residual_out.unsafe_ptr(), f32_ptr(a[10]), b * l * dm)
+    return PythonObject(b * l * dm)
+
+
+# ===========================================================================
+# The Samba stack's own steps around its blocks: the embedding gather, the
+# final RMSNorm and the head, each `_mojolearn_training_host`'s entry of the
+# same name and contract, over training/host/samba_ops_oracle.mojo.
+# ===========================================================================
+
+
+def embedding_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addresses [y (n*width), w (vocab*width), ids (n int32)]; params
+    [n, vocab, width]. Returns n * width."""
+    var a = _addrs(addrs, 3, String("embedding_forward"))
+    if Int(py=len(params)) != 3:
+        raise Error("embedding_forward: params must be [n_positions, vocab, width]")
+    var n = _index(params[0])
+    var vocab = _index(params[1])
+    var width = _index(params[2])
+    if n < 1 or vocab < 1 or width < 1:
+        raise Error("embedding_forward: the embedding shape must be positive")
+    with GILReleased(Python()):
+        var y = host_samba_embedding_forward(read_f32(a[1], vocab * width), read_i32(a[2], n), n, vocab, width)
+        copy_f32(y.unsafe_ptr(), f32_ptr(a[0]), n * width)
+    return PythonObject(n * width)
+
+
+def rms_norm_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addresses [y (m*dm), x (m*dm), w (dm)]; params [m, dm, eps]."""
+    var a = _addrs(addrs, 3, String("rms_norm_forward"))
+    if Int(py=len(params)) != 3:
+        raise Error("rms_norm_forward: params must be [m, dm, eps]")
+    var m = _index(params[0])
+    var dm = _index(params[1])
+    var eps = Float32(Float64(py=params[2]))
+    if m < 1 or dm < 1:
+        raise Error("rms_norm_forward: the shape must be positive")
+    with GILReleased(Python()):
+        var y = host_samba_rms_norm_forward(read_f32(a[1], m * dm), read_f32(a[2], dm), m, dm, eps)
+        copy_f32(y.unsafe_ptr(), f32_ptr(a[0]), m * dm)
+    return PythonObject(m * dm)
+
+
+def linear_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`C[m, n] = A[m, k] . W[n, k]^T`; addresses [c, a, w]; params [m, n, k]."""
+    var a = _addrs(addrs, 3, String("linear_forward"))
+    if Int(py=len(params)) != 3:
+        raise Error("linear_forward: params must be [m, n, k]")
+    var m = _index(params[0])
+    var n = _index(params[1])
+    var k = _index(params[2])
+    if m < 1 or n < 1 or k < 1:
+        raise Error("linear_forward: the shape must be positive")
+    with GILReleased(Python()):
+        var c = host_samba_linear_forward(read_f32(a[1], m * k), read_f32(a[2], n * k), m, n, k)
+        copy_f32(c.unsafe_ptr(), f32_ptr(a[0]), m * n)
+    return PythonObject(m * n)
+
+
 @export
 def PyInit__mojolearn_neural_host() abi("C") -> PythonObject:
     try:
@@ -186,6 +364,12 @@ def PyInit__mojolearn_neural_host() abi("C") -> PythonObject:
         module.def_function[neural_host_sabotage_binding]("neural_host_sabotage")
         module.def_function[mlp_forward_logits_binding]("mlp_forward_logits")
         module.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
+        module.def_function[mamba1_forward_fresh_binding]("mamba1_forward_fresh")
+        module.def_function[mamba2_forward_fresh_binding]("mamba2_forward_fresh")
+        module.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
+        module.def_function[embedding_forward_binding]("embedding_forward")
+        module.def_function[rms_norm_forward_binding]("rms_norm_forward")
+        module.def_function[linear_forward_binding]("linear_forward")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_neural_host: ", error))

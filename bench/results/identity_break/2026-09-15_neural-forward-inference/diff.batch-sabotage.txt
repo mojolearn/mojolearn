@@ -1,0 +1,1420 @@
+== byte-lm-resident
+NOTE: --lanes scopes this diff to 1 lane(s); 9 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the batchscale part with sabotage '1'; its cells are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the ragged part with sabotage '1'; its cells are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|
+| byte-lm-resident/base        | IDENTICAL x2 | 4094f29d7499d189 | 4094f29d7499d189 |
+| byte-lm-resident/denormal    | ONE-COLUMN | f433ba682ec9d3a3 | (not run)        |
+| byte-lm-resident/denormal_ftz | ONE-COLUMN | 724fd18c8144f388 | (not run)        |
+| byte-lm-resident/dupes       | ONE-COLUMN | 960769cfbcc39557 | (not run)        |
+| byte-lm-resident/hashed      | ONE-COLUMN | 88e68038f4c71cb4 | (not run)        |
+| byte-lm-resident/negative    | ONE-COLUMN | 85edbd989ddbfed0 | (not run)        |
+| byte-lm-resident/odd         | ONE-COLUMN | 4094f29d7499d189 | (not run)        |
+| byte-lm-resident/ties        | ONE-COLUMN | f52820f3ff7cdeb1 | (not run)        |
+| byte-lm-resident/wide        | ONE-COLUMN | 95b8d710bed9afe5 | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=8
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| byte-lm-resident/base        | infer  | IDENTICAL x2 | 220885cbd8d2f82f | 220885cbd8d2f82f |
+| byte-lm-resident/base        | model  | IDENTICAL x2 | b1d65b99997911c5 | b1d65b99997911c5 |
+| byte-lm-resident/base        | batch  | BATCH_MOVED  | c44734e41960ea7d | BATCH_MOVED      |
+| byte-lm-resident/base        | rlpair | IDENTICAL x2 | 75d10aa264b7a173 | 75d10aa264b7a173 |
+| byte-lm-resident/base        | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm-resident/base        | batchscale | BATCH_MOVED  | d5797719799d871d | BATCH_MOVED      |
+| byte-lm-resident/base        | ragged | BATCH_MOVED  | f230913e438ed170 | BATCH_MOVED      |
+| byte-lm-resident/denormal    | infer  | ONE-COLUMN   | 16c555cc1776f127 | (not run)        |
+| byte-lm-resident/denormal    | model  | ONE-COLUMN   | 90d95bea0a099246 | (not run)        |
+| byte-lm-resident/denormal    | batch  | ONE-COLUMN   | 9a4f9d37b38b6127 | (not run)        |
+| byte-lm-resident/denormal    | rlpair | ONE-COLUMN   | 8ab8f644645ef801 | (not run)        |
+| byte-lm-resident/denormal    | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm-resident/denormal    | batchscale | ONE-COLUMN   | 193793e4ae0cab88 | (not run)        |
+| byte-lm-resident/denormal    | ragged | ONE-COLUMN   | 397cbe2d51703d59 | (not run)        |
+| byte-lm-resident/denormal_ftz | infer  | ONE-COLUMN   | 21c7e2e9e4e3c163 | (not run)        |
+| byte-lm-resident/denormal_ftz | model  | ONE-COLUMN   | ff9e808d37f12ae2 | (not run)        |
+| byte-lm-resident/denormal_ftz | batch  | ONE-COLUMN   | 3e3cfcb8788e7cf3 | (not run)        |
+| byte-lm-resident/denormal_ftz | rlpair | ONE-COLUMN   | 9898acc0a6d417c0 | (not run)        |
+| byte-lm-resident/denormal_ftz | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm-resident/denormal_ftz | batchscale | ONE-COLUMN   | c72376fe922328df | (not run)        |
+| byte-lm-resident/denormal_ftz | ragged | ONE-COLUMN   | a6550ba7ad3bd554 | (not run)        |
+| byte-lm-resident/dupes       | infer  | ONE-COLUMN   | a76dcc66f0b0b3d6 | (not run)        |
+| byte-lm-resident/dupes       | model  | ONE-COLUMN   | 78870cb1fb90caf6 | (not run)        |
+| byte-lm-resident/dupes       | batch  | ONE-COLUMN   | ad53b8960db92852 | (not run)        |
+| byte-lm-resident/dupes       | rlpair | ONE-COLUMN   | 6bf12066f8169234 | (not run)        |
+| byte-lm-resident/dupes       | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm-resident/dupes       | batchscale | ONE-COLUMN   | 37ef89fa03fe5f1a | (not run)        |
+| byte-lm-resident/dupes       | ragged | ONE-COLUMN   | 723c9f8de59b128d | (not run)        |
+| byte-lm-resident/hashed      | infer  | ONE-COLUMN   | d9a8ae1211de63a8 | (not run)        |
+| byte-lm-resident/hashed      | model  | ONE-COLUMN   | 0fa0ffc6bdf7e8da | (not run)        |
+| byte-lm-resident/hashed      | batch  | ONE-COLUMN   | 2a8fad887169cf0e | (not run)        |
+| byte-lm-resident/hashed      | rlpair | ONE-COLUMN   | fa10ffc49616575d | (not run)        |
+| byte-lm-resident/hashed      | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm-resident/hashed      | batchscale | ONE-COLUMN   | d0aa913541fabd9a | (not run)        |
+| byte-lm-resident/hashed      | ragged | ONE-COLUMN   | bca6020717597afa | (not run)        |
+| byte-lm-resident/negative    | infer  | ONE-COLUMN   | feaf17f14d1fa224 | (not run)        |
+| byte-lm-resident/negative    | model  | ONE-COLUMN   | a6aa56e3723d26e7 | (not run)        |
+| byte-lm-resident/negative    | batch  | ONE-COLUMN   | 6daa8fd7fe40b602 | (not run)        |
+| byte-lm-resident/negative    | rlpair | ONE-COLUMN   | 54680d0fdf3ebf0a | (not run)        |
+| byte-lm-resident/negative    | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm-resident/negative    | batchscale | ONE-COLUMN   | 21f9d38b29563d9e | (not run)        |
+| byte-lm-resident/negative    | ragged | ONE-COLUMN   | 820dbda443e05239 | (not run)        |
+| byte-lm-resident/odd         | infer  | ONE-COLUMN   | 220885cbd8d2f82f | (not run)        |
+| byte-lm-resident/odd         | model  | ONE-COLUMN   | b1d65b99997911c5 | (not run)        |
+| byte-lm-resident/odd         | batch  | ONE-COLUMN   | c44734e41960ea7d | (not run)        |
+| byte-lm-resident/odd         | rlpair | ONE-COLUMN   | 75d10aa264b7a173 | (not run)        |
+| byte-lm-resident/odd         | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm-resident/odd         | batchscale | ONE-COLUMN   | 51efa1a6bad70fd4 | (not run)        |
+| byte-lm-resident/odd         | ragged | ONE-COLUMN   | f230913e438ed170 | (not run)        |
+| byte-lm-resident/ties        | infer  | ONE-COLUMN   | efab6527ef0195aa | (not run)        |
+| byte-lm-resident/ties        | model  | ONE-COLUMN   | 947981070e61e180 | (not run)        |
+| byte-lm-resident/ties        | batch  | ONE-COLUMN   | 4178e56fb2b92328 | (not run)        |
+| byte-lm-resident/ties        | rlpair | ONE-COLUMN   | 5ab9db09132a0874 | (not run)        |
+| byte-lm-resident/ties        | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm-resident/ties        | batchscale | ONE-COLUMN   | ec3a490b2ab22890 | (not run)        |
+| byte-lm-resident/ties        | ragged | ONE-COLUMN   | 6646c27bf26cff39 | (not run)        |
+| byte-lm-resident/wide        | infer  | ONE-COLUMN   | d9cdc033be91d67a | (not run)        |
+| byte-lm-resident/wide        | model  | ONE-COLUMN   | 24cbda1caad25158 | (not run)        |
+| byte-lm-resident/wide        | batch  | ONE-COLUMN   | 6d2986674bd92c94 | (not run)        |
+| byte-lm-resident/wide        | rlpair | ONE-COLUMN   | b2d04e8471f8694e | (not run)        |
+| byte-lm-resident/wide        | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm-resident/wide        | batchscale | ONE-COLUMN   | 145f7e4820523fac | (not run)        |
+| byte-lm-resident/wide        | ragged | ONE-COLUMN   | 44b32eafb5d4fc26 | (not run)        |
+
+summary (infer/model): IDENTICAL=2, ONE-COLUMN=16
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=8
+summary (rlpair): IDENTICAL=1, ONE-COLUMN=8
+summary (batchgrad): N/A=9
+summary (batchscale): BATCH_MOVED=1, ONE-COLUMN=8
+summary (ragged): BATCH_MOVED=1, ONE-COLUMN=8
+exit 1
+== byte-lm
+NOTE: --lanes scopes this diff to 1 lane(s); 9 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the batchscale part with sabotage '1'; its cells are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the ragged part with sabotage '1'; its cells are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|
+| byte-lm/base                 | IDENTICAL x2 | f9a8d760f503f795 | f9a8d760f503f795 |
+| byte-lm/denormal             | ONE-COLUMN | 9f7725f93b3c2400 | (not run)        |
+| byte-lm/denormal_ftz         | ONE-COLUMN | 65bde5a2fb67dfdb | (not run)        |
+| byte-lm/dupes                | ONE-COLUMN | 9d9fe9205064bac3 | (not run)        |
+| byte-lm/hashed               | ONE-COLUMN | e1937509a223711e | (not run)        |
+| byte-lm/negative             | ONE-COLUMN | 2ac343da560e4d31 | (not run)        |
+| byte-lm/odd                  | ONE-COLUMN | f9a8d760f503f795 | (not run)        |
+| byte-lm/ties                 | ONE-COLUMN | b6939352795ff292 | (not run)        |
+| byte-lm/wide                 | ONE-COLUMN | f06570ace1982aab | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=8
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| byte-lm/base                 | infer  | IDENTICAL x2 | 220885cbd8d2f82f | 220885cbd8d2f82f |
+| byte-lm/base                 | model  | IDENTICAL x2 | b1d65b99997911c5 | b1d65b99997911c5 |
+| byte-lm/base                 | batch  | BATCH_MOVED  | c44734e41960ea7d | BATCH_MOVED      |
+| byte-lm/base                 | rlpair | IDENTICAL x2 | 75d10aa264b7a173 | 75d10aa264b7a173 |
+| byte-lm/base                 | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/base                 | batchscale | BATCH_MOVED  | d5797719799d871d | BATCH_MOVED      |
+| byte-lm/base                 | ragged | BATCH_MOVED  | f230913e438ed170 | BATCH_MOVED      |
+| byte-lm/denormal             | infer  | ONE-COLUMN   | 16c555cc1776f127 | (not run)        |
+| byte-lm/denormal             | model  | ONE-COLUMN   | 90d95bea0a099246 | (not run)        |
+| byte-lm/denormal             | batch  | ONE-COLUMN   | 9a4f9d37b38b6127 | (not run)        |
+| byte-lm/denormal             | rlpair | ONE-COLUMN   | 8ab8f644645ef801 | (not run)        |
+| byte-lm/denormal             | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm/denormal             | batchscale | ONE-COLUMN   | 193793e4ae0cab88 | (not run)        |
+| byte-lm/denormal             | ragged | ONE-COLUMN   | 397cbe2d51703d59 | (not run)        |
+| byte-lm/denormal_ftz         | infer  | ONE-COLUMN   | 21c7e2e9e4e3c163 | (not run)        |
+| byte-lm/denormal_ftz         | model  | ONE-COLUMN   | ff9e808d37f12ae2 | (not run)        |
+| byte-lm/denormal_ftz         | batch  | ONE-COLUMN   | 3e3cfcb8788e7cf3 | (not run)        |
+| byte-lm/denormal_ftz         | rlpair | ONE-COLUMN   | 9898acc0a6d417c0 | (not run)        |
+| byte-lm/denormal_ftz         | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm/denormal_ftz         | batchscale | ONE-COLUMN   | c72376fe922328df | (not run)        |
+| byte-lm/denormal_ftz         | ragged | ONE-COLUMN   | a6550ba7ad3bd554 | (not run)        |
+| byte-lm/dupes                | infer  | ONE-COLUMN   | a76dcc66f0b0b3d6 | (not run)        |
+| byte-lm/dupes                | model  | ONE-COLUMN   | 78870cb1fb90caf6 | (not run)        |
+| byte-lm/dupes                | batch  | ONE-COLUMN   | ad53b8960db92852 | (not run)        |
+| byte-lm/dupes                | rlpair | ONE-COLUMN   | 6bf12066f8169234 | (not run)        |
+| byte-lm/dupes                | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm/dupes                | batchscale | ONE-COLUMN   | 37ef89fa03fe5f1a | (not run)        |
+| byte-lm/dupes                | ragged | ONE-COLUMN   | 723c9f8de59b128d | (not run)        |
+| byte-lm/hashed               | infer  | ONE-COLUMN   | d9a8ae1211de63a8 | (not run)        |
+| byte-lm/hashed               | model  | ONE-COLUMN   | 0fa0ffc6bdf7e8da | (not run)        |
+| byte-lm/hashed               | batch  | ONE-COLUMN   | 2a8fad887169cf0e | (not run)        |
+| byte-lm/hashed               | rlpair | ONE-COLUMN   | fa10ffc49616575d | (not run)        |
+| byte-lm/hashed               | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm/hashed               | batchscale | ONE-COLUMN   | d0aa913541fabd9a | (not run)        |
+| byte-lm/hashed               | ragged | ONE-COLUMN   | bca6020717597afa | (not run)        |
+| byte-lm/negative             | infer  | ONE-COLUMN   | feaf17f14d1fa224 | (not run)        |
+| byte-lm/negative             | model  | ONE-COLUMN   | a6aa56e3723d26e7 | (not run)        |
+| byte-lm/negative             | batch  | ONE-COLUMN   | 6daa8fd7fe40b602 | (not run)        |
+| byte-lm/negative             | rlpair | ONE-COLUMN   | 54680d0fdf3ebf0a | (not run)        |
+| byte-lm/negative             | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm/negative             | batchscale | ONE-COLUMN   | 21f9d38b29563d9e | (not run)        |
+| byte-lm/negative             | ragged | ONE-COLUMN   | 820dbda443e05239 | (not run)        |
+| byte-lm/odd                  | infer  | ONE-COLUMN   | 220885cbd8d2f82f | (not run)        |
+| byte-lm/odd                  | model  | ONE-COLUMN   | b1d65b99997911c5 | (not run)        |
+| byte-lm/odd                  | batch  | ONE-COLUMN   | c44734e41960ea7d | (not run)        |
+| byte-lm/odd                  | rlpair | ONE-COLUMN   | 75d10aa264b7a173 | (not run)        |
+| byte-lm/odd                  | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm/odd                  | batchscale | ONE-COLUMN   | 51efa1a6bad70fd4 | (not run)        |
+| byte-lm/odd                  | ragged | ONE-COLUMN   | f230913e438ed170 | (not run)        |
+| byte-lm/ties                 | infer  | ONE-COLUMN   | efab6527ef0195aa | (not run)        |
+| byte-lm/ties                 | model  | ONE-COLUMN   | 947981070e61e180 | (not run)        |
+| byte-lm/ties                 | batch  | ONE-COLUMN   | 4178e56fb2b92328 | (not run)        |
+| byte-lm/ties                 | rlpair | ONE-COLUMN   | 5ab9db09132a0874 | (not run)        |
+| byte-lm/ties                 | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm/ties                 | batchscale | ONE-COLUMN   | ec3a490b2ab22890 | (not run)        |
+| byte-lm/ties                 | ragged | ONE-COLUMN   | 6646c27bf26cff39 | (not run)        |
+| byte-lm/wide                 | infer  | ONE-COLUMN   | d9cdc033be91d67a | (not run)        |
+| byte-lm/wide                 | model  | ONE-COLUMN   | 24cbda1caad25158 | (not run)        |
+| byte-lm/wide                 | batch  | ONE-COLUMN   | 6d2986674bd92c94 | (not run)        |
+| byte-lm/wide                 | rlpair | ONE-COLUMN   | b2d04e8471f8694e | (not run)        |
+| byte-lm/wide                 | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | (not run)        |
+| byte-lm/wide                 | batchscale | ONE-COLUMN   | 145f7e4820523fac | (not run)        |
+| byte-lm/wide                 | ragged | ONE-COLUMN   | 44b32eafb5d4fc26 | (not run)        |
+
+summary (infer/model): IDENTICAL=2, ONE-COLUMN=16
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=8
+summary (rlpair): IDENTICAL=1, ONE-COLUMN=8
+summary (batchgrad): N/A=9
+summary (batchscale): BATCH_MOVED=1, ONE-COLUMN=8
+summary (ragged): BATCH_MOVED=1, ONE-COLUMN=8
+exit 1
+== mamba1
+NOTE: --lanes scopes this diff to 1 lane(s); 9 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the batchscale part with sabotage '1'; its cells are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the ragged part with sabotage '1'; its cells are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|
+| mamba1/base                  | IDENTICAL x2 | 1609902abaf80a04 | 1609902abaf80a04 |
+| mamba1/denormal              | ONE-COLUMN | b7b8e653d7d0f153 | (not run)        |
+| mamba1/denormal_ftz          | ONE-COLUMN | b7b8e653d7d0f153 | (not run)        |
+| mamba1/dupes                 | ONE-COLUMN | 2ac98fad7386a721 | (not run)        |
+| mamba1/hashed                | ONE-COLUMN | 062931419c55ee5a | (not run)        |
+| mamba1/negative              | ONE-COLUMN | 0a83c66670f92b55 | (not run)        |
+| mamba1/odd                   | ONE-COLUMN | 1609902abaf80a04 | (not run)        |
+| mamba1/ties                  | ONE-COLUMN | c821893bfb5ba46c | (not run)        |
+| mamba1/wide                  | ONE-COLUMN | 0e7b2cee60a53003 | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=8
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| mamba1/base                  | infer  | IDENTICAL x2 | 97e86b9db80719a7 | 97e86b9db80719a7 |
+| mamba1/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba1/base                  | batch  | BATCH_MOVED  | fbb1f3233000006e | BATCH_MOVED      |
+| mamba1/base                  | rlpair | IDENTICAL x2 | 3fd0b9d19f53c9c1 | 3fd0b9d19f53c9c1 |
+| mamba1/base                  | batchgrad | IDENTICAL x2 | 6dc76b046d9dfd07 | 6dc76b046d9dfd07 |
+| mamba1/base                  | batchscale | BATCH_MOVED  | 5481e0dff3303591 | BATCH_MOVED      |
+| mamba1/base                  | ragged | BATCH_MOVED  | e560b542fc558190 | BATCH_MOVED      |
+| mamba1/denormal              | infer  | ONE-COLUMN   | 79e0f910c5525ef7 | (not run)        |
+| mamba1/denormal              | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba1/denormal              | batch  | ONE-COLUMN   | a17b09e0f608dab7 | (not run)        |
+| mamba1/denormal              | rlpair | ONE-COLUMN   | 7b0bbb310451668a | (not run)        |
+| mamba1/denormal              | batchgrad | ONE-COLUMN   | 6a7023d45d75092c | (not run)        |
+| mamba1/denormal              | batchscale | ONE-COLUMN   | 6cefa2fe4b8e937a | (not run)        |
+| mamba1/denormal              | ragged | ONE-COLUMN   | 820e4e6bfba11c24 | (not run)        |
+| mamba1/denormal_ftz          | infer  | ONE-COLUMN   | 79e0f910c5525ef7 | (not run)        |
+| mamba1/denormal_ftz          | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba1/denormal_ftz          | batch  | ONE-COLUMN   | a17b09e0f608dab7 | (not run)        |
+| mamba1/denormal_ftz          | rlpair | ONE-COLUMN   | deb7fd8a06a24ed9 | (not run)        |
+| mamba1/denormal_ftz          | batchgrad | ONE-COLUMN   | 6a7023d45d75092c | (not run)        |
+| mamba1/denormal_ftz          | batchscale | ONE-COLUMN   | 6cefa2fe4b8e937a | (not run)        |
+| mamba1/denormal_ftz          | ragged | ONE-COLUMN   | 820e4e6bfba11c24 | (not run)        |
+| mamba1/dupes                 | infer  | ONE-COLUMN   | 4f1ca2b3595ec583 | (not run)        |
+| mamba1/dupes                 | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba1/dupes                 | batch  | ONE-COLUMN   | 7eb2c68796e0f91a | (not run)        |
+| mamba1/dupes                 | rlpair | ONE-COLUMN   | 3fd0b9d19f53c9c1 | (not run)        |
+| mamba1/dupes                 | batchgrad | ONE-COLUMN   | d3d5d8870262f8b6 | (not run)        |
+| mamba1/dupes                 | batchscale | ONE-COLUMN   | b8fa64bb560de88e | (not run)        |
+| mamba1/dupes                 | ragged | ONE-COLUMN   | 5a07ad1dafb81fb1 | (not run)        |
+| mamba1/hashed                | infer  | ONE-COLUMN   | b2e6c1006bf3a5ce | (not run)        |
+| mamba1/hashed                | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba1/hashed                | batch  | ONE-COLUMN   | 29fc3810bca1e78a | (not run)        |
+| mamba1/hashed                | rlpair | ONE-COLUMN   | 08398a6bfcc8570a | (not run)        |
+| mamba1/hashed                | batchgrad | ONE-COLUMN   | 02307cd514fceb2d | (not run)        |
+| mamba1/hashed                | batchscale | ONE-COLUMN   | d44c4d814a35d216 | (not run)        |
+| mamba1/hashed                | ragged | ONE-COLUMN   | 8fbfb081c0991539 | (not run)        |
+| mamba1/negative              | infer  | ONE-COLUMN   | c0e8d2045bc0faf6 | (not run)        |
+| mamba1/negative              | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba1/negative              | batch  | ONE-COLUMN   | a48d8850d38c0e4c | (not run)        |
+| mamba1/negative              | rlpair | ONE-COLUMN   | 0f0f848b5a1a12e3 | (not run)        |
+| mamba1/negative              | batchgrad | ONE-COLUMN   | d337c6414d0c6b88 | (not run)        |
+| mamba1/negative              | batchscale | ONE-COLUMN   | f1f293536dd10853 | (not run)        |
+| mamba1/negative              | ragged | ONE-COLUMN   | 71baa8846a0294d9 | (not run)        |
+| mamba1/odd                   | infer  | ONE-COLUMN   | 97e86b9db80719a7 | (not run)        |
+| mamba1/odd                   | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba1/odd                   | batch  | ONE-COLUMN   | fbb1f3233000006e | (not run)        |
+| mamba1/odd                   | rlpair | ONE-COLUMN   | 3fd0b9d19f53c9c1 | (not run)        |
+| mamba1/odd                   | batchgrad | ONE-COLUMN   | 6dc76b046d9dfd07 | (not run)        |
+| mamba1/odd                   | batchscale | ONE-COLUMN   | 8f97528deb8aa655 | (not run)        |
+| mamba1/odd                   | ragged | ONE-COLUMN   | e560b542fc558190 | (not run)        |
+| mamba1/ties                  | infer  | ONE-COLUMN   | 13aed38cf2e3c341 | (not run)        |
+| mamba1/ties                  | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba1/ties                  | batch  | ONE-COLUMN   | 23b7f12c8a228592 | (not run)        |
+| mamba1/ties                  | rlpair | ONE-COLUMN   | 29e18589720b7474 | (not run)        |
+| mamba1/ties                  | batchgrad | ONE-COLUMN   | 606a5724ab5c0f41 | (not run)        |
+| mamba1/ties                  | batchscale | ONE-COLUMN   | dcb2a540e0d72eac | (not run)        |
+| mamba1/ties                  | ragged | ONE-COLUMN   | 5abcb0b09ea615e3 | (not run)        |
+| mamba1/wide                  | infer  | ONE-COLUMN   | 905c98cf2a276d1d | (not run)        |
+| mamba1/wide                  | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba1/wide                  | batch  | ONE-COLUMN   | e83173af858d8291 | (not run)        |
+| mamba1/wide                  | rlpair | ONE-COLUMN   | 8a4cd7a1b49c65a8 | (not run)        |
+| mamba1/wide                  | batchgrad | ONE-COLUMN   | 44ae6f0520c58bb3 | (not run)        |
+| mamba1/wide                  | batchscale | ONE-COLUMN   | 54da89a0749a8c64 | (not run)        |
+| mamba1/wide                  | ragged | ONE-COLUMN   | 93bf5f8aa3430649 | (not run)        |
+
+summary (infer/model): IDENTICAL=1, N/A=9, ONE-COLUMN=8
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=8
+summary (rlpair): IDENTICAL=1, ONE-COLUMN=8
+summary (batchgrad): IDENTICAL=1, ONE-COLUMN=8
+summary (batchscale): BATCH_MOVED=1, ONE-COLUMN=8
+summary (ragged): BATCH_MOVED=1, ONE-COLUMN=8
+exit 1
+== mamba2-dtlimit
+NOTE: --lanes scopes this diff to 1 lane(s); 9 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the batchscale part with sabotage '1'; its cells are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the ragged part with sabotage '1'; its cells are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|
+| mamba2-dtlimit/base          | IDENTICAL x2 | b9e7928a2a4d30cf | b9e7928a2a4d30cf |
+| mamba2-dtlimit/denormal      | ONE-COLUMN | 5686523944c0f4f4 | (not run)        |
+| mamba2-dtlimit/denormal_ftz  | ONE-COLUMN | 5686523944c0f4f4 | (not run)        |
+| mamba2-dtlimit/dupes         | ONE-COLUMN | 04cf69094de5328f | (not run)        |
+| mamba2-dtlimit/hashed        | ONE-COLUMN | 6cff59b5b34681ab | (not run)        |
+| mamba2-dtlimit/negative      | ONE-COLUMN | caba9face6653ba0 | (not run)        |
+| mamba2-dtlimit/odd           | ONE-COLUMN | b9e7928a2a4d30cf | (not run)        |
+| mamba2-dtlimit/ties          | ONE-COLUMN | 70a5916600842982 | (not run)        |
+| mamba2-dtlimit/wide          | ONE-COLUMN | 911465156f47fed2 | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=8
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| mamba2-dtlimit/base          | infer  | IDENTICAL x2 | 574842725ea2d43f | 574842725ea2d43f |
+| mamba2-dtlimit/base          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba2-dtlimit/base          | batch  | BATCH_MOVED  | af7b9d3840cf5ef4 | BATCH_MOVED      |
+| mamba2-dtlimit/base          | rlpair | IDENTICAL x2 | fc40c30a5ef759e1 | fc40c30a5ef759e1 |
+| mamba2-dtlimit/base          | batchgrad | IDENTICAL x2 | cd0ad4d1f1ebde94 | cd0ad4d1f1ebde94 |
+| mamba2-dtlimit/base          | batchscale | BATCH_MOVED  | e2f29cd647bd434e | BATCH_MOVED      |
+| mamba2-dtlimit/base          | ragged | BATCH_MOVED  | 0fe25a2632347e16 | BATCH_MOVED      |
+| mamba2-dtlimit/denormal      | infer  | ONE-COLUMN   | a88b2984e2b61ecc | (not run)        |
+| mamba2-dtlimit/denormal      | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2-dtlimit/denormal      | batch  | ONE-COLUMN   | fc87c19f72f968a4 | (not run)        |
+| mamba2-dtlimit/denormal      | rlpair | ONE-COLUMN   | f8759cd70e5a991b | (not run)        |
+| mamba2-dtlimit/denormal      | batchgrad | ONE-COLUMN   | 6301d0357ff4a866 | (not run)        |
+| mamba2-dtlimit/denormal      | batchscale | ONE-COLUMN   | 129e8ba500105487 | (not run)        |
+| mamba2-dtlimit/denormal      | ragged | ONE-COLUMN   | 6c5dd05bef2b93a6 | (not run)        |
+| mamba2-dtlimit/denormal_ftz  | infer  | ONE-COLUMN   | a88b2984e2b61ecc | (not run)        |
+| mamba2-dtlimit/denormal_ftz  | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2-dtlimit/denormal_ftz  | batch  | ONE-COLUMN   | fc87c19f72f968a4 | (not run)        |
+| mamba2-dtlimit/denormal_ftz  | rlpair | ONE-COLUMN   | 14b7680b4a85314e | (not run)        |
+| mamba2-dtlimit/denormal_ftz  | batchgrad | ONE-COLUMN   | 6301d0357ff4a866 | (not run)        |
+| mamba2-dtlimit/denormal_ftz  | batchscale | ONE-COLUMN   | 129e8ba500105487 | (not run)        |
+| mamba2-dtlimit/denormal_ftz  | ragged | ONE-COLUMN   | 6c5dd05bef2b93a6 | (not run)        |
+| mamba2-dtlimit/dupes         | infer  | ONE-COLUMN   | ce418d3c6ca799ae | (not run)        |
+| mamba2-dtlimit/dupes         | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2-dtlimit/dupes         | batch  | ONE-COLUMN   | 14ae83f5c3e1998f | (not run)        |
+| mamba2-dtlimit/dupes         | rlpair | ONE-COLUMN   | fc40c30a5ef759e1 | (not run)        |
+| mamba2-dtlimit/dupes         | batchgrad | ONE-COLUMN   | 3282e2d8d4f91249 | (not run)        |
+| mamba2-dtlimit/dupes         | batchscale | ONE-COLUMN   | 8fc7b3cccce77c49 | (not run)        |
+| mamba2-dtlimit/dupes         | ragged | ONE-COLUMN   | d8399deb8feb945d | (not run)        |
+| mamba2-dtlimit/hashed        | infer  | ONE-COLUMN   | f9184585ded42cc8 | (not run)        |
+| mamba2-dtlimit/hashed        | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2-dtlimit/hashed        | batch  | ONE-COLUMN   | 6251ed997aa6e1ff | (not run)        |
+| mamba2-dtlimit/hashed        | rlpair | ONE-COLUMN   | d9aa90106508c6f4 | (not run)        |
+| mamba2-dtlimit/hashed        | batchgrad | ONE-COLUMN   | 7c7e39f70c6a2340 | (not run)        |
+| mamba2-dtlimit/hashed        | batchscale | ONE-COLUMN   | 6587794eb21492f5 | (not run)        |
+| mamba2-dtlimit/hashed        | ragged | ONE-COLUMN   | 44933e25e57279d7 | (not run)        |
+| mamba2-dtlimit/negative      | infer  | ONE-COLUMN   | e71489aec1499756 | (not run)        |
+| mamba2-dtlimit/negative      | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2-dtlimit/negative      | batch  | ONE-COLUMN   | 822a574e48d23549 | (not run)        |
+| mamba2-dtlimit/negative      | rlpair | ONE-COLUMN   | 835884c3c2618c53 | (not run)        |
+| mamba2-dtlimit/negative      | batchgrad | ONE-COLUMN   | 5e6136ab5ecd7e55 | (not run)        |
+| mamba2-dtlimit/negative      | batchscale | ONE-COLUMN   | 41a7fd6cd3fc1a1d | (not run)        |
+| mamba2-dtlimit/negative      | ragged | ONE-COLUMN   | 986898fbf71488b1 | (not run)        |
+| mamba2-dtlimit/odd           | infer  | ONE-COLUMN   | 574842725ea2d43f | (not run)        |
+| mamba2-dtlimit/odd           | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2-dtlimit/odd           | batch  | ONE-COLUMN   | af7b9d3840cf5ef4 | (not run)        |
+| mamba2-dtlimit/odd           | rlpair | ONE-COLUMN   | fc40c30a5ef759e1 | (not run)        |
+| mamba2-dtlimit/odd           | batchgrad | ONE-COLUMN   | cd0ad4d1f1ebde94 | (not run)        |
+| mamba2-dtlimit/odd           | batchscale | ONE-COLUMN   | b8715636bb190b5d | (not run)        |
+| mamba2-dtlimit/odd           | ragged | ONE-COLUMN   | 0fe25a2632347e16 | (not run)        |
+| mamba2-dtlimit/ties          | infer  | ONE-COLUMN   | 6961b92c3565ded6 | (not run)        |
+| mamba2-dtlimit/ties          | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2-dtlimit/ties          | batch  | ONE-COLUMN   | af6fcf1e9222cb76 | (not run)        |
+| mamba2-dtlimit/ties          | rlpair | ONE-COLUMN   | d17cd4c49bbf55b4 | (not run)        |
+| mamba2-dtlimit/ties          | batchgrad | ONE-COLUMN   | 1561179a532a5697 | (not run)        |
+| mamba2-dtlimit/ties          | batchscale | ONE-COLUMN   | 82db40d087dd1829 | (not run)        |
+| mamba2-dtlimit/ties          | ragged | ONE-COLUMN   | f7efc342921c1098 | (not run)        |
+| mamba2-dtlimit/wide          | infer  | ONE-COLUMN   | c8604d7add29e134 | (not run)        |
+| mamba2-dtlimit/wide          | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2-dtlimit/wide          | batch  | ONE-COLUMN   | 93f22fa95029c3d8 | (not run)        |
+| mamba2-dtlimit/wide          | rlpair | ONE-COLUMN   | b96eaa63de60edcd | (not run)        |
+| mamba2-dtlimit/wide          | batchgrad | ONE-COLUMN   | 7b66b1a3a14acfb8 | (not run)        |
+| mamba2-dtlimit/wide          | batchscale | ONE-COLUMN   | ed66d3b94742f0fd | (not run)        |
+| mamba2-dtlimit/wide          | ragged | ONE-COLUMN   | de5bdde294971ec3 | (not run)        |
+
+summary (infer/model): IDENTICAL=1, N/A=9, ONE-COLUMN=8
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=8
+summary (rlpair): IDENTICAL=1, ONE-COLUMN=8
+summary (batchgrad): IDENTICAL=1, ONE-COLUMN=8
+summary (batchscale): BATCH_MOVED=1, ONE-COLUMN=8
+summary (ragged): BATCH_MOVED=1, ONE-COLUMN=8
+exit 1
+== mamba2
+NOTE: --lanes scopes this diff to 1 lane(s); 9 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the batchscale part with sabotage '1'; its cells are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the ragged part with sabotage '1'; its cells are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|
+| mamba2/base                  | IDENTICAL x2 | 5b05a3ecbd70248e | 5b05a3ecbd70248e |
+| mamba2/denormal              | ONE-COLUMN | a143926e29ac0813 | (not run)        |
+| mamba2/denormal_ftz          | ONE-COLUMN | a143926e29ac0813 | (not run)        |
+| mamba2/dupes                 | ONE-COLUMN | c565acd587b39ab2 | (not run)        |
+| mamba2/hashed                | ONE-COLUMN | 2689cc3187df61fd | (not run)        |
+| mamba2/negative              | ONE-COLUMN | 3506202ab66d8a1f | (not run)        |
+| mamba2/odd                   | ONE-COLUMN | 5b05a3ecbd70248e | (not run)        |
+| mamba2/ties                  | ONE-COLUMN | 48a4bec7b6f6e4f6 | (not run)        |
+| mamba2/wide                  | ONE-COLUMN | 0d1022f692c144dd | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=8
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| mamba2/base                  | infer  | IDENTICAL x2 | b0084ee171c0720f | b0084ee171c0720f |
+| mamba2/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba2/base                  | batch  | BATCH_MOVED  | d21a83ab6b3ce297 | BATCH_MOVED      |
+| mamba2/base                  | rlpair | IDENTICAL x2 | f4abbd5451ff5172 | f4abbd5451ff5172 |
+| mamba2/base                  | batchgrad | IDENTICAL x2 | 99cad63be0fb7239 | 99cad63be0fb7239 |
+| mamba2/base                  | batchscale | BATCH_MOVED  | f5c6c5c02917a956 | BATCH_MOVED      |
+| mamba2/base                  | ragged | BATCH_MOVED  | f1f44805dc9171e8 | BATCH_MOVED      |
+| mamba2/denormal              | infer  | ONE-COLUMN   | 715e3b3d9ee219ba | (not run)        |
+| mamba2/denormal              | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2/denormal              | batch  | ONE-COLUMN   | ce1a26dfa4587c15 | (not run)        |
+| mamba2/denormal              | rlpair | ONE-COLUMN   | c43d27b4d3607e26 | (not run)        |
+| mamba2/denormal              | batchgrad | ONE-COLUMN   | ce0a5a78bcd04f68 | (not run)        |
+| mamba2/denormal              | batchscale | ONE-COLUMN   | a8a0984b5804dde6 | (not run)        |
+| mamba2/denormal              | ragged | ONE-COLUMN   | c6cfc709454fd6a4 | (not run)        |
+| mamba2/denormal_ftz          | infer  | ONE-COLUMN   | 715e3b3d9ee219ba | (not run)        |
+| mamba2/denormal_ftz          | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2/denormal_ftz          | batch  | ONE-COLUMN   | ce1a26dfa4587c15 | (not run)        |
+| mamba2/denormal_ftz          | rlpair | ONE-COLUMN   | 85aeeec8c5a056a1 | (not run)        |
+| mamba2/denormal_ftz          | batchgrad | ONE-COLUMN   | ce0a5a78bcd04f68 | (not run)        |
+| mamba2/denormal_ftz          | batchscale | ONE-COLUMN   | a8a0984b5804dde6 | (not run)        |
+| mamba2/denormal_ftz          | ragged | ONE-COLUMN   | c6cfc709454fd6a4 | (not run)        |
+| mamba2/dupes                 | infer  | ONE-COLUMN   | bc19a007224d9860 | (not run)        |
+| mamba2/dupes                 | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2/dupes                 | batch  | ONE-COLUMN   | 82b6615b36847109 | (not run)        |
+| mamba2/dupes                 | rlpair | ONE-COLUMN   | f4abbd5451ff5172 | (not run)        |
+| mamba2/dupes                 | batchgrad | ONE-COLUMN   | 30287f3369d63e43 | (not run)        |
+| mamba2/dupes                 | batchscale | ONE-COLUMN   | 8b9801efe8170524 | (not run)        |
+| mamba2/dupes                 | ragged | ONE-COLUMN   | c6240fc848bde00d | (not run)        |
+| mamba2/hashed                | infer  | ONE-COLUMN   | fa5cdfa7a8028ea4 | (not run)        |
+| mamba2/hashed                | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2/hashed                | batch  | ONE-COLUMN   | a824974d95e976a1 | (not run)        |
+| mamba2/hashed                | rlpair | ONE-COLUMN   | ebd9a6af0f062bee | (not run)        |
+| mamba2/hashed                | batchgrad | ONE-COLUMN   | cc350cb47739345e | (not run)        |
+| mamba2/hashed                | batchscale | ONE-COLUMN   | 492b5c7545648f34 | (not run)        |
+| mamba2/hashed                | ragged | ONE-COLUMN   | 758a09358b4de751 | (not run)        |
+| mamba2/negative              | infer  | ONE-COLUMN   | e47047c1022164fb | (not run)        |
+| mamba2/negative              | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2/negative              | batch  | ONE-COLUMN   | 5e4dc2619d55149f | (not run)        |
+| mamba2/negative              | rlpair | ONE-COLUMN   | 08cdec93b208dfcc | (not run)        |
+| mamba2/negative              | batchgrad | ONE-COLUMN   | 2992677ebe413db5 | (not run)        |
+| mamba2/negative              | batchscale | ONE-COLUMN   | 9c78b8aeea6269b2 | (not run)        |
+| mamba2/negative              | ragged | ONE-COLUMN   | 2586664048028a83 | (not run)        |
+| mamba2/odd                   | infer  | ONE-COLUMN   | b0084ee171c0720f | (not run)        |
+| mamba2/odd                   | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2/odd                   | batch  | ONE-COLUMN   | d21a83ab6b3ce297 | (not run)        |
+| mamba2/odd                   | rlpair | ONE-COLUMN   | f4abbd5451ff5172 | (not run)        |
+| mamba2/odd                   | batchgrad | ONE-COLUMN   | 99cad63be0fb7239 | (not run)        |
+| mamba2/odd                   | batchscale | ONE-COLUMN   | 71e5ec10135b32fb | (not run)        |
+| mamba2/odd                   | ragged | ONE-COLUMN   | f1f44805dc9171e8 | (not run)        |
+| mamba2/ties                  | infer  | ONE-COLUMN   | bbd1634ec2e78ddf | (not run)        |
+| mamba2/ties                  | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2/ties                  | batch  | ONE-COLUMN   | 4b2801f8f573c8c8 | (not run)        |
+| mamba2/ties                  | rlpair | ONE-COLUMN   | f899efc2a35ec48a | (not run)        |
+| mamba2/ties                  | batchgrad | ONE-COLUMN   | d662c396d92de418 | (not run)        |
+| mamba2/ties                  | batchscale | ONE-COLUMN   | 9febb4c33c9d4b48 | (not run)        |
+| mamba2/ties                  | ragged | ONE-COLUMN   | 8f0119a70131adcb | (not run)        |
+| mamba2/wide                  | infer  | ONE-COLUMN   | b67647742c88aaf1 | (not run)        |
+| mamba2/wide                  | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba2/wide                  | batch  | ONE-COLUMN   | 0a20d6f3d8237f24 | (not run)        |
+| mamba2/wide                  | rlpair | ONE-COLUMN   | 47957b59ac09a5d8 | (not run)        |
+| mamba2/wide                  | batchgrad | ONE-COLUMN   | 3151cfcc25d5c776 | (not run)        |
+| mamba2/wide                  | batchscale | ONE-COLUMN   | ff5f412bb3fd5328 | (not run)        |
+| mamba2/wide                  | ragged | ONE-COLUMN   | 9c1bcc53c4f2905a | (not run)        |
+
+summary (infer/model): IDENTICAL=1, N/A=9, ONE-COLUMN=8
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=8
+summary (rlpair): IDENTICAL=1, ONE-COLUMN=8
+summary (batchgrad): IDENTICAL=1, ONE-COLUMN=8
+summary (batchscale): BATCH_MOVED=1, ONE-COLUMN=8
+summary (ragged): BATCH_MOVED=1, ONE-COLUMN=8
+exit 1
+== mamba3
+NOTE: --lanes scopes this diff to 1 lane(s); 9 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the batchscale part with sabotage '1'; its cells are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the ragged part with sabotage '1'; its cells are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|
+| mamba3/base                  | IDENTICAL x2 | 63de4bf6b9f8262a | 63de4bf6b9f8262a |
+| mamba3/denormal              | ONE-COLUMN | d506465b344d39d6 | (not run)        |
+| mamba3/denormal_ftz          | ONE-COLUMN | d506465b344d39d6 | (not run)        |
+| mamba3/dupes                 | ONE-COLUMN | 59a1567b027ac450 | (not run)        |
+| mamba3/hashed                | ONE-COLUMN | 6535988e7df6b7c8 | (not run)        |
+| mamba3/negative              | ONE-COLUMN | 467cfdf1eeb3a1c6 | (not run)        |
+| mamba3/odd                   | ONE-COLUMN | 63de4bf6b9f8262a | (not run)        |
+| mamba3/ties                  | ONE-COLUMN | 4bad5909ae635933 | (not run)        |
+| mamba3/wide                  | ONE-COLUMN | 07f2064c0243e8c2 | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=8
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| mamba3/base                  | infer  | IDENTICAL x2 | 6d73873ffe222457 | 6d73873ffe222457 |
+| mamba3/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba3/base                  | batch  | BATCH_MOVED  | a59631110897fda3 | BATCH_MOVED      |
+| mamba3/base                  | rlpair | IDENTICAL x2 | 8335131b23bae55d | 8335131b23bae55d |
+| mamba3/base                  | batchgrad | IDENTICAL x2 | 292bbf6a571391a3 | 292bbf6a571391a3 |
+| mamba3/base                  | batchscale | BATCH_MOVED  | 509739cc35c73cb0 | BATCH_MOVED      |
+| mamba3/base                  | ragged | BATCH_MOVED  | aa2a093f3670c2de | BATCH_MOVED      |
+| mamba3/denormal              | infer  | ONE-COLUMN   | 2092a683dc18e94b | (not run)        |
+| mamba3/denormal              | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba3/denormal              | batch  | ONE-COLUMN   | 4182cf2b203fedea | (not run)        |
+| mamba3/denormal              | rlpair | ONE-COLUMN   | 4c9c87c7c49eccbd | (not run)        |
+| mamba3/denormal              | batchgrad | ONE-COLUMN   | 78db7df43245f472 | (not run)        |
+| mamba3/denormal              | batchscale | ONE-COLUMN   | 89e5e31a5ebbe5fb | (not run)        |
+| mamba3/denormal              | ragged | ONE-COLUMN   | 4ed7e9d569e75a4f | (not run)        |
+| mamba3/denormal_ftz          | infer  | ONE-COLUMN   | 2092a683dc18e94b | (not run)        |
+| mamba3/denormal_ftz          | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba3/denormal_ftz          | batch  | ONE-COLUMN   | 4182cf2b203fedea | (not run)        |
+| mamba3/denormal_ftz          | rlpair | ONE-COLUMN   | ee432f5df351f529 | (not run)        |
+| mamba3/denormal_ftz          | batchgrad | ONE-COLUMN   | 78db7df43245f472 | (not run)        |
+| mamba3/denormal_ftz          | batchscale | ONE-COLUMN   | 89e5e31a5ebbe5fb | (not run)        |
+| mamba3/denormal_ftz          | ragged | ONE-COLUMN   | 4ed7e9d569e75a4f | (not run)        |
+| mamba3/dupes                 | infer  | ONE-COLUMN   | 572e878fb8e538ce | (not run)        |
+| mamba3/dupes                 | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba3/dupes                 | batch  | ONE-COLUMN   | 605d8473f84fd235 | (not run)        |
+| mamba3/dupes                 | rlpair | ONE-COLUMN   | 8335131b23bae55d | (not run)        |
+| mamba3/dupes                 | batchgrad | ONE-COLUMN   | 050c6b60f15665f4 | (not run)        |
+| mamba3/dupes                 | batchscale | ONE-COLUMN   | 1db7c3474dfd5d6c | (not run)        |
+| mamba3/dupes                 | ragged | ONE-COLUMN   | 46052e7560b7203a | (not run)        |
+| mamba3/hashed                | infer  | ONE-COLUMN   | c1862ccad54884ed | (not run)        |
+| mamba3/hashed                | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba3/hashed                | batch  | ONE-COLUMN   | b922b29fdddfc3d6 | (not run)        |
+| mamba3/hashed                | rlpair | ONE-COLUMN   | 54338d80374d4535 | (not run)        |
+| mamba3/hashed                | batchgrad | ONE-COLUMN   | e5f2eacc692aa8dc | (not run)        |
+| mamba3/hashed                | batchscale | ONE-COLUMN   | 8a2a3cd88f6fcfbf | (not run)        |
+| mamba3/hashed                | ragged | ONE-COLUMN   | 2a3da811e51ed911 | (not run)        |
+| mamba3/negative              | infer  | ONE-COLUMN   | 27f5cfbb4648281d | (not run)        |
+| mamba3/negative              | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba3/negative              | batch  | ONE-COLUMN   | da761d278ab6655a | (not run)        |
+| mamba3/negative              | rlpair | ONE-COLUMN   | 21d8a2cbf5d39256 | (not run)        |
+| mamba3/negative              | batchgrad | ONE-COLUMN   | c4695e3042bc5e5e | (not run)        |
+| mamba3/negative              | batchscale | ONE-COLUMN   | d98940ae9f08f6ed | (not run)        |
+| mamba3/negative              | ragged | ONE-COLUMN   | 79b1eae4fb165f88 | (not run)        |
+| mamba3/odd                   | infer  | ONE-COLUMN   | 6d73873ffe222457 | (not run)        |
+| mamba3/odd                   | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba3/odd                   | batch  | ONE-COLUMN   | a59631110897fda3 | (not run)        |
+| mamba3/odd                   | rlpair | ONE-COLUMN   | 8335131b23bae55d | (not run)        |
+| mamba3/odd                   | batchgrad | ONE-COLUMN   | 292bbf6a571391a3 | (not run)        |
+| mamba3/odd                   | batchscale | ONE-COLUMN   | 02d53e8b250733f1 | (not run)        |
+| mamba3/odd                   | ragged | ONE-COLUMN   | aa2a093f3670c2de | (not run)        |
+| mamba3/ties                  | infer  | ONE-COLUMN   | 1b23621d97f54640 | (not run)        |
+| mamba3/ties                  | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba3/ties                  | batch  | ONE-COLUMN   | a93eb5738c206655 | (not run)        |
+| mamba3/ties                  | rlpair | ONE-COLUMN   | cd68b3cf1d7e2468 | (not run)        |
+| mamba3/ties                  | batchgrad | ONE-COLUMN   | f3bd46f553f22909 | (not run)        |
+| mamba3/ties                  | batchscale | ONE-COLUMN   | 51be49b4805d5896 | (not run)        |
+| mamba3/ties                  | ragged | ONE-COLUMN   | 8e058cc2a6b89c46 | (not run)        |
+| mamba3/wide                  | infer  | ONE-COLUMN   | 229127d013a0eeb7 | (not run)        |
+| mamba3/wide                  | model  | N/A          | n/a:no-save      | (not run)        |
+| mamba3/wide                  | batch  | ONE-COLUMN   | ac07fbd366e6fce2 | (not run)        |
+| mamba3/wide                  | rlpair | ONE-COLUMN   | f71f944d03be5153 | (not run)        |
+| mamba3/wide                  | batchgrad | ONE-COLUMN   | be0084453f949005 | (not run)        |
+| mamba3/wide                  | batchscale | ONE-COLUMN   | 83ffd63d3622750f | (not run)        |
+| mamba3/wide                  | ragged | ONE-COLUMN   | f6867acb0aad7f0e | (not run)        |
+
+summary (infer/model): IDENTICAL=1, N/A=9, ONE-COLUMN=8
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=8
+summary (rlpair): IDENTICAL=1, ONE-COLUMN=8
+summary (batchgrad): IDENTICAL=1, ONE-COLUMN=8
+summary (batchscale): BATCH_MOVED=1, ONE-COLUMN=8
+summary (ragged): BATCH_MOVED=1, ONE-COLUMN=8
+exit 1
+== samba-untied-dropout-accum
+NOTE: --lanes scopes this diff to 1 lane(s); 9 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the batchscale part with sabotage '1'; its cells are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the ragged part with sabotage '1'; its cells are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|
+| samba-untied-dropout-accum/base | IDENTICAL x2 | 4610c84719bc1a25 | 4610c84719bc1a25 |
+| samba-untied-dropout-accum/denormal | ONE-COLUMN | 70a608ce179e03dd | (not run)        |
+| samba-untied-dropout-accum/denormal_ftz | ONE-COLUMN | eb0dc6c31a737411 | (not run)        |
+| samba-untied-dropout-accum/dupes | ONE-COLUMN | 9a7b9c31419aa4b9 | (not run)        |
+| samba-untied-dropout-accum/hashed | ONE-COLUMN | 18a317bc4260eb9a | (not run)        |
+| samba-untied-dropout-accum/negative | ONE-COLUMN | 42e27eabc8c4706f | (not run)        |
+| samba-untied-dropout-accum/odd | ONE-COLUMN | 4610c84719bc1a25 | (not run)        |
+| samba-untied-dropout-accum/ties | ONE-COLUMN | 603f4c03dcbe47c9 | (not run)        |
+| samba-untied-dropout-accum/wide | ONE-COLUMN | 70d8b0c335b40464 | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=8
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| samba-untied-dropout-accum/base | infer  | IDENTICAL x2 | 43f7860a7ff7a633 | 43f7860a7ff7a633 |
+| samba-untied-dropout-accum/base | model  | IDENTICAL x2 | 4c6bb23f04af6858 | 4c6bb23f04af6858 |
+| samba-untied-dropout-accum/base | batch  | BATCH_MOVED  | 94c79045f8d92d80 | BATCH_MOVED      |
+| samba-untied-dropout-accum/base | rlpair | IDENTICAL x2 | a14b4cd9184a5a34 | a14b4cd9184a5a34 |
+| samba-untied-dropout-accum/base | batchgrad | IDENTICAL x2 | 9ae573a84ecf90f8 | 9ae573a84ecf90f8 |
+| samba-untied-dropout-accum/base | batchscale | BATCH_MOVED  | 9b780937c00cda02 | BATCH_MOVED      |
+| samba-untied-dropout-accum/base | ragged | BATCH_MOVED  | 5266053152ec7003 | BATCH_MOVED      |
+| samba-untied-dropout-accum/denormal | infer  | ONE-COLUMN   | 24c7e0e923e369e0 | (not run)        |
+| samba-untied-dropout-accum/denormal | model  | ONE-COLUMN   | 10a8d940bbce9051 | (not run)        |
+| samba-untied-dropout-accum/denormal | batch  | ONE-COLUMN   | 52f4c864f4e177ed | (not run)        |
+| samba-untied-dropout-accum/denormal | rlpair | ONE-COLUMN   | 557fcb8ac104b01a | (not run)        |
+| samba-untied-dropout-accum/denormal | batchgrad | ONE-COLUMN   | dd94d6ce0f01b073 | (not run)        |
+| samba-untied-dropout-accum/denormal | batchscale | ONE-COLUMN   | e09efb4fd5971a12 | (not run)        |
+| samba-untied-dropout-accum/denormal | ragged | ONE-COLUMN   | 1c4331af10529d7f | (not run)        |
+| samba-untied-dropout-accum/denormal_ftz | infer  | ONE-COLUMN   | d815951934e104a6 | (not run)        |
+| samba-untied-dropout-accum/denormal_ftz | model  | ONE-COLUMN   | 35a817ce8929a5d6 | (not run)        |
+| samba-untied-dropout-accum/denormal_ftz | batch  | ONE-COLUMN   | eb52194ccef805e4 | (not run)        |
+| samba-untied-dropout-accum/denormal_ftz | rlpair | ONE-COLUMN   | 743c668e023e6740 | (not run)        |
+| samba-untied-dropout-accum/denormal_ftz | batchgrad | ONE-COLUMN   | 49f70c4b208aded0 | (not run)        |
+| samba-untied-dropout-accum/denormal_ftz | batchscale | ONE-COLUMN   | dc5f0c82e7ee9978 | (not run)        |
+| samba-untied-dropout-accum/denormal_ftz | ragged | ONE-COLUMN   | 4aab3884613c0b41 | (not run)        |
+| samba-untied-dropout-accum/dupes | infer  | ONE-COLUMN   | 3ca26c5ae1819ebc | (not run)        |
+| samba-untied-dropout-accum/dupes | model  | ONE-COLUMN   | 4bea33bdf66a23bc | (not run)        |
+| samba-untied-dropout-accum/dupes | batch  | ONE-COLUMN   | 95236c32031b7ace | (not run)        |
+| samba-untied-dropout-accum/dupes | rlpair | ONE-COLUMN   | 7f85526ff9bb0a7e | (not run)        |
+| samba-untied-dropout-accum/dupes | batchgrad | ONE-COLUMN   | 110dcd9ce98a7c10 | (not run)        |
+| samba-untied-dropout-accum/dupes | batchscale | ONE-COLUMN   | d331883a71ba5ba7 | (not run)        |
+| samba-untied-dropout-accum/dupes | ragged | ONE-COLUMN   | 63801d92a23251a1 | (not run)        |
+| samba-untied-dropout-accum/hashed | infer  | ONE-COLUMN   | 87796cb8024bd934 | (not run)        |
+| samba-untied-dropout-accum/hashed | model  | ONE-COLUMN   | 148bfe51d04c1d98 | (not run)        |
+| samba-untied-dropout-accum/hashed | batch  | ONE-COLUMN   | 9e101ad04c649179 | (not run)        |
+| samba-untied-dropout-accum/hashed | rlpair | ONE-COLUMN   | 935b160b9a5d1ae1 | (not run)        |
+| samba-untied-dropout-accum/hashed | batchgrad | ONE-COLUMN   | 99a88af5db3ba4c4 | (not run)        |
+| samba-untied-dropout-accum/hashed | batchscale | ONE-COLUMN   | a9d10a15a11cfd5a | (not run)        |
+| samba-untied-dropout-accum/hashed | ragged | ONE-COLUMN   | 8f1fa87643603034 | (not run)        |
+| samba-untied-dropout-accum/negative | infer  | ONE-COLUMN   | 55ec2d1c5eccef2d | (not run)        |
+| samba-untied-dropout-accum/negative | model  | ONE-COLUMN   | ecaf3ac775bac83b | (not run)        |
+| samba-untied-dropout-accum/negative | batch  | ONE-COLUMN   | dcc15ae7885b0699 | (not run)        |
+| samba-untied-dropout-accum/negative | rlpair | ONE-COLUMN   | bd86f42f23ab1765 | (not run)        |
+| samba-untied-dropout-accum/negative | batchgrad | ONE-COLUMN   | 2a46376740cf4f17 | (not run)        |
+| samba-untied-dropout-accum/negative | batchscale | ONE-COLUMN   | c4f69db31e4918fc | (not run)        |
+| samba-untied-dropout-accum/negative | ragged | ONE-COLUMN   | 00673227cddf155d | (not run)        |
+| samba-untied-dropout-accum/odd | infer  | ONE-COLUMN   | 43f7860a7ff7a633 | (not run)        |
+| samba-untied-dropout-accum/odd | model  | ONE-COLUMN   | 4c6bb23f04af6858 | (not run)        |
+| samba-untied-dropout-accum/odd | batch  | ONE-COLUMN   | 94c79045f8d92d80 | (not run)        |
+| samba-untied-dropout-accum/odd | rlpair | ONE-COLUMN   | a14b4cd9184a5a34 | (not run)        |
+| samba-untied-dropout-accum/odd | batchgrad | ONE-COLUMN   | 9ae573a84ecf90f8 | (not run)        |
+| samba-untied-dropout-accum/odd | batchscale | ONE-COLUMN   | dde1e26eb972c8d8 | (not run)        |
+| samba-untied-dropout-accum/odd | ragged | ONE-COLUMN   | 5266053152ec7003 | (not run)        |
+| samba-untied-dropout-accum/ties | infer  | ONE-COLUMN   | bb32b8aebf4dc90e | (not run)        |
+| samba-untied-dropout-accum/ties | model  | ONE-COLUMN   | 9818c749c2dfc7ea | (not run)        |
+| samba-untied-dropout-accum/ties | batch  | ONE-COLUMN   | 4130d70c2c138b0e | (not run)        |
+| samba-untied-dropout-accum/ties | rlpair | ONE-COLUMN   | 9f6648df433827af | (not run)        |
+| samba-untied-dropout-accum/ties | batchgrad | ONE-COLUMN   | 80ecfdf5e1fd7965 | (not run)        |
+| samba-untied-dropout-accum/ties | batchscale | ONE-COLUMN   | cb351616dbbc93b2 | (not run)        |
+| samba-untied-dropout-accum/ties | ragged | ONE-COLUMN   | ff6d591eb1482891 | (not run)        |
+| samba-untied-dropout-accum/wide | infer  | ONE-COLUMN   | 21601e087bd7d274 | (not run)        |
+| samba-untied-dropout-accum/wide | model  | ONE-COLUMN   | 98b807c41ebff82a | (not run)        |
+| samba-untied-dropout-accum/wide | batch  | ONE-COLUMN   | fb9e91204daaf37e | (not run)        |
+| samba-untied-dropout-accum/wide | rlpair | ONE-COLUMN   | b1543091f6ddb627 | (not run)        |
+| samba-untied-dropout-accum/wide | batchgrad | ONE-COLUMN   | 3271e56a56b048ee | (not run)        |
+| samba-untied-dropout-accum/wide | batchscale | ONE-COLUMN   | 286affb39e9299ae | (not run)        |
+| samba-untied-dropout-accum/wide | ragged | ONE-COLUMN   | d88b904b4d7a835b | (not run)        |
+
+summary (infer/model): IDENTICAL=2, ONE-COLUMN=16
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=8
+summary (rlpair): IDENTICAL=1, ONE-COLUMN=8
+summary (batchgrad): IDENTICAL=1, ONE-COLUMN=8
+summary (batchscale): BATCH_MOVED=1, ONE-COLUMN=8
+summary (ragged): BATCH_MOVED=1, ONE-COLUMN=8
+exit 1
+== samba
+NOTE: --lanes scopes this diff to 1 lane(s); 9 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the batchscale part with sabotage '1'; its cells are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the ragged part with sabotage '1'; its cells are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|
+| samba/base                   | IDENTICAL x2 | 037e7701daa7fc7c | 037e7701daa7fc7c |
+| samba/denormal               | ONE-COLUMN | 97c929c9824ede42 | (not run)        |
+| samba/denormal_ftz           | ONE-COLUMN | 2dc833bbce3de194 | (not run)        |
+| samba/dupes                  | ONE-COLUMN | daa904c0d89aefde | (not run)        |
+| samba/hashed                 | ONE-COLUMN | 0fb42364f4c84411 | (not run)        |
+| samba/negative               | ONE-COLUMN | 8c6bfc3b26396833 | (not run)        |
+| samba/odd                    | ONE-COLUMN | 037e7701daa7fc7c | (not run)        |
+| samba/ties                   | ONE-COLUMN | e02c7412e926a415 | (not run)        |
+| samba/wide                   | ONE-COLUMN | 68e2e32002737938 | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=8
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| samba/base                   | infer  | IDENTICAL x2 | 77db10c414ebd846 | 77db10c414ebd846 |
+| samba/base                   | model  | IDENTICAL x2 | 674582804fcf1a50 | 674582804fcf1a50 |
+| samba/base                   | batch  | BATCH_MOVED  | aacbe0585755bc0f | BATCH_MOVED      |
+| samba/base                   | rlpair | IDENTICAL x2 | 8ae8dda8ba22a4aa | 8ae8dda8ba22a4aa |
+| samba/base                   | batchgrad | IDENTICAL x2 | 6eafd29a27e3b376 | 6eafd29a27e3b376 |
+| samba/base                   | batchscale | BATCH_MOVED  | 0872a6f17bb82169 | BATCH_MOVED      |
+| samba/base                   | ragged | BATCH_MOVED  | eb391546ac70ae0c | BATCH_MOVED      |
+| samba/denormal               | infer  | ONE-COLUMN   | ca618a38cf786fa4 | (not run)        |
+| samba/denormal               | model  | ONE-COLUMN   | f7f05521e7cdfec7 | (not run)        |
+| samba/denormal               | batch  | ONE-COLUMN   | f5880effe032ad0f | (not run)        |
+| samba/denormal               | rlpair | ONE-COLUMN   | 87af7af2b081fddc | (not run)        |
+| samba/denormal               | batchgrad | ONE-COLUMN   | 66825be665b22b30 | (not run)        |
+| samba/denormal               | batchscale | ONE-COLUMN   | 9c14caa774e24955 | (not run)        |
+| samba/denormal               | ragged | ONE-COLUMN   | c6310b93e035d00e | (not run)        |
+| samba/denormal_ftz           | infer  | ONE-COLUMN   | b728af86ccc442fb | (not run)        |
+| samba/denormal_ftz           | model  | ONE-COLUMN   | f34e7e4227d3ab4b | (not run)        |
+| samba/denormal_ftz           | batch  | ONE-COLUMN   | d765507d7d144423 | (not run)        |
+| samba/denormal_ftz           | rlpair | ONE-COLUMN   | ee2093efea1daf9e | (not run)        |
+| samba/denormal_ftz           | batchgrad | ONE-COLUMN   | 17d748d11f46ed94 | (not run)        |
+| samba/denormal_ftz           | batchscale | ONE-COLUMN   | aaa0373e794e177b | (not run)        |
+| samba/denormal_ftz           | ragged | ONE-COLUMN   | af5e79e7727ed342 | (not run)        |
+| samba/dupes                  | infer  | ONE-COLUMN   | 3bb2585d8a536f77 | (not run)        |
+| samba/dupes                  | model  | ONE-COLUMN   | 5113ff087cd1d774 | (not run)        |
+| samba/dupes                  | batch  | ONE-COLUMN   | a77ce9563430eca6 | (not run)        |
+| samba/dupes                  | rlpair | ONE-COLUMN   | 2f241faee9373acb | (not run)        |
+| samba/dupes                  | batchgrad | ONE-COLUMN   | 327d0bfd2395a506 | (not run)        |
+| samba/dupes                  | batchscale | ONE-COLUMN   | f8b3ff80eb16cf92 | (not run)        |
+| samba/dupes                  | ragged | ONE-COLUMN   | f5f3982764f18c9b | (not run)        |
+| samba/hashed                 | infer  | ONE-COLUMN   | b0b897d724d5a625 | (not run)        |
+| samba/hashed                 | model  | ONE-COLUMN   | 284aef669039f101 | (not run)        |
+| samba/hashed                 | batch  | ONE-COLUMN   | 685cfa1d3a50b038 | (not run)        |
+| samba/hashed                 | rlpair | ONE-COLUMN   | af0e02cacfad8270 | (not run)        |
+| samba/hashed                 | batchgrad | ONE-COLUMN   | 3868e1890bf25d35 | (not run)        |
+| samba/hashed                 | batchscale | ONE-COLUMN   | 30ffca4eef8cfbbe | (not run)        |
+| samba/hashed                 | ragged | ONE-COLUMN   | aa231cea2adacc40 | (not run)        |
+| samba/negative               | infer  | ONE-COLUMN   | 3a11eda41792501b | (not run)        |
+| samba/negative               | model  | ONE-COLUMN   | bf0a203a904b24cf | (not run)        |
+| samba/negative               | batch  | ONE-COLUMN   | 87de84abeab25d86 | (not run)        |
+| samba/negative               | rlpair | ONE-COLUMN   | 1af4d714620deaf5 | (not run)        |
+| samba/negative               | batchgrad | ONE-COLUMN   | 6dc47e85c06129c7 | (not run)        |
+| samba/negative               | batchscale | ONE-COLUMN   | bb6fcbdc0822016b | (not run)        |
+| samba/negative               | ragged | ONE-COLUMN   | f0b62c34b66da60f | (not run)        |
+| samba/odd                    | infer  | ONE-COLUMN   | 77db10c414ebd846 | (not run)        |
+| samba/odd                    | model  | ONE-COLUMN   | 674582804fcf1a50 | (not run)        |
+| samba/odd                    | batch  | ONE-COLUMN   | aacbe0585755bc0f | (not run)        |
+| samba/odd                    | rlpair | ONE-COLUMN   | 8ae8dda8ba22a4aa | (not run)        |
+| samba/odd                    | batchgrad | ONE-COLUMN   | 6eafd29a27e3b376 | (not run)        |
+| samba/odd                    | batchscale | ONE-COLUMN   | 0fc187985877bd57 | (not run)        |
+| samba/odd                    | ragged | ONE-COLUMN   | eb391546ac70ae0c | (not run)        |
+| samba/ties                   | infer  | ONE-COLUMN   | a777e99f0a27b647 | (not run)        |
+| samba/ties                   | model  | ONE-COLUMN   | 1e49500f833e02a1 | (not run)        |
+| samba/ties                   | batch  | ONE-COLUMN   | ca83b11a24eb8695 | (not run)        |
+| samba/ties                   | rlpair | ONE-COLUMN   | e4e74a603305d265 | (not run)        |
+| samba/ties                   | batchgrad | ONE-COLUMN   | 7da094a4bce624b4 | (not run)        |
+| samba/ties                   | batchscale | ONE-COLUMN   | 4f412d22d8dd4784 | (not run)        |
+| samba/ties                   | ragged | ONE-COLUMN   | 343d0e7ac3063750 | (not run)        |
+| samba/wide                   | infer  | ONE-COLUMN   | a9c9aafd145646b1 | (not run)        |
+| samba/wide                   | model  | ONE-COLUMN   | 6adcd1530cd32c5e | (not run)        |
+| samba/wide                   | batch  | ONE-COLUMN   | 609a185bf1638192 | (not run)        |
+| samba/wide                   | rlpair | ONE-COLUMN   | cb7ed4b4430e1283 | (not run)        |
+| samba/wide                   | batchgrad | ONE-COLUMN   | 87bfd07b0b3cb13d | (not run)        |
+| samba/wide                   | batchscale | ONE-COLUMN   | b68a9569d43a4580 | (not run)        |
+| samba/wide                   | ragged | ONE-COLUMN   | a4753a0b93544243 | (not run)        |
+
+summary (infer/model): IDENTICAL=2, ONE-COLUMN=16
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=8
+summary (rlpair): IDENTICAL=1, ONE-COLUMN=8
+summary (batchgrad): IDENTICAL=1, ONE-COLUMN=8
+summary (batchscale): BATCH_MOVED=1, ONE-COLUMN=8
+summary (ragged): BATCH_MOVED=1, ONE-COLUMN=8
+exit 1
+== transformer-window
+NOTE: --lanes scopes this diff to 1 lane(s); 9 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the batchscale part with sabotage '1'; its cells are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the ragged part with sabotage '1'; its cells are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|
+| transformer-window/base      | IDENTICAL x2 | 49ffb2316f238e6d | 49ffb2316f238e6d |
+| transformer-window/denormal  | ONE-COLUMN | 4f8ec13b57260957 | (not run)        |
+| transformer-window/denormal_ftz | ONE-COLUMN | 4f8ec13b57260957 | (not run)        |
+| transformer-window/dupes     | ONE-COLUMN | 44fa7ec52d690ee9 | (not run)        |
+| transformer-window/hashed    | ONE-COLUMN | af2bffef90669cb5 | (not run)        |
+| transformer-window/negative  | ONE-COLUMN | e1f21e879b6d8fa9 | (not run)        |
+| transformer-window/odd       | ONE-COLUMN | 49ffb2316f238e6d | (not run)        |
+| transformer-window/ties      | ONE-COLUMN | 4cc1690c572f7931 | (not run)        |
+| transformer-window/wide      | ONE-COLUMN | 44a2b49da1619c85 | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=8
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| transformer-window/base      | infer  | IDENTICAL x2 | a35cf82209713d66 | a35cf82209713d66 |
+| transformer-window/base      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| transformer-window/base      | batch  | BATCH_MOVED  | e0499610bd0279e1 | BATCH_MOVED      |
+| transformer-window/base      | rlpair | IDENTICAL x2 | c6f0e94cbc9ade59 | c6f0e94cbc9ade59 |
+| transformer-window/base      | batchgrad | IDENTICAL x2 | 212351f26cf2ea25 | 212351f26cf2ea25 |
+| transformer-window/base      | batchscale | BATCH_MOVED  | 2792496c71904df4 | BATCH_MOVED      |
+| transformer-window/base      | ragged | BATCH_MOVED  | cc1926bc76441b0f | BATCH_MOVED      |
+| transformer-window/denormal  | infer  | ONE-COLUMN   | 82b8315aa5e3eff3 | (not run)        |
+| transformer-window/denormal  | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer-window/denormal  | batch  | ONE-COLUMN   | 7c86487e6c8de244 | (not run)        |
+| transformer-window/denormal  | rlpair | ONE-COLUMN   | e6e8d4b4b5b5e46a | (not run)        |
+| transformer-window/denormal  | batchgrad | ONE-COLUMN   | 5f70e6d27d39b5de | (not run)        |
+| transformer-window/denormal  | batchscale | ONE-COLUMN   | bdf2f3c4ae71fd74 | (not run)        |
+| transformer-window/denormal  | ragged | ONE-COLUMN   | 2b7e40b86782cb9c | (not run)        |
+| transformer-window/denormal_ftz | infer  | ONE-COLUMN   | 82b8315aa5e3eff3 | (not run)        |
+| transformer-window/denormal_ftz | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer-window/denormal_ftz | batch  | ONE-COLUMN   | 7c86487e6c8de244 | (not run)        |
+| transformer-window/denormal_ftz | rlpair | ONE-COLUMN   | f27349ced3ee6254 | (not run)        |
+| transformer-window/denormal_ftz | batchgrad | ONE-COLUMN   | 5f70e6d27d39b5de | (not run)        |
+| transformer-window/denormal_ftz | batchscale | ONE-COLUMN   | bdf2f3c4ae71fd74 | (not run)        |
+| transformer-window/denormal_ftz | ragged | ONE-COLUMN   | 2b7e40b86782cb9c | (not run)        |
+| transformer-window/dupes     | infer  | ONE-COLUMN   | c8727f6975c294a0 | (not run)        |
+| transformer-window/dupes     | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer-window/dupes     | batch  | ONE-COLUMN   | 2609e898b7c93177 | (not run)        |
+| transformer-window/dupes     | rlpair | ONE-COLUMN   | c6f0e94cbc9ade59 | (not run)        |
+| transformer-window/dupes     | batchgrad | ONE-COLUMN   | 6a7752a8ad2e7e49 | (not run)        |
+| transformer-window/dupes     | batchscale | ONE-COLUMN   | c7ed428af4f7e6bf | (not run)        |
+| transformer-window/dupes     | ragged | ONE-COLUMN   | c70bb87ba0b79ee3 | (not run)        |
+| transformer-window/hashed    | infer  | ONE-COLUMN   | 980b88a5ef026b11 | (not run)        |
+| transformer-window/hashed    | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer-window/hashed    | batch  | ONE-COLUMN   | 235440a27bc0150e | (not run)        |
+| transformer-window/hashed    | rlpair | ONE-COLUMN   | 3ed927cc1a04c983 | (not run)        |
+| transformer-window/hashed    | batchgrad | ONE-COLUMN   | e1e96857e9c912a4 | (not run)        |
+| transformer-window/hashed    | batchscale | ONE-COLUMN   | 3db9693cdc916f29 | (not run)        |
+| transformer-window/hashed    | ragged | ONE-COLUMN   | 04e41ddf58d11495 | (not run)        |
+| transformer-window/negative  | infer  | ONE-COLUMN   | 4d10337584b45e49 | (not run)        |
+| transformer-window/negative  | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer-window/negative  | batch  | ONE-COLUMN   | bda185330c5accc5 | (not run)        |
+| transformer-window/negative  | rlpair | ONE-COLUMN   | 756fe43411985468 | (not run)        |
+| transformer-window/negative  | batchgrad | ONE-COLUMN   | 36281f513ad8f76b | (not run)        |
+| transformer-window/negative  | batchscale | ONE-COLUMN   | 56b9a0bce1fab958 | (not run)        |
+| transformer-window/negative  | ragged | ONE-COLUMN   | ebcab46b3bf9fb43 | (not run)        |
+| transformer-window/odd       | infer  | ONE-COLUMN   | a35cf82209713d66 | (not run)        |
+| transformer-window/odd       | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer-window/odd       | batch  | ONE-COLUMN   | e0499610bd0279e1 | (not run)        |
+| transformer-window/odd       | rlpair | ONE-COLUMN   | c6f0e94cbc9ade59 | (not run)        |
+| transformer-window/odd       | batchgrad | ONE-COLUMN   | 212351f26cf2ea25 | (not run)        |
+| transformer-window/odd       | batchscale | ONE-COLUMN   | b852899e3e7c4b9d | (not run)        |
+| transformer-window/odd       | ragged | ONE-COLUMN   | cc1926bc76441b0f | (not run)        |
+| transformer-window/ties      | infer  | ONE-COLUMN   | 22a7a20579fe94db | (not run)        |
+| transformer-window/ties      | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer-window/ties      | batch  | ONE-COLUMN   | 27cdeafedfb90f1a | (not run)        |
+| transformer-window/ties      | rlpair | ONE-COLUMN   | cebcb9e7e839c5fd | (not run)        |
+| transformer-window/ties      | batchgrad | ONE-COLUMN   | eace7960b014bd0a | (not run)        |
+| transformer-window/ties      | batchscale | ONE-COLUMN   | 4f8657e490d55da3 | (not run)        |
+| transformer-window/ties      | ragged | ONE-COLUMN   | a857139f896612a9 | (not run)        |
+| transformer-window/wide      | infer  | ONE-COLUMN   | 75cf7df2cce4aea9 | (not run)        |
+| transformer-window/wide      | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer-window/wide      | batch  | ONE-COLUMN   | 68798687c33a64ff | (not run)        |
+| transformer-window/wide      | rlpair | ONE-COLUMN   | ec1cc10a6b0298e7 | (not run)        |
+| transformer-window/wide      | batchgrad | ONE-COLUMN   | 052d53c67d5977f0 | (not run)        |
+| transformer-window/wide      | batchscale | ONE-COLUMN   | 40c125fc58bef4dd | (not run)        |
+| transformer-window/wide      | ragged | ONE-COLUMN   | 132703047789a4ae | (not run)        |
+
+summary (infer/model): IDENTICAL=1, N/A=9, ONE-COLUMN=8
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=8
+summary (rlpair): IDENTICAL=1, ONE-COLUMN=8
+summary (batchgrad): IDENTICAL=1, ONE-COLUMN=8
+summary (batchscale): BATCH_MOVED=1, ONE-COLUMN=8
+summary (ragged): BATCH_MOVED=1, ONE-COLUMN=8
+exit 1
+== transformer
+NOTE: --lanes scopes this diff to 1 lane(s); 9 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=0b459d9e85fd4364a99641295093bc35b201d4e2
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the batchscale part with sabotage '1'; its cells are not evidence
+NOTE: column cpu-amd-epyc-4564p-16-core-processor ran the ragged part with sabotage '1'; its cells are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-4564p-16-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-4564p-16-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|------------|------------------|------------------|
+| transformer/base             | IDENTICAL x2 | 295d4e62d4c78b14 | 295d4e62d4c78b14 |
+| transformer/denormal         | ONE-COLUMN | da87cbc4fb93d086 | (not run)        |
+| transformer/denormal_ftz     | ONE-COLUMN | da87cbc4fb93d086 | (not run)        |
+| transformer/dupes            | ONE-COLUMN | e48bc0a8545b1a29 | (not run)        |
+| transformer/hashed           | ONE-COLUMN | 7d565e3a35324caa | (not run)        |
+| transformer/negative         | ONE-COLUMN | 79d66e219ac996a9 | (not run)        |
+| transformer/odd              | ONE-COLUMN | 295d4e62d4c78b14 | (not run)        |
+| transformer/ties             | ONE-COLUMN | 251eb6369ef11d70 | (not run)        |
+| transformer/wide             | ONE-COLUMN | ecbe59229197362b | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=8
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-4564p-16-core-processor | cpu-amd-epyc-4564p-16-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| transformer/base             | infer  | IDENTICAL x2 | d658bafd272776e1 | d658bafd272776e1 |
+| transformer/base             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| transformer/base             | batch  | BATCH_MOVED  | 321df8136b576084 | BATCH_MOVED      |
+| transformer/base             | rlpair | IDENTICAL x2 | 41c065998015307c | 41c065998015307c |
+| transformer/base             | batchgrad | IDENTICAL x2 | 5185ee1be0a72be5 | 5185ee1be0a72be5 |
+| transformer/base             | batchscale | BATCH_MOVED  | dd733dfdaf480743 | BATCH_MOVED      |
+| transformer/base             | ragged | BATCH_MOVED  | bb97a92d33f296c6 | BATCH_MOVED      |
+| transformer/denormal         | infer  | ONE-COLUMN   | 2dd718be6601b4be | (not run)        |
+| transformer/denormal         | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer/denormal         | batch  | ONE-COLUMN   | aad837e59ba3f9c6 | (not run)        |
+| transformer/denormal         | rlpair | ONE-COLUMN   | 174e6a3a08b33eab | (not run)        |
+| transformer/denormal         | batchgrad | ONE-COLUMN   | c47919c0f5c78ce2 | (not run)        |
+| transformer/denormal         | batchscale | ONE-COLUMN   | 74eb2208c18d07ab | (not run)        |
+| transformer/denormal         | ragged | ONE-COLUMN   | c640b8d2f2a2db5b | (not run)        |
+| transformer/denormal_ftz     | infer  | ONE-COLUMN   | 2dd718be6601b4be | (not run)        |
+| transformer/denormal_ftz     | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer/denormal_ftz     | batch  | ONE-COLUMN   | aad837e59ba3f9c6 | (not run)        |
+| transformer/denormal_ftz     | rlpair | ONE-COLUMN   | 3e90019a6be2628a | (not run)        |
+| transformer/denormal_ftz     | batchgrad | ONE-COLUMN   | c47919c0f5c78ce2 | (not run)        |
+| transformer/denormal_ftz     | batchscale | ONE-COLUMN   | 74eb2208c18d07ab | (not run)        |
+| transformer/denormal_ftz     | ragged | ONE-COLUMN   | c640b8d2f2a2db5b | (not run)        |
+| transformer/dupes            | infer  | ONE-COLUMN   | cc0485bd3463891b | (not run)        |
+| transformer/dupes            | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer/dupes            | batch  | ONE-COLUMN   | 4b51e3c2db7f9667 | (not run)        |
+| transformer/dupes            | rlpair | ONE-COLUMN   | 41c065998015307c | (not run)        |
+| transformer/dupes            | batchgrad | ONE-COLUMN   | 95f387677893408d | (not run)        |
+| transformer/dupes            | batchscale | ONE-COLUMN   | edf21e57a13d856f | (not run)        |
+| transformer/dupes            | ragged | ONE-COLUMN   | 67919ad5d9cf64ef | (not run)        |
+| transformer/hashed           | infer  | ONE-COLUMN   | 33aa6df81aac0bcd | (not run)        |
+| transformer/hashed           | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer/hashed           | batch  | ONE-COLUMN   | 10988a93701693a8 | (not run)        |
+| transformer/hashed           | rlpair | ONE-COLUMN   | d64e16e9457f1512 | (not run)        |
+| transformer/hashed           | batchgrad | ONE-COLUMN   | 0e60acf19fba3e74 | (not run)        |
+| transformer/hashed           | batchscale | ONE-COLUMN   | 1a444c7d5b568c7b | (not run)        |
+| transformer/hashed           | ragged | ONE-COLUMN   | 0f50152a3d44f8bf | (not run)        |
+| transformer/negative         | infer  | ONE-COLUMN   | 0804b57610d9b1f5 | (not run)        |
+| transformer/negative         | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer/negative         | batch  | ONE-COLUMN   | 55ca8b3a54e10ffa | (not run)        |
+| transformer/negative         | rlpair | ONE-COLUMN   | 0b99fe53b0eaa46a | (not run)        |
+| transformer/negative         | batchgrad | ONE-COLUMN   | d2c6b30184854635 | (not run)        |
+| transformer/negative         | batchscale | ONE-COLUMN   | 9f25cf7e36c84094 | (not run)        |
+| transformer/negative         | ragged | ONE-COLUMN   | d1381c4d94345cfb | (not run)        |
+| transformer/odd              | infer  | ONE-COLUMN   | d658bafd272776e1 | (not run)        |
+| transformer/odd              | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer/odd              | batch  | ONE-COLUMN   | 321df8136b576084 | (not run)        |
+| transformer/odd              | rlpair | ONE-COLUMN   | 41c065998015307c | (not run)        |
+| transformer/odd              | batchgrad | ONE-COLUMN   | 5185ee1be0a72be5 | (not run)        |
+| transformer/odd              | batchscale | ONE-COLUMN   | 55dc41466bacdf0d | (not run)        |
+| transformer/odd              | ragged | ONE-COLUMN   | bb97a92d33f296c6 | (not run)        |
+| transformer/ties             | infer  | ONE-COLUMN   | f222fca146b15f94 | (not run)        |
+| transformer/ties             | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer/ties             | batch  | ONE-COLUMN   | 8548d6f52de06b7b | (not run)        |
+| transformer/ties             | rlpair | ONE-COLUMN   | 88f6733750d71307 | (not run)        |
+| transformer/ties             | batchgrad | ONE-COLUMN   | 5480cd2fd1ec39e3 | (not run)        |
+| transformer/ties             | batchscale | ONE-COLUMN   | 6a4dbc3b09de1c75 | (not run)        |
+| transformer/ties             | ragged | ONE-COLUMN   | 44e9b3e1e14edfb7 | (not run)        |
+| transformer/wide             | infer  | ONE-COLUMN   | 976e818c75ac481c | (not run)        |
+| transformer/wide             | model  | N/A          | n/a:no-save      | (not run)        |
+| transformer/wide             | batch  | ONE-COLUMN   | a487428103ce49a8 | (not run)        |
+| transformer/wide             | rlpair | ONE-COLUMN   | f7b820c4caf9e16d | (not run)        |
+| transformer/wide             | batchgrad | ONE-COLUMN   | f7322716ad07daec | (not run)        |
+| transformer/wide             | batchscale | ONE-COLUMN   | 10f7d48195d8481a | (not run)        |
+| transformer/wide             | ragged | ONE-COLUMN   | 75e48e29d314a73b | (not run)        |
+
+summary (infer/model): IDENTICAL=1, N/A=9, ONE-COLUMN=8
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=8
+summary (rlpair): IDENTICAL=1, ONE-COLUMN=8
+summary (batchgrad): IDENTICAL=1, ONE-COLUMN=8
+summary (batchscale): BATCH_MOVED=1, ONE-COLUMN=8
+summary (ragged): BATCH_MOVED=1, ONE-COLUMN=8
+exit 1
