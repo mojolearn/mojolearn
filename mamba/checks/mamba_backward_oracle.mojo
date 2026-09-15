@@ -116,23 +116,28 @@ def mamba_backward_stage_width(i: Int, dims: MambaDims) -> Int:
 
 
 def mamba_backward_free_choices() -> String:
-    """The seven decisions this file MADE because the plan does not state them, each with what would falsify it."""
+    """The decisions this file MADE because the plan did not state them, each with what would falsify it. FC1 and FC2 were falsified on 2026-09-15 by the device VJP and the amended plan and are kept as history."""
     return (
         String("mojolearn.identical.mamba1.bwd.fp32.v1 FREE CHOICES")
-        + " (7, none derived, none measured)\n"
-        + "FC1 B7 silu' middle term `1 + v*(1-sig)` is ONE"
-        + " identical_mul_add. The plan gives the expression and the count"
-        + " (3 roundings) but never the fusion; only the fused middle has"
-        + " both. FALSIFIED BY: a device spelling it unfused (4 roundings),"
-        + " or the plan amending the count.\n"
-        + "FC2 B18 ddelta is TWO separate ascending-n folds (B path, then A"
-        + " path), each seeded +0.0, joined by ONE unfused flushed add with"
-        + " ddelta_B LEFT. Plan section 2 (S7', S5', S14') spells exactly"
-        + " this; 3.2's B18 says `interleaving pinned` and never says what"
-        + " the interleaving is. FALSIFIED BY: a SAB_BWD_DDELTA_INTERLEAVED"
-        + " arm folding both terms in one ascending-n chain (upstream's"
-        + " shape, bwd_kernel `ddelta_vals[i] += ddelta_u*u + dx*A*a`)"
-        + " agreeing with the device and not with this file.\n"
+        + " (7; FC1 and FC2 falsified and removed 2026-09-15; FC3 to FC7"
+        + " agree with the device VJP on every tensor"
+        + " mamba_backward_host_oracle_check.mojo compares over the 16"
+        + " corpus cases, which is agreement at those shapes, not a"
+        + " derivation)\n"
+        + "FC1 FALSIFIED AND REMOVED 2026-09-15: B7 silu' is the plan's"
+        + " four-rounding chain (DEVIATION 1085), `1 - sig`, `v * (1 - sig)`,"
+        + " `1 + that` unfused, `sig * that`, the device's _silu_prime. This"
+        + " file's fused middle (three roundings) was the first seam where it"
+        + " and the device VJP parted (bwd.dz), measured by"
+        + " mamba/checks/mamba_backward_host_oracle_check.mojo.\n"
+        + "FC2 FALSIFIED AND REMOVED 2026-09-15: B18 ddelta is ONE ascending-n"
+        + " chain, per n the B term then the A term (DEVIATION 1083), the"
+        + " device's shape; the two-fold reading this file used is the"
+        + " device's SAB_BWD_DDELTA_TWO_FOLDS arm. Same check.\n"
+        + "(also 2026-09-15, not a free choice: T1's seed is an OMITTED"
+        + " operation at the walk's first step, DEVIATION 1082; this file"
+        + " folded a stored +0.0 and turned -0.0 into +0.0 in bwd.dh on"
+        + " adv_gate_saturation. Same check.)\n"
         + "FC3 the T2 h checkpoint is [B, L+1, di, N] TOKEN-MAJOR, slot t+1"
         + " holding h[t] and slot 0 the flushed entry state."
         + " t2_h_checkpoint_floats writes the SIZE as b*di*(l+1)*N, whose"
@@ -166,7 +171,7 @@ def mamba_backward_free_choices() -> String:
 
 
 struct MambaBackwardStages(Movable):
-    """Every recorded stage of one backward call, in the card's order. `dh` IS a card stage (`bwd.dh`, `[M, di, N]`, plan section 7); `h_ckpt` is T2's `[B, L+1, di, N]` checkpoint, which the DEVICE gets from the forward and which the host must rebuild, so a gate that wants to price MB9 (upstream's `h[t] - dbu[t]` recovery) has the numbers to price it with."""
+    """Every recorded stage of one backward call, in the card's order. `dh` IS a card stage (`bwd.dh`, `[M, di, N]`, plan section 7); `h_ckpt` is T2's `[B, L+1, di, N]` checkpoint, which the DEVICE gets from the forward and which the host must rebuild, so a gate that wants to price MB9 (the reference's `h[t] - dbu[t]` recovery) has the numbers to price it with."""
 
     var dres: List[Float32]  # [M, d_model]        B1
     var dg: List[Float32]  # [M, d_inner]          B2
@@ -268,10 +273,18 @@ def _zeros(n: Int) -> List[Float32]:
 
 
 def pinned_silu_prime(v: Float32) -> Float32:
-    """`silu'(v) = sig(v) * (1 + v*(1 - sig(v)))`, THREE roundings."""
+    """`silu'(v) = sig(v) * (1 + v*(1 - sig(v)))`, left to right, FOUR
+    roundings after the sigmoid (plan row B7 as amended by DEVIATION 1085:
+    `transformer/checks/transformer_backward.mojo::bwd_silu_backward_kernel`'s
+    chain, the one `modeling_mamba_backward.mojo::_silu_prime` transcribes).
+    This file used to fuse the middle `1 + v*(1 - sig)` into one
+    `identical_mul_add` (its old free choice FC1, three roundings); the
+    device never did, and on 2026-09-15 that fusion was the first seam
+    where this oracle and the device VJP parted (`bwd.dz`)."""
     var sig = ftz(identical_sigmoid(v))
-    var one_minus = ftz(Float32(1.0) - sig)
-    var mid = ftz(identical_mul_add(v, one_minus, Float32(1.0)))
+    var one_minus = ftz(ftz(Float32(1.0)) - ftz(sig))
+    var prod = ftz(pinned_mul(v, one_minus))
+    var mid = ftz(ftz(Float32(1.0)) + ftz(prod))
     return ftz(pinned_mul(sig, mid))
 
 
@@ -282,7 +295,7 @@ def _forward_rstd(sumsq: Float32, dm: Int) -> Float32:
 
 
 def _forward_da(delta: Float32, a: Float32) -> Float32:
-    """`da[t,d,n] = exp(delta[t,d] * A[d,n])`, seams S5 and S6, RECOMPUTED. Upstream's forward and backward both use the exp2 substitution and are self-consistent; DEVIATION 722 already refused it as a different function with an extra rounding, and plan section 6 item 6 says the backward's recomputed `da` must be OUR forward's `da` or it is not a recomputation."""
+    """`da[t,d,n] = exp(delta[t,d] * A[d,n])`, seams S5 and S6, RECOMPUTED. The reference's forward and backward both use the exp2 substitution and are self-consistent; DEVIATION 722 already refused it as a different function with an extra rounding, and plan section 6 item 6 says the backward's recomputed `da` must be OUR forward's `da` or it is not a recomputation."""
     return ftz(identical_exp(ftz(pinned_mul(delta, a))))
 
 
@@ -303,7 +316,7 @@ def mamba_h_checkpoint_oracle(
     l: Int,
     d_inner: Int,
 ) -> List[Float32]:
-    """`h[t, d, n]` for every `t` in `[-1, L)`, into `[B, L+1, di, N]`. PINNED AS AN EXPLICIT CHECKPOINT.** The REFUSED alternative is upstream's `a = h[t] - dbu[t]` (`selective_scan_bwd_kernel.cuh:290`)."""
+    """`h[t, d, n]` for every `t` in `[-1, L)`, into `[B, L+1, di, N]`. PINNED AS AN EXPLICIT CHECKPOINT.** The REFUSED alternative is the reference's `a = h[t] - dbu[t]` (`selective_scan_bwd_kernel.cuh:290`)."""
     var out = _zeros(b * (l + 1) * d_inner * D_STATE)
     for bb in range(b):
         for d in range(d_inner):
@@ -432,7 +445,13 @@ def mamba_block_backward_oracle(
                     var contrib = ftz(
                         pinned_mul(dyv, ftz(cmat[t * D_STATE + n]))
                     )
-                    var v = ftz(identical_mul_add(dan[n], dhn[n], contrib))
+                    # DEVIATION 1082: at the first step of the walk the
+                    # seed is an OMITTED operation, never a stored +0.0
+                    # folded in (that fold turns a -0.0 contribution into
+                    # +0.0; it is the device's SAB_BWD_T1_SEED_ADD arm).
+                    var v = contrib
+                    if li != l - 1:
+                        v = ftz(identical_mul_add(dan[n], dhn[n], contrib))
                     bst.dh[(t * di + d) * D_STATE + n] = v
                     dhn[n] = v
                 var dl = ftz(st.softplus_out[t * di + d])
@@ -485,18 +504,19 @@ def mamba_block_backward_oracle(
         for d in range(di):
             var dl = ftz(st.softplus_out[t * di + d])
             var uv = ftz(st.silu_out[t * di + d])
-            var acc_b = Float32(0.0)
+            # B18: ONE accumulator over n ascending, per n the B term then
+            # the A term (DEVIATION 1083; the old two-fold spelling, this
+            # file's FC2, is the device's SAB_BWD_DDELTA_TWO_FOLDS arm).
+            var acc = Float32(0.0)
             for n in range(D_STATE):
                 var d_dbb = ftz(
                     pinned_mul(ftz(bst.dh[(t * di + d) * D_STATE + n]), uv)
                 )
-                acc_b = ftz(
+                acc = ftz(
                     identical_mul_add(
-                        d_dbb, ftz(bmat[t * D_STATE + n]), acc_b
+                        d_dbb, ftz(bmat[t * D_STATE + n]), acc
                     )
                 )
-            var acc_a = Float32(0.0)
-            for n in range(D_STATE):
                 var av = ftz(st.a_out[d * D_STATE + n])
                 var d_da = ftz(
                     pinned_mul(
@@ -505,8 +525,8 @@ def mamba_block_backward_oracle(
                     )
                 )
                 var d_arg = ftz(pinned_mul(d_da, _forward_da(dl, av)))
-                acc_a = ftz(identical_mul_add(d_arg, av, acc_a))
-            bst.ddelta.append(ftz(acc_b + acc_a))
+                acc = ftz(identical_mul_add(d_arg, av, acc))
+            bst.ddelta.append(acc)
 
     for t in range(m):
         for d in range(di):

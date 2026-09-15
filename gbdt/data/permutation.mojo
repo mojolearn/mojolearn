@@ -39,7 +39,7 @@ so this implementation does not have it, and a caller here can hand us rows in a
 order at all -- including sorted by target.
 
 `train()` therefore takes its CTR estimation order from a NON-IDENTITY
-permutation id; see the deviation block below and `archive/reference/PORTING.md` 55.
+permutation id; see the deviation block below.
 
 ## The seed, and why it must match exactly
 
@@ -387,6 +387,6 @@ def ctrs_estimation_permutation(
     Their loop runs this for every `permutationId` in
     `[0, permutation_count)` and writes a SEPARATE set of CTR columns per
     permutation into that permutation's own compressed dataset
-    (`:251-262`). See `archive/reference/PORTING.md` 55 for which one this implementation keeps.
+    (`:251-262`).
     """
     return get_permutation(doc_count, permutation_id, 1)

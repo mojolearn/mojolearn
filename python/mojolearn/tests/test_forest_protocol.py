@@ -67,7 +67,9 @@ def test_set_params_refreshes_native_config_atomically(cls):
 def test_pipeline_serial_search_and_score_mode(monkeypatch, cls):
     modes = []
     fitted_configs = []
-    def fitted(self, X, y, n_classes, fit_fn):
+    def fitted(self, X, y, n_classes, fit_fn, *rest):
+        # `_fit_arrays` gained a trailing argument after this fake was
+        # written; the fake reads none of them.
         fitted_configs.append((self._cfg['max_depth'], self.numeric_mode))
         self._offsets = np.array([0, 1], dtype=np.int32)
         self.n_features_in_ = X.shape[1]
@@ -85,14 +87,17 @@ def test_pipeline_serial_search_and_score_mode(monkeypatch, cls):
             values[:] = 0
         return np.asarray(self.classes_)[values] if classifier else values.astype(np.float32)
     monkeypatch.setattr(cls, 'predict', predict)
-    def accuracy(yt, yp, *, numeric_mode):
+    weights = []
+    def accuracy(yt, yp, *, sample_weight=None, numeric_mode):
         yt, yp = np.asarray(yt), np.asarray(yp)
         modes.append(numeric_mode)
+        weights.append(sample_weight)
         assert yt.dtype == yp.dtype == np.int32
         return float(np.mean(yt == yp))
-    def r2(yt, yp, *, numeric_mode):
+    def r2(yt, yp, *, sample_weight=None, numeric_mode):
         yt, yp = np.asarray(yt), np.asarray(yp)
         modes.append(numeric_mode)
+        weights.append(sample_weight)
         assert yt.dtype == yp.dtype == np.float32
         return float(1 - np.sum((yt-yp)**2)/np.sum((yt-yt.mean())**2))
     monkeypatch.setattr(_metrics_impl, 'accuracy_score', accuracy)
@@ -108,8 +113,12 @@ def test_pipeline_serial_search_and_score_mode(monkeypatch, cls):
     assert search.score(X, y) == 1
     assert set(modes) == {'identical'}
     assert set(fitted_configs) == {(1, 'identical'), (2, 'identical')}
-    with pytest.raises(NotImplementedError, match='sample_weight'):
-        search.best_estimator_[-1].score(X, y, sample_weight=np.ones(len(y)))
+    # score(sample_weight) forwards the weights to the weighted metric arm
+    # (lane/cpu-training-small-gaps); it used to refuse them.
+    w = np.arange(1, len(y) + 1, dtype=np.float32)
+    weights.clear()
+    assert search.best_estimator_[-1].score(X, y, sample_weight=w) == 1
+    assert len(weights) == 1 and weights[0] is w
     with pytest.raises(ValueError, match='one-dimensional'):
         search.best_estimator_[-1].score(X, y[:, None])
     with pytest.raises(ValueError, match='lengths differ'):

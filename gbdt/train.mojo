@@ -619,7 +619,7 @@ def sample_indices_for_borders(
     `TRestorableFastRng64` and ours is `TRandom`, so the SET drawn is not
     theirs at the same seed -- only the SEMANTICS (size, no repetition,
     shared across features) match. The rejection branch returns hash
-    order upstream and insertion order here, which is order-equivalent
+    order in the reference and insertion order here, which is order-equivalent
     because the sample is sorted before borders are built.
 
     MODULE LEVEL ON PURPOSE. It used to be inline in `train()`, which
@@ -861,7 +861,7 @@ def train(
 
     **ALL `permutation_count` COLUMN SETS ARE BUILT** as of 2026-08-21, one
     compressed index each (DEVIATION 89), where this used to build only the
-    estimation permutation's -- the sentence archive/reference/PORTING.md 55 recorded, now
+    estimation permutation's, which is now
     false. `permutation_count` resolves the way `UpdateGpuSpecificDefaults`
     resolves it (`cuda/train_lib/train.cpp:99-108`): their default of 4,
     ASSIGNED down to 1 when no categorical feature feeds a CTR -- an
@@ -1102,7 +1102,7 @@ def train(
             )
     # Validate dense class codes before class-weight indexing or allocating
     # prediction planes. The later objective check was too late to protect
-    # MakeClassificationWeights (upstream data_providers.cpp:162-168).
+    # MakeClassificationWeights (reference data_providers.cpp:162-168).
     if loss == "MultiClass" or loss == "MultiClassOneVsAll":
         for r in range(n_rows):
             var label = y[r]
@@ -1193,7 +1193,7 @@ def train(
     # categorical feature it overrides an explicit `permutation_count`
     # too, because four identical permutations of a dataset with no
     # permutation-dependent column are four identical datasets. This implementation
-    # is Plain (archive/reference/PORTING.md 88), so the second half of their condition
+    # is Plain, so the second half of their condition
     # holds unconditionally here.
     #
     # `HasPermutationFeatures` (`:86-98`) is "some cat feature is used for

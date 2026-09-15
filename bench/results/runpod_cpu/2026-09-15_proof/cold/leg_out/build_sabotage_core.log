@@ -1,0 +1,113 @@
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:461:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            dp[i] = out_dist[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:462:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            xp[i] = out_idx[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:588:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    pp[off + j] = proba[j]
+                    ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:594:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                lp[j] = labels_out[j]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:598:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                up[uoff + j] = uniqs[i][j]
+                ~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:666:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[j] = out[j]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:732:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ap[0] = Int32(0)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:736:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ap[q + 1] = Int32(nnz)
+            ~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:812:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                xp[p] = cols[p]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:813:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                dp[p] = dists[p]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:815:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ap[q] = indptr[q]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:876:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            xp[i] = out_idx[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:877:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            dp[i] = out_dist[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:962:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[i] = centroids[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:964:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            lp[i] = labels[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:1016:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            lp[i] = labels[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_core_host.mojo:92:
+./bindings/host_helpers.mojo:197:33: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                memcpy(dest=dst + r * width, src=src + index * width, count=width)
+                            ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_core_host.mojo:92:
+./bindings/host_helpers.mojo:197:54: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                memcpy(dest=dst + r * width, src=src + index * width, count=width)
+                                                 ~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_core_host.mojo:92:
+./bindings/host_helpers.mojo:197:17: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+                memcpy(dest=dst + r * width, src=src + index * width, count=width)
+                ^~~~~~
+                unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_core_host.mojo:105:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_core_host.mojo:105:
+./bindings/hostptr.mojo:69:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:774:15: warning: assignment to 'nnz' was never used; assign to '_' instead?
+    var nnz = 0
+              ^
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:940:26: warning: assignment to 'inertia' was never used; assign to '_' instead?
+    var inertia = Float64(0.0)
+                         ^
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:941:18: warning: assignment to 'n_iter' was never used; assign to '_' instead?
+    var n_iter = 0
+                 ^
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:942:28: warning: assignment to 'sum_scale' was never used; assign to '_' instead?
+    var sum_scale = Float64(0.0)
+                           ^
+/root/mojolearn/bindings/_mojolearn_core_host.mojo:943:31: warning: assignment to 'weight_scale' was never used; assign to '_' instead?
+    var weight_scale = Float64(0.0)
+                              ^
+Included from /root/mojolearn/bindings/_mojolearn_core_host.mojo:115:
+./cluster/host/kmeans_oracle.mojo:998:31: warning: assignment to 'c_norm' was never used; assign to '_' instead?
+    var c_norm = List[Float32](length=k, fill=Float32(0.0))
+                              ^
+built python/mojolearn/host-sabotage/_mojolearn_core_host.so
+BINCACHE negative-miss+built-uploaded bindings/build_core_host.sh key=d7bb13e6d3001f71 seconds=39.3

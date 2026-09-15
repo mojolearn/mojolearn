@@ -7,8 +7,8 @@ per-layer stage buffers. Arithmetic, synchronization and attention dispatch
 are unchanged. Trees untouched.
 
 Reference: upstream/transformers/src/transformers/models/llama/modeling_llama.py:
-402-412 visits decoder layers. Workspace reuse is our storage policy, not an
-upstream arithmetic change. Our kv_append_kernel's `j < s_old` branch establishes
+402-412 visits decoder layers. Workspace reuse is our storage policy, not a
+reference arithmetic change. Our kv_append_kernel's `j < s_old` branch establishes
 that stale workspace contents cannot be read with `s_old == 0`.
 
 Previously each forward allocated and zeroed two buffers per layer. Now two

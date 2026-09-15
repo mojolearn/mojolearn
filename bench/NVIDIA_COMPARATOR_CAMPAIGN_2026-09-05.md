@@ -92,7 +92,7 @@ Mamba3, or any backward path. The existing Mamba1/2/3 backward certificates
 and `tools/mamba_gradient_oracle.py` are correctness evidence, not timings.
 The latter uses float64 PyTorch reference transcriptions plus finite
 differences; it must not be relabelled as native vendor throughput.
-Fresh Mamba2/3 full-block and backward comparisons need explicit upstream
+Fresh Mamba2/3 full-block and backward comparisons need explicit reference
 CUDA/Triton adapters, matching weight layouts, objectives, state gradients
 and shapes. Cache setup and gradient reset belong outside timing.
 

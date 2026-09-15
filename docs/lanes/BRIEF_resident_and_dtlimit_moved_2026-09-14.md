@@ -71,7 +71,7 @@ Read after writing the paragraph above: both kernels are one thread per element 
 disjoint writes (`m2_buffer_update_kernel` copies one window element per thread from the
 working buffers, `m2_step_upstream_kernel` owns one (b, h, p) row of the state per thread),
 so by inspection neither races with itself. Two things the reading did turn up. The step
-does NOT clamp dt (`mamba2.mojo:709`, "NO clamp in their step (:313)", upstream fidelity),
+does NOT clamp dt (`mamba2.mojo:709`, "NO clamp in their step (:313)", reference fidelity),
 so with an active dt_limit the prefill's state is built from clamped dt and the decode
 from unclamped dt; that is a property of the profile, not a race, but it is why this lane
 and not `mamba2` sees whatever moves. And the remaining suspects are the l = 1 conv-window

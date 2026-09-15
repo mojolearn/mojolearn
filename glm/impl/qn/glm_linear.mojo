@@ -32,7 +32,7 @@ writing `loss_terms[i] = lz * normalization` (the map half of
 `:164`), one thread per row; the SUM is `glm_base.mojo::sum_terms_kernel`
 (one pinned block, DEVIATION 547).
 
-`nrm1` upstream is `raft::linalg::rowNorm<L1Norm, rowMajor=true>` over one
+`nrm1` in the reference is `raft::linalg::rowNorm<L1Norm, rowMajor=true>` over one
 row of `len` entries -- `raft::linalg::reduce` with `abs_op`, `add_op`: a
 CUB-shaped fold. Here it is the same ONE-BLOCK pinned shape as `dot` and
 `nrmMax` (DEVIATION 547): `STATS_TPB` strided partials `acc = acc + |u_i|`

@@ -7,7 +7,7 @@ pure function of `(seed, tree_id, node_id, feature_id)` rather than of the order
 in which a parallel builder happened to visit candidates — the reason recorded
 in DEVIATION 130 of `archive/research/extratrees/DEVIATIONS.md`.
 
-Every arithmetic line below is a transcription of an upstream, pinned:
+Every arithmetic line below is a transcription of a pinned reference:
 
 * RAFT `661a3b840c3300f95f053812a560c952c9d049a4`
   * `cpp/include/raft/random/detail/rng_device.cuh:546` `struct PCGenerator`
@@ -35,7 +35,7 @@ Every arithmetic line below is a transcription of an upstream, pinned:
 `key_for`, `SplitKey` and `uniform_threshold` at the bottom of the file are
 OURS, not an implementation. They are marked as such.
 
-Checked cell-for-cell against the upstreams' own arithmetic by
+Checked cell-for-cell against the references' own arithmetic by
 `extratrees/checks/pcg_rng_check.mojo` against
 `extratrees/tools/rng_oracle/pcg_reference.txt`.
 """
@@ -316,7 +316,7 @@ def uniform_float(mut gen: PCGenerator, start: Float32, end: Float32) -> Float32
     unfused on host, or fused on both". An explicit `fma` is ONE IEEE
     operation, fixed by the source on every backend — strictly more determined
     than either — and it is also what RAFT's own expression becomes under
-    nvcc's default `--fmad=true`, i.e. what the upstream actually computes on
+    nvcc's default `--fmad=true`, i.e. what the reference actually computes on
     the hardware they ship for.
     """
     var res = gen.next_float()
@@ -398,7 +398,7 @@ def key_for(
 
     We chain FOUR, with the SAME `fnv1a32` and the same basis:
     `THRESHOLD_KEY_SALT, feature_id, tree_id, node_id` -- the last three
-    deliberately mirroring their `threadIdx, treeid, nodeid`, with
+    deliberately matching their `threadIdx, treeid, nodeid`, with
     `feature_id` in the per-candidate slot their `threadIdx.x` occupies (the
     extension ExtraTrees needs because it draws a threshold per
     `(node, feature)` where their sampler draws per `(node, thread)`).

@@ -21,12 +21,12 @@ but every seam it reaches is the block spelling with `l = 1`, and the only
 arithmetic written out longhand in this file is the SABOTAGE arm, which
 exists to be falsified.
 
-That is why upstream's own `step` has two arms at :215 and :238 (the torch
+That is why the reference's own `step` has two arms at :215 and :238 (the torch
 fallback and the fused CUDA kernel) and this file has one. Those two arms
 do NOT agree bitwise -- the CUDA `selective_state_update` rounds
 `B * (delta * u)` where the torch reference rounds `(delta * B) * u`
 (contract seam S8, `selective_scan_fwd_kernel.cuh:162,222`) -- so an implementation
-that mirrored the branch would mirror a bitwise fork. DEVIATION 732.
+that followed the branch would follow a bitwise fork. DEVIATION 732.
 
 ## The four departures from their spelling, numbered
 
@@ -87,7 +87,7 @@ blocks. The profile's block order is HuggingFace's instead (contract
 section 2 and section 1's block-order pin: `MambaBlock.forward` MM:505-530,
 `residual = hidden; hidden = norm(hidden); hidden = mixer(hidden); hidden =
 residual + hidden`), so the decode step here covers the whole block, norm
-and residual included. The two upstreams genuinely disagree about where
+and residual included. The two references genuinely disagree about where
 those two operations sit, the contract already chose, and a decode step
 that stopped at `out_proj` could not be compared against a prefill card
 that does not (gate D is per STAGE, and `norm.sumsq` and `residual.out` are

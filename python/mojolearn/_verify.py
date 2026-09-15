@@ -221,7 +221,7 @@ def _coord(i, f, salt):
 def build_fixture():
     """Return (X, init_centroids), float32 and C contiguous.
 
-    The centroids are ROWS OF X, which is what `INIT_ARRAY` means upstream
+    The centroids are ROWS OF X, which is what `INIT_ARRAY` means in the reference
     and what makes the start of the fit exact rather than sampled. Row
     `c * 37` for cluster c, exactly as the E1U driver picks them.
 

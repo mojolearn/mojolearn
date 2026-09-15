@@ -1,0 +1,277 @@
+NOTE: --lanes scopes this diff to 17 lane(s); 149 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_preprocessing_host', '_mojolearn_solver_host'] commit=59cbcedd2b3c7bb809ffd3b28dc26a2d7791c8fa
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    nvidia-h100-sm_90a: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    amd-mi325x-gfx942: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    nvidia-h100-sm_90a: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    amd-mi325x-gfx942: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    nvidia-h100-sm_90a: {'X': 'e4b16c115962dfcd'}
+    amd-mi325x-gfx942: {'X': 'e4b16c115962dfcd'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd1ba686494256660'}
+    nvidia-h100-sm_90a: {'X': 'd1ba686494256660'}
+    amd-mi325x-gfx942: {'X': 'd1ba686494256660'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    cpu-apple-m4: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| elasticnet-l2end-no-intercept/base | DIVERGENT  | parts differ: coef,predict; agree: - | 5346e205a1021396 | 5346e205a1021396 | 0c058a8d67ed5e8b |
+| elasticnet-l2end-no-intercept/denormal | DIVERGENT  | parts differ: coef,predict; agree: - | 87ba9a45e3804809 | 87ba9a45e3804809 | 31af46cfc3470f73 |
+| elasticnet-l2end-no-intercept/odd | DIVERGENT  | parts differ: coef,predict; agree: - | 810604d104c7fb79 | 810604d104c7fb79 | 9465f683d91cc4df |
+| elasticnet/base              | DIVERGENT  | parts differ: coef,predict; agree: - | 2cf742083831ee9d | 2cf742083831ee9d | 3bde50d4452e548a |
+| elasticnet/denormal          | DIVERGENT  | parts differ: coef,predict; agree: - | 3add60ff69fd788c | 3add60ff69fd788c | 95e7a36c9656a512 |
+| elasticnet/odd               | DIVERGENT  | parts differ: coef,predict; agree: - | 1a518e703b7dd1d9 | 1a518e703b7dd1d9 | a1435af45a9e04e7 |
+| kernel-ridge/base            | DIVERGENT  | parts differ: dual,predict; agree: info | f556d0ce44d56b91 | f556d0ce44d56b91 | ab21ecaa83c5b0e2 |
+| kernel-ridge/denormal        | DIVERGENT  | parts differ: dual,predict; agree: info | 08fc4a04cb059cdc | 08fc4a04cb059cdc | e76ad15abcdf0b4f |
+| kernel-ridge/odd             | DIVERGENT  | parts differ: dual,predict; agree: info | 252bb6c9e80b6930 | 252bb6c9e80b6930 | 66ed77afd5766ee9 |
+| lasso/base                   | DIVERGENT  | parts differ: coef,predict; agree: - | 2fa3301e45a46091 | 2fa3301e45a46091 | 61a6ae20cfafca49 |
+| lasso/denormal               | DIVERGENT  | parts differ: coef,predict; agree: - | 5374b434a96382d6 | 5374b434a96382d6 | 9260d95ad3bbe398 |
+| lasso/odd                    | DIVERGENT  | parts differ: coef,predict; agree: - | 5593579edd6113d6 | 5593579edd6113d6 | f8bac29e6c300083 |
+| logistic-elasticnet/base     | DIVERGENT  | parts differ: coef,proba; agree: - | 13d16c952886809e | 13d16c952886809e | f1b6afc79ec9a732 |
+| logistic-elasticnet/denormal | DIVERGENT  | parts differ: coef,proba; agree: - | d057c6546ef4a432 | d057c6546ef4a432 | 463704b7964d029b |
+| logistic-elasticnet/odd      | DIVERGENT  | parts differ: coef,proba; agree: - | c3c78dc7813e1dd1 | c3c78dc7813e1dd1 | 505daee93b69e39b |
+| logistic-l1/base             | DIVERGENT  | parts differ: coef,proba; agree: - | 2a6077809e43f596 | 2a6077809e43f596 | ebcd4647e6343b2b |
+| logistic-l1/denormal         | DIVERGENT  | parts differ: coef,proba; agree: - | b03374c1e49f2ae8 | b03374c1e49f2ae8 | b9bf29540973b834 |
+| logistic-l1/odd              | DIVERGENT  | parts differ: coef,proba; agree: - | d165146dba6f3d02 | d165146dba6f3d02 | 85e940ef693ec33f |
+| logistic-unpenalized-no-intercept/base | DIVERGENT  | parts differ: coef,proba; agree: - | 2d680bec24348fb1 | 2d680bec24348fb1 | 8e9bc923f7d09283 |
+| logistic-unpenalized-no-intercept/denormal | DIVERGENT  | parts differ: coef,proba; agree: - | 626de4d1000c3305 | 626de4d1000c3305 | ec632410dcae3759 |
+| logistic-unpenalized-no-intercept/odd | DIVERGENT  | parts differ: coef,proba; agree: - | 4c2b1a307f3901c0 | 4c2b1a307f3901c0 | 36a100f73d638fe9 |
+| minmax-scaler-clip/base      | DIVERGENT  | parts differ: min,transform,inverse; agree: scale | 2c223d868d9144bd | 2c223d868d9144bd | c53d1a1cdbb9693b |
+| minmax-scaler-clip/denormal  | DIVERGENT  | parts differ: min,transform,inverse; agree: scale | 7dc0c86e7125bd63 | 7dc0c86e7125bd63 | 146c98e09504913b |
+| minmax-scaler-clip/odd       | DIVERGENT  | parts differ: min,transform,inverse; agree: scale | 44e4955bb9a96707 | 44e4955bb9a96707 | c710462210d98998 |
+| minmax-scaler/base           | DIVERGENT  | parts differ: min,transform,inverse; agree: data_min,data_max,scale | 646b46cf73ead58e | 646b46cf73ead58e | b05219f46ef16d44 |
+| minmax-scaler/denormal       | DIVERGENT  | parts differ: min,transform,inverse; agree: data_min,data_max,scale | 760381e656d7edc6 | 760381e656d7edc6 | 608cb410463a4e3f |
+| minmax-scaler/odd            | DIVERGENT  | parts differ: min,transform,inverse; agree: data_min,data_max,scale | 803149932ba8b2da | 803149932ba8b2da | 1a31c8d63ae6d07a |
+| nystroem/base                | DIVERGENT  | parts differ: normalization,eigenvalues,eigenvectors,transform; agree: components,indices,sweeps | 51cd84d728ad878c | 51cd84d728ad878c | 9194b84da7f2caaf |
+| nystroem/denormal            | DIVERGENT  | parts differ: normalization,transform; agree: components,indices,eigenvalues,eigenvectors,sweeps | 9c20e9397f8d75af | 9c20e9397f8d75af | 93b91660d6f4972e |
+| nystroem/odd                 | DIVERGENT  | parts differ: normalization,eigenvalues,eigenvectors,transform; agree: components,indices,sweeps | ac49556f30e24606 | ac49556f30e24606 | 4d6cbc63c7d77b17 |
+| ols-no-intercept/base        | DIVERGENT  | parts differ: coef,predict; agree: - | bc9714aa8394d319 | bc9714aa8394d319 | dc34908a0e679747 |
+| ols-no-intercept/denormal    | DIVERGENT  | parts differ: coef,predict; agree: - | 172fbbe0bc0a7c91 | 172fbbe0bc0a7c91 | dcdad3648687e43e |
+| ols-no-intercept/odd         | DIVERGENT  | parts differ: coef,predict; agree: - | 3d456f2024b12b13 | 3d456f2024b12b13 | d7b153d0bae2621b |
+| ols-weighted/base            | DIVERGENT  | parts differ: coef,predict; agree: - | 91b9e03ba0bb0253 | 91b9e03ba0bb0253 | 009f90540b134eaf |
+| ols-weighted/denormal        | DIVERGENT  | parts differ: coef,predict; agree: - | 9896adcaa53b73e3 | 9896adcaa53b73e3 | 4b7c2176cf62bd0e |
+| ols-weighted/odd             | DIVERGENT  | parts differ: coef,predict; agree: - | 806d776bed929869 | 806d776bed929869 | 601a9c7234332e5e |
+| rbf-sampler/base             | DIVERGENT  | parts differ: transform; agree: weights,offset,sigma,scale | 2c2d8da2b42d472a | 2c2d8da2b42d472a | cf2f592db0caeeeb |
+| rbf-sampler/denormal         | DIVERGENT  | parts differ: transform; agree: weights,offset,sigma,scale | d0f7e01fbefae473 | d0f7e01fbefae473 | 661d4ca474b49262 |
+| rbf-sampler/odd              | DIVERGENT  | parts differ: transform; agree: weights,offset,sigma,scale | cd3871f38ffab071 | cd3871f38ffab071 | ae4a987617852c87 |
+| ridge-no-intercept/base      | DIVERGENT  | parts differ: coef,predict; agree: - | 273f820b187f1a36 | 273f820b187f1a36 | e204dda9123f12e3 |
+| ridge-no-intercept/denormal  | DIVERGENT  | parts differ: coef,predict; agree: - | 606b59a04cbd098a | 606b59a04cbd098a | 101be89305e8c33e |
+| ridge-no-intercept/odd       | DIVERGENT  | parts differ: coef,predict; agree: - | 64449bd167f8e9cf | 64449bd167f8e9cf | eeebbe52e0973b96 |
+| standard-scaler-no-mean/base | DIVERGENT  | parts differ: var,scale,transform,inverse; agree: - | 8e822e639ac24f60 | 8e822e639ac24f60 | 738defd51d2e04a0 |
+| standard-scaler-no-mean/denormal | DIVERGENT  | parts differ: var,scale,transform,inverse; agree: - | 7688757091a44290 | 7688757091a44290 | 4de5a158be52bfd6 |
+| standard-scaler-no-mean/odd  | DIVERGENT  | parts differ: var,scale,transform,inverse; agree: - | e96dbecddd2bb06a | e96dbecddd2bb06a | 73670d2e21ee39b6 |
+| standard-scaler-no-std/base  | DIVERGENT  | parts differ: mean,transform,inverse; agree: - | a381f22821f82024 | a381f22821f82024 | eeca1cae2e3d6377 |
+| standard-scaler-no-std/denormal | DIVERGENT  | parts differ: mean,transform,inverse; agree: - | 8ac8111d55fd1f91 | 8ac8111d55fd1f91 | 9adabe33cf2d0095 |
+| standard-scaler-no-std/odd   | DIVERGENT  | parts differ: mean,transform,inverse; agree: - | 2ac9839d045e284d | 2ac9839d045e284d | bce2ecb61a022d1d |
+| standard-scaler/base         | DIVERGENT  | parts differ: mean,var,scale,transform,inverse; agree: - | 9954d8aba9fdfba3 | 9954d8aba9fdfba3 | 0022e6a61df70892 |
+| standard-scaler/denormal     | DIVERGENT  | parts differ: mean,var,scale,transform,inverse; agree: - | 87862ff4b450f03a | 87862ff4b450f03a | fc294ae091024ccb |
+| standard-scaler/odd          | DIVERGENT  | parts differ: mean,var,scale,transform,inverse; agree: - | 24632a63d5c0debd | 24632a63d5c0debd | e684788e348b9965 |
+
+summary: DIVERGENT=51
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| elasticnet-l2end-no-intercept/base | infer  | DIVERGENT    | 63a154f8f524d3be | 63a154f8f524d3be | 63a154f8f524d3be | d491b7fecb63adac |
+| elasticnet-l2end-no-intercept/base | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | f3b2e1c5d53e4b7c |
+| elasticnet-l2end-no-intercept/base | batch  | DIVERGENT    | f182600116558577 | f182600116558577 | f182600116558577 | a644a6cab5220b50 |
+| elasticnet-l2end-no-intercept/denormal | infer  | DIVERGENT    | 00300017193bf8a5 | 00300017193bf8a5 | 00300017193bf8a5 | 623158aa105dddc6 |
+| elasticnet-l2end-no-intercept/denormal | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | d91767b96626b7ff |
+| elasticnet-l2end-no-intercept/denormal | batch  | DIVERGENT    | d960b91ea7d32a59 | d960b91ea7d32a59 | d960b91ea7d32a59 | 659936372b2fc7b6 |
+| elasticnet-l2end-no-intercept/odd | infer  | DIVERGENT    | c03221f3656309a4 | c03221f3656309a4 | c03221f3656309a4 | 6a63f3aaeae75e14 |
+| elasticnet-l2end-no-intercept/odd | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 966ee8dc7569829c |
+| elasticnet-l2end-no-intercept/odd | batch  | DIVERGENT    | 0be9aed689343358 | 0be9aed689343358 | 0be9aed689343358 | 096ebfc800e5499f |
+| elasticnet/base              | infer  | DIVERGENT    | 483bce4b8cc1a137 | 483bce4b8cc1a137 | 483bce4b8cc1a137 | 6e76d9988c7d218b |
+| elasticnet/base              | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 17445d6ed4d7cb15 |
+| elasticnet/base              | batch  | DIVERGENT    | 956915d5c61aa604 | 956915d5c61aa604 | 956915d5c61aa604 | 2aaaf59ad47d3465 |
+| elasticnet/denormal          | infer  | DIVERGENT    | 0047832ca8c561a3 | 0047832ca8c561a3 | 0047832ca8c561a3 | dabdd3ce831b1222 |
+| elasticnet/denormal          | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 9616cae7669640f4 |
+| elasticnet/denormal          | batch  | DIVERGENT    | 19772c145c4b0d34 | 19772c145c4b0d34 | 19772c145c4b0d34 | 5a29dbe2918ce8bf |
+| elasticnet/odd               | infer  | DIVERGENT    | 75a88217f1114867 | 75a88217f1114867 | 75a88217f1114867 | e0761ba736a43db9 |
+| elasticnet/odd               | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0ab638820838c987 |
+| elasticnet/odd               | batch  | DIVERGENT    | f140130bad4b7f18 | f140130bad4b7f18 | f140130bad4b7f18 | f81ed765e4cdc450 |
+| kernel-ridge/base            | infer  | DIVERGENT    | 6d91b2e922c596c9 | 6d91b2e922c596c9 | 6d91b2e922c596c9 | 8efa5d4756444adb |
+| kernel-ridge/base            | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c48dd7a0d0699de8 |
+| kernel-ridge/base            | batch  | DIVERGENT    | 013c14ab12301b2a | 013c14ab12301b2a | 013c14ab12301b2a | af53a0753ed1afbe |
+| kernel-ridge/denormal        | infer  | DIVERGENT    | 1d93958dfff6ae9c | 1d93958dfff6ae9c | 1d93958dfff6ae9c | 5c5b7aff6ec71e89 |
+| kernel-ridge/denormal        | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 98c32d4c30fe0804 |
+| kernel-ridge/denormal        | batch  | DIVERGENT    | 84d10ac93d168343 | 84d10ac93d168343 | 84d10ac93d168343 | 34b1e5c288626ebd |
+| kernel-ridge/odd             | infer  | DIVERGENT    | be1d82e6396343af | be1d82e6396343af | be1d82e6396343af | ee15731cfd60ecaf |
+| kernel-ridge/odd             | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 445acf543bec9da7 |
+| kernel-ridge/odd             | batch  | DIVERGENT    | e461f2292f79bcd5 | e461f2292f79bcd5 | e461f2292f79bcd5 | ce788f64ddda47e8 |
+| lasso/base                   | infer  | DIVERGENT    | 7334b38e7b651e27 | 7334b38e7b651e27 | 7334b38e7b651e27 | 278289be9f4aa645 |
+| lasso/base                   | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | a8b398ae957f7afc |
+| lasso/base                   | batch  | DIVERGENT    | 17cc629044f18231 | 17cc629044f18231 | 17cc629044f18231 | 0996cfcf242fe35a |
+| lasso/denormal               | infer  | DIVERGENT    | b92e9bfda9b725b4 | b92e9bfda9b725b4 | b92e9bfda9b725b4 | 0c7fcc43eb13f58a |
+| lasso/denormal               | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | ae25ef6264a44a71 |
+| lasso/denormal               | batch  | DIVERGENT    | 569fc3172ebd0164 | 569fc3172ebd0164 | 569fc3172ebd0164 | 4831541fbcdd62cd |
+| lasso/odd                    | infer  | DIVERGENT    | 1c17e2eb1ef6a2e2 | 1c17e2eb1ef6a2e2 | 1c17e2eb1ef6a2e2 | b5f5376046b07f5f |
+| lasso/odd                    | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 45039a4d63649932 |
+| lasso/odd                    | batch  | DIVERGENT    | 14762f161b0b7377 | 14762f161b0b7377 | 14762f161b0b7377 | 7f9f27760a188d7c |
+| logistic-elasticnet/base     | infer  | DIVERGENT    | bb41dcdcc6b956cb | bb41dcdcc6b956cb | bb41dcdcc6b956cb | 9f1155a605f040c0 |
+| logistic-elasticnet/base     | model  | DIVERGENT    | 73c4066bfcea08e1 | 73c4066bfcea08e1 | 73c4066bfcea08e1 | 73fe4bd24408bcab |
+| logistic-elasticnet/base     | batch  | DIVERGENT    | 790a349c8d79c171 | 790a349c8d79c171 | 790a349c8d79c171 | 0ed7ff5ccbeb29c5 |
+| logistic-elasticnet/denormal | infer  | DIVERGENT    | 9124d29f98d5f3a3 | 9124d29f98d5f3a3 | 9124d29f98d5f3a3 | 599a49e75c89f7c9 |
+| logistic-elasticnet/denormal | model  | DIVERGENT    | 0fc41d637c47c533 | 0fc41d637c47c533 | 0fc41d637c47c533 | 3fa7b7aad37adc8e |
+| logistic-elasticnet/denormal | batch  | DIVERGENT    | dd992527e3a3b1b2 | dd992527e3a3b1b2 | dd992527e3a3b1b2 | d75ae7702a40a860 |
+| logistic-elasticnet/odd      | infer  | DIVERGENT    | 959dbbc72b9e84fd | 959dbbc72b9e84fd | 959dbbc72b9e84fd | e74c8bdccc6c09da |
+| logistic-elasticnet/odd      | model  | DIVERGENT    | 2fc5c63d76b381f2 | 2fc5c63d76b381f2 | 2fc5c63d76b381f2 | 590e377320ec5bcd |
+| logistic-elasticnet/odd      | batch  | DIVERGENT    | 4139fcaafcc5beec | 4139fcaafcc5beec | 4139fcaafcc5beec | 979a1bec9d63cd4e |
+| logistic-l1/base             | infer  | DIVERGENT    | 87f24b6ab0f699de | 87f24b6ab0f699de | 87f24b6ab0f699de | e584ad56ce02fe40 |
+| logistic-l1/base             | model  | DIVERGENT    | e8c4053e100eb43b | e8c4053e100eb43b | e8c4053e100eb43b | 9e60a3199b2c3027 |
+| logistic-l1/base             | batch  | DIVERGENT    | db991c1fff13c957 | db991c1fff13c957 | db991c1fff13c957 | edc6e82561d3479c |
+| logistic-l1/denormal         | infer  | DIVERGENT    | 9d5061f6cc0e010e | 9d5061f6cc0e010e | 9d5061f6cc0e010e | eba741e617cb0760 |
+| logistic-l1/denormal         | model  | DIVERGENT    | cbaa801dd6c0e8d0 | cbaa801dd6c0e8d0 | cbaa801dd6c0e8d0 | 9172a883665512d7 |
+| logistic-l1/denormal         | batch  | DIVERGENT    | 5d0f088a5893e0ef | 5d0f088a5893e0ef | 5d0f088a5893e0ef | bea82e426aa3afaf |
+| logistic-l1/odd              | infer  | DIVERGENT    | b792319498542c26 | b792319498542c26 | b792319498542c26 | 6333fe7d6d313e4c |
+| logistic-l1/odd              | model  | DIVERGENT    | c4194b58746aff39 | c4194b58746aff39 | c4194b58746aff39 | f4ccf3370d604d96 |
+| logistic-l1/odd              | batch  | DIVERGENT    | a412f35d8b8f12f3 | a412f35d8b8f12f3 | a412f35d8b8f12f3 | d43f25071185be06 |
+| logistic-unpenalized-no-intercept/base | infer  | DIVERGENT    | cdf9799cd24dc82b | cdf9799cd24dc82b | cdf9799cd24dc82b | 330b9b7f62f9dd46 |
+| logistic-unpenalized-no-intercept/base | model  | DIVERGENT    | 39289af0a057344b | 39289af0a057344b | 39289af0a057344b | 4df8b6468f22ad15 |
+| logistic-unpenalized-no-intercept/base | batch  | DIVERGENT    | 78b7d1e815634918 | 78b7d1e815634918 | 78b7d1e815634918 | 74eca4fc610c2224 |
+| logistic-unpenalized-no-intercept/denormal | infer  | DIVERGENT    | bb1c22a7662b5818 | bb1c22a7662b5818 | bb1c22a7662b5818 | 797c7f9efc6acc4e |
+| logistic-unpenalized-no-intercept/denormal | model  | DIVERGENT    | d69f80caed7c3bf0 | d69f80caed7c3bf0 | d69f80caed7c3bf0 | c426f84298243322 |
+| logistic-unpenalized-no-intercept/denormal | batch  | DIVERGENT    | eba48adb0f43e69c | eba48adb0f43e69c | eba48adb0f43e69c | db8e82e7c074cb6c |
+| logistic-unpenalized-no-intercept/odd | infer  | DIVERGENT    | 96b781fca9afcde0 | 96b781fca9afcde0 | 96b781fca9afcde0 | e1b46fb4729a1afe |
+| logistic-unpenalized-no-intercept/odd | model  | DIVERGENT    | e82a04f98e35b088 | e82a04f98e35b088 | e82a04f98e35b088 | ae33506d2b3affb3 |
+| logistic-unpenalized-no-intercept/odd | batch  | DIVERGENT    | 580129145dacc4f5 | 580129145dacc4f5 | 580129145dacc4f5 | 7fcbce42c5411735 |
+| minmax-scaler-clip/base      | infer  | DIVERGENT    | 601b3471b9f7478a | 601b3471b9f7478a | 601b3471b9f7478a | 6a9312b2fac85405 |
+| minmax-scaler-clip/base      | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | aa86b032a04086c6 |
+| minmax-scaler-clip/base      | batch  | DIVERGENT    | 5d3b185c6df7c1b8 | 5d3b185c6df7c1b8 | 5d3b185c6df7c1b8 | 631035640f32bd4d |
+| minmax-scaler-clip/denormal  | infer  | DIVERGENT    | 672201861cc97847 | 672201861cc97847 | 672201861cc97847 | 349502df41bd068e |
+| minmax-scaler-clip/denormal  | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 918a5a7429d272e7 |
+| minmax-scaler-clip/denormal  | batch  | DIVERGENT    | 1f03e7472d6c92a6 | 1f03e7472d6c92a6 | 1f03e7472d6c92a6 | f119ad0de7351cca |
+| minmax-scaler-clip/odd       | infer  | DIVERGENT    | 667e82d3d7ee49dd | 667e82d3d7ee49dd | 667e82d3d7ee49dd | 090be228371f3096 |
+| minmax-scaler-clip/odd       | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | efa8c7d87f80cf28 |
+| minmax-scaler-clip/odd       | batch  | DIVERGENT    | a6c1e06513ef4a67 | a6c1e06513ef4a67 | a6c1e06513ef4a67 | 8ce791e29ac6619c |
+| minmax-scaler/base           | infer  | DIVERGENT    | 5b934842e164f80f | 5b934842e164f80f | 5b934842e164f80f | 6c4413a2c148974e |
+| minmax-scaler/base           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | aaeb670507679c66 |
+| minmax-scaler/base           | batch  | DIVERGENT    | bdcf978b59eaee06 | bdcf978b59eaee06 | bdcf978b59eaee06 | 399ab5be6e4059a8 |
+| minmax-scaler/denormal       | infer  | DIVERGENT    | 17c9e6cc1a1bfd82 | 17c9e6cc1a1bfd82 | 17c9e6cc1a1bfd82 | 62a66b92a4052542 |
+| minmax-scaler/denormal       | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 927e49f27ce04ca4 |
+| minmax-scaler/denormal       | batch  | DIVERGENT    | e470cfca3c51904a | e470cfca3c51904a | e470cfca3c51904a | 5e449a5b3459f2c9 |
+| minmax-scaler/odd            | infer  | DIVERGENT    | c170795fb6119629 | c170795fb6119629 | c170795fb6119629 | 80f5b8107a87ab2f |
+| minmax-scaler/odd            | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c6170b6b5f37ec46 |
+| minmax-scaler/odd            | batch  | DIVERGENT    | 380e2675e1096b8e | 380e2675e1096b8e | 380e2675e1096b8e | 7d2f664667706b46 |
+| nystroem/base                | infer  | DIVERGENT    | 301ea319efafa3d7 | 301ea319efafa3d7 | 301ea319efafa3d7 | f5f26ee9f122d17b |
+| nystroem/base                | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | a9fc5ecd9e33db4f |
+| nystroem/base                | batch  | DIVERGENT    | f08ea096ad64867a | f08ea096ad64867a | f08ea096ad64867a | f96d98a1c9663615 |
+| nystroem/denormal            | infer  | DIVERGENT    | 8fcb15ff3d9d1b88 | 8fcb15ff3d9d1b88 | 8fcb15ff3d9d1b88 | cab237658bd9fa1a |
+| nystroem/denormal            | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6e3b668150bd6dd0 |
+| nystroem/denormal            | batch  | DIVERGENT    | 8c770ae1ec43369f | 8c770ae1ec43369f | 8c770ae1ec43369f | 27f707fc7de69f41 |
+| nystroem/odd                 | infer  | DIVERGENT    | dfb23ba9068104f6 | dfb23ba9068104f6 | dfb23ba9068104f6 | 1d74f9c8574ccd04 |
+| nystroem/odd                 | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | f5201645221aa911 |
+| nystroem/odd                 | batch  | DIVERGENT    | 1bc69db81163813f | 1bc69db81163813f | 1bc69db81163813f | ac10bc0f300fd8d3 |
+| ols-no-intercept/base        | infer  | DIVERGENT    | 5fbab3a7de51017a | 5fbab3a7de51017a | 5fbab3a7de51017a | 943747ff55a6147f |
+| ols-no-intercept/base        | model  | DIVERGENT    | f3ef9126ad986141 | f3ef9126ad986141 | f3ef9126ad986141 | e92ad95386d7da31 |
+| ols-no-intercept/base        | batch  | DIVERGENT    | dc55264f9670b923 | dc55264f9670b923 | dc55264f9670b923 | 3ce3fa49213c9d09 |
+| ols-no-intercept/denormal    | infer  | DIVERGENT    | 15ca54a4cd747c03 | 15ca54a4cd747c03 | 15ca54a4cd747c03 | 5f0569d6b39ed0e2 |
+| ols-no-intercept/denormal    | model  | DIVERGENT    | eb819356230f741a | eb819356230f741a | eb819356230f741a | 790e8c7524d4c1bd |
+| ols-no-intercept/denormal    | batch  | DIVERGENT    | 6af1552ec8d1ebef | 6af1552ec8d1ebef | 6af1552ec8d1ebef | 56dcd43cfa0fc053 |
+| ols-no-intercept/odd         | infer  | DIVERGENT    | 2659af88e6d096ad | 2659af88e6d096ad | 2659af88e6d096ad | ce1fbdd74fb3feac |
+| ols-no-intercept/odd         | model  | DIVERGENT    | 6c6ad7bbc740a643 | 6c6ad7bbc740a643 | 6c6ad7bbc740a643 | 880a7b435a9ebdcc |
+| ols-no-intercept/odd         | batch  | DIVERGENT    | 316836dd567e0c8b | 316836dd567e0c8b | 316836dd567e0c8b | b403f26cc92891ba |
+| ols-weighted/base            | infer  | DIVERGENT    | aa6de46fa1ca4da9 | aa6de46fa1ca4da9 | aa6de46fa1ca4da9 | cd235f5cbf19e234 |
+| ols-weighted/base            | model  | DIVERGENT    | 22419c862a253d42 | 22419c862a253d42 | 22419c862a253d42 | 728375c56d929121 |
+| ols-weighted/base            | batch  | DIVERGENT    | 488e990b37795fd5 | 488e990b37795fd5 | 488e990b37795fd5 | fef036c8f9ca5761 |
+| ols-weighted/denormal        | infer  | DIVERGENT    | d0bc0fd5d809e428 | d0bc0fd5d809e428 | d0bc0fd5d809e428 | ef900cc8d1c3f3bd |
+| ols-weighted/denormal        | model  | DIVERGENT    | 414bf055344a03b7 | 414bf055344a03b7 | 414bf055344a03b7 | c305adf65be94331 |
+| ols-weighted/denormal        | batch  | DIVERGENT    | 45a3a04f42105be5 | 45a3a04f42105be5 | 45a3a04f42105be5 | 9a9d66d88e60e225 |
+| ols-weighted/odd             | infer  | DIVERGENT    | 9c27cf5534996fea | 9c27cf5534996fea | 9c27cf5534996fea | 518d6129f4789d33 |
+| ols-weighted/odd             | model  | DIVERGENT    | aa11e8df832f5320 | aa11e8df832f5320 | aa11e8df832f5320 | 5ac6757a0a29e65c |
+| ols-weighted/odd             | batch  | DIVERGENT    | 8d21160ea1720605 | 8d21160ea1720605 | 8d21160ea1720605 | 4ad9029d351aa2b6 |
+| rbf-sampler/base             | infer  | DIVERGENT    | b07160af23992ad7 | b07160af23992ad7 | b07160af23992ad7 | 399dc7f9ec16f30b |
+| rbf-sampler/base             | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0033e59ff3fcc60d |
+| rbf-sampler/base             | batch  | DIVERGENT    | 8308d98bf2b02312 | 8308d98bf2b02312 | 8308d98bf2b02312 | 96994df4535287f2 |
+| rbf-sampler/denormal         | infer  | DIVERGENT    | 090ab3cf318cc2f5 | 090ab3cf318cc2f5 | 090ab3cf318cc2f5 | 7aee7048d3b0cc65 |
+| rbf-sampler/denormal         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0033e59ff3fcc60d |
+| rbf-sampler/denormal         | batch  | DIVERGENT    | d6e52f75534b16b3 | d6e52f75534b16b3 | d6e52f75534b16b3 | 5693b6d2da541a9d |
+| rbf-sampler/odd              | infer  | DIVERGENT    | b48ce39cf9d5a2d4 | b48ce39cf9d5a2d4 | b48ce39cf9d5a2d4 | 210e0ebe7fa725d9 |
+| rbf-sampler/odd              | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | b22681a46d9fcb49 |
+| rbf-sampler/odd              | batch  | DIVERGENT    | 443f9847d32d75b8 | 443f9847d32d75b8 | 443f9847d32d75b8 | 4a7364f7f53e0d13 |
+| ridge-no-intercept/base      | infer  | DIVERGENT    | de95aa3133824540 | de95aa3133824540 | de95aa3133824540 | a1aec56946aacec1 |
+| ridge-no-intercept/base      | model  | DIVERGENT    | 63c4b76f9b193631 | 63c4b76f9b193631 | 63c4b76f9b193631 | b13493e0f2d2b5ca |
+| ridge-no-intercept/base      | batch  | DIVERGENT    | 29f3e535a8785f0a | 29f3e535a8785f0a | 29f3e535a8785f0a | c4bab8147236e2b8 |
+| ridge-no-intercept/denormal  | infer  | DIVERGENT    | 63dff4ada90afa03 | 63dff4ada90afa03 | 63dff4ada90afa03 | 1d9a11562cffb87d |
+| ridge-no-intercept/denormal  | model  | DIVERGENT    | 5079aebbea7e74ce | 5079aebbea7e74ce | 5079aebbea7e74ce | eab80fdddd89fb17 |
+| ridge-no-intercept/denormal  | batch  | DIVERGENT    | a009a8fdc6793565 | a009a8fdc6793565 | a009a8fdc6793565 | 4a31bce934d35894 |
+| ridge-no-intercept/odd       | infer  | DIVERGENT    | 1ac4267394e4baca | 1ac4267394e4baca | 1ac4267394e4baca | c580e4c2f68421b0 |
+| ridge-no-intercept/odd       | model  | DIVERGENT    | 1378173105e52beb | 1378173105e52beb | 1378173105e52beb | ce5d4778031d22a3 |
+| ridge-no-intercept/odd       | batch  | DIVERGENT    | 44fb03ff9054331c | 44fb03ff9054331c | 44fb03ff9054331c | 4fee353e54da8592 |
+| standard-scaler-no-mean/base | infer  | DIVERGENT    | e103471072f6f93c | e103471072f6f93c | e103471072f6f93c | 488d95f6b331044e |
+| standard-scaler-no-mean/base | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2719c1c8e08e49d6 |
+| standard-scaler-no-mean/base | batch  | DIVERGENT    | f2b20a155236588f | f2b20a155236588f | f2b20a155236588f | 0d7c6ca4372a8f08 |
+| standard-scaler-no-mean/denormal | infer  | DIVERGENT    | 43674cd8b2e13d95 | 43674cd8b2e13d95 | 43674cd8b2e13d95 | 851a631942669724 |
+| standard-scaler-no-mean/denormal | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 80faef1249db66b0 |
+| standard-scaler-no-mean/denormal | batch  | DIVERGENT    | 818949f8942b8e66 | 818949f8942b8e66 | 818949f8942b8e66 | c4cf4ca753db7821 |
+| standard-scaler-no-mean/odd  | infer  | DIVERGENT    | 4286a08fcc88b3e4 | 4286a08fcc88b3e4 | 4286a08fcc88b3e4 | 095f92839346cb1d |
+| standard-scaler-no-mean/odd  | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1bbe59490c9ca02e |
+| standard-scaler-no-mean/odd  | batch  | DIVERGENT    | a83affc9c2e55ee6 | a83affc9c2e55ee6 | a83affc9c2e55ee6 | 1d5b08170d093819 |
+| standard-scaler-no-std/base  | infer  | DIVERGENT    | 3e359a1ee902bec9 | 3e359a1ee902bec9 | 3e359a1ee902bec9 | a7e3e5e69e408b12 |
+| standard-scaler-no-std/base  | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c2cbd6804ca86c67 |
+| standard-scaler-no-std/base  | batch  | DIVERGENT    | ad43b69d0964595d | ad43b69d0964595d | ad43b69d0964595d | ba4307bc298d97bc |
+| standard-scaler-no-std/denormal | infer  | DIVERGENT    | 3c22fb9e38e0528c | 3c22fb9e38e0528c | 3c22fb9e38e0528c | 076e57ff543b85ec |
+| standard-scaler-no-std/denormal | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6e4085062334c548 |
+| standard-scaler-no-std/denormal | batch  | DIVERGENT    | b0c03753068ba1f9 | b0c03753068ba1f9 | b0c03753068ba1f9 | bc6b1b603cc62bc7 |
+| standard-scaler-no-std/odd   | infer  | DIVERGENT    | 5c562c5c90fb0b9d | 5c562c5c90fb0b9d | 5c562c5c90fb0b9d | eb874d52312e849b |
+| standard-scaler-no-std/odd   | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 42a56349931a5874 |
+| standard-scaler-no-std/odd   | batch  | DIVERGENT    | 51fa2154c3c96e47 | 51fa2154c3c96e47 | 51fa2154c3c96e47 | 219a9535c5ddbf94 |
+| standard-scaler/base         | infer  | DIVERGENT    | fa0fbdef7ccae250 | fa0fbdef7ccae250 | fa0fbdef7ccae250 | 9eb5f82f228d52df |
+| standard-scaler/base         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | b77a1e11468f3255 |
+| standard-scaler/base         | batch  | DIVERGENT    | 917ae37b02618ab5 | 917ae37b02618ab5 | 917ae37b02618ab5 | e6839f31ad40acee |
+| standard-scaler/denormal     | infer  | DIVERGENT    | d0a324ba42db1e9c | d0a324ba42db1e9c | d0a324ba42db1e9c | af77d4875896608e |
+| standard-scaler/denormal     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 52d9b276d37c9699 |
+| standard-scaler/denormal     | batch  | DIVERGENT    | adc8b864c7fd6591 | adc8b864c7fd6591 | adc8b864c7fd6591 | bf25a2766571e871 |
+| standard-scaler/odd          | infer  | DIVERGENT    | 6a7a884532f89e93 | 6a7a884532f89e93 | 6a7a884532f89e93 | d9dff57ef8a8180d |
+| standard-scaler/odd          | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6779a6ccf70587d2 |
+| standard-scaler/odd          | batch  | DIVERGENT    | 76422b3deb83eac1 | 76422b3deb83eac1 | 76422b3deb83eac1 | 2e6cd4fab56cc56a |
+
+summary (infer/model): DIVERGENT=69, ONE-COLUMN=33
+summary (batch): DIVERGENT=51
+summary (rlpair): 

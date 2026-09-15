@@ -124,7 +124,7 @@ oracle = "mojo run -I . oracle_main.mojo"
 # disagreeing one -- `oracle` is the gate, this is the matrix, and a matrix
 # that stops at its first red cell reports one number instead of thirty. Ends
 # with a per-cell sabotage that must cost exactly one match at exactly
-# (tree 0, depth 0). A GPU, ~80 fits. archive/reference/PORTING.md 132-134.
+# (tree 0, depth 0). A GPU, ~80 fits.
 oracle-sweep = "mojo run -I . checks/oracle_sweep_main.mojo"
 
 # WHICH of the four one-byte accumulators each fixture actually enters,
@@ -132,7 +132,7 @@ oracle-sweep = "mojo run -I . checks/oracle_sweep_main.mojo"
 # histogram, on the layout and folds the PRODUCT'S constructor built, and
 # exactly one may come back non-empty. A fixture that lands one bit width low
 # still matches CatBoost, because all four compute the same histogram -- so a
-# green differential is not a reach proof. archive/reference/PORTING.md 130-131.
+# green differential is not a reach proof.
 check-onebyte-reach = "mojo run -I . checks/onebyte_reach_check.mojo"
 
 # THE DEVIATION 134 HUNT. Runs the cell that produced the intermittent
@@ -178,7 +178,7 @@ soak-determinism = "mojo run -I . checks/determinism_soak.mojo"
 # ---------------------------------------------------------------------------
 check-bin-order = "mojo run -I . checks/bin_order_check.mojo"
 check-sample-indices = "mojo run -I . checks/sample_indices_check.mojo"
-# THE SMALLER-SIBLING TIE-BREAK (archive/reference/PORTING.md 136). Four crafted pairs, two of
+# THE SMALLER-SIBLING TIE-BREAK. Four crafted pairs, two of
 # them exact ties, through the shipped device planner against their `:1318`,
 # with an in-file inverted twin that must fail on exactly the ties. Also
 # MEASURES the blast radius: how many histogram cells the choice moves, and a
@@ -190,8 +190,8 @@ check-sibling-tiebreak = "mojo run -I . checks/sibling_tiebreak_check.mojo"
 # on the leaves-estimation walker that is not a comparison against a
 # reimplementation written in the same file. Needs
 # bench/oracle_logloss_leaves.txt; regenerate with `logloss-leaf-oracle-gen`.
-# EXPECTED RED: 3 cells of 96 diverge on the ten-iteration arm and archive/reference/PORTING.md
-# 140 is the reason -- their CPU walk freezes after six accepted steps where
+# EXPECTED RED: 3 cells of 96 diverge on the ten-iteration arm because
+# their CPU walk freezes after six accepted steps where
 # ours takes eight. No allowance is granted, because an allowance sized to
 # today's divergence swallows tomorrow's regression.
 check-logloss-leaf-oracle = "mojo run -I . checks/logloss_leaf_oracle_check.mojo"
@@ -404,7 +404,7 @@ check-gbdt-per-round-2551-host-partition = "mojo run -D MOJOLEARN_NUMERIC_IDENTI
 check-nan-mode = "mojo run -I . checks/nan_mode_check.mojo"
 
 # The offset arithmetic of CatBoost's OTHER histogram family, the one both
-# of their oblivious searchers share (archive/reference/PORTING.md 91 B, rung 1). Six gates:
+# of their oblivious searchers share. Six gates:
 # the fold stripe is a power-of-two rounding that a histogram offset does
 # NOT apply and conflating them is invisible at every power-of-two fold
 # count; the document-block multiplier against a hand trace including both
@@ -415,7 +415,7 @@ check-nan-mode = "mojo run -I . checks/nan_mode_check.mojo"
 # stat-major and a transposed scan moves no total. Own main(); a GPU, ~20 s.
 check-pointwise-offsets = "mojo run -I . checks/pointwise_offsets_check.mojo"
 
-# archive/reference/PORTING.md 13 asserted that a shared-memory pointer cannot cross a function
+# An earlier design note asserted that a shared-memory pointer cannot cross a function
 # boundary in Mojo, and that assertion is why every histogram kernel in
 # greedy_subsets_searcher/kernel/ carries its own copy of CatBoost's one
 # shared loop -- a duplication that already shipped one wrong-histogram bug.
@@ -466,10 +466,10 @@ check-pointwise-resolve = "mojo run -I . checks/pointwise_resolve_check.mojo"
 # pre-136 tie inversion as sabotage. Own main(); a GPU, seconds.
 check-plan-fusion = "mojo run -I . checks/plan_fusion_check.mojo"
 
-# The tripwire under archive/reference/PORTING.md 11 and 92. Two histogram families here run
+# The divergent-barrier tripwire. Two histogram families here run
 # one iteration count per BLOCK rather than CatBoost's per-thread counts,
 # because their AddPoint syncs an 8-lane tile and ours can only take a
-# threadgroup barrier. Item 11 says a divergent barrier was observed failing;
+# threadgroup barrier. An earlier note said a divergent barrier was observed failing;
 # this probe runs that exact shape (512-thread block, warp 0 one iteration
 # and warps 1-15 zero) and it does NOT fail, at any of seven sizes. The
 # uniform path is therefore kept on SPECIFICATION, and this check exists to
@@ -490,7 +490,7 @@ check-divergent-barrier = "mojo run -I . checks/divergent_barrier_probe.mojo"
 # of its threads share an inner histogram copy and a barrier is the only
 # thing holding their writes apart. That is why it caught a divergent peel
 # loop which check-pointwise-loop passed at every block size, in both its
-# broken and its fixed form (archive/reference/PORTING.md 92). Own main(); a GPU, ~30 s.
+# broken and its fixed form. Own main(); a GPU, ~30 s.
 check-pointwise-hist2 = "mojo run -I . checks/pointwise_hist2_check.mojo"
 
 # The 8-bit pointwise accumulator, which is a different design rather than
@@ -611,7 +611,7 @@ check-cindex-packing = "mojo run -I . checks/cindex_packing_check.mojo"
 # split must agree feature for feature and bin for bin. They share the
 # cindex and NOTHING else -- different histogram layouts (stat-major against
 # stat-minor), different collision schemes, different reduce shapes,
-# OPPOSITE sign conventions (archive/reference/PORTING.md 94a), fixed-point on one side at 8
+# OPPOSITE sign conventions, fixed-point on one side at 8
 # bits and none on the other. Agreement is two implementations of one algorithm
 # arriving at one answer, not a tautology.
 #
@@ -650,7 +650,7 @@ check-pointwise-identical-multiplier = "mojo run -I . -D MOJOLEARN_NUMERIC_IDENT
 check-pointwise-identical-multiplier-2670 = "mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_2670_PW_PRIVATE_DOC_SLOTS=1 checks/pointwise_identical_multiplier_check.mojo"
 check-pointwise-dispatch-2670 = "mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_2670_PW_PRIVATE_DOC_SLOTS=1 checks/pointwise_dispatch_check.mojo"
 
-# The two measurements archive/reference/PORTING.md 98a and 106 said were a measurement's job.
+# Two questions that only a measurement can settle.
 # Both interleave their arms and report the MIN of each, because another
 # session runs GPU work on this box and a sequential A-then-B measurement
 # here has drifted a result 4.5x invisibly before. Neither can change a
@@ -818,7 +818,7 @@ e2u-diff = "python3 tools/e2_matrix_diff.py"
 # independent count/(n+1) tally, across the packing-policy cardinality
 # boundaries, both priors, the partCount==size dispatcher arm, a 100k
 # multi-block run, and a sabotage that must land exactly on the affected
-# categories. Closes archive/reference/PORTING.md deviation 52. Own main(); a GPU and
+# categories. Closes deviation 52. Own main(); a GPU and
 # seconds.
 check-freq-ctr-device = "mojo run -I . checks/freq_ctr_device_check.mojo"
 
@@ -962,7 +962,7 @@ check-identity-trace = "sh tools/check_identity_trace.sh"
 # rows 19-26 and `archive/research/UNSUPERVISED_IDENTITY.md`. One process is one mode
 # (`GLOBAL_NUMERIC_MODE` is comptime), so every check asserts something
 # DIFFERENT in each: under FAST that the shipped arm still behaves as
-# measured and that the upstream's non-reproducibility is REPORTED, under
+# measured and that the reference's non-reproducibility is REPORTED, under
 # IDENTICAL that the pins are reached, that the answer does not move with
 # the launch geometry, and that a truncated propagation raises. Running one
 # mode proves half of that and reads like the whole of it.
@@ -1165,6 +1165,8 @@ check-mamba-decode = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/check
 check-mamba-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_check.mojo"
 check-mamba2-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba2_check.mojo"
 check-mamba3-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba3_check.mojo"
+# host only, no GPU: the Mamba-1 host backward oracle against the device VJP (mamba/host/gen) on the 16 corpus cases
+check-mamba1-backward-oracle-host = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings mamba/checks/mamba_backward_host_oracle_check.mojo"
 # DEVIATION 2712: the four Mamba lanes cold on a binding whose scratch buffers
 # hold NaN; every cell must equal the committed record (tools/mamba_poison_gate.sh)
 check-mamba-poison = "sh tools/mamba_poison_gate.sh"
@@ -1431,7 +1433,7 @@ oracle-gen = "python tools/catboost_oracle.py > bench/oracle.json"
 # The 5-bit and 6-bit one-byte fixtures. 24 folds lands in 16..32 and 48 in
 # 33..64, which are the ranges `pointwise_hist2_one_byte_templ.cuh:179-183`
 # gives those two accumulators; before these, neither had a differential
-# against CatBoost at all (archive/reference/PORTING.md 130).
+# against CatBoost at all.
 oracle24-gen = "ORACLE_BORDERS=24 ORACLE_OUT=bench/oracle24.txt python tools/catboost_oracle.py > bench/oracle24.json"
 oracle48-gen = "ORACLE_BORDERS=48 ORACLE_OUT=bench/oracle48.txt python tools/catboost_oracle.py > bench/oracle48.json"
 
@@ -1507,7 +1509,7 @@ python = "3.14.*"
 # 2026-08-20 that `torch.backends.mps.is_available()` is True and a matmul
 # runs on device. Do not infer the answer from the build string.
 pytorch = ">=2.13"
-# Required by the verbatim upstream selective-scan and SSD references used by
+# Required by the verbatim reference selective-scan and SSD implementations used by
 # the Mamba forward/gradient corpus. It stays in this PyTorch-only environment
 # rather than expanding the core Mojo environment.
 einops = ">=0.8"

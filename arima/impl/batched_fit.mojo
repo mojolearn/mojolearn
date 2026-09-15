@@ -49,7 +49,7 @@ forward-difference optimum there: `sqrt(eps_f64) = 1.49e-8`.
 
 OURS. In Float32 `1e-8` IS BELOW eps (`1.19e-7`), so `x + h` is `x` for
 every `|x| > 1e-1` and the gradient is exactly zero or pure noise. cuML's
-value cannot be carried across DEVIATION 670 and there is no upstream
+value cannot be carried across DEVIATION 670 and there is no reference
 answer to inherit.
 
 The gate had quietly been using `1e-3` since 2026-08-23
@@ -571,7 +571,7 @@ struct FitResult(Movable):
     values unpacked.
 
     `x0` is kept because a fit that goes wrong is nearly always a fit that
-    started wrong, and `estimate_x0` is the half with no upstream oracle."""
+    started wrong, and `estimate_x0` is the half with no reference oracle."""
 
     var x: List[Float32]
     var t_x: List[Float32]

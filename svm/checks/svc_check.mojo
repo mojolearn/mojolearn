@@ -775,7 +775,7 @@ def check_refusals(ctx: DeviceContext) raises:
     # A NEGATIVE epsilon on a regressor is still refused below and still
     # comes out of `check_rung1_scope`, which is the boundary that has to
     # stay named.
-    # `epsilon` on a CLASSIFIER, where upstream ignores it.
+    # `epsilon` on a CLASSIFIER, where the reference ignores it.
     var p3 = SvmParameter.default()
     p3.epsilon = 0.1
     hits += _try_refusal(ctx, fx, p3, KernelParams.linear(), False, "epsilon")
@@ -2004,7 +2004,7 @@ def check_svr_sabotage_reach(
 # There is no `svr_fit` on the estimator surface, and this file does not add
 # one -- it spells `svrFitX` (`svr_impl.cuh:37-83`) inline, which is four
 # lines: validate, upload, `SmoSolver::Solve`, `model.n_cols = n_cols`. The
-# ONE thing upstream does that this cannot is skip the label machinery,
+# ONE thing the reference does that this cannot is skip the label machinery,
 # because `svcFit` computes `getUniquelabels` and asserts two classes and a
 # regression target has neither. `svrFitX` never calls it either; the
 # regression path reaches `Solve` directly, and so does this.
@@ -2012,7 +2012,7 @@ def check_svr_sabotage_reach(
 # `model.unique_labels` is filled with a dummy pair. `decision_kernel` takes
 # `label0`/`label1` as arguments in every build but reads them only when
 # `predict_class_in != 0`, and SVR prediction is `svcPredict(...,
-# predict_class = false)` -- upstream's `svrPredict` IS that call. So the
+# predict_class = false)` -- the reference's `svrPredict` IS that call. So the
 # dummies change no number, and `predict_class = true` is never asked for
 # here.
 # ===========================================================================

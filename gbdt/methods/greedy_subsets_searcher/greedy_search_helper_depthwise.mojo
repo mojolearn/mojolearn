@@ -194,7 +194,7 @@ struct TBinFeatureTable(Copyable, Movable):
 
     So the walk is done once for every bin-feature at the top of the fit and
     the level loop indexes it. That is a change of ALGORITHM on the host and
-    therefore a deviation (archive/reference/PORTING.md 351), and it is bit-inert by
+    therefore a deviation, and it is bit-inert by
     construction: `resolve_split` is the function that fills the table, so
     the table cannot disagree with it. `checks/depthwise_check.mojo`
     claim 1 asserts the two agree cell for cell anyway, because "cannot
@@ -1286,7 +1286,7 @@ def fit_non_symmetric_tree[
         #   * the LEFT child keeps the parent's id (`MakeSplit`, `:861-862`),
         #     so the parent's histogram already sits in the left child's slot
         #     -- when the plan derives the LEFT sibling (`big == left`, which
-        #     includes every exact-size tie, archive/reference/PORTING.md 136), the split-time
+        #     includes every exact-size tie), the split-time
         #     copy was writing a slot that the very next level ZEROED. Copy
         #     deleted, subtraction unchanged: `from` is the left id and its
         #     slot holds the parent's totals, as `substract_histograms`

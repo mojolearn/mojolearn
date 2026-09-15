@@ -451,7 +451,7 @@ def launch_segmented_scan_vector(
     `ctr_calcers.h:182` is the CTR call: `inclusive=false`,
     `flagMask = 1u << 31`, flags carried in the permutation itself.
 
-    The empty guard mirrors `if (numBlocks)` on their launches
+    The empty guard follows `if (numBlocks)` on their launches
     (`segmented_scan.cu:42`).
     """
     if size <= 0:
