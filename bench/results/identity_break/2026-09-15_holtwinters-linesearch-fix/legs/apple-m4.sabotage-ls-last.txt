@@ -1,0 +1,14 @@
+== holtwinters/checks/hw_check.mojo [IDENTICAL] sabotage=LS_LAST  pack_sabotage=none ==
+check_hw_refusals OK [IDENTICAL]: 13 refusals by name (cuML's wrapper rules + DEVIATION 664); a zero under additive accepted
+check_hw_decompose_vs_reference OK [IDENTICAL]: R1Qt == float64 pinv at 172 weights (6 trend_len) with the four pinv identities; planted slope/intercept/season recovered (worst season err 0.0001125335693359375); float32 vs float64 start values worst rel err 3.201789708778331e-05
+check_hw_optimizer_reduces_sse OK [IDENTICAL]: 14 series, fitted SSE <= start SSE everywhere, parameters in [0,1], 0 hit the 1000-iteration limit; float32 vs float64 SSE worst rel diff 0.00379656045208355 (report)
+check_hw_forecast_continues_pattern OK [IDENTICAL]: noiseless planted additive and multiplicative series continued within 0.5% over 2 seasons (worst rel 0.0005049758596906099)
+check_hw_signed_zero_clamp OK [IDENTICAL]: host bound(-0.0)=0x00000000, bound(NaN)=+0.0, bound(inf)=1; device eval at alpha=beta=gamma=-0.0 == eval at +0.0 bit for bit (724 cells), == oracle; RECORDED clamp: start (-0.0, NaN, -0.0) on the zero series -> 0x00000000/0x00000000/0x00000000
+check_hw_zero_series_keeps_start OK [IDENTICAL]: all-zero additive series keeps (0.4, 0.3, 0.3), OPTIM_MIN_GRAD_NORM, niter 0, SSE 0 on device and oracle; iter000 slots 0x00000000/0x00000000/0x00000000 (unwritten fill)
+check_hw_device_equals_oracle OK [IDENTICAL]: 6 of 6 fixtures bit-identical at every stage and cell (cards through first_divergence); REACH: additive vs multiplicative params differ on 7/7 series, season cells on all; stmp_eps branch planted (sse s0 0x4d458e1e)
+check_hw_launch_invariance OK [IDENTICAL]: 2 seasonal types byte-identical across tpb_decomp 32/256, tpb_optim 128/64, pad 0/37, two poisons, run twice, and series in batch 1 == batch 7 == batch 512 (every stage incl. per-iteration params)
+check_hw_card_is_emitted OK [IDENTICAL]: 38 stages (hw.input ... 23 iteration stages ... hw.forecast), run-to-run control identical
+  line-search limit census: 504 series, 504 ran a line search, 331 reached the limit, 229 of those with a last trial that is not the best trial, 229 disagreeing with the replay
+  line-search limit loss: 229 of 229 separating series store a strictly lower SSE; total SSE of the last trials 42595.94173812866, reduced by 8626.223781585693; largest relative reduction 0.5733250884009314
+Unhandled exception caught during execution: check_hw_linesearch_limit_keeps_best FAILED (sabotage LS_LAST ): 229 series disagree; first: additive salt 2 linesearch_iter_limit 1 series 3 (2 trials, limit reached): device stored (0x3eea395d, 0xbd1833a1, 0x3f10c717) but the replay selects (0x3f03d2f7, 0xbebfa682, 0x3f54c162); last trial (0x3eea395d, 0xbd1833a1, 0x3f10c717)
+mojo: error: execution exited with a non-zero result: 1

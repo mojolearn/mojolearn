@@ -23,7 +23,7 @@ on every column measured:
 | cpu, AMD EPYC 9754 (RunPod CPU pod) | `cpu-amd-epyc-9754.json` | `diff.166-vs-cpu.txt`, `--require-columns 4`, lanes holtwinters, holtwinters-multiplicative, par-holtwinters, kpss | IDENTICAL=36 (infer IDENTICAL=27, batch IDENTICAL=36), OWED=0, exit 0 |
 | amd-mi325x-gfx942 (DigitalOcean) | `amd-mi325x-gfx942.json` | `diff.166-cpu-amd.txt`, `--require-columns 5`, the three Holt-Winters lanes | IDENTICAL=27 (infer IDENTICAL=27, batch IDENTICAL=27), exit 0 |
 | nvidia-rtx-4090-sm_89 (RunPod) | `nvidia-rtx-4090-sm_89.json` | `diff.six-columns.txt`, `--require-columns 6` (the three record columns, cpu, amd, nvidia), the three Holt-Winters lanes | IDENTICAL=27 (infer IDENTICAL=27, batch IDENTICAL=27), exit 0 |
-| apple-m4 | OWED: Metal paused on the shared Mac | | |
+| apple-m4 | not recorded for this fix | | not needed: no cell moved, and the 166-lane Apple column already agrees with the cpu, amd and nvidia columns above |
 
 No new record columns are needed and `python/mojolearn/host_surface.py` is not
 changed: the CPU gate's comparison against `TRAINING_GPU_COLUMNS` still holds.
@@ -48,6 +48,26 @@ SSE at iteration 0, AMD MI325X under IDENTICAL (`legs/amd-mi325x-gfx942.gate.txt
   reduction on one series is 57.3%.
 
 This is a statement about loss, not speed.
+
+## check-holtwinters in every mode, and the sabotage
+
+| mode | box | verdict |
+|---|---|---|
+| IDENTICAL | NVIDIA RTX 4090 sm_89, AMD MI325X gfx942 | `== hw_check: ALL OK [IDENTICAL] ==` on both (`legs/*.gate.txt`) |
+| DETERMINISTIC | Apple M4 | `ALL OK [DETERMINISTIC]` (`legs/apple-m4.check-deterministic.txt`) |
+| FAST | Apple M4 | `ALL OK [FAST]` (`legs/apple-m4.check-fast.txt`) |
+| IDENTICAL, `-D MOJOLEARN_HW_SABOTAGE_LS_LAST=1` | Apple M4 | FAILS, exit 1: `check_hw_linesearch_limit_keeps_best FAILED (sabotage LS_LAST): 229 series disagree`, exactly the 229 series whose last trial is not the best; the device stored the last trial (`legs/apple-m4.sabotage-ls-last.txt`) |
+
+Under DETERMINISTIC and FAST the device arithmetic is not the replay's pinned
+spelling, so the stored point is RECORDED as disagreeing on all 504 series
+rather than raised, as the check's docstring specifies. The census (331 limit
+series, 229 separating) is the same in every mode. One wording defect for a
+follow-up: the check's closing REPORT line in those modes still says "stored
+point == replay selection on 504 series" when it has just recorded 504
+disagreements.
+
+A CPU pod cannot run this check: its device kernels need a GPU architecture
+(`Unknown GPU architecture detected`), so the three modes ran on GPUs only.
 
 ## Legs
 
