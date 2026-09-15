@@ -163,7 +163,6 @@ per tile become `AccRowsPerTh` per row. archive/reference/PORTING.md 43.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
-from std.math import sqrt
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
@@ -173,6 +172,7 @@ from checks.numerics import (
     ftz_simd,
     identical_mul_add,
     identical_mul_add_simd,
+    identical_sqrt,
 )
 
 
@@ -571,7 +571,19 @@ def fused_distance_nn_kernel[
                 if row < m:
                     var best_v = val[i]
                     if is_sqrt_in != 0:
-                        best_v = sqrt(best_v)
+                        # DEVIATION 2715 (2026-09-14, kmeans-sqrt/wide):
+                        # PINNED, as `row_norm_kernel`'s root already was.
+                        # This was the stdlib `sqrt`, which on NVIDIA lowers
+                        # to the approximate PTX square root (DEVIATION
+                        # 258), so every L2SqrtExpanded distance the fit
+                        # summed into `inertia_` could sit one ulp off
+                        # Apple's and AMD's correctly rounded root: the
+                        # 166-lane record's one DIVERGENT cell, the H100
+                        # inertia alone on the `wide` fixture. The argmin
+                        # runs on the squared value before this line, so
+                        # labels and centers never saw it. FAST keeps the
+                        # stdlib root (`identical_sqrt`'s FAST arm).
+                        best_v = identical_sqrt(best_v)
                     out_value.unsafe_store(row, best_v)
                     out_key.unsafe_store(row, key[i])
         tile_m += grid_stride_m

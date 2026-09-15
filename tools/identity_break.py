@@ -2255,9 +2255,10 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("kmeans-sqrt")
 def _(ml, X, yc, yr, Xh=None):
-    """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken in
-    the assignment norms and the inertia (`metric_is_sqrt`); a different
-    inertia_ and a different sum_scale_ from the squared arm."""
+    """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken on
+    the assignment's reduced distance (`metric_is_sqrt`, `identical_sqrt`,
+    DEVIATION 2715) and so in the inertia, the row norms squared as under
+    L2Expanded (DEVIATION 2716); a different inertia_ from the squared arm."""
     m = ml.KMeans(n_clusters=8, random_state=3, metric="l2_sqrt_expanded").fit(X)
     return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_),
                      inertia=_h(np.float64(m.inertia_)), scales=_h(np.asarray([m.sum_scale_, m.weight_scale_], dtype=np.float64))),
