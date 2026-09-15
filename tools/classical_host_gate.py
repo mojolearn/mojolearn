@@ -517,6 +517,7 @@ def do_check(args):
         return 2
     results = []
     verdict_ok = True
+    moved, unmoved = [], []
     for directory in dirs:
         expected = json.loads((directory / 'expected.json').read_text())
         if expected.get('status') != 'RECORDED' or 'predictions' not in expected:
@@ -568,6 +569,10 @@ def do_check(args):
         verdict_ok = verdict_ok and ih_equal
         print(f"check {lane} {kind} identity_hash {'EQUAL' if ih_equal else 'DIFFER'} "
               f"gpu {want['identity_hash']} host {got['identity_hash']}")
+        if not ih_equal or not all(c['equal'] for c in cases):
+            moved.append(f'{lane}/{kind}')
+        else:
+            unmoved.append(f'{lane}/{kind}')
         vendors = []
         for label, j in columns:
             cell = j.get('cells', {}).get(f'{lane}/{kind}')
@@ -595,10 +600,14 @@ def do_check(args):
     if args.expect_mismatch:
         verdict = 'EXPECTED MISMATCH SEEN' if not verdict_ok else 'SABOTAGE NOT CAUGHT'
         code = 0 if not verdict_ok else 1
+        if args.every_fixture and unmoved:
+            for name in unmoved:
+                print(f'check {name} DID NOT MOVE under --expect-mismatch --every-fixture')
+            verdict, code = f'SABOTAGE NOT CAUGHT ON {len(unmoved)} FIXTURES', 1
     else:
         verdict = 'IDENTICAL' if verdict_ok else 'MISMATCH'
         code = 0 if verdict_ok else 1
-    report = dict(verdict=verdict, expect_mismatch=bool(args.expect_mismatch), exit=code,
+    report = dict(verdict=verdict, expect_mismatch=bool(args.expect_mismatch), exit=code, unmoved=unmoved,
                   binary=binary_path(), binaries=binary_paths(), vendor=mojolearn.vendor(), host=host_info(),
                   gpu_columns=[label for label, _ in columns], commit=git_commit(),
                   checked_at=time.strftime('%Y-%m-%dT%H:%M:%S%z'), fixtures=results)
@@ -630,6 +639,8 @@ def main():
                      help='an identity_break JSON whose infer cells are compared too (repeatable)')
     chk.add_argument('--report', type=Path, help='new exclusive JSON report')
     chk.add_argument('--expect-mismatch', action='store_true')
+    chk.add_argument('--every-fixture', action='store_true',
+                     help='with --expect-mismatch, every fixture (not only one) must differ somewhere')
     args = parser.parse_args()
     if args.command == 'record':
         return do_record(args)
