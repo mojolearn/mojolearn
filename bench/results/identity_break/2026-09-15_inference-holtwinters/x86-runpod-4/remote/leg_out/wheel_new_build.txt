@@ -1,0 +1,9 @@
+Processing /tmp/ws_new
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: mojolearn
+  Building wheel for mojolearn (pyproject.toml): started
+  Building wheel for mojolearn (pyproject.toml): finished with status 'done'
+  Created wheel for mojolearn: filename=mojolearn-0.8.5-py3-none-linux_x86_64.whl size=1045819 sha256=9f0da0c6213085531b50246e96b7bf171e908fda3c1a43f63d09f8b2bae0cffa
+  Stored in directory: /tmp/pip-ephem-wheel-cache-_kx39y8t/wheels/af/92/83/4bb953ba7d72195435c6a9eec49dfcc053cd2bcba4fb6602f8
+Successfully built mojolearn

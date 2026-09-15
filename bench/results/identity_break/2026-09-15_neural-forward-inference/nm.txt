@@ -1,0 +1,4 @@
+_mojolearn_neural_host.so 490504 bytes, 508 defined symbols, nm backward|optimizer|adamw|decode|clip_grad|ce_loss|train_step = 0
+_mojolearn_training_host.so 420416 bytes, 550 defined symbols, nm backward|optimizer|adamw|decode|clip_grad|ce_loss|train_step = 20
+_mojolearn_mamba_host.so 1256872 bytes, 734 defined symbols, nm backward|optimizer|adamw|decode|clip_grad|ce_loss|train_step = 71
+_mojolearn_transformer_host.so 341528 bytes, 419 defined symbols, nm backward|optimizer|adamw|decode|clip_grad|ce_loss|train_step = 12

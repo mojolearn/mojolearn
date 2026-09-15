@@ -1,0 +1,9 @@
+7f00706e45c0317b29174ac7ba3413020d0e12b31519c8978608d9444dac0ba8  python/mojolearn/identical/_mojolearn_metrics.so
+17:16:54 test rc=139 1331s
+17:17:11 columns spectral base,ties rc=139 17s
+17:17:30 columns spectral-precomputed base,ties rc=0 19s
+17:17:30 merge rc=1
+17:18:02 par-graph-spectral base rc=0 32s
+17:18:19 batchsab spectral rc=139 17s
+17:18:23 batchsab spectral-precomputed rc=1 4s
+METAL_CHAIN_DONE

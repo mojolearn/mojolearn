@@ -1,0 +1,8 @@
+-rwxr-xr-x 1 root root 371288 Sep 15 21:59 python/mojolearn/host-sabotage/_mojolearn_arima_host.so
+-rwxr-xr-x 1 root root 594488 Sep 15 21:59 python/mojolearn/host-sabotage/_mojolearn_core_host.so
+-rwxr-xr-x 1 root root 298656 Sep 15 21:59 python/mojolearn/host-sabotage/_mojolearn_forecast_host.so
+-rwxr-xr-x 1 root root 307144 Sep 15 21:59 python/mojolearn/host-sabotage/_mojolearn_tsa_host.so
+-rwxr-xr-x 1 root root 371168 Sep 15 21:58 python/mojolearn/host/_mojolearn_arima_host.so
+-rwxr-xr-x 1 root root 594488 Sep 15 21:58 python/mojolearn/host/_mojolearn_core_host.so
+-rwxr-xr-x 1 root root 298536 Sep 15 21:59 python/mojolearn/host/_mojolearn_forecast_host.so
+-rwxr-xr-x 1 root root 303048 Sep 15 21:58 python/mojolearn/host/_mojolearn_tsa_host.so

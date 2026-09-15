@@ -1,0 +1,1 @@
+nproc=8 python3=Python 3.14.7 x86_64

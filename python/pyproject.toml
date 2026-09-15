@@ -57,7 +57,7 @@ keywords = [
 # and 3.11 are NOT claimed because they were not run, and a floor is a
 # promise". Both sentences are now false and are deleted rather than softened.
 # Measured 2026-08-24: python3.10 through python3.14 are ALL present on this
-# machine (/opt/homebrew/bin), and packaging/macos/verify_wheel.sh:37 loops
+# machine, and packaging/macos/verify_wheel.sh:37 loops
 # over all five by name. The paragraph thirty lines below always said the
 # oldest verified numpy was 1.26.4 "on python3.10, running the full smoke
 # fit", so the two halves of this file already disagreed.
@@ -230,6 +230,11 @@ mojolearn = [
     "reference_cards/*",
     "identity_columns/*/*.json",
     "identity_columns/COMMIT",
+    # `python -m mojolearn verify --all` (2026-09-15): the reference hash
+    # table generated from the committed identity_break records, and the
+    # portable GPU-trained models with their manifest (docs/VERIFY.md).
+    "verify_reference/*.json",
+    "verify_reference/models/*",
     "cuda/*.so", "cuda/identical/*.so", "cuda/deterministic/*.so", "cuda/.libs/*",
     "cuda/sm_*/*.so", "cuda/sm_*/identical/*.so", "cuda/sm_*/deterministic/*.so", "cuda/sm_*/.libs/*",
     "hip/*.so", "hip/identical/*.so", "hip/deterministic/*.so", "hip/.libs/*",

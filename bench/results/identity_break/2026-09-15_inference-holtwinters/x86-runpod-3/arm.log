@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod ovb9le1qdopo4q ...
+ARMED. Pod ovb9le1qdopo4q is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-inf-holtwinters/bench/results/identity_break/2026-09-15_inference-holtwinters/x86-runpod-3/lease/ovb9le1qdopo4q.lease
+  extend with: tools/runpod_guard.sh extend ovb9le1qdopo4q '-p 25715 root@213.173.105.103' <minutes>

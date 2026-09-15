@@ -1,0 +1,17 @@
+== cpu Tue Sep 15 17:44:13 UTC 2026
+cpu exit 0
+== cpu_hsab Tue Sep 15 17:44:19 UTC 2026
+cpu_hsab exit 0
+== tests Tue Sep 15 17:44:22 UTC 2026
+test_gp_sample_y exit 0
+test_cpu_training_gp exit 0
+test_gp_normalize_y exit 0
+---- cpu
+cells=63 stable=45 moved=0 refused=18
+infer: stable=45
+batch: stable=36 n/a=9
+---- cpu_hsab
+cells=63 stable=45 moved=0 refused=18
+infer: stable=45
+batch: stable=36 n/a=9
+tail: option used in invalid context -- 3

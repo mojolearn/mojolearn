@@ -86,7 +86,9 @@ def test_fix_lanes_split_the_covered_lanes():
     covered = host_surface.covered_lanes()
     record = host_surface.record_covered_lanes()
     fixed = host_surface.fix_covered_lanes()
-    assert fixed == ["kmeans-sqrt"], fixed
+    # kmeans-sqrt predates its fix on the record; the embedding and ivf lanes
+    # (lane/cpu-training-embedding-ivf) are not in the record at all.
+    assert fixed == ["kmeans-sqrt", "embedding", "embedding-sort", "ivf", "ivf-euclidean"], fixed
     assert not set(record) & set(fixed)
     assert sorted(record + fixed) == sorted(covered)
     assert [l for l in covered if l in record] == record, "the record set lost the gate's order"
@@ -95,24 +97,33 @@ def test_fix_lanes_split_the_covered_lanes():
 
 
 def test_fix_columns_carry_the_fixed_lane_on_every_fixture():
-    """The three fix columns must exist, be the record boxes, and carry each
-    fix lane STABLE with one hash per fixture across all three; the 166-lane
-    record must NOT (otherwise the lane belongs back on the record)."""
-    assert len(host_surface.TRAINING_FIX_COLUMNS) == 3
-    for fix, rec in zip(host_surface.TRAINING_FIX_COLUMNS, host_surface.TRAINING_GPU_COLUMNS):
-        assert fix.rsplit("/", 1)[1] == rec.rsplit("/", 1)[1], (fix, rec)
-    cols = [json.loads(_read(rel))["cells"] for rel in host_surface.TRAINING_FIX_COLUMNS]
+    """Every fix lane must be carried by exactly three of the fix columns, one
+    per GPU vendor, STABLE with one hash per fixture across the three; and
+    the record must either lack the lane or disagree with those hashes on
+    some fixture (otherwise the lane belongs back on the record). kmeans-sqrt's
+    three are the record's own boxes after the fix."""
+    cols = {rel: json.loads(_read(rel)) for rel in host_surface.TRAINING_FIX_COLUMNS}
     recs = [json.loads(_read(rel))["cells"] for rel in host_surface.TRAINING_GPU_COLUMNS]
+    for fix, rec in zip(host_surface.TRAINING_FIX_COLUMNS[:3], host_surface.TRAINING_GPU_COLUMNS):
+        assert fix.rsplit("/", 1)[1] == rec.rsplit("/", 1)[1], (fix, rec)
     for lane in host_surface.fix_covered_lanes():
+        carriers = [rel for rel, j in cols.items() if f"{lane}/base" in j["cells"]]
+        assert len(carriers) == 3, f"{lane}: carried by {len(carriers)} fix columns {carriers}, want 3"
+        # By file name: the ivf-euclidean record's Apple column predates the
+        # derived vendor label and reads "arm64" (its platform is macOS arm64).
+        vendors = sorted(v for rel in carriers for v in ("amd", "apple", "nvidia")
+                         if v in rel.rsplit("/", 1)[1])
+        assert vendors == ["amd", "apple", "nvidia"], (lane, vendors)
         differs = 0
         for fx in FIXTURES:
             key = f"{lane}/{fx}"
             hashes = set()
-            for c in cols:
-                assert c[key]["verdict"] == "STABLE", (key, c[key]["verdict"])
-                hashes.add(c[key]["hashes"][0])
+            for rel in carriers:
+                c = cols[rel]["cells"][key]
+                assert c["verdict"] == "STABLE", (key, rel, c["verdict"])
+                hashes.add(c["hashes"][0])
             assert len(hashes) == 1, f"{key}: the fix columns disagree {hashes}"
-            if any(r[key]["hashes"][0] not in hashes for r in recs):
+            if any(key not in r or r[key]["hashes"][0] not in hashes for r in recs):
                 differs += 1
         assert differs > 0, f"{lane}: the record already carries the fixed cells; drop it from TRAINING_FIX_LANES"
 
@@ -133,9 +144,14 @@ def test_workflow_diffs_each_set_against_its_columns():
 def test_identity_command_runs_public_reference_probes_on_a_cpu():
     text = _read("python/mojolearn/_identity.py")
     assert "l in host_surface.public_reference_lanes()]" in text
-    assert set(host_surface.public_reference_lanes()) <= set(host_surface.record_covered_lanes())
+    host_only = host_surface.PUBLIC_HOST_ONLY_LANES
+    trained = set(host_surface.public_reference_lanes()) - set(host_only)
+    assert trained <= set(host_surface.record_covered_lanes())
     wheel_lanes = {lane for f in host_surface.FAMILIES if f["ships_in_wheel"] for lane in f["training_lanes"]}
-    assert set(host_surface.public_reference_lanes()) <= wheel_lanes
+    assert trained <= wheel_lanes
+    for lane, family in host_only.items():
+        f = host_surface.family(family)
+        assert f["ships_in_wheel"] and f["routes"] is None, f"{lane}: not a shipped host-only family"
 
 
 def test_core_host_binding_registers_the_fold_gather():
@@ -197,7 +213,7 @@ def test_manifest_covers_the_neural_lanes():
     for name in NEURAL_EXPORTS:
         assert f'("{name}")' in src and f'("{name}")' in gpu, name
         assert name in fam["exports"], name
-    for absent in ("neural_rng", "clip_parallel_available", "optimizer_parallel_available"):
+    for absent in ("clip_parallel_available", "optimizer_parallel_available"):
         assert f'("{absent}")' in gpu and f'("{absent}")' not in src, absent
     assert SAMBA_ORACLE in fam["host_modules"] and (ROOT / SAMBA_ORACLE).is_file()
     text = _read(SAMBA_ORACLE)
@@ -207,7 +223,7 @@ def test_manifest_covers_the_neural_lanes():
                    "gemm_backward_b_call", "identical_rsqrt"):
         assert oracle in text, oracle
     sentence = host_surface.no_cpu_path_sentence()
-    assert "neural blocks" not in sentence and "Samba blocks" in sentence, sentence
+    assert "neural blocks" not in sentence and "Samba" not in sentence, sentence
 
 
 def _cpu_only_with(basename):

@@ -1,0 +1,3377 @@
+{
+  "binaries": {
+    "_mojolearn": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_core_host.so",
+    "_mojolearn_arima": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_forecast_host.so",
+    "_mojolearn_embedding": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_embedding_infer_host.so",
+    "_mojolearn_estimators": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_estimators_host.so",
+    "_mojolearn_gp": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_gp_infer_host.so",
+    "_mojolearn_hdbscan": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_hdbscan_infer_host.so",
+    "_mojolearn_ivf": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_ivf_search_host.so",
+    "_mojolearn_kernel_methods": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_estimators_host.so",
+    "_mojolearn_metrics": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_metrics_host.so",
+    "_mojolearn_mixture": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_mixture_infer_host.so",
+    "_mojolearn_preprocessing": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_estimators_host.so",
+    "_mojolearn_solver": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_estimators_host.so",
+    "_mojolearn_svm": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_svm_host.so",
+    "_mojolearn_tsa": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_forecast_host.so"
+  },
+  "binary": "/root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_estimators_host.so",
+  "checked_at": "2026-09-15T22:05:14+0000",
+  "commit": null,
+  "exit": 0,
+  "expect_mismatch": true,
+  "fixtures": [
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "58f275f0cdae7f9c9f9b852a249dc724d9a6e7e77bde4f00573da7e27a54f839",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "58f275f0cdae7f9c9f9b852a249dc724d9a6e7e77bde4f00573da7e27a54f839",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "17be0381dc2020d0e8d9cd88e29303ea4aaa7db462631bfda23339ace7e87b97",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "8344ac5cf73addfdda0665809c95c75d0046e8be5ec9ac58430a9729cfc4aecb",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "639cc7fb23288f822351493c391738e3e9a4102d50cd289aa44bcc9ea55e3af5",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "639cc7fb23288f822351493c391738e3e9a4102d50cd289aa44bcc9ea55e3af5",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "1a4db59953c47b1d0418958b7fba7c7a7e2f9b58e4016c890d7cfcd491c4688b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "1a4db59953c47b1d0418958b7fba7c7a7e2f9b58e4016c890d7cfcd491c4688b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "7ec0846695c03af74c7e4ec165db8e222feb09ff78dd0eff6ca233464be3ea26",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "ce92a3bf6d03057e52deb9e038877702dda29e9d7655d9ef6dbfa9ff50a40194",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "08750331b5a1845f1f87f7dcf5767592fea84942e3119472afca3c95d4d066e2",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "d426692f4d818b1622ee14d74731478a3d54d889685f33c5af6a9e755aa4a33e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "e866e13f5c77fad86b1ce4a14b78cca3308e05388cdf49e954c3b895e957c1a9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "e866e13f5c77fad86b1ce4a14b78cca3308e05388cdf49e954c3b895e957c1a9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "8f7e358a4c8931d119ff6c079cbfe4efbb01848df4161329df6a8e2534d75c02",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "8f7e358a4c8931d119ff6c079cbfe4efbb01848df4161329df6a8e2534d75c02",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "13b7c2006a343df7b315e1068b63eb18880aee3e4faefb9739e3113b56c15167",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "13b7c2006a343df7b315e1068b63eb18880aee3e4faefb9739e3113b56c15167",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "7b9f2d18d5ce1f01",
+        "want": "f930b5ed0ef2c318"
+      },
+      "kind": "base",
+      "lane": "holtwinters",
+      "model_sha256": "386ea9716a68db575dfc05c82e008cc18e8d9ae7f79f17c7189d717e075b6dfe",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.033003
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "e0fb2d87992a9fc79e7729163ad2aea5efbf14806711292c8c46e873bac1a253",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "e0fb2d87992a9fc79e7729163ad2aea5efbf14806711292c8c46e873bac1a253",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "6c475015de0379d8346eb8c478ca3b523b985617f82c97378faabae45f063b94",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "fef951e6c76ad6a01b208af650ca6d95769bec840e009981c5ae1316a42c90b1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "15b6bf61ae8c82124d83c33d20fbc9c3d957e767520a5b87f19bd4b0dbf32b5d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "15b6bf61ae8c82124d83c33d20fbc9c3d957e767520a5b87f19bd4b0dbf32b5d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "ac2874e5141d5b150d6778662b10a9015bf712021ce0c83b84ca2098358932d3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "94c5d0a1269a3fc889ead2cddbb9cd56ae410add3123e38d1201c9e6126f5e20",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "08c89beca597ad5fadf622d9f585301d324c9c6ddd7e93967b4398f035de7b80",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "b638277a8690e175a9137feff1e43c067f9faf4e2f600caf468fb05b0403b717",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "8f0323bbd25853407b0acede173e7d59636a0b1611f44128c7834a796187be63",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "8f0323bbd25853407b0acede173e7d59636a0b1611f44128c7834a796187be63",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "db2dcbdbc2d639c627eb04fd0148edb7ffb921099149e2989fa449bb9dbdc53e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "db2dcbdbc2d639c627eb04fd0148edb7ffb921099149e2989fa449bb9dbdc53e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "f018440ea29372a80aaacedf6fc8f17a8354cd78d7fb58721b99a7c38f605dda",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "f018440ea29372a80aaacedf6fc8f17a8354cd78d7fb58721b99a7c38f605dda",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "e4d1fb4fb6483655",
+        "want": "5e7dba822d698dd4"
+      },
+      "kind": "denormal",
+      "lane": "holtwinters",
+      "model_sha256": "e0329aaf3a587b5deb649ea3549f345e325475ffefff64f5ed4682d93bfeccfe",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000306
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "e0fb2d87992a9fc79e7729163ad2aea5efbf14806711292c8c46e873bac1a253",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "e0fb2d87992a9fc79e7729163ad2aea5efbf14806711292c8c46e873bac1a253",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "6c475015de0379d8346eb8c478ca3b523b985617f82c97378faabae45f063b94",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "fef951e6c76ad6a01b208af650ca6d95769bec840e009981c5ae1316a42c90b1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "15b6bf61ae8c82124d83c33d20fbc9c3d957e767520a5b87f19bd4b0dbf32b5d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "15b6bf61ae8c82124d83c33d20fbc9c3d957e767520a5b87f19bd4b0dbf32b5d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "ac2874e5141d5b150d6778662b10a9015bf712021ce0c83b84ca2098358932d3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "94c5d0a1269a3fc889ead2cddbb9cd56ae410add3123e38d1201c9e6126f5e20",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "08c89beca597ad5fadf622d9f585301d324c9c6ddd7e93967b4398f035de7b80",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "b638277a8690e175a9137feff1e43c067f9faf4e2f600caf468fb05b0403b717",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "8f0323bbd25853407b0acede173e7d59636a0b1611f44128c7834a796187be63",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "8f0323bbd25853407b0acede173e7d59636a0b1611f44128c7834a796187be63",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "db2dcbdbc2d639c627eb04fd0148edb7ffb921099149e2989fa449bb9dbdc53e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "db2dcbdbc2d639c627eb04fd0148edb7ffb921099149e2989fa449bb9dbdc53e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "f018440ea29372a80aaacedf6fc8f17a8354cd78d7fb58721b99a7c38f605dda",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "f018440ea29372a80aaacedf6fc8f17a8354cd78d7fb58721b99a7c38f605dda",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "e4d1fb4fb6483655",
+        "want": "5e7dba822d698dd4"
+      },
+      "kind": "denormal_ftz",
+      "lane": "holtwinters",
+      "model_sha256": "e0329aaf3a587b5deb649ea3549f345e325475ffefff64f5ed4682d93bfeccfe",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000296
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "58f275f0cdae7f9c9f9b852a249dc724d9a6e7e77bde4f00573da7e27a54f839",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "58f275f0cdae7f9c9f9b852a249dc724d9a6e7e77bde4f00573da7e27a54f839",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "17be0381dc2020d0e8d9cd88e29303ea4aaa7db462631bfda23339ace7e87b97",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "8344ac5cf73addfdda0665809c95c75d0046e8be5ec9ac58430a9729cfc4aecb",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "639cc7fb23288f822351493c391738e3e9a4102d50cd289aa44bcc9ea55e3af5",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "639cc7fb23288f822351493c391738e3e9a4102d50cd289aa44bcc9ea55e3af5",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "1a4db59953c47b1d0418958b7fba7c7a7e2f9b58e4016c890d7cfcd491c4688b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "1a4db59953c47b1d0418958b7fba7c7a7e2f9b58e4016c890d7cfcd491c4688b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "7ec0846695c03af74c7e4ec165db8e222feb09ff78dd0eff6ca233464be3ea26",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "ce92a3bf6d03057e52deb9e038877702dda29e9d7655d9ef6dbfa9ff50a40194",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "08750331b5a1845f1f87f7dcf5767592fea84942e3119472afca3c95d4d066e2",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "d426692f4d818b1622ee14d74731478a3d54d889685f33c5af6a9e755aa4a33e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "e866e13f5c77fad86b1ce4a14b78cca3308e05388cdf49e954c3b895e957c1a9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "e866e13f5c77fad86b1ce4a14b78cca3308e05388cdf49e954c3b895e957c1a9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "8f7e358a4c8931d119ff6c079cbfe4efbb01848df4161329df6a8e2534d75c02",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "8f7e358a4c8931d119ff6c079cbfe4efbb01848df4161329df6a8e2534d75c02",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "13b7c2006a343df7b315e1068b63eb18880aee3e4faefb9739e3113b56c15167",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "13b7c2006a343df7b315e1068b63eb18880aee3e4faefb9739e3113b56c15167",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "7b9f2d18d5ce1f01",
+        "want": "f930b5ed0ef2c318"
+      },
+      "kind": "dupes",
+      "lane": "holtwinters",
+      "model_sha256": "386ea9716a68db575dfc05c82e008cc18e8d9ae7f79f17c7189d717e075b6dfe",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000292
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "0d09406603672f9dd88adcf824b1fb3bd43ac10d587df12cba863fc792ca0172",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "0d09406603672f9dd88adcf824b1fb3bd43ac10d587df12cba863fc792ca0172",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "282c8f0a91b19c8bdf54f906dec194de7a920a59837c72b8021e47a5a1bdb58e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "60bf2e34c7fc9cdd3039111472a7edf8c64ba27d2b94ba3d77ef83d265ef74e9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "589b4ff4f5c480f59ea8f809ff11af50b844856c7fe7c5914742427c4279f195",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "589b4ff4f5c480f59ea8f809ff11af50b844856c7fe7c5914742427c4279f195",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "e89aa923528e8e686413c9b8f72cdf54e2c3cfced9e6586b21de817640afa58f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "fdf12e96cfd7ed8425932e170389d5fead8ac35083ff62163155af2eb7e552c7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "a53d439423d3e7e90942ec87c826b9b67ed0064f5589772efac795aa0167cdb4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "97fa94b92a1a4b40becd6ddda939fcc92a2b96c5dcfa3d3a116a1e355239c9c0",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "cea596b6b481886e9e598ab07faef710d88a4aa1760e0633fa260014c96112d4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "cea596b6b481886e9e598ab07faef710d88a4aa1760e0633fa260014c96112d4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "8ef4c4edeb7c304c70ec08b902709d3773bb58a4877354fd11c4f8e25e3a6b1f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "8ef4c4edeb7c304c70ec08b902709d3773bb58a4877354fd11c4f8e25e3a6b1f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "fb8d0091e76fdd95595eee453ec07e1273e9c2823252cd48c38b4ebfce6fc0b9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "fb8d0091e76fdd95595eee453ec07e1273e9c2823252cd48c38b4ebfce6fc0b9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "c2b0f2a3fd1dba2b",
+        "want": "bfa4a149ae74602c"
+      },
+      "kind": "hashed",
+      "lane": "holtwinters",
+      "model_sha256": "0bbf65d228c3a691d46b8536c43349bd512efd094f0f179defb7a1908a49b9fd",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000315
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "cf002297cbc4b264d022489e8dfca77103a36ff421a5cec6a8e5f53044008dfe",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "cf002297cbc4b264d022489e8dfca77103a36ff421a5cec6a8e5f53044008dfe",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "e12722a4d12bc420055ee5960caf938f108de5b8e2d1caee13084ccf5675af63",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "e12722a4d12bc420055ee5960caf938f108de5b8e2d1caee13084ccf5675af63",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "0bf13a89c523500b5779dec1b502d764dac41f499e0c14e69c3c703e02cfac0a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "42a7ae8b1f607fa3adaf4bfd525b9090f6604df450226733a4e9eebee7697077",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "d560d9fb68081fe8a2209ae5f90254fcd8460ea7c20e2153489179c16d51cdcb",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "d560d9fb68081fe8a2209ae5f90254fcd8460ea7c20e2153489179c16d51cdcb",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "f1c09c7335d1d0d03151246249f19dfc301780ff61d949591b902eab511d09b1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "f1c09c7335d1d0d03151246249f19dfc301780ff61d949591b902eab511d09b1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "9ccf0ccd0eebc5515e30e9709add871f25d87d6cef495134cf8e22363cbe23b0",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "eb9513966d4e45290d2e79f1eab8807631bdb2d4556a3baaf0a48f833c2444a9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "6f422a604e40789822c2ecc16f01b0802e10aadf708ad5b6887e05061f251c41",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "5e1f6247e307e482596ce542a491175b279dbacd2478415395de707e87983bd7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "6dce393b99009f38ed46948e24127d7ad6c25bdee6a917b10f9a2fe98d01f55e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "6dce393b99009f38ed46948e24127d7ad6c25bdee6a917b10f9a2fe98d01f55e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "acb13e7779838ff56dd3e29cc36057cbd46776a345707428873c8e31f5522427",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "acb13e7779838ff56dd3e29cc36057cbd46776a345707428873c8e31f5522427",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "94004dc4921bea2d55d98e0ad38d5ee34b8878ddfcd71eb5b9817a7877492d82",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "94004dc4921bea2d55d98e0ad38d5ee34b8878ddfcd71eb5b9817a7877492d82",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "6c8b8ef2f1ea6117",
+        "want": "c03b71a1af7f0d5c"
+      },
+      "kind": "negative",
+      "lane": "holtwinters",
+      "model_sha256": "6fa74fd4f6957e5ddfbb4136aff0138ec85930644b6e82870b9d709fdbc8cb73",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000309
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "72b0aa6a3dbbcd9206cc10a4b740353abd383a0da46e8255399025ba19c99b03",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "72b0aa6a3dbbcd9206cc10a4b740353abd383a0da46e8255399025ba19c99b03",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "7bfb4eb2b92822f7128ee73480bab6b15e6410357fe5415f99a84b15bcb3411c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "1ad1da420a974a12485c8a66979fd74a4cafa97a0e14b886e2c7cbec99d51430",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "2bb2676fd5f1ebfb034e36bcabc047ee4aa7e0851357bb26bfe2e2f0c603d92d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "2bb2676fd5f1ebfb034e36bcabc047ee4aa7e0851357bb26bfe2e2f0c603d92d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "06a432881fb26f6076320624fdca70da55f921f71199cc62319cf4ecf68953b9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "b0a09613a627f92e91124f2a82ff3115c581ac2a775b45203b1ae10a1e40ac9a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "a58bf41d3b6a1d970dcc31b0251931b6f80b1d0e0c1d37c3501d854c5a17ce55",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "dd7466dd4b4cf417f803b90d5206cce4e4bbf59db190cfc0a998ebeaf971208f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "e6ca509d309d55b03e5f2da150cd5bf7ffe8cdc772d5f3cfad70b46b88879606",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "e6ca509d309d55b03e5f2da150cd5bf7ffe8cdc772d5f3cfad70b46b88879606",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "a5ae4c6da5bc1dd706e219dc66327de1e673a98fb9a9baa79bb10e3d3706a23e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "a5ae4c6da5bc1dd706e219dc66327de1e673a98fb9a9baa79bb10e3d3706a23e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "56e31a262f96236a9c5343266783b4b58a6346e13480742adfe8934bcb68e578",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "56e31a262f96236a9c5343266783b4b58a6346e13480742adfe8934bcb68e578",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "fe316ee98b0b44c5",
+        "want": "baeea8494596eeb9"
+      },
+      "kind": "odd",
+      "lane": "holtwinters",
+      "model_sha256": "122949dbfaf739849ca0ca4b7680c0a124b456ef721984f6bd572ee88b03141e",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000305
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "b9c1dc100464a4f9d5f8587a1f86af03069205c3cbc0aca97d27893668daaaf6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "b9c1dc100464a4f9d5f8587a1f86af03069205c3cbc0aca97d27893668daaaf6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "323f2bd377e3a7f32b745475342de7e75e08a0992fa4d7b9bf2e05ade269f8d1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "323f2bd377e3a7f32b745475342de7e75e08a0992fa4d7b9bf2e05ade269f8d1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "291d06c5e353b0dfd33b897acc10968428f5843f9aaab76f3fd3e9560115fe3b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "453768ff4c036e3322922a64b641cba7d25fd6a024d2585a57d680bef4b83141",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "b1a774c84e8f45a6f54776e4a208e085941f72143542aef287169a1a491b0131",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "b1a774c84e8f45a6f54776e4a208e085941f72143542aef287169a1a491b0131",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "a4b521822bda73f31af3a3764ad5d71b85e8cb96068da6ee2968ded56b1980d3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "a4b521822bda73f31af3a3764ad5d71b85e8cb96068da6ee2968ded56b1980d3",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "0383a883ec80148186fdd226ae44683c6c42389ddcd261e9a5f67d392eeb65f4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "ce45059685d56fdb4fd539e71fbc9acb90988ac9a2a9d1d4ee5d2827e09bf9a3",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "c894683199cd39617a91e8f786fbf43cc6c8a65be20fd87ebe51f197be54b16b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "b3c249d12f87a64e60058fcd2d7852abcc7e9bea5dd306afad48ffee03523e1f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "6abc0ed0bc70702da5b0bd25eb4080cc59bcf9c0a74e7bba784ac2cd4a34dc3e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "6abc0ed0bc70702da5b0bd25eb4080cc59bcf9c0a74e7bba784ac2cd4a34dc3e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "b26f3d8b44a222cdc46fab0e3c8fa1c3f973e3b206d9effaf19257f3b4bf8ff3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "b26f3d8b44a222cdc46fab0e3c8fa1c3f973e3b206d9effaf19257f3b4bf8ff3",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "0d4c2cca8b83c945e65385ea317f952b48c4232e412f9f9d63315f4e2b6e8ab1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "0d4c2cca8b83c945e65385ea317f952b48c4232e412f9f9d63315f4e2b6e8ab1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "898d87dcb255afa1",
+        "want": "a48df2766423502f"
+      },
+      "kind": "ties",
+      "lane": "holtwinters",
+      "model_sha256": "b8929131c9bb8ffe8bf1acdf7549dc91b63bb597fdcb6480455554871fefb27c",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000288
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "0a3226c7ac4a3257d2db74c450560831ceacf5b9c3b107517ba97225b0baaa0e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "0a3226c7ac4a3257d2db74c450560831ceacf5b9c3b107517ba97225b0baaa0e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "bbff72561d243e331450b9376375fc238d0e220d9ff8951daefa72e0319b24f7",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "bbff72561d243e331450b9376375fc238d0e220d9ff8951daefa72e0319b24f7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "972062358c1b1814e3f9160090f9ec4a8185e1bd433fc66463366917efde98ac",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "2160675ed4fedcba30d6a9ce57555cea8e2c14067d5bfb05a13f2bfeff8d039b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "f7301b8b1c1abb501b88ae33ab7b4e4c9c3419b627beb4e60ce3569f88f4d1d9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "f7301b8b1c1abb501b88ae33ab7b4e4c9c3419b627beb4e60ce3569f88f4d1d9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "f40a70b66920c342453adb55feb81e42314b834bae2a8820d575370ec005abb3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "f40a70b66920c342453adb55feb81e42314b834bae2a8820d575370ec005abb3",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "42d834208d25cba18092172127fc07b8c18b0fc62b5c1eab08ebe9c0975771d5",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "6ce7efc622c569a33ff22bed0dee2d804673164b56c2baed78a3bdc28542384e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "cd94708209c8f984fc353e854012488691004e725d7f2d45a6cd84f32e7a6f4a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "2c7cf6c6a328c1b16546dab87b2d6216d050342929dc10244ab87c913b7a05fe",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "0f843a20bb4162d64a67f259607981cb33c2056c5ec8e1fd69606d03df936d81",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "0f843a20bb4162d64a67f259607981cb33c2056c5ec8e1fd69606d03df936d81",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "b893bce6db1452ae950703222a80018f624553b2d7310b1790146eca41721ebc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "b893bce6db1452ae950703222a80018f624553b2d7310b1790146eca41721ebc",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "dd3bbb6db33c71ef09b31f9ca3552b270154ee4e3eef1cc962820d6952b60a04",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "dd3bbb6db33c71ef09b31f9ca3552b270154ee4e3eef1cc962820d6952b60a04",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "10f2b66df27f6a77",
+        "want": "5df1cfaa8f4b4e78"
+      },
+      "kind": "wide",
+      "lane": "holtwinters",
+      "model_sha256": "8811438af56608f5cd1c093396abb3334f3a1d68155fe9aa16dd513d272cd4c7",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000293
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "03b5d6e5a208dd1db8064b449b8287eea7d7f76688d3ca62829038d48a10131c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "03b5d6e5a208dd1db8064b449b8287eea7d7f76688d3ca62829038d48a10131c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "2b91198501c71a8537ca1cacc3f5f49cece426e7b678e26161c3cb9c049b9edc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "e28a8728acda2648e69352c8ca14b8536a052ec14e11ac0d0d19bedd1fa3bd12",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "16be01216efed8038766fa97bf16648172fdd552723395365dd863fb34827399",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "16be01216efed8038766fa97bf16648172fdd552723395365dd863fb34827399",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "715e3430f3d29869629880b4f2630fab6e070d71370a859067a1ad2c9b381a4d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "fc379a31c053a08a5513e6f06e960acc34f181750ffd0a2d6bf9f9f054b0cd1a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "5dbaf02308b87e7f4af8b5793cfc3297e2ba124d4f861e5fc8b3354839f09d96",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "7031d02817e1ad08b161ad1a4aa3dcce002a3b3f13c8d08c7081deb9f09046dd",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "7992d04bfe9c3b271dbd8be2833422e8874cff098f6ba93e098e14a125a97557",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "7992d04bfe9c3b271dbd8be2833422e8874cff098f6ba93e098e14a125a97557",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "1ed96d88cb2f767d9dcbd400a78aa236a32ac9c05fe0685ea042ab05dc6e9372",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "1ed96d88cb2f767d9dcbd400a78aa236a32ac9c05fe0685ea042ab05dc6e9372",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "13b7c2006a343df7b315e1068b63eb18880aee3e4faefb9739e3113b56c15167",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "13b7c2006a343df7b315e1068b63eb18880aee3e4faefb9739e3113b56c15167",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "7aed10cdb4fb9866",
+        "want": "733c9600a564ad92"
+      },
+      "kind": "base",
+      "lane": "holtwinters-multiplicative",
+      "model_sha256": "b8a024b882e689d847c45719fdd54902e1179e16905d1879de2e31ae99147cf3",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000288
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "e0fb2d87992a9fc79e7729163ad2aea5efbf14806711292c8c46e873bac1a253",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "e0fb2d87992a9fc79e7729163ad2aea5efbf14806711292c8c46e873bac1a253",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "6c475015de0379d8346eb8c478ca3b523b985617f82c97378faabae45f063b94",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "fef951e6c76ad6a01b208af650ca6d95769bec840e009981c5ae1316a42c90b1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "15b6bf61ae8c82124d83c33d20fbc9c3d957e767520a5b87f19bd4b0dbf32b5d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "15b6bf61ae8c82124d83c33d20fbc9c3d957e767520a5b87f19bd4b0dbf32b5d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "ac2874e5141d5b150d6778662b10a9015bf712021ce0c83b84ca2098358932d3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "94c5d0a1269a3fc889ead2cddbb9cd56ae410add3123e38d1201c9e6126f5e20",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "08c89beca597ad5fadf622d9f585301d324c9c6ddd7e93967b4398f035de7b80",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "b638277a8690e175a9137feff1e43c067f9faf4e2f600caf468fb05b0403b717",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "a45d5edb22e30d49f017d2a760933c22ad132ed218ec2d5dd2e489d42d03b97b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "a45d5edb22e30d49f017d2a760933c22ad132ed218ec2d5dd2e489d42d03b97b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "db2dcbdbc2d639c627eb04fd0148edb7ffb921099149e2989fa449bb9dbdc53e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "db2dcbdbc2d639c627eb04fd0148edb7ffb921099149e2989fa449bb9dbdc53e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "f018440ea29372a80aaacedf6fc8f17a8354cd78d7fb58721b99a7c38f605dda",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "f018440ea29372a80aaacedf6fc8f17a8354cd78d7fb58721b99a7c38f605dda",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "e4d1fb4fb6483655",
+        "want": "5e7dba822d698dd4"
+      },
+      "kind": "denormal",
+      "lane": "holtwinters-multiplicative",
+      "model_sha256": "fb2179fa46b8c783dacc2e6d229a2deb4a033114e85544aaa9463e229d6c1e5a",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000285
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "e0fb2d87992a9fc79e7729163ad2aea5efbf14806711292c8c46e873bac1a253",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "e0fb2d87992a9fc79e7729163ad2aea5efbf14806711292c8c46e873bac1a253",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "6c475015de0379d8346eb8c478ca3b523b985617f82c97378faabae45f063b94",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "fef951e6c76ad6a01b208af650ca6d95769bec840e009981c5ae1316a42c90b1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "15b6bf61ae8c82124d83c33d20fbc9c3d957e767520a5b87f19bd4b0dbf32b5d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "15b6bf61ae8c82124d83c33d20fbc9c3d957e767520a5b87f19bd4b0dbf32b5d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "ac2874e5141d5b150d6778662b10a9015bf712021ce0c83b84ca2098358932d3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "94c5d0a1269a3fc889ead2cddbb9cd56ae410add3123e38d1201c9e6126f5e20",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "08c89beca597ad5fadf622d9f585301d324c9c6ddd7e93967b4398f035de7b80",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "b638277a8690e175a9137feff1e43c067f9faf4e2f600caf468fb05b0403b717",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "a45d5edb22e30d49f017d2a760933c22ad132ed218ec2d5dd2e489d42d03b97b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "a45d5edb22e30d49f017d2a760933c22ad132ed218ec2d5dd2e489d42d03b97b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "db2dcbdbc2d639c627eb04fd0148edb7ffb921099149e2989fa449bb9dbdc53e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "db2dcbdbc2d639c627eb04fd0148edb7ffb921099149e2989fa449bb9dbdc53e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "f018440ea29372a80aaacedf6fc8f17a8354cd78d7fb58721b99a7c38f605dda",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "f018440ea29372a80aaacedf6fc8f17a8354cd78d7fb58721b99a7c38f605dda",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "e4d1fb4fb6483655",
+        "want": "5e7dba822d698dd4"
+      },
+      "kind": "denormal_ftz",
+      "lane": "holtwinters-multiplicative",
+      "model_sha256": "fb2179fa46b8c783dacc2e6d229a2deb4a033114e85544aaa9463e229d6c1e5a",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000312
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "03b5d6e5a208dd1db8064b449b8287eea7d7f76688d3ca62829038d48a10131c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "03b5d6e5a208dd1db8064b449b8287eea7d7f76688d3ca62829038d48a10131c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "2b91198501c71a8537ca1cacc3f5f49cece426e7b678e26161c3cb9c049b9edc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "e28a8728acda2648e69352c8ca14b8536a052ec14e11ac0d0d19bedd1fa3bd12",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "16be01216efed8038766fa97bf16648172fdd552723395365dd863fb34827399",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "16be01216efed8038766fa97bf16648172fdd552723395365dd863fb34827399",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "715e3430f3d29869629880b4f2630fab6e070d71370a859067a1ad2c9b381a4d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "fc379a31c053a08a5513e6f06e960acc34f181750ffd0a2d6bf9f9f054b0cd1a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "5dbaf02308b87e7f4af8b5793cfc3297e2ba124d4f861e5fc8b3354839f09d96",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "7031d02817e1ad08b161ad1a4aa3dcce002a3b3f13c8d08c7081deb9f09046dd",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "7992d04bfe9c3b271dbd8be2833422e8874cff098f6ba93e098e14a125a97557",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "7992d04bfe9c3b271dbd8be2833422e8874cff098f6ba93e098e14a125a97557",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "1ed96d88cb2f767d9dcbd400a78aa236a32ac9c05fe0685ea042ab05dc6e9372",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "1ed96d88cb2f767d9dcbd400a78aa236a32ac9c05fe0685ea042ab05dc6e9372",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "13b7c2006a343df7b315e1068b63eb18880aee3e4faefb9739e3113b56c15167",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "13b7c2006a343df7b315e1068b63eb18880aee3e4faefb9739e3113b56c15167",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "7aed10cdb4fb9866",
+        "want": "733c9600a564ad92"
+      },
+      "kind": "dupes",
+      "lane": "holtwinters-multiplicative",
+      "model_sha256": "b8a024b882e689d847c45719fdd54902e1179e16905d1879de2e31ae99147cf3",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000291
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "a8df10263666b0a1f189c61e1e7ee5ceb99075e076ed9b57a3ef5fc5c7b249b2",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "a8df10263666b0a1f189c61e1e7ee5ceb99075e076ed9b57a3ef5fc5c7b249b2",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "5a6025d202e0dd358881c44d8fe25d3ad052574c880b09a09a5810518d0285dc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "7b2506772a1f7b8e2ec1ca6fbfb51856946fa66af277d0a08e0e117fb61b87e1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "679b84c522c6f19e2be64f3117e130210d930405da47b2d6d637828aa192ca52",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "679b84c522c6f19e2be64f3117e130210d930405da47b2d6d637828aa192ca52",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "f6244bdeadd87975c4cc82f09ad9c897b997d98b5b6e03a219220cb39d9f09e9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "f6244bdeadd87975c4cc82f09ad9c897b997d98b5b6e03a219220cb39d9f09e9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "11af5c4a479f4894f024a1c1836a5346e54e1e848ea58c878ac1a4ea4071cae9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "bffe0692427f1fc2cdde8bc092c8662a40433b35ddefb7426cc5d5d6db6eaf4d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "c3012bb46621dcb74be70b7be869aead9d220a86da321a2634e353212f20f211",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "36b6d7037515e6c208a33fc748646643b7c08925cb8502b105c5bd22b859f1b6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "0a7099ff7c0d9a68d43b8719ae5b98cf3835f95b60e5ca54fe5ba6b6850d7692",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "0a7099ff7c0d9a68d43b8719ae5b98cf3835f95b60e5ca54fe5ba6b6850d7692",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "c4383679d082ef8fbe6405fc7e9e3c8e672e17f0a499ec5015e56b750a6490fd",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "c4383679d082ef8fbe6405fc7e9e3c8e672e17f0a499ec5015e56b750a6490fd",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "fb8d0091e76fdd95595eee453ec07e1273e9c2823252cd48c38b4ebfce6fc0b9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "fb8d0091e76fdd95595eee453ec07e1273e9c2823252cd48c38b4ebfce6fc0b9",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "919b6cb49e902760",
+        "want": "4c14823c8b1dbcd7"
+      },
+      "kind": "hashed",
+      "lane": "holtwinters-multiplicative",
+      "model_sha256": "1be92a88fe27b753ef6b1dc17de8f3b2b6446b9cf440e15aa51a4ed72c381fa7",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000302
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "d61f0bb9f91fc561276f3d0971630c38a5587bef587980a51ad3a85b4718ce2c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "d61f0bb9f91fc561276f3d0971630c38a5587bef587980a51ad3a85b4718ce2c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "3a9ccc4e43e0eb069ec7c4dd687e8144c291310ff7e8850fcba6702232b6d9c4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "6ecfaa67d6d076450eaeca7160ba3328137a1fcf40e31a1da7ece3ac13573634",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "aff8cfd31c61891120d4f47da53aa2ac755b11d205457de99128c1d5f281a487",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "aff8cfd31c61891120d4f47da53aa2ac755b11d205457de99128c1d5f281a487",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "c9933838f42ab0f2f69e0a295b6f37abdd528121f7fe518d96c80e30c26d0677",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "c9933838f42ab0f2f69e0a295b6f37abdd528121f7fe518d96c80e30c26d0677",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "8ee15e3ec8d2d86e16b8dd313f04b3c8be8edf2b7e8d8692714e18a5e3736326",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "8eb03ca13abe60dcdee82f18d0a0d31ac0ad56c9e2a50a0968192a4d7cc654cd",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "bee4a0086c24cbf954e3d15c78e3cdd2d2c781dbc4cd26dc2725a5f09960cf07",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "c138c047ae62e4235265138696c218643337d3666b916b5e1e975766fc9f1a8c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "57f3aa42763055fc2a4fefa8a77ed6aae7913336da4afbbade12cd3774a0087b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "57f3aa42763055fc2a4fefa8a77ed6aae7913336da4afbbade12cd3774a0087b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "c148c28ab5a4bd8c31ae8e9c142a7c0004b87b0181cf110a7dcc496bb565b4ca",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "c148c28ab5a4bd8c31ae8e9c142a7c0004b87b0181cf110a7dcc496bb565b4ca",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "96cb81ffe41278f1f95d189b0aa25fa876c9522b46f547a3c1b833a8b66dc565",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "96cb81ffe41278f1f95d189b0aa25fa876c9522b46f547a3c1b833a8b66dc565",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "d3eced1dca4349b9",
+        "want": "462c8ebc8d2efa04"
+      },
+      "kind": "negative",
+      "lane": "holtwinters-multiplicative",
+      "model_sha256": "432eee1e5166113f1d312543cf11afafed42673fe57c7ab59cff746de5db79d3",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000336
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "9406cc26839f74ccf172df6ef0ed096bb518bf01c60057a4d09195421c08b815",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "9406cc26839f74ccf172df6ef0ed096bb518bf01c60057a4d09195421c08b815",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "d676965fbe3708f7e7414424977770d6facb4f8823f81190ba2bc2601e0dbcd4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "39349b385664e9dbbc15e73adb274b236cd0e8652e130caca4781264b5aa6bff",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "260f66e67ad382c352dc85bb640e58035925b1c76c702f0e1497f0039fe1d95a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "260f66e67ad382c352dc85bb640e58035925b1c76c702f0e1497f0039fe1d95a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "fb26f537eec9009f8e7665172583b20f226fab13173b0537c5a28185ce649abe",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "fb26f537eec9009f8e7665172583b20f226fab13173b0537c5a28185ce649abe",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "0df81d3c3997f7cdf8e08c205f156085628fb993852c08c643678a6eb1713ff0",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "5ac80cff34fc97dff4fef1b51cd6591f373e3c118c0f67a4282ca3cc1b05e29a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "1f8a09f0ea0a4e9ad9b16f3a87f6b8cb7fa0aa964614f321a74773a6d6fd2229",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "baa6eef88e07f06e728edd894f0dad92a39f19725a5b057e53558f3bafd332ce",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "6649580cbde4fb1c52329e29c566c12f4cf226d8bedc616b23f81d17f727e7c6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "6649580cbde4fb1c52329e29c566c12f4cf226d8bedc616b23f81d17f727e7c6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "4e969e008c41602aa63f2044b9e638570fe189bfe1361ff95d0759ebf685bed6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "4e969e008c41602aa63f2044b9e638570fe189bfe1361ff95d0759ebf685bed6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "56e31a262f96236a9c5343266783b4b58a6346e13480742adfe8934bcb68e578",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "56e31a262f96236a9c5343266783b4b58a6346e13480742adfe8934bcb68e578",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "b25f29a471c23ae9",
+        "want": "899a6730dedaa535"
+      },
+      "kind": "odd",
+      "lane": "holtwinters-multiplicative",
+      "model_sha256": "50be27dd6867acbdd264215ecd4697c7ec2e809cc4b26d4cf4958d8a0bca521b",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000279
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "492a852f4bd82935ffc482b833f8d592400cfe7bbf454418f7431a028eb47a5f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "492a852f4bd82935ffc482b833f8d592400cfe7bbf454418f7431a028eb47a5f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "1d356510bdf510aaead4e326faf0deb9859fafb7113b2a34720b7ef3204c6f6a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "1d356510bdf510aaead4e326faf0deb9859fafb7113b2a34720b7ef3204c6f6a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "1d663ac7c72d2bd5aa7b54af86a9f8c5f0ec10b3e07a7cd3ccac141cf4185f2f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "6ad2b09216867f205df67ddcb89ac5864cd3053db4dbecd77dd6b669e5a67d26",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "8889a19016ca03f193d780516dd5bf42aea7723ca7f04257e8eb5782522a8f88",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "8889a19016ca03f193d780516dd5bf42aea7723ca7f04257e8eb5782522a8f88",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "86d6855ce2817b5c0a72a5ed50c792bf8853b0bbefc97fd4a48633ffe67ede12",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "86d6855ce2817b5c0a72a5ed50c792bf8853b0bbefc97fd4a48633ffe67ede12",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "79207d356b88a1e556b986b66fc33b64dd9e1ca3af6860539f13accab417ec0a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "8d96ac47b7cf60767a1e27fd8ab6f8e9f60a3ee115215c4f9a71c608b026ca7c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "81e034d813ba1acaf16002da13955d08fa07b31d5cee4b8b6b18f4ef06a8949c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "0bbaf2dbd43488da3f22d3b0087fb904600c9205ff40aa77c11c85c0728611a1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "efcbfb26e8986ed443b82a6e409bf7a491f73d062c9bbcd0e3131a1fbc632eac",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "efcbfb26e8986ed443b82a6e409bf7a491f73d062c9bbcd0e3131a1fbc632eac",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "6c231c404a76399863fda8dbf4cc2f6ad43e00c3709c49537d6a3b2b7a79545a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "6c231c404a76399863fda8dbf4cc2f6ad43e00c3709c49537d6a3b2b7a79545a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "08dc2c0e81147d39359cd4968816db356eaf444dabeacc410bea315d14196296",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "08dc2c0e81147d39359cd4968816db356eaf444dabeacc410bea315d14196296",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "e52599b3d82963fa",
+        "want": "54aab1a29ccacdfe"
+      },
+      "kind": "ties",
+      "lane": "holtwinters-multiplicative",
+      "model_sha256": "e57730b49d91cf1a29bcaf7837f8b1c8e6f8dd02302d703b7e26329feb39b1ec",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000278
+    },
+    {
+      "cases": [
+        {
+          "case": "alpha",
+          "equal": true,
+          "got": "0b72f85cc5737f42f19200ea5c0969c835ec2fb1be753a71e7bcf8fd9c591535",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "0b72f85cc5737f42f19200ea5c0969c835ec2fb1be753a71e7bcf8fd9c591535",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "beta",
+          "equal": true,
+          "got": "b5bcab1336c82a11d9e46426248e739bb9fd163f067457bb50d730ff3662a944",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "b5bcab1336c82a11d9e46426248e739bb9fd163f067457bb50d730ff3662a944",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "d7a1dfdb38857727c41e01e0ab57645c5fce0d29e1e912bc45c78323b6373d75",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "842e0a9c3c8451b7a55cd6ef65b3185541bb509310ccb1cd189bea390a55b5dd",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "gamma",
+          "equal": true,
+          "got": "2ff2e48b908d8064f37d1b5471c6af5261994dd478ba5b2a584097b49214e229",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "2ff2e48b908d8064f37d1b5471c6af5261994dd478ba5b2a584097b49214e229",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "level",
+          "equal": true,
+          "got": "406a202261315d67c9c2fd77a433015fd8010a8a7fe38765b3a4f3eeef354a13",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "406a202261315d67c9c2fd77a433015fd8010a8a7fe38765b3a4f3eeef354a13",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "68113440efc0269b5d687bb7d2d0bcb9426add770058d925cd02f2131ec22028",
+          "got_dtype": "<f4",
+          "got_shape": [
+            512
+          ],
+          "want": "14a364961af88b0573120d2af0b834ae0dfd371eb11a2a2d77f102071bd3a916",
+          "want_dtype": "<f4",
+          "want_shape": [
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "ded9dae32277951c61c955767f17ee55aec5add8beaf134b0fe01a687744ee31",
+          "got_dtype": "<f4",
+          "got_shape": [
+            32
+          ],
+          "want": "e11d049e9d322a3e281c1ca70e1baa54daa481d49d969190f803300f79e2c696",
+          "want_dtype": "<f4",
+          "want_shape": [
+            32
+          ]
+        },
+        {
+          "case": "season",
+          "equal": true,
+          "got": "d29bc11362c041bab05e0303b6e792d6e57089685206bcbafad923ff34c5c78b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "d29bc11362c041bab05e0303b6e792d6e57089685206bcbafad923ff34c5c78b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        },
+        {
+          "case": "sse",
+          "equal": true,
+          "got": "210c907b5a00442d7af6ddabc56ae7b06448596bdd437be0a86ad98b3d430ed8",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1
+          ],
+          "want": "210c907b5a00442d7af6ddabc56ae7b06448596bdd437be0a86ad98b3d430ed8",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1
+          ]
+        },
+        {
+          "case": "trend",
+          "equal": true,
+          "got": "ad23baee86cb2fc776b08da3fa31e3160cd436540349d3b312b556232cf279a0",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1,
+            500
+          ],
+          "want": "ad23baee86cb2fc776b08da3fa31e3160cd436540349d3b312b556232cf279a0",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1,
+            500
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ExponentialSmoothing",
+      "identity_hash": {
+        "equal": false,
+        "got": "d5484588d9d2ee5b",
+        "want": "c0221c39c93138de"
+      },
+      "kind": "wide",
+      "lane": "holtwinters-multiplicative",
+      "model_sha256": "3998344adee0204b7d9801568df06703c8783209c699af877bf1e9d20f7dbeec",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000289
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "06acb59b90f5532376a37a4e066b7107937336c342b5bd26c0a892cf43193fc3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "06acb59b90f5532376a37a4e066b7107937336c342b5bd26c0a892cf43193fc3",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "d3a12198cd327edc5954c91421802b138306462eff0c54c582fa030f4d85a484",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "8c2e40bf3752b34194f8c75cdafe52c1f608923ba3852df211980249ee9b74c8",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "d7484219f3bb6cbe9767e04609fa61fbeb263c0ba063cdd5289853b338727d36",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "d7484219f3bb6cbe9767e04609fa61fbeb263c0ba063cdd5289853b338727d36",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "ba8c5928b073146c4a90bf60827d9fdfdc8cc35ed39e9c12624958baec48f343",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            3
+          ],
+          "want": "ba8c5928b073146c4a90bf60827d9fdfdc8cc35ed39e9c12624958baec48f343",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            3
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "79b6e7bc3db917c07b859edff36322dc58dcc18e981130d8e0f46ea0dfae1021",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "a7b0d58f28d5cf2affc6e3038ef3be081df0c2f3a7bb8cca32852998c155419e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "edf02ba2f6544d7571bd0afe4a741998d1f1c29d9818675c8151d3998748a4de",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "41c9f349c1d7fb8d54120638cafa14ca76d9240667a3a0312a292cf6be401a2b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "4c1ebb2104ed1c1d75f7a8d4efbd12ce1cc00e31ce53d35b1a6ddd59d7288bb6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "4c1ebb2104ed1c1d75f7a8d4efbd12ce1cc00e31ce53d35b1a6ddd59d7288bb6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": false,
+        "got": "f912c3f50a60b1e4",
+        "want": "9f76be0396a666ca"
+      },
+      "kind": "base",
+      "lane": "arima",
+      "model_sha256": "6ae822845884aedf4b6b48e8ea50a9afd40a437c63e9a45a61589cbbec0fa562",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000847
+    },
+    {
+      "cases": [
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "19105125d21efc810e1178fc75cc1cd8bb88f52d4c2c75e7562a0128c2b4fa1c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "4b06c4f7e006a8770e8673c2f33b2550e5520246a1df0546a273ebc3fd7384ad",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "ma",
+          "equal": true,
+          "got": "612d29e310aeeec1fedb08aa4374ba5d919ea8dd50070baff497f07c506f8dfa",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "612d29e310aeeec1fedb08aa4374ba5d919ea8dd50070baff497f07c506f8dfa",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "70a1c512524421ba0a262223a0a6f785bacf50b07ddf54937778b25b7ae97e75",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            2
+          ],
+          "want": "70a1c512524421ba0a262223a0a6f785bacf50b07ddf54937778b25b7ae97e75",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            2
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "8752f23813defb99564ece62355c7ef73e51a9514beb5f0135ba0ef184e74a5f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "8cc6f86b99b129e1c5aa807d1ee158830931a1bc18106118f9596c9f20b8dd55",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "cf70568ac497e13fadd4f34afd0e16510860ba624e96ce677da188374c873af9",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "4126afac8caeb4336f1c88a80899a6535f96ffbd0d3a19d9e59fc4eb449be13a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "10923934f457f589b91a2885269678a88b43f6c235a36424d03ba33705b5166d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "10923934f457f589b91a2885269678a88b43f6c235a36424d03ba33705b5166d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": false,
+        "got": "481c3c4fa66c8c0f",
+        "want": "436e34843e2d7277"
+      },
+      "kind": "base",
+      "lane": "arima-011",
+      "model_sha256": "d10f42f4fa3ab9cb4e409e184592c1693a681f3b8e72b55070c5dee2e0e0a5cc",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.001071
+    },
+    {
+      "cases": [
+        {
+          "case": "ar",
+          "equal": true,
+          "got": "693cd25921518f6f7ae3cced90d8ff94b69aa117162e87b01ba82187880aafea",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "693cd25921518f6f7ae3cced90d8ff94b69aa117162e87b01ba82187880aafea",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "forecast",
+          "equal": false,
+          "got": "99dabefff00d21d71a48d5ba3f4d224fcd747e9d111b84ca4feadf2178b55c45",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "0b435ea84ae834a48101cd9f490109bfbc7628dd686f0753e1b8e5dff3f1f36d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "mu",
+          "equal": true,
+          "got": "6c8c1aa8481c20a3b1a543577ef4543e05babd9ad84d0f7d0014436a556efd98",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "6c8c1aa8481c20a3b1a543577ef4543e05babd9ad84d0f7d0014436a556efd98",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        },
+        {
+          "case": "params",
+          "equal": true,
+          "got": "7bab7462710e06cc49386694eb76843a6ce21e698d4c360ed4e4bc318b1b5afa",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            4
+          ],
+          "want": "7bab7462710e06cc49386694eb76843a6ce21e698d4c360ed4e4bc318b1b5afa",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            4
+          ]
+        },
+        {
+          "case": "predict_in_sample",
+          "equal": false,
+          "got": "b525e9dc245df8473596b8c873640afc2603b199484a88f00d46e844a8c52a1c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            512
+          ],
+          "want": "fa70ae24fe995b248a48160cf617d8d0f628d770c23e6c839fddae966bfd106e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            512
+          ]
+        },
+        {
+          "case": "predict_straddle",
+          "equal": false,
+          "got": "4249326f0d4991d6b5661a3cf44f8fde21d64404d3fe0242f58157fb0710be73",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            32
+          ],
+          "want": "8ca2aad0108de215c968b3030c29a1737979aa0d98b3b300e9f4521c7737df46",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            32
+          ]
+        },
+        {
+          "case": "sar",
+          "equal": true,
+          "got": "4e5d4bb262a929de9dff8abf54c0b04c52bdd45599ae805570c444a65b3044d7",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4,
+            1
+          ],
+          "want": "4e5d4bb262a929de9dff8abf54c0b04c52bdd45599ae805570c444a65b3044d7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4,
+            1
+          ]
+        },
+        {
+          "case": "sigma2",
+          "equal": true,
+          "got": "4c36473b52fa080c5d22b14c02ef9c605c15f2785d9d26c346dc3687b58dafde",
+          "got_dtype": "<f4",
+          "got_shape": [
+            4
+          ],
+          "want": "4c36473b52fa080c5d22b14c02ef9c605c15f2785d9d26c346dc3687b58dafde",
+          "want_dtype": "<f4",
+          "want_shape": [
+            4
+          ]
+        }
+      ],
+      "columns": [],
+      "estimator": "ARIMA",
+      "identity_hash": {
+        "equal": false,
+        "got": "20d523e7ff5be475",
+        "want": "51863aef53c592d2"
+      },
+      "kind": "base",
+      "lane": "arima-seasonal-c",
+      "model_sha256": "4b68b52e2c4312b5b749e77e9526f1b5fa0d6597b37c9d2e9da6ec0aaeb786df",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.004991
+    }
+  ],
+  "gpu_columns": [],
+  "host": {
+    "cpu": "AMD EPYC 9655P 96-Core Processor",
+    "family": "26",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "2",
+    "python": "3.14.7",
+    "release": "6.8.0-100-generic",
+    "stepping": "1",
+    "system": "Linux",
+    "vendor": "AuthenticAMD"
+  },
+  "unmoved": [],
+  "vendor": "cpu",
+  "verdict": "EXPECTED MISMATCH SEEN"
+}

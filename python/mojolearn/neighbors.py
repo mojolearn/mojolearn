@@ -35,6 +35,13 @@ _DEFAULT_QUERY_TILE = 0  # Ask the compiled planner for its measured default.
 #: with no GPU through `bindings/_mojolearn_core_host.mojo`.
 _KNN_FORMAT = "mojolearn-knn-1"
 _KNN_META_FIELDS = 6  # n_features_in_, n_samples_fit_, n_neighbors, query_tile, outputs_2d, n_outputs
+#: RadiusNeighbors' model file (the neighbors and density inference lane,
+#: 2026-09-15): the `<f4` index as fitted, `radius`, `p` as `<f8`, `metric`
+#: and `algorithm` as text, `meta` `<i8` [n_features_in_, n_samples_fit_].
+#: What `radius_neighbors` reads and nothing else; `mojolearn.host_model`
+#: queries it on a CPU through the core host binding's
+#: radius_neighbors_count and radius_neighbors_fill.
+_RADIUS_FORMAT = "mojolearn-radius-1"
 
 
 def _knn_arrays(est):
@@ -551,7 +558,10 @@ class NearestNeighbors(NumericModeMixin):
         # Resolving the metric IS the metric check: it raises by name for
         # an unimplemented row of cuML's table, for an unknown name, and for a
         # p that cannot be one arithmetic. One table, one place.
-        if self.algorithm == "rbc" and type(self) is not NearestNeighbors:
+        # By class, not by `type(self) is NearestNeighbors`: a subclass of
+        # NearestNeighbors alone (the host class `mojolearn.host_model`
+        # returns, 2026-09-15) still runs `kneighbors` and keeps the cover.
+        if self.algorithm == "rbc" and isinstance(self, (KNeighborsClassifier, KNeighborsRegressor)):
             # REFUSED RATHER THAN ACCEPTED AND IGNORED, which is the whole
             # of `reached-but-inert`. The classifier and the regressor do
             # not call `kneighbors`; they call cuML's `knn_classify` /
@@ -1237,6 +1247,57 @@ class RadiusNeighbors(NumericModeMixin):
         self.n_samples_fit_ = idx.shape[0]
         self.n_features_in_ = idx.shape[1]
         return self
+
+    def save(self, path):
+        """Write the fitted index to `path` as an npz (`_RADIUS_FORMAT`): the
+        `<f4` index as fitted, `radius`, `metric`, `p` and `algorithm`.
+        `mojolearn.host_model(path)` answers `radius_neighbors` from it on a
+        CPU with no GPU."""
+        if self._index is None:
+            raise RuntimeError("this estimator is not fitted yet")
+        return _serialize.write_npz(path, {
+            "format": _RADIUS_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "metric": str(self.metric),
+            "algorithm": str(self.algorithm),
+            "radius": Array.from_list([float(self.radius)], "<f8"),
+            "p": Array.from_list([float(self.p)], "<f8"),
+            "index": self._index,
+            "meta": Array.from_list([int(self.n_features_in_), int(self.n_samples_fit_)], "<i8"),
+        })
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The refusals `fit` raises are raised
+        here too; every array is read at its saved dtype and never cast."""
+        arrays = _serialize.read_npz(path, _RADIUS_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 2:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 2 are needed")
+        radius = _serialize.exact(arrays, "radius", "<f8")
+        p = _serialize.exact(arrays, "p", "<f8")
+        if radius.size != 1 or p.size != 1:
+            raise ValueError(f"mojolearn: {path!r} radius and p must hold one value each")
+        obj = cls(
+            radius=float(radius[0]),
+            metric=_serialize.scalar_str(arrays, "metric"),
+            algorithm=_serialize.scalar_str(arrays, "algorithm"),
+            p=float(p[0]),
+        )
+        _restore_mode(obj, arrays)
+        obj._check_refusals()
+        nf, ns = int(meta[0]), int(meta[1])
+        index = _serialize.exact(arrays, "index", "<f4")
+        if index.ndim != 2 or tuple(index.shape) != (ns, nf) or ns < 1 or nf < 1:
+            raise ValueError(
+                f"mojolearn: {path!r} index has shape {tuple(index.shape)}, meta says ({ns}, {nf})"
+            )
+        obj._index = index
+        obj.n_samples_fit_ = ns
+        obj.n_features_in_ = nf
+        return obj
 
     def radius_neighbors(
         self, X=None, radius=None, return_distance=True, sort_results=False

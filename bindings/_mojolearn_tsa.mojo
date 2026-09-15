@@ -52,6 +52,7 @@ from checks.vendor import COMPILED_VENDOR
 
 from holtwinters.estimator import holtwinters_fit_ptr, holtwinters_forecast_ptr
 from tsa.estimator import kpss_test_host, select_d_host
+from bindings.holtwinters_host_predict import holtwinters_predict_binding
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -286,6 +287,10 @@ def PyInit__mojolearn_tsa() abi("C") -> PythonObject:
         m.def_function[tsa_vendor_binding]("tsa_vendor")
         m.def_function[holtwinters_fit_binding]("holtwinters_fit")
         m.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
+        # The in-sample prediction from the fitted components is host
+        # arithmetic on every install, one source with the host bindings
+        # (bindings/holtwinters_host_predict.mojo, lane/inference-holtwinters).
+        m.def_function[holtwinters_predict_binding]("holtwinters_predict")
         m.def_function[kpss_test_binding]("kpss_test")
         m.def_function[select_d_binding]("select_d")
         return m.finalize()

@@ -1,0 +1,5 @@
+pod=z8rbbimhd1br3l
+name=mojolearn-cpu-ties-sabotage-20260915-223202
+terminated_verified=1
+exit=0
+at=2026-09-15T22:57:26Z

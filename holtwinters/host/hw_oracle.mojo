@@ -23,6 +23,7 @@ design -- that is the pin -- and `hw_eval.mojo`'s header names it.
 from std.math import fma, sqrt
 from std.sys.compile import is_defined
 
+from holtwinters.host.hw_predict import hw_forecast_from_state
 from holtwinters.impl.internal.hw_decompose import host_filter, host_r1qt
 from holtwinters.impl.internal.hw_optim import (
     HW_DEC_ALPHA_HI,
@@ -482,6 +483,13 @@ def oracle_fit[dt: DType](
             var cauchy = _f[dt](c_ls * _dot3[dt](g1, g2, g3, p1, p2, p3))
             var loss_ref = _loss[dt](s, fit, pseason, x1, x2, x3)
             var loss = _loss[dt](s, fit, pseason, nx1, nx2, nx3)
+            # DEVIATION 2717 (hw_optim.mojo's header): keep the best trial,
+            # trial 0 first, replaced only on a STRICTLY lower loss.
+            var best_step = step_size
+            var best_nx1 = nx1
+            var best_nx2 = nx2
+            var best_nx3 = nx3
+            var best_loss = loss
             var i = 0
             while i < p.linesearch_iter_limit and (loss > _f[dt](_mad[dt](step_size, cauchy, loss_ref))):
                 step_size = _f[dt](step_size * tau)
@@ -490,9 +498,21 @@ def oracle_fit[dt: DType](
                 nx3 = _f[dt](_mad[dt](step_size, p3, x3))
                 loss = _loss[dt](s, fit, pseason, nx1, nx2, nx3)
                 i += 1
+                if loss < best_loss:
+                    best_step = step_size
+                    best_nx1 = nx1
+                    best_nx2 = nx2
+                    best_nx3 = nx3
+                    best_loss = loss
             ls_halvings += i
             if i >= p.linesearch_iter_limit:
                 decisions |= HW_DEC_LS_LIMIT
+                # the limit arm stores the best trial with its step and loss
+                step_size = best_step
+                nx1 = best_nx1
+                nx2 = best_nx2
+                nx3 = best_nx3
+                loss = best_loss
             var dx1 = abs(_f[dt](x1 - nx1))
             var dx2 = abs(_f[dt](x2 - nx2))
             var dx3 = abs(_f[dt](x3 - nx3))
@@ -583,24 +603,12 @@ def oracle_fit[dt: DType](
 
 def oracle_forecast[dt: DType](fit: HWOracleFit[dt], h: Int) -> List[Scalar[dt]]:
     """`HoltWintersForecastHelper`: from the last fitted row of level and
-    trend and the last `frequency` rows of season; `h x batch`, time-major."""
-    var bs = fit.batch_size
-    var f = fit.frequency
-    var n_minus = fit.n - f
-    var lt_shift = (n_minus - 1) * bs
-    var s_shift = (n_minus - f) * bs
-    var out = _zeros[dt](h * bs)
-    for s in range(bs):
-        var level = fit.level[lt_shift + s]
-        var trend = fit.trend[lt_shift + s]
-        for i in range(h):
-            var season = fit.season[s_shift + s + (i % f) * bs]
-            var lt = _f[dt](_mad[dt](trend, Scalar[dt](i + 1), level))
-            if fit.additive:
-                out[s + i * bs] = _f[dt](lt + season)
-            else:
-                out[s + i * bs] = _f[dt](lt * season)
-    return out^
+    trend and the last `frequency` rows of season; `h x batch`, time-major.
+    The body is `hw_predict.mojo::hw_forecast_from_state`, the one spelling
+    the host bindings' forecast shares (lane/inference-holtwinters)."""
+    return hw_forecast_from_state[dt](
+        fit.level, fit.trend, fit.season, fit.n, fit.batch_size, fit.frequency, fit.additive, h
+    )
 
 
 def oracle_sse_at[dt: DType](

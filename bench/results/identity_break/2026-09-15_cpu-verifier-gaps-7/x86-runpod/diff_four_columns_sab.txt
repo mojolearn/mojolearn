@@ -1,0 +1,458 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 7 lane(s); 165 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_forest_host', '_mojolearn_gp_host', '_mojolearn_mixture_host', '_mojolearn_preprocessing_host', '_mojolearn_tokenizer_host'] commit=11c5f2192579b8aceada93096fdfcae37a2726a7
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr-tables/base | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 72cde7b15ef5f221 |
+| gbdt-categorical-ctr-tables/denormal | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 72cde7b15ef5f221 |
+| gbdt-categorical-ctr-tables/denormal_ftz | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 72cde7b15ef5f221 |
+| gbdt-categorical-ctr-tables/dupes | ONE-COLUMN | (not run)        | (not run)        | (not run)        | e64ee54180696fd6 |
+| gbdt-categorical-ctr-tables/hashed | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 521699a11c6857c8 |
+| gbdt-categorical-ctr-tables/negative | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 8e4be8f9d9c80e8c |
+| gbdt-categorical-ctr-tables/odd | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 1968fe7962279797 |
+| gbdt-categorical-ctr-tables/ties | ONE-COLUMN | (not run)        | (not run)        | (not run)        | ac535fdcf35626e6 |
+| gbdt-categorical-ctr-tables/wide | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 5abc2bd57c1f327f |
+| gbdt-tensor-ctr-tables/base  | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 81ff1ddfff5a6b06 |
+| gbdt-tensor-ctr-tables/denormal | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 9b7bcee964e863b3 |
+| gbdt-tensor-ctr-tables/denormal_ftz | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 9b7bcee964e863b3 |
+| gbdt-tensor-ctr-tables/dupes | ONE-COLUMN | (not run)        | (not run)        | (not run)        | e723b7a89b149745 |
+| gbdt-tensor-ctr-tables/hashed | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 886790f32217e0a8 |
+| gbdt-tensor-ctr-tables/negative | ONE-COLUMN | (not run)        | (not run)        | (not run)        | a190d1ac61776a6b |
+| gbdt-tensor-ctr-tables/odd   | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 069c6d393252a0a6 |
+| gbdt-tensor-ctr-tables/ties  | ONE-COLUMN | (not run)        | (not run)        | (not run)        | c65d72201a6fde9b |
+| gbdt-tensor-ctr-tables/wide  | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 7f93b9536fb45179 |
+| gmm-random-init-sample/base  | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 74f318e0c93c671e |
+| gmm-random-init-sample/denormal | ONE-COLUMN | (not run)        | (not run)        | (not run)        | d415c3559b4974c4 |
+| gmm-random-init-sample/denormal_ftz | ONE-COLUMN | (not run)        | (not run)        | (not run)        | d415c3559b4974c4 |
+| gmm-random-init-sample/dupes | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 74f318e0c93c671e |
+| gmm-random-init-sample/hashed | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 08fb92ea494ae627 |
+| gmm-random-init-sample/negative | ONE-COLUMN | (not run)        | (not run)        | (not run)        | ad9c34f803053f22 |
+| gmm-random-init-sample/odd   | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 1a3780f08d9f6ea4 |
+| gmm-random-init-sample/ties  | ONE-COLUMN | (not run)        | (not run)        | (not run)        | f9270e76271f8235 |
+| gmm-random-init-sample/wide  | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 77b73d5b6cb14cba |
+| gmm-sample/base              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | f4fa11eaa3bc615f |
+| gmm-sample/denormal          | ONE-COLUMN | (not run)        | (not run)        | (not run)        | e155b6a710ec7cb6 |
+| gmm-sample/denormal_ftz      | ONE-COLUMN | (not run)        | (not run)        | (not run)        | e155b6a710ec7cb6 |
+| gmm-sample/dupes             | ONE-COLUMN | (not run)        | (not run)        | (not run)        | f4fa11eaa3bc615f |
+| gmm-sample/hashed            | ONE-COLUMN | (not run)        | (not run)        | (not run)        | e51e461b4129c7f2 |
+| gmm-sample/negative          | ONE-COLUMN | (not run)        | (not run)        | (not run)        | f854fbaface33f85 |
+| gmm-sample/odd               | ONE-COLUMN | (not run)        | (not run)        | (not run)        | a8ff8280e31b34c3 |
+| gmm-sample/ties              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | f692f3474a33be61 |
+| gmm-sample/wide              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 194c524cc9d1b2b2 |
+| gp-sample-y-normalize/base   | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 24c44714c0bfdc6d |
+| gp-sample-y-normalize/denormal | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 92637b32697fc263 |
+| gp-sample-y-normalize/denormal_ftz | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 92637b32697fc263 |
+| gp-sample-y-normalize/dupes  | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 1dc07c929ff949b0 |
+| gp-sample-y-normalize/hashed | ONE-COLUMN | (not run)        | (not run)        | (not run)        | f2469eee30c6234d |
+| gp-sample-y-normalize/negative | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 21ed9a6c18c4cb1a |
+| gp-sample-y-normalize/odd    | ONE-COLUMN | (not run)        | (not run)        | (not run)        | f7358f4658b17ce7 |
+| gp-sample-y-normalize/ties   | ONE-COLUMN | (not run)        | (not run)        | (not run)        | eca685cc01bf16e1 |
+| gp-sample-y-normalize/wide   | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 2f9c09fb42347cb0 |
+| gp-sample-y/base             | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 82c5d5c45a0b1c4c |
+| gp-sample-y/denormal         | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 8bdc4f536645721b |
+| gp-sample-y/denormal_ftz     | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 8bdc4f536645721b |
+| gp-sample-y/dupes            | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 7f2067db1b4538d5 |
+| gp-sample-y/hashed           | ONE-COLUMN | (not run)        | (not run)        | (not run)        | f3146e81af7d6eb6 |
+| gp-sample-y/negative         | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 4b33a5084d1db7b4 |
+| gp-sample-y/odd              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 849c51fb1f1d7c96 |
+| gp-sample-y/ties             | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 036c0a0f1ed44ae5 |
+| gp-sample-y/wide             | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 59446f9972b8537f |
+| tokenizer/base               | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 74458a3ecb971805 |
+| tokenizer/denormal           | ONE-COLUMN | (not run)        | (not run)        | (not run)        | d322d18fab348b21 |
+| tokenizer/denormal_ftz       | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 4f403b1e5e237dea |
+| tokenizer/dupes              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 6b30a6941eef4198 |
+| tokenizer/hashed             | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 898febe78a80327a |
+| tokenizer/negative           | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 5262bf205be38975 |
+| tokenizer/odd                | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 74458a3ecb971805 |
+| tokenizer/ties               | ONE-COLUMN | (not run)        | (not run)        | (not run)        | 0f4aff7c9f453e85 |
+| tokenizer/wide               | ONE-COLUMN | (not run)        | (not run)        | (not run)        | d8f676c80c02e0ac |
+
+summary: ONE-COLUMN=63
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr-tables/base | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 6ca674d84461ffb0 |
+| gbdt-categorical-ctr-tables/base | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/base | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 1031a2dfc55c782f |
+| gbdt-categorical-ctr-tables/denormal | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 6ca674d84461ffb0 |
+| gbdt-categorical-ctr-tables/denormal | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/denormal | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 1031a2dfc55c782f |
+| gbdt-categorical-ctr-tables/denormal_ftz | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 6ca674d84461ffb0 |
+| gbdt-categorical-ctr-tables/denormal_ftz | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/denormal_ftz | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 1031a2dfc55c782f |
+| gbdt-categorical-ctr-tables/dupes | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | ff2642bcab355330 |
+| gbdt-categorical-ctr-tables/dupes | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/dupes | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 8536c85e6dc84095 |
+| gbdt-categorical-ctr-tables/hashed | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 35b0346dbd88b991 |
+| gbdt-categorical-ctr-tables/hashed | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/hashed | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e8f695a166b8a1e1 |
+| gbdt-categorical-ctr-tables/negative | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 10eed27c5066a7c0 |
+| gbdt-categorical-ctr-tables/negative | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/negative | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | a80e4efcd4b3ffc6 |
+| gbdt-categorical-ctr-tables/odd | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 3767f04f91ad7b5e |
+| gbdt-categorical-ctr-tables/odd | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/odd | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 004761944c569ee1 |
+| gbdt-categorical-ctr-tables/ties | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | ce0017bfa23417e6 |
+| gbdt-categorical-ctr-tables/ties | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/ties | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 701a4a12b42c58c4 |
+| gbdt-categorical-ctr-tables/wide | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f4986a5da4456128 |
+| gbdt-categorical-ctr-tables/wide | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/wide | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f079f5c5d7970630 |
+| gbdt-tensor-ctr-tables/base  | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 36e6f556a3ce2399 |
+| gbdt-tensor-ctr-tables/base  | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/base  | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | acdd0381685f59cd |
+| gbdt-tensor-ctr-tables/denormal | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | c4257d96aa186c96 |
+| gbdt-tensor-ctr-tables/denormal | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/denormal | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | ca603f46475fb8b8 |
+| gbdt-tensor-ctr-tables/denormal_ftz | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | c4257d96aa186c96 |
+| gbdt-tensor-ctr-tables/denormal_ftz | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/denormal_ftz | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | ca603f46475fb8b8 |
+| gbdt-tensor-ctr-tables/dupes | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | cb6085cb88139ee5 |
+| gbdt-tensor-ctr-tables/dupes | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/dupes | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 9371e00b8f59f6f8 |
+| gbdt-tensor-ctr-tables/hashed | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 7f10ec57b6cfcadc |
+| gbdt-tensor-ctr-tables/hashed | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/hashed | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | bf4292e2b0e998c0 |
+| gbdt-tensor-ctr-tables/negative | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 961748c162b8f30a |
+| gbdt-tensor-ctr-tables/negative | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/negative | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 2d916680cb81263c |
+| gbdt-tensor-ctr-tables/odd   | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 1dd476d8f443121b |
+| gbdt-tensor-ctr-tables/odd   | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/odd   | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | c3f0a65408341852 |
+| gbdt-tensor-ctr-tables/ties  | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | cff255aadabb8f0c |
+| gbdt-tensor-ctr-tables/ties  | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/ties  | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | c79adc440339285f |
+| gbdt-tensor-ctr-tables/wide  | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 254f632e36ea9b9a |
+| gbdt-tensor-ctr-tables/wide  | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/wide  | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | ac742405bc369629 |
+| gmm-random-init-sample/base  | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f372e7ac219fef07 |
+| gmm-random-init-sample/base  | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | b80752b4e03f2a05 |
+| gmm-random-init-sample/base  | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/denormal | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e1d85ce914e4ff1b |
+| gmm-random-init-sample/denormal | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 2356cce2069d11e1 |
+| gmm-random-init-sample/denormal | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/denormal_ftz | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e1d85ce914e4ff1b |
+| gmm-random-init-sample/denormal_ftz | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 2356cce2069d11e1 |
+| gmm-random-init-sample/denormal_ftz | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/dupes | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f372e7ac219fef07 |
+| gmm-random-init-sample/dupes | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | b80752b4e03f2a05 |
+| gmm-random-init-sample/dupes | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/hashed | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 88939d0bc90bbf37 |
+| gmm-random-init-sample/hashed | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e6a5247054b65336 |
+| gmm-random-init-sample/hashed | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/negative | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 91f6887cdcdb4711 |
+| gmm-random-init-sample/negative | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 7ec8721370ff1f09 |
+| gmm-random-init-sample/negative | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/odd   | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f65fcee4d715fa3a |
+| gmm-random-init-sample/odd   | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 701f92bbf61d420d |
+| gmm-random-init-sample/odd   | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/ties  | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | b4ad372be861cccc |
+| gmm-random-init-sample/ties  | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | ab683ed7badb9157 |
+| gmm-random-init-sample/ties  | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/wide  | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | c63b072f4faf1472 |
+| gmm-random-init-sample/wide  | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | ab70e0ef0a4b765b |
+| gmm-random-init-sample/wide  | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/base              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | d95cffab4f81fec5 |
+| gmm-sample/base              | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 0c00d2ed45b423bc |
+| gmm-sample/base              | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/denormal          | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 005e2b431846e8f1 |
+| gmm-sample/denormal          | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 91ded1d8fd8ff6a2 |
+| gmm-sample/denormal          | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/denormal_ftz      | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 005e2b431846e8f1 |
+| gmm-sample/denormal_ftz      | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 91ded1d8fd8ff6a2 |
+| gmm-sample/denormal_ftz      | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/dupes             | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | d95cffab4f81fec5 |
+| gmm-sample/dupes             | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 0c00d2ed45b423bc |
+| gmm-sample/dupes             | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/hashed            | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 018736aa2fd7a210 |
+| gmm-sample/hashed            | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 26e717942ca2cbe9 |
+| gmm-sample/hashed            | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/negative          | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 7640fc0458524a00 |
+| gmm-sample/negative          | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | caab3817b78e8176 |
+| gmm-sample/negative          | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/odd               | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 858302e69a1a82ad |
+| gmm-sample/odd               | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e9bd98d555b0f0e4 |
+| gmm-sample/odd               | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/ties              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 9b8cc401aad0696d |
+| gmm-sample/ties              | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e3567019afdcf8b2 |
+| gmm-sample/ties              | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/wide              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 156389771f6ef3a9 |
+| gmm-sample/wide              | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 0e6389be58245ab3 |
+| gmm-sample/wide              | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gp-sample-y-normalize/base   | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 6b82af601b0adc8b |
+| gp-sample-y-normalize/base   | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 64f422e68cba83a8 |
+| gp-sample-y-normalize/base   | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/denormal | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 4dfea0e75d850c9b |
+| gp-sample-y-normalize/denormal | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | da9e8f2cffd8b0bb |
+| gp-sample-y-normalize/denormal | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/denormal_ftz | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 4dfea0e75d850c9b |
+| gp-sample-y-normalize/denormal_ftz | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 2850ba9637228ae0 |
+| gp-sample-y-normalize/denormal_ftz | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/dupes  | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | bdb29f021c93dcf9 |
+| gp-sample-y-normalize/dupes  | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 8ba30f3abc84b63a |
+| gp-sample-y-normalize/dupes  | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/hashed | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | b7f350a61edb3e85 |
+| gp-sample-y-normalize/hashed | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | a2bbc10e60c068ff |
+| gp-sample-y-normalize/hashed | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/negative | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 9ec234c851663079 |
+| gp-sample-y-normalize/negative | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e9b9bab47138c567 |
+| gp-sample-y-normalize/negative | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/odd    | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 883ddedd7af0d531 |
+| gp-sample-y-normalize/odd    | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 95fd91308ef63851 |
+| gp-sample-y-normalize/odd    | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/ties   | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e027031ed45b0a8a |
+| gp-sample-y-normalize/ties   | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 288018b455b2130a |
+| gp-sample-y-normalize/ties   | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/wide   | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 22fea7e857d40dcb |
+| gp-sample-y-normalize/wide   | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | fd59489103228fc1 |
+| gp-sample-y-normalize/wide   | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/base             | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 9462337d24b65264 |
+| gp-sample-y/base             | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f7db3402cc8897cf |
+| gp-sample-y/base             | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/denormal         | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 966f537e0f7d5d87 |
+| gp-sample-y/denormal         | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 5f4c402cdb4b13d1 |
+| gp-sample-y/denormal         | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/denormal_ftz     | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 966f537e0f7d5d87 |
+| gp-sample-y/denormal_ftz     | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 75aea66abbcc0057 |
+| gp-sample-y/denormal_ftz     | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/dupes            | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | cc109f64c5ee81de |
+| gp-sample-y/dupes            | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 7d0455dd26768cfd |
+| gp-sample-y/dupes            | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/hashed           | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | a9b65ada50af2e08 |
+| gp-sample-y/hashed           | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 64b9a4917ddd4713 |
+| gp-sample-y/hashed           | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/negative         | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 7be986534146333e |
+| gp-sample-y/negative         | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 888eb631876e352b |
+| gp-sample-y/negative         | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/odd              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e054b835c9e607cf |
+| gp-sample-y/odd              | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 7b48474a01cf1c39 |
+| gp-sample-y/odd              | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/ties             | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | bfa8c2511f846320 |
+| gp-sample-y/ties             | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 395663fc6ff27a49 |
+| gp-sample-y/ties             | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/wide             | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 8cd47b3598650d83 |
+| gp-sample-y/wide             | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 661aef3fd227e293 |
+| gp-sample-y/wide             | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| tokenizer/base               | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 4bec413bce4c1597 |
+| tokenizer/base               | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/base               | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 54dbcc73f9b214e0 |
+| tokenizer/denormal           | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | b667c4cb1f0b2319 |
+| tokenizer/denormal           | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/denormal           | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | d2aeb5e86d087908 |
+| tokenizer/denormal_ftz       | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 68693a34296e6a1d |
+| tokenizer/denormal_ftz       | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/denormal_ftz       | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | a8effeeb8268bdc3 |
+| tokenizer/dupes              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 7c980118bc464c5c |
+| tokenizer/dupes              | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/dupes              | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 225efd6e83196894 |
+| tokenizer/hashed             | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 26a404942548a5ff |
+| tokenizer/hashed             | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/hashed             | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | a6171c088a42aba2 |
+| tokenizer/negative           | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 82628ed3422d8ad5 |
+| tokenizer/negative           | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/negative           | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 12d5dea685216316 |
+| tokenizer/odd                | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 4bec413bce4c1597 |
+| tokenizer/odd                | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/odd                | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 4da32467a812901e |
+| tokenizer/ties               | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | b4997614d6879154 |
+| tokenizer/ties               | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/ties               | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 4e17f982ec8a49e1 |
+| tokenizer/wide               | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 2f27a19f8fea5b93 |
+| tokenizer/wide               | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/wide               | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 3fba878431b331fa |
+
+summary (infer/model): N/A=27, ONE-COLUMN=99
+summary (batch): N/A=36, ONE-COLUMN=27
+summary (rlpair): 
+REQUIRE FAIL gbdt-categorical-ctr-tables/base train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/denormal train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/denormal_ftz train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/dupes train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/hashed train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/negative train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/odd train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/ties train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/wide train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/base train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/denormal train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/denormal_ftz train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/dupes train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/hashed train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/negative train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/odd train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/ties train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/wide train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/base train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/denormal train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/denormal_ftz train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/dupes train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/hashed train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/negative train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/odd train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/ties train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/wide train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/base train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/denormal train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/denormal_ftz train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/dupes train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/hashed train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/negative train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/odd train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/ties train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/wide train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/base train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/denormal train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/denormal_ftz train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/dupes train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/hashed train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/negative train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/odd train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/ties train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/wide train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/base train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/denormal train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/denormal_ftz train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/dupes train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/hashed train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/negative train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/odd train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/ties train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/wide train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/base train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/denormal train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/denormal_ftz train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/dupes train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/hashed train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/negative train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/odd train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/ties train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/wide train: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/denormal_ftz infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/denormal_ftz batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/dupes infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/dupes batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/hashed infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/hashed batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/negative infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/negative batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/wide infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-categorical-ctr-tables/wide batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/denormal_ftz infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/denormal_ftz batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/dupes infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/dupes batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/hashed infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/hashed batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/negative infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/negative batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/wide infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gbdt-tensor-ctr-tables/wide batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/denormal_ftz infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/dupes infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/hashed infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/negative infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/wide infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-random-init-sample/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/denormal_ftz infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/dupes infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/hashed infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/negative infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/wide infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gmm-sample/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/denormal_ftz infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/dupes infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/hashed infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/negative infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/wide infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y-normalize/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/denormal_ftz infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/dupes infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/hashed infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/negative infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/wide infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL gp-sample-y/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/denormal infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/denormal batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/denormal_ftz infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/denormal_ftz batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/dupes infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/dupes batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/hashed infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/hashed batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/negative infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/negative batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/wide infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL tokenizer/wide batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 4 over ['gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables', 'gmm-random-init-sample', 'gmm-sample', 'gp-sample-y', 'gp-sample-y-normalize', 'tokenizer']: 189 short

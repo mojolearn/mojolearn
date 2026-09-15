@@ -1,0 +1,16 @@
+Context leak detected, CoreAnalytics returned false
+# vendor=apple-m4 commit=1386833b4d6098de5db802ac0ccb43ab7fb33942 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 17:44:52  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | odd              |
+|------------------------|------------------|------------------|------------------|
+| gbdt-tensor-ctr-tables | 7cc167fbb56c972e | a57c449ae1a19b4e | 7377ac4d24ab4fc7 |
+| gbdt-tensor-ctr-tables infer | 18c29c1d0b000438 | 1659c6bbc45fd69d | b6a857464e3fc541 |
+| gbdt-tensor-ctr-tables model | d701b87375180e4b | 4274b123a863584a | 4148bc1f3f9b7e87 |
+| gbdt-tensor-ctr-tables batch | c14b5f2874153914 | c648d9eb03bb1455 | 3de632fb4d411bcf |
+
+cells=3 stable=3 moved=0 refused=0
+infer: stable=3
+model: stable=3
+batch: stable=3
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/ctr/metal-gbdt-tensor-ctr-tables.json

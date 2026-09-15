@@ -1,0 +1,12 @@
+mac_slot: Metal slot busy (/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-release-086-fix :: nice -n 19 ./packaging/macos/build_release_wheel.sh); waiting
+mac_slot: Metal slot busy (/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-release-086-fix :: nice -n 19 ./packaging/macos/build_release_wheel.sh); waiting
+mac_slot: Metal slot busy (/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-release-086-fix :: nice -n 19 ./packaging/macos/build_release_wheel.sh); waiting
+mac_slot: Metal slot busy (/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-release-086-fix :: nice -n 19 ./packaging/macos/build_release_wheel.sh); waiting
+mac_slot: Metal slot busy (/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-hw-linesearch :: pixi run mojo run -D MOJOLEARN_NUMERIC_DETERMINISTIC=1 -I . ho); waiting
+....                                                                     [100%]
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteLMSession has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+4 passed, 1 warning in 20.72s

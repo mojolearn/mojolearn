@@ -1,0 +1,135 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 162 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_svm_host'] commit=b5d4417d066e7bdbbfbb00d142f38631ec8d0fb5
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-h100-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    amd-mi325x-gfx942: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    nvidia-h100-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    amd-mi325x-gfx942: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-7713-64-core-processor: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gmm-random-init/base         | IDENTICAL x4 | fc8ac51adc1813b2 | fc8ac51adc1813b2 | fc8ac51adc1813b2 | fc8ac51adc1813b2 |
+| gmm-random-init/dupes        | IDENTICAL x4 | fc8ac51adc1813b2 | fc8ac51adc1813b2 | fc8ac51adc1813b2 | fc8ac51adc1813b2 |
+| gmm-random-init/ties         | IDENTICAL x4 | 01978ea4fe0c8e33 | 01978ea4fe0c8e33 | 01978ea4fe0c8e33 | 01978ea4fe0c8e33 |
+| gmm/base                     | IDENTICAL x4 | bf646caedaf7a508 | bf646caedaf7a508 | bf646caedaf7a508 | bf646caedaf7a508 |
+| gmm/dupes                    | IDENTICAL x4 | bf646caedaf7a508 | bf646caedaf7a508 | bf646caedaf7a508 | bf646caedaf7a508 |
+| gmm/ties                     | IDENTICAL x4 | 2f07a729352d2581 | 2f07a729352d2581 | 2f07a729352d2581 | 2f07a729352d2581 |
+| iforest-tuned/base           | IDENTICAL x4 | 0a149db6290bacd6 | 0a149db6290bacd6 | 0a149db6290bacd6 | 0a149db6290bacd6 |
+| iforest-tuned/dupes          | IDENTICAL x4 | cf1224bee78e2e10 | cf1224bee78e2e10 | cf1224bee78e2e10 | cf1224bee78e2e10 |
+| iforest-tuned/ties           | IDENTICAL x4 | 8f43ab374b0ab900 | 8f43ab374b0ab900 | 8f43ab374b0ab900 | 8f43ab374b0ab900 |
+| iforest/base                 | IDENTICAL x4 | 8703d4a008ffd13d | 8703d4a008ffd13d | 8703d4a008ffd13d | 8703d4a008ffd13d |
+| iforest/dupes                | IDENTICAL x4 | b879bcf3dcf99f38 | b879bcf3dcf99f38 | b879bcf3dcf99f38 | b879bcf3dcf99f38 |
+| iforest/ties                 | IDENTICAL x4 | 5043855ee14799da | 5043855ee14799da | 5043855ee14799da | 5043855ee14799da |
+
+summary: IDENTICAL=12
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gmm-random-init/base         | infer  | IDENTICAL x4 | 87226624dfab0f10 | 87226624dfab0f10 | 87226624dfab0f10 | 87226624dfab0f10 |
+| gmm-random-init/base         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | de637910417c0f6a |
+| gmm-random-init/base         | batch  | IDENTICAL x4 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 |
+| gmm-random-init/dupes        | infer  | IDENTICAL x4 | 87226624dfab0f10 | 87226624dfab0f10 | 87226624dfab0f10 | 87226624dfab0f10 |
+| gmm-random-init/dupes        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | de637910417c0f6a |
+| gmm-random-init/dupes        | batch  | IDENTICAL x4 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 |
+| gmm-random-init/ties         | infer  | IDENTICAL x4 | 5c4f620623f43daf | 5c4f620623f43daf | 5c4f620623f43daf | 5c4f620623f43daf |
+| gmm-random-init/ties         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4bf7497302af00ff |
+| gmm-random-init/ties         | batch  | IDENTICAL x4 | 6f7b606277388c47 | 6f7b606277388c47 | 6f7b606277388c47 | 6f7b606277388c47 |
+| gmm/base                     | infer  | IDENTICAL x4 | 140095763edf6c53 | 140095763edf6c53 | 140095763edf6c53 | 140095763edf6c53 |
+| gmm/base                     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | c4a997dc3ae320a2 |
+| gmm/base                     | batch  | IDENTICAL x4 | 599d547e666f29b2 | 599d547e666f29b2 | 599d547e666f29b2 | 599d547e666f29b2 |
+| gmm/dupes                    | infer  | IDENTICAL x4 | 140095763edf6c53 | 140095763edf6c53 | 140095763edf6c53 | 140095763edf6c53 |
+| gmm/dupes                    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | c4a997dc3ae320a2 |
+| gmm/dupes                    | batch  | IDENTICAL x4 | 599d547e666f29b2 | 599d547e666f29b2 | 599d547e666f29b2 | 599d547e666f29b2 |
+| gmm/ties                     | infer  | IDENTICAL x4 | dbb412e155fd4fb2 | dbb412e155fd4fb2 | dbb412e155fd4fb2 | dbb412e155fd4fb2 |
+| gmm/ties                     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | fa63a34d1b2e5088 |
+| gmm/ties                     | batch  | IDENTICAL x4 | 60796a07f79e71e9 | 60796a07f79e71e9 | 60796a07f79e71e9 | 60796a07f79e71e9 |
+| iforest-tuned/base           | infer  | IDENTICAL x4 | bcbf71b247c3951c | bcbf71b247c3951c | bcbf71b247c3951c | bcbf71b247c3951c |
+| iforest-tuned/base           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | b9c8ac0cfcb621b7 |
+| iforest-tuned/base           | batch  | IDENTICAL x4 | 23c01febba0472d9 | 23c01febba0472d9 | 23c01febba0472d9 | 23c01febba0472d9 |
+| iforest-tuned/dupes          | infer  | IDENTICAL x4 | b6c59cfe033236ce | b6c59cfe033236ce | b6c59cfe033236ce | b6c59cfe033236ce |
+| iforest-tuned/dupes          | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | fbf5432597bb751f |
+| iforest-tuned/dupes          | batch  | IDENTICAL x4 | c644f0ba93bd5487 | c644f0ba93bd5487 | c644f0ba93bd5487 | c644f0ba93bd5487 |
+| iforest-tuned/ties           | infer  | IDENTICAL x4 | 9f8aee8ed2215f71 | 9f8aee8ed2215f71 | 9f8aee8ed2215f71 | 9f8aee8ed2215f71 |
+| iforest-tuned/ties           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | d8e240e70ffb7034 |
+| iforest-tuned/ties           | batch  | IDENTICAL x4 | e2eb172cfc7af595 | e2eb172cfc7af595 | e2eb172cfc7af595 | e2eb172cfc7af595 |
+| iforest/base                 | infer  | IDENTICAL x4 | c4247bb3a6c4675e | c4247bb3a6c4675e | c4247bb3a6c4675e | c4247bb3a6c4675e |
+| iforest/base                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 547970b132aefe8b |
+| iforest/base                 | batch  | IDENTICAL x4 | 59fc2061e91cc75e | 59fc2061e91cc75e | 59fc2061e91cc75e | 59fc2061e91cc75e |
+| iforest/dupes                | infer  | IDENTICAL x4 | db8a00a8aa424f7c | db8a00a8aa424f7c | db8a00a8aa424f7c | db8a00a8aa424f7c |
+| iforest/dupes                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | fb2362d583209a88 |
+| iforest/dupes                | batch  | IDENTICAL x4 | bfeab82f12199afa | bfeab82f12199afa | bfeab82f12199afa | bfeab82f12199afa |
+| iforest/ties                 | infer  | IDENTICAL x4 | 288c5e41c62cddea | 288c5e41c62cddea | 288c5e41c62cddea | 288c5e41c62cddea |
+| iforest/ties                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 052acc3268f89dc5 |
+| iforest/ties                 | batch  | IDENTICAL x4 | d441bc2c72edfeab | d441bc2c72edfeab | d441bc2c72edfeab | d441bc2c72edfeab |
+
+summary (infer/model): IDENTICAL=12, OWED=12
+summary (batch): IDENTICAL=12
+summary (rlpair): 
+require-columns 4 over ['gmm', 'gmm-random-init', 'iforest', 'iforest-tuned']: OK (12 OWED)
+OWED gmm-random-init/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gmm-random-init/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gmm-random-init/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gmm/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gmm/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED gmm/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED iforest-tuned/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED iforest-tuned/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED iforest-tuned/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED iforest/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED iforest/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED iforest/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+summary (owed): OWED=12; the next release record owes exactly these cell parts; wrote bench/results/identity_break/2026-09-15_inference-iforest-gmm-hdbscan/owed.iforest-gmm.json

@@ -65,7 +65,12 @@ cmd_stage() {
     leg="$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"
     map=$(mktemp "${TMPDIR:-/tmp}/bincache-map.XXXXXX") || return 1
     chmod 600 "$map"
-    if ! with_creds plan --partition "$arch/$slug" --image "$image" --leg-id "$leg" > "$map"; then
+    # MOJOLEARN_BINCACHE_NEGATIVE=1 (tools/runpod_cpu_leg.sh) also lists the
+    # sabotage namespace, as sget rows only a negative-control build reads.
+    neg=""
+    [ "${MOJOLEARN_BINCACHE_NEGATIVE:-0}" = 1 ] && neg="--negative"
+    # shellcheck disable=SC2086
+    if ! with_creds plan --partition "$arch/$slug" --image "$image" --leg-id "$leg" $neg > "$map"; then
         rm -f "$map"
         echo "BINCACHE STAGING FAILED (plan); the body builds from source"
         return 1

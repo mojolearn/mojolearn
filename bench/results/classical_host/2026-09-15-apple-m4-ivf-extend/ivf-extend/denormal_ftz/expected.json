@@ -1,0 +1,78 @@
+{
+  "commit": "c6c6f79b075f2c00544977a1e94d47fdcf89f711",
+  "estimator": "IVFIndex",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "denormal_ftz",
+  "lane": "ivf-extend",
+  "model_sha256": "4defe96aca4c8e114387294b5a06472a5f0c3557255d695cb6f88677c8f2ab8e",
+  "numeric_mode": "identical",
+  "predictions": {
+    "extend_list_indices": {
+      "dtype": "<i4",
+      "sha256": "39e545394ad4720b6360e035e222fd5b48145cee41422d58308c3fa58de43d72",
+      "shape": [
+        4160
+      ]
+    },
+    "extend_lists": {
+      "dtype": "<i4",
+      "sha256": "0ab0a405a2263dd0a5bcb259ce46cbdb634909ae1348b0c565561252420b0c0d",
+      "shape": [
+        64
+      ]
+    },
+    "identity_hash": "3da4f22de1f06f6e",
+    "list_data": {
+      "dtype": "<f4",
+      "sha256": "fc224f75ec7a05f0eab0c044dd26f68f2c75b10b0c961262eca11ae8f42e9417",
+      "shape": [
+        4096,
+        16
+      ]
+    },
+    "list_indices": {
+      "dtype": "<i4",
+      "sha256": "5ec55b4a4c29b19da2009752d0340cb9fe66bdd22c803aae55c83cc5de9c1a6c",
+      "shape": [
+        4096
+      ]
+    },
+    "search_after_extend_ids": {
+      "dtype": "<i4",
+      "sha256": "7bc278f1d815bc554a18425b88d9ee858f8d6cd66dcac4d6ce55d937c6ee0d49",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_distances": {
+      "dtype": "<f4",
+      "sha256": "95ab29d16a5575c9a332b23079a6e58835918e6278bfeddd1042176a53bb7a8a",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_second_batch_ids": {
+      "dtype": "<i4",
+      "sha256": "f0e3cbd978a92b17f7a22f9d78b0b89c6ecb0ebb560b582bf5929d1a1ef11c94",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "seconds": 3.016741
+  },
+  "recorded_at": "2026-09-15T13:58:22-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "4e4a32ec62cf73fd1bd2f5ffa0a6be6345aaae4392587c3c784e9121b407d664"
+}

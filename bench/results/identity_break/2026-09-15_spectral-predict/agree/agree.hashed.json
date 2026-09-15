@@ -1,0 +1,57 @@
+{
+ "fixture": "hashed",
+ "mojolearn": "/root/mojolearn/python/mojolearn",
+ "spectral": {
+  "agree": 1964,
+  "embedding_max_abs_gap": 0.0012719249352812767,
+  "fitted_labels_hist": [
+   458,
+   463,
+   581,
+   498
+  ],
+  "heldout_embedding": "be9844dfd85f3d43",
+  "heldout_labels": "bed6847d78245bdc",
+  "heldout_labels_hist": [
+   57,
+   54,
+   80,
+   65
+  ],
+  "mu": [
+   1.0,
+   0.9790365695953369,
+   0.977726936340332,
+   0.9759872555732727
+  ],
+  "n": 2000,
+  "rate": 0.982
+ },
+ "spectral-precomputed": {
+  "agree": 999,
+  "embedding_max_abs_gap": 0.0003015762194991112,
+  "fitted_labels_hist": [
+   206,
+   277,
+   283,
+   234
+  ],
+  "heldout_embedding": "cbbcbeec1e70bd68",
+  "heldout_labels": "75ad032026c05264",
+  "heldout_labels_hist": [
+   56,
+   77,
+   70,
+   53
+  ],
+  "mu": [
+   1.0,
+   0.5512746572494507,
+   0.5453953742980957,
+   0.511667013168335
+  ],
+  "n": 1000,
+  "rate": 0.999
+ },
+ "vendor": "cpu"
+}

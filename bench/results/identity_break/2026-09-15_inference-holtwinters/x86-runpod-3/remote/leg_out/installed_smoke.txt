@@ -1,0 +1,9 @@
+mojolearn /tmp/wv/lib/python3.14/site-packages/mojolearn/__init__.py vendor cpu
+inference routes {'_mojolearn_embedding': '_mojolearn_embedding_infer_host', '_mojolearn_ivf': '_mojolearn_ivf_search_host', '_mojolearn_arima': '_mojolearn_forecast_host', '_mojolearn_tsa': '_mojolearn_forecast_host'}
+host dir ['_mojolearn_core_host.so', '_mojolearn_forecast_host.so']
+holtwinters plain class and host_model agree; HostExponentialSmoothing bound to /tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_forecast_host.so
+fit refuses: mojolearn: public CPU estimators support inference from saved models; fit/training is rese
+holtwinters-multiplicative plain class and host_model agree; HostExponentialSmoothing bound to /tmp/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_forecast_host.so
+fit refuses: mojolearn: public CPU estimators support inference from saved models; fit/training is rese
+kpss_test refuses: ImportError mojolearn: no CPU implementation of _mojolearn_tsa.kpss_test yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (the host binding _mojolearn_forecast_host is 
+installed smoke OK

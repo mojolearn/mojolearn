@@ -83,7 +83,12 @@ THE GIL is released around every device call, and nothing inside a
 """
 
 from std.os import abort
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
+from gaussian_process.host.gp_theta import (
+    gp_log64,
+    gp_restart_uniform,
+    gp_theta_param,
+)
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -109,8 +114,18 @@ from gaussian_process.checks.kernels import (
 from gaussian_process.estimator import (
     GPRegressor,
     gpr_fit_host,
+    gpr_lml_grad_host,
     gpr_predict_host,
+    gpr_sample_y_host,
 )
+# Gaussian process classification (lane/gaussian-process-classifier,
+# 2026-09-15): the binary Laplace fit and its latent prediction on the
+# device, the float64 probability on the host (DEVIATIONS 2830-2832).
+from gaussian_process.classifier import (
+    gpc_fit_binary_host,
+    gpc_predict_binary_host,
+)
+from gaussian_process.host.gpc_steps import gpc_proba
 # The Cholesky door (workstream D, 2026-09-14). `cholesky/` is already
 # linked into this binary because the GP factors through it; exposing the
 # one-shot host entries here adds no kernel and no second build.
@@ -584,6 +599,110 @@ def gpr_predict_binding(
     return PythonObject(n_clamped)
 
 
+def _gpr_sample_y_run(
+    model: GPRegressor,
+    x_star: List[Float32],
+    n_star: Int,
+    n_samples: Int,
+    seed: UInt64,
+    out_addr: Int,
+) raises:
+    """The GIL-free half of `gpr_sample_y_binding`."""
+    var y = gpr_sample_y_host(model, x_star, n_star, n_samples, seed)
+    copy_f32(y.unsafe_ptr(), _f32_ptr(out_addr), n_star * n_samples)
+
+
+def gpr_sample_y_binding(
+    addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`sample_y(X, n_samples, random_state)` on a model handed back in
+    (DEVIATION 2793, gaussian_process/checks/sample_y.mojo). Returns
+    `n_samples`; the draws are in the model's normalized scale.
+
+    `addrs` is the NINE buffer addresses, in this exact order (mirrored in
+    `python/mojolearn/_gp_impl.py::sample_y`):
+
+        0  xtrain          n_train * n_features float32, read
+        1  l               n_train * n_train float32, read
+        2  dual            n_train float32, read
+        3  xstar           n_star * n_features float32, read
+        4  kinds           n_nodes int32, read
+        5  kparams         n_nodes float32, read
+        6  ls_len          n_nodes int32, read
+        7  ls              max(n_ls, 1) float32, read
+        8  y_out           n_star * n_samples float32, WRITTEN (row i is
+                            query row i, column s is draw s)
+
+    `params` is, in this exact order:
+
+        0  n_train
+        1  n_features
+        2  n_star
+        3  n_nodes
+        4  n_ls
+        5  info            LAPACK's info from the fit, PASSED THROUGH so
+                            the refusal to sample from a failed fit fires
+                            by name (DEVIATION 1634)
+        6  n_samples       refused below 1 by name in Mojo
+        7  random_state's low 32 bits
+        8  random_state's high 32 bits
+    """
+    if len(addrs) != 9:
+        raise Error(
+            "gpr_sample_y: addrs must contain 9 addresses (xtrain, l, dual,"
+            " xstar, kinds, kparams, ls_len, ls, y_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 9:
+        raise Error(
+            "gpr_sample_y: params must contain 9 values (n_train, n_features,"
+            " n_star, n_nodes, n_ls, info, n_samples, seed_lo, seed_hi), got "
+            + String(len(params))
+        )
+    var out_addr = Int(py=addrs[8])
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_star = Int(py=params[2])
+    var n_nodes = Int(py=params[3])
+    var n_ls = Int(py=params[4])
+    var info = Int(py=params[5])
+    var n_samples = Int(py=params[6])
+    var seed = (UInt64(Int(py=params[8])) << 32) | UInt64(Int(py=params[7]))
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        Int(py=addrs[6]),
+        Int(py=addrs[7]),
+        n_nodes,
+        n_ls,
+        String("gpr_sample_y"),
+    )
+    var xt = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var l = read_f32(Int(py=addrs[1]), max(0, n_train * n_train))
+    var dual = read_f32(Int(py=addrs[2]), max(0, n_train))
+    var x_star = read_f32(Int(py=addrs[3]), max(0, n_star * n_features))
+    var yzero = List[Float32]()
+    var model = GPRegressor(
+        xt^,
+        yzero^,
+        n_train,
+        n_features,
+        spec^,
+        Float32(0.0),
+        l^,
+        dual^,
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
+        info,
+        0,
+    )
+    with GILReleased(Python()):
+        _gpr_sample_y_run(model, x_star, n_star, n_samples, seed, out_addr)
+    return PythonObject(n_samples)
+
+
 # ===========================================================================
 # THE CHOLESKY DOOR (workstream D, 2026-09-14). `cholesky/estimator.mojo`'s
 # one-shot host entries, reached through THIS binding because the GP build
@@ -746,6 +865,327 @@ def cholesky_solve_binding(
     return PythonObject(0)
 
 
+# ===========================================================================
+# GAUSSIAN PROCESS CLASSIFICATION (lane/gaussian-process-classifier,
+# 2026-09-15). One BINARY Laplace fit per call; the one-vs-rest loop past
+# two classes is python/mojolearn/_gpc_impl.py's (DEVIATION 2833). The ABI is
+# the GP's: an address list and a params list, each length-checked, orders
+# written out here and mirrored at the _gpc_impl.py call sites and in
+# bindings/_mojolearn_gp_host.mojo.
+# ===========================================================================
+
+
+def _gpc_fit_run(
+    x: List[Float32],
+    y: List[Float32],
+    spec: GPKernelSpec,
+    n_train: Int,
+    n_features: Int,
+    max_iter_predict: Int,
+    lp: MutPointer[Float32, MutUntrackedOrigin],
+    pp: MutPointer[Float32, MutUntrackedOrigin],
+    wp: MutPointer[Float32, MutUntrackedOrigin],
+    sp: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> Int:
+    """The GIL-free half of `gpc_fit_binding`."""
+    var fit = gpc_fit_binary_host(x, n_train, n_features, y, spec, max_iter_predict)
+    for i in range(n_train * n_train):
+        lp.unsafe_store(i, fit.l[i])
+    for i in range(n_train):
+        pp.unsafe_store(i, fit.pi[i])
+        wp.unsafe_store(i, fit.wsr[i])
+    # lml, n_iter, nb, in that order; each widens to float64 exactly.
+    sp.unsafe_store(0, Float64(fit.lml))
+    sp.unsafe_store(1, Float64(fit.n_iter))
+    sp.unsafe_store(2, Float64(fit.nb))
+    return fit.n_iter
+
+
+def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """One binary `_BinaryGaussianProcessClassifierLaplace(kernel,
+    optimizer=None).fit(X, y)` with `y` encoded to 0 and 1. Returns the
+    Newton iteration count (DEVIATION 2830).
+
+    `addrs`, in this exact order:
+
+        0  x               n_train * n_features float32, row-major, read
+        1  y               n_train float32, each 0 or 1, read
+        2  kinds           n_nodes int32, read
+        3  kparams         n_nodes float32, read
+        4  ls_len          n_nodes int32, read
+        5  ls              max(n_ls, 1) float32, read
+        6  l_out           n_train * n_train float32, WRITTEN (L of B)
+        7  pi_out          n_train float32, WRITTEN
+        8  wsr_out         n_train float32, WRITTEN
+        9  scalars_out     3 float64, WRITTEN: lml, n_iter, nb
+
+    `params`, in this exact order: 0 n_train, 1 n_features, 2 n_nodes,
+    3 n_ls, 4 max_iter_predict.
+    """
+    if len(addrs) != 10:
+        raise Error(
+            "gpc_fit: addrs must contain 10 addresses (x, y, kinds, kparams,"
+            " ls_len, ls, l_out, pi_out, wsr_out, scalars_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 5:
+        raise Error(
+            "gpc_fit: params must contain 5 values (n_train, n_features,"
+            " n_nodes, n_ls, max_iter_predict), got "
+            + String(len(params))
+        )
+    var lp = _f32_ptr(Int(py=addrs[6]))
+    var pp = _f32_ptr(Int(py=addrs[7]))
+    var wp = _f32_ptr(Int(py=addrs[8]))
+    var sp = _f64_ptr(Int(py=addrs[9]))
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_nodes = Int(py=params[2])
+    var n_ls = Int(py=params[3])
+    var max_iter_predict = Int(py=params[4])
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[2]),
+        Int(py=addrs[3]),
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        n_nodes,
+        n_ls,
+        String("gpc_fit"),
+    )
+    var x = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    var n_iter = 0
+    with GILReleased(Python()):
+        n_iter = _gpc_fit_run(
+            x, y, spec, n_train, n_features, max_iter_predict, lp, pp, wp, sp
+        )
+    return PythonObject(n_iter)
+
+
+def _gpc_predict_run(
+    xt: List[Float32],
+    y: List[Float32],
+    pi: List[Float32],
+    wsr: List[Float32],
+    l: List[Float32],
+    spec: GPKernelSpec,
+    x_star: List[Float32],
+    n_train: Int,
+    n_features: Int,
+    n_star: Int,
+    want_proba: Bool,
+    mean_addr: Int,
+    var_addr: Int,
+    proba_addr: Int,
+) raises -> Int:
+    """The GIL-free half of `gpc_predict_binding`. The variance and
+    probability addresses are resolved only when `want_proba`."""
+    var lat = gpc_predict_binary_host(
+        xt, y, pi, wsr, l, n_train, n_features, spec, x_star, n_star, want_proba
+    )
+    var mp = _f32_ptr(mean_addr)
+    for t in range(n_star):
+        mp.unsafe_store(t, lat.mean[t])
+    if want_proba:
+        var p = gpc_proba(lat.mean, lat.variance)
+        var vp = _f32_ptr(var_addr)
+        var pr = _f64_ptr(proba_addr)
+        for t in range(n_star):
+            vp.unsafe_store(t, lat.variance[t])
+            pr.unsafe_store(t, p[t])
+    return 0
+
+
+def gpc_predict_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """The latent mean, and with `want_proba` the latent variance and the
+    probability of class 1, of one binary fit at the query rows. Returns 0.
+
+    `addrs`, in this exact order:
+
+        0  xtrain          n_train * n_features float32, read
+        1  y               n_train float32 (0 or 1), read
+        2  pi              n_train float32, read
+        3  wsr             n_train float32, read
+        4  l               n_train * n_train float32, read
+        5  xstar           n_star * n_features float32, read
+        6  kinds           n_nodes int32, read
+        7  kparams         n_nodes float32, read
+        8  ls_len          n_nodes int32, read
+        9  ls              max(n_ls, 1) float32, read
+        10 mean_out        n_star float32, WRITTEN
+        11 var_out         n_star float32, WRITTEN when want_proba
+        12 proba_out       n_star float64, WRITTEN when want_proba
+
+    `params`, in this exact order: 0 n_train, 1 n_features, 2 n_star,
+    3 n_nodes, 4 n_ls, 5 want_proba.
+    """
+    if len(addrs) != 13:
+        raise Error(
+            "gpc_predict: addrs must contain 13 addresses (xtrain, y, pi,"
+            " wsr, l, xstar, kinds, kparams, ls_len, ls, mean_out, var_out,"
+            " proba_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 6:
+        raise Error(
+            "gpc_predict: params must contain 6 values (n_train, n_features,"
+            " n_star, n_nodes, n_ls, want_proba), got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_star = Int(py=params[2])
+    var n_nodes = Int(py=params[3])
+    var n_ls = Int(py=params[4])
+    var want_proba = Int(py=params[5]) != 0
+    var mean_addr = Int(py=addrs[10])
+    var var_addr = Int(py=addrs[11])
+    var proba_addr = Int(py=addrs[12])
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[6]),
+        Int(py=addrs[7]),
+        Int(py=addrs[8]),
+        Int(py=addrs[9]),
+        n_nodes,
+        n_ls,
+        String("gpc_predict"),
+    )
+    var xt = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    var pi = read_f32(Int(py=addrs[2]), max(0, n_train))
+    var wsr = read_f32(Int(py=addrs[3]), max(0, n_train))
+    var l = read_f32(Int(py=addrs[4]), max(0, n_train * n_train))
+    var x_star = read_f32(Int(py=addrs[5]), max(0, n_star * n_features))
+    var rc = 0
+    with GILReleased(Python()):
+        rc = _gpc_predict_run(
+            xt, y, pi, wsr, l, spec, x_star, n_train, n_features, n_star,
+            want_proba, mean_addr, var_addr, proba_addr,
+        )
+    return PythonObject(rc)
+
+
+# ===========================================================================
+# KERNEL HYPERPARAMETER OPTIMIZATION (lane/gp-optimizer, 2026-09-15).
+# The optimizer's state machine is python/mojolearn/_gp_optimizer.py
+# (DEVIATION 2881); what it cannot do identically in Python float64 lives
+# here: the likelihood and its gradient (DEVIATION 2880), the log and exp of
+# the hyperparameters, and the Philox restart draws.
+# ===========================================================================
+
+
+def _gpr_lml_grad_run(
+    x: List[Float32],
+    y: List[Float32],
+    spec: GPKernelSpec,
+    free: List[Int32],
+    n_train: Int,
+    n_features: Int,
+    alpha: Float32,
+    gp: MutPointer[Float64, MutUntrackedOrigin],
+    sp: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> Int:
+    """The GIL-free half of `gpr_lml_grad_binding`."""
+    var r = gpr_lml_grad_host(x, n_train, n_features, y, spec, free, alpha)
+    for i in range(len(r.grad)):
+        gp.unsafe_store(i, Float64(r.grad[i]))
+    sp.unsafe_store(0, Float64(r.info))
+    sp.unsafe_store(1, Float64(r.lml))
+    return r.info
+
+
+def gpr_lml_grad_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`log_marginal_likelihood(theta, eval_gradient=True)` at the kernel
+    handed in (DEVIATION 2880). Returns LAPACK's `info`.
+
+    `addrs`, in this exact order (mirrored in `python/mojolearn/_gp_impl.py`
+    and `bindings/_mojolearn_gp_host.mojo`):
+
+        0  x               n_train * n_features float32, read
+        1  y               n_train float32, read
+        2  kinds           n_nodes int32, read
+        3  kparams         n_nodes float32, read
+        4  ls_len          n_nodes int32, read
+        5  ls              max(n_ls, 1) float32, read
+        6  free            n_nodes int32 (0 fixed, 1 free), read
+        7  grad_out        max(n_free, 1) float64, WRITTEN (float32 widened)
+        8  scalars_out     2 float64, WRITTEN: info, lml
+
+    `params`: 0 n_train, 1 n_features, 2 n_nodes, 3 n_ls, 4 alpha.
+    """
+    if len(addrs) != 9:
+        raise Error(
+            "gpr_lml_grad: addrs must contain 9 addresses (x, y, kinds,"
+            " kparams, ls_len, ls, free, grad_out, scalars_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 5:
+        raise Error(
+            "gpr_lml_grad: params must contain 5 values (n_train, n_features,"
+            " n_nodes, n_ls, alpha), got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_nodes = Int(py=params[2])
+    var n_ls = Int(py=params[3])
+    var alpha = Float32(Float64(py=params[4]))
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4]), Int(py=addrs[5]),
+        n_nodes, n_ls, String("gpr_lml_grad"),
+    )
+    var free = read_i32(Int(py=addrs[6]), max(0, n_nodes))
+    var gp = _f64_ptr(Int(py=addrs[7]))
+    var sp = _f64_ptr(Int(py=addrs[8]))
+    var x = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    var info = 0
+    with GILReleased(Python()):
+        info = _gpr_lml_grad_run(x, y, spec, free, n_train, n_features, alpha, gp, sp)
+    return PythonObject(info)
+
+
+def gp_log64_binding(values: PythonObject) raises -> PythonObject:
+    """`identical_log64` over a list of floats: theta of hyperparameter values
+    and bounds (DEVIATION 2880)."""
+    var out = Python.list()
+    for i in range(len(values)):
+        out.append(PythonObject(gp_log64(Float64(py=values[i]))))
+    return out
+
+
+def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
+    """`Float32(identical_exp64(theta))` over a list, widened back to Python
+    floats: the float32 hyperparameters that run at theta (DEVIATION 2880)."""
+    var out = Python.list()
+    for i in range(len(values)):
+        out.append(PythonObject(Float64(gp_theta_param(Float64(py=values[i])))))
+    return out
+
+
+def gp_restart_uniforms_binding(params: PythonObject) raises -> PythonObject:
+    """The restart draws (DEVIATION 2881): `params` = n_restarts, n_dims,
+    random_state low 32 bits, high 32 bits; returns n_restarts * n_dims
+    doubles in [0, 1), restart r's dimension j at r * n_dims + j."""
+    if len(params) != 4:
+        raise Error(
+            "gp_restart_uniforms: params must contain 4 values (n_restarts,"
+            " n_dims, seed_lo, seed_hi), got " + String(len(params))
+        )
+    var nr = Int(py=params[0])
+    var nd = Int(py=params[1])
+    var seed = (UInt64(Int(py=params[3])) << 32) | UInt64(Int(py=params[2]))
+    var out = Python.list()
+    for r in range(nr):
+        for j in range(nd):
+            out.append(PythonObject(gp_restart_uniform(seed, r, j)))
+    return out
+
+
 def gp_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
@@ -759,6 +1199,13 @@ def PyInit__mojolearn_gp() abi("C") -> PythonObject:
         m.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         m.def_function[gpr_fit_binding]("gpr_fit")
         m.def_function[gpr_predict_binding]("gpr_predict")
+        m.def_function[gpr_sample_y_binding]("gpr_sample_y")
+        m.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
+        m.def_function[gp_log64_binding]("gp_log64")
+        m.def_function[gp_theta_params_binding]("gp_theta_params")
+        m.def_function[gp_restart_uniforms_binding]("gp_restart_uniforms")
+        m.def_function[gpc_fit_binding]("gpc_fit")
+        m.def_function[gpc_predict_binding]("gpc_predict")
         # The Cholesky door (workstream D, 2026-09-14).
         m.def_function[cholesky_parallel_available]("cholesky_parallel_available")
         m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")

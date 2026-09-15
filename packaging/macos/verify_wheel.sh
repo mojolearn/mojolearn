@@ -131,8 +131,12 @@ print(f'PASS installed host bindings: {len(host_surface.wheel_bindings())} ({", 
 # reference card directory `verify` reads, and the harness, the three
 # columns and the commit witness `identity` reads. `identity --check` runs
 # no fit; it resolves every file and exits 0 or says which is missing.
-import subprocess
-subprocess.run([sys.executable, '-m', 'mojolearn', 'identity', '--check'], check=True)
+import os, subprocess
+# env=dict(os.environ), never the inherited C environment: loading the Mojo
+# runtime above setenv()s PYTHONEXECUTABLE, PYTHONPATH and MOJO_PYTHON_LIBRARY
+# at the C level (os.environ does not see them), and a child that inherits
+# PYTHONEXECUTABLE leaves this venv on Python 3.11 and later.
+subprocess.run([sys.executable, '-m', 'mojolearn', 'identity', '--check'], check=True, env=dict(os.environ))
 from mojolearn import _verify
 _verify.load_differ()
 assert pathlib.Path(_verify.reference_dir()).is_dir(), 'installed wheel has no reference_cards/'

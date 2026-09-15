@@ -1,0 +1,21 @@
+....ss.................................................................. [ 43%]
+......................................................................F. [ 86%]
+......................                                                   [100%]
+=================================== FAILURES ===================================
+______________________ test_recordings_and_columns_exist _______________________
+
+    def test_recordings_and_columns_exist():
+        for rel in (host_surface.CLASSICAL_RECORDED + host_surface.FORECAST_RECORDED + host_surface.INFERENCE_ONLY_RECORDED
+                    + host_surface.SEARCH_LOOKUP_RECORDED
+                    + host_surface.CLASSICAL_GPU_COLUMNS
+                    + (host_surface.FOREST_RECORDED_ROOT,)):
+>           assert (ROOT / rel).exists(), f"the manifest names {rel}, which is not in the tree"
+E           AssertionError: the manifest names bench/results/classical_host/2026-09-13-apple-m4, which is not in the tree
+E           assert False
+E            +  where False = exists()
+E            +    where exists = (PosixPath('/root/mojolearn') / 'bench/results/classical_host/2026-09-13-apple-m4').exists
+
+python/mojolearn/tests/test_host_surface.py:242: AssertionError
+=========================== short test summary info ============================
+FAILED python/mojolearn/tests/test_host_surface.py::test_recordings_and_columns_exist
+1 failed, 163 passed, 2 skipped in 0.66s

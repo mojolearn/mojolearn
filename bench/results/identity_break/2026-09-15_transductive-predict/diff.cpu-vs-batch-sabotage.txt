@@ -1,0 +1,97 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_solver_host'] commit=bd9ef2eee4c4ebeb16112cb647828320b593aedc
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_solver_host'] commit=bd9ef2eee4c4ebeb16112cb647828320b593aedc
+NOTE: column cpu-amd-epyc-7713-64-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7713-64-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7713-64-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7713-64-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7713-64-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7713-64-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7713-64-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-7713-64-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|------------|------------------|------------------|
+| agglomerative/base           | IDENTICAL x2 | ad11b976bfbfc20b | ad11b976bfbfc20b |
+| agglomerative/denormal       | ONE-COLUMN | b05982504c7e8646 | (not run)        |
+| agglomerative/dupes          | ONE-COLUMN | ad11b976bfbfc20b | (not run)        |
+| agglomerative/ties           | ONE-COLUMN | 7dea8a094150b8a9 | (not run)        |
+| dbscan-brute-l1/base         | IDENTICAL x2 | 0e71495be68d20c8 | 0e71495be68d20c8 |
+| dbscan-brute-l1/denormal     | ONE-COLUMN | 21d5ea1c72f42a78 | (not run)        |
+| dbscan-brute-l1/dupes        | ONE-COLUMN | 0e71495be68d20c8 | (not run)        |
+| dbscan-brute-l1/ties         | ONE-COLUMN | b7535355c1581603 | (not run)        |
+| dbscan-weighted/base         | IDENTICAL x2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 |
+| dbscan-weighted/denormal     | ONE-COLUMN | d3c48a5338826d18 | (not run)        |
+| dbscan-weighted/dupes        | ONE-COLUMN | 3aa7f30692765cf2 | (not run)        |
+| dbscan-weighted/ties         | ONE-COLUMN | 525addc009cffb40 | (not run)        |
+| dbscan/base                  | IDENTICAL x2 | 64df251bd00de81b | 64df251bd00de81b |
+| dbscan/denormal              | ONE-COLUMN | 9c0b3563fc16b652 | (not run)        |
+| dbscan/dupes                 | ONE-COLUMN | 64df251bd00de81b | (not run)        |
+| dbscan/ties                  | ONE-COLUMN | b7535355c1581603 | (not run)        |
+
+summary: IDENTICAL=4, ONE-COLUMN=12
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| agglomerative/base           | infer  | IDENTICAL x2 | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| agglomerative/base           | model  | IDENTICAL x2 | 9bb9f86300c44f5f | 9bb9f86300c44f5f |
+| agglomerative/base           | batch  | BATCH_MOVED  | a8e67882b424a053 | BATCH_MOVED      |
+| agglomerative/denormal       | infer  | ONE-COLUMN   | 2b2d3f329eec69f7 | (not run)        |
+| agglomerative/denormal       | model  | ONE-COLUMN   | 0749a7721feb2709 | (not run)        |
+| agglomerative/denormal       | batch  | ONE-COLUMN   | a2740d2ed4d74812 | (not run)        |
+| agglomerative/dupes          | infer  | ONE-COLUMN   | 3a6472714f51d8ab | (not run)        |
+| agglomerative/dupes          | model  | ONE-COLUMN   | 9bb9f86300c44f5f | (not run)        |
+| agglomerative/dupes          | batch  | ONE-COLUMN   | a8e67882b424a053 | (not run)        |
+| agglomerative/ties           | infer  | ONE-COLUMN   | d161892b4ef55128 | (not run)        |
+| agglomerative/ties           | model  | ONE-COLUMN   | 64a8cd1101ec17ba | (not run)        |
+| agglomerative/ties           | batch  | ONE-COLUMN   | a8e67882b424a053 | (not run)        |
+| dbscan-brute-l1/base         | infer  | IDENTICAL x2 | 291d58b2feb4ae4e | 291d58b2feb4ae4e |
+| dbscan-brute-l1/base         | model  | IDENTICAL x2 | 619ee7c70d1194cb | 619ee7c70d1194cb |
+| dbscan-brute-l1/base         | batch  | BATCH_MOVED  | df8d83ccb3f26700 | BATCH_MOVED      |
+| dbscan-brute-l1/denormal     | infer  | ONE-COLUMN   | 3a6472714f51d8ab | (not run)        |
+| dbscan-brute-l1/denormal     | model  | ONE-COLUMN   | 8506a36c8f053030 | (not run)        |
+| dbscan-brute-l1/denormal     | batch  | ONE-COLUMN   | a8e67882b424a053 | (not run)        |
+| dbscan-brute-l1/dupes        | infer  | ONE-COLUMN   | 291d58b2feb4ae4e | (not run)        |
+| dbscan-brute-l1/dupes        | model  | ONE-COLUMN   | 619ee7c70d1194cb | (not run)        |
+| dbscan-brute-l1/dupes        | batch  | ONE-COLUMN   | df8d83ccb3f26700 | (not run)        |
+| dbscan-brute-l1/ties         | infer  | ONE-COLUMN   | 63990f64c63d296b | (not run)        |
+| dbscan-brute-l1/ties         | model  | ONE-COLUMN   | d68a5069f692910e | (not run)        |
+| dbscan-brute-l1/ties         | batch  | ONE-COLUMN   | be9e40c554329827 | (not run)        |
+| dbscan-weighted/base         | infer  | IDENTICAL x2 | 29d206737766caf0 | 29d206737766caf0 |
+| dbscan-weighted/base         | model  | IDENTICAL x2 | 0db3aac99393d616 | 0db3aac99393d616 |
+| dbscan-weighted/base         | batch  | BATCH_MOVED  | f7e7d24690d3107e | BATCH_MOVED      |
+| dbscan-weighted/denormal     | infer  | ONE-COLUMN   | 3a6472714f51d8ab | (not run)        |
+| dbscan-weighted/denormal     | model  | ONE-COLUMN   | 0c1ef67464dfa955 | (not run)        |
+| dbscan-weighted/denormal     | batch  | ONE-COLUMN   | a8e67882b424a053 | (not run)        |
+| dbscan-weighted/dupes        | infer  | ONE-COLUMN   | 29d206737766caf0 | (not run)        |
+| dbscan-weighted/dupes        | model  | ONE-COLUMN   | 0db3aac99393d616 | (not run)        |
+| dbscan-weighted/dupes        | batch  | ONE-COLUMN   | f7e7d24690d3107e | (not run)        |
+| dbscan-weighted/ties         | infer  | ONE-COLUMN   | 9c8a2ca10937b6b1 | (not run)        |
+| dbscan-weighted/ties         | model  | ONE-COLUMN   | cca8baca73f60bac | (not run)        |
+| dbscan-weighted/ties         | batch  | ONE-COLUMN   | 1b1361f65f9b5250 | (not run)        |
+| dbscan/base                  | infer  | IDENTICAL x2 | e6e720fcb54b180e | e6e720fcb54b180e |
+| dbscan/base                  | model  | IDENTICAL x2 | c36812c6260e7ee6 | c36812c6260e7ee6 |
+| dbscan/base                  | batch  | BATCH_MOVED  | f7e7d24690d3107e | BATCH_MOVED      |
+| dbscan/denormal              | infer  | ONE-COLUMN   | 3a6472714f51d8ab | (not run)        |
+| dbscan/denormal              | model  | ONE-COLUMN   | af8f5b102930fc66 | (not run)        |
+| dbscan/denormal              | batch  | ONE-COLUMN   | a8e67882b424a053 | (not run)        |
+| dbscan/dupes                 | infer  | ONE-COLUMN   | e6e720fcb54b180e | (not run)        |
+| dbscan/dupes                 | model  | ONE-COLUMN   | c36812c6260e7ee6 | (not run)        |
+| dbscan/dupes                 | batch  | ONE-COLUMN   | f7e7d24690d3107e | (not run)        |
+| dbscan/ties                  | infer  | ONE-COLUMN   | 63990f64c63d296b | (not run)        |
+| dbscan/ties                  | model  | ONE-COLUMN   | 7c766eb707695149 | (not run)        |
+| dbscan/ties                  | batch  | ONE-COLUMN   | be9e40c554329827 | (not run)        |
+
+summary (infer/model): IDENTICAL=8, ONE-COLUMN=24
+summary (batch): BATCH_MOVED=4, ONE-COLUMN=12
+summary (rlpair): 

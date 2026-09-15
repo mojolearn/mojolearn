@@ -50,9 +50,12 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
     OBJECTIVE_POISSON,
+    OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUANTILE,
+    OBJECTIVE_QUERY_RMSE,
     OBJECTIVE_RMSE,
     OBJECTIVE_TWEEDIE,
+    OBJECTIVE_YETI_RANK,
 )
 from gbdt.ctrs.ctr import (
     CTR_BORDERS,
@@ -1319,6 +1322,22 @@ def get_estimation_method_defaults(
         method = LEAF_ESTIMATION_NEWTON
         newton = 1
         gradient = 10
+    elif f == OBJECTIVE_QUERY_RMSE:
+        # `:94-98`
+        method = LEAF_ESTIMATION_NEWTON
+        newton = 1
+        gradient = 1
+    elif f == OBJECTIVE_PAIR_LOGIT:
+        # `:120-125`
+        method = LEAF_ESTIMATION_NEWTON
+        newton = 10
+        gradient = 40
+    elif f == OBJECTIVE_YETI_RANK:
+        # `:166-172`: the one ranking loss whose L2 default is 0, not 3
+        l2 = Float32(0.0)
+        method = LEAF_ESTIMATION_NEWTON
+        newton = 1
+        gradient = 1
     elif f == OBJECTIVE_TWEEDIE:
         # `:221-231`. THE GPU ARM: twenty iterations, where their CPU
         # takes one. We are a GPU, so twenty.
@@ -1412,6 +1431,12 @@ def set_leaves_estimation_default(
         l2 = l2_override
 
     if method_override >= 0:
+        if method_override != method and loss.loss_function == OBJECTIVE_YETI_RANK:
+            # `:307-308`, their message verbatim
+            raise Error(
+                "At the moment, in the YetiRank mode, changing the"
+                " leaf_estimation_method parameter is prohibited."
+            )
         method = method_override
 
     var iterations: Int

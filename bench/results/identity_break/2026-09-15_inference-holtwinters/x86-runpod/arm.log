@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod upsxf62678fbvz ...
+ARMED. Pod upsxf62678fbvz is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-inf-holtwinters/bench/results/identity_break/2026-09-15_inference-holtwinters/x86-runpod/lease/upsxf62678fbvz.lease
+  extend with: tools/runpod_guard.sh extend upsxf62678fbvz '-p 36314 root@157.157.221.29' <minutes>

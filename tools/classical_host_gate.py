@@ -7,7 +7,10 @@ whitened PCA (`pca-whiten`, an identity_break lane of its own), and since the
 knn host inference lane (2026-09-14) NearestNeighbors (`kneighbors`: distances
 and indices), KNeighborsClassifier (`predict`, `predict_proba`) and
 KNeighborsRegressor (`predict`), lanes knn, knn-clf and knn-reg, through
-`mojolearn/host/_mojolearn_core_host.so`.
+`mojolearn/host/_mojolearn_core_host.so`; since the neighbors and density
+inference lane (2026-09-15) also the k-NN metric, ball cover and weighted
+lanes, RadiusNeighbors (lanes radius, radius-manhattan, radius-chebyshev,
+radius-minkowski-p3) and the KDE kernel, metric and weight lanes.
 
 Two halves over tools/identity_break.py's own nine fixtures, so the
 held-out rows here ARE the rows behind the `infer` column of the committed
@@ -57,6 +60,93 @@ from forest_host_gate import (  # noqa: E402
 
 #: Held-out rows each lane probes, `identity_break.py`'s `Xh[:256]`.
 PROBE_ROWS = 256
+
+
+def _forecast_pair(e):
+    """identity_break's forecaster infer probe, the same call and the same
+    byte check (`_same_bytes`), so its hash is that column's cell."""
+    ib = identity_tool()
+    h = ib.FORECAST_HORIZON
+    return ib._same_bytes("forecast(h)", e.forecast(h),
+                          "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + h))
+
+
+def _radius_probe(e, X):
+    """identity_break's radius infer probe: `_ragged` over the sorted query
+    of the first 64 held-out rows."""
+    return identity_tool()._ragged(e.radius_neighbors(X[:64], sort_results=True))
+
+
+def _approximate_predict(e, X):
+    """identity_break's hdbscan infer probe: approximate_predict's labels and
+    probabilities on the held-out rows' first four columns, then
+    membership_vector on the same rows and all_points_membership_vectors
+    (the probe since HDBSCAN's soft clustering, 2026-09-15)."""
+    from mojolearn.hdbscan import (
+        all_points_membership_vectors, approximate_predict, membership_vector,
+    )
+    return tuple(approximate_predict(e, X[:, :4])) + (
+        membership_vector(e, X[:, :4]), all_points_membership_vectors(e))
+
+
+#: The surfaces every ARIMA lane adds beside its identity probe.
+_ARIMA_EXTRAS = {
+    'predict_in_sample': lambda e, X: e.predict(0, e.n_obs_),
+    'predict_straddle': lambda e, X: e.predict(e.n_obs_ - 16, e.n_obs_ + 16),
+    'params': lambda e, X: e.params_,
+    'sigma2': lambda e, X: e.sigma2_,
+}
+
+
+def _hw_forecast_pair(e):
+    """identity_break's Holt-Winters infer probe: forecast(H) through both
+    return paths, the flat buffer and the `index=0` strided read, held to the
+    same bytes (`_same_bytes`), so its hash is that column's cell."""
+    ib = identity_tool()
+    h = ib.FORECAST_HORIZON
+    return ib._same_bytes("forecast(h)", e.forecast(h), "forecast(h, index=0)", e.forecast(h, index=0))
+
+
+#: The surfaces every Holt-Winters lane adds beside its identity probe
+#: (lane/inference-holtwinters, 2026-09-15): the in-sample one-step
+#: predictions, a prediction straddling the end of the series, and the fitted
+#: state a loaded model answers.
+_HW_EXTRAS = {
+    'predict_in_sample': lambda e, X: e.predict(0, e.n),
+    'predict_straddle': lambda e, X: e.predict(e.n - 16, e.n + 16),
+    'level': lambda e, X: e.level_,
+    'trend': lambda e, X: e.trend_,
+    'season': lambda e, X: e.season_,
+    'alpha': lambda e, X: e.alpha_,
+    'beta': lambda e, X: e.beta_,
+    'gamma': lambda e, X: e.gamma_,
+    'sse': lambda e, X: e.sse_,
+}
+
+
+def _ivf_probe(e, Q):
+    """identity_break's ivf infer probe: `search` then `n_candidates_`."""
+    d, i = e.search(Q)
+    return (d, i, e.n_candidates_)
+
+
+_IVF_EXTRAS = {
+    'search_second_batch_ids': lambda e, X: e.search(X[64:128])[1],
+    'list_indices': lambda e, X: e.list_indices_,
+    'list_data': lambda e, X: e.list_data_,
+}
+
+
+def _embedding_probe(e, X):
+    """identity_break's embedding infer probe: the 512 held-out ids (the
+    first 512 bytes of the held-out rows, which `Xh[:256]` holds)."""
+    import numpy as np
+    ib = identity_tool()
+    V, T = e.num_embeddings, 512
+    ids = (ib._ids(X, 1, T).reshape(T) % V).astype(np.int32)
+    return (np.asarray(e.forward(ids)),)
+
+
 #: lane -> (estimator, identity_break probe, extra surfaces). The identity
 #: probe is the tuple `identity_break` hashes for the `infer` column, in its
 #: order (the knn lanes probe `Xh[:64]`, as `identity_break` does); the
@@ -93,13 +183,203 @@ LANES = {
                             lambda e, X: (e.predict_proba(X), e.predict(X)),
                             {'predict': lambda e, X: e.predict(X),
                              'decision_function': lambda e, X: e.decision_function(X)}),
+    # The neighbors and density inference lane (2026-09-15): every k-NN
+    # metric and the ball cover arm, the distance-weighted vote and mean, the
+    # radius query on its four metrics and the KDE kernel and metric pairs,
+    # each probed exactly as its identity_break lane probes the held-out
+    # rows (the radius probe is identity_break's `_ragged` over the sorted
+    # query; the cosine KDE pair shifts its rows by 8, as the lane does).
+    'knn-sqeuclidean': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                               {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-manhattan': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                             {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-chebyshev': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                             {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-cosine': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                          {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-minkowski-p3': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                                {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-rbc': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                       {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-clf-distance': ('KNeighborsClassifier',
+                         lambda e, X: (e.predict(X[:64]), e.predict_proba(X[:64])),
+                         {'predict_proba': lambda e, X: e.predict_proba(X[:64])}),
+    'knn-reg-distance': ('KNeighborsRegressor', lambda e, X: (e.predict(X[:64]),), {}),
+    'radius': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'radius-manhattan': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'radius-chebyshev': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'radius-minkowski-p3': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'kde-tophat-sqeuclidean': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'kde-epanechnikov-l1': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'kde-exponential-chebyshev': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'kde-linear-cosine': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4] + 8.0),), {}),
+    'kde-cosine-minkowski': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'kde-weighted': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    # IsolationForest (same lane): identity_break scores every held-out row
+    # and predicts the first 512, so these two lanes probe the whole
+    # held-out draw (LANE_PROBE_ROWS) rather than its first PROBE_ROWS.
+    'iforest': ('IsolationForest', lambda e, X: (e.score_samples(X), e.predict(X[:512])),
+               {'predict': lambda e, X: e.predict(X[:512]),
+                'decision_function': lambda e, X: e.decision_function(X)}),
+    'iforest-tuned': ('IsolationForest', lambda e, X: (e.score_samples(X), e.predict(X[:512])),
+                     {'predict': lambda e, X: e.predict(X[:512]),
+                      'decision_function': lambda e, X: e.decision_function(X)}),
+    # GaussianMixture (same lane), through the inference-only mixture
+    # binding: 64 held-out rows of the first four columns, as the lanes ask.
+    'gmm': ('GaussianMixture',
+            lambda e, X: (e.score_samples(X[:64, :4]), e.predict(X[:64, :4]), e.predict_proba(X[:64, :4])),
+            {'predict': lambda e, X: e.predict(X[:64, :4]),
+             'predict_proba': lambda e, X: e.predict_proba(X[:64, :4])}),
+    'gmm-random-init': ('GaussianMixture', lambda e, X: (e.score_samples(X[:64, :4]),),
+                        {'predict': lambda e, X: e.predict(X[:64, :4])}),
+    # GaussianMixture.sample (same lane, after main's gmm-sample lanes): the
+    # identity_break probe is sample(1024)'s (X, y) from the saved model; it
+    # reads no held-out rows.
+    'gmm-sample': ('GaussianMixture', lambda e, X: tuple(e.sample(1024)),
+                   {'sample_y': lambda e, X: e.sample(1024)[1]}),
+    'gmm-random-init-sample': ('GaussianMixture', lambda e, X: tuple(e.sample(1024)),
+                               {'sample_y': lambda e, X: e.sample(1024)[1]}),
+    # GaussianProcessRegressor (same lane), through the inference-only gp
+    # binding: the predictive mean and std of 64 held-out rows of four
+    # columns, as every GP lane asks, normalize_y's scale-back included.
+    'gp': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+          {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-matern12': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                   {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-matern32': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                   {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-matern52-ard': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                       {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-normalize-y': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                      {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    # GaussianProcessClassifier (same lane, after lane/gaussian-process-
+    # classifier merged): predict and predict_proba of 64 held-out rows of
+    # four columns, the pair both gpc lanes hash, through gpc_predict.
+    'gpc': ('GaussianProcessClassifier', lambda e, X: (e.predict(X[:64, :4]), e.predict_proba(X[:64, :4])),
+           {'predict_proba': lambda e, X: e.predict_proba(X[:64, :4])}),
+    'gpc-multiclass': ('GaussianProcessClassifier', lambda e, X: (e.predict(X[:64, :4]), e.predict_proba(X[:64, :4])),
+                      {'predict_proba': lambda e, X: e.predict_proba(X[:64, :4])}),
+    # HDBSCAN (same lane): approximate_predict's labels and probabilities,
+    # membership_vector on the first 256 held-out rows of four columns and
+    # all_points_membership_vectors, the tuple both lanes hash.
+    'hdbscan': ('HDBSCAN', lambda e, X: _approximate_predict(e, X),
+               {'probabilities': lambda e, X: _approximate_predict(e, X)[1],
+                'membership_vector': lambda e, X: _approximate_predict(e, X)[2],
+                'all_points_membership_vectors': lambda e, X: _approximate_predict(e, X)[3]}),
+    'hdbscan-leaf': ('HDBSCAN', lambda e, X: _approximate_predict(e, X),
+                    {'probabilities': lambda e, X: _approximate_predict(e, X)[1],
+                     'membership_vector': lambda e, X: _approximate_predict(e, X)[2],
+                     'all_points_membership_vectors': lambda e, X: _approximate_predict(e, X)[3]}),
+    # lane/inference-forecast-umap-pca (2026-09-15). pca-full-whiten is the
+    # dense SVD fit with the whitened pair. umap probes identity_break's
+    # batch of 64 held-out rows in one call: the transform's answer depends
+    # on the batch, so the claim is the same bytes for the same batch.
+    'pca-full-whiten': ('PCA', lambda e, X: (e.transform(X),),
+                        {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'umap': ('UMAP', lambda e, X: (e.transform(X[:64, :8]),), {}),
+    # The forecasters take no rows: the probe is identity_break's pair,
+    # forecast(H) and predict(n_obs, n_obs + H), held to the same bytes. The
+    # extras are what the CPU inference surface adds beyond that cell: the
+    # in-sample prediction, a prediction straddling the end of the series,
+    # and the fitted-state accessors of the loaded model.
+    'arima': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
+        _ARIMA_EXTRAS, ar=lambda e, X: e.ar_, mu=lambda e, X: e.mu_)),
+    'arima-011': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
+        _ARIMA_EXTRAS, ma=lambda e, X: e.ma_)),
+    'arima-seasonal-c': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
+        _ARIMA_EXTRAS, ar=lambda e, X: e.ar_, sar=lambda e, X: e.sar_, mu=lambda e, X: e.mu_)),
+    # lane/inference-holtwinters (2026-09-15): the saved Holt-Winters models,
+    # additive and multiplicative, through the forecast inference binding.
+    'holtwinters': ('ExponentialSmoothing', lambda e, X: _hw_forecast_pair(e), _HW_EXTRAS),
+    'holtwinters-multiplicative': ('ExponentialSmoothing', lambda e, X: _hw_forecast_pair(e), _HW_EXTRAS),
+    # lane/inference-linear-svm (2026-09-15): the option variants of ols,
+    # ridge and logistic through the formats above, and the scalers,
+    # coordinate descent and the kernel methods through formats of their
+    # own. Each probe is its identity_break lane's infer probe; the extras
+    # are the other public surfaces of the loaded model.
+    'ols-no-intercept': ('LinearRegression', lambda e, X: (e.predict(X),), {}),
+    'ols-weighted': ('LinearRegression', lambda e, X: (e.predict(X),), {}),
+    'ridge-no-intercept': ('Ridge', lambda e, X: (e.predict(X),), {}),
+    'logistic-l1': ('LogisticRegression', lambda e, X: (e.predict_proba(X),),
+                    {'predict': lambda e, X: e.predict(X),
+                     'decision_function': lambda e, X: e.decision_function(X)}),
+    'logistic-elasticnet': ('LogisticRegression', lambda e, X: (e.predict_proba(X),),
+                            {'predict': lambda e, X: e.predict(X),
+                             'decision_function': lambda e, X: e.decision_function(X)}),
+    'logistic-unpenalized-no-intercept': ('LogisticRegression', lambda e, X: (e.predict_proba(X),),
+                                          {'predict': lambda e, X: e.predict(X),
+                                           'decision_function': lambda e, X: e.decision_function(X)}),
+    'standard-scaler': ('StandardScaler', lambda e, X: (e.transform(X),),
+                        {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'standard-scaler-no-mean': ('StandardScaler', lambda e, X: (e.transform(X),),
+                                {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'standard-scaler-no-std': ('StandardScaler', lambda e, X: (e.transform(X),),
+                               {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'minmax-scaler': ('MinMaxScaler', lambda e, X: (e.transform(X),),
+                      {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'minmax-scaler-clip': ('MinMaxScaler', lambda e, X: (e.transform(X),),
+                           {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'lasso': ('Lasso', lambda e, X: (e.predict(X),), {}),
+    'elasticnet': ('ElasticNet', lambda e, X: (e.predict(X),), {}),
+    'elasticnet-l2end-no-intercept': ('ElasticNet', lambda e, X: (e.predict(X),), {}),
+    'kernel-ridge': ('KernelRidge', lambda e, X: (e.predict(X[:64, :4]),), {}),
+    'nystroem': ('Nystroem', lambda e, X: (e.transform(X[:64, :4]),), {}),
+    'rbf-sampler': ('RBFSampler', lambda e, X: (e.transform(X),), {}),
+    # lane/inference-embedding-ivf-cholesky (2026-09-15). The IVF lanes probe
+    # identity_break's 64 held-out queries over the saved, GPU-built index
+    # (distances, ids, candidate counts); the extras search a second query
+    # batch and read the index arrays back. The embedding lane's probe is
+    # identity_break's 512 held-out ids through the saved table.
+    'ivf': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),
+    'ivf-euclidean': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),
+    'embedding': ('Embedding', lambda e, X: _embedding_probe(e, X), {}),
+    # Stage 2 of the same lane: an index built and EXTENDED on the GPU, saved;
+    # the extras extend a clone of the loaded index by 64 held-out rows (the
+    # host binding's extend on a CPU) and search 64 more rows after it.
+    'ivf-extend': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), dict(
+        _IVF_EXTRAS,
+        extend_lists=lambda e, X: e._clone().extend(X[64:128]).extend_labels_,
+        extend_list_indices=lambda e, X: e._clone().extend(X[64:128]).list_indices_,
+        search_after_extend_ids=lambda e, X: e._clone().extend(X[64:128]).search(X[128:192])[1],
+    )),
+    # lane/inference-svm (2026-09-15): SVC's linear and polynomial kernels
+    # through the svc format, and SVR (rbf and linear) through its own. Each
+    # probe is its identity_break lane's infer probe.
+    'svc-linear': ('SVC', lambda e, X: (e.decision_function(X), e.predict(X)),
+                   {'predict': lambda e, X: e.predict(X)}),
+    'svc-poly': ('SVC', lambda e, X: (e.decision_function(X), e.predict(X)),
+                 {'predict': lambda e, X: e.predict(X)}),
+    'svr': ('SVR', lambda e, X: (e.predict(X),), {}),
+    'svr-linear': ('SVR', lambda e, X: (e.predict(X),), {}),
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'logistic': 'predict_proba', 'pca': 'transform',
                'kde': 'score_samples', 'svc': 'decision_function',
                'pca-whiten': 'transform',
                'knn': 'kneighbors_distances', 'knn-clf': 'predict',
-               'knn-reg': 'predict', 'logistic-multiclass': 'predict_proba'}
+               'knn-reg': 'predict', 'logistic-multiclass': 'predict_proba',
+               'pca-full-whiten': 'transform', 'umap': 'transform',
+               'arima': 'forecast', 'arima-011': 'forecast', 'arima-seasonal-c': 'forecast',
+               'holtwinters': 'forecast', 'holtwinters-multiplicative': 'forecast',
+               'ols-no-intercept': 'predict', 'ols-weighted': 'predict',
+               'ridge-no-intercept': 'predict', 'logistic-l1': 'predict_proba',
+               'logistic-elasticnet': 'predict_proba',
+               'logistic-unpenalized-no-intercept': 'predict_proba',
+               'standard-scaler': 'transform', 'standard-scaler-no-mean': 'transform',
+               'standard-scaler-no-std': 'transform', 'minmax-scaler': 'transform',
+               'minmax-scaler-clip': 'transform', 'lasso': 'predict', 'elasticnet': 'predict',
+               'elasticnet-l2end-no-intercept': 'predict', 'kernel-ridge': 'predict',
+               'nystroem': 'transform', 'rbf-sampler': 'transform',
+               'ivf': 'search_distances', 'ivf-euclidean': 'search_distances', 'embedding': 'forward', 'ivf-extend': 'search_distances',
+               'svc-linear': 'decision_function', 'svc-poly': 'decision_function',
+               'svr': 'predict', 'svr-linear': 'predict'}
+PROBE_NAMES.update({lane: {'NearestNeighbors': 'kneighbors_distances', 'KNeighborsClassifier': 'predict',
+                           'KNeighborsRegressor': 'predict', 'RadiusNeighbors': 'radius_neighbors_counts',
+                           'KernelDensity': 'score_samples', 'IsolationForest': 'score_samples',
+                           'GaussianMixture': 'score_samples', 'HDBSCAN': 'approximate_predict_labels',
+                           'GaussianProcessRegressor': 'predict_mean',
+                           'GaussianProcessClassifier': 'predict'}[spec[0]]
+                    for lane, spec in LANES.items() if lane not in PROBE_NAMES})
 
 
 def _fit_logistic_multiclass(ml, X, yc, yr, Xh=None):
@@ -133,10 +413,21 @@ def package_root(args):
         sys.path.insert(0, os.path.abspath(args.package_root))
 
 
-def held_out(ib, kind):
+#: Lanes whose identity_break probe reads the whole held-out draw; every
+#: other lane reads its first PROBE_ROWS rows.
+LANE_PROBE_ROWS = {'iforest': None, 'iforest-tuned': None}
+
+
+def probe_rows(ib, lane, kind):
+    """The held-out row count `lane` probes on fixture `kind`."""
+    rows = LANE_PROBE_ROWS.get(lane, PROBE_ROWS)
+    return int(ib.heldout(kind).shape[0]) if rows is None else rows
+
+
+def held_out(ib, kind, lane=None):
     """The identity_break held-out slice the lane probes, as a numpy
     array, and its bytes' SHA-256."""
-    Xh = ib.heldout(kind)[:PROBE_ROWS]
+    Xh = ib.heldout(kind)[:probe_rows(ib, lane, kind)]
     return Xh, sha256_bytes(Xh.tobytes())
 
 
@@ -191,7 +482,7 @@ def do_record(args):
             if type(model).__name__ != estimator:
                 print(f'gate: lane {lane} fitted {type(model).__name__}, not {estimator}', file=sys.stderr)
                 return 2
-            Xh, x_sha = held_out(ib, kind)
+            Xh, x_sha = held_out(ib, kind, lane)
             gpu = digests_for(lane, model, Xh, ib)
             # The identity_break probe on the fitted model must agree with
             # the tool's own infer cell for this fit, or the probe here is
@@ -213,7 +504,7 @@ def do_record(args):
                           f'reload on the GPU path: {gpu[key]} vs {reload[key]}', file=sys.stderr)
                     return 1
             spec = dict(lane=lane, kind=kind, estimator=estimator, heldout_seed=ib.HELDOUT_SEED,
-                        probe_rows=PROBE_ROWS, x_sha256=x_sha)
+                        probe_rows=probe_rows(ib, lane, kind), x_sha256=x_sha)
             (directory / 'fixture.json').write_text(json.dumps(spec, indent=2, sort_keys=True) + '\n')
             report = dict(
                 status='RECORDED', lane=lane, kind=kind, estimator=estimator, vendor=vendor,
@@ -238,6 +529,35 @@ def gpu_columns(paths):
     return cols
 
 
+def sabotage_verdict(verdict_ok, moved, unmoved, every_lane=False, every_fixture=False, lane_rule_only=()):
+    """The --expect-mismatch verdict over `<lane>/<fixture>` names.
+
+    Plain: one differing fixture anywhere is a catch. --every-lane: every lane
+    must differ on at least one fixture. --every-fixture (lane/ties-sabotage,
+    2026-09-15): every fixture of every lane must differ, except that a lane
+    named in `lane_rule_only` keeps the --every-lane rule, by name. Returns
+    (verdict, exit code, lines to print)."""
+    verdict = 'EXPECTED MISMATCH SEEN' if not verdict_ok else 'SABOTAGE NOT CAUGHT'
+    code = 0 if not verdict_ok else 1
+    lines = []
+    if not (every_lane or every_fixture):
+        return verdict, code, lines
+    exempt = set(lane_rule_only)
+    moved_lanes = {m.split('/')[0] for m in moved}
+    dead = sorted({u.split('/')[0] for u in unmoved} - moved_lanes)
+    for name in unmoved:
+        lane = name.split('/')[0]
+        rule = 'every-lane by name' if every_fixture and lane in exempt else ('every-fixture' if every_fixture else 'every-lane')
+        lines.append(f'check {name} did not move (its lane {"moved elsewhere" if lane in moved_lanes else "DID NOT MOVE"}; rule {rule})')
+    if every_fixture:
+        still = sorted(u for u in unmoved if u.split('/')[0] not in exempt)
+        if still:
+            return f'SABOTAGE NOT CAUGHT ON FIXTURES {",".join(still)}', 1, lines
+    if dead:
+        return f'SABOTAGE NOT CAUGHT ON LANES {",".join(dead)}', 1, lines
+    return verdict, code, lines
+
+
 def do_check(args):
     package_root(args)
     try:
@@ -259,6 +579,7 @@ def do_check(args):
         return 2
     results = []
     verdict_ok = True
+    moved, unmoved = [], []
     for directory in dirs:
         expected = json.loads((directory / 'expected.json').read_text())
         if expected.get('status') != 'RECORDED' or 'predictions' not in expected:
@@ -267,11 +588,11 @@ def do_check(args):
             return 2
         spec = json.loads((directory / 'fixture.json').read_text())
         lane, kind = spec['lane'], spec['kind']
-        if lane not in LANES or kind not in ib.FIXTURES or int(spec.get('probe_rows', 0)) != PROBE_ROWS:
+        if lane not in LANES or kind not in ib.FIXTURES or int(spec.get('probe_rows', 0)) != probe_rows(ib, lane, kind):
             print(f'gate: {directory} fixture.json names a lane, fixture or probe size this gate '
                   'does not know', file=sys.stderr)
             return 2
-        Xh, x_sha = held_out(ib, kind)
+        Xh, x_sha = held_out(ib, kind, lane)
         if x_sha != spec.get('x_sha256') or x_sha != expected.get('x_sha256'):
             print(f'gate: {directory} regenerated held-out rows hash {x_sha}, the fixture records '
                   f'{spec.get("x_sha256")}', file=sys.stderr)
@@ -310,6 +631,10 @@ def do_check(args):
         verdict_ok = verdict_ok and ih_equal
         print(f"check {lane} {kind} identity_hash {'EQUAL' if ih_equal else 'DIFFER'} "
               f"gpu {want['identity_hash']} host {got['identity_hash']}")
+        if not ih_equal or not all(c['equal'] for c in cases):
+            moved.append(f'{lane}/{kind}')
+        else:
+            unmoved.append(f'{lane}/{kind}')
         vendors = []
         for label, j in columns:
             cell = j.get('cells', {}).get(f'{lane}/{kind}')
@@ -318,6 +643,12 @@ def do_check(args):
             equal = theirs == got['identity_hash']
             if theirs is None:
                 status = 'ABSENT'
+            elif isinstance(theirs, str) and theirs.startswith('n/a:'):
+                # A record older than the lane's infer probe carries its
+                # reason (`n/a:transductive` on hdbscan before 2026-09-15),
+                # not a hash: nothing to compare, so it cannot differ.
+                status = 'N/A'
+                equal = None
             else:
                 status = 'EQUAL' if equal else 'DIFFER'
                 verdict_ok = verdict_ok and equal
@@ -329,12 +660,15 @@ def do_check(args):
                             identity_hash=dict(want=want['identity_hash'], got=got['identity_hash'], equal=ih_equal),
                             columns=vendors, seconds=got['seconds'], cases=cases))
     if args.expect_mismatch:
-        verdict = 'EXPECTED MISMATCH SEEN' if not verdict_ok else 'SABOTAGE NOT CAUGHT'
-        code = 0 if not verdict_ok else 1
+        verdict, code, lines = sabotage_verdict(
+            verdict_ok, moved, unmoved, every_lane=args.every_lane,
+            every_fixture=args.every_fixture, lane_rule_only=args.lane_rule_only)
+        for line in lines:
+            print(line)
     else:
         verdict = 'IDENTICAL' if verdict_ok else 'MISMATCH'
         code = 0 if verdict_ok else 1
-    report = dict(verdict=verdict, expect_mismatch=bool(args.expect_mismatch), exit=code,
+    report = dict(verdict=verdict, expect_mismatch=bool(args.expect_mismatch), exit=code, unmoved=unmoved,
                   binary=binary_path(), binaries=binary_paths(), vendor=mojolearn.vendor(), host=host_info(),
                   gpu_columns=[label for label, _ in columns], commit=git_commit(),
                   checked_at=time.strftime('%Y-%m-%dT%H:%M:%S%z'), fixtures=results)
@@ -366,7 +700,15 @@ def main():
                      help='an identity_break JSON whose infer cells are compared too (repeatable)')
     chk.add_argument('--report', type=Path, help='new exclusive JSON report')
     chk.add_argument('--expect-mismatch', action='store_true')
+    chk.add_argument('--every-lane', action='store_true',
+                     help='with --expect-mismatch, every lane (not only one) must differ on at least one fixture')
+    chk.add_argument('--every-fixture', action='store_true',
+                     help='with --expect-mismatch, every fixture of every lane must differ')
+    chk.add_argument('--lane-rule-only', action='append', default=[], metavar='LANE',
+                     help='with --every-fixture, this lane keeps the --every-lane rule, by name (repeatable)')
     args = parser.parse_args()
+    if args.lane_rule_only and not args.every_fixture:
+        parser.error('--lane-rule-only needs --every-fixture')
     if args.command == 'record':
         return do_record(args)
     return do_check(args)

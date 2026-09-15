@@ -1,0 +1,85 @@
+build_old_sab_core	0	20s
+build_old_sab_ivf	0	23s
+build_old_sab_ivf_search	0	12s
+ib_prod	0	36s
+ib_sab_old	0	20s
+ib_sab_new	0	18s
+diff_nb	0	0s
+diff_iv	0	0s
+diff_nb_sab_old	1	1s
+diff_iv_sab_old	1	1s
+owed_nb_old	1	0s
+owed_iv_old	0	0s
+diff_nb_sab_new	1	0s
+diff_iv_sab_new	1	0s
+owed_nb_new	1	1s
+owed_iv_new	0	0s
+gate_prod_classical	0	7s
+gate_prod_saved	0	21s
+gate_old_six_every_fixture	1	2s
+gate_old_saved_every_fixture	1	24s
+gate_old_saved_every_lane	0	22s
+gate_new_six_every_fixture	0	3s
+gate_new_saved_every_fixture	0	22s
+gate_new_classical_every_fixture	0	6s
+unit	0	1s
+core/knn_host_predict.mojo:0
+ivf/host/ivf_host.mojo:0
+branch sources restored
+core/knn_host_predict.mojo:5
+ivf/host/ivf_host.mojo:3
+/root/leg_out/moved_counts.txt:sabotage old: 166 of 216 production cell parts moved
+/root/leg_out/moved_counts.txt:sabotage new: 180 of 216 production cell parts moved
+/root/leg_out/diff.iv.record-vs-cpu.txt:summary: IDENTICAL=18
+/root/leg_out/diff.iv.record-vs-cpu.txt:summary (infer/model): IDENTICAL=18, OWED=18
+/root/leg_out/diff.iv.record-vs-cpu.txt:summary (batch): IDENTICAL=18
+/root/leg_out/diff.iv.record-vs-cpu.txt:summary (rlpair): 
+/root/leg_out/diff.iv.record-vs-cpu.txt:require-columns 4 over ['ivf', 'ivf-euclidean']: OK (18 OWED)
+/root/leg_out/diff.iv.record-vs-cpu.txt:summary (owed): OWED=18; the next release record owes exactly these cell parts; wrote /root/leg_out/owed_iv.json
+/root/leg_out/diff.iv.record-vs-sabotage-new.txt:summary: DIVERGENT=18
+/root/leg_out/diff.iv.record-vs-sabotage-new.txt:summary (infer/model): DIVERGENT=18, ONE-COLUMN=18
+/root/leg_out/diff.iv.record-vs-sabotage-new.txt:summary (batch): DIVERGENT=18
+/root/leg_out/diff.iv.record-vs-sabotage-new.txt:summary (rlpair): 
+/root/leg_out/diff.iv.record-vs-sabotage-old.txt:summary: DIVERGENT=17, IDENTICAL=1
+/root/leg_out/diff.iv.record-vs-sabotage-old.txt:summary (infer/model): DIVERGENT=17, IDENTICAL=1, ONE-COLUMN=18
+/root/leg_out/diff.iv.record-vs-sabotage-old.txt:summary (batch): DIVERGENT=17, IDENTICAL=1
+/root/leg_out/diff.iv.record-vs-sabotage-old.txt:summary (rlpair): 
+/root/leg_out/diff.nb.record-vs-cpu.txt:summary: IDENTICAL=36
+/root/leg_out/diff.nb.record-vs-cpu.txt:summary (infer/model): IDENTICAL=54, OWED=18
+/root/leg_out/diff.nb.record-vs-cpu.txt:summary (batch): IDENTICAL=36
+/root/leg_out/diff.nb.record-vs-cpu.txt:summary (rlpair): 
+/root/leg_out/diff.nb.record-vs-cpu.txt:require-columns 4 over ['knn-cosine', 'knn-rbc', 'radius', 'radius-manhattan']: OK (18 OWED)
+/root/leg_out/diff.nb.record-vs-cpu.txt:summary (owed): OWED=18; the next release record owes exactly these cell parts; wrote /root/leg_out/owed_nb.json
+/root/leg_out/diff.nb.record-vs-sabotage-new.txt:summary: DIVERGENT=36
+/root/leg_out/diff.nb.record-vs-sabotage-new.txt:summary (infer/model): DIVERGENT=36, IDENTICAL=18, ONE-COLUMN=18
+/root/leg_out/diff.nb.record-vs-sabotage-new.txt:summary (batch): DIVERGENT=36
+/root/leg_out/diff.nb.record-vs-sabotage-new.txt:summary (rlpair): 
+/root/leg_out/diff.nb.record-vs-sabotage-old.txt:summary: DIVERGENT=33, IDENTICAL=3
+/root/leg_out/diff.nb.record-vs-sabotage-old.txt:summary (infer/model): DIVERGENT=32, IDENTICAL=22, ONE-COLUMN=18
+/root/leg_out/diff.nb.record-vs-sabotage-old.txt:summary (batch): DIVERGENT=32, IDENTICAL=4
+/root/leg_out/diff.nb.record-vs-sabotage-old.txt:summary (rlpair): 
+/root/leg_out/owed_iv_sabotage_new.txt:owed verdict OK (18 of 18 owed cell part(s) moved, 0 failure(s))
+/root/leg_out/owed_iv_sabotage_old.txt:owed verdict OK (18 of 18 owed cell part(s) moved, 0 failure(s))
+/root/leg_out/owed_nb_sabotage_new.txt:owed verdict FAIL (0 of 18 owed cell part(s) moved, 18 failure(s))
+/root/leg_out/owed_nb_sabotage_old.txt:owed verdict FAIL (0 of 18 owed cell part(s) moved, 18 failure(s))
+/root/leg_out/gate_new_classical_every_fixture.txt:gate verdict EXPECTED MISMATCH SEEN (54 fixtures, 0 GPU columns, exit 0)
+/root/leg_out/gate_new_saved_every_fixture.txt:gate verdict EXPECTED MISMATCH SEEN (115 fixtures, 0 GPU columns, exit 0)
+/root/leg_out/gate_new_six_every_fixture.txt:gate verdict EXPECTED MISMATCH SEEN (30 fixtures, 0 GPU columns, exit 0)
+/root/leg_out/gate_old_saved_every_fixture.txt:gate verdict SABOTAGE NOT CAUGHT ON FIXTURES ivf-euclidean/ties,ivf/ties (115 fixtures, 0 GPU columns, exit 1)
+/root/leg_out/gate_old_saved_every_lane.txt:gate verdict EXPECTED MISMATCH SEEN (115 fixtures, 0 GPU columns, exit 0)
+/root/leg_out/gate_old_six_every_fixture.txt:gate verdict SABOTAGE NOT CAUGHT ON FIXTURES ivf-euclidean/ties,ivf/ties,knn-cosine/ties,knn-rbc/ties,radius-manhattan/ties,radius/ties (30 fixtures, 0 GPU columns, exit 1)
+/root/leg_out/gate_prod_classical.txt:gate verdict IDENTICAL (54 fixtures, 3 GPU columns, exit 0)
+/root/leg_out/gate_prod_saved.txt:gate verdict IDENTICAL (115 fixtures, 3 GPU columns, exit 0)
+      1 gate_old_six_every_fixture.txt:check radius/ties did not move (its lane moved elsewhere; rule every-fixture)
+      1 gate_old_six_every_fixture.txt:check radius-manhattan/ties did not move (its lane moved elsewhere; rule every-fixture)
+      1 gate_old_six_every_fixture.txt:check knn-rbc/ties did not move (its lane moved elsewhere; rule every-fixture)
+      1 gate_old_six_every_fixture.txt:check knn-cosine/ties did not move (its lane moved elsewhere; rule every-fixture)
+      1 gate_old_six_every_fixture.txt:check ivf/ties did not move (its lane moved elsewhere; rule every-fixture)
+      1 gate_old_six_every_fixture.txt:check ivf-euclidean/ties did not move (its lane moved elsewhere; rule every-fixture)
+      1 gate_old_saved_every_lane.txt:check ivf/ties did not move (its lane moved elsewhere; rule every-lane)
+      1 gate_old_saved_every_lane.txt:check ivf-euclidean/ties did not move (its lane moved elsewhere; rule every-lane)
+      1 gate_old_saved_every_fixture.txt:check ivf/ties did not move (its lane moved elsewhere; rule every-fixture)
+      1 gate_old_saved_every_fixture.txt:check ivf-euclidean/ties did not move (its lane moved elsewhere; rule every-fixture)
+Ran 27 tests in 0.216s
+
+OK

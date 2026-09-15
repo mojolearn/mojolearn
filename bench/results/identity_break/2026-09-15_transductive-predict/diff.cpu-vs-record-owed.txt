@@ -1,0 +1,127 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 2 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_solver_host'] commit=bd9ef2eee4c4ebeb16112cb647828320b593aedc
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| agglomerative/base           | IDENTICAL x4 | ad11b976bfbfc20b | ad11b976bfbfc20b | ad11b976bfbfc20b | ad11b976bfbfc20b |
+| agglomerative/denormal       | IDENTICAL x4 | b05982504c7e8646 | b05982504c7e8646 | b05982504c7e8646 | b05982504c7e8646 |
+| agglomerative/dupes          | IDENTICAL x4 | ad11b976bfbfc20b | ad11b976bfbfc20b | ad11b976bfbfc20b | ad11b976bfbfc20b |
+| agglomerative/ties           | IDENTICAL x4 | 7dea8a094150b8a9 | 7dea8a094150b8a9 | 7dea8a094150b8a9 | 7dea8a094150b8a9 |
+| dbscan-brute-l1/base         | IDENTICAL x4 | 0e71495be68d20c8 | 0e71495be68d20c8 | 0e71495be68d20c8 | 0e71495be68d20c8 |
+| dbscan-brute-l1/denormal     | IDENTICAL x4 | 21d5ea1c72f42a78 | 21d5ea1c72f42a78 | 21d5ea1c72f42a78 | 21d5ea1c72f42a78 |
+| dbscan-brute-l1/dupes        | IDENTICAL x4 | 0e71495be68d20c8 | 0e71495be68d20c8 | 0e71495be68d20c8 | 0e71495be68d20c8 |
+| dbscan-brute-l1/ties         | IDENTICAL x4 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 |
+| dbscan-weighted/base         | IDENTICAL x4 | 3aa7f30692765cf2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 |
+| dbscan-weighted/denormal     | IDENTICAL x4 | d3c48a5338826d18 | d3c48a5338826d18 | d3c48a5338826d18 | d3c48a5338826d18 |
+| dbscan-weighted/dupes        | IDENTICAL x4 | 3aa7f30692765cf2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 |
+| dbscan-weighted/ties         | IDENTICAL x4 | 525addc009cffb40 | 525addc009cffb40 | 525addc009cffb40 | 525addc009cffb40 |
+| dbscan/base                  | IDENTICAL x4 | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b |
+| dbscan/denormal              | IDENTICAL x4 | 9c0b3563fc16b652 | 9c0b3563fc16b652 | 9c0b3563fc16b652 | 9c0b3563fc16b652 |
+| dbscan/dupes                 | IDENTICAL x4 | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b |
+| dbscan/ties                  | IDENTICAL x4 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 |
+
+summary: IDENTICAL=16
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| agglomerative/base           | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| agglomerative/base           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 9bb9f86300c44f5f |
+| agglomerative/base           | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| agglomerative/denormal       | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 2b2d3f329eec69f7 |
+| agglomerative/denormal       | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0749a7721feb2709 |
+| agglomerative/denormal       | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | a2740d2ed4d74812 |
+| agglomerative/dupes          | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| agglomerative/dupes          | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 9bb9f86300c44f5f |
+| agglomerative/dupes          | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| agglomerative/ties           | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | d161892b4ef55128 |
+| agglomerative/ties           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 64a8cd1101ec17ba |
+| agglomerative/ties           | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| dbscan-brute-l1/base         | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 291d58b2feb4ae4e |
+| dbscan-brute-l1/base         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 619ee7c70d1194cb |
+| dbscan-brute-l1/base         | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | df8d83ccb3f26700 |
+| dbscan-brute-l1/denormal     | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| dbscan-brute-l1/denormal     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8506a36c8f053030 |
+| dbscan-brute-l1/denormal     | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| dbscan-brute-l1/dupes        | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 291d58b2feb4ae4e |
+| dbscan-brute-l1/dupes        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 619ee7c70d1194cb |
+| dbscan-brute-l1/dupes        | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | df8d83ccb3f26700 |
+| dbscan-brute-l1/ties         | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 63990f64c63d296b |
+| dbscan-brute-l1/ties         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | d68a5069f692910e |
+| dbscan-brute-l1/ties         | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | be9e40c554329827 |
+| dbscan-weighted/base         | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 29d206737766caf0 |
+| dbscan-weighted/base         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0db3aac99393d616 |
+| dbscan-weighted/base         | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | f7e7d24690d3107e |
+| dbscan-weighted/denormal     | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| dbscan-weighted/denormal     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0c1ef67464dfa955 |
+| dbscan-weighted/denormal     | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| dbscan-weighted/dupes        | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 29d206737766caf0 |
+| dbscan-weighted/dupes        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0db3aac99393d616 |
+| dbscan-weighted/dupes        | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | f7e7d24690d3107e |
+| dbscan-weighted/ties         | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 9c8a2ca10937b6b1 |
+| dbscan-weighted/ties         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | cca8baca73f60bac |
+| dbscan-weighted/ties         | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 1b1361f65f9b5250 |
+| dbscan/base                  | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | e6e720fcb54b180e |
+| dbscan/base                  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | c36812c6260e7ee6 |
+| dbscan/base                  | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | f7e7d24690d3107e |
+| dbscan/denormal              | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| dbscan/denormal              | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | af8f5b102930fc66 |
+| dbscan/denormal              | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| dbscan/dupes                 | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | e6e720fcb54b180e |
+| dbscan/dupes                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | c36812c6260e7ee6 |
+| dbscan/dupes                 | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | f7e7d24690d3107e |
+| dbscan/ties                  | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 63990f64c63d296b |
+| dbscan/ties                  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 7c766eb707695149 |
+| dbscan/ties                  | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | be9e40c554329827 |
+
+summary (infer/model): OWED=32
+summary (batch): OWED=16
+summary (rlpair): 
+require-columns 4 over ['agglomerative', 'dbscan', 'dbscan-brute-l1', 'dbscan-weighted']: OK (48 OWED)
+OWED agglomerative/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED agglomerative/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED agglomerative/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED agglomerative/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED agglomerative/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED agglomerative/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED agglomerative/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED agglomerative/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED agglomerative/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED agglomerative/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED agglomerative/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED agglomerative/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-brute-l1/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan-weighted/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED dbscan/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+summary (owed): OWED=48; the next release record owes exactly these cell parts; wrote bench/results/identity_break/2026-09-15_transductive-predict/owed.json

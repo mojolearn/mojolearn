@@ -1,0 +1,32 @@
+b85f40771fdb8a9b08fbb06e460c8682e5c44546a90b7a935242a63ad4dbe2f2  python/mojolearn/identical/_mojolearn.so
+18b48ff0cc1eaed28371bc420e99863d3e2ab9601ef84046b394f316731a438c  python/mojolearn/identical/_mojolearn_gbdt.so
+== validate 18:59:18
+validate-tensor rc=0 3s 18:59:21
+validate-categorical rc=0 60s 19:00:21
+gbdt-tensor-ctr-tables npz d701b87375180e4b d701b87375180e4b cells SAME 7cc167fbb56c972e 7cc167fbb56c972e
+gbdt-categorical-ctr-tables npz bf3bea6dea6870d5 bf3bea6dea6870d5 cells SAME 9aef0c9ccfa6907c 9aef0c9ccfa6907c
+VALIDATE OK
+== new fixtures 19:00:21
+tensor-6fx rc=0 14s 19:00:35
+categorical-hashed rc=0 25s 19:01:00
+categorical-wide rc=0 25s 19:01:25
+categorical-denormal rc=0 25s 19:01:50
+categorical-denormal_ftz rc=0 26s 19:02:16
+categorical-dupes rc=0 26s 19:02:42
+categorical-negative rc=0 32s 19:03:14
+total 824
+drwxr-xr-x  14 andrewhendel  wheel    448 Sep 15 19:03 .
+drwxr-xr-x   7 andrewhendel  wheel    224 Sep 15 18:59 ..
+-rw-r--r--   1 andrewhendel  wheel  64020 Sep 15 19:01 gbdt-categorical-ctr-tables.denormal.npz
+-rw-r--r--   1 andrewhendel  wheel  64020 Sep 15 19:02 gbdt-categorical-ctr-tables.denormal_ftz.npz
+-rw-r--r--   1 andrewhendel  wheel  64157 Sep 15 19:02 gbdt-categorical-ctr-tables.dupes.npz
+-rw-r--r--   1 andrewhendel  wheel  63736 Sep 15 19:00 gbdt-categorical-ctr-tables.hashed.npz
+-rw-r--r--   1 andrewhendel  wheel  63665 Sep 15 19:03 gbdt-categorical-ctr-tables.negative.npz
+-rw-r--r--   1 andrewhendel  wheel  66176 Sep 15 19:01 gbdt-categorical-ctr-tables.wide.npz
+-rw-r--r--   1 andrewhendel  wheel   3918 Sep 15 19:00 gbdt-tensor-ctr-tables.denormal.npz
+-rw-r--r--   1 andrewhendel  wheel   3918 Sep 15 19:00 gbdt-tensor-ctr-tables.denormal_ftz.npz
+-rw-r--r--   1 andrewhendel  wheel   3917 Sep 15 19:00 gbdt-tensor-ctr-tables.dupes.npz
+-rw-r--r--   1 andrewhendel  wheel   3940 Sep 15 19:00 gbdt-tensor-ctr-tables.hashed.npz
+-rw-r--r--   1 andrewhendel  wheel   3922 Sep 15 19:00 gbdt-tensor-ctr-tables.negative.npz
+-rw-r--r--   1 andrewhendel  wheel   3950 Sep 15 19:00 gbdt-tensor-ctr-tables.wide.npz
+DONE

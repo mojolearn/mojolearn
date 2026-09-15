@@ -1,0 +1,9 @@
+200c5ef0b7a9b27dfac7dec10aae803681483769b279aec1de665935eb7d5775  /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-spectral-predict/python/mojolearn/identical/_mojolearn_metrics.so
+probe rc=0
+17:56:49 test rc=0 29s
+17:58:28 columns spectral base,ties rc=0 99s
+17:58:48 columns spectral-precomputed base,ties rc=0 20s
+17:58:48 merge rc=0
+17:59:05 batchsab spectral rc=1 17s
+17:59:09 batchsab spectral-precomputed rc=1 4s
+CHAIN4_DONE

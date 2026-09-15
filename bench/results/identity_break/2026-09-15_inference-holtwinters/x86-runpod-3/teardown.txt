@@ -1,0 +1,5 @@
+pod=ovb9le1qdopo4q
+name=mojolearn-cpu-inference-holtwinters-20260915-220729
+terminated_verified=1
+exit=0
+at=2026-09-15T22:10:58Z

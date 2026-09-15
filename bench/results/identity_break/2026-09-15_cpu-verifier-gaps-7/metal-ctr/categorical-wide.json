@@ -1,0 +1,103 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "a76c02d27c95b8fcdbca8d29fd159ea34829c6e0",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  }
+ },
+ "heldout": {
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  }
+ },
+ "cells": {
+  "gbdt-categorical-ctr-tables/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "852e96ce7e62df7c"
+   ],
+   "parts": [
+    {
+     "predict": "9e952313d68c2869",
+     "proba": "22c06af56636389e"
+    }
+   ],
+   "infer": [
+    "a942bfe94df4d9db"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "9b400c71cad50af0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a942bfe94df4d9db"
+   ],
+   "batch": [
+    "b9b2a1559aa6e945"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1"
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-cpu-gaps7/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "b85f40771fdb8a9b08fbb06e460c8682e5c44546a90b7a935242a63ad4dbe2f2",
+    "size": 2761120
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "18b48ff0cc1eaed28371bc420e99863d3e2ab9601ef84046b394f316731a438c",
+    "size": 6985888
+   }
+  ]
+ }
+}

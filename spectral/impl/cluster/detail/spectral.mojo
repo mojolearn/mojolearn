@@ -43,11 +43,12 @@ from cluster.impl.kmeans_params import (
 from core.identity_trace import IdentityTrace
 from core.row_norms import NORM_TPB, row_norm_kernel
 from checks.fixed_point import choose_scale
-from spectral.checks.device_io import download_u32, upload_f32
+from spectral.checks.device_io import download_f32, download_u32, upload_f32
+from spectral.host.spectral_predict_host import SpectralPredictionState
 from spectral.impl.preprocessing.detail.spectral_embedding import (
     SpectralEmbeddingParams,
     create_connectivity_graph,
-    transform_graph,
+    transform_graph_keep,
 )
 from spectral.impl.sparse.coo import CooGraph
 
@@ -74,6 +75,21 @@ def fit_predict_graph(
     mut embedding_out: List[Float32],
     mut trace: IdentityTrace,
 ) raises:
+    """`fit_predict_graph_keep` keeping nothing."""
+    var state = SpectralPredictionState()
+    fit_predict_graph_keep(ctx, config, connectivity_graph, labels, embedding_out, state, False, trace)
+
+
+def fit_predict_graph_keep(
+    ctx: DeviceContext,
+    config: SpectralClusteringParams,
+    connectivity_graph: CooGraph,
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+) raises:
     """`fit_predict` on a COO (`:17-62`). `labels` gets `n` cluster ids in
     `[0, n_clusters)`; `embedding_out` gets the `n x n_components` row-major
     embedding k-means ran on (ours exposes it for the gates)."""
@@ -92,7 +108,7 @@ def fit_predict_graph(
         has_seed=True,
         seed=config.seed,
     )
-    var n_out = transform_graph(ctx, emb_params, connectivity_graph, embedding_out, trace)
+    var n_out = transform_graph_keep(ctx, emb_params, connectivity_graph, embedding_out, state, keep, trace)
     # embedding_row_major (:47-52): ours is row-major already.
     var n_features = n_out
 
@@ -155,6 +171,10 @@ def fit_predict_graph(
     for i in range(n_samples):
         labels.append(Int32(got[i]))
     trace.record_list_i32("spectral.labels", labels)
+    if keep:
+        # lane/spectral-predict: a COPY of the final centroids the labels
+        # were assigned to, for SpectralClustering(prediction_data=True).
+        state.centroids = download_f32(ctx, centroids, cd)
     _ = x^
     _ = weights^
     _ = centroids^
@@ -171,6 +191,25 @@ def fit_predict_dataset(
     n_features: Int,
     mut labels: List[Int32],
     mut embedding_out: List[Float32],
+    mut trace: IdentityTrace,
+) raises:
+    """`fit_predict_dataset_keep` keeping nothing."""
+    var state = SpectralPredictionState()
+    fit_predict_dataset_keep(
+        ctx, config, dataset, n_samples, n_features, labels, embedding_out, state, False, trace
+    )
+
+
+def fit_predict_dataset_keep(
+    ctx: DeviceContext,
+    config: SpectralClusteringParams,
+    dataset: List[Float32],
+    n_samples: Int,
+    n_features: Int,
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
     mut trace: IdentityTrace,
 ) raises:
     """`fit_predict` on a dataset (`:64-80`): `create_connectivity_graph`
@@ -195,4 +234,4 @@ def fit_predict_dataset(
     trace.record_list_i32("spectral.W.rows", graph.rows)
     trace.record_list_i32("spectral.W.cols", graph.cols)
     trace.record_list_f32("spectral.W.vals", graph.vals)
-    fit_predict_graph(ctx, config, graph, labels, embedding_out, trace)
+    fit_predict_graph_keep(ctx, config, graph, labels, embedding_out, state, keep, trace)

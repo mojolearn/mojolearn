@@ -1,0 +1,27 @@
+== cpu Tue Sep 15 17:58:27 UTC 2026
+cpu exit 0
+== cpu_hsab Tue Sep 15 17:58:33 UTC 2026
+cpu_hsab exit 0
+== tests Tue Sep 15 17:58:35 UTC 2026
+test_gp_sample_y exit 0
+test_cpu_training_gp exit 1
+test_gp_normalize_y exit 0
+---- cpu
+cells=63 stable=63 moved=0 refused=0
+infer: stable=63
+batch: stable=45 n/a=18
+---- cpu_hsab
+cells=63 stable=63 moved=0 refused=0
+infer: stable=63
+batch: stable=45 n/a=18
+---- test_gp_sample_y
+  ok    REFUSE     the NOT_IMPLEMENTED row for sample_y is gone
+
+test_gp_sample_y: GREEN under numeric_mode=identical, 18 checks. One box, one vendor; no bit is claimed for any other.
+---- test_cpu_training_gp
+    assert sentence in src and sentence in gpu, sentence
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: addrs must contain 12 addresses
+---- test_gp_normalize_y
+..s.                                                                     [100%]
+3 passed, 1 skipped in 0.15s

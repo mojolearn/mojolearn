@@ -26,7 +26,16 @@ leaves f32 (n_leaf_values), x f32 (n_rows * n_cols, COLUMN-major, as
 `gbdt_predict` takes it), out f32 (n_rows * dim, ROW-major)]`, `params` is
 `[n_rows, n_cols, n_trees, dim, non_symmetric, n_splits, n_leaf_values,
 n_borders]`, and `bias` is the model's float64 bias. It returns the rows
-written. `forest_host_gbdt_sigmoid` is `gbdt_sigmoid`'s body
+written. `forest_host_gbdt_expand_ctr` (lane/inference-gbdt-ctr-tables,
+2026-09-15) turns the raw input columns of a model with CTR tables or tensor
+CTRs into its model columns first, through `core/gbdt_host_ctr.mojo`; its
+address contract is `[x f32 (n_rows * n_raw, COLUMN-major), ctr_ints i32,
+ctr_floats f32, tensor_ints i32, tensor_floats f32, counts i32,
+border_offsets i32 (n_cols + 1), borders f32, one_hot i32 (n_cols), out f32
+(n_rows * n_cols, COLUMN-major)]` and `params` is `[n_rows, n_raw, n_cols,
+n_ctr_tables, len(ctr_ints), len(ctr_floats), n_tensor_tables,
+len(tensor_ints), len(tensor_floats), len(counts), n_borders]`.
+`forest_host_gbdt_sigmoid` is `gbdt_sigmoid`'s body
 (`bindings/_mojolearn_gbdt.mojo:133-149`), the Logloss link the GPU binding
 already computes on the host.
 
@@ -52,7 +61,7 @@ from bindings.host_helpers import (
     gather_f64_binding,
     gather_i64_binding,
 )
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -66,6 +75,7 @@ from core.forest_host_predict import (
     rf_host_predict,
     rf_host_trees,
 )
+from core.gbdt_host_ctr import GBDT_CTR_HOST_SABOTAGE, gbdt_host_expand_ctr
 from core.gbdt_host_predict import gbdt_host_predict
 
 
@@ -271,6 +281,72 @@ def forest_host_gbdt_predict_binding(
     return PythonObject(wrote)
 
 
+def forest_host_gbdt_expand_ctr_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`predict_floats`'s CTR step on the host: raw columns to model
+    columns. Returns the columns written."""
+    var entry = String("forest_host_gbdt_expand_ctr")
+    if len(addresses) != 10 or len(params) != 11:
+        raise Error(entry + ": expected 10 addresses and 11 params")
+    var n_rows = _index(params[0])
+    var n_raw = _index(params[1])
+    var n_cols = _index(params[2])
+    var n_ctr = _index(params[3])
+    var n_ctr_ints = _index(params[4])
+    var n_ctr_floats = _index(params[5])
+    var n_tensor = _index(params[6])
+    var n_tensor_ints = _index(params[7])
+    var n_tensor_floats = _index(params[8])
+    var n_counts = _index(params[9])
+    var n_borders = _index(params[10])
+    if n_rows <= 0 or n_rows > FOREST_HOST_MAX_ROWS:
+        raise Error(entry + ": n_rows must be in [1, 2^30]")
+    if n_raw <= 0 or n_cols < n_raw or n_cols > 65536:
+        raise Error(entry + ": n_raw must be positive and n_cols in [n_raw, 65536]")
+    if n_rows > 2147483647 // n_cols:
+        raise Error(entry + ": n_rows * n_cols must fit int32")
+    for i in range(3, 11):
+        if _index(params[i]) < 0 or _index(params[i]) > 2147483647:
+            raise Error(entry + ": counts must be non-negative and fit int32")
+    var wrote = 0
+    var x_addr = _index(addresses[0])
+    var a1 = _index(addresses[1])
+    var a2 = _index(addresses[2])
+    var a3 = _index(addresses[3])
+    var a4 = _index(addresses[4])
+    var a5 = _index(addresses[5])
+    var a6 = _index(addresses[6])
+    var a7 = _index(addresses[7])
+    var a8 = _index(addresses[8])
+    var op = f32_ptr(_index(addresses[9]))
+    with GILReleased(Python()):
+        var x = read_f32(x_addr, n_rows * n_raw)
+        var ctr_ints = read_i32(a1, n_ctr_ints)
+        var ctr_floats = read_f32(a2, n_ctr_floats)
+        var tensor_ints = read_i32(a3, n_tensor_ints)
+        var tensor_floats = read_f32(a4, n_tensor_floats)
+        var counts = read_i32(a5, n_counts)
+        var border_offsets = read_i32(a6, n_cols + 1)
+        var borders = read_f32(a7, n_borders)
+        var one_hot = read_i32(a8, n_cols)
+        var out = gbdt_host_expand_ctr(
+            x, n_rows, n_cols, ctr_ints, ctr_floats, n_ctr, tensor_ints,
+            tensor_floats, n_tensor, counts, border_offsets, borders, one_hot,
+        )
+        if len(out) != n_rows * n_cols:
+            raise Error(entry + ": the expansion wrote " + String(len(out)) + " values")
+        for i in range(n_rows * n_cols):
+            op[i] = out[i]
+        wrote = n_cols
+    return PythonObject(wrote)
+
+
+def forest_host_gbdt_ctr_sabotage_binding() raises -> PythonObject:
+    """Whether this binary rotates every CTR table's counts on purpose."""
+    return PythonObject(GBDT_CTR_HOST_SABOTAGE)
+
+
 def forest_host_gbdt_sigmoid_binding(
     raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
 ) raises -> PythonObject:
@@ -301,6 +377,8 @@ def PyInit__mojolearn_forest_host() abi("C") -> PythonObject:
         module.def_function[forest_host_et_predict_binding]("forest_host_et_predict")
         module.def_function[forest_host_gbdt_predict_binding]("forest_host_gbdt_predict")
         module.def_function[forest_host_gbdt_sigmoid_binding]("forest_host_gbdt_sigmoid")
+        module.def_function[forest_host_gbdt_expand_ctr_binding]("forest_host_gbdt_expand_ctr")
+        module.def_function[forest_host_gbdt_ctr_sabotage_binding]("forest_host_gbdt_ctr_sabotage")
         module.def_function[all_finite_f32_binding]("all_finite_f32")
         module.def_function[all_finite_f64_binding]("all_finite_f64")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")

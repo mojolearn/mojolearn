@@ -1,0 +1,53 @@
+{
+ "catboost": "1.2.10",
+ "fixtures": {
+  "base": {
+   "final": {
+    "DCG:type=Base": 7.3347500032857145,
+    "NDCG:type=Base": 0.9679123730301102
+   },
+   "n_rows": 20000
+  },
+  "odd": {
+   "final": {
+    "DCG:type=Base": 7.337317522387646,
+    "NDCG:type=Base": 0.9689946713872971
+   },
+   "n_rows": 12345
+  },
+  "ties": {
+   "final": {
+    "DCG:type=Base": 12.664414180373587,
+    "NDCG:type=Base": 0.9968287651637421
+   },
+   "n_rows": 20000
+  }
+ },
+ "metrics": [
+  "NDCG:type=Base",
+  "DCG:type=Base"
+ ],
+ "params": {
+  "allow_writing_files": false,
+  "boost_from_average": false,
+  "boosting_type": "Plain",
+  "bootstrap_type": "No",
+  "border_count": 128,
+  "depth": 6,
+  "feature_border_type": "GreedyLogSum",
+  "grow_policy": "SymmetricTree",
+  "iterations": 20,
+  "l2_leaf_reg": 0.0,
+  "leaf_estimation_iterations": 1,
+  "learning_rate": 0.03,
+  "loss_function": "YetiRank:permutations=10;decay=0.85",
+  "nan_mode": "Min",
+  "random_seed": 0,
+  "random_strength": 0.0,
+  "score_function": "Cosine",
+  "task_type": "CPU",
+  "thread_count": 1,
+  "use_best_model": false,
+  "verbose": false
+ }
+}

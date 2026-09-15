@@ -210,6 +210,26 @@ comptime OBJECTIVE_MULTICLASS = 12
 #: `one_vs_all_val_and_first_der_kernel`, not either kernel in this file.
 comptime OBJECTIVE_MULTICLASS_OVA = 13
 
+#: `QueryRMSE`, the first QUERYWISE target: the CatBoost reference trains it
+#: through `TQuerywiseTargetsImpl` (`targets/querywise_targets_impl.h`), not
+#: `TPointwiseTargetsImpl`, so it reaches neither kernel in this file. Its
+#: derivatives need the pool's grouping and live in
+#: `gbdt/targets/kernel/query_rmse.mojo`; `launch_pointwise_target_kernel`
+#: refuses it by name.
+comptime OBJECTIVE_QUERY_RMSE = 14
+
+#: `PairLogit`, the second querywise target (`TQuerywiseTargetsImpl`'s
+#: `InitPairLogit` arm, `targets/querywise_targets_impl.h:326-346`). Its
+#: derivatives are per PAIR and live in `gbdt/targets/kernel/pair_logit.mojo`;
+#: it reaches neither kernel in this file.
+comptime OBJECTIVE_PAIR_LOGIT = 15
+
+#: `YetiRank`, the third querywise target (`TQuerywiseTargetsImpl`'s
+#: `InitYetiRank` arm, `targets/querywise_targets_impl.h:313-321`). Its
+#: derivatives come from sampled permutations per query and live in
+#: `gbdt/targets/kernel/yeti_rank.mojo`; it reaches neither kernel in this file.
+comptime OBJECTIVE_YETI_RANK = 16
+
 #: `NumErrors` is in their kernel switch (`pointwise_targets.cu:497-501`)
 #: and is deliberately NOT here: `TPointwiseTargetsImpl::Init`
 #: (`pointwise_target_impl.h:259-299`) has no `NumErrors` case, so its
@@ -255,10 +275,17 @@ def objective_from_name(name: String) raises -> Int:
         return OBJECTIVE_MULTICLASS
     if name == "MultiClassOneVsAll":
         return OBJECTIVE_MULTICLASS_OVA
+    if name == "QueryRMSE":
+        return OBJECTIVE_QUERY_RMSE
+    if name == "PairLogit":
+        return OBJECTIVE_PAIR_LOGIT
+    if name == "YetiRank":
+        return OBJECTIVE_YETI_RANK
     raise Error(
         "unknown loss '" + name + "': this implementation trains RMSE, Logloss,"
         " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
-        " Expectile, Tweedie, Huber, MultiClass and MultiClassOneVsAll"
+        " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll,"
+        " QueryRMSE, PairLogit and YetiRank"
     )
 
 
@@ -292,6 +319,12 @@ def objective_name(objective: Int) -> String:
         return String("MultiClass")
     if objective == OBJECTIVE_MULTICLASS_OVA:
         return String("MultiClassOneVsAll")
+    if objective == OBJECTIVE_QUERY_RMSE:
+        return String("QueryRMSE")
+    if objective == OBJECTIVE_PAIR_LOGIT:
+        return String("PairLogit")
+    if objective == OBJECTIVE_YETI_RANK:
+        return String("YetiRank")
     return String("<unknown>")
 
 

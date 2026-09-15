@@ -1,0 +1,182 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 164 other lane(s) the JSONs carry are not compared
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    nvidia-h100-sm_90a: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    amd-mi325x-gfx942: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    apple-m4: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    apple-m4: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    apple-m4: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-h100-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    amd-mi325x-gfx942: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    apple-m4: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    nvidia-h100-sm_90a: {'X': 'e4b16c115962dfcd'}
+    amd-mi325x-gfx942: {'X': 'e4b16c115962dfcd'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    nvidia-h100-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    amd-mi325x-gfx942: {'X': '32ea0bbed60b8e6c'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    apple-m4: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| spectral-precomputed/base    | IDENTICAL x4 | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf |
+| spectral-precomputed/denormal | IDENTICAL x3 | 134d1fdd8654374a | 134d1fdd8654374a | 134d1fdd8654374a | (not run)        |
+| spectral-precomputed/denormal_ftz | IDENTICAL x3 | 134d1fdd8654374a | 134d1fdd8654374a | 134d1fdd8654374a | (not run)        |
+| spectral-precomputed/dupes   | IDENTICAL x3 | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf | (not run)        |
+| spectral-precomputed/hashed  | IDENTICAL x3 | fafd67318e66c8e9 | fafd67318e66c8e9 | fafd67318e66c8e9 | (not run)        |
+| spectral-precomputed/negative | IDENTICAL x3 | 6231ccf8fca2283f | 6231ccf8fca2283f | 6231ccf8fca2283f | (not run)        |
+| spectral-precomputed/odd     | IDENTICAL x3 | bbe40df82c9e623a | bbe40df82c9e623a | bbe40df82c9e623a | (not run)        |
+| spectral-precomputed/ties    | IDENTICAL x4 | 32ed236da838cb22 | 32ed236da838cb22 | 32ed236da838cb22 | 32ed236da838cb22 |
+| spectral-precomputed/wide    | IDENTICAL x3 | ebeb9c5c4008a66d | ebeb9c5c4008a66d | ebeb9c5c4008a66d | (not run)        |
+| spectral/base                | IDENTICAL x4 | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb |
+| spectral/denormal            | IDENTICAL x3 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 | (not run)        |
+| spectral/denormal_ftz        | IDENTICAL x3 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 | (not run)        |
+| spectral/dupes               | IDENTICAL x3 | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb | (not run)        |
+| spectral/hashed              | IDENTICAL x3 | 2bd3b69e87fa6b9b | 2bd3b69e87fa6b9b | 2bd3b69e87fa6b9b | (not run)        |
+| spectral/negative            | IDENTICAL x3 | de29c53c40a728c5 | de29c53c40a728c5 | de29c53c40a728c5 | (not run)        |
+| spectral/odd                 | IDENTICAL x3 | a48b941d2c585a12 | a48b941d2c585a12 | a48b941d2c585a12 | (not run)        |
+| spectral/ties                | IDENTICAL x4 | f160e7dc7c262f73 | f160e7dc7c262f73 | f160e7dc7c262f73 | f160e7dc7c262f73 |
+| spectral/wide                | IDENTICAL x3 | d1857f998728ef34 | d1857f998728ef34 | d1857f998728ef34 | (not run)        |
+
+summary: IDENTICAL=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| spectral-precomputed/base    | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | bb2835f47f32e74d |
+| spectral-precomputed/base    | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6b04b89cfa623e45 |
+| spectral-precomputed/base    | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 403839d9afb03ede |
+| spectral-precomputed/denormal | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/denormal | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral-precomputed/denormal | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/denormal_ftz | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral-precomputed/denormal_ftz | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/dupes   | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/dupes   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral-precomputed/dupes   | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/hashed  | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/hashed  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral-precomputed/hashed  | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/negative | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/negative | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral-precomputed/negative | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/odd     | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/odd     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral-precomputed/odd     | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/ties    | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 77b660ca4b2a42e2 |
+| spectral-precomputed/ties    | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | ea7aeb5dfe06471c |
+| spectral-precomputed/ties    | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | eba1461e59f20122 |
+| spectral-precomputed/wide    | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral-precomputed/wide    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral-precomputed/wide    | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/base                | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 252d693ce8954a7e |
+| spectral/base                | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1b89aeaedeac5981 |
+| spectral/base                | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 68d103065457bdaa |
+| spectral/denormal            | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/denormal            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral/denormal            | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/denormal_ftz        | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/denormal_ftz        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral/denormal_ftz        | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/dupes               | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/dupes               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral/dupes               | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/hashed              | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/hashed              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral/hashed              | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/negative            | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/negative            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral/negative            | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/odd                 | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/odd                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral/odd                 | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/ties                | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | b2fb7d1e31bef33f |
+| spectral/ties                | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | d2c3cfca89b27058 |
+| spectral/ties                | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 006f4a6b2b116959 |
+| spectral/wide                | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| spectral/wide                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| spectral/wide                | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+
+summary (infer/model): N/A=28, ONE-COLUMN=8
+summary (batch): N/A=14, ONE-COLUMN=4
+summary (rlpair): 
+REQUIRE FAIL spectral-precomputed/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral-precomputed/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/ties infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+REQUIRE FAIL spectral/ties batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: no CPU column hashes it)
+require-columns 4 over ['spectral', 'spectral-precomputed']: 26 short (0 OWED)
+summary (owed): OWED=0; the next release record owes exactly these cell parts; wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/sp-ev/b4/owed.metal.json

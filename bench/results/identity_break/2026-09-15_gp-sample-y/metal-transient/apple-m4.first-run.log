@@ -1,0 +1,83 @@
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+# vendor=apple-m4 commit=607d797940e9318f5f8f2072a4c373102f452c46 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 13:46:54  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gp                     | ea70c56b99a74791 | c92496318cb78403 | f01c58a79fb1af27 | ca779c84b786d493 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | fba9e6f4ea05af2c | cbdbd1248c92a3f8 | 40fd2f479f775ec4 |
+| gp infer               | 1e032c58b3e9cd14 | 22b0b528124de8d0 | 6eec04108625b28e | 890cda1ff831faab | 353cd97119d0e754 | 353cd97119d0e754 | 52e6b306c452f16c | 9e3f1cf6c455f0fa | b2713d53a58fa4c9 |
+| gp batch               | 305bfd4eaf79a5fa | 42c01186900b0c68 | f18ced6112fb55e8 | d3e6783a8a000e56 | 9305dbeb22908e4a | 9305dbeb22908e4a | 3caf5f428c1e5112 | e3e6d237ca783492 | 0284440d2cd65731 |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-normalize-y         | 295a3a943bb1e6c1 | dcd3de359f3c2074 | b3faa0b97f15bcba | 3f637d262c88b131 | 563ede6c2700528e | 563ede6c2700528e | 56127db3c25510e4 | c3c46d3bdd248167 | c162a835d708df60 |
+| gp-normalize-y infer   | 7c5123dc7a512038 | 0e6c262796044cb8 | b77bf4a2d0da8736 | 13332a5abc671f44 | c9c056f09a65ff3b | c9c056f09a65ff3b | 3c0b639788527068 | e8873986c9e0f24f | e8c9793a64ffecd4 |
+| gp-normalize-y batch   | 10f20ff36a173c93 | d3aaf331f5414e4b | 83463eae32c0bbe9 | f83ca2d738dfbae9 | 00079f14e3f462fc | 00079f14e3f462fc | cd8dc4dd4d12cb25 | 290d32315445165d | d4b37ced285cc86d |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-sample-y            | d698872d7e33df6e | 15f827dc671917f0 | 1f0e45838e5c52d2 | ce0c19926bcf9dbf | 37e844812b3bd076 | 37e844812b3bd076 | 05aaa44e678259a6 | 23fab759980d7acc | 55e0efee90db4801 |
+| gp-sample-y infer      | b7cef1a89e642972 | 0811d434a92222cc | 1512a8f232028314 | eb0dc965d1fb9854 | 41aae3173e5800f3 | 41aae3173e5800f3 | 1ecf65597b149dc3 | 88b3eef5cfb3f1e8 | 4adb5317401462a1 |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-sample-y-normalize  | b5ad01b81c59fdf3 | 43811dbad15ad2f0 | 455f431e3dcb0773 | c11bb0e6d158bfe3 | 33512fcfac39fb55 | 33512fcfac39fb55 | 78ae9a8195ece8f9 | b4dd92087d7a5b3a | 0644e14fb6f52191 |
+| gp-sample-y-normalize infer | 0c4beaeb3b1aeb90 | 37a77ee22082dc29 | c0c2a3bec4606a09 | 296d00db02a3dc55 | d83e1344b5034607 | d83e1344b5034607 | 64889722931adde7 | 1ed38e7596ec035d | de0542b579ff2843 |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-matern12            | a54e340b4a22147f | 2661efdd41bfdb23 | ece4c902bf99f265 | 770208f9d55b9e6d | 6ca669d68732c77e | 6ca669d68732c77e | dc7d705bf6b6fb42 | 91b8075bebf3738a | 5e78849478852ef7 |
+| gp-matern12 infer      | 4f79f8b5efa024a7 | a001b7e2647b5504 | d97f7a7856e5c3cf | d85b3fdd5a0d4b83 | b18535ebf335687e | b18535ebf335687e | f28fbf34f5e2f5e4 | 70c7a448533ae162 | 7a4ce4fbf93bfe0a |
+| gp-matern12 batch      | 60ba7e42986f842e | afa881afdf169ffe | f61dcba2448ded11 | 2a36bbb9dbe1d986 | 6e00b6a519f68971 | 6e00b6a519f68971 | 9298e4ad500ce168 | e3e57f92fb8d7443 | 7d864314cdf560ff |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-matern32            | 03066455003d7df7 | f4c49d5c4fd7edda | 2a98418556cb39e1 | 710809cd4f31ce7e | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 5346a4ac3a9fb082 | 0e42009aae37b1a3 | 415c32e64ea7e125 |
+| gp-matern32 infer      | a89afc94af5f084c | d4ebe9e3a969d687 | 9b2c58c951e46aa6 | e01432f62e53b456 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e0a8a2dff9f3e703 | cebcbbd1a0cf26a5 | 59c1f19475065932 |
+| gp-matern32 batch      | 4d0c75f26ce30a17 | e0f8d36884ec439b | a696dd8895d78928 | 0e1eaf22f908fce3 | 9dc26cf63aee002d | 9dc26cf63aee002d | 314fbd59f78d11be | 6245f5a144c11e87 | BATCH_MOVED      |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-matern52-ard        | MOVED db03bb04   | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 | 96ec7127b1bf9354 |
+| gp-matern52-ard infer  | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 | 2b3b47d75d0729c6 |
+| gp-matern52-ard batch  | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc | 47a898f48b4390fc |
+
+cells=63 stable=62 moved=1 refused=0
+infer: stable=63
+model: n/a=63
+batch: stable=44 batch_moved=1 n/a=18
+n/a: gp model n/a:no-save, gp-matern12 model n/a:no-save, gp-matern32 model n/a:no-save, gp-matern52-ard model n/a:no-save, gp-normalize-y model n/a:no-save, gp-sample-y batch n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior), gp-sample-y model n/a:no-save, gp-sample-y-normalize batch n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior), gp-sample-y-normalize model n/a:no-save
+MOVED   gp-matern52-ard/base: ['db03bb040b67a91b', '96ec7127b1bf9354']
+BATCH_MOVED gp-matern32/negative: BATCH_MOVED:predict(return_std=True):row 14 of 64 alone:output 0 element 0: whole 0xc0a54224 vs alone 0x00000000
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/gpsy_ev2/apple-m4.json

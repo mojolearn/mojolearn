@@ -1,0 +1,9 @@
+ok test_archive_names_and_losses_refuse_before_any_binding_loads
+ok test_ctr_and_tensor_ctr_records_without_tables_refuse
+ok test_forest_family_and_gate_declare_the_four_kinds
+SKIP: the gbdt host binding or the forest host binary is not built
+ok test_four_modes_predict_through_host_model_when_built
+ok test_gate_coded_transform_is_the_documented_rule
+ok test_gbdt_estimators_are_the_three_saving_classes
+ok test_identity_break_host_infer_is_opt_in
+7 passed

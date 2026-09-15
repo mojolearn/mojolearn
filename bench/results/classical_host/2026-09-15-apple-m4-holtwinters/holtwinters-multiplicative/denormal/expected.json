@@ -1,0 +1,98 @@
+{
+  "commit": "f6796cebb03764e0d9b003bf1c464990f76e0886",
+  "estimator": "ExponentialSmoothing",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.6",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "denormal",
+  "lane": "holtwinters-multiplicative",
+  "model_sha256": "fb2179fa46b8c783dacc2e6d229a2deb4a033114e85544aaa9463e229d6c1e5a",
+  "numeric_mode": "identical",
+  "predictions": {
+    "alpha": {
+      "dtype": "<f4",
+      "sha256": "e0fb2d87992a9fc79e7729163ad2aea5efbf14806711292c8c46e873bac1a253",
+      "shape": [
+        1
+      ]
+    },
+    "beta": {
+      "dtype": "<f4",
+      "sha256": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+      "shape": [
+        1
+      ]
+    },
+    "forecast": {
+      "dtype": "<f4",
+      "sha256": "fef951e6c76ad6a01b208af650ca6d95769bec840e009981c5ae1316a42c90b1",
+      "shape": [
+        512
+      ]
+    },
+    "gamma": {
+      "dtype": "<f4",
+      "sha256": "45a6d738a7607576d3fe0862200bc67b10c12d5ed74167b4d5d5a708974c0f32",
+      "shape": [
+        1
+      ]
+    },
+    "identity_hash": "5e7dba822d698dd4",
+    "level": {
+      "dtype": "<f4",
+      "sha256": "15b6bf61ae8c82124d83c33d20fbc9c3d957e767520a5b87f19bd4b0dbf32b5d",
+      "shape": [
+        1,
+        500
+      ]
+    },
+    "predict_in_sample": {
+      "dtype": "<f4",
+      "sha256": "94c5d0a1269a3fc889ead2cddbb9cd56ae410add3123e38d1201c9e6126f5e20",
+      "shape": [
+        512
+      ]
+    },
+    "predict_straddle": {
+      "dtype": "<f4",
+      "sha256": "b638277a8690e175a9137feff1e43c067f9faf4e2f600caf468fb05b0403b717",
+      "shape": [
+        32
+      ]
+    },
+    "season": {
+      "dtype": "<f4",
+      "sha256": "a45d5edb22e30d49f017d2a760933c22ad132ed218ec2d5dd2e489d42d03b97b",
+      "shape": [
+        1,
+        500
+      ]
+    },
+    "seconds": 0.104795,
+    "sse": {
+      "dtype": "<f4",
+      "sha256": "db2dcbdbc2d639c627eb04fd0148edb7ffb921099149e2989fa449bb9dbdc53e",
+      "shape": [
+        1
+      ]
+    },
+    "trend": {
+      "dtype": "<f4",
+      "sha256": "f018440ea29372a80aaacedf6fc8f17a8354cd78d7fb58721b99a7c38f605dda",
+      "shape": [
+        1,
+        500
+      ]
+    }
+  },
+  "recorded_at": "2026-09-15T17:56:01-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "a67775cb50fa4e97d03889cd219ee75e0b531598a6674bd6ab4ad2e2d51ed998"
+}

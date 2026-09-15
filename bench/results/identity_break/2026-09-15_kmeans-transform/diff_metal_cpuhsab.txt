@@ -1,0 +1,141 @@
+NOTE: --lanes scopes this diff to 8 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host'] commit=bb937d57b15ab745d6db2d27a410b6bad2fb82f6
+| lane/fixture                 | verdict    | apple-m4         | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| kmeans-array/base            | DIVERGENT  | parts differ: centers,labels; agree: - | 0adde259eb5ba361 |
+| kmeans-array/denormal        | DIVERGENT  | parts differ: centers,labels; agree: - | 6509656f79748b55 |
+| kmeans-array/odd             | DIVERGENT  | parts differ: centers,labels; agree: - | ac14e12b99bf0db7 |
+| kmeans-array/ties            | DIVERGENT  | parts differ: centers,labels; agree: - | 87f6af07a050bf0b |
+| kmeans-classic-pp/base       | DIVERGENT  | parts differ: centers,labels,inertia; agree: - | 0acc47d1fbdfa538 |
+| kmeans-classic-pp/denormal   | DIVERGENT  | parts differ: centers,labels,inertia; agree: - | 7cff0dc6168d913d |
+| kmeans-classic-pp/odd        | DIVERGENT  | parts differ: centers,labels,inertia; agree: - | b9cd3356dfa259a2 |
+| kmeans-classic-pp/ties       | DIVERGENT  | parts differ: centers,labels,inertia; agree: - | 0e8bfefa35703556 |
+| kmeans-cosine/base           | IDENTICAL x2 | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/denormal       | IDENTICAL x2 | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/odd            | IDENTICAL x2 | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/ties           | IDENTICAL x2 | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-random/base           | DIVERGENT  | parts differ: centers,labels; agree: - | a8cb6990c11eca35 |
+| kmeans-random/denormal       | DIVERGENT  | parts differ: centers,labels; agree: - | ce25e85f78f58fb1 |
+| kmeans-random/odd            | DIVERGENT  | parts differ: centers,labels; agree: - | 4ac2949d882ae480 |
+| kmeans-random/ties           | DIVERGENT  | parts differ: centers,labels; agree: - | a9e116b2233a98c0 |
+| kmeans-sqrt/base             | DIVERGENT  | parts differ: centers,labels,inertia; agree: scales | 1bebc62831e1be3c |
+| kmeans-sqrt/denormal         | DIVERGENT  | parts differ: centers,labels,inertia; agree: scales | 74dea7550890681c |
+| kmeans-sqrt/odd              | DIVERGENT  | parts differ: centers,labels,inertia; agree: scales | a6a3a20242c4587a |
+| kmeans-sqrt/ties             | DIVERGENT  | parts differ: centers,labels,inertia; agree: scales | e74416f89e00ef79 |
+| kmeans-weighted/base         | DIVERGENT  | parts differ: centers,labels; agree: - | f8d4e6ec1791620a |
+| kmeans-weighted/denormal     | DIVERGENT  | parts differ: centers,labels; agree: - | 060243a018c9fac1 |
+| kmeans-weighted/odd          | DIVERGENT  | parts differ: centers,labels; agree: - | f7cd3ec15aeff1d8 |
+| kmeans-weighted/ties         | DIVERGENT  | parts differ: centers,labels; agree: - | 3f378ec64dcbd4ea |
+| kmeans/base                  | DIVERGENT  | parts differ: centers,labels; agree: - | 1169ffe8848d53a0 |
+| kmeans/denormal              | DIVERGENT  | parts differ: centers,labels; agree: - | bff6b8fa3f59607f |
+| kmeans/odd                   | DIVERGENT  | parts differ: centers,labels; agree: - | d3c6e6148ecf93d5 |
+| kmeans/ties                  | DIVERGENT  | parts differ: centers,labels; agree: - | 3e79e6ae937a0c6d |
+| par-kmeans/base              | ONE-COLUMN | 5aa44cc11034dec9 | REFUSED          |
+| par-kmeans/denormal          | ONE-COLUMN | 993fe5caff144b0c | REFUSED          |
+| par-kmeans/odd               | ONE-COLUMN | 43d8a3d3859f4143 | REFUSED          |
+| par-kmeans/ties              | ONE-COLUMN | 3de3e103006de69c | REFUSED          |
+
+summary: DIVERGENT=24, IDENTICAL=4, ONE-COLUMN=4
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| kmeans-array/base            | infer  | DIVERGENT    | ae9509c50c75d2bc | bb2f91173604b369 |
+| kmeans-array/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-array/base            | batch  | DIVERGENT    | 4b1022a4b98908d1 | 4d408631a0556a56 |
+| kmeans-array/denormal        | infer  | DIVERGENT    | c7e58f1805e93798 | 7ce7d9aaef56a929 |
+| kmeans-array/denormal        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-array/denormal        | batch  | DIVERGENT    | 8aaa92c6db31897f | b1096978a7d2cb11 |
+| kmeans-array/odd             | infer  | DIVERGENT    | cb0a1ae7215c27aa | b282b7054a2ff48a |
+| kmeans-array/odd             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-array/odd             | batch  | DIVERGENT    | 21e79ca2282ddc5f | e797bd02cb24bacf |
+| kmeans-array/ties            | infer  | DIVERGENT    | 5f64992d5da78b8f | c4c674b87b970ebd |
+| kmeans-array/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-array/ties            | batch  | DIVERGENT    | 3d1ce5fa3f9e09c4 | efa260732706e744 |
+| kmeans-classic-pp/base       | infer  | DIVERGENT    | e44226a81eebb7a8 | 3507b2a992672278 |
+| kmeans-classic-pp/base       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/base       | batch  | DIVERGENT    | a710fad38f112c1c | 3621b58bc69991b3 |
+| kmeans-classic-pp/denormal   | infer  | DIVERGENT    | f86f206425b73e29 | dbc3f1e1b7dd63e2 |
+| kmeans-classic-pp/denormal   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/denormal   | batch  | DIVERGENT    | 15dec882e28b9589 | 2f398e8dbe27131d |
+| kmeans-classic-pp/odd        | infer  | DIVERGENT    | 3b0d31ba504ffc5b | 96b1ba4bcdae761b |
+| kmeans-classic-pp/odd        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/odd        | batch  | DIVERGENT    | 192831cf947aa32b | a3b24b685956074c |
+| kmeans-classic-pp/ties       | infer  | DIVERGENT    | 83ac9df1fe7b737d | 40c6293cae989ac4 |
+| kmeans-classic-pp/ties       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/ties       | batch  | DIVERGENT    | ff31663995ac52c6 | ac90741f7e1ab582 |
+| kmeans-cosine/base           | infer  | N/A          | n/a:function     | n/a:function     |
+| kmeans-cosine/base           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/base           | batch  | N/A          | n/a:fit-refused  | n/a:fit-refused  |
+| kmeans-cosine/denormal       | infer  | N/A          | n/a:function     | n/a:function     |
+| kmeans-cosine/denormal       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/denormal       | batch  | N/A          | n/a:fit-refused  | n/a:fit-refused  |
+| kmeans-cosine/odd            | infer  | N/A          | n/a:function     | n/a:function     |
+| kmeans-cosine/odd            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/odd            | batch  | N/A          | n/a:fit-refused  | n/a:fit-refused  |
+| kmeans-cosine/ties           | infer  | N/A          | n/a:function     | n/a:function     |
+| kmeans-cosine/ties           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/ties           | batch  | N/A          | n/a:fit-refused  | n/a:fit-refused  |
+| kmeans-random/base           | infer  | DIVERGENT    | 45d941e241fdba4f | 6001e830632042a5 |
+| kmeans-random/base           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-random/base           | batch  | DIVERGENT    | 41f3015cf8e0680a | c31fbdf4c691122e |
+| kmeans-random/denormal       | infer  | DIVERGENT    | f1b6a290aca7f88d | c4482ae3e28df96d |
+| kmeans-random/denormal       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-random/denormal       | batch  | DIVERGENT    | 88799e781dfe5a5b | 1ed1e8a372d3afe3 |
+| kmeans-random/odd            | infer  | DIVERGENT    | df29a616a051e530 | 68b4a3b3ba60d8f2 |
+| kmeans-random/odd            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-random/odd            | batch  | DIVERGENT    | 53b58fa53fc8a4c3 | 6d11f68eebedb955 |
+| kmeans-random/ties           | infer  | DIVERGENT    | 6698384517f202cd | 4387a5ed3b409760 |
+| kmeans-random/ties           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-random/ties           | batch  | DIVERGENT    | 9dba3245a60df276 | 98299e229823f161 |
+| kmeans-sqrt/base             | infer  | DIVERGENT    | 58a73ee6f884f892 | 9624cbf11a7d7e73 |
+| kmeans-sqrt/base             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/base             | batch  | DIVERGENT    | 50d831d9342c295e | 8ee5aad8a6467af2 |
+| kmeans-sqrt/denormal         | infer  | DIVERGENT    | 5613aee8380a3878 | 7e3cc6d93e2b4ad6 |
+| kmeans-sqrt/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/denormal         | batch  | DIVERGENT    | 79378a3a1acbc98e | b59424f6d9048225 |
+| kmeans-sqrt/odd              | infer  | DIVERGENT    | d57783b77ce4e554 | 45657c14c347437d |
+| kmeans-sqrt/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/odd              | batch  | DIVERGENT    | 308b44148cf1b4d5 | 34413a7f4fad5e65 |
+| kmeans-sqrt/ties             | infer  | DIVERGENT    | 11403f38e806a8a7 | a482b6dc2d4359fe |
+| kmeans-sqrt/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/ties             | batch  | DIVERGENT    | 59f927df98783136 | f9164358500c0ecd |
+| kmeans-weighted/base         | infer  | DIVERGENT    | 33403bafb4259ce4 | d0c446c1686e1961 |
+| kmeans-weighted/base         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/base         | batch  | DIVERGENT    | bd21da2a20bcf33f | 1d6966ef60f01234 |
+| kmeans-weighted/denormal     | infer  | DIVERGENT    | 03780e8f5ba1bb21 | 6e45b41674ab3036 |
+| kmeans-weighted/denormal     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/denormal     | batch  | DIVERGENT    | d4c912e6b87b383e | e72ef6bc3d39fd0f |
+| kmeans-weighted/odd          | infer  | DIVERGENT    | 86bea24bd326b655 | 5bc9a2f909aa7c2d |
+| kmeans-weighted/odd          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/odd          | batch  | DIVERGENT    | 2ac9fe78151082ea | 54388808f8282424 |
+| kmeans-weighted/ties         | infer  | DIVERGENT    | f1a40d6c9595a677 | c85f155f51bd2376 |
+| kmeans-weighted/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/ties         | batch  | DIVERGENT    | 797f19f2820413c0 | 654d94626202fb62 |
+| kmeans/base                  | infer  | DIVERGENT    | 3d50c4c50bf078b2 | d19b76a657c233ee |
+| kmeans/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans/base                  | batch  | DIVERGENT    | ce34789a012168b5 | 667a4f46a420714b |
+| kmeans/denormal              | infer  | DIVERGENT    | 9b15ee1cac8ce636 | f96beb06597a08de |
+| kmeans/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans/denormal              | batch  | DIVERGENT    | cd11da38d7d996eb | c3db6bc0029bd858 |
+| kmeans/odd                   | infer  | DIVERGENT    | 191287260610940c | 9440665ed914948f |
+| kmeans/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans/odd                   | batch  | DIVERGENT    | 06c7a23bc000d13d | 8dd75bd2ccc5d89e |
+| kmeans/ties                  | infer  | DIVERGENT    | 0e9dcaedec0fcadc | f0a8309520378277 |
+| kmeans/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans/ties                  | batch  | DIVERGENT    | ff636ffbdf6153fe | cc4ddf2a00165dfb |
+| par-kmeans/base              | infer  | ONE-COLUMN   | 3d50c4c50bf078b2 | REFUSED          |
+| par-kmeans/base              | model  | N/A          | n/a:no-save      | REFUSED          |
+| par-kmeans/base              | batch  | ONE-COLUMN   | ce34789a012168b5 | REFUSED          |
+| par-kmeans/denormal          | infer  | ONE-COLUMN   | 9b15ee1cac8ce636 | REFUSED          |
+| par-kmeans/denormal          | model  | N/A          | n/a:no-save      | REFUSED          |
+| par-kmeans/denormal          | batch  | ONE-COLUMN   | cd11da38d7d996eb | REFUSED          |
+| par-kmeans/odd               | infer  | ONE-COLUMN   | 191287260610940c | REFUSED          |
+| par-kmeans/odd               | model  | N/A          | n/a:no-save      | REFUSED          |
+| par-kmeans/odd               | batch  | ONE-COLUMN   | 06c7a23bc000d13d | REFUSED          |
+| par-kmeans/ties              | infer  | ONE-COLUMN   | 0e9dcaedec0fcadc | REFUSED          |
+| par-kmeans/ties              | model  | N/A          | n/a:no-save      | REFUSED          |
+| par-kmeans/ties              | batch  | ONE-COLUMN   | ff636ffbdf6153fe | REFUSED          |
+
+summary (infer/model): DIVERGENT=24, N/A=36, ONE-COLUMN=4
+summary (batch): DIVERGENT=24, N/A=4, ONE-COLUMN=4
+summary (rlpair): 

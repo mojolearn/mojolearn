@@ -1,0 +1,320 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "a76c02d27c95b8fcdbca8d29fd159ea34829c6e0",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "gbdt-tensor-ctr-tables/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1da6ad28d961ad35",
+    "1da6ad28d961ad35"
+   ],
+   "parts": [
+    {
+     "predict": "243b37f432508129"
+    },
+    {
+     "predict": "243b37f432508129"
+    }
+   ],
+   "infer": [
+    "19da48b6c3ba9d2c",
+    "19da48b6c3ba9d2c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "5c1025887f1a4112",
+    "5c1025887f1a4112"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "19da48b6c3ba9d2c",
+    "19da48b6c3ba9d2c"
+   ],
+   "batch": [
+    "23554a4fe59a1961",
+    "23554a4fe59a1961"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-tensor-ctr-tables/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "89d3d2eb687d4002",
+    "89d3d2eb687d4002"
+   ],
+   "parts": [
+    {
+     "predict": "1d73017d0732304b"
+    },
+    {
+     "predict": "1d73017d0732304b"
+    }
+   ],
+   "infer": [
+    "3073c208310a28ff",
+    "3073c208310a28ff"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "e768f6d7a856ca3f",
+    "e768f6d7a856ca3f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3073c208310a28ff",
+    "3073c208310a28ff"
+   ],
+   "batch": [
+    "1ca38d2db239a5c8",
+    "1ca38d2db239a5c8"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-tensor-ctr-tables/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1489a9f5968cb79d",
+    "1489a9f5968cb79d"
+   ],
+   "parts": [
+    {
+     "predict": "bdd89b11efbe7f42"
+    },
+    {
+     "predict": "bdd89b11efbe7f42"
+    }
+   ],
+   "infer": [
+    "39133503b753ec5d",
+    "39133503b753ec5d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1a4382769846fc64",
+    "1a4382769846fc64"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "39133503b753ec5d",
+    "39133503b753ec5d"
+   ],
+   "batch": [
+    "ddf0cf2c0e19ff1d",
+    "ddf0cf2c0e19ff1d"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-tensor-ctr-tables/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1489a9f5968cb79d",
+    "1489a9f5968cb79d"
+   ],
+   "parts": [
+    {
+     "predict": "bdd89b11efbe7f42"
+    },
+    {
+     "predict": "bdd89b11efbe7f42"
+    }
+   ],
+   "infer": [
+    "39133503b753ec5d",
+    "39133503b753ec5d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1a4382769846fc64",
+    "1a4382769846fc64"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "39133503b753ec5d",
+    "39133503b753ec5d"
+   ],
+   "batch": [
+    "ddf0cf2c0e19ff1d",
+    "ddf0cf2c0e19ff1d"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-tensor-ctr-tables/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a972ee33b2bbafec",
+    "a972ee33b2bbafec"
+   ],
+   "parts": [
+    {
+     "predict": "c09ea792b9a31610"
+    },
+    {
+     "predict": "c09ea792b9a31610"
+    }
+   ],
+   "infer": [
+    "431c16487b4df475",
+    "431c16487b4df475"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f99b90a46f47a09c",
+    "f99b90a46f47a09c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "431c16487b4df475",
+    "431c16487b4df475"
+   ],
+   "batch": [
+    "577fb834656d49e9",
+    "577fb834656d49e9"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-tensor-ctr-tables/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0619163e8b8f3fc5",
+    "0619163e8b8f3fc5"
+   ],
+   "parts": [
+    {
+     "predict": "d926f73a8a0982a2"
+    },
+    {
+     "predict": "d926f73a8a0982a2"
+    }
+   ],
+   "infer": [
+    "4fbfc6dcd6ae0bc5",
+    "4fbfc6dcd6ae0bc5"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d388697c55275e5f",
+    "d388697c55275e5f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "4fbfc6dcd6ae0bc5",
+    "4fbfc6dcd6ae0bc5"
+   ],
+   "batch": [
+    "af1429b2866dde66",
+    "af1429b2866dde66"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1"
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-cpu-gaps7/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "b85f40771fdb8a9b08fbb06e460c8682e5c44546a90b7a935242a63ad4dbe2f2",
+    "size": 2761120
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "18b48ff0cc1eaed28371bc420e99863d3e2ab9601ef84046b394f316731a438c",
+    "size": 6985888
+   }
+  ]
+ }
+}

@@ -120,6 +120,40 @@ def test_sabotage_define_reaches_each_binding():
         )
 
 
+#: The fit entry points an inference-only binding must never name, by family
+#: (the neighbors and density inference lane, 2026-09-15).
+#: Mojo compiles only what a binding reaches, so a source that names none of
+#: these ships none of them; bench/results/identity_break/
+#: 2026-09-15_inference-iforest-gmm-hdbscan/fit_symbols.txt shows the built
+#: files agree.
+_FIT_NAMES = {
+    "mixture_infer": ("gmmh_fit", "gmm_fit", "gmmh_m_step", "gmmh_initial_resp"),
+    "hdbscan_infer": ("hdbh_fit", "hdbscan_fit", "generate_prediction_data"),
+    "gp_infer": ("gpr_host_fit", "gpr_fit", "gpc_host_fit", "gpc_fit", "chol_host_potrf", "cholesky_factor"),
+    # lane/inference-holtwinters (2026-09-15): the Holt-Winters fit, its
+    # decomposition and BFGS, and the ARIMA fit.
+    "forecast": ("holtwinters_fit", "oracle_fit", "holtwinters_validate_params", "host_r1qt",
+                 "arima_fit", "oracle_eval"),
+}
+
+
+def _mojo_code(text):
+    """Mojo source with its triple-quoted strings and `#` comments removed,
+    so a docstring saying what a binding leaves out is not read as code."""
+    text = re.sub(r'"""[\s\S]*?"""', "", text)
+    return re.sub(r"#[^\n]*", "", text)
+
+
+def test_inference_only_bindings_name_no_fit():
+    for name, fits in _FIT_NAMES.items():
+        f = host_surface.family(name)
+        texts = [_mojo_code(_read(host_surface.binding_source(name)))]
+        texts += [_mojo_code(_read(m)) for m in f["host_modules"] if m.startswith("bindings/")]
+        for fit in fits:
+            hits = [t for t in texts if re.search(rf"\b{fit}\b", t)]
+            assert not hits, f"{name}: {fit} is named in its binding sources"
+
+
 def test_host_modules_exist():
     for f in host_surface.FAMILIES:
         for m in f["host_modules"]:
@@ -172,6 +206,11 @@ def test_covered_lanes_are_identity_break_lanes():
     text = _read("tools/identity_break.py")
     defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
     assert defined, "no @lane registrations found in tools/identity_break.py"
+    # Module-level call registrations, `lane("gmm-sample")(_gmm_sample_lane("kmeans"))`
+    # (the sample and sample_y lanes; lane/cpu-verifier-gaps-7, 2026-09-15).
+    called = set(re.findall(r'^lane\("([a-z0-9-]+)"\)\(', text, re.M))
+    assert {"gmm-sample", "gp-sample-y"} <= called, f"the call reader no longer sees the sample lanes: {sorted(called)}"
+    defined |= called
     looped = _loop_registered_lanes(text)
     assert {"gp-matern12", "gp-matern32", "gp-matern52-ard"} <= looped, (
         f"the loop reader no longer sees the gp Matern lanes: {sorted(looped)}"
@@ -201,7 +240,9 @@ def test_forest_kinds_are_the_forest_gate_kinds():
 
 
 def test_recordings_and_columns_exist():
-    for rel in (host_surface.CLASSICAL_RECORDED + host_surface.CLASSICAL_GPU_COLUMNS
+    for rel in (host_surface.CLASSICAL_RECORDED + host_surface.FORECAST_RECORDED + host_surface.INFERENCE_ONLY_RECORDED
+                + host_surface.SEARCH_LOOKUP_RECORDED
+                + host_surface.CLASSICAL_GPU_COLUMNS
                 + (host_surface.FOREST_RECORDED_ROOT,)):
         assert (ROOT / rel).exists(), f"the manifest names {rel}, which is not in the tree"
 
@@ -221,9 +262,48 @@ def test_backend_routes_the_manifest():
         assert gpu_family in _backend._MODULES, f"{gpu_family} is routed but is not a _MODULES family"
 
 
+def test_inference_routes_ship_and_carry_no_fit():
+    """lane/inference-forecast-umap-pca (2026-09-15): an inference-only
+    binding that serves a route on a CPU-only install ships, serves a real
+    `_MODULES` family whose reference binding does not ship, registers the
+    reference binding's prediction names and no `*_fit` name, and
+    `_backend` reads the table from the manifest."""
+    from mojolearn import _backend
+    routes = host_surface.inference_routes()
+    assert routes == {
+        "_mojolearn_arima": "_mojolearn_forecast_host",
+        # lane/inference-holtwinters (2026-09-15)
+        "_mojolearn_tsa": "_mojolearn_forecast_host",
+        # lane/inference-embedding-ivf-cholesky (2026-09-15)
+        "_mojolearn_ivf": "_mojolearn_ivf_search_host",
+        "_mojolearn_embedding": "_mojolearn_embedding_infer_host",
+    }
+    assert _backend._HOST_INFERENCE_MODULES == routes
+    shipped = set(host_surface.wheel_bindings())
+    for route, binding in routes.items():
+        assert route in _backend._MODULES
+        assert binding in shipped
+        reference = host_surface.routed_modules().get(route)
+        assert reference and reference not in shipped, f"{route}: the reference binding ships; no fallback is needed"
+        name = binding[len("_mojolearn_"):-len("_host")]
+        exported = _exports_in_source(name)
+        assert not [e for e in exported if e.endswith("_fit")], f"{binding} registers a fit: {exported}"
+        # One inference binding may serve several routes (forecast serves
+        # ARIMA and Holt-Winters): every name it registers is a name of one
+        # of the reference bindings of the routes it serves.
+        ref_exports = set()
+        for other, b in routes.items():
+            if b == binding:
+                ref = host_surface.routed_modules()[other]
+                ref_exports |= set(host_surface.family(ref[len("_mojolearn_"):-len("_host")])["exports"])
+        served = [e for e in exported if not e.startswith(name + "_host_")]
+        assert set(served) <= ref_exports, f"{binding} registers names its reference bindings do not"
+
+
 def test_workflow_reads_the_manifest_not_literals():
     text = _read(".github/workflows/cpu-identity-gate.yml")
-    for var in ("COVERED_LANES", "HOST_FAMILIES", "HOST_BINDINGS", "CLASSICAL_RECORDED"):
+    for var in ("COVERED_LANES", "BUILD_FAMILIES", "SABOTAGE_FAMILIES", "ALL_HOST_BINDINGS",
+                "CLASSICAL_RECORDED", "SAVED_MODEL_RECORDED"):
         assert not re.search(rf'^\s+{var}: "', text, re.M), (
             f"the workflow carries a literal {var}; it must read the manifest"
         )
@@ -231,12 +311,24 @@ def test_workflow_reads_the_manifest_not_literals():
         "the workflow carries a literal GPU_COLUMNS block; it must read the manifest"
     )
     assert "python/mojolearn/host_surface.py" in text
-    for flag in ("--covered-lanes", "--routed-families", "--routed-bindings",
-                 "--classical-recorded", "--classical-gpu-columns", "--training-gpu-columns"):
+    for flag in ("--covered-lanes", "--families", "--wheel-families", "--bindings", "--wheel-bindings",
+                 "--classical-recorded", "--saved-model-recorded", "--classical-gpu-columns",
+                 "--training-gpu-columns", "cpu_identity_gate_check.py build-list"):
         assert flag in text, f"the workflow does not read {flag} from the manifest"
     for rel in host_surface.TRAINING_GPU_COLUMNS + host_surface.CLASSICAL_GPU_COLUMNS:
         directory = "/" + rel.rsplit("/", 1)[0] + "/"
         assert directory in text, f"the sparse checkout does not bring down {directory}"
+    # Every build loop reads the manifest's list; no binding is built by hand
+    # (until 2026-09-15 byte_lm, forest and tokenizer were, and seven shipped
+    # bindings were never built).
+    # The one hand build left is the forest sabotage binding, which reads its
+    # own define (MOJOLEARN_FOREST_HOST_SABOTAGE) into its own directory.
+    assert re.findall(r"sh bindings/build_([a-z_]+)_host\.sh", text) == ["forest"], "the workflow builds a family by hand"
+    assert text.count('for family in $BUILD_FAMILIES; do') == 1
+    assert text.count('for family in $SABOTAGE_FAMILIES; do') == 1
+    for rel in host_surface.saved_model_recorded():
+        assert rel.startswith("bench/results/classical_host/"), rel
+    assert "/bench/results/classical_host/" in text
 
 
 def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
@@ -246,10 +338,19 @@ def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
     from mojolearn import _backend
     shipped = set(host_surface.wheel_bindings())
     assert set(_backend._HOST_MODULES.values()) <= set(host_surface.bindings())
-    assert {"_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host"} <= shipped
+    assert {"_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host",
+            "_mojolearn_neural_host"} <= shipped
     assert set(host_surface.wheel_families()) == {
-        "byte_lm", "forest", "tokenizer", "core", "linalg", "estimators", "metrics", "svm",
+        "byte_lm", "forest", "tokenizer", "neural", "core", "linalg", "estimators", "metrics", "svm", "forecast",
+        "mixture_infer", "hdbscan_infer", "gp_infer",
+        "embedding_infer", "ivf_search",
     }
+    # The inference-only families ship; the reference families whose
+    # scoring and prediction entries they carry do not.
+    for inference, reference in (("mixture_infer", "mixture"), ("hdbscan_infer", "hdbscan"), ("gp_infer", "gp")):
+        assert host_surface.family(inference)["ships_in_wheel"] and host_surface.family(inference)["routes"] is None
+        assert not host_surface.family(reference)["ships_in_wheel"]
+        assert host_surface.family(inference)["training_lanes"] == ()
     assert len(host_surface.families()) > len(host_surface.wheel_families())
     assert host_surface.training_gpu_column_record() == host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 2)[1]
     for rel, token in (
@@ -280,3 +381,79 @@ def test_command_line_agrees_with_the_api(capsys):
 def test_training_lane_names_cover_every_covered_lane():
     missing = [lane for lane in host_surface.covered_lanes() if lane not in host_surface.TRAINING_LANE_NAMES]
     assert missing == [], f"no doc name for covered lanes {missing}"
+
+
+#: lane/cpu-verifier-gaps-7 (2026-09-15): the seven one-device lanes that had a
+#: CPU host function and no gate wiring, by the family whose binding computes
+#: their CPU cells.
+GAPS_7 = {
+    "gmm-sample": "mixture", "gmm-random-init-sample": "mixture",
+    "gp-sample-y": "gp", "gp-sample-y-normalize": "gp",
+    "tokenizer": "tokenizer",
+    "gbdt-categorical-ctr-tables": "forest", "gbdt-tensor-ctr-tables": "forest",
+}
+
+
+def test_gaps_7_are_covered_by_their_families():
+    covered = host_surface.covered_lanes()
+    record = host_surface.record_covered_lanes()
+    for lane, fam in GAPS_7.items():
+        assert lane in covered, f"{lane} is not a covered lane"
+        assert lane in record, f"{lane} is not diffed against the training GPU columns (OWED there)"
+        assert lane in host_surface.family(fam)["training_lanes"], f"{lane} is not declared by {fam}"
+
+
+def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
+    """MOJOLEARN_HOST_SABOTAGE reaches nothing in the tokenizer binding and
+    only the CTR arm moves a CTR table lane without touching every other
+    forest prediction, so the gate's sabotage set builds both with their own
+    define, and the define must exist in the binding source."""
+    assert host_surface.sabotage_build_defines("tokenizer").split() == [
+        "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1"]
+    assert host_surface.sabotage_build_defines("forest").split() == [
+        "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1"]
+    for name in host_surface.families():
+        if name not in host_surface.GATE_SABOTAGE_OWN_DEFINES:
+            assert host_surface.sabotage_build_defines(name) == "-D MOJOLEARN_HOST_SABOTAGE=1", name
+    sources = {"tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo"],
+               "forest": ["core/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"]}
+    for name, define in host_surface.GATE_SABOTAGE_OWN_DEFINES.items():
+        text = "".join(_read(rel) for rel in sources[name])
+        assert f'is_defined["{define}"]' in text, f"{define} is read by no {name} source"
+    with pytest.raises(KeyError):
+        host_surface.sabotage_build_defines("nonesuch")
+
+
+def test_gbdt_ctr_models_cover_every_fixture():
+    """The CTR table lanes' CPU cells load one Metal-saved model per lane and
+    fixture; a missing file reads REFUSED on the CPU column and fails the gate."""
+    text = _read("tools/identity_break.py")
+    m = re.search(r"^FIXTURES = \[(.*?)\]", text, re.M)
+    assert m, "no FIXTURES list in tools/identity_break.py"
+    fixtures = re.findall(r'"([a-z_]+)"', m.group(1))
+    assert len(fixtures) == 9, fixtures
+    assert 'GBDT_CTR_MODELS_ENV = "MOJOLEARN_IDENTITY_GBDT_CTR_MODELS"' in text
+    d = ROOT / host_surface.GBDT_CTR_MODELS_DIR
+    missing = [f"{lane}.{fx}.npz" for lane in host_surface.GBDT_CTR_MODEL_LANES for fx in fixtures
+               if not (d / f"{lane}.{fx}.npz").is_file()]
+    assert missing == [], f"{d} lacks {missing}"
+    assert set(host_surface.GBDT_CTR_MODEL_LANES) == set(host_surface.family("forest")["training_lanes"])
+
+
+def test_workflow_wires_the_gaps_7_lanes():
+    text = _read(".github/workflows/cpu-identity-gate.yml")
+    assert "/" + host_surface.GBDT_CTR_MODELS_DIR.rsplit("/", 1)[0] + "/" in text, "the models are not checked out"
+    assert "MOJOLEARN_IDENTITY_GBDT_CTR_MODELS=$GITHUB_WORKSPACE/$(python3 $manifest --gbdt-ctr-models)" in text
+    assert '--sabotage-build-defines "$family"' in text
+    assert 'MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_HOST_SABOTAGE=1"' not in text, (
+        "a step-level sabotage define list would override the manifest's per-family defines")
+    sab_run = text.split("covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE", 1)[1].split("- name:", 1)[0]
+    assert 'MOJOLEARN_FOREST_HOST_BINARY="${{ runner.temp }}/host-sab/_mojolearn_forest_host.so"' in sab_run
+    assert "MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1" in sab_run
+
+
+def test_command_line_prints_the_gaps_7_wiring(capsys):
+    assert host_surface.main(["--gbdt-ctr-models"]) == 0
+    assert capsys.readouterr().out.strip() == host_surface.GBDT_CTR_MODELS_DIR
+    assert host_surface.main(["--sabotage-build-defines", "tokenizer"]) == 0
+    assert capsys.readouterr().out.strip() == host_surface.sabotage_build_defines("tokenizer")

@@ -1,0 +1,9 @@
+mac_slot: Metal slot busy (/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-release-086-fix :: nice -n 19 ./packaging/macos/build_release_wheel.sh); waiting
+mac_slot: Metal slot busy (/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-release-086-fix :: nice -n 19 ./packaging/macos/build_release_wheel.sh); waiting
+fit plain
+fit prediction_data
+fit ok [-2.3850567743011197e-08, -0.042763981968164444, -0.05254843086004257]
+predict one row
+labels [1]
+predict all
+labels [1, 0, 1, 2, 1, 1, 2, 2, 0, 2]

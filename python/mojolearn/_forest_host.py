@@ -83,7 +83,11 @@ def _load():
         raise RuntimeError(f"mojolearn: {path} was not compiled IDENTICAL; rebuild it")
     if str(module.forest_host_vendor()) != 'cpu':
         raise RuntimeError(f"mojolearn: {path} does not read back as the CPU binding")
-    if bool(module.forest_host_sabotage()) and os.environ.get('MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE') != '1':
+    # the CTR-path arm (lane/inference-gbdt-ctr-tables, 2026-09-15) is a
+    # sabotage build too and takes the same switch
+    ctr_sabotage = getattr(module, 'forest_host_gbdt_ctr_sabotage', None)
+    sabotaged = bool(module.forest_host_sabotage()) or bool(ctr_sabotage is not None and ctr_sabotage())
+    if sabotaged and os.environ.get('MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE') != '1':
         raise RuntimeError(
             f"mojolearn: {path} is the gate's SABOTAGE build and computes "
             "wrong answers on purpose; it is refused outside the gate")
@@ -228,10 +232,12 @@ def host_model(path):
     `HostForest` for a forest archive, a `HostGBDT` (`_gbdt_host.py`) for a
     `GradientBoosting.save` archive, a host subclass of LinearRegression,
     Ridge, TruncatedSVD, LogisticRegression or PCA (`_classical_host.py`,
-    the classical host inference lane, 2026-09-13) or of NearestNeighbors,
+    the classical host inference lane, 2026-09-13), of NearestNeighbors,
     KNeighborsClassifier or KNeighborsRegressor (the knn host inference
-    lane, 2026-09-14) for one of their archives. Any other format is
-    refused with the tag it carries."""
+    lane, 2026-09-14), or of StandardScaler, MinMaxScaler, ElasticNet,
+    Lasso, KernelRidge, Nystroem or RBFSampler (lane/inference-linear-svm,
+    2026-09-15) for one of their archives. Any other format is refused with
+    the tag it carries."""
     from ._classical_host import CLASSICAL_FORMATS
     from ._classical_host import host_model as classical_host_model
     from ._gbdt_host import GBDT_FORMAT, HostGBDT

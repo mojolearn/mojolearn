@@ -96,9 +96,9 @@ It also lets a job move. Train on rented NVIDIA capacity, continue on AMD from
 the checkpoint, and the run stays on the same trajectory rather than a nearby
 one. Hardware stops being a confounding variable in a mixed fleet.
 
-There is a second reason to be here, independent of the contract. CatBoost,
-XGBoost, LightGBM and cuML have no Metal backend, so GPU tree training and GPU
-classical learning have not run on Apple silicon at all. One Mojo source
+There is a second reason to be here, independent of the contract. GPU tree
+training and GPU classical learning have not had an Apple silicon backend. One
+Mojo source
 builds for Metal, CUDA and HIP, which puts them on the laptop as well as the
 datacenter.
 
@@ -200,9 +200,8 @@ fast tier that are not "trees" is a rule you would have to look up, and one
 rule beats two wins. The neural lanes gate every fused kernel on the identical
 contract, so their lower tiers were slower than the default anyway.
 
-What every other family offers instead is the part no vendor sells: cuML is
-CUDA and Linux only and does not run on Apple silicon at all, and
-cross-vendor bitwise identity is available nowhere else.
+What every other family offers instead is cross-vendor bitwise identity:
+the same bits on Apple, NVIDIA and AMD GPUs and on the CPU.
 
 ## Who this is for
 
@@ -244,14 +243,14 @@ and the library refuses rather than running a fit elsewhere. Beside that, a
 CPU-only binding exists for some lanes, and each is held to the same
 bit-identity gate against the Apple, NVIDIA and AMD columns as the GPU builds,
 with a sabotage build required to fail it. Inference on a CPU from a saved
-model: <!--fact:host_inference_surfaces-->random forests, Extra Trees and the four gradient boosting variants; nearest neighbors, k-NN classification and k-NN regression; linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening and kernel density; SVC<!--/fact-->
+model: <!--fact:host_inference_surfaces-->random forests, Extra Trees and eight gradient boosting variants; nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting and radius neighbors; linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density on every kernel, metric and weighting, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features; UMAP transform of a saved embedding (the GPU's bytes for the same query batch; a row's embedding depends on the batch it is asked in); SVC and the isolation forest; the Gaussian mixture's scores, probabilities, labels and samples; the Gaussian process regressor's predictive mean and std, normalized targets included, and the Gaussian process classifier's labels and probabilities; HDBSCAN's approximate_predict, membership_vector and all_points_membership_vectors; Embedding lookup in a saved table; IVF-Flat search over a saved index and extending it; batched ARIMA prediction, in sample and out of sample, and forecasts, and Holt-Winters forecasts and in-sample one-step predictions, additive and multiplicative<!--/fact-->
 (the forests: 24 three-GPU recordings reproduced on seven CPUs, workflow run
 34782452584, [fixtures](bench/results/forest_host/README.md); the classical
 estimators: Apple M4, NVIDIA H100 and AMD MI300X recordings of the first
 five, 45 fixtures each, and Apple M4 recordings of kernel density, SVC,
 whitened PCA and the three k-NN classes, 54 fixtures each, reproduced on
 the CPU path, [fixtures](bench/results/classical_host/)). Training on a CPU:
-<!--fact:host_training_lanes-->pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet, SVC, agglomerative clustering, the Extra Trees classifier, the Extra Trees regressor, the isolation forest, nearest neighbors, the k-NN classifier, the k-NN regressor, PCA, whitened PCA, truncated SVD, linear regression, ridge, DBSCAN, k-means, the metrics, spectral clustering, the standard scaler, the min-max scaler, logistic regression, the random forest classifier, the random forest regressor, k-means with a random start, k-means from given centroids, weighted k-means, the standard scaler without centering, the standard scaler without scaling, the clipped min-max scaler, spectral clustering on a precomputed affinity, the Gaussian process with an RBF kernel, the Gaussian process with a Matern kernel at nu 0.5, the Gaussian process with a Matern kernel at nu 1.5, the Gaussian process with an ARD Matern kernel at nu 2.5, nearest neighbors under squared euclidean distance, the distance-weighted k-NN classifier, the distance-weighted k-NN regressor, the transposed GEMM ops, brute-force DBSCAN under manhattan distance, kernel density with the tophat kernel under squared euclidean distance, kernel density with the Epanechnikov kernel under manhattan distance, kernel density with the exponential kernel under chebyshev distance, kernel density with the linear kernel under cosine distance, kernel density with the cosine kernel under minkowski distance, weighted kernel density, linear regression without an intercept, weighted linear regression, ridge without an intercept, unpenalized logistic regression without an intercept, elasticnet at the l2 end without an intercept, multiplicative Holt-Winters, the linear SVC, the tuned isolation forest, nearest neighbors under manhattan distance, nearest neighbors under chebyshev distance, nearest neighbors under cosine distance, nearest neighbors under minkowski distance at p 3, nearest neighbors over the random ball cover, radius neighbors, radius neighbors under manhattan distance, radius neighbors under chebyshev distance, radius neighbors under minkowski distance at p 3, weighted DBSCAN, l1-penalized logistic regression, elasticnet-penalized logistic regression, multiclass logistic regression, the KPSS stationarity test, SVR, the linear SVR, whitened PCA through the full SVD, the classification, ranking and regression metrics, the Fowlkes-Mallows index, the small MLP, gradient boosting on symmetric trees with the Logloss loss, gradient boosting on symmetric trees with the RMSE loss, gradient boosting on depthwise trees with the Logloss loss, gradient boosting on lossguide trees with the Logloss loss, gradient boosting with the Min and Max NaN modes, the gradient boosting classifier, the gradient boosting regressor, gradient boosting with the Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq, Expectile, Tweedie, Huber and CrossEntropy losses, gradient boosting with Exact leaves and the Poisson bootstrap, gradient boosting on lossguide trees with the NewtonCosine score and the searcher options, multiclass gradient boosting, one-vs-all gradient boosting, ordered boosting with the RMSE loss (OrderedRMSE), the two-level FeatureFreq estimator, gradient boosting with the pointwise searcher, L2 scores, the Bayesian bootstrap and an eval set, gradient boosting with one-hot categorical columns, ARIMA, differenced ARIMA, seasonal ARIMA, UMAP, k-means under the rooted euclidean metric, k-means from the classic k-means++ start, the refusal of k-means under cosine distance, cross-validation of gradient boosting, the bootstrap, the permutation test, Monte Carlo integration, SGD with momentum, Nesterov and dampening, Adam and AdamW with the gradient clip and accumulation, the cross-entropy loss arms, the embedding, RMSNorm and linear training primitives, the Cholesky factorization and solve, random Fourier features, kernel ridge, the Nystroem kernel approximation, the Gaussian mixture, the Gaussian mixture with a random start, HDBSCAN, HDBSCAN with leaf selection, the random forest classifier with entropy splits, log2 features and no bootstrap, the class-weighted random forest classifier with the parallel groves engine, the random forest regressor with the Poisson criterion, the random forest regressor with the gamma and inverse Gaussian criteria, the best-first Extra Trees classifier with entropy splits, the bootstrapped Extra Trees regressor with the parallel groves engine, the Mamba-2 block, the Mamba-2 block with an active dt clamp, the Mamba-1 block, the Mamba-3 block, the Transformer block, the sliding-window Transformer block, the byte LM forward pass on its reference path (inference), the byte LM forward pass on its threaded path (inference), the published byte LM host training step, the column-sharded standard scaler, series-sharded ARIMA, series-sharded Holt-Winters, query-sharded k-NN classification, query-sharded radius neighbors, query-sharded kernel density, reference-sharded k-NN classification, reference-sharded k-NN regression, the tree-range-sharded random forest classifier, the tree-range-sharded Extra Trees regressor and the small MLP trained over ordered logical gradient shards<!--/fact-->,
+<!--fact:host_training_lanes-->pinned GEMM, kernel density, Holt-Winters, lasso, elasticnet, SVC, agglomerative clustering, the Extra Trees classifier, the Extra Trees regressor, the isolation forest, nearest neighbors, the k-NN classifier, the k-NN regressor, PCA, whitened PCA, truncated SVD, linear regression, ridge, DBSCAN, k-means, the metrics, spectral clustering, the standard scaler, the min-max scaler, logistic regression, the random forest classifier, the random forest regressor, k-means with a random start, k-means from given centroids, weighted k-means, the standard scaler without centering, the standard scaler without scaling, the clipped min-max scaler, spectral clustering on a precomputed affinity, the Gaussian process with an RBF kernel, the Gaussian process with a Matern kernel at nu 0.5, the Gaussian process with a Matern kernel at nu 1.5, the Gaussian process with an ARD Matern kernel at nu 2.5, the Gaussian process with normalized targets, the binary Gaussian process classifier, the one-vs-rest Gaussian process classifier, nearest neighbors under squared euclidean distance, the distance-weighted k-NN classifier, the distance-weighted k-NN regressor, the transposed GEMM ops, brute-force DBSCAN under manhattan distance, kernel density with the tophat kernel under squared euclidean distance, kernel density with the Epanechnikov kernel under manhattan distance, kernel density with the exponential kernel under chebyshev distance, kernel density with the linear kernel under cosine distance, kernel density with the cosine kernel under minkowski distance, weighted kernel density, linear regression without an intercept, weighted linear regression, ridge without an intercept, unpenalized logistic regression without an intercept, elasticnet at the l2 end without an intercept, multiplicative Holt-Winters, the linear SVC, the polynomial SVC, the tuned isolation forest, nearest neighbors under manhattan distance, nearest neighbors under chebyshev distance, nearest neighbors under cosine distance, nearest neighbors under minkowski distance at p 3, nearest neighbors over the random ball cover, radius neighbors, radius neighbors under manhattan distance, radius neighbors under chebyshev distance, radius neighbors under minkowski distance at p 3, weighted DBSCAN, l1-penalized logistic regression, elasticnet-penalized logistic regression, multiclass logistic regression, the KPSS stationarity test, SVR, the linear SVR, whitened PCA through the full SVD, the classification, ranking and regression metrics, the Fowlkes-Mallows index, the weighted scores of the gradient boosting classifier and regressor, the weighted scores of the random forest classifier and regressor, the small MLP, gradient boosting on symmetric trees with the Logloss loss, gradient boosting on symmetric trees with the RMSE loss, gradient boosting on depthwise trees with the Logloss loss, gradient boosting on lossguide trees with the Logloss loss, gradient boosting with the Min and Max NaN modes, the gradient boosting classifier, the gradient boosting regressor, gradient boosting with the Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq, Expectile, Tweedie, Huber and CrossEntropy losses, gradient boosting with Exact leaves and the Poisson bootstrap, gradient boosting on lossguide trees with the NewtonCosine score and the searcher options, multiclass gradient boosting, one-vs-all gradient boosting, ordered boosting with the RMSE loss (OrderedRMSE), the two-level FeatureFreq estimator, gradient boosting with the pointwise searcher, L2 scores, the Bayesian bootstrap and an eval set, gradient boosting with one-hot categorical columns, gradient boosting with the QueryRMSE ranking loss on query groups, gradient boosting with the PairLogit ranking loss on generated and explicit pairs, gradient boosting with the YetiRank ranking loss on query groups, ARIMA, differenced ARIMA, seasonal ARIMA, UMAP, k-means under the rooted euclidean metric, k-means from the classic k-means++ start, the refusal of k-means under cosine distance, cross-validation of gradient boosting, the bootstrap, the permutation test, Monte Carlo integration, SGD with momentum, Nesterov and dampening, Adam and AdamW with the gradient clip and accumulation, the cross-entropy loss arms, the embedding, RMSNorm and linear training primitives, the Cholesky factorization and solve, random Fourier features, kernel ridge, the Nystroem kernel approximation, the Gaussian mixture, the Gaussian mixture with a random start, HDBSCAN, HDBSCAN with leaf selection, the random forest classifier with entropy splits, log2 features and no bootstrap, the class-weighted random forest classifier with the parallel groves engine, the random forest regressor with the Poisson criterion, the random forest regressor with the gamma and inverse Gaussian criteria, the best-first Extra Trees classifier with entropy splits, the bootstrapped Extra Trees regressor with the parallel groves engine, the Mamba-2 block, the Mamba-2 block with an active dt clamp, the Mamba-1 block, the Mamba-3 block, the Transformer block, the sliding-window Transformer block, the Samba stack, the Samba stack with untied embeddings, dropout, accumulation, clipping and a cosine schedule, the byte LM forward pass on its reference path (inference), the byte LM forward pass on its threaded path (inference), the published byte LM host training step, the column-sharded standard scaler, series-sharded ARIMA, series-sharded Holt-Winters, query-sharded k-NN classification, query-sharded radius neighbors, query-sharded kernel density, reference-sharded k-NN classification, reference-sharded k-NN regression, the tree-range-sharded random forest classifier, the tree-range-sharded Extra Trees regressor, the small MLP trained over ordered logical gradient shards, the Embedding layer, the Embedding layer on its sorted execution plan, the IVF-Flat index, the IVF-Flat index under euclidean distance, extending a built IVF-Flat index, the byte LM trainer, the byte LM trainer on its resident session, samples from the Gaussian mixture, samples from the Gaussian mixture with a random start, posterior draws from the Gaussian process, posterior draws from the Gaussian process with normalized targets, the byte-level BPE tokenizer (inference, host integers), predictions of Metal-saved gradient boosting models with CTR tables (inference) and predictions of Metal-saved gradient boosting models with tensor CTRs (inference)<!--/fact-->,
 the first six identical to the three GPU columns on seven CPUs
 ([gate](.github/workflows/cpu-identity-gate.yml)) and, since 2026-09-14,
 agglomerative clustering, Extra Trees (classifier and regressor, the saved
@@ -275,7 +274,7 @@ over the token count. From 0.8.6 every one of these host bindings ships in both
 wheels (0.8.5 and earlier carry only the byte LM's); each also builds from
 source with `bindings/build_*_host.sh` (a shim over
 `bindings/build_host_family.sh <family>`). Every lane not named here has
-no CPU path at all: <!--fact:no_cpu_path-->the Samba blocks, the Embedding layer and gradient boosting training outside its declared lanes (CTR categorical features, and sample weights, eval sets and the pointwise searcher outside the gbdt-pointwise-l2-bayesian-eval configuration, among them)<!--/fact-->.
+no CPU path at all: <!--fact:no_cpu_path-->gradient boosting training outside its declared lanes (CTR categorical features, and sample weights, eval sets and the pointwise searcher outside the gbdt-pointwise-l2-bayesian-eval configuration, among them)<!--/fact-->.
 Run the diagnostic command before depending on a new machine:
 
 ```sh
@@ -344,6 +343,23 @@ nominations in a public issue, and the succession steps for a sole maintainer
 (nominate two successors, transfer access, document release and certification
 steps, rotate credentials, publish open blockers) are written down. The code
 is Apache-2.0.
+
+### Check the claims on your machine
+
+```sh
+pip install mojolearn
+python -m mojolearn verify --all        # or --quick, one lane per family
+```
+
+This runs the identity lanes the committed records were written with, on
+fixtures generated inside the package, and compares every train, infer,
+saved-model and batch part with the reference hashes the Apple, NVIDIA, AMD
+and CPU records carry, shipped in the wheel. On a CPU-only install it runs
+the CPU reference lanes and loads small GPU-trained models, which must
+answer with the recorded GPU bits. Each part reads IDENTICAL, DIVERGENT,
+OWED (no record yet) or REFUSED; `--json` writes a report to share.
+[docs/VERIFY.md](docs/VERIFY.md) says what a local run proves and what it
+does not.
 
 You can verify a certificate without trusting the maintainer. On any
 supported GPU, `MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify`
@@ -434,7 +450,7 @@ parameters or numeric mode requires refitting, and changing query batching
 can change results. Supervised targets, alternate metrics and alternate
 initialization remain unsupported.
 
-The APIs intentionally resemble scikit-learn, but mojolearn is not a drop-in
+The APIs follow familiar estimator conventions, but mojolearn is not a drop-in
 replacement. Where an algorithm has a settled convention for a default, that
 convention is followed. Unsupported parameters raise explicitly rather than
 being silently ignored.
@@ -487,7 +503,7 @@ What will get in your way first:
 - mojolearn is not a drop-in replacement for scikit-learn, CatBoost or cuML.
   Parameter coverage is intentionally smaller than any of them, and
   unsupported parameters raise.
-- Source builds need the Mojo toolchain through [pixi](https://pixi.sh), and
+- Source builds need the Mojo toolchain through pixi, and
   one build targets one GPU architecture. NVIDIA Linux is source-build-only
   today.
 - The support matrix is honest about gaps. Several public surfaces still have
@@ -523,6 +539,13 @@ Current priorities are in [ROADMAP.md](ROADMAP.md). See also
 outside, at three costs](docs/VERIFY_EXTERNALLY.md), [release](docs/PYPI_RELEASE.md),
 [engineering rules](ENGINEERING_RULES.md), [contributing](CONTRIBUTING.md),
 [governance](GOVERNANCE.md), and [notices](NOTICE).
+
+## Trademarks and affiliation
+
+mojolearn is an independent project by Andrew Hendel. It is not affiliated
+with, sponsored by, or endorsed by Modular, Inc. MAX® and Mojo® are trademarks
+of Modular, Inc. Binary wheels include unmodified Modular runtime components
+redistributed under Modular's own license; see [NOTICE](NOTICE).
 
 ## Citation
 

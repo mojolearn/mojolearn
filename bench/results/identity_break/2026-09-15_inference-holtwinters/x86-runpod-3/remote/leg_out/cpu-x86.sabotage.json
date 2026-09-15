@@ -1,0 +1,852 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-9655p-96-core-processor",
+ "commit": "27b6a850506fede9873401280d8fe49285e00b21",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "holtwinters/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b52038e06d35f4f3"
+   ],
+   "parts": [
+    {
+     "forecast": "6ee00fb67d4a535d"
+    }
+   ],
+   "infer": [
+    "f2b5c3c5182f61fc"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "78a79a55fc17d866"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "f2b5c3c5182f61fc"
+   ],
+   "batch": [
+    "ba53e64a1df82b23"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "31752d7c51a0cb71"
+   ],
+   "parts": [
+    {
+     "forecast": "dafd8e03684ade38"
+    }
+   ],
+   "infer": [
+    "6cf8fd565fce08e8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "cfe9b179b957cc04"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "6cf8fd565fce08e8"
+   ],
+   "batch": [
+    "b1a7d50e30db40da"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "61eddb36bd2d87b7"
+   ],
+   "parts": [
+    {
+     "forecast": "9a4144e075c8e6c1"
+    }
+   ],
+   "infer": [
+    "400a20ab50c26aeb"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "8487a98cf3fea8e4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "400a20ab50c26aeb"
+   ],
+   "batch": [
+    "9e1d97a0a9681293"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9164b6c631db609d"
+   ],
+   "parts": [
+    {
+     "forecast": "ebd7af716d6bc358"
+    }
+   ],
+   "infer": [
+    "352bc975ceed52c0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1a8852dc5e23ea87"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "352bc975ceed52c0"
+   ],
+   "batch": [
+    "c5bb0277d4565f27"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "db35c88da059e9e1"
+   ],
+   "parts": [
+    {
+     "forecast": "310564fa3a120e17"
+    }
+   ],
+   "infer": [
+    "5e7dba822d698dd4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6d689739bf9e7dfd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "5e7dba822d698dd4"
+   ],
+   "batch": [
+    "0b25b078a96b247e"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "db35c88da059e9e1"
+   ],
+   "parts": [
+    {
+     "forecast": "310564fa3a120e17"
+    }
+   ],
+   "infer": [
+    "5e7dba822d698dd4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6d689739bf9e7dfd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "5e7dba822d698dd4"
+   ],
+   "batch": [
+    "0b25b078a96b247e"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b52038e06d35f4f3"
+   ],
+   "parts": [
+    {
+     "forecast": "6ee00fb67d4a535d"
+    }
+   ],
+   "infer": [
+    "f2b5c3c5182f61fc"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "78a79a55fc17d866"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "f2b5c3c5182f61fc"
+   ],
+   "batch": [
+    "ba53e64a1df82b23"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c6d21c5c6afe4f69"
+   ],
+   "parts": [
+    {
+     "forecast": "5a107d64b232d045"
+    }
+   ],
+   "infer": [
+    "17a028df36fb8262"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "8426c59be14800ab"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "17a028df36fb8262"
+   ],
+   "batch": [
+    "a60663334389dbc0"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5c46bc9487708aa4"
+   ],
+   "parts": [
+    {
+     "forecast": "164104102e4b1522"
+    }
+   ],
+   "infer": [
+    "a5724baec0334ef2"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1de9d5357cb94fb7"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a5724baec0334ef2"
+   ],
+   "batch": [
+    "0bd54d5ed1c29864"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters-multiplicative/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f793337e37e1e0da"
+   ],
+   "parts": [
+    {
+     "forecast": "b8b4844218a50096"
+    }
+   ],
+   "infer": [
+    "c6f8edc28ac81e23"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "dbeaa25bc903e601"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c6f8edc28ac81e23"
+   ],
+   "batch": [
+    "7f8a8750ff50d004"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters-multiplicative/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c45ce7bf711fc42b"
+   ],
+   "parts": [
+    {
+     "forecast": "0bb8e718cf0f5255"
+    }
+   ],
+   "infer": [
+    "701cc8c843394281"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1108e97a0b8dc210"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "701cc8c843394281"
+   ],
+   "batch": [
+    "5cbcdf1f63a17411"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters-multiplicative/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "341b73cce337cb26"
+   ],
+   "parts": [
+    {
+     "forecast": "ebc7145f0b64deae"
+    }
+   ],
+   "infer": [
+    "4a64bb80f8a1619e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "da7cdbbcbc59a0d6"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "4a64bb80f8a1619e"
+   ],
+   "batch": [
+    "d37b64dae210f8c1"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters-multiplicative/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "425d0592ac2127b5"
+   ],
+   "parts": [
+    {
+     "forecast": "51985a0815f3aed7"
+    }
+   ],
+   "infer": [
+    "3a49be394ba885c8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "35be864b39776dfe"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3a49be394ba885c8"
+   ],
+   "batch": [
+    "5b90f5e14e94917c"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters-multiplicative/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b5f24460a7980a35"
+   ],
+   "parts": [
+    {
+     "forecast": "5caf36fd8045338b"
+    }
+   ],
+   "infer": [
+    "a2ef7ddecbc96c95"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "decc3e666fc2be26"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a2ef7ddecbc96c95"
+   ],
+   "batch": [
+    "0b99b6262a9558b7"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters-multiplicative/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b5f24460a7980a35"
+   ],
+   "parts": [
+    {
+     "forecast": "5caf36fd8045338b"
+    }
+   ],
+   "infer": [
+    "a2ef7ddecbc96c95"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "decc3e666fc2be26"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a2ef7ddecbc96c95"
+   ],
+   "batch": [
+    "0b99b6262a9558b7"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters-multiplicative/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f793337e37e1e0da"
+   ],
+   "parts": [
+    {
+     "forecast": "b8b4844218a50096"
+    }
+   ],
+   "infer": [
+    "c6f8edc28ac81e23"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "dbeaa25bc903e601"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c6f8edc28ac81e23"
+   ],
+   "batch": [
+    "7f8a8750ff50d004"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters-multiplicative/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d454ffecacd02dea"
+   ],
+   "parts": [
+    {
+     "forecast": "73a617c3d79c046e"
+    }
+   ],
+   "infer": [
+    "15f6c056acaf4851"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ad80fe2916bda1b2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "15f6c056acaf4851"
+   ],
+   "batch": [
+    "1fa571c2103448a2"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "holtwinters-multiplicative/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2000b8405ae36e8a"
+   ],
+   "parts": [
+    {
+     "forecast": "7acbb1bf099996f6"
+    }
+   ],
+   "infer": [
+    "69f3cc4c5c1e2580"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "68a44462d155e35a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "69f3cc4c5c1e2580"
+   ],
+   "batch": [
+    "f9f48e2c3e0233b8"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1"
+ },
+ "host": {
+  "cpu_model": "AMD EPYC 9655P 96-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gpc",
+   "gpc-multiclass",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sha256": "4ca85b60f17ea48bd355ae19961c1513e1ea01caa944e7cd55cae8a783baf5aa",
+    "size": 371288,
+    "sabotage": true
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "426ea62ad000274fc57ad6ff5aa49ecb37ea02308abcb1683cccc1f5fcc57132",
+    "size": 594488,
+    "sabotage": true
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "0bdfe12747a352d594591036cd8863dc4c698e815b399f96d77a41a5404080de",
+    "size": 298656,
+    "sabotage": true
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sha256": "800ac4a14dea39f54e73a1e38b1f695b863c3ddab748c09aa624683ff5d3365a",
+    "size": 307144,
+    "sabotage": true
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ }
+}

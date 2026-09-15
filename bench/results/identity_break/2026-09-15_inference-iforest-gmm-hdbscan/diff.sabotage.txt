@@ -1,0 +1,157 @@
+NOTE: --lanes scopes this diff to 6 lane(s); 160 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_hdbscan_host', '_mojolearn_mixture_host', '_mojolearn_svm_host'] commit=b5d4417d066e7bdbbfbb00d142f38631ec8d0fb5
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-h100-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    amd-mi325x-gfx942: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    nvidia-h100-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    amd-mi325x-gfx942: {'X': '32ea0bbed60b8e6c'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    apple-m4: None
+    cpu-amd-epyc-7713-64-core-processor: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|------------------|
+| gmm-random-init/base         | DIVERGENT  | parts differ: weights,means,covariances; agree: n_iter,lower_bound,labels | fc8ac51adc1813b2 | fc8ac51adc1813b2 | (not run)        | 68334433c8205781 |
+| gmm-random-init/dupes        | DIVERGENT  | parts differ: weights,means,covariances; agree: n_iter,lower_bound,labels | fc8ac51adc1813b2 | fc8ac51adc1813b2 | (not run)        | 68334433c8205781 |
+| gmm-random-init/ties         | DIVERGENT  | parts differ: weights,means,covariances; agree: n_iter,lower_bound,labels | 01978ea4fe0c8e33 | 01978ea4fe0c8e33 | (not run)        | f7b45881dd8f4ce9 |
+| gmm/base                     | DIVERGENT  | parts differ: weights,means,covariances,precisions,logdet,proba; agree: n_iter,converged,lower_bound,labels | bf646caedaf7a508 | bf646caedaf7a508 | (not run)        | 089fbece950aec0f |
+| gmm/dupes                    | DIVERGENT  | parts differ: weights,means,covariances,precisions,logdet,proba; agree: n_iter,converged,lower_bound,labels | bf646caedaf7a508 | bf646caedaf7a508 | (not run)        | 089fbece950aec0f |
+| gmm/ties                     | DIVERGENT  | parts differ: weights,means,covariances,precisions,logdet,proba; agree: n_iter,converged,lower_bound,labels | 2f07a729352d2581 | 2f07a729352d2581 | (not run)        | 38806b3df1b23ad1 |
+| hdbscan-leaf/base            | DIVERGENT  | parts differ: labels,core,counts; agree: - | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | 9d136bc011b39e78 |
+| hdbscan-leaf/dupes           | DIVERGENT  | parts differ: labels,core,counts; agree: - | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | 9d136bc011b39e78 |
+| hdbscan-leaf/ties            | DIVERGENT  | parts differ: labels,core,counts; agree: - | 41045554964e4bd8 | 41045554964e4bd8 | 41045554964e4bd8 | 38c4ab16664267e5 |
+| hdbscan/base                 | DIVERGENT  | parts differ: labels,core,counts; agree: - | 1032d54b827b0e0c | 1032d54b827b0e0c | 1032d54b827b0e0c | 1ba67d4db1385d26 |
+| hdbscan/dupes                | DIVERGENT  | parts differ: labels,core,counts; agree: - | 1032d54b827b0e0c | 1032d54b827b0e0c | 1032d54b827b0e0c | 1ba67d4db1385d26 |
+| hdbscan/ties                 | DIVERGENT  | parts differ: labels,core,counts; agree: - | 444bc82f0a607cfb | 444bc82f0a607cfb | 444bc82f0a607cfb | 5196591a54982010 |
+| iforest-tuned/base           | DIVERGENT  | parts differ: scores,predict; agree: - | 0a149db6290bacd6 | 0a149db6290bacd6 | (not run)        | 5d8271dbe55b72eb |
+| iforest-tuned/dupes          | DIVERGENT  | parts differ: scores,predict; agree: - | cf1224bee78e2e10 | cf1224bee78e2e10 | (not run)        | b4c53944c70a05bf |
+| iforest-tuned/ties           | DIVERGENT  | parts differ: scores,predict; agree: - | 8f43ab374b0ab900 | 8f43ab374b0ab900 | (not run)        | 657f9f2aef495a10 |
+| iforest/base                 | DIVERGENT  | parts differ: scores,predict; agree: - | 8703d4a008ffd13d | 8703d4a008ffd13d | (not run)        | 9d499389c350b685 |
+| iforest/dupes                | DIVERGENT  | parts differ: scores,predict; agree: - | b879bcf3dcf99f38 | b879bcf3dcf99f38 | (not run)        | 5643bf51ede7f91a |
+| iforest/ties                 | DIVERGENT  | parts differ: scores,predict; agree: - | 5043855ee14799da | 5043855ee14799da | (not run)        | b97289dad7e65f31 |
+
+summary: DIVERGENT=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|------------------|
+| gmm-random-init/base         | infer  | DIVERGENT    | 87226624dfab0f10 | 87226624dfab0f10 | 87226624dfab0f10 | (not run)        | b6696615983525bb |
+| gmm-random-init/base         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | b80752b4e03f2a05 |
+| gmm-random-init/base         | batch  | DIVERGENT    | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | (not run)        | d2df689aa35c6b41 |
+| gmm-random-init/dupes        | infer  | DIVERGENT    | 87226624dfab0f10 | 87226624dfab0f10 | 87226624dfab0f10 | (not run)        | b6696615983525bb |
+| gmm-random-init/dupes        | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | b80752b4e03f2a05 |
+| gmm-random-init/dupes        | batch  | DIVERGENT    | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | (not run)        | d2df689aa35c6b41 |
+| gmm-random-init/ties         | infer  | DIVERGENT    | 5c4f620623f43daf | 5c4f620623f43daf | 5c4f620623f43daf | (not run)        | ace0093486976803 |
+| gmm-random-init/ties         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | ab683ed7badb9157 |
+| gmm-random-init/ties         | batch  | DIVERGENT    | 6f7b606277388c47 | 6f7b606277388c47 | 6f7b606277388c47 | (not run)        | bc7eec535efb66bb |
+| gmm/base                     | infer  | DIVERGENT    | 140095763edf6c53 | 140095763edf6c53 | 140095763edf6c53 | (not run)        | 021ff0b9b181c731 |
+| gmm/base                     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | 0c00d2ed45b423bc |
+| gmm/base                     | batch  | DIVERGENT    | 599d547e666f29b2 | 599d547e666f29b2 | 599d547e666f29b2 | (not run)        | df987357c10d7161 |
+| gmm/dupes                    | infer  | DIVERGENT    | 140095763edf6c53 | 140095763edf6c53 | 140095763edf6c53 | (not run)        | 021ff0b9b181c731 |
+| gmm/dupes                    | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | 0c00d2ed45b423bc |
+| gmm/dupes                    | batch  | DIVERGENT    | 599d547e666f29b2 | 599d547e666f29b2 | 599d547e666f29b2 | (not run)        | df987357c10d7161 |
+| gmm/ties                     | infer  | DIVERGENT    | dbb412e155fd4fb2 | dbb412e155fd4fb2 | dbb412e155fd4fb2 | (not run)        | ad043d1df90df3e6 |
+| gmm/ties                     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | e3567019afdcf8b2 |
+| gmm/ties                     | batch  | DIVERGENT    | 60796a07f79e71e9 | 60796a07f79e71e9 | 60796a07f79e71e9 | (not run)        | 288c19f5f54c0d23 |
+| hdbscan-leaf/base            | infer  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | 72404979b3191f8d | 0c217ea51a658bc1 |
+| hdbscan-leaf/base            | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | e5e7e5621116affa |
+| hdbscan-leaf/base            | batch  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | 88b044992cd41342 | 4196e344e8596354 |
+| hdbscan-leaf/dupes           | infer  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | 72404979b3191f8d | 0c217ea51a658bc1 |
+| hdbscan-leaf/dupes           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | e5e7e5621116affa |
+| hdbscan-leaf/dupes           | batch  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | 88b044992cd41342 | 4196e344e8596354 |
+| hdbscan-leaf/ties            | infer  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | e796aec36f4eda67 | f8ff0dc1b8d0f5ed |
+| hdbscan-leaf/ties            | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | bfd13ffe3e547028 |
+| hdbscan-leaf/ties            | batch  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | cad94e47463e9d27 | bb87068fa13d2cc3 |
+| hdbscan/base                 | infer  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | a104cfe065750353 | 7f34530f10cc123e |
+| hdbscan/base                 | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 251580665726e3b5 |
+| hdbscan/base                 | batch  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | d49a36bc7e6177b4 | afcb9939b9da9528 |
+| hdbscan/dupes                | infer  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | a104cfe065750353 | 7f34530f10cc123e |
+| hdbscan/dupes                | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 251580665726e3b5 |
+| hdbscan/dupes                | batch  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | d49a36bc7e6177b4 | afcb9939b9da9528 |
+| hdbscan/ties                 | infer  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | 324146f46faedded | 9970bf0867e74d38 |
+| hdbscan/ties                 | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 87446899e3975742 |
+| hdbscan/ties                 | batch  | DIVERGENT    | n/a:transductive | n/a:transductive | n/a:transductive | c67a80723b373687 | 00efbbcbf695a67f |
+| iforest-tuned/base           | infer  | DIVERGENT    | bcbf71b247c3951c | bcbf71b247c3951c | bcbf71b247c3951c | (not run)        | 7a18291ac8d10b43 |
+| iforest-tuned/base           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | a5a275f33983fdc6 |
+| iforest-tuned/base           | batch  | DIVERGENT    | 23c01febba0472d9 | 23c01febba0472d9 | 23c01febba0472d9 | (not run)        | 773d0ac502495740 |
+| iforest-tuned/dupes          | infer  | DIVERGENT    | b6c59cfe033236ce | b6c59cfe033236ce | b6c59cfe033236ce | (not run)        | 1c84ccdce0791252 |
+| iforest-tuned/dupes          | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | ac9dfea5ffe375fe |
+| iforest-tuned/dupes          | batch  | DIVERGENT    | c644f0ba93bd5487 | c644f0ba93bd5487 | c644f0ba93bd5487 | (not run)        | 94d6bae458c8e03c |
+| iforest-tuned/ties           | infer  | DIVERGENT    | 9f8aee8ed2215f71 | 9f8aee8ed2215f71 | 9f8aee8ed2215f71 | (not run)        | 251c871d28d3c2dc |
+| iforest-tuned/ties           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | 9288f4ccad67c8ca |
+| iforest-tuned/ties           | batch  | DIVERGENT    | e2eb172cfc7af595 | e2eb172cfc7af595 | e2eb172cfc7af595 | (not run)        | d6ab4f7c489c2768 |
+| iforest/base                 | infer  | DIVERGENT    | c4247bb3a6c4675e | c4247bb3a6c4675e | c4247bb3a6c4675e | (not run)        | 75968f3089cf4b34 |
+| iforest/base                 | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | 547970b132aefe8b |
+| iforest/base                 | batch  | DIVERGENT    | 59fc2061e91cc75e | 59fc2061e91cc75e | 59fc2061e91cc75e | (not run)        | b050c903fe328ac4 |
+| iforest/dupes                | infer  | DIVERGENT    | db8a00a8aa424f7c | db8a00a8aa424f7c | db8a00a8aa424f7c | (not run)        | 81b0ff8f7aff1565 |
+| iforest/dupes                | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | fb2362d583209a88 |
+| iforest/dupes                | batch  | DIVERGENT    | bfeab82f12199afa | bfeab82f12199afa | bfeab82f12199afa | (not run)        | 7eb6e7a40e8207e4 |
+| iforest/ties                 | infer  | DIVERGENT    | 288c5e41c62cddea | 288c5e41c62cddea | 288c5e41c62cddea | (not run)        | 5519b137e8f83159 |
+| iforest/ties                 | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        | 052acc3268f89dc5 |
+| iforest/ties                 | batch  | DIVERGENT    | d441bc2c72edfeab | d441bc2c72edfeab | d441bc2c72edfeab | (not run)        | 589deb0fc94d676d |
+
+summary (infer/model): DIVERGENT=18, ONE-COLUMN=18
+summary (batch): DIVERGENT=18
+summary (rlpair): 

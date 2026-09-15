@@ -1,0 +1,19 @@
+owed metrics-fowlkes-mallows/base train: production 2cc16b7a5cb0caa4 sabotage 5a0a271424ec3bbf MOVED
+owed metrics-fowlkes-mallows/denormal train: production 2cc16b7a5cb0caa4 sabotage 5a0a271424ec3bbf MOVED
+owed metrics-fowlkes-mallows/denormal_ftz train: production 2cc16b7a5cb0caa4 sabotage 5a0a271424ec3bbf MOVED
+owed metrics-fowlkes-mallows/dupes train: production 2cc16b7a5cb0caa4 sabotage 5a0a271424ec3bbf MOVED
+owed metrics-fowlkes-mallows/hashed train: production 39299bfd4fafd06f sabotage 10886bf80e92f4d3 MOVED
+owed metrics-fowlkes-mallows/negative train: production bf17710ae346249e sabotage 5ab8a191481d4508 MOVED
+owed metrics-fowlkes-mallows/odd train: production 6ea7091579a40238 sabotage 469d96600ac7eb8c MOVED
+owed metrics-fowlkes-mallows/ties train: production 7a26ee9f258fb0a8 sabotage c9e066b48dae2812 MOVED
+owed metrics-fowlkes-mallows/wide train: production f3260f403bc50af5 sabotage 307cb4fb29cc6611 MOVED
+owed metrics-classification/base batch: production 7ad4c2154ecfc2b1 sabotage 25b2df6f41f210ba MOVED
+owed metrics-classification/denormal batch: production 9eff2140c98aabc3 sabotage 576b46dc89e23cd6 MOVED
+owed metrics-classification/denormal_ftz batch: production 9eff2140c98aabc3 sabotage 576b46dc89e23cd6 MOVED
+owed metrics-classification/dupes batch: production 7ad4c2154ecfc2b1 sabotage 25b2df6f41f210ba MOVED
+owed metrics-classification/hashed batch: production 1d1071f2c508d40b sabotage e349747b1178bab9 MOVED
+owed metrics-classification/negative batch: production a717c35664360555 sabotage 4f3b86d0c4cac947 MOVED
+owed metrics-classification/odd batch: production 10d07741c1238b7b sabotage c742760daa0c29b3 MOVED
+owed metrics-classification/ties batch: production 59ae3e19c610247a sabotage d52edefd07c6073a MOVED
+owed metrics-classification/wide batch: production 6b5c02ff40efbb18 sabotage ce67b9563a560a6d MOVED
+owed verdict OK (18 of 18 owed cell part(s) moved, 0 failure(s))

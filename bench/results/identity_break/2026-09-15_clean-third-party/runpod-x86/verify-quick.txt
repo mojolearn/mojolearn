@@ -1,0 +1,37 @@
+# verify --all: cpu (cpu), 4 lanes x 1 fixtures, harness wheel copy, table /tmp/tgt/mojolearn/verify_reference/table.json
+  gemm-pinned                        linalg              0.0s
+  kde                                estimators          0.0s
+  knn                                core                0.0s
+  svc                                svm                 0.0s
+  portable:rf-clf                    base        0.0s
+  portable:gbdt-symmetric            base        0.0s
+  portable:ols                       base        0.0s
+  portable:pca                       base        0.0s
+# python -m mojolearn verify --all
+# mojolearn 0.8.5  commit bc47909fdfcce60e0d27fdacae521788c5015c22 (MOJOLEARN_COMMIT)
+# mode identical  vendor cpu (class cpu)  device Linux x86_64 (no vendor tool answered)
+# cpu AMD EPYC 9754 128-Core Processor  Linux-5.15.0-94-generic-x86_64-with-glibc2.35  python 3.14.7  numpy 2.5.3
+# reference table /tmp/tgt/mojolearn/verify_reference/table.json (sha256 4aba246bf1e3bb2f, 54 records)
+# depth quick: 4 lanes x 1 fixtures, 1 repeat(s), 4 portable model(s)
+# note: this harness is not the one the table was generated with; lanes added or changed since then read OWED or DIVERGENT until the table is regenerated
+
+| family          | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-----------------|-------|-----------|-----------|------|---------|-----|
+| linalg          |     1 |         0 |         0 |    0 |       4 |   0 |
+| estimators      |     1 |         0 |         0 |    0 |       4 |   0 |
+| core            |     1 |         0 |         0 |    0 |       4 |   0 |
+| svm             |     1 |         0 |         0 |    0 |       4 |   0 |
+| portable models |     4 |         4 |         0 |    0 |       4 |   0 |
+| all             |     8 |         4 |         0 |    0 |      20 |   0 |
+
+REFUSED (20):
+  gemm-pinned train: ImportError: mojolearn: no CPU implementation of _mojolearn_linalg.linalg_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_linalg; host bindings built here: _mojolearn_tokenizer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box 
+  kde train: ImportError: mojolearn: no CPU implementation of _mojolearn_estimators.kde_score_samples yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_estimators; host bindings built here: _mojolearn_tokenizer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on thi
+  knn train: ImportError: mojolearn: no CPU implementation of _mojolearn.knn_search yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_tokenizer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModel
+  svc train: ImportError: mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_tokenizer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageM
+  portable:rf-clf batch: ImportError: mojolearn: /tmp/tgt/mojolearn/host/_mojolearn_forest_host.so is not built. Build it with bindings/build_forest_host.sh
+  portable:gbdt-symmetric batch: ImportError: mojolearn: /tmp/tgt/mojolearn/host/_mojolearn_forest_host.so is not built. Build it with bindings/build_forest_host.sh
+  portable:ols batch: batch: ImportError: mojolearn: /tmp/tgt/mojolearn/host/_mojolearn_estimators_host.so is not built. Build it with bindings/build_estimators_host.sh
+  portable:pca batch: batch: ImportError: mojolearn: /tmp/tgt/mojolearn/host/_mojolearn_estimators_host.so is not built. Build it with bindings/build_estimators_host.sh
+
+RESULT: VERIFIED (4 identical, 0 divergent, 0 owed, 20 refused, 0 n/a cell parts). 0.1s. exit 0

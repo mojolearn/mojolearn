@@ -9,7 +9,10 @@
 #
 # What it proves on each runner, and nothing more. Every host binding the
 # manifest declares (python/mojolearn/host_surface.py lists the families, a
-# count written here went stale twice on 2026-09-14; each builds through bindings/build_<family>_host.sh)
+# count written here went stale twice on 2026-09-14; each builds through
+# bindings/build_<family>_host.sh, in ONE loop over the manifest's list, never
+# a hand list: until 2026-09-15 this file named byte_lm, forest and tokenizer
+# beside the routed families and missed seven bindings the wheel ships)
 # ON THAT RUNNER with no accelerator target as the kernel matrix's CPU column
 # (checks/kernel_matrix.mojo COLUMN_CPU; each binding asserts it at build time
 # and reads it back). The checkout's package takes the CPU-only path
@@ -24,8 +27,9 @@
 # implementation and STABLE for every lane in COVERED_LANES.
 #
 # COVERED_LANES is the list of identity_break lanes that have a CPU
-# implementation, and HOST_FAMILIES the phase 1 host bindings that serve them
-# (bindings/build_<family>_host.sh, routed by _backend._HOST_MODULES). Both
+# implementation, and BUILD_FAMILIES every host family the gate builds
+# (bindings/build_<family>_host.sh; the routed ones by _backend._HOST_MODULES,
+# the rest loaded by path or through mojolearn.host_model). Both
 # are READ FROM python/mojolearn/host_surface.py (the host surface manifest
 # lane, 2026-09-14); a host lane adds its family and lanes there and this
 # file follows. Were the list empty the "covered" steps would say so and run
@@ -86,15 +90,25 @@ env:
   #                       3 (lane/cpu-training-batch3) adds
   #                       logistic-multiclass (the softmax loss), so no
   #                       classical lane is inference-only any more.
-  #   HOST_FAMILIES       the routed (phase 1) families, space separated; each
-  #                       is built by bindings/build_<family>_host.sh (a shim
-  #                       over bindings/build_host_family.sh) into
-  #                       MOJOLEARN_<FAMILY>_HOST_OUTDIR, read back as the CPU
+  #   BUILD_FAMILIES      every family the gate builds, space separated: the
+  #                       manifest's --families on the full verification
+  #                       (routed, loaded by path and inference-only alike),
+  #                       --wheel-families otherwise. Each is built by
+  #                       bindings/build_<family>_host.sh (a shim over
+  #                       bindings/build_host_family.sh), read back as the CPU
   #                       column, and named in host.families.
-  #   HOST_BINDINGS       the routed families' basenames, space separated.
-  #   ALL_HOST_BINDINGS   every host binding basename, comma separated (the
-  #                       byte LM, forest and tokenizer bindings included), the
+  #   SABOTAGE_FAMILIES   the same list, built again with
+  #                       -D MOJOLEARN_HOST_SABOTAGE=1 into host-sab.
+  #   ALL_HOST_BINDINGS   the BUILD_FAMILIES basenames, comma separated, the
   #                       read-back and column checks' --binding list.
+  #                       `cpu_identity_gate_check.py build-list` fails the
+  #                       manifest step when any of the three lists leaves out
+  #                       a binding the manifest declares.
+  #   SAVED_MODEL_RECORDED
+  #                       the saved-model recordings of the unrouted inference
+  #                       families (forecast, mixture_infer, gp_infer,
+  #                       hdbscan_infer, ivf_search, embedding_infer),
+  #                       space separated, checked like CLASSICAL_RECORDED.
   #   CLASSICAL_RECORDED  the classical host gate recordings, space separated.
   #   CLASSICAL_GPU_COLUMNS
   #                       the three 46-lane GPU columns the classical gate
@@ -128,7 +142,9 @@ jobs:
             slot: x86-a
             label: x86-64 Linux (24.04)
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    # 90 since 2026-09-15: the seven shipped inference bindings are built
+    # twice more (production and sabotage) than before.
+    timeout-minutes: 90
     permissions:
       contents: read
     env:
@@ -164,6 +180,9 @@ jobs:
             /bench/results/identity_break/2026-09-14_136-lanes/
             /bench/results/identity_break/2026-09-14_166-lanes/
             /bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/
+            /bench/results/identity_break/2026-09-15_embedding-sort/
+            /bench/results/identity_break/2026-09-14_ivf-euclidean/
+            /bench/results/identity_break/2026-09-15_gbdt-ctr-tables/
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -233,22 +252,36 @@ jobs:
           {
             echo "COVERED_LANES=$(python3 $manifest --covered-lanes)"
             if [ "$FULL_CPU_VERIFY" = true ]; then
-              echo "HOST_FAMILIES=$(python3 $manifest --routed-families)"
-              echo "HOST_BINDINGS=$(python3 $manifest --routed-bindings)"
+              echo "BUILD_FAMILIES=$(python3 $manifest --families)"
+              echo "SABOTAGE_FAMILIES=$(python3 $manifest --families)"
               echo "ALL_HOST_BINDINGS=$(python3 $manifest --bindings --sep ,)"
             else
-              echo "HOST_FAMILIES=$(python3 -c 'import runpy; h=runpy.run_path("python/mojolearn/host_surface.py"); print(" ".join(f["family"] for f in h["FAMILIES"] if f["routes"] and f["ships_in_wheel"]))')"
+              echo "BUILD_FAMILIES=$(python3 $manifest --wheel-families)"
+              echo "SABOTAGE_FAMILIES=$(python3 $manifest --wheel-families)"
               echo "ALL_HOST_BINDINGS=$(python3 $manifest --wheel-bindings --sep ,)"
             fi
             echo "CLASSICAL_RECORDED=$(python3 $manifest --classical-recorded)"
+            echo "SAVED_MODEL_RECORDED=$(python3 $manifest --saved-model-recorded)"
             echo "CLASSICAL_GPU_COLUMNS=$(python3 $manifest --classical-gpu-columns)"
             echo "GPU_COLUMNS=$(python3 $manifest --training-gpu-columns)"
             echo "RECORD_COVERED_LANES=$(python3 $manifest --record-covered-lanes)"
             echo "FIX_COVERED_LANES=$(python3 $manifest --fix-covered-lanes)"
             echo "FIX_COLUMNS=$(python3 $manifest --training-fix-columns)"
+            # The CTR table lanes load these Metal-saved models on the CPU
+            # column (CPU training refuses CTR tables by name).
+            echo "MOJOLEARN_IDENTITY_GBDT_CTR_MODELS=$GITHUB_WORKSPACE/$(python3 $manifest --gbdt-ctr-models)"
           } | tee -a "$GITHUB_ENV" | tee "$GATE_OUT/manifest.txt"
           python3 $manifest --json > "$GATE_OUT/host_surface.json"
-          for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns) $(python3 $manifest --training-fix-columns); do
+          # The build lists above must cover every binding the manifest
+          # declares (tools/test_cpu_identity_gate.py BuildListTests holds the
+          # negative control: the pre-2026-09-15 hand list fails here).
+          scope=routine; [ "$FULL_CPU_VERIFY" = true ] && scope=full
+          python3 tools/cpu_identity_gate_check.py build-list --scope "$scope" \
+            --families "$(sed -n 's/^BUILD_FAMILIES=//p' "$GATE_OUT/manifest.txt")" \
+            --sabotage-families "$(sed -n 's/^SABOTAGE_FAMILIES=//p' "$GATE_OUT/manifest.txt")" \
+            --readback "$(sed -n 's/^ALL_HOST_BINDINGS=//p' "$GATE_OUT/manifest.txt")" \
+            2>&1 | tee "$GATE_OUT/build_list.log"
+          for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --saved-model-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns) $(python3 $manifest --training-fix-columns) $(python3 $manifest --gbdt-ctr-models); do
             [ -e "$d" ] || { echo "manifest names $d, which is not in this checkout: the record lags the surface" >&2; exit 1; }
           done
 
@@ -273,35 +306,18 @@ jobs:
           path: python/mojolearn/host/*.so
           key: host-v2-${{ env.FULL_CPU_VERIFY }}-${{ runner.os }}-${{ runner.arch }}-${{ env.GATE_IMAGE }}-${{ env.MOJOLEARN_TARGET_CPU }}-identical-${{ hashFiles('**/*.mojo', 'bindings/*.sh', 'pixi.lock', 'pixi.toml', 'python/mojolearn/host_surface.py', '.github/workflows/cpu-identity-gate.yml') }}
 
-      - name: Build the byte LM host binding (CPU column)
+      # Every family in BUILD_FAMILIES, straight from the manifest: the byte
+      # LM, forest, tokenizer and neural bindings loaded by path, the routed
+      # (phase 1) families, and the inference-only families the wheel ships
+      # (mixture_infer, gp_infer, hdbscan_infer, embedding_infer, ivf_search,
+      # forecast). The manifest step's build-list check has already failed
+      # if the list leaves one out, and the read-back step below fails on a
+      # listed binding that did not build.
+      - name: Build every host binding the manifest declares (CPU column)
         if: steps.host-cache.outputs.cache-hit != 'true'
         run: |
           set -o pipefail
-          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host.log"
-
-      - name: Build the forest host binding (CPU column)
-        if: steps.host-cache.outputs.cache-hit != 'true'
-        run: |
-          set -o pipefail
-          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host.log"
-
-      # The third binding loaded by path (the expose-tokenizer lane,
-      # 2026-09-14): the read-back step below takes every binding the
-      # manifest declares, so a declared family this workflow does not
-      # build fails there on the first runner.
-      - name: Build the tokenizer host binding (CPU column)
-        if: steps.host-cache.outputs.cache-hit != 'true'
-        run: |
-          set -o pipefail
-          MOJOLEARN_BUILD_JOBS=2 sh bindings/build_tokenizer_host.sh 2>&1 | tee "$GATE_OUT/build_tokenizer_host.log"
-
-      # The phase 1 host set, one binding per family in HOST_FAMILIES, each
-      # exporting the GPU binding's names for the fits it covers.
-      - name: Build the phase 1 host bindings (CPU column)
-        if: steps.host-cache.outputs.cache-hit != 'true'
-        run: |
-          set -o pipefail
-          for family in $HOST_FAMILIES; do
+          for family in $BUILD_FAMILIES; do
             MOJOLEARN_BUILD_JOBS=2 sh "bindings/build_${family}_host.sh" 2>&1 | tee "$GATE_OUT/build_${family}_host.log"
           done
 
@@ -398,6 +414,26 @@ jobs:
           for c in $CLASSICAL_GPU_COLUMNS; do columns="$columns --gpu-column $c"; done
           python3 tools/classical_host_gate.py check $CLASSICAL_RECORDED $columns \
             --report "$GATE_OUT/classical_gate_prod.json" 2>&1 | tee "$GATE_OUT/classical_gate_prod.log"
+
+      # The saved-model recordings of the unrouted inference families
+      # (host_surface.saved_model_recorded(): ARIMA through forecast; GMM,
+      # its samples and HDBSCAN approximate_predict through mixture_infer and
+      # hdbscan_infer; the GP regressor and classifier through gp_infer; the
+      # IVF-Flat index and embedding table through ivf_search and
+      # embedding_infer; the isolation forest through core), recorded on the
+      # M4's Metal set and predicted here through the bindings built above.
+      # The neural binding has no saved-model recording: its gate is the
+      # covered lanes' four-column diff below, whose mlp, transformer, mamba
+      # and samba infer, batch, batchscale and ragged cells a CPU column
+      # asks through the public inference classes over _mojolearn_neural_host.
+      - name: Saved-model host gate (forecast, mixture, GP, HDBSCAN, IVF, embedding), every recorded prediction
+        if: always()
+        run: |
+          set -o pipefail
+          columns=""
+          for c in $CLASSICAL_GPU_COLUMNS; do columns="$columns --gpu-column $c"; done
+          python3 tools/classical_host_gate.py check $SAVED_MODEL_RECORDED $columns \
+            --report "$GATE_OUT/saved_model_gate_prod.json" 2>&1 | tee "$GATE_OUT/saved_model_gate_prod.log"
 
       # The tool loads on this CPU and the three committed GPU columns diff
       # exactly as recorded (the 2026-09-14 166-lane record at 1eea14f80, the
@@ -600,7 +636,6 @@ jobs:
           # The phase 1 build scripts read MOJOLEARN_HOST_OUTDIR when their
           # own MOJOLEARN_<FAMILY>_HOST_OUTDIR is unset.
           MOJOLEARN_HOST_OUTDIR: ${{ runner.temp }}/host-sab
-          MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_HOST_SABOTAGE=1"
         run: |
           set -o pipefail
           if [ -z "$COVERED_LANES" ]; then
@@ -608,17 +643,17 @@ jobs:
             exit 0
           fi
           rm -rf "${{ runner.temp }}/host-sab"
-          if [ "$FULL_CPU_VERIFY" = true ]; then
-            MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host_sab.log"
-            MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host_sab.log"
-            sabotage_families="$HOST_FAMILIES"
-          else
-            # The recorded classical inference checks use these three families.
-            # Forest inference has its separate sabotage build above.
-            sabotage_families="core estimators svm"
-          fi
-          for family in $sabotage_families; do
-            MOJOLEARN_BUILD_JOBS=2 sh "bindings/build_${family}_host.sh" 2>&1 | tee "$GATE_OUT/build_${family}_host_sab.log"
+          # SABOTAGE_FAMILIES is BUILD_FAMILIES (the manifest step checked
+          # both). MOJOLEARN_HOST_DIR has no fallback, and a binding absent
+          # from host-sab would load nothing. Each family's defines come from
+          # the manifest (host_surface.sabotage_build_defines): -D
+          # MOJOLEARN_HOST_SABOTAGE=1 for all, plus the tokenizer's own define
+          # and the forest's CTR arm (GATE_SABOTAGE_OWN_DEFINES), which the
+          # tokenizer and CTR table lanes rest on. byte_lm builds clean.
+          for family in $SABOTAGE_FAMILIES; do
+            defines="$(python3 $MOJOLEARN_HOST_SURFACE --sabotage-build-defines "$family")"
+            echo "sabotage build $family: $defines"
+            MOJOLEARN_BUILD_EXTRA_DEFINES="$defines" MOJOLEARN_BUILD_JOBS=2 sh "bindings/build_${family}_host.sh" 2>&1 | tee "$GATE_OUT/build_${family}_host_sab.log"
           done
 
       - name: The CPU column, covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE
@@ -630,13 +665,19 @@ jobs:
             echo "no covered lane, no sabotage arm to run (COVERED_LANES is empty)" | tee "$GATE_OUT/cpu_sabotage.log"
             exit 0
           fi
-          # Every routed family, the byte LM and the forest binding must be in
-          # the sabotage set: a missing one would load nothing and read
-          # REFUSED, which the diff below would count as a catch.
-          for b in _mojolearn_byte_lm_host _mojolearn_forest_host $HOST_BINDINGS; do
+          # Every built binding must be in the sabotage set: a missing one would
+          # load nothing and read REFUSED, which the diff below would count as
+          # a catch.
+          for b in ${ALL_HOST_BINDINGS//,/ }; do
             [ -f "${{ runner.temp }}/host-sab/$b.so" ] || { echo "the sabotage host set lacks $b.so" >&2; exit 1; }
           done
           export MOJOLEARN_HOST_DIR="${{ runner.temp }}/host-sab" MOJOLEARN_HOST_ALLOW_SABOTAGE=1
+          # The CTR table lanes predict through _forest_host, which loads
+          # MOJOLEARN_FOREST_HOST_BINARY (else the package's production file);
+          # host_record has already loaded host-sab's forest binding under the
+          # same module name, so both must name that file, or the lanes'
+          # binary guard refuses them.
+          export MOJOLEARN_FOREST_HOST_BINARY="${{ runner.temp }}/host-sab/_mojolearn_forest_host.so" MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1
           python3 tools/cpu_identity_gate_check.py run-column --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
             --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" -- --repeats 1 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
@@ -677,6 +718,25 @@ jobs:
           [ -f "$MOJOLEARN_HOST_DIR/_mojolearn_estimators_host.so" ] || { echo "no sabotage estimators host binding under $MOJOLEARN_HOST_DIR" >&2; exit 1; }
           python3 tools/classical_host_gate.py check $CLASSICAL_RECORDED --expect-mismatch \
             --report "$GATE_OUT/classical_gate_sab.json" 2>&1 | tee "$GATE_OUT/classical_gate_sab.log"
+
+      # The same sabotage host set must move EVERY fixture of EVERY saved-model
+      # lane (--every-fixture): one moved family or fixture must not hide one
+      # that did not. Until lane/ties-sabotage (2026-09-15) ivf/ties and
+      # ivf-euclidean/ties stayed EQUAL (an exact integer fold), so the rule
+      # was one fixture per lane; the IVF value arm moves them now.
+      - name: Saved-model host gate, the sabotage build must be caught on every fixture
+        if: always()
+        env:
+          MOJOLEARN_HOST_DIR: ${{ runner.temp }}/host-sab
+          MOJOLEARN_HOST_ALLOW_SABOTAGE: "1"
+        run: |
+          set -o pipefail
+          for b in _mojolearn_forecast_host _mojolearn_mixture_infer_host _mojolearn_gp_infer_host \
+                   _mojolearn_hdbscan_infer_host _mojolearn_ivf_search_host _mojolearn_embedding_infer_host; do
+            [ -f "$MOJOLEARN_HOST_DIR/$b.so" ] || { echo "no sabotage $b under $MOJOLEARN_HOST_DIR" >&2; exit 1; }
+          done
+          python3 tools/classical_host_gate.py check $SAVED_MODEL_RECORDED --expect-mismatch --every-fixture \
+            --report "$GATE_OUT/saved_model_gate_sab.json" 2>&1 | tee "$GATE_OUT/saved_model_gate_sab.log"
 
       - name: Upload reports and logs
         if: always()

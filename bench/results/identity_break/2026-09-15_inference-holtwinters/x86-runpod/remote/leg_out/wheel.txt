@@ -1,0 +1,4 @@
+ls: cannot access '/tmp/wheel_new/*.whl': No such file or directory
+ls: cannot access '/tmp/wheel_old/*.whl': No such file or directory
+-rwxr-xr-x 1 root root 267200 Sep 15 22:00 /tmp/oldhost/_mojolearn_forecast_host.so
+-rwxr-xr-x 1 root root 298536 Sep 15 21:59 python/mojolearn/host/_mojolearn_forecast_host.so

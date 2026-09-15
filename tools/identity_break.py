@@ -43,12 +43,16 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whose estimator has no out-of-sample method records
             `n/a:<reason>` and never a hash of training-row output.
             transductive means the labels belong to the fitted rows only
-            (DBSCAN, agglomerative, spectral: `fit` and `fit_predict`, and
-            SpectralClustering.predict raises NotImplementedError by
-            design); KMeans answered no-predict until 2026-09-15, when
-            `predict` arrived (no `transform`) and its lanes' probe became
-            `predict` on the held-out rows, with `predict` on the training
-            rows held to `labels_`; function means the lane is not an estimator
+            (spectral answered transductive until 2026-09-15, when `predict`
+            from a `prediction_data=True` fit arrived, DEVIATION 2860, and
+            its two lanes' probe became `predict` on the held-out rows; DBSCAN and agglomerative answered transductive until
+            2026-09-15, when `predict` from a `prediction_data=True` fit
+            arrived, DEVIATION 2740, and their lanes' probe became
+            `predict` on the held-out rows); KMeans answered no-predict until 2026-09-15, when
+            `predict` arrived and its lanes' probe became `predict` on the
+            held-out rows, with `predict` on the training rows held to
+            `labels_`; `transform` joined the probe later that day, with
+            `transform(X)` at `labels_` held to each row's minimum; function means the lane is not an estimator
             (linalg, metrics). THE FORECASTERS (holtwinters, arima; the
             infer probes of 2026-09-14) take no new rows, so their held-out
             axis is TIME: the infer column hashes the forecast beyond the
@@ -280,7 +284,7 @@ evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15, then `gmm-sample` and `gmm-random-init-sample` for GaussianMixture.sample the same day, then `gp-sample-y` and `gp-sample-y-normalize` for GaussianProcessRegressor.sample_y). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -300,7 +304,7 @@ sampler, a solver, a metric, a reduction).
                gbdt-multiclass gbdt-onevsall gbdt-parametric-losses
                gbdt-lossguide-newtoncosine gbdt-pointwise-l2-bayesian-eval
                gbdt-exact-mae gbdt-categorical-ctr gbdt-nan-modes gbdt-adapter-clf
-               gbdt-adapter-reg iforest-tuned (last, with iforest)
+               gbdt-adapter-reg gbdt-query-rmse gbdt-pair-logit iforest-tuned (last, with iforest)
       neural   mamba2-dtlimit transformer-window byte-lm-resident
                byte-lm-host-infer-threaded (the SHIPPED default arm; the
                2026-09-13 lane pins the reference arm) samba-untied-dropout-accum
@@ -334,6 +338,10 @@ sampler, a solver, a metric, a reduction).
       par-forest-pool par-gmm par-resample par-hdbscan
     2026-09-15 (the Cholesky and kernel-method drivers; devices=_par_devices())
       par-cholesky par-kernel-ridge par-nystroem par-rbf-sampler
+    2026-09-15 (GaussianMixture.sample, DEVIATIONS 2791 and 2792)
+      gmm-sample gmm-random-init-sample
+    2026-09-15 (GaussianProcessRegressor.sample_y, DEVIATION 2793)
+      gp-sample-y gp-sample-y-normalize
     2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
       ivf embedding
     2026-09-14 night (fix/ivf-l2sqrt, metric='euclidean' no longer refused)
@@ -341,7 +349,8 @@ sampler, a solver, a metric, a reduction).
     2026-09-15 (lane/embedding-owed, PLAN_SORT through Embedding(plan="sort"))
       embedding-sort
     2026-09-15 (lane/cpu-training-small-gaps)
-      metrics-fowlkes-mallows
+      metrics-fowlkes-mallows gbdt-adapter-score-weighted rf-score-weighted svc-poly
+      gp-normalize-y
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -591,6 +600,15 @@ def _h(*arrays):
     return m.hexdigest()[:16]
 
 
+def _train_hash(parts):
+    """The train column's cell hash of one fit: `_h` over the lane's parts
+    dict spelled `key=value`, sorted by key, joined by `|`. The run loop and
+    `python -m mojolearn verify --all` (python/mojolearn/_verify_all.py, which
+    imports this module) both call this, so the shipped verifier cannot hash
+    a cell differently from the record."""
+    return _h(np.frombuffer("|".join(f"{k}={v}" for k, v in sorted(parts.items())).encode(), dtype=np.uint8))
+
+
 def _hfile(path):
     with open(path, "rb") as fh:
         return hashlib.sha256(fh.read()).hexdigest()[:16]
@@ -721,6 +739,26 @@ FIXTURES = ["base", "ties", "hashed", "wide", "denormal", "denormal_ftz", "dupes
 
 LANES = {}
 
+#: LANES WHOSE INPUT CHANGED AFTER RECORDS WERE TAKEN (2026-09-15). A column
+#: records these as `lane_revisions`; `diff` and the verify reference table
+#: (python/mojolearn/_verify_reference.py) treat a column whose revision of a
+#: lane is not this one as carrying NO cell for that lane, so its cells read
+#: OWED to the next record rather than DIVERGENT against hashes of different
+#: input. Bump a lane's revision when its fixture or vocabulary changes.
+#:   tokenizer  synthetic-vocab-1: the GPT-2 table left the tree; the lane
+#:              loads the synthetic vocabulary (python/mojolearn/
+#:              _tokenizer_synthetic.py). Host integer code, so one hash per
+#:              cell on every device class; the GPU columns are owed at the
+#:              next release record.
+LANE_REVISIONS = {"tokenizer": "synthetic-vocab-1"}
+
+
+def stale_revision_lanes(record):
+    """The LANE_REVISIONS lanes whose revision in `record` (a column JSON) is
+    not this harness's, sorted."""
+    have = record.get("lane_revisions") or {}
+    return sorted(name for name, rev in LANE_REVISIONS.items() if have.get(name) != rev)
+
 
 def lane(name):
     def deco(fn):
@@ -740,12 +778,19 @@ class Fit(dict):
     arguments and reads only the dict; that contract is unchanged."""
     est = None
     probe = "n/a:function"
+    #: An `n/a:<reason>` for the model column of a lane whose saved file
+    #: holds only what the lane passed in (lane/inference-embedding-ivf-
+    #: cholesky, 2026-09-15): the Embedding table is the caller's weight, so
+    #: its file hash is not arithmetic and no host sabotage can move it. The
+    #: saved-table lookup is tools/classical_host_gate.py's embedding lane.
+    model_na = None
 
 
-def _fit(parts, est=None, probe="n/a:function"):
+def _fit(parts, est=None, probe="n/a:function", model_na=None):
     f = Fit(parts)
     f.est = est
     f.probe = probe
+    f.model_na = model_na
     return f
 
 
@@ -815,12 +860,19 @@ def _km_probe(X, Xh):
     assignment (cluster/estimator.mojo::kmeans_predict and
     cluster/host/kmeans_oracle.mojo::host_kmeans_predict); where it is not,
     the probe raises naming the pair and only the infer cell reads REFUSED.
+    `transform` (2026-09-15, cluster/estimator.mojo::kmeans_transform) is
+    asked too: each cell is the fused kernel's cell, so `transform(X)` at
+    `labels_` must be every training row's minimum bit for bit, and the
+    held-out distances are hashed beside the held-out labels.
     Only the held-out rows are hashed, never the training-row output, and
     the train column hashes the fit's own attributes, so no train cell
     moves."""
     def probe(e):
         _same_bytes("predict(X)", e.predict(X), "labels_", e.labels_)
-        return (e.predict(Xh),)
+        t = np.asarray(e.transform(X))
+        at_label = t[np.arange(t.shape[0]), np.asarray(e.labels_, dtype=np.int64)]
+        _same_bytes("transform(X)[i, labels_[i]]", at_label, "transform(X).min(axis=1)", t.min(axis=1))
+        return (e.predict(Xh), e.transform(Xh))
     return probe
 
 
@@ -852,8 +904,11 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("dbscan")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4])
-    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+    # prediction_data=True (2026-09-15) copies the fit's core mask out and
+    # moves no train byte; infer is DBSCAN.predict on 256 held-out rows, the
+    # nearest core sample within eps (DEVIATION 2740).
+    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:6000, :4])
+    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("pca")
@@ -925,15 +980,21 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("agglomerative")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.AgglomerativeClustering(n_clusters=4).fit(X[:2000, :4])
-    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+    # prediction_data=True (2026-09-15) keeps the training rows and moves no
+    # train byte; infer is predict on 256 held-out rows, the single-linkage
+    # rule (DEVIATION 2740).
+    m = ml.AgglomerativeClustering(n_clusters=4, prediction_data=True).fit(X[:2000, :4])
+    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("spectral")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.SpectralClustering(n_clusters=4, random_state=3).fit(X[:2000, :4])
-    # SpectralClustering.predict raises NotImplementedError by design
-    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+    # prediction_data=True (lane/spectral-predict, 2026-09-15) copies the
+    # eigenpairs, degree scaling and centroids out of the fit and moves no
+    # train byte; infer is predict on 256 held-out rows, the Nystrom
+    # extension and the fit's k-means assignment (DEVIATION 2860).
+    m = ml.SpectralClustering(n_clusters=4, random_state=3, prediction_data=True).fit(X[:2000, :4])
+    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("holtwinters")
@@ -1204,6 +1265,45 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.predict(Xh[:64, :4], return_std=True))
 
 
+def _gpc_three_classes(X):
+    """Three balanced classes for the first 256 rows: the stable rank of the
+    labels' own score (columns 3 and 4, `labels_for`'s rule) cut in thirds,
+    so every fixture, `negative` and `ties` included, hands the one-vs-rest
+    lane three classes."""
+    s = (X[:256, 3] + np.float32(0.5) * X[:256, 4]).astype(np.float32)
+    y3 = np.empty(256, dtype=np.int64)
+    y3[np.argsort(s, kind="stable")] = (np.arange(256) * 3) // 256
+    return y3
+
+
+def _gpc_parts(m, q):
+    fits = m.estimators_
+    return dict(L=_h(*[e.L_ for e in fits]), pi=_h(*[e.pi_ for e in fits]), W_sr=_h(*[e.W_sr_ for e in fits]),
+                lml=_h(np.array([e.log_marginal_likelihood_value_ for e in fits] +
+                                [m.log_marginal_likelihood_value_], dtype=np.float64)),
+                n_iter=_h(np.array([e.n_iter_ for e in fits], dtype=np.int64)),
+                predict=_h(m.predict(q)), proba=_h(m.predict_proba(q)))
+
+
+@lane("gpc")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessClassifier, binary, optimizer=None (DEVIATION 1761):
+    the Laplace fit's Newton loop, whose iteration count is on the card
+    (DEVIATION 2830), sized like the gp lane. The model column is the saved
+    classifier and its reload."""
+    m = ml.GaussianProcessClassifier(kernel=ml.ConstantKernel(1.0) * ml.RBF(1.0)).fit(X[:256, :4], yc[:256])
+    return _fit(_gpc_parts(m, X[256:320, :4]), m, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
+
+
+@lane("gpc-multiclass")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessClassifier one-vs-rest over three classes
+    (DEVIATION 2833) with a Matern nu=1.5 kernel scaled by a constant."""
+    k = ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5)
+    m = ml.GaussianProcessClassifier(kernel=k).fit(X[:256, :4], _gpc_three_classes(X))
+    return _fit(_gpc_parts(m, X[256:320, :4]), m, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
+
+
 @lane("umap")
 def _(ml, X, yc, yr, Xh=None):
     """Exact neighbor search is quadratic, so 1024 rows of eight columns
@@ -1277,7 +1377,7 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(loss=_h(np.asarray(losses)),
                      weights=_h(*[np.asarray(m.weights_[k]) for k in sorted(m.weights_)]),
                      logits=_h(np.asarray(m.predict_logits(Xm)))),
-                m, lambda e: (np.asarray(e.predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
+                m, lambda e: (np.asarray(_neural_inference(ml, "mlp", e).predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
 
 
 @lane("byte-lm")
@@ -1384,7 +1484,7 @@ def _(ml, X, yc, yr, Xh=None):
         ones=("input_layernorm.weight", "post_attention_layernorm.weight"))
     blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
-    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+    return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer", e).forward(_seq(Xh, 2, 16, dm))),))
 
 
 @lane("samba")
@@ -1452,6 +1552,23 @@ def _affinity(P):
     t = float(np.median(d2))
     A = np.where(d2 < t, 1.0 / (1.0 + d2), 0.0)
     return np.ascontiguousarray(A.astype(np.float32))
+
+
+def _cross_affinity(Q, P):
+    """The affinity of rows Q to the training rows P under `_affinity`'s
+    rule: 1 / (1 + d2) where d2 is under the TRAINING matrix's median (the
+    threshold `_affinity(P)` used), else exactly zero. Fixed-order float64
+    host arithmetic, elementwise."""
+    Pd = P.astype(np.float64)
+    Qd = Q.astype(np.float64)
+    d2 = np.zeros((Pd.shape[0], Pd.shape[0]), dtype=np.float64)
+    c2 = np.zeros((Qd.shape[0], Pd.shape[0]), dtype=np.float64)
+    for j in range(Pd.shape[1]):
+        col = Pd[:, j]
+        d2 = d2 + (col[:, None] - col[None, :]) ** 2
+        c2 = c2 + (Qd[:, j][:, None] - col[None, :]) ** 2
+    t = float(np.median(d2))
+    return np.ascontiguousarray(np.where(c2 < t, 1.0 / (1.0 + c2), 0.0).astype(np.float32))
 
 
 def _exact_prob(n, seed):
@@ -1610,6 +1727,147 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(_coded(X)))), m, lambda e: (e.predict(_coded(Xh)),))
 
 
+#: lane/inference-gbdt-ctr-tables (2026-09-15). The saved-model directory
+#: of the two CTR table lanes: a GPU column FITS and writes
+#: `<dir>/<lane>.<fixture>.npz` (repeat 0); a CPU column, whose training
+#: path refuses CTR tables by name, LOADS that file through
+#: `mojolearn.host_model` instead of fitting, so its train, infer and batch
+#: cells are HostGBDT's predictions from the GPU's own saved model and its
+#: model cell is that file's hash.
+GBDT_CTR_MODELS_ENV = "MOJOLEARN_IDENTITY_GBDT_CTR_MODELS"
+
+
+def _rank_codes(col, cuts):
+    """Dense codes from the RANK of a column (a stable argsort, ties by row
+    order), cut at the fractions `cuts`: host arithmetic only, the same
+    bytes on every box, every code present, uneven group sizes."""
+    n = col.shape[0]
+    ranks = np.empty(n, dtype=np.int64)
+    ranks[np.argsort(col, kind="stable")] = np.arange(n, dtype=np.int64)
+    return np.searchsorted(np.asarray(cuts, dtype=np.float64), ranks.astype(np.float64) / n,
+                           side="right").astype(np.int64)
+
+
+def _ctr_tables_x(X, heldout=False):
+    """gbdt-categorical-ctr-tables' input: column 0 has eight categories
+    (seven rank groups of column 3 and an eighth held by ONE training row),
+    column 1 five (rank groups of column 4), both above the GPU
+    one_hot_max_size of 2, so each becomes four CTR columns (Borders at three
+    priors and FeatureFreq); column 2 is a two-category one-hot column; then
+    the first eight numeric columns. On the held-out rows every 97th row
+    carries category 8 and every 101st category 12 in column 0 (never seen
+    in training), every 89th category 7 (seen once), every 103rd category 9
+    in column 1 (never seen)."""
+    c0 = _rank_codes(X[:, 3], (0.30, 0.50, 0.65, 0.77, 0.86, 0.93))
+    c1 = _rank_codes(X[:, 4], (0.20, 0.45, 0.70, 0.90))
+    c2 = (X[:, 5] > np.median(X[:, 5])).astype(np.int64)
+    rows = np.arange(X.shape[0])
+    if heldout:
+        c0[rows % 89 == 0] = 7
+        c0[rows % 97 == 0] = 8
+        c0[rows % 101 == 0] = 12
+        c1[rows % 103 == 0] = 9
+    else:
+        c0[int(np.argsort(X[:, 6], kind="stable")[-1])] = 7
+    return np.ascontiguousarray(np.column_stack(
+        [c0.astype(np.float32), c1.astype(np.float32), c2.astype(np.float32), X[:, :8]]).astype(np.float32))
+
+
+def _ctr_tables_xh(Xh):
+    return _ctr_tables_x(Xh, heldout=True)
+
+
+def _tensor_ctr_x(X, heldout=False):
+    """gbdt-tensor-ctr-tables' input: two categorical source columns (four
+    rank groups of column 3 plus a fifth category held by ONE training row,
+    four rank groups of column 4), then the first four numeric columns. On
+    the held-out rows every 89th row carries source 0 category 4 (the
+    combinations seen once, or never), every 97th category 6 (past its
+    cardinality, the empty-value key)."""
+    c0 = _rank_codes(X[:, 3], (0.40, 0.70, 0.90))
+    c1 = _rank_codes(X[:, 4], (0.25, 0.55, 0.80))
+    rows = np.arange(X.shape[0])
+    if heldout:
+        c0[rows % 89 == 0] = 4
+        c0[rows % 97 == 0] = 6
+    else:
+        c0[int(np.argsort(X[:, 6], kind="stable")[-1])] = 4
+    return np.ascontiguousarray(np.column_stack(
+        [c0.astype(np.float32), c1.astype(np.float32), X[:, :4]]).astype(np.float32))
+
+
+def _tensor_ctr_xh(Xh):
+    return _tensor_ctr_x(Xh, heldout=True)
+
+
+def _tensor_ctr_y(Xt):
+    """The combination's learn frequency, float32, plus a small numeric
+    term: a target the tensor FeatureFreq column predicts and neither source
+    alone does."""
+    key = Xt[:, 0].astype(np.int64) * 16 + Xt[:, 1].astype(np.int64)
+    _, inverse, counts = np.unique(key, return_inverse=True, return_counts=True)
+    freq = counts[inverse].astype(np.float64) / Xt.shape[0]
+    return (freq * 10.0 + 0.01 * Xt[:, 2].astype(np.float64)).astype(np.float32)
+
+
+def _ctr_saved_or_fit(ml, fit):
+    """The estimator a CTR table lane answers with: fitted (and saved,
+    under GBDT_CTR_MODELS_ENV, on repeat 0) on a GPU column; on a CPU
+    column the HostGBDT of the saved file, tagged with its path."""
+    lane_name, fx, repeat = (_DUMP_TAG.split("/") + ["", "", ""])[:3]
+    d = os.environ.get(GBDT_CTR_MODELS_ENV, "").strip()
+    path = os.path.join(d, f"{lane_name}.{fx}.npz") if d and lane_name else None
+    if ml.vendor() == "cpu":
+        if not path or not os.path.isfile(path):
+            raise RuntimeError(f"CPU training refuses CTR tables by name; set {GBDT_CTR_MODELS_ENV} to the "
+                               f"directory of this lane's GPU-saved models (no {path})")
+        from mojolearn._forest_host import binary_path, host_model
+        est = host_model(path)
+        # the train and batch cells predict through this object, so it takes
+        # _probe_fit_host's guard: a forest binding loaded earlier under the
+        # shared module name (host_record reads MOJOLEARN_HOST_DIR) is not the
+        # MOJOLEARN_FOREST_HOST_BINARY asked for
+        bound = getattr(getattr(est, "_binding", None), "__file__", None)
+        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
+            raise RuntimeError(f"the forest binding in this process is {bound}, "
+                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+        est.identity_saved_path = path
+        return est
+    est = fit()
+    if path and repeat == "0":
+        os.makedirs(d, exist_ok=True)
+        est.save(path)
+    return est
+
+
+@lane("gbdt-categorical-ctr-tables")
+def _(ml, X, yc, yr, Xh=None):
+    """Gradient boosting whose categorical columns are above
+    one_hot_max_size, so the saved model carries real CTR tables (Borders at
+    three priors and FeatureFreq per column, ctr_table and ctr_entry records)
+    beside a one-hot column: 20 depth-6 Logloss trees. The held-out rows
+    carry unseen and seen-once categories."""
+    Xc = _ctr_tables_x(X)
+    m = _ctr_saved_or_fit(ml, lambda: ml.GradientBoosting(
+        n_estimators=20, max_depth=6, loss="Logloss", cat_features=[0, 1, 2]).fit(Xc, yc))
+    return _fit(dict(predict=_h(m.predict(Xc)), proba=_h(m.predict_proba(Xc))),
+                m, lambda e: (e.predict(_ctr_tables_xh(Xh)), e.predict_proba(_ctr_tables_xh(Xh))))
+
+
+@lane("gbdt-tensor-ctr-tables")
+def _(ml, X, yc, yr, Xh=None):
+    """ExperimentalTwoLevelFeatureFreq on two categorical sources with a
+    target the combination's frequency predicts, so the tree splits on the
+    tensor FeatureFreq column and the saved model carries a
+    tensor_ctr_registry with feature_freq_tensor records. The held-out rows
+    carry combinations seen once, never seen, and a code past the source's
+    cardinality."""
+    Xt = _tensor_ctr_x(X)
+    m = _ctr_saved_or_fit(ml, lambda: ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(
+        Xt, _tensor_ctr_y(Xt)))
+    return _fit(dict(predict=_h(m.predict(Xt))), m, lambda e: (e.predict(_tensor_ctr_xh(Xh)),))
+
+
 @lane("gbdt-nan-modes")
 def _(ml, X, yc, yr, Xh=None):
     """nan_mode Min and Max on a fixture that actually carries NaN
@@ -1636,6 +1894,141 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     m = ml.GradientBoostingRegressor(n_estimators=20, max_depth=6).fit(X, yr)
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+#: the gbdt-query-rmse lane's query sizes, cycled in row order: sizes of one
+#: and two rows (a query of one has zero QueryRMSE derivative on every row)
+#: beside larger ones, uneven on purpose so the 32-lane query reduce sees
+#: queries shorter than, near and longer than one lane stride.
+RANK_QUERY_SIZES = (1, 2, 7, 3, 16, 1, 5, 40, 2, 9)
+
+#: the relevance cut points: comparisons only, no float arithmetic, so every
+#: box hands the lane the same grades
+RANK_CUTS = (-1.0, 0.0, 1.0, 2.0)
+
+
+def _rank_groups(n):
+    """The gbdt-query-rmse group ids, one per row, consecutive by
+    construction (`RANK_QUERY_SIZES` cycled; the last query truncated at
+    `n`). Shared with the CatBoost CPU reference script, so both sides read
+    the same grouping."""
+    ids = []
+    q = 0
+    while len(ids) < n:
+        ids.extend([q] * RANK_QUERY_SIZES[q % len(RANK_QUERY_SIZES)])
+        q += 1
+    return np.asarray(ids[:n], dtype=np.int64)
+
+
+def _relevance(yr):
+    """Tie-heavy graded relevance 0..4 from the fixture's regression target,
+    cut at `RANK_CUTS` (`np.digitize`, comparisons only), as float32."""
+    return np.digitize(yr, np.asarray(RANK_CUTS, dtype=np.float32)).astype(np.float32)
+
+
+@lane("gbdt-query-rmse")
+def _(ml, X, yc, yr, Xh=None):
+    """QueryRMSE (learning to rank, the querywise target) on uneven queries
+    with tie-heavy grades: 20 depth-6 symmetric trees, the predictions and
+    the learn loss curve hashed. Predict is row-wise, so the held-out probe
+    and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="QueryRMSE").fit(X, rel, group_id=g)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64))),
+                m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-pair-logit")
+def _(ml, X, yc, yr, Xh=None):
+    """PairLogit (learning to rank, pairwise derivatives on query groups):
+    20 depth-6 symmetric trees on the gbdt-query-rmse queries and grades with
+    the pairs generated from them, and a second fit of 8 trees given explicit
+    `pairs` and `pairs_weight` (every third generated-style pair of the first
+    40 queries, hashed weights), so both input paths are hashed. Predict is
+    row-wise, so the held-out probe and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="PairLogit").fit(X, rel, group_id=g)
+    pairs = []
+    begin = 0
+    for q in range(40):
+        size = int(np.count_nonzero(g == q))
+        for a in range(begin, begin + size):
+            for b in range(a + 1, begin + size):
+                if rel[a] != rel[b] and (a + b) % 3 == 0:
+                    pairs.append((a, b) if rel[a] > rel[b] else (b, a))
+        begin += size
+    pw = _hw((len(pairs),), "gbdt-pair-logit:pairs_weight", 0.5, 2.0)
+    e = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="PairLogit").fit(
+        X, rel, group_id=g, pairs=pairs, pairs_weight=pw)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     explicit_predict=_h(e.predict(X)),
+                     explicit_loss_curve=_h(np.asarray(e.loss_curve_, dtype=np.float64))),
+                m, lambda est: (est.predict(Xh),))
+
+
+@lane("gbdt-yeti-rank")
+def _(ml, X, yc, yr, Xh=None):
+    """YetiRank (learning to rank, sampled permutations on query groups): 20
+    depth-6 symmetric trees on the gbdt-query-rmse queries and grades, and a
+    second fit of 8 depth-4 trees at random_state=7, so the hash covers the
+    derivative draws' stream as well as the task tables. Unweighted: the host
+    column refuses sample_weight on every loss. YetiRank has no loss value
+    (the target writes 0), so `loss_curve_` is hashed only to pin that.
+    Predict is row-wise, so the held-out probe and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
+    e = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="YetiRank", random_state=7).fit(
+        X, rel, group_id=g)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     seeded_predict=_h(e.predict(X))),
+                m, lambda est: (est.predict(Xh),))
+
+
+def _weighted_score_parts(clf, reg, X, yc, yr, tag):
+    """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
+    weights on [0.25, 4), the same weights with every seventh zeroed, unit
+    weights, and the unweighted score beside them. Weights come from the
+    hashed stream, never from the fixture's own floats."""
+    lo, hi = 2000, 3024
+    Xs = np.ascontiguousarray(X[lo:hi])
+    ycs = np.ascontiguousarray(yc[lo:hi])
+    yrs = np.ascontiguousarray(yr[lo:hi])
+    w = _hw((hi - lo,), f"{tag}:w", 0.25, 4.0)
+    wz = w.copy()
+    wz[::7] = np.float32(0.0)
+    ones = np.ones(hi - lo, dtype=np.float32)
+    parts = {}
+    for kind, m, y in (("clf", clf, ycs), ("reg", reg, yrs)):
+        parts[f"{kind}_weighted"] = _h(np.float64(m.score(Xs, y, sample_weight=w)))
+        parts[f"{kind}_zeroed"] = _h(np.float64(m.score(Xs, y, sample_weight=wz)))
+        parts[f"{kind}_unit"] = _h(np.float64(m.score(Xs, y, sample_weight=ones)))
+        parts[f"{kind}_unweighted"] = _h(np.float64(m.score(Xs, y)))
+    return parts
+
+
+@lane("gbdt-adapter-score-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    """GradientBoostingClassifier.score and GradientBoostingRegressor.score
+    with sample_weight (lane/cpu-training-small-gaps, 2026-09-15): scikit-
+    learn's weighted accuracy and R2 on the pinned-sum path. A lane of its
+    own so the adapter lanes' committed hashes do not move; 2000 training
+    rows."""
+    clf = ml.GradientBoostingClassifier(n_estimators=20, max_depth=6).fit(X[:2000], yc[:2000])
+    reg = ml.GradientBoostingRegressor(n_estimators=20, max_depth=6).fit(X[:2000], yr[:2000])
+    return _fit(_weighted_score_parts(clf, reg, X, yc, yr, "gbdt-adapter-score-weighted"))
+
+
+@lane("rf-score-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    """RandomForestClassifier.score and RandomForestRegressor.score with
+    sample_weight (lane/cpu-training-small-gaps, 2026-09-15), through the
+    forest protocol's score that the Extra Trees share; 2000 training rows."""
+    clf = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X[:2000], yc[:2000])
+    reg = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X[:2000], yr[:2000])
+    return _fit(_weighted_score_parts(clf, reg, X, yc, yr, "rf-score-weighted"))
 
 
 # -- neural
@@ -1669,7 +2062,7 @@ def _(ml, X, yc, yr, Xh=None):
         ones=("input_layernorm.weight", "post_attention_layernorm.weight"))
     blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=8)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
-    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+    return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer-window", e).forward(_seq(Xh, 2, 16, dm))),))
 
 
 @lane("byte-lm-resident")
@@ -1834,15 +2227,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("dbscan-brute-l1")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.DBSCAN(eps=0.9, min_samples=5, metric="manhattan", algorithm="brute").fit(X[:6000, :4])
-    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+    m = ml.DBSCAN(eps=0.9, min_samples=5, metric="manhattan", algorithm="brute",
+                  prediction_data=True).fit(X[:6000, :4])
+    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("dbscan-weighted")
 def _(ml, X, yc, yr, Xh=None):
     w = _hw((6000,), "dbscan:sample_weight", 0.5, 1.5)
-    m = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4], sample_weight=w)
-    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:6000, :4], sample_weight=w)
+    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 def _kde_lane(kernel, metric):
@@ -1951,6 +2345,17 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
 
+@lane("svc-poly")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC(kernel='poly') (lane/cpu-training-small-gaps, 2026-09-15): the
+    identical linear Gram, then kernel_methods' polynomial epilogue (one fused
+    multiply-add, an ascending repeated product; DEVIATION 1663) at degree 3,
+    gamma 0.1 and coef0 1.0. Sized like the svc lane."""
+    m = ml.SVC(C=1.0, kernel="poly", degree=3, gamma=0.1, coef0=1.0, max_iter=200).fit(X[:2000], yc[:2000])
+    return _fit(dict(decision=_h(m.decision_function(X[2000:2256])), predict=_h(m.predict(X[2000:2256]))),
+                m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+
 @lane("svr-linear")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.SVR(C=1.0, kernel="linear", epsilon=0.1, max_iter=200).fit(X[:2000], yr[:2000])
@@ -2034,8 +2439,15 @@ def _(ml, X, yc, yr, Xh=None):
     nearest-neighbors graph; the affinity is _affinity's, host-derived in
     fixed order so the input is the same bytes on every box."""
     A = _affinity(X[:1000, :4])
-    m = ml.SpectralClustering(n_clusters=4, affinity="precomputed", random_state=3).fit(A)
-    return _fit(dict(affinity=_h(A), labels=_h(m.labels_)), m, "n/a:transductive")
+    m = ml.SpectralClustering(n_clusters=4, affinity="precomputed", random_state=3,
+                              prediction_data=True).fit(A)
+    # infer (lane/spectral-predict, 2026-09-15, DEVIATION 2860): predict on
+    # the affinity of 256 held-out rows to the 1000 training rows, under
+    # _affinity's rule with the training matrix's threshold. The batch part
+    # reads the same matrix from the estimator.
+    Ah = _cross_affinity(Xh[:256, :4], X[:1000, :4])
+    m._identity_heldout_affinity = Ah
+    return _fit(dict(affinity=_h(A), labels=_h(m.labels_)), m, lambda e: (e.predict(Ah),))
 
 
 @lane("holtwinters-multiplicative")
@@ -2095,6 +2507,82 @@ def _gp_lane(nu, length_scale):
                     m, lambda e: e.predict(Xh[:64, :4], return_std=True))
     body.__doc__ = f"Matern nu={nu} length_scale={length_scale}: a kernel node kind the gp lane never launches; the vector length scale is the ARD divide loop."
     return body
+
+
+@lane("gp-normalize-y")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessRegressor(normalize_y=True) (lane/cpu-training-small-gaps,
+    2026-09-15): the gp lane's kernel and slices with y centered and scaled by
+    StandardScaler's pinned folds before the fit, and the predictive mean and
+    std scaled back on the host. The target is shifted by 50 so the mean is
+    not near zero."""
+    k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+    y = np.ascontiguousarray(yr[:256] + np.float32(50.0)).astype(np.float32)
+    m = ml.GaussianProcessRegressor(kernel=k, normalize_y=True).fit(X[:256, :4], y)
+    mean, std = m.predict(X[256:320, :4], return_std=True)
+    return _fit(dict(alpha=_h(m.alpha_), L=_h(m.L_), lml=_h(np.float64(m.log_marginal_likelihood_value_)),
+                     y_stats=_h(np.float32([m._y_train_mean, m._y_train_std])),
+                     mean=_h(mean), std=_h(std)),
+                m, lambda e: e.predict(Xh[:64, :4], return_std=True))
+
+
+def _gp_sample_y_lane(normalize_y):
+    def body(ml, X, yc, yr, Xh=None):
+        k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+        y = yr[:256]
+        if normalize_y:
+            y = np.ascontiguousarray(yr[:256] + np.float32(50.0)).astype(np.float32)
+        m = ml.GaussianProcessRegressor(kernel=k, normalize_y=normalize_y).fit(X[:256, :4], y)
+        s = m.sample_y(X[256:320, :4], n_samples=3, random_state=11)
+        _same_bytes("sample_y(n_samples=3)", s, "sample_y(n_samples=3) again",
+                    m.sample_y(X[256:320, :4], n_samples=3, random_state=11))
+        return _fit(dict(sample=_h(s)), m,
+                    lambda e: (e.sample_y(Xh[:64, :4], n_samples=4, random_state=2 ** 40 + 5),))
+    body.__doc__ = (f"GaussianProcessRegressor.sample_y (2026-09-15) on the gp{'-normalize-y' if normalize_y else ''} "
+                    "lane's fit: train hashes sample_y over 64 rows, 3 draws, held to a second call bit for bit; "
+                    "infer hashes 4 draws over 64 held-out rows with a key whose high word is set. The posterior "
+                    "covariance is factored by the identical Cholesky at 2^-20 and the normals are position-mapped "
+                    "Philox (DEVIATION 2793). Separate lanes so the gp lanes' recorded cells do not move.")
+    return body
+
+
+lane("gp-sample-y")(_gp_sample_y_lane(False))
+lane("gp-sample-y-normalize")(_gp_sample_y_lane(True))
+
+
+def _gp_optimize_lane(restarts):
+    def body(ml, X, yc, yr, Xh=None):
+        if restarts:
+            k = ml.ConstantKernel(1.0) * ml.Matern([1.0, 1.0, 1.0, 1.0], nu=2.5) + ml.WhiteKernel(0.1)
+            m = ml.GaussianProcessRegressor(kernel=k, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=2,
+                                            random_state=7)
+        else:
+            k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+            m = ml.GaussianProcessRegressor(kernel=k, optimizer="fmin_l_bfgs_b")
+        m.fit(X[:64, :4], yr[:64])
+        mean, std = m.predict(X[64:128, :4], return_std=True)
+        runs = m._optimizer_runs
+        return _fit(dict(theta=_h(np.array(m.kernel_.theta, dtype=np.float64)),
+                         params=_h(np.array(m.kernel_._free_values(), dtype=np.float64)),
+                         runs=_h(np.array([[r[0], r[1]] for r in runs], dtype=np.int64),
+                                 np.array([r[3] for r in runs], dtype=np.float64)),
+                         lml=_h(np.float64(m.log_marginal_likelihood_value_)),
+                         alpha=_h(m.alpha_), L=_h(m.L_), mean=_h(mean), std=_h(std)),
+                    m, lambda e: e.predict(Xh[:64, :4], return_std=True))
+    body.__doc__ = ("GaussianProcessRegressor(optimizer='fmin_l_bfgs_b') (lane/gp-optimizer, 2026-09-15): the kernel "
+                    "hyperparameters maximize the log marginal likelihood through the identical gradient "
+                    "(DEVIATION 2880) and the projected L-BFGS (DEVIATION 2881)"
+                    + (", from the kernel's theta and two Philox restarts keyed by random_state=7, over an ARD Matern "
+                       "nu=2.5 scaled by a constant plus white noise" if restarts else
+                       ", over the gp lane's kernel") +
+                    ". 64 training rows of four columns; train hashes the optimized theta, the float32 "
+                    "hyperparameters, every run's iteration and evaluation counts and likelihood, the fit and the "
+                    "prediction at 64 rows. Separate lanes so the recorded gp cells do not move.")
+    return body
+
+
+lane("gp-optimize")(_gp_optimize_lane(False))
+lane("gp-optimize-restarts")(_gp_optimize_lane(True))
 
 
 for _name, _nu, _ls in (("matern12", 0.5, 1.0), ("matern32", 1.5, 1.0), ("matern52-ard", 2.5, [1.0, 2.0, 0.5, 4.0])):
@@ -2185,17 +2673,24 @@ def _(ml, X, yc, yr, Xh=None):
     """GPT2Tokenizer (python/mojolearn/tokenizer.py), host integers and
     tables through _mojolearn_tokenizer_host; no float arithmetic, so
     cross-vendor identity is by construction and what this measures is
-    that the SAME binary bytes were built on every box. The fixture bytes
-    are the first 4,096 bytes of X viewed as bytes (the byte-lm lane's
-    derivation without _ids' modulus), encoded with <|endoftext|> allowed,
-    then decoded back; the held-out probe encodes Xh's first 4,096 bytes
+    that the SAME binary bytes were built on every box. mojolearn ships no
+    vocabulary, so the lane loads the synthetic one mojolearn trains itself
+    (python/mojolearn/_tokenizer_synthetic.py, 512 ranks) at revision
+    LANE_REVISIONS["tokenizer"]. The fixture bytes are the first 4,096 bytes
+    of X viewed as bytes (the byte-lm lane's derivation without _ids'
+    modulus), encoded with <|endoftext|> allowed, then decoded back; the
+    held-out probe encodes Xh's first 4,096 bytes
     (docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md section 3)."""
-    tok = ml.GPT2Tokenizer()
+    tok = ml.tokenizer.GPT2Tokenizer._synthetic()
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     ids = np.asarray(tok.encode_bytes(raw, allow_endoftext=True), dtype=np.int32)
     back = np.frombuffer(tok.decode_bytes(ids.tolist()), dtype=np.uint8)
-    assert back.tobytes() == raw, "tokenizer lane: decode(encode(x)) != x"
-    return _fit(dict(ids=_h(ids), decoded=_h(back), n_vocab=_h(np.int64(tok.n_vocab))),
+    # The round trip is a hashed part, not an assertion (2026-09-15): a
+    # sabotaged binary must read DIVERGENT, and a raise would read REFUSED,
+    # which the owed check (tools/cpu_identity_gate_check.py owed) does not
+    # count as a catch. A production column hashes roundtrip=1 everywhere.
+    roundtrip = np.int64(1 if back.tobytes() == raw else 0)
+    return _fit(dict(ids=_h(ids), decoded=_h(back), roundtrip=_h(roundtrip), n_vocab=_h(np.int64(tok.n_vocab))),
                 tok, lambda e: (np.asarray(e.encode_bytes(np.ascontiguousarray(Xh).tobytes()[:4096],
                                                           allow_endoftext=True), dtype=np.int32),))
 
@@ -2311,6 +2806,23 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.score_samples(Xh[:64, :4]),))
 
 
+def _gmm_sample_lane(init_params):
+    def body(ml, X, yc, yr, Xh=None):
+        m = ml.GaussianMixture(n_components=4, max_iter=30, random_state=3, init_params=init_params).fit(X[:6000, :4])
+        xs, ys = m.sample(256)
+        _same_bytes("sample(256) X", xs, "sample(256) X again", m.sample(256)[0])
+        return _fit(dict(sample_X=_h(xs), sample_y=_h(ys)), m, lambda e: tuple(e.sample(1024)))
+    body.__doc__ = (f"GaussianMixture.sample (2026-09-15) on the gmm{'' if init_params == 'kmeans' else '-random-init'} "
+                    "lane's fit: train hashes sample(256), held to a second call bit for bit; infer hashes "
+                    "sample(1024). Position-mapped Philox draws (DEVIATION 2791) through precisions_cholesky_ "
+                    "(DEVIATION 2792). A separate lane so the gmm lanes' recorded cells do not move.")
+    return body
+
+
+lane("gmm-sample")(_gmm_sample_lane("kmeans"))
+lane("gmm-random-init-sample")(_gmm_sample_lane("random"))
+
+
 @lane("hdbscan")
 def _(ml, X, yc, yr, Xh=None):
     """HDBSCAN (python/mojolearn/hdbscan.py), cuML's runner path at its
@@ -2321,11 +2833,14 @@ def _(ml, X, yc, yr, Xh=None):
     counts); the integer stages are where a divergence first shows.
     The fit keeps prediction_data (2026-09-15), which moves no train byte;
     infer is approximate_predict's labels and probabilities on 256
-    held-out rows (hdbscan.pyx:1264, predict.cuh:220-262)."""
+    held-out rows (hdbscan.pyx:1264, predict.cuh:220-262), then
+    membership_vector on the same rows and all_points_membership_vectors
+    (hdbscan.pyx:1180, :1114, soft_clustering.cuh:385-627, DEVIATION 1616)."""
     m = ml.HDBSCAN(min_cluster_size=5, prediction_data=True).fit(X[:6000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
-                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
+                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
+                + (ml.hdbscan.membership_vector(e, Xh[:256, :4]), ml.hdbscan.all_points_membership_vectors(e)))
 
 
 @lane("hdbscan-leaf")
@@ -2338,7 +2853,8 @@ def _(ml, X, yc, yr, Xh=None):
                    prediction_data=True).fit(X[:6000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
-                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
+                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
+                + (ml.hdbscan.membership_vector(e, Xh[:256, :4]), ml.hdbscan.all_points_membership_vectors(e)))
 
 
 @lane("bootstrap")
@@ -2480,6 +2996,33 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
 
 
+@lane("ivf-extend")
+def _(ml, X, yc, yr, Xh=None):
+    """IVFIndex.extend (python/mojolearn/_ivf_impl.py; lane/inference-embedding-
+    ivf-cholesky stage 2, 2026-09-15), cuVS ivf_flat::extend with fixed
+    centres. The `ivf` lane's index (16 lists, random_state 3) built on rows
+    0..3072, extended by rows 3072..4096 in ONE call and, from a clone of the
+    same built index, in TWO calls split at 3584: the two extended indexes
+    must be the same bytes, and the new rows' lists the same, or the train
+    cell reads REFUSED naming the array. Then 64 queries with 4 probes. Train
+    hashes the extended CSR arrays, the new rows' lists and the search; the
+    model column saves the extended index; the probe searches 64 held-out
+    rows."""
+    base = ml.IVFIndex(n_lists=16, n_probes=4, n_neighbors=8, random_state=3).fit(X[:3072])
+    one = base._clone().extend(X[3072:4096])
+    two = base._clone().extend(X[3072:3584])
+    first = np.asarray(two.extend_labels_).copy()
+    two.extend(X[3584:4096])
+    for name in ("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_"):
+        _same_bytes(f"one-call extend {name}", getattr(one, name), f"two-call extend {name}", getattr(two, name))
+    _same_bytes("one-call new-row lists", one.extend_labels_, "two-call new-row lists",
+                np.concatenate([first, np.asarray(two.extend_labels_)]))
+    d, i = one.search(X[4096:4160])
+    return _fit(dict(offsets=_h(one.list_offsets_), carry=_h(one.list_indices_), data=_h(one.list_data_),
+                     lists=_h(one.extend_labels_), dist=_h(d), idx=_h(i), cand=_h(one.n_candidates_)),
+                one, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
+
+
 @lane("embedding")
 def _(ml, X, yc, yr, Xh=None):
     """Embedding (python/mojolearn/embedding.py), profile
@@ -2506,7 +3049,7 @@ def _(ml, X, yc, yr, Xh=None):
     dw_nopad = np.asarray(ml.Embedding(V, Dm, weight=w).backward(ids, dy))
     idh = (_ids(Xh, 1, T).reshape(T) % V).astype(np.int32)
     return _fit(dict(fwd=_h(y), dw=_h(dw), dw_nopad=_h(dw_nopad)),
-                e, lambda m: (np.asarray(m.forward(idh)),))
+                e, lambda m: (np.asarray(m.forward(idh)),), model_na="n/a:input-table")
 
 
 @lane("embedding-sort")
@@ -2537,7 +3080,7 @@ def _(ml, X, yc, yr, Xh=None):
                 np.asarray(ml.Embedding(V, Dm, weight=w).backward(ids, dy)))
     idh = (_ids(Xh, 1, T).reshape(T) % V).astype(np.int32)
     return _fit(dict(fwd=_h(y), dw=_h(dw), dw_nopad=_h(dw_nopad)),
-                e, lambda m: (np.asarray(m.forward(idh)),))
+                e, lambda m: (np.asarray(m.forward(idh)),), model_na="n/a:input-table")
 
 
 @lane("kmeans-sqrt")
@@ -2729,10 +3272,10 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("par-dbscan")
 def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_dbscan
-    par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5), X[:6000, :4], devices=_par_devices())
+    par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
     plain = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4])
     _same_bytes("fit_dbscan labels", par.labels_, "plain labels", plain.labels_)
-    return _fit(dict(labels=_h(par.labels_)), par, "n/a:transductive")
+    return _fit(dict(labels=_h(par.labels_)), par, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("par-scaler")
@@ -2954,11 +3497,12 @@ def _(ml, X, yc, yr, Xh=None):
     and merge tree."""
     from mojolearn.parallel_graph import fit_graph
     A = np.ascontiguousarray(X[:2000, :4])
-    par = fit_graph(ml.AgglomerativeClustering(n_clusters=4), A, devices=_par_devices())
+    par = fit_graph(ml.AgglomerativeClustering(n_clusters=4, prediction_data=True), A, devices=_par_devices())
     plain = ml.AgglomerativeClustering(n_clusters=4).fit(A)
     _same_bytes("fit_graph labels_", par.labels_, "plain labels_", plain.labels_)
     _same_bytes("fit_graph children_", par.children_, "plain children_", plain.children_)
-    return _fit(dict(labels=_h(par.labels_), children=_h(par.children_)), par, "n/a:transductive")
+    return _fit(dict(labels=_h(par.labels_), children=_h(par.children_)), par,
+                lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("par-graph-spectral")
@@ -3373,6 +3917,61 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (transform_rbf_sampler(e, Xh[:256], devices=_par_devices(), rows_per_shard=100),))
 
 
+def _neural_inference(ml, lane_name, est):
+    """The estimator a neural lane's held-out and batch cells ask
+    (lane/inference-tokenizer-neural, 2026-09-15). On a CPU column
+    (`ml.vendor() == "cpu"`) it is the PUBLIC inference class built from the
+    fitted model: `MLPInference.from_checkpoint` on the trainer's saved
+    checkpoint, or `TransformerBlockInference` on the block's nine weights,
+    both over the shipped `_mojolearn_neural_host`. On a GPU column it is the
+    fitted estimator itself, as before, so no GPU cell changes meaning. The
+    train rows never go through here."""
+    if ml.vendor() != "cpu":
+        return est
+    if lane_name == "mlp":
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "mlp.json")
+            est.save_checkpoint(path)
+            return ml.MLPInference.from_checkpoint(path)
+    # lane/inference-neural-forward (2026-09-15): the Mamba blocks from their
+    # named weights, the Samba stack from its saved checkpoint and the byte LM
+    # from its exported checkpoint, each through its public inference class.
+    if lane_name in ("mamba1", "mamba2", "mamba3", "mamba2-dtlimit"):
+        cls = dict(mamba1=ml.Mamba1BlockInference, mamba3=ml.Mamba3BlockInference).get(
+            lane_name, ml.Mamba2BlockInference)
+        kw = dict(dt_limit=est.dt_limit) if cls is ml.Mamba2BlockInference else {}
+        return cls(dict(zip(est._W_NAMES, est._w)), **kw)
+    if lane_name in ("samba", "samba-untied-dropout-accum"):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "samba.ckpt")
+            est.save_checkpoint(path)
+            return ml.SambaInference.from_checkpoint(path)
+    if lane_name in ("byte-lm", "byte-lm-resident"):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "byte_lm.json")
+            est.export_checkpoint(path)
+            return ml.LanguageModelInference.from_checkpoint(path)
+    return ml.TransformerBlockInference(dict(zip(est._W_NAMES, est._w)), n_heads=est.n_heads,
+                                        n_kv_heads=est.n_kv_heads, head_dim=est.head_dim, window=est.window)
+
+
+#: The lanes whose infer, reload and batch cells ask the public CPU inference
+#: class on a CPU column through `_public_est` (lane/inference-neural-forward).
+#: mlp, transformer and transformer-window wrap theirs in the lane bodies and
+#: batch declarations above, so they are named only for the opt-in parts.
+NEURAL_PUBLIC_LANES = ("mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "samba",
+                       "samba-untied-dropout-accum", "byte-lm", "byte-lm-resident")
+NEURAL_PUBLIC_PART_LANES = NEURAL_PUBLIC_LANES + ("transformer", "transformer-window")
+
+
+def _public_est(name, est, lanes=NEURAL_PUBLIC_LANES):
+    """`est`, or on a CPU column the public inference class built from it
+    for a lane in `lanes`. GPU columns are unchanged."""
+    if name not in lanes or est is None:
+        return est
+    return _neural_inference(sys.modules["mojolearn"], name, est)
+
+
 # ---------------------------------------------------------------- the batch part (2026-09-14)
 # See the `batch` part in the module docstring. A declaration per lane, kept
 # OUT of the lane bodies so no train, infer or model hash can move because
@@ -3608,7 +4207,7 @@ def _probe_batch(fit, name, ml, Xh, alone, sabotage):
     if isinstance(spec, str):
         return spec, None
     try:
-        calls = spec(ml, fit.est, Xh)
+        calls = spec(ml, _public_est(name, fit.est), Xh)
         digest = hashlib.sha256()
         for call in calls:
             if isinstance(call, _BatchRows):
@@ -3658,9 +4257,12 @@ _batch_decl(_rows_calls("predict", "predict_proba"),
 _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
-            "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et")
+            "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
+            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
+_batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
+_batch_decl(_rows_calls("predict", prep=_tensor_ctr_xh), "gbdt-tensor-ctr-tables")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):
@@ -3678,43 +4280,49 @@ def _batch_iforest(ml, e, Xh):
 
 _batch_decl(_batch_iforest, "iforest", "iforest-tuned", "par-iforest")
 
-_batch_decl(_rows_calls("predict"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted", "kmeans-sqrt",
-            "kmeans-classic-pp", "par-kmeans")
+_batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
+            "kmeans-sqrt", "kmeans-classic-pp", "par-kmeans")
 # cosine fit is refused by name, so there is no fitted model to ask
 _batch_decl("n/a:fit-refused", "kmeans-cosine")
 # The transductive clustering lanes (read 2026-09-15 against the Python
-# estimator, the GPU binding, the CPU host binding and cuML v26.08.00): none
-# has a held-out row call on EITHER backend, so no batch part exists to ask.
-#   DBSCAN: density.py:189,286 fit and fit_predict only; _mojolearn_estimators
-#     and _mojolearn_estimators_host export dbscan_fit only; cuML dbscan.pyx
-#     has fit (:301) and fit_predict (:478) only.
-#   AgglomerativeClustering: _hierarchy_impl.py:311 fit_predict only; the
-#     solver and solver host bindings export linkage_fit only; cuML
-#     agglomerative.pyx has fit (:139) and fit_predict (:216) only.
-#   SpectralClustering: _spectral_impl.py:547 predict raises
-#     NotImplementedError; the metrics bindings export spectral_fit_predict_
-#     dataset and _graph only; cuML spectral_clustering.pyx has fit (:263) and
-#     fit_predict (:239) only.
+# estimator, the GPU binding, the CPU host binding and cuML v26.08.00).
+#   DBSCAN and AgglomerativeClustering are NOT transductive since
+#     lane/inference-transductive-predict (2026-09-15): with
+#     prediction_data=True both have `predict` on the GPU and CPU host
+#     estimators bindings (labeled_reference_predict, DEVIATION 2740, NEW
+#     capability: cuML dbscan.pyx has fit (:301) and fit_predict (:478) only,
+#     agglomerative.pyx fit (:139) and fit_predict (:216) only), so the part
+#     asks predict on 64 held-out rows.
+#   SpectralClustering is NOT transductive since lane/spectral-predict
+#     (2026-09-15): with prediction_data=True it has `predict` on the GPU and
+#     CPU host metrics bindings (spectral_predict, the Nystrom extension,
+#     DEVIATION 2860, NEW capability: cuML spectral_clustering.pyx has fit
+#     (:263) and fit_predict (:239) only), so the part asks predict on 64
+#     held-out rows, or on their affinity rows for the precomputed lane.
 #   HDBSCAN is NOT transductive since 2026-09-15: HDBSCAN(prediction_data=True)
 #     and mojolearn.hdbscan.approximate_predict (cuML hdbscan.pyx:1264,
-#     predict.cuh:220-262) on both bindings, below. membership_vector (:1180)
-#     and all_points_membership_vectors (:1114) are still NOT IMPLEMENTED and
-#     refuse by name (hdbscan/NOT_IMPLEMENTED.tsv), so the part asks
-#     approximate_predict only.
-_batch_decl("n/a:transductive (DBSCAN has no predict on GPU, CPU or cuML; fit and fit_predict only)",
-            "dbscan", "dbscan-brute-l1", "dbscan-weighted", "par-dbscan")
-_batch_decl("n/a:transductive (AgglomerativeClustering has no predict on GPU, CPU or cuML; fit and fit_predict only)",
-            "agglomerative")
-_batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
-            "spectral", "spectral-precomputed")
+#     predict.cuh:220-262) on both bindings, below, and since the same day
+#     membership_vector (:1180, soft_clustering.cuh:501-627, DEVIATION 1616),
+#     which the part asks too. all_points_membership_vectors (:1114) has no
+#     held-out rows; the lanes' infer probe hashes it.
+_batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]),
+            "dbscan", "dbscan-brute-l1", "dbscan-weighted", "par-dbscan", "agglomerative")
+_batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]), "spectral")
+_batch_decl(lambda ml, e, Xh: [_BatchRows("predict", e._identity_heldout_affinity[:64], lambda r: (e.predict(r),))],
+            "spectral-precomputed")
 
 
 def _batch_hdbscan(ml, e, Xh):
-    """approximate_predict's labels and probabilities, 64 held-out rows."""
-    return [_BatchRows("approximate_predict", Xh[:64, :4], lambda r: tuple(ml.hdbscan.approximate_predict(e, r)))]
+    """approximate_predict's labels and probabilities and membership_vector's
+    rows, 64 held-out rows."""
+    return [_BatchRows("approximate_predict", Xh[:64, :4], lambda r: tuple(ml.hdbscan.approximate_predict(e, r))),
+            _BatchRows("membership_vector", Xh[:64, :4], lambda r: (ml.hdbscan.membership_vector(e, r),))]
 
 
 _batch_decl(_batch_hdbscan, "hdbscan", "hdbscan-leaf")
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gpc", "gpc-multiclass")
 
 
 def _batch_kneighbors(ml, e, Xh):
@@ -3750,7 +4358,7 @@ _batch_decl(_rows_calls("predict", sl=slice(0, 256), min_batch=2, refusal=CD_PRE
 _batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "logistic", "logistic-l1", "logistic-elasticnet",
             "logistic-unpenalized-no-intercept", "par-logistic")
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 256)), "logistic-multiclass")
-_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "svc", "svc-linear", "par-svm")
+_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "svc", "svc-linear", "par-svm", "svc-poly")
 _batch_decl(_rows_calls("score_samples", sl=(slice(0, 256), slice(0, 4))), "kde", "kde-weighted",
             "kde-tophat-sqeuclidean", "kde-epanechnikov-l1", "kde-exponential-chebyshev",
             "kde-cosine-minkowski")
@@ -3765,7 +4373,14 @@ def _batch_gp(ml, e, Xh):
     return [_BatchRows("predict(return_std=True)", Xh[:64, :4], lambda r: tuple(e.predict(r, return_std=True)))]
 
 
-_batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp")
+_batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp", "gp-normalize-y",
+            "gp-optimize", "gp-optimize-restarts")
+# GaussianProcessRegressor.sample_y factors the posterior covariance over ALL
+# the rows of one call, so a row's draw depends on every other row asked with
+# it: splitting the rows changes the covariance, by the reference's contract
+# (gaussian_process/checks/sample_y.mojo, DEVIATION 2793)
+_batch_decl("n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+            "gp-sample-y", "gp-sample-y-normalize")
 # UMAP.transform is batch-dependent BY ITS OWN CONTRACT: umap/transform.mojo's
 # module docstring says "Query batching may change results (global sigma
 # floor, edge weighting and RNG ordinals)", and the part measured it on the
@@ -3794,6 +4409,9 @@ _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "kernel-ridg
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "nystroem")
 _batch_decl(_rows_calls("score_samples", "predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gmm")
 _batch_decl(_rows_calls("score_samples", sl=(slice(0, 64), slice(0, 4))), "gmm-random-init")
+# GaussianMixture.sample draws n_samples rows from the fitted model and reads no
+# input rows, so there is no row axis to split (mixture/checks/sample.mojo)
+_batch_decl("n/a:no-batch-axis (GaussianMixture.sample takes no input rows)", "gmm-sample", "gmm-random-init-sample")
 
 
 def _batch_cholesky(ml, e, Xh):
@@ -4100,6 +4718,10 @@ PAR_BYTE_LM_BATCH_NA = ("n/a:driver-step (ParallelByteLanguageModelTrainer and i
 _batch_decl(PAR_BYTE_LM_BATCH_NA, "par-byte-lm")
 # metrics.fowlkes_mallows_score (lane/cpu-training-small-gaps) keeps the reason main gave it
 _batch_decl("n/a:function", "metrics-fowlkes-mallows")
+_batch_decl("n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is "
+            "handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and "
+            "predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, "
+            "rf-clf and rf-reg)", "gbdt-adapter-score-weighted", "rf-score-weighted")
 
 
 def _batch_cross_entropy(ml, e, Xh):
@@ -4144,10 +4766,25 @@ def _batch_embedding(ml, e, Xh):
 
 
 _batch_decl(_batch_ivf, "ivf", "ivf-euclidean")
+
+
+def _batch_ivf_extend(ml, e, Xh):
+    """extend is row-wise in the new rows' LISTS: a row's list comes from the
+    fixed centres alone, so each held-out row extended alone, and in pieces,
+    must name the list it names inside the whole batch of 64. Every call
+    extends a fresh clone of the fitted index; the ids are not compared,
+    because a row's id is its position in the extension by contract."""
+    return [_BatchRows("extend (new-row lists)", Xh[:64],
+                       lambda r: (np.asarray(e._clone().extend(r).extend_labels_),))]
+
+
+_batch_decl(_batch_ivf_extend, "ivf-extend")
 _batch_decl(_batch_embedding, "embedding", "embedding-sort")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
 _batch_decl(_batch_training_primitives, "training-primitives")
-_batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "mlp", "par-mlp")
+_batch_decl(lambda ml, e, Xh: _rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8)))(
+    ml, _neural_inference(ml, "mlp", e), Xh), "mlp")
+_batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "par-mlp")
 
 #: the sequence models' held-out batch: 8 sequences of 16, so eight rows alone
 SEQ_BATCH, SEQ_LEN = 8, 16
@@ -4177,7 +4814,9 @@ def _batch_block(ml, e, Xh):
                          axis=1)]
 
 
-_batch_decl(_batch_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "transformer", "transformer-window")
+_batch_decl(_batch_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit")
+_batch_decl(lambda ml, e, Xh: _batch_block(ml, _neural_inference(ml, "transformer", e), Xh),
+            "transformer", "transformer-window")
 
 
 def _batch_samba(ml, e, Xh):
@@ -4238,11 +4877,13 @@ _batch_decl(_batch_pq("radius_neighbors", sl=slice(0, 64), ragged=True, sort_res
 _batch_decl(_batch_pq("score_samples", sl=(slice(0, 256), slice(0, 4))), "par-queries-kde")
 _batch_decl(_batch_rsn("kneighbors", "predict", "predict_proba"), "par-reference-knn")
 _batch_decl(_batch_rsn("predict"), "par-reference-knn-reg")
-# parallel_graph.fit_graph is fit-only; see the agglomerative and spectral reasons above
-_batch_decl("n/a:transductive (AgglomerativeClustering has no predict on GPU, CPU or cuML; fit and fit_predict only)",
-            "par-graph-agglomerative")
-_batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
-            "par-graph-spectral")
+# parallel_graph.fit_graph fits; the fitted AgglomerativeClustering(prediction_data=True)
+# predicts like the plain lane's (DEVIATION 2740)
+_batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]), "par-graph-agglomerative")
+# par-graph-spectral fits without prediction_data; its train cells hold the
+# fit_graph labels and embedding to the plain fit's, and it asks no predict
+_batch_decl("n/a:transductive (the par-graph-spectral lane fits without prediction_data; "
+            "SpectralClustering.predict is the spectral lane's)", "par-graph-spectral")
 _batch_decl(_rows_calls("predict"), "par-ordered-rmse")
 _batch_decl(_rows_calls("predict", prep=_coded), "par-feature-freq")
 _batch_decl(_rows_calls("predict", "predict_proba"), "par-boosting-pointwise")
@@ -4916,7 +5557,8 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
         return spec, None, notes
     flip = sabotage not in ("", "0", "serial")
     try:
-        calls = spec(ml, fit.est, Xh)
+        # batchgrad differentiates the fitted block, which no inference class can
+        calls = spec(ml, fit.est if part == "batchgrad" else _public_est(name, fit.est, NEURAL_PUBLIC_PART_LANES), Xh)
         digest = hashlib.sha256()
         for call in calls:
             if isinstance(call, _BatchRows):
@@ -5447,6 +6089,101 @@ def _has_save_load(est):
     return _save_load(est) is not None
 
 
+#: PUBLIC CPU INFERENCE (lane/inference-gbdt-modes, 2026-09-15). `1` for
+#: every lane, or a comma list of lanes: the infer cell is the held-out probe
+#: asked of `mojolearn.host_model(<the saved file>)` (HostForest, HostGBDT or
+#: a classical host model, the shipped wheel families) instead of the fitted
+#: estimator, and the model cell hashes that file. The reload cell stays the
+#: estimator class's own `load`, so a host answer that differs from the
+#: class's reads RELOAD-MOVED here as well as DIVERGENT against the GPU
+#: columns. A file host_model refuses reads REFUSED. The JSON records the
+#: lanes under `host_infer`.
+HOST_INFER_ENV = "MOJOLEARN_IDENTITY_HOST_INFER"
+
+
+def _host_infer_lanes():
+    raw = os.environ.get(HOST_INFER_ENV, "").strip()
+    if not raw or raw == "0":
+        return None
+    return True if raw == "1" else set(p.strip() for p in raw.split(",") if p.strip())
+
+
+def _host_infer_on(name):
+    lanes = _host_infer_lanes()
+    return lanes is True or (lanes is not None and name in lanes)
+
+
+def _probe_fit_host(fit, name):
+    """`_probe_fit` under HOST_INFER_ENV: save, then predict through
+    `host_model`. Same return shape."""
+    if not _has_save_load(fit.est):
+        return None, None, None, "infer: host infer asked of an estimator with no save"
+    save, load, suffix = _save_load(fit.est)
+    from mojolearn._forest_host import binary_path, host_model
+    try:
+        with tempfile.TemporaryDirectory(prefix="identity_break_host_") as tmp:
+            path = os.path.join(tmp, f"{name}{suffix}")
+            getattr(fit.est, save)(path)
+            model = _hfile(path)
+            try:
+                host = host_model(path)
+                # THE BINARY THAT PREDICTED IS THE ONE NAMED (2026-09-15): host_record
+                # loads MOJOLEARN_HOST_DIR's forest binding under the module name
+                # _forest_host reuses from sys.modules, so a MOJOLEARN_FOREST_HOST_BINARY
+                # pointing elsewhere (a sabotage build) was silently not the one asked,
+                # and a forest sabotage column read IDENTICAL on a RunPod x86 pod.
+                bound = getattr(getattr(host, "_binding", None), "__file__", None)
+                if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
+                        os.path.realpath(bound) != os.path.realpath(binary_path())):
+                    raise RuntimeError(f"the forest binding in this process is {bound}, "
+                                       f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+                infer = _h(*fit.probe(host_model(path)))
+            except Exception as exc:
+                return None, None, None, f"infer (host_model): {type(exc).__name__}: {exc}"
+            reload = _h(*fit.probe(getattr(type(fit.est), load)(path)))
+    except Exception as exc:
+        return None, None, None, f"model: {type(exc).__name__}: {exc}"
+    if fit.model_na:
+        # The same n/a as `_probe_fit` (Fit.model_na): the host answer is
+        # still the infer cell, the file of caller-given bytes is not a cell.
+        return infer, fit.model_na, None, None
+    return infer, model, reload, None
+
+
+def _probe_saved_host(fit, name):
+    """The infer, model and reload columns of a CPU fit that LOADED a GPU
+    column's saved file (GBDT_CTR_MODELS_ENV): the held-out probe of a fresh
+    `host_model(<file>)`, the model part n/a, and the probe of a second fresh
+    load. The same binary guard as `_probe_fit_host`.
+
+    The model part is n/a on a CPU column since lane/cpu-verifier-gaps-7
+    (2026-09-15): the file is the GPU column's bytes, which the CPU column
+    did not write, so its hash is not a CPU cell, and the CPU gate's
+    sabotage arm could never move it (every OWED part must move). The GPU
+    columns still hash the file they wrote. A second load that predicts
+    differently from the first is refused (the model part reads REFUSED),
+    because an n/a model part skips the RELOAD-MOVED comparison."""
+    from mojolearn._forest_host import binary_path, host_model
+    path = fit.est.identity_saved_path
+    try:
+        host = host_model(path)
+        bound = getattr(getattr(host, "_binding", None), "__file__", None)
+        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
+            raise RuntimeError(f"the forest binding in this process is {bound}, "
+                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+        infer = _h(*fit.probe(host))
+    except Exception as exc:
+        return None, None, None, f"infer (saved model): {type(exc).__name__}: {exc}"
+    try:
+        reload = _h(*fit.probe(host_model(path)))
+    except Exception as exc:
+        return infer, None, None, f"model (saved model): {type(exc).__name__}: {exc}"
+    if reload != infer:
+        return infer, None, None, (f"model (saved model): a second host_model load of {path} predicts "
+                                   f"{reload}, the first {infer}")
+    return infer, "n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none)", None, None
+
+
 def _probe_fit(fit, name):
     """The infer and model columns of ONE fit. Returns (infer, model, reload,
     error) where infer and model are a hash or an `n/a:<reason>` string,
@@ -5455,10 +6192,16 @@ def _probe_fit(fit, name):
     stage that raised leaves its column None, which reads REFUSED."""
     if not callable(fit.probe):
         return fit.probe, "n/a:no-save", None, None
+    if getattr(fit.est, "identity_saved_path", None):
+        return _probe_saved_host(fit, name)
+    if _host_infer_on(name):
+        return _probe_fit_host(fit, name)
     try:
-        infer = _h(*fit.probe(fit.est))
+        infer = _h(*fit.probe(_public_est(name, fit.est)))
     except Exception as exc:
         return None, None, None, f"infer: {type(exc).__name__}: {exc}"
+    if fit.model_na:
+        return infer, fit.model_na, None, None
     if not _has_save_load(fit.est):
         return infer, "n/a:no-save", None, None
     save, load, suffix = _save_load(fit.est)
@@ -5474,7 +6217,7 @@ def _probe_fit(fit, name):
                 return infer, "n/a:save-not-implemented", None, None
             model = _hfile(path)
             back = getattr(type(fit.est), load)(path)
-            reload = _h(*fit.probe(back))
+            reload = _h(*fit.probe(_public_est(name, back)))
     except Exception as exc:
         return infer, None, None, f"model: {type(exc).__name__}: {exc}"
     return infer, model, reload, None
@@ -5594,7 +6337,10 @@ def _run_reference(args):
                       heldout=heldout_hashes, cells=cells, complete=complete,
                       skipped=sorted(skip), batch_protocol=batch_protocol,
                       batch_sabotage=batch_sabotage, rlpair_protocol=rlpair_protocol,
-                      rlpair_sabotage=rlpair_sabotage)
+                      rlpair_sabotage=rlpair_sabotage, lane_revisions=dict(LANE_REVISIONS))
+        host_infer = _host_infer_lanes()
+        if host_infer is not None:
+            record["host_infer"] = "all" if host_infer is True else sorted(host_infer)
         for part in extra:
             record[f"{part}_protocol"] = _part_protocol(part, args.batch_alone)
             record[f"{part}_sabotage"] = extra_sabotage[part] or False
@@ -5641,7 +6387,7 @@ def _run_reference(args):
                     _DUMP_TAG = f"{name}/{f}/{repeat}"
                     p = LANES[name](ml, X, yc, yr, held[f].copy())
                     parts.append(dict(p))
-                    hs.append(_h(np.frombuffer("|".join(f"{k}={v}" for k, v in sorted(p.items())).encode(), dtype=np.uint8)))
+                    hs.append(_train_hash(p))
                 except Exception as exc:
                     err = f"{type(exc).__name__}: {exc}"
                     if args.verbose:
@@ -5957,6 +6703,14 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
         with open(p) as fh:
             j = json.load(fh)
         cols.append((j.get("vendor") or os.path.basename(p), j))
+    for name, j in cols:
+        stale = stale_revision_lanes(j)
+        dropped = [k for k in j["cells"] if k.split("/")[0] in stale]
+        if dropped:
+            for k in dropped:
+                del j["cells"][k]
+            print(f"NOTE: column {name} hashed {', '.join(stale)} at an older lane revision "
+                  f"(LANE_REVISIONS); its {len(dropped)} cell(s) there are not compared and read as absent")
     keys = sorted(set(k for _, j in cols for k in j["cells"]))
     if require_lanes:
         # --lanes SCOPES the diff (2026-09-14 night): the verdicts, the
@@ -6172,7 +6926,7 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
 
 #: the keys every part of one column must agree on before --merge joins them
 MERGE_SAME = ("vendor", "commit", "mode", "repeats", "heldout_seed", "fixtures", "heldout",
-              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage") + tuple(
+              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage", "lane_revisions") + tuple(
     f"{part}_{k}" for part in EXTRA_PARTS for k in ("protocol", "sabotage"))
 
 

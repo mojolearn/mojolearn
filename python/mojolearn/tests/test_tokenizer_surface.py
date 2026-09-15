@@ -1,30 +1,30 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The GPT-2 tokenizer's Python door (the expose-tokenizer lane, 2026-09-14).
+"""The tokenizer's Python door.
 
-`GPT2Tokenizer` through the built `_mojolearn_tokenizer_host` binding,
-against the SAME 43 cases `pixi run check-tokenizer` holds the Mojo encoder
-to (`tokenizer/checks/fixtures/gpt2_reference.json`, recorded from tiktoken
-0.14.0): exact id sequences, byte-exact round trips, the two readings of
-`<|endoftext|>`, fixed byte strings with their ids spelled out here, and
-every refusal by name. A build with `-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1`
-(ids written in reverse) must fail the exact-id tests, which is how this
-file is known to read the binary and not a Python stand-in.
+`GPT2Tokenizer` through the built `_mojolearn_tokenizer_host` binding. mojolearn
+ships no vocabulary (2026-09-15), so the vocabulary here is the synthetic one
+`mojolearn/_tokenizer_synthetic.py` trains itself, and every expected id comes
+from that module's second, pure Python encoder of the same algorithm: exact id
+sequences, byte-exact round trips, both readings of `<|endoftext|>`, byte
+fallback, Unicode classes, batch encoding, and every refusal by name. A build
+with `-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1` (ids written in reverse) must
+fail the exact-id tests, which is how this file is known to read the binary.
 
-Runs two ways:
+A user-supplied GPT-2 vocabulary is tested when MOJOLEARN_GPT2_ENCODER_JSON
+and MOJOLEARN_GPT2_VOCAB_BPE name the two files; without them that test
+skips (under pytest) or is reported as skipped (module run).
 
     cd python && python3 -m mojolearn.tests.test_tokenizer_surface
     cd python && python3 -m pytest -q mojolearn/tests/test_tokenizer_surface.py
 
-Without the binding built (`bindings/build_tokenizer_host.sh`) the module
-run exits 2 and says so; pytest skips with the same sentence. Neither is a
-pass. This file measures the host it runs on and says nothing about another
-box: the tokenizer has no float arithmetic, so what it can get wrong is
-agreement with the reference, and that is what is asserted.
+Without the binding built (`bindings/build_tokenizer_host.sh`) the module run
+exits 2 and says so; pytest skips with the same sentence. Neither is a pass.
 """
 import json
+import os
 import sys
-from pathlib import Path
+import tempfile
 
 try:
     import pytest
@@ -32,29 +32,30 @@ except ImportError:  # the module run needs no pytest
     pytest = None
 
 from mojolearn import GPT2Tokenizer
+from mojolearn import _tokenizer_synthetic as syn
 
-ROOT = Path(__file__).resolve().parents[3]
-FIXTURE = ROOT / "tokenizer" / "checks" / "fixtures" / "gpt2_reference.json"
+ENCODER_ENV = "MOJOLEARN_GPT2_ENCODER_JSON"
+MERGES_ENV = "MOJOLEARN_GPT2_VOCAB_BPE"
 
-#: Fixed byte strings and the ids tiktoken 0.14.0 assigns them, spelled out
-#: so a reader needs no fixture to see what "exact" means here.
-FIXED = (
-    (b"hello world", False, [31373, 995]),
-    (b"hello", False, [31373]),
-    (b" hello", False, [23748]),
-    (b"it's", False, [270, 338]),
-    (b"IT'S", False, [2043, 6, 50]),
-    (b"\x00\x01\x7f", False, [188, 189, 221]),
-    (b"\xc3", False, [127]),  # a lone continuation-lead byte, its own token
-    ("é".encode("utf-8"), False, [2634]),  # one token, not two bytes
-    (b"<|endoftext|>", True, [50256]),
-    (b"", False, []),
-)
+
+class Skipped(Exception):
+    pass
+
+
+#: True inside `main` (the module run), where a skip is reported by this file
+#: rather than by pytest, even when pytest is importable.
+_MODULE_RUN = False
+
+
+def _skip(why):
+    if pytest is not None and not _MODULE_RUN:
+        pytest.skip(why)
+    raise Skipped(why)
 
 
 def _tokenizer():
     try:
-        return GPT2Tokenizer()
+        return GPT2Tokenizer._synthetic()
     except ImportError as exc:
         if pytest is not None:
             pytest.skip(f"tokenizer host binding not built: {exc}")
@@ -67,78 +68,93 @@ if pytest is not None:
         return _tokenizer()
 
 
-def _cases():
-    with open(FIXTURE, "r", encoding="utf-8") as fh:
-        fx = json.load(fh)
-    assert fx["encoding"] == "gpt2" and fx["n_vocab"] == 50257
-    assert fx["tiktoken_version"] == "0.14.0"
-    return fx["cases"]
+def _vocab():
+    return syn.vocabulary()
 
 
-def test_fixed_bytes_exact_ids(tok):
-    for raw, allow, want in FIXED:
-        assert tok.encode_bytes(raw, allow_endoftext=allow) == want, raw
-        assert tok.encode(raw, allow_endoftext=allow) == want, raw
-    assert tok.encode("hello world") == [31373, 995]
-    assert tok.encode("") == []
+def _ref(raw, allow=False):
+    return syn.reference_encode(_vocab(), raw, allow)
 
 
-def test_reference_cases_exact_ids(tok):
-    """All 43 recorded cases, id for id; `endoftext_as_special` is the one
-    case recorded with the special token allowed, as the Mojo gate reads
-    it."""
-    cases = _cases()
-    assert len(cases) == 43
+def test_synthetic_vocabulary_shape(tok):
+    v = _vocab()
+    assert v[:256] == [bytes([b]) for b in range(256)]
+    assert len(v) == syn.TARGET_TOKENS and len(set(v)) == len(v)
+    assert sum(1 for t in v if len(t) > 1) >= 200, "the vocabulary must have real merges"
+    assert tok.n_vocab == len(v) + 1
+    assert tok.eot_token == len(v)
+    assert syn.vocabulary() == v, "the synthetic vocabulary is deterministic"
+
+
+def test_cases_exact_ids(tok):
     wrong = []
-    for case in cases:
-        text = case["text"].encode("utf-8")
-        allow = case["name"] == "endoftext_as_special"
-        got = tok.encode_bytes(text, allow_endoftext=allow)
-        if got != case["ids"]:
-            wrong.append((case["name"], case["ids"], got))
-    assert wrong == [], f"{len(wrong)} of 43 id sequences differ: {wrong}"
+    for name, text, allow in syn.cases():
+        raw = text.encode("utf-8")
+        want = _ref(raw, allow)
+        got = tok.encode_bytes(raw, allow_endoftext=allow)
+        if got != want:
+            wrong.append((name, want, got))
+    assert wrong == [], f"{len(wrong)} of {len(syn.cases())} id sequences differ: {wrong}"
 
 
-def test_reference_cases_round_trip(tok):
-    cases = _cases()
+def test_cases_exercise_merges_and_fallback(tok):
+    """The cases reach what they claim: a merged token, a byte-fallback run,
+    the special token and a multi-byte codepoint split to bytes."""
+    ids = [i for name, text, allow in syn.cases() for i in tok.encode(text, allow_endoftext=allow)]
+    assert any(256 <= i < tok.eot_token for i in ids), "no merged token in the cases"
+    assert tok.eot_token in ids
+    assert tok.encode("xyzw QXJ") == list(b"xyzw QXJ"), "unseen bytes fall back to byte tokens"
+    assert tok.encode(" kalo")[0] >= 256
+
+
+def test_cases_round_trip(tok):
     wrong = []
-    for case in cases:
-        text = case["text"].encode("utf-8")
-        allow = case["name"] == "endoftext_as_special"
-        back = tok.decode_bytes(tok.encode_bytes(text, allow_endoftext=allow))
-        if back != text:
-            wrong.append((case["name"], text, back))
-    assert wrong == [], f"{len(wrong)} of 43 round trips differ: {wrong}"
+    for name, text, allow in syn.cases():
+        raw = text.encode("utf-8")
+        back = tok.decode_bytes(tok.encode_bytes(raw, allow_endoftext=allow))
+        if back != raw:
+            wrong.append((name, raw, back))
+    assert wrong == [], f"{len(wrong)} round trips differ: {wrong}"
+
+
+def test_unicode_classes(tok):
+    """The pre-token boundaries the classes decide, through the ids: a
+    precomposed letter joins its word, a combining mark does not, Arabic-Indic
+    digits are numbers, NBSP is whitespace and U+001C is not."""
+    for text in ("e\u0301", "caf\u00e9", "\u0661\u0662 3", "a\u00a0b", "a\u001cb", "\u4e2d\u6587 x",
+                 "it's IT'S", "a   b", "a   ", "\U0001F642!"):
+        raw = text.encode("utf-8")
+        assert syn.pretokenize(raw) and tok.encode_bytes(raw) == _ref(raw), text
 
 
 def test_invalid_utf8_round_trips(tok):
     """A byte that begins no well-formed sequence is its own one-byte
-    pre-token (every single byte is a token), so it encodes and comes back;
-    tiktoken's `&str` input cannot hold it, so this is ours to state."""
-    raw = b"\xff\xfe abc \x00 \xc3"
+    pre-token (every single byte is a token), so it encodes and comes back."""
+    raw = b"\xff\xfe abc \x00 \xc3 \xed\xa0\x80"
     ids = tok.encode_bytes(raw)
-    assert all(0 <= i < 50257 for i in ids)
+    assert ids == _ref(raw)
+    assert all(0 <= i < tok.n_vocab for i in ids)
     assert tok.decode_bytes(ids) == raw
 
 
 def test_endoftext_both_readings(tok):
     text = "<|endoftext|>"
-    assert tok.encode(text, allow_endoftext=True) == [50256]
+    eot = tok.eot_token
+    assert tok.encode(text, allow_endoftext=True) == [eot]
     plain = tok.encode(text, allow_endoftext=False)
-    assert len(plain) == 7 and 50256 not in plain
+    assert len(plain) >= 2 and eot not in plain
     assert tok.encode(text) == plain
     both = tok.encode("a<|endoftext|>b", allow_endoftext=True)
-    assert both == tok.encode("a") + [50256] + tok.encode("b")
-    assert tok.decode([50256]) == text
-    assert tok.decode_bytes([50256]) == text.encode()
+    assert both == tok.encode("a") + [eot] + tok.encode("b")
+    assert tok.decode([eot]) == text
+    assert tok.decode_bytes([eot]) == text.encode()
 
 
 def test_decode_text_and_errors(tok):
-    assert tok.decode(tok.encode("héllo wörld")) == "héllo wörld"
-    assert tok.encode("é") == [2634]  # one token for the two bytes
-    half = tok.encode_bytes(b"\xc3")  # the first byte of "é" alone
-    assert half == [127]
-    assert tok.decode(half) == "�"  # tiktoken's errors="replace"
+    assert tok.decode(tok.encode("h\u00e9llo w\u00f6rld")) == "h\u00e9llo w\u00f6rld"
+    half = tok.encode_bytes(b"\xc3")  # the first byte of a two-byte character alone
+    assert half == [0xC3]
+    assert tok.decode(half) == "\ufffd"
     try:
         tok.decode(half, errors="strict")
     except UnicodeDecodeError:
@@ -146,13 +162,6 @@ def test_decode_text_and_errors(tok):
     else:
         raise AssertionError("errors='strict' did not raise on half a character")
     assert tok.decode([]) == "" and tok.decode_bytes([]) == b""
-
-
-def test_vocabulary_constants(tok):
-    assert tok.n_vocab == 50257 == GPT2Tokenizer.N_VOCAB
-    assert tok.eot_token == 50256 == GPT2Tokenizer.ENDOFTEXT_ID
-    assert GPT2Tokenizer.ENDOFTEXT == "<|endoftext|>"
-    assert (Path(tok.data_directory) / "gpt2_ranks.tsv").is_file()
 
 
 def test_binding_reads_back_cpu_identical(tok):
@@ -164,7 +173,6 @@ def test_binding_reads_back_cpu_identical(tok):
 
 
 def _sabotage_allowed():
-    import os
     return os.environ.get("MOJOLEARN_HOST_ALLOW_SABOTAGE") == "1"
 
 
@@ -189,9 +197,10 @@ def test_refuses_allow_endoftext_type(tok):
 
 
 def test_refuses_ids_out_of_range(tok):
-    _raises(lambda: tok.decode_bytes([1, 50257]), ValueError, "id 50257 at position 1 is outside [0, 50257)")
-    _raises(lambda: tok.decode([-1]), ValueError, "id -1 at position 0 is outside [0, 50257)")
-    assert tok.decode_bytes([50256]) == b"<|endoftext|>"  # the last valid id
+    n = tok.n_vocab
+    _raises(lambda: tok.decode_bytes([1, n]), ValueError, f"id {n} at position 1 is outside [0, {n})")
+    _raises(lambda: tok.decode([-1]), ValueError, f"id -1 at position 0 is outside [0, {n})")
+    assert tok.decode_bytes([n - 1]) == b"<|endoftext|>"  # the last valid id
 
 
 def test_refuses_ids_of_the_wrong_type(tok):
@@ -202,12 +211,10 @@ def test_refuses_ids_of_the_wrong_type(tok):
 
 
 def _batch_documents():
-    """Every fixture case (both readings are asked separately below), the
-    fixed byte strings, empty documents between them and one invalid UTF-8
-    document: adjacent documents whose concatenation would merge."""
-    docs = [c["text"].encode("utf-8") for c in _cases()]
-    docs += [raw for raw, _allow, _want in FIXED]
-    docs += [b"", b"hello", b"", b" world", b"\xff\xfe<|endoftext|>\xc3", b"it", b"'s"]
+    """Every case text, empty documents between them and invalid UTF-8
+    documents: adjacent documents whose concatenation would merge."""
+    docs = [text.encode("utf-8") for _, text, _ in syn.cases()]
+    docs += [b"", b"kalo", b"", b" mine", b"\xff\xfe<|endoftext|>\xc3", b"it", b"'s", b"ka", b"lo"]
     return docs
 
 
@@ -217,7 +224,7 @@ def test_encode_batch_each_document_as_alone(tok):
         got = tok.encode_batch(docs, allow_endoftext=allow)
         assert len(got) == len(docs)
         for k, (d, ids) in enumerate(zip(docs, got)):
-            assert ids == tok.encode_bytes(d, allow_endoftext=allow), (k, d, allow)
+            assert ids == tok.encode_bytes(d, allow_endoftext=allow) == _ref(d, allow), (k, d, allow)
 
 
 def test_encode_batch_split_invariant(tok):
@@ -230,15 +237,15 @@ def test_encode_batch_split_invariant(tok):
         assert tok.encode_batch(docs[:a], allow_endoftext=True) + tok.encode_batch(docs[a:], allow_endoftext=True) == whole
     assert [tok.encode_batch([d], allow_endoftext=True)[0] for d in docs] == whole
     assert tok.encode_batch(docs[::-1], allow_endoftext=True) == whole[::-1]
-    assert tok.encode_batch([b"hello", b" world"]) == [[31373], [995]]
+    assert tok.encode_batch([b"ka", b"lo"]) == [_ref(b"ka"), _ref(b"lo")]
 
 
 def test_encode_batch_accepts_str_and_empty(tok):
     assert tok.encode_batch([]) == []
     assert tok.encode_batch(["", b""]) == [[], []]
-    assert tok.encode_batch(["hello world", bytearray(b"hello")]) == [[31373, 995], [31373]]
-    assert tok.encode_batch(("<|endoftext|>",), allow_endoftext=True) == [[50256]]
-    assert tok.encode_batch(iter(["é"])) == [[2634]]
+    assert tok.encode_batch([" kalo mine", bytearray(b"kalo")]) == [_ref(b" kalo mine"), _ref(b"kalo")]
+    assert tok.encode_batch(("<|endoftext|>",), allow_endoftext=True) == [[tok.eot_token]]
+    assert tok.encode_batch(iter(["\u00e9"])) == [_ref("\u00e9".encode())]
 
 
 def test_decode_batch_round_trip(tok):
@@ -250,53 +257,133 @@ def test_decode_batch_round_trip(tok):
 
 
 def test_batch_refusals(tok):
+    n = tok.n_vocab
     _raises(lambda: tok.encode_batch("abc"), TypeError, "encode_batch takes a sequence of documents, got str")
     _raises(lambda: tok.encode_batch(b"abc"), TypeError, "encode_batch takes a sequence of documents, got bytes")
     _raises(lambda: tok.encode_batch(5), TypeError, "encode_batch takes a sequence of documents, got int")
     _raises(lambda: tok.encode_batch(["a", 3]), TypeError, "document 1 must be str or bytes-like, got int")
     _raises(lambda: tok.encode_batch(["a"], allow_endoftext=1), TypeError, "allow_endoftext must be a bool, got int")
-    _raises(lambda: tok.decode_batch([[1], [50257]]), ValueError, "id 50257 at position 0 is outside [0, 50257)")
+    _raises(lambda: tok.decode_batch([[1], [n]]), ValueError, f"id {n} at position 0 is outside [0, {n})")
     _raises(lambda: tok.decode_bytes_batch(b"ab"), TypeError, "decode_bytes_batch takes a sequence of id sequences")
 
 
-def test_refuses_a_missing_table_by_name(tmp_path=None):
+def test_ranks_file_matches_token_bytes(tok):
+    d = tempfile.mkdtemp()
+    path = os.path.join(d, "ranks.tsv")
+    syn.write_ranks(_vocab(), path)
+    other = GPT2Tokenizer.from_ranks_file(path)
+    text = "".join(t for _, t, _ in syn.cases()).encode("utf-8")
+    assert other.n_vocab == tok.n_vocab
+    assert other.encode_bytes(text, allow_endoftext=True) == tok.encode_bytes(text, allow_endoftext=True)
+
+
+def test_from_files_spelled_vocabulary(tok):
+    """The synthetic vocabulary written in the GPT-2 file format (spelled
+    encoder JSON plus a merge list) loads to the same tokenizer."""
+    from mojolearn.tokenizer import _byte_to_char
+    spell = _byte_to_char()
+    v = _vocab()
+    d = tempfile.mkdtemp()
+    enc = {"".join(spell[b] for b in t): i for i, t in enumerate(v)}
+    enc["<|endoftext|>"] = len(v)
+    with open(os.path.join(d, "encoder.json"), "w", encoding="utf-8") as fh:
+        json.dump(enc, fh)
+    index = {t: i for i, t in enumerate(v)}
+    lines = ["#version: synthetic"]
+    for i, t in enumerate(v):
+        if i < 256:
+            continue
+        # the earliest split into two lower tokens
+        for k in range(1, len(t)):
+            a, b = t[:k], t[k:]
+            if a in index and b in index and index[a] < i and index[b] < i:
+                lines.append("".join(spell[x] for x in a) + " " + "".join(spell[x] for x in b))
+                break
+    with open(os.path.join(d, "vocab.bpe"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+    other = GPT2Tokenizer.from_files(os.path.join(d, "encoder.json"), os.path.join(d, "vocab.bpe"))
+    text = "".join(t for _, t, _ in syn.cases()).encode("utf-8")
+    assert other.n_vocab == tok.n_vocab
+    assert other.encode_bytes(text, allow_endoftext=True) == tok.encode_bytes(text, allow_endoftext=True)
+
+
+def test_user_supplied_gpt2_files():
+    """The GPT-2 encoder.json and vocab.bpe a user downloaded themselves.
+    Skips when the two environment variables do not name existing files."""
+    enc, merges = os.environ.get(ENCODER_ENV, ""), os.environ.get(MERGES_ENV, "")
+    if not (enc and merges and os.path.isfile(enc) and os.path.isfile(merges)):
+        _skip(f"{ENCODER_ENV} and {MERGES_ENV} do not name the GPT-2 files")
+    tok = GPT2Tokenizer.from_files(enc, merges)
+    with open(enc, "r", encoding="utf-8") as fh:
+        encoder = json.load(fh)
+    assert tok.n_vocab == len(encoder)
+    assert tok.eot_token == encoder["<|endoftext|>"]
+    assert tok.encode("<|endoftext|>", allow_endoftext=True) == [encoder["<|endoftext|>"]]
+    # a word the vocabulary holds whole is one id, with and without its space
+    for spelled in ("hello", "\u0120hello", "\u0120world"):
+        if spelled in encoder:
+            text = spelled.replace("\u0120", " ")
+            assert tok.encode(text) == [encoder[spelled]], text
+    text = "It's 2026: h\u00e9llo, w\u00f6rld!  \u4e2d\u6587\n<|endoftext|>"
+    assert tok.decode(tok.encode(text, allow_endoftext=True)) == text
+
+
+def test_refuses_no_vocabulary_by_name():
     """Resolved before the binding is loaded, so this needs no build."""
-    import tempfile
-    d = tempfile.mkdtemp() if tmp_path is None else str(tmp_path)
-    _raises(lambda: GPT2Tokenizer(data_directory=d), FileNotFoundError, "gpt2_ranks.tsv does not exist")
+    _raises(lambda: GPT2Tokenizer(), ValueError, "GPT2Tokenizer needs a vocabulary, and mojolearn ships none")
+    _raises(lambda: GPT2Tokenizer(), ValueError, "GPT2Tokenizer.from_files(encoder_json, vocab_bpe)")
+    _raises(lambda: GPT2Tokenizer(), ValueError, "OpenAI publishes with its GPT-2 release")
+    missing = os.path.join(tempfile.mkdtemp(), "ranks.tsv")
+    _raises(lambda: GPT2Tokenizer.from_ranks_file(missing), FileNotFoundError, "does not exist")
+
+
+def test_refuses_bad_token_bytes():
+    """Refused in Python before any binding is loaded."""
+    full = [bytes([b]) for b in range(256)]
+    _raises(lambda: GPT2Tokenizer.from_token_bytes(full[:255]), ValueError, "lacks 1 of the 256 single-byte tokens")
+    _raises(lambda: GPT2Tokenizer.from_token_bytes(full + [b"ab", b"ab"]), ValueError, "token 257 repeats token 256")
+    _raises(lambda: GPT2Tokenizer.from_token_bytes(full + [b""]), ValueError, "token 256 is empty")
+    _raises(lambda: GPT2Tokenizer.from_token_bytes(b"abc"), TypeError, "tokens must be a sequence of bytes")
 
 
 TESTS = [(name, fn) for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
+_NO_TOK = ("test_user_supplied_gpt2_files", "test_refuses_no_vocabulary_by_name", "test_refuses_bad_token_bytes")
 
 
 def main(argv=None):
+    global _MODULE_RUN
+    _MODULE_RUN = True
     out = sys.stdout
     try:
-        tok = GPT2Tokenizer()
+        tok = GPT2Tokenizer._synthetic()
     except ImportError as exc:
         out.write(f"test_tokenizer_surface: NOT RUN. {exc}\n")
         return 2
-    failures = []
+    failures, skipped = [], []
     for name, fn in TESTS:
         try:
-            if name == "test_refuses_a_missing_table_by_name":
+            if name in _NO_TOK:
                 fn()
             else:
                 fn(tok)
+        except Skipped as why:
+            skipped.append((name, str(why)))
         except Exception as exc:  # noqa: BLE001
             failures.append((name, f"{type(exc).__name__}: {exc}"))
     for name, why in failures:
         out.write(f"FAIL {name}: {why}\n")
+    for name, why in skipped:
+        out.write(f"SKIP {name}: {why}\n")
     n = len(TESTS)
     if failures:
         out.write(f"test_tokenizer_surface: RED. {len(failures)} of {n} checks failed.\n")
         return 1
     out.write(
-        f"test_tokenizer_surface: GREEN. {n} checks on this host: 43/43 exact id\n"
-        "sequences and 43/43 byte-exact round trips against tiktoken 0.14.0's\n"
-        "recorded fixture through the Python door, the fixed byte strings, both\n"
-        "readings of <|endoftext|>, invalid UTF-8 round-tripping, and every\n"
-        "refusal by name. It says nothing about another box.\n"
+        f"test_tokenizer_surface: GREEN. {n - len(skipped)} of {n} checks on this host ({len(skipped)} skipped): "
+        f"{len(syn.cases())} exact id sequences and round trips against the synthetic vocabulary's\n"
+        "Python encoder through the Python door, merges, byte fallback, Unicode classes, both\n"
+        "readings of <|endoftext|>, batch encoding, the rank-file and spelled-file loaders, and\n"
+        "every refusal by name. It says nothing about another box.\n"
     )
     return 0
 

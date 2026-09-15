@@ -1,0 +1,6 @@
+lane=inference-holtwinters
+commit=204e1561f655e5c36da9bbff0db173c83af5742f
+dirty_tracked=0
+worktree=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-inf-holtwinters
+source=2792	18685788	27838b16bb6b9c8294e8d0438dd8623babbb33767ecaa7f19918b8b9be6cd8dd
+box_clock_minus_mac=0

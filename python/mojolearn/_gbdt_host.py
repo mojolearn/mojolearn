@@ -20,13 +20,27 @@ THE MODEL TEXT IS PARSED HERE, in Python, because the Mojo parser
 `TrainedModel` from `gbdt/train.mojo`, which imports the device side. This
 parser reads the same records with the same strictness on what it accepts
 (header order, gap-free indices, counts that add up, an unknown keyword is
-an error) and REFUSES BY NAME what the host walk does not carry: CTR columns
-and tables (`ctr_columns`, `ctr_table`, `ctr_entry`, `tensor_ctr_registry`,
-`feature_freq_tensor`, a feature of type `ctr` or `tensor_ctr`). Every float
+an error). Every float
 comes from the hex bits half of its token, as the Mojo loader reads it; the
 decimal half is not consulted (the Mojo loader checks it agrees within one
 ULP, which this parser does not, so a hand-edited decimal is not caught
 here; the bits are what both sides predict with).
+
+CTR TABLES AND TENSOR CTRS (lane/inference-gbdt-ctr-tables, 2026-09-15).
+A model whose categorical input was above `one_hot_max_size` carries
+`ctr_columns`, one `ctr_table` per CTR column and its `ctr_entry` counts; an
+`ExperimentalTwoLevelFeatureFreq` model whose tree split on a combination
+carries `tensor_ctr_registry` and its `feature_freq_tensor` records. They are
+parsed here with `load_model_text`'s checks and handed to the forest host
+binding's `forest_host_gbdt_expand_ctr`, which rebuilds the tables and calls
+the same `expand_raw_columns` and `expand_tensor_ctr_columns` the GPU
+`predict_floats` calls, then the ordinary quantize and walk run on the model
+columns. What `predict_floats` refuses is refused here, at load: a model
+with both kinds, a model declaring more CTR columns than it carries tables,
+and a table of a type with no apply-time arithmetic (Buckets,
+BinarizedTargetMeanValue, FloatTargetMeanValue), by name. The tensor record's
+hash is checked for shape only (two unsigned 32-bit halves); the Mojo reader
+recomputes it from the sources and splits, which this parser does not.
 
 This module holds no arithmetic beyond the `1 - p` column
 `GradientBoosting.predict_proba` also computes in Python (DEVIATION 2333).
@@ -56,9 +70,14 @@ _NAN_CODES = {'as_is': 0, 'as_false': 1, 'as_true': 2}
 _PROBA_LOSSES = ('Logloss', 'CrossEntropy')
 _MULTI_LOSSES = ('MultiClass', 'MultiClassOneVsAll')
 _CLASSIFICATION_LOSSES = _PROBA_LOSSES + _MULTI_LOSSES
-#: Records the host walk does not carry, refused by name.
-_REFUSED_RECORDS = ('ctr_columns', 'ctr_table', 'ctr_entry', 'tensor_ctr_registry',
-                    'feature_freq_tensor')
+#: `ctr_type_name`, `gbdt/ctrs/ctr.mojo`: the names a `ctr_table` may carry.
+_CTR_TYPE_CODES = {'Borders': 0, 'Buckets': 1, 'BinarizedTargetMeanValue': 2,
+                   'FloatTargetMeanValue': 3, 'Counter': 4, 'FeatureFreq': 5}
+#: The types `TCtrValueTable.value_for` has apply-time arithmetic for; the
+#: others raise there and are refused here by name.
+_CTR_APPLIED = ('Borders', 'Counter', 'FeatureFreq')
+#: Records no reader of this version understands, refused by name.
+_REFUSED_RECORDS = ()
 
 
 def _bits32(token, what):
@@ -91,6 +110,156 @@ def _padded_i32(values):
     return _i32(values if values else [0])
 
 
+def _u32_word(token, what):
+    v = int(token)
+    if v < 0 or v > 0xffffffff:
+        raise ValueError(f'{what} {token!r} does not fit an unsigned 32-bit word')
+    return v
+
+
+def _parse_tensor_table(t):
+    """One `feature_freq_tensor 2` record, with
+    `parse_feature_freq_tensor_table`'s checks (`gbdt/models/
+    tensor_ctr_value_table.mojo`) except the recomputed tensor hash and the
+    canonical split order, which need the tensor builder."""
+    p = [1]
+
+    def word(expect=None):
+        if p[0] >= len(t):
+            raise ValueError('a truncated feature_freq_tensor record')
+        tok = t[p[0]]
+        p[0] += 1
+        if expect is not None and tok != expect:
+            raise ValueError(f'expected tensor {expect}, got {tok!r}')
+        return tok
+
+    if int(word()) != 2:
+        raise ValueError('unsupported feature_freq_tensor version')
+    word('hash_hi'); _u32_word(word(), 'tensor hash_hi')
+    word('hash_lo'); _u32_word(word(), 'tensor hash_lo')
+    word('sources')
+    n_sources = int(word())
+    sources = [int(word()) for _ in range(n_sources)]
+    word('cardinalities')
+    if int(word()) != n_sources:
+        raise ValueError('tensor source/cardinality count mismatch')
+    cards, product = [], 1
+    for _ in range(n_sources):
+        card = int(word())
+        if card < 1 or product > 10000000 // card:
+            raise ValueError('invalid tensor cardinality product')
+        product *= card
+        cards.append(card)
+    word('splits')
+    n_splits = int(word())
+    if n_splits < 0 or n_splits > 30:
+        raise ValueError('invalid tensor split count')
+    splits = []
+    for _ in range(n_splits):
+        feature, bin_idx, kind = int(word()), int(word()), int(word())
+        if feature < 0 or feature > 2147483647 or bin_idx < 0 or bin_idx > 2147483647 or kind not in (0, 1):
+            raise ValueError('invalid tensor split record')
+        if product > 10000000 // 2:
+            raise ValueError('tensor split table exceeds 10,000,000 entries')
+        product *= 2
+        splits.append((feature, bin_idx, kind))
+    word('classes')
+    classes = int(word())
+    if classes != 0 and (classes < 2 or classes > 256):
+        raise ValueError('tensor target classes must be zero or at least two')
+    word('target_border')
+    target_border = int(word())
+    if (classes == 0 and target_border != -1) or (classes > 0 and not 0 <= target_border < classes - 1):
+        raise ValueError('invalid tensor target border')
+    word('prior_bits')
+    prior_num, prior_denom = _u32_word(word(), 'tensor prior'), _u32_word(word(), 'tensor prior')
+    if classes > 0 and prior_denom & 0x7fffffff == 0:
+        raise ValueError('Borders tensor prior denominator must be non-zero')
+    word('denominator')
+    denominator = int(word())
+    if denominator < 0:
+        raise ValueError('tensor denominator must be non-negative')
+    word('counts')
+    n_counts = int(word())
+    width = classes if classes > 0 else 1
+    if product > 10000000 // width or n_counts != product * width:
+        raise ValueError('tensor count length does not match cardinalities')
+    counts = [int(word()) for _ in range(n_counts)]
+    if any(c < 0 for c in counts):
+        raise ValueError('tensor counts must be non-negative')
+    if classes == 0 and sum(counts) != denominator:
+        raise ValueError('tensor counts do not sum to denominator')
+    if classes > 0 and denominator != 0:
+        raise ValueError('Borders tensor denominator must be zero')
+    if p[0] != len(t):
+        raise ValueError('trailing fields in feature_freq_tensor record')
+    if any(s < 0 for s in sources) or any(a >= b for a, b in zip(sources, sources[1:])):
+        raise ValueError('tensor sources are not canonical and unique')
+    return dict(sources=sources, cardinalities=cards, splits=splits, classes=classes,
+                target_border=target_border, prior_num=prior_num, prior_denom=prior_denom,
+                denominator=denominator, counts=counts)
+
+
+def _ctr_plan(n_features, kinds, ctr_column_count, ctr_tables, tensor_first, tensor_declared, tensor_tables):
+    """`load_model_text`'s cross-checks of the CTR half, `predict_floats`'s
+    refusals, and `model_input_features`: the RAW input column count."""
+    for tab in ctr_tables:
+        width = tab['classes'] if tab['classes'] > 0 else 1
+        if tab['seen'] != tab['entries'] or len(tab['counts']) != tab['entries'] * width:
+            raise ValueError(f"mojolearn: ctr_table for column {tab['column']} declares {tab['entries']} "
+                             f"entries and carries {tab['seen']}")
+        if kinds[tab['column']] != 'ctr':
+            raise ValueError(f"mojolearn: column {tab['column']} carries a CTR table and its `feature` "
+                             f"record says type '{kinds[tab['column']]}'")
+    named = {tab['column'] for tab in ctr_tables}
+    for f, k in enumerate(kinds):
+        if k == 'ctr' and f not in named:
+            raise ValueError(f'mojolearn: column {f} says type ctr and no `ctr_table` record names it')
+    if len(ctr_tables) > ctr_column_count:
+        raise ValueError(f'mojolearn: the header declares {ctr_column_count} CTR columns and the file '
+                         f'carries {len(ctr_tables)} CTR tables')
+    if len(tensor_tables) != tensor_declared:
+        raise ValueError(f'mojolearn: tensor CTR registry declares {tensor_declared} tables and carries '
+                         f'{len(tensor_tables)}')
+    if tensor_first >= 0 and tensor_first + tensor_declared > n_features:
+        raise ValueError('mojolearn: tensor CTR registry exceeds model feature columns')
+    for f, k in enumerate(kinds):
+        in_registry = tensor_first >= 0 and tensor_first <= f < tensor_first + tensor_declared
+        if (k == 'tensor_ctr') != in_registry:
+            raise ValueError(f'mojolearn: feature {f} of type {k} and the tensor CTR registry disagree')
+    if tensor_tables and ctr_tables:
+        raise ValueError('mojolearn: combined simple-CTR and tensor-CTR model apply needs a composed '
+                         'column plan and is not wired yet (predict_floats refuses this model)')
+    if ctr_column_count != len(ctr_tables):
+        raise ValueError(
+            f'mojolearn: a model with {ctr_column_count} CTR columns and {len(ctr_tables)} CTR tables '
+            'cannot score a new row: a CTR value is a statistic of the learn pool (predict_floats '
+            'refuses it)')
+    if tensor_tables:
+        if tensor_first + tensor_declared != n_features:
+            raise ValueError('mojolearn: tensor CTR apply plan does not end at the last model column')
+        return tensor_first
+    if not ctr_tables:
+        return n_features
+    # `column_plan` (gbdt/models/ctr_value_table.mojo)
+    table_of = {tab['column']: tab for tab in ctr_tables}
+    c = f = 0
+    while c < n_features:
+        tab = table_of.get(c)
+        if tab is None:
+            c += 1
+            f += 1
+            continue
+        if tab['source'] != f:
+            raise ValueError(f"mojolearn: CTR table for column {c} names input feature {tab['source']}, "
+                             f"but the columns before it account for {f} inputs")
+        src = tab['source']
+        while c < n_features and c in table_of and table_of[c]['source'] == src:
+            c += 1
+        f += 1
+    return f
+
+
 def parse_model_text(text):
     """The flat arrays of a `mojolearn-model 2` text. Returns a dict; see
     `HostGBDT.__init__` for the members. Mirrors `load_model_text`'s
@@ -102,6 +271,10 @@ def parse_model_text(text):
     fold_counts, one_hot, nan_codes, border_lists = [], [], [], []
     trees = []          # per tree: dict(shape, size, dim, splits, leaves)
     losses_seen = 0
+    kinds = []          # the `type` token of each feature
+    ctr_column_count = 0
+    ctr_tables = []     # dict(column, source, type, ints..., counts)
+    tensor_first, tensor_declared, tensor_tables = -1, 0, []
     for line_no, raw in enumerate(text.split('\n'), 1):
         line = raw.strip()
         if not line or line.startswith('#'):
@@ -141,10 +314,64 @@ def parse_model_text(text):
                     raise ValueError('`bias` takes one float token')
                 bias = struct.unpack('<d', struct.pack('<Q', _bits64(t[1], 'bias')))[0]
                 bias_seen = True
-            elif kind in _REFUSED_RECORDS:
-                raise ValueError(
-                    f'a `{kind}` record; the host walk applies float and one-hot '
-                    'features only, CTR models are refused')
+            elif kind == 'ctr_columns':
+                if header != 4 or len(t) != 2:
+                    raise ValueError('`ctr_columns` must follow `losses`')
+                ctr_column_count = int(t[1])
+            elif kind == 'tensor_ctr_registry':
+                if len(t) != 3 or tensor_first != -1:
+                    raise ValueError('malformed or duplicate tensor_ctr_registry')
+                tensor_first, tensor_declared = int(t[1]), int(t[2])
+                if tensor_first < 0 or tensor_declared < 0:
+                    raise ValueError('negative tensor CTR registry field')
+            elif kind == 'feature_freq_tensor':
+                if tensor_first < 0:
+                    raise ValueError('tensor table appears before its registry')
+                tensor_tables.append(_parse_tensor_table(t))
+            elif kind == 'ctr_table':
+                if len(fold_counts) != n_features:
+                    raise ValueError('a `ctr_table` before the feature block ended')
+                if trees:
+                    raise ValueError('a `ctr_table` after the first `tree`')
+                if len(t) != 22 or [t[i] for i in range(2, 22, 2)] != [
+                        'source', 'type', 'prior_num', 'prior_denom', 'shift', 'scale', 'denom',
+                        'classes', 'target_border', 'entries']:
+                    raise ValueError('a `ctr_table` record has 22 fields')
+                col = int(t[1])
+                if col < 0 or col >= n_features:
+                    raise ValueError(f'ctr_table names column {col} of {n_features}')
+                if ctr_tables and col <= ctr_tables[-1]['column']:
+                    raise ValueError('ctr_table records must arrive in ascending column order')
+                if t[5] not in _CTR_TYPE_CODES:
+                    raise ValueError(f"unknown ctr type name '{t[5]}'")
+                if t[5] not in _CTR_APPLIED:
+                    raise ValueError(
+                        f'a `ctr_table` of type {t[5]}; no apply-time table arithmetic is implemented '
+                        'for it (TCtrValueTable.value_for applies Borders, Counter and FeatureFreq), '
+                        'so the model is refused')
+                classes, border_idx, entries = int(t[17]), int(t[19]), int(t[21])
+                if classes < 0 or classes == 1:
+                    raise ValueError(f'ctr_table declares {classes} target classes')
+                if border_idx < 0 or entries < 0:
+                    raise ValueError('ctr_table declares a negative target_border or entry count')
+                ctr_tables.append(dict(
+                    column=col, source=int(t[3]), type=_CTR_TYPE_CODES[t[5]], type_name=t[5],
+                    prior_num=_bits32(t[7], 'prior_num'), prior_denom=_bits32(t[9], 'prior_denom'),
+                    shift=_bits32(t[11], 'shift'), scale=_bits32(t[13], 'scale'), denom=int(t[15]),
+                    classes=classes, target_border=border_idx, entries=entries, seen=0, counts=[]))
+            elif kind == 'ctr_entry':
+                if not ctr_tables:
+                    raise ValueError('a `ctr_entry` before any `ctr_table`')
+                tab = ctr_tables[-1]
+                if int(t[1]) != tab['column']:
+                    raise ValueError(f"a `ctr_entry` for column {t[1]} under the `ctr_table` for column {tab['column']}")
+                width = tab['classes'] if tab['classes'] > 0 else 1
+                if len(t) != 3 + width:
+                    raise ValueError(f'a `ctr_entry` record has {3 + width} fields, this one has {len(t)}')
+                if int(t[2]) != tab['seen']:
+                    raise ValueError(f"column {tab['column']} categories must arrive in order")
+                tab['counts'].extend(int(v) for v in t[3:])
+                tab['seen'] += 1
             elif kind == 'feature':
                 if header != 4:
                     raise ValueError('a `feature` record before the header ended')
@@ -155,9 +382,7 @@ def parse_model_text(text):
                         or t[8] != 'nan' or t[10] != 'borders'):
                     raise ValueError('malformed `feature` record')
                 folds, flag, ftype, nan_tok, n_b = int(t[3]), int(t[5]), t[7], t[9], int(t[11])
-                if ftype in ('ctr', 'tensor_ctr'):
-                    raise ValueError(f'feature {f} is of type {ftype}; the host walk refuses CTR models')
-                if ftype not in ('float', 'cat'):
+                if ftype not in ('float', 'cat', 'ctr', 'tensor_ctr'):
                     raise ValueError(f'feature {f} has unknown type {ftype!r}')
                 if flag not in (0, 1) or (ftype == 'cat') != (flag == 1 and n_flags != 0):
                     raise ValueError(f'feature {f}: type {ftype} and one_hot {flag} disagree')
@@ -166,6 +391,7 @@ def parse_model_text(text):
                 if folds < 0 or n_b < 0 or len(t) != 12 + n_b:
                     raise ValueError(f'feature {f} declares {n_b} borders and carries {len(t) - 12}')
                 fold_counts.append(folds)
+                kinds.append(ftype)
                 one_hot.append(flag if n_flags else 0)
                 nan_codes.append(_NAN_CODES[nan_tok])
                 border_lists.append([_bits32(tok, f'feature {f} border') for tok in t[12:]])
@@ -262,6 +488,8 @@ def parse_model_text(text):
     for ti, tree in enumerate(trees):
         if len(tree['splits']) != tree['size'] or len(tree['leaves']) != tree['n_leaves'] * tree['dim']:
             raise ValueError(f'mojolearn: tree {ti} is incomplete')
+    n_input = _ctr_plan(n_features, kinds, ctr_column_count, ctr_tables, tensor_first,
+                        tensor_declared, tensor_tables)
     dims = {tree['dim'] for tree in trees}
     if len(dims) > 1:
         raise ValueError('mojolearn: trees disagree on dim')
@@ -275,8 +503,30 @@ def parse_model_text(text):
         tree_offsets.append(tree_offsets[-1] + tree['size'])
         leaf_offsets.append(leaf_offsets[-1] + len(tree['leaves']))
     splits = [s for tree in trees for s in tree['splits']]
+    ctr_ints, ctr_floats, tensor_ints, tensor_floats, counts = [], [], [], [], []
+    for tab in ctr_tables:
+        ctr_ints += [tab['column'], tab['source'], tab['type'], tab['denom'], tab['classes'],
+                     tab['target_border'], len(counts), len(tab['counts'])]
+        ctr_floats += [tab['prior_num'], tab['prior_denom'], tab['shift'], tab['scale']]
+        counts += tab['counts']
+    for tab in tensor_tables:
+        tensor_ints += [len(tab['sources'])] + tab['sources'] + tab['cardinalities'] + [len(tab['splits'])]
+        for split in tab['splits']:
+            tensor_ints += list(split)
+        tensor_ints += [tab['classes'], tab['target_border'], tab['denominator'], len(counts), len(tab['counts'])]
+        tensor_floats += [tab['prior_num'], tab['prior_denom']]
+        counts += tab['counts']
+    if any(c > 2147483647 for c in counts + tensor_ints + ctr_ints):
+        raise ValueError('mojolearn: a CTR count or field does not fit int32')
     return dict(
         n_features=n_features, n_trees=n_trees, dim=dim, bias=bias,
+        n_input_features=n_input,
+        n_ctr_tables=len(ctr_tables), n_tensor_tables=len(tensor_tables),
+        ctr_ints=_padded_i32(ctr_ints), n_ctr_ints=len(ctr_ints),
+        ctr_floats=_f32_from_bits(ctr_floats or [0]), n_ctr_floats=len(ctr_floats),
+        tensor_ints=_padded_i32(tensor_ints), n_tensor_ints=len(tensor_ints),
+        tensor_floats=_f32_from_bits(tensor_floats or [0]), n_tensor_floats=len(tensor_floats),
+        ctr_counts=_padded_i32(counts), n_ctr_counts=len(counts),
         non_symmetric=(shape == 'ntree'),
         border_offsets=_i32(border_offsets),
         borders=_f32_from_bits([b for borders in border_lists for b in borders] or [0]),
@@ -296,21 +546,44 @@ def parse_model_text(text):
     )
 
 
+#: The `estimator` members a `mojolearn-gbdt-1` archive may carry, with the
+#: losses each class can save. `OrderedRMSE` and
+#: `ExperimentalTwoLevelFeatureFreq` subclass `GradientBoosting` and inherit
+#: its `save`, so their archives are the same format holding the same model
+#: text records (symmetric trees, float and one-hot `cat` features); the name
+#: is kept so a report says which class trained the file. A class whose model
+#: text carries CTR or tensor CTR records is still refused by the parser, by
+#: record name, whatever the class.
+GBDT_ESTIMATORS = {
+    'GradientBoosting': None,
+    'OrderedRMSE': ('RMSE',),
+    'ExperimentalTwoLevelFeatureFreq': ('RMSE',),
+}
+
+
 class HostGBDT:
-    """A saved GradientBoosting model that predicts on the CPU."""
+    """A saved GradientBoosting, OrderedRMSE or ExperimentalTwoLevelFeatureFreq
+    model that predicts on the CPU."""
 
     estimator = 'GradientBoosting'
 
     def __init__(self, *, loss, text, n_features_in, approx_dim, n_classes=None,
-                 numeric_mode=None, bias=None):
+                 numeric_mode=None, bias=None, estimator='GradientBoosting'):
+        if estimator not in GBDT_ESTIMATORS:
+            raise ValueError(f"mojolearn: {estimator!r} is not a gradient boosting class this loader reads")
+        losses = GBDT_ESTIMATORS[estimator]
+        if losses is not None and str(loss) not in losses:
+            raise ValueError(f"mojolearn: a {estimator} archive with loss {loss!r}; that class saves "
+                             f"{', '.join(losses)} only, the file is corrupt")
+        self.estimator = estimator
         self.loss = str(loss)
         self.numeric_mode = numeric_mode
         self.model_ = str(text)
         arrays = parse_model_text(self.model_)
-        if arrays['n_features'] != int(n_features_in):
+        if arrays['n_input_features'] != int(n_features_in):
             raise ValueError(
                 f"mojolearn: the archive says {int(n_features_in)} features, its model "
-                f"text holds {arrays['n_features']}; the file is corrupt")
+                f"text reads {arrays['n_input_features']}; the file is corrupt")
         if arrays['dim'] != int(approx_dim):
             raise ValueError(
                 f"mojolearn: the archive stores approx_dim {int(approx_dim)} but its "
@@ -320,7 +593,9 @@ class HostGBDT:
                 f"mojolearn: the archive stores bias {float(bias)!r} but its model text "
                 f"holds {arrays['bias']!r}; the file is corrupt")
         self._arrays = arrays
-        self.n_features_in_ = arrays['n_features']
+        self.n_features_in_ = arrays['n_input_features']
+        #: model columns: the input columns, or more for a CTR model
+        self.n_model_columns_ = arrays['n_features']
         self.approx_dim_ = arrays['dim']
         self.bias_ = arrays['bias']
         self.n_classes_ = None if n_classes is None else int(n_classes)
@@ -330,11 +605,13 @@ class HostGBDT:
 
     @classmethod
     def from_file(cls, path):
-        """A model from a file written by `GradientBoosting.save`."""
+        """A model from a file written by `GradientBoosting.save` (or the
+        `OrderedRMSE` and `ExperimentalTwoLevelFeatureFreq` save it inherits)."""
         arrays = _serialize.read_npz(path, GBDT_FORMAT)
         saved_as = _serialize.scalar_str(arrays, 'estimator')
-        if saved_as != cls.estimator:
-            raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not {cls.estimator}")
+        if saved_as not in GBDT_ESTIMATORS:
+            raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not "
+                             f"{' or '.join(GBDT_ESTIMATORS)}")
         mode = None
         if 'numeric_mode' in arrays:
             mode = _serialize.scalar_str(arrays, 'numeric_mode')
@@ -350,7 +627,7 @@ class HostGBDT:
         return cls(loss=_serialize.scalar_str(arrays, 'loss'), text=text,
                    n_features_in=int(meta[0]), approx_dim=int(meta[1]),
                    n_classes=None if int(meta[2]) < 0 else int(meta[2]),
-                   numeric_mode=mode, bias=float(bias))
+                   numeric_mode=mode, bias=float(bias), estimator=saved_as)
 
     @property
     def n_trees(self):
@@ -385,6 +662,20 @@ class HostGBDT:
         Xa = Xc._as_order('F')
         a = self._arrays
         dim = self.approx_dim_
+        n_cols = self.n_model_columns_
+        if a['n_ctr_tables'] or a['n_tensor_tables']:
+            expanded = empty((n_rows * n_cols,), '<f4')
+            names = ('ctr_ints', 'ctr_floats', 'tensor_ints', 'tensor_floats', 'ctr_counts',
+                     'border_offsets', 'borders', 'one_hot')
+            wrote = self._binding.forest_host_gbdt_expand_ctr(
+                [addr_ro(Xa, name='X')] + [addr_ro(a[name], name=name) for name in names]
+                + [addr(expanded, name='expanded')],
+                [int(n_rows), int(n_features), n_cols, a['n_ctr_tables'], a['n_ctr_ints'],
+                 a['n_ctr_floats'], a['n_tensor_tables'], a['n_tensor_ints'], a['n_tensor_floats'],
+                 a['n_ctr_counts'], a['n_borders']])
+            if int(wrote) != n_cols:
+                raise RuntimeError(f"forest_host_gbdt_expand_ctr wrote {wrote} of {n_cols} columns")
+            Xa, n_features = expanded, n_cols
         out = empty((n_rows * dim,), '<f4')
         names = ('border_offsets', 'borders', 'fold_counts', 'one_hot', 'nan_treatment',
                  'tree_offsets', 'split_feature', 'split_bin', 'split_take_bin',

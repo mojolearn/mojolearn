@@ -19,13 +19,15 @@ Cholesky profile restated on the host) and `gemm/host/gemm_oracle.mojo`
 `max.gpu.host`; its host-side constructors and validators are restated here
 under the same refusal sentences.
 
-THERE IS NO OPTIMIZER TO MIRROR. The device fit refuses every optimizer but
-None, every nonzero `n_restarts_optimizer` and `normalize_y=True`
-(DEVIATIONS 1761 and 1764; `_gp_impl.py` refuses them in Python before any
-binding is reached), so the fitted kernel is the kernel passed in: no
-log marginal likelihood gradient, no L-BFGS, no convergence test, no
-restart RNG exists on any column. The fit is one kernel matrix, one ridge,
-one factorization, one solve and three scalars.
+THE FIT HERE IS THE ONE-SHOT FIT: one kernel matrix, one ridge, one
+factorization, one solve and three scalars, at the kernel it is handed
+(`gpr_fit_host`'s own contract; `optimizer` and `n_restarts_optimizer` are
+not arguments of this entry). Kernel hyperparameter optimization (2026-09-15)
+is `gaussian_process/host/gpr_grad_oracle.mojo` -- the likelihood and its
+gradient at a candidate kernel, the verifier of
+`estimator.mojo::gpr_lml_grad_host` -- driven by
+`python/mojolearn/_gp_optimizer.py` (DEVIATIONS 2880 and 2881), which runs
+the same state machine on every column.
 
 THE STAGES, EACH WITH THE DEVICE LINE IT MIRRORS
 

@@ -9,7 +9,7 @@ by this file; that is the package owner's call. Import it as
 WHAT IS HERE
 
     ExponentialSmoothing   cuml.tsa.ExponentialSmoothing, backed by
-                           `holtwinters/` (DEVIATIONS 660-665, 697-699)
+                           `holtwinters/` (DEVIATIONS 660-665, 697-699, 2717)
     kpss_test              cuml.tsa.stationarity.kpss_test, backed by
                            `tsa/` (DEVIATIONS 671-672)
     select_d               auto_arima's "Choose the hyper-parameter d"
@@ -58,7 +58,7 @@ row in the ledger at all. Under `MOJOLEARN_NUMERIC_MODE=identical` these
 run the pinned spelling that is DESIGNED to be vendor-independent, which
 is a claim about the source and not a measurement of three GPUs.
 
-UPSTREAM IS RETIRING WHAT ExponentialSmoothing MIRRORS. The pinned tree's
+THE REFERENCE LIBRARY IS RETIRING ExponentialSmoothing. The pinned tree's
 `holtwinters.pyx` carries a `.. deprecated:: 26.08` and says
 `cuml.tsa.ExponentialSmoothing` will be removed in cuML 26.12. The implementation is
 checked against v26.08.00 and stays valid; what expires is the ability to
@@ -92,6 +92,10 @@ class _Binding:
 
 
 _mojolearn_tsa = _Binding()
+
+#: The saved-model format tag (`ExponentialSmoothing.save`,
+#: lane/inference-holtwinters, 2026-09-15).
+_HW_FORMAT = "mojolearn-holtwinters-1"
 
 
 def _series_major(y, name):
@@ -141,7 +145,7 @@ def _series_major(y, name):
 
 
 def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
-    """The KPSS stationarity test, mirroring
+    """The KPSS stationarity test, with the reference
     `cuml.tsa.stationarity.kpss_test` (`tsa/`, DEVIATIONS 671-672).
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
@@ -278,13 +282,17 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
 
 
 class ExponentialSmoothing:
-    """Holt-Winters exponential smoothing, mirroring
+    """Holt-Winters exponential smoothing, with the reference
     `cuml.tsa.ExponentialSmoothing` (`holtwinters/`, DEVIATIONS 660-665 and
     697-699).
 
     THE SHAPE IS cuML's, NOT sklearn's. `endog` goes in the CONSTRUCTOR,
     `fit()` takes no arguments, and the successor method is `forecast(h)`.
-    There is no `predict(X)` here and there is none in cuML.
+    There is no `predict(X)` here and there is none in cuML. OURS, since
+    lane/inference-holtwinters (2026-09-15): `predict(start, end)`, the
+    in-sample one-step predictions and the forecast beyond `n`, and `save`
+    and `load` (format `mojolearn-holtwinters-1`), so a model fitted on a
+    GPU forecasts and predicts on a CPU with no GPU.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter:
 
@@ -306,7 +314,7 @@ class ExponentialSmoothing:
         start_periods    honored   must be >= 2 and <= seasonal_periods.
         ts_num           honored   the number of series; must match
                                    `endog`'s first dimension, and cuML's
-                                   mismatch message is mirrored.
+                                   mismatch message is the same.
         eps              honored   default 2.24e-3, cuML's. Must be > 0.
         verbose          REFUSED   cuML's logging plumbing; there is no
                                    logger here.
@@ -353,13 +361,12 @@ class ExponentialSmoothing:
                                   cuML writes this only in the arm its fit
                                   does not take.
 
-    A cuML DEFECT THAT IS REPRODUCED ON PURPOSE AND NOT FIXED. When the line
-    search hits its iteration limit, `hw_optim.cuh:485-508` stores the LAST
-    trial point rather than the one that minimized the loss. That is
-    rapidsai/cuml#888 and it is flagged in their own comment. It is
-    deterministic and vendor-independent, so fixing it would move the
-    fitted parameters away from cuML's for no identity gain
-    (`holtwinters/NOT_IMPLEMENTED.tsv`).
+    THE LINE-SEARCH LIMIT, DEVIATION 2717. When the BFGS line search hits
+    its iteration limit, this implementation stores the trial point with
+    the lowest loss (strictly lower replaces, so a tie keeps the earliest
+    trial), not the last trial the reference stores (rapidsai/cuml#888).
+    A line search that exits normally is unchanged. Fits that reach the
+    limit can therefore differ from the reference's parameters.
 
     A DIVERGENCE FROM cuML's PYTHON THAT IS NOT A NUMERIC ONE. cuML caches
     `forecasted_points` and recomputes only when `h` grows, so a second
@@ -408,6 +415,17 @@ class ExponentialSmoothing:
         self.ts_num = ts_num
         self.eps = eps
         self.fit_executed_flag = False
+
+    #: The GPU family this estimator binds; `_classical_host.py`'s host
+    #: subclass answers the forecast inference binding for it instead.
+    _BINDING = "_mojolearn_tsa"
+
+    def _bind(self, name=None):
+        """The binding for this estimator's tier, as `NumericModeMixin._bind`
+        resolves it: the process default until a loaded model restores the
+        tier it was saved under."""
+        from . import _backend
+        return _backend.binding(name or self._BINDING, getattr(self, "numeric_mode", None))
 
     def _check_dims(self, ts_input):
         """`holtwinters.pyx:230-262` for a numpy input, by name.
@@ -462,7 +480,13 @@ class ExponentialSmoothing:
         >= 2`, `start_periods >= 2`, `seasonal_periods >= start_periods`,
         `eps > 0`, `n >= 1`, `n >= start_periods * seasonal_periods`. They
         are not restated here, so there is one place they can drift from.
+
+        On a CPU-only install this refuses by name outside the internal
+        reference context, as every other CPU fit does
+        (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
         """
+        from ._cpu_reference import require_training
+        require_training(self)
         data, n = self._check_dims(self.endog)
         self._data = data  # kept alive across the call (_buffer.py)
         components_len = (n - self.seasonal_periods) * self.ts_num
@@ -480,7 +504,7 @@ class ExponentialSmoothing:
         comps = empty((3 * components_len,), "<f4")
         stats = empty((4 * self.ts_num,), "<f4")
         flags = empty((2 * self.ts_num,), "<i4")
-        _mojolearn_tsa.holtwinters_fit(
+        self._bind().holtwinters_fit(
             addr_ro(data, name="endog"),
             addr(comps, name="components"),
             addr(stats, name="stats"),
@@ -496,6 +520,25 @@ class ExponentialSmoothing:
             ],
             self.seasonal,
         )
+        b = self.ts_num
+        # stats LAYOUT -- the same words as in bindings/_mojolearn_tsa.mojo
+        # and holtwinters/estimator.mojo:
+        #   [0 * ts_num, 1 * ts_num)   sse
+        #   [1 * ts_num, 2 * ts_num)   alpha
+        #   [2 * ts_num, 3 * ts_num)   beta
+        #   [3 * ts_num, 4 * ts_num)   gamma
+        # flags LAYOUT -- the same words as in the other two files:
+        #   [0 * ts_num, 1 * ts_num)   niter
+        #   [1 * ts_num, 2 * ts_num)   criterion
+        # (Array slices copy; each attribute owns its `(ts_num,)` block.)
+        return self._set_fitted(n, comps, stats[0:b], stats[b:2 * b], stats[2 * b:3 * b],
+                                stats[3 * b:4 * b], flags[0:b], flags[b:2 * b])
+
+    def _set_fitted(self, n, comps, sse, alpha, beta, gamma, n_iter, criterion):
+        """The fitted state from the packed components and the per-series
+        blocks, shared by `fit` and `load` so a loaded model answers every
+        attribute a fitted one does, from the same bytes."""
+        components_len = (n - self.seasonal_periods) * self.ts_num
         self.n = n
         self._components_len = components_len
         self._comps = comps  # kept for forecast(), which re-uploads them
@@ -529,21 +572,12 @@ class ExponentialSmoothing:
             "trend": comps[cl:2 * cl].reshape((num_rows, b)),
             "season": comps[2 * cl:3 * cl].reshape((num_rows, b)),
         }
-        # stats LAYOUT -- the same words as in the other two files:
-        #   [0 * ts_num, 1 * ts_num)   sse
-        #   [1 * ts_num, 2 * ts_num)   alpha
-        #   [2 * ts_num, 3 * ts_num)   beta
-        #   [3 * ts_num, 4 * ts_num)   gamma
-        # (Array slices copy; each attribute owns its `(ts_num,)` block.)
-        self.sse_ = stats[0:b]
-        self.alpha_ = stats[b:2 * b]
-        self.beta_ = stats[2 * b:3 * b]
-        self.gamma_ = stats[3 * b:4 * b]
-        # flags LAYOUT -- the same words as in the other two files:
-        #   [0 * ts_num, 1 * ts_num)   niter
-        #   [1 * ts_num, 2 * ts_num)   criterion
-        self.n_iter_ = flags[0:b]
-        self.criterion_ = flags[b:2 * b]
+        self.sse_ = sse
+        self.alpha_ = alpha
+        self.beta_ = beta
+        self.gamma_ = gamma
+        self.n_iter_ = n_iter
+        self.criterion_ = criterion
         self.fit_executed_flag = True
         return self
 
@@ -580,7 +614,7 @@ class ExponentialSmoothing:
                 f"of range [0, {self.ts_num})"
             )
         out = empty((h * self.ts_num,), "<f4")
-        _mojolearn_tsa.holtwinters_forecast(
+        self._bind().holtwinters_forecast(
             addr_ro(self._comps, name="components"),
             addr(out, name="out"),
             # ORDER MATCHES bindings/_mojolearn_tsa.mojo::holtwinters_forecast_binding.
@@ -600,12 +634,159 @@ class ExponentialSmoothing:
         # `strided_rows`; a single series IS the flat buffer; and
         # `points.T` -- `(h, ts_num)` -- IS the time-major buffer read
         # in C order.
+        return self._shaped(out, h, index)
+
+    def _shaped(self, out, steps, index):
+        """`forecast`'s three return shapes over a TIME-MAJOR flat buffer of
+        `steps * ts_num` values."""
         if index is not None:
-            return strided_rows(out, 0, h * self.ts_num, self.ts_num, h,
-                                empty((self.ts_num, h), "<f4"))[index]
+            return strided_rows(out, 0, steps * self.ts_num, self.ts_num, steps,
+                                empty((self.ts_num, steps), "<f4"))[index]
         if self.ts_num == 1:
             return out
-        return out.reshape((h, self.ts_num))
+        return out.reshape((steps, self.ts_num))
+
+    def predict(self, start=0, end=None, index=None):
+        """The one-step predictions at times `[start, end)` (lane/inference-
+        holtwinters, 2026-09-15). OURS: cuML has no prediction entry.
+
+        A time `t < n` is in sample: the value the fit's final evaluation
+        predicted for `endog[t]` before it read it, from the fitted level,
+        trend and season (`holtwinters/host/hw_predict.mojo`). Times `t <
+        2 * seasonal_periods` are NaN, by name: their prediction reads the
+        decomposition's start state, which the fit does not keep. A time
+        `t >= n` is the forecast, so `predict(n, n + h)` is `forecast(h)`
+        byte for byte. `end` defaults to `n`. The return shapes are
+        `forecast`'s.
+
+        The in-sample arithmetic is host code on every install, the GPU
+        binding's included; on a CPU with no GPU it runs through the
+        shipped forecast host binding from a saved model (`save`, `load`,
+        `mojolearn.host_model`)."""
+        if not self.fit_executed_flag:
+            raise ValueError(
+                "mojolearn ExponentialSmoothing: fit() the model before predict()"
+            )
+        n, b = int(self.n), int(self.ts_num)
+        end = n if end is None else end
+        for label, value in (("start", start), ("end", end)):
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError(
+                    f"mojolearn ExponentialSmoothing: {label} must be int, got {type(value)}"
+                )
+        if index is not None and (not isinstance(index, int) or isinstance(index, bool)):
+            raise TypeError(
+                "mojolearn ExponentialSmoothing: index must be int or None, "
+                f"got {type(index)}"
+            )
+        if start < 0 or end <= start:
+            raise ValueError(
+                f"mojolearn ExponentialSmoothing: need 0 <= start < end (start={start}, end={end})"
+            )
+        if index is not None and (index < 0 or index >= b):
+            raise IndexError(
+                f"mojolearn ExponentialSmoothing: index input: {index} outside "
+                f"of range [0, {b})"
+            )
+        binding = self._bind()
+        steps = end - start
+        if start >= n:
+            fc = empty(((end - n) * b,), "<f4")
+            binding.holtwinters_forecast(
+                addr_ro(self._comps, name="components"), addr(fc, name="out"),
+                [n, b, int(self.seasonal_periods), int(end - n)], self.seasonal,
+            )
+            return self._shaped(fc[(start - n) * b:], steps, index)
+        out = empty((steps * b,), "<f4")
+        k_in = min(end, n) - start
+        base = addr(out, name="out")
+        # ORDER MATCHES bindings/holtwinters_host_predict.mojo::holtwinters_predict_binding.
+        #   0 n, 1 batch_size, 2 frequency, 3 start, 4 end
+        binding.holtwinters_predict(
+            addr_ro(self._comps, name="components"), base,
+            [n, b, int(self.seasonal_periods), int(start), int(start + k_in)], self.seasonal,
+        )
+        if end > n:
+            # The forecast writes its `(end - n) * ts_num` values straight
+            # after the in-sample block of the same time-major buffer.
+            binding.holtwinters_forecast(
+                addr_ro(self._comps, name="components"), base + 4 * k_in * b,
+                [n, b, int(self.seasonal_periods), int(end - n)], self.seasonal,
+            )
+        return self._shaped(out, steps, index)
+
+    # -- saved models (lane/inference-holtwinters, 2026-09-15) ----------------
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: `components` (the
+        packed, time-major level, trend and season float32 buffer `fit`
+        keeps), `sse`, `alpha`, `beta`, `gamma` (float32), `n_iter`,
+        `criterion` (int32), `meta` `<i8` [n, ts_num, seasonal_periods,
+        start_periods], `eps` `<f8`, `seasonal` and `numeric_mode`.
+
+        `endog` is not saved: nothing a loaded model answers reads it. A
+        loaded model forecasts, predicts and answers every fitted attribute;
+        it does not refit. On a CPU-only install that is public inference
+        through the forecast host binding (`mojolearn.host_model(path)`, or
+        `ExponentialSmoothing.load(path)`), with no GPU and no CPU training."""
+        if not self.fit_executed_flag:
+            raise ValueError(
+                "mojolearn ExponentialSmoothing: fit() the model before save()"
+            )
+        from . import _serialize
+        from .decomposition import _saved_mode
+        arrays = {
+            "format": _HW_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "seasonal": str(self.seasonal),
+            "components": self._comps,
+            "sse": self.sse_,
+            "alpha": self.alpha_,
+            "beta": self.beta_,
+            "gamma": self.gamma_,
+            "n_iter": self.n_iter_,
+            "criterion": self.criterion_,
+            "meta": Array.from_list(
+                [int(self.n), int(self.ts_num), int(self.seasonal_periods), int(self.start_periods)],
+                "<i8",
+            ),
+            "eps": Array.from_list([float(self.eps)], "<f8"),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result forecasts, predicts and
+        answers the fitted attributes; it does not refit."""
+        from . import _serialize
+        from .decomposition import _check_saved_by, _restore_mode
+        arrays = _serialize.read_npz(path, _HW_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 4:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 4 are needed")
+        n, b, f, sp = (int(meta[i]) for i in range(4))
+        eps = _serialize.exact(arrays, "eps", "<f8")
+        if eps.size != 1:
+            raise ValueError(f"mojolearn: {path!r} eps holds {eps.size} values, 1 is needed")
+        obj = cls(None, seasonal=_serialize.scalar_str(arrays, "seasonal"),
+                  seasonal_periods=f, start_periods=sp, ts_num=b, eps=float(eps[0]))
+        _restore_mode(obj, arrays)
+        if b < 1 or n <= f:
+            raise ValueError(f"mojolearn: {path!r} records n={n}, ts_num={b}, seasonal_periods={f}")
+        cl = (n - f) * b
+        shapes = {"components": ("<f4", (3 * cl,)), "sse": ("<f4", (b,)), "alpha": ("<f4", (b,)),
+                  "beta": ("<f4", (b,)), "gamma": ("<f4", (b,)), "n_iter": ("<i4", (b,)),
+                  "criterion": ("<i4", (b,))}
+        got = {}
+        for name, (dtype, shape) in shapes.items():
+            value = _serialize.exact(arrays, name, dtype)
+            if tuple(value.shape) != shape:
+                raise ValueError(f"mojolearn: {path!r} {name} has shape {tuple(value.shape)}, not {shape}")
+            got[name] = value
+        return obj._set_fitted(n, got["components"], got["sse"], got["alpha"], got["beta"],
+                               got["gamma"], got["n_iter"], got["criterion"])
 
     def score(self, index=None):
         """The SSE of the fitted model, which is what cuML's `score`

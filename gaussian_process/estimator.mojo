@@ -63,23 +63,16 @@ not a number to quietly raise**; the way to express a larger ridge under
 IDENTICAL is to apply the pinned one more than once and record how many
 times, and the way to change the value is a v2 of the Cholesky profile.
 
-HYPERPARAMETER OPTIMIZATION IS NOT IMPLEMENTED
------------------------------------------------
-**DEVIATION 1761.** `optimizer` accepts the single value `"none"`, which is
-this file's spelling of scikit-learn's `optimizer=None` (`_gpr.py:299`:
-`if self.optimizer is not None and self.kernel_.n_dims > 0`). Everything
-else, `"fmin_l_bfgs_b"` (sklearn's DEFAULT) included, is refused by name.
-
-The reason is not effort. An optimizer's ITERATION COUNT is data dependent,
-so the convergence test is itself part of the arithmetic: two vendors that
-agree bit for bit on every single L-BFGS step still diverge if the test that
-stops the loop is not itself identical, because one takes 41 steps and the
-other 42 and the answers are two different models. Making that test
-identical means pinning the line search, the gradient's own fold, the
-scaling of `theta`, and the tolerance comparison, and it means a gate that
-can tell a converged run from a lucky one. None of that is written, so the
-honest state is a refusal with the closure condition named, not a loop that
-usually agrees.
+HYPERPARAMETER OPTIMIZATION LIVES OUTSIDE THIS ONE-SHOT FIT
+-----------------------------------------------------------
+`gpr_fit_host` still accepts only `optimizer="none"` (DEVIATION 1761's
+refusal, kept at this entry): it fits the kernel it is handed. The optimizer
+(2026-09-15) evaluates `gpr_lml_grad_host` below at each candidate kernel
+(DEVIATION 2880: the likelihood, and its gradient through the identical
+Cholesky and one pinned fold) and runs its state machine in
+`python/mojolearn/_gp_optimizer.py` (DEVIATION 2881), whose every stop rule
+reads those bits alone, so the iteration count is the same on every column.
+The Python surface then calls this fit once with the optimized kernel.
 
 A CALLER THAT KEEPS ITS MATRICES ON THE DEVICE should call
 `gaussian_process/checks/kernels.mojo::gp_kernel_matrix` and the Cholesky
@@ -125,11 +118,20 @@ from gaussian_process.checks.kernels import (
     gp_predictive_variance,
     gp_validate_kernel,
 )
+from gaussian_process.checks.kernel_gradient import gp_kernel_matrix_grad
+from gaussian_process.host.gp_theta import gp_free_count, gp_lml_gradient_fold
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_TN
+from gemm.checks.gemm_oracle import OP_NN, OP_TN
+from gaussian_process.checks.sample_y import (
+    gp_sample_y_add_mean,
+    gp_sample_y_check_factor,
+    gp_sample_y_covariance,
+    gp_sample_y_normals,
+    gp_sample_y_validate,
+)
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -855,6 +857,93 @@ def gp_log_marginal_likelihood_value(
     return ftz(ftz(t1 + t2) + t3)
 
 
+@fieldwise_init
+struct GPLmlGrad(Movable):
+    """The log marginal likelihood and its gradient at one kernel
+    (DEVIATION 2880). `info != 0` means the factorization failed: `lml` is
+    +0.0 and `grad` all +0.0, and the caller reads that as scikit-learn's
+    `(-inf, zeros)` (`_gpr.py:593`)."""
+
+    var lml: Float32
+    var grad: List[Float32]
+    var info: Int
+
+
+def gpr_lml_grad_host(
+    x: List[Float32],
+    n_train: Int,
+    n_features: Int,
+    y: List[Float32],
+    kernel: GPKernelSpec,
+    free: List[Int32],
+    alpha: Float32,
+    elem_tpb: Int = GP_ELEM_TPB,
+) raises -> GPLmlGrad:
+    """scikit-learn `log_marginal_likelihood(theta, eval_gradient=True)`
+    (`_gpr.py:575-653`) at the kernel handed in, whose FREE leaves are
+    flagged one per postfix node (DEVIATION 2880).
+
+        K, dK   = kernel(X, eval_gradient=True)   device, kernel_gradient.mojo
+        L       = cholesky(K + alpha I)           cholesky_factor_host
+        alpha_  = cho_solve(L, y)                 cholesky_solve_host
+        lml     = gp_log_marginal_likelihood_value, fit's own
+        K_inv   = cho_solve(L, eye)               cholesky_solve_host, n rhs
+        grad    = gp_lml_gradient_fold            gp_theta.mojo, host serial
+
+    K here is bit for bit the K `gpr_fit_host` builds (the same value
+    launches), so the likelihood at the optimizer's answer is the fit's.
+    No card stage is recorded: the optimizer evaluates many kernels and a
+    card of them would be a function of the iteration count."""
+    gp_validate_data(x, n_train, n_features, String("X"))
+    gp_validate_targets(y, n_train)
+    gp_validate_kernel(kernel, n_features)
+    gp_validate_alpha(alpha)
+    var n = n_train
+    var cells = n * n
+    var n_free = gp_free_count(kernel.kinds, kernel.ls_len, free)
+
+    var ctx = DeviceContext()
+    var dx = _upload(ctx, x)
+    var dls = _upload(ctx, _length_scale_table(kernel))
+    var dk = ctx.enqueue_create_buffer[DType.float32](cells)
+    var dstack = ctx.enqueue_create_buffer[DType.float32](
+        gp_kernel_stack_floats(n, n)
+    )
+    var dgrad = ctx.enqueue_create_buffer[DType.float32](max(n_free * cells, 1))
+    ctx.synchronize()
+    _ = gp_kernel_matrix_grad(
+        ctx, dk, dx, dls, dstack, dgrad, n, n_features, kernel, free, elem_tpb
+    )
+    ctx.synchronize()
+    var k_host = _download(ctx, dk, cells)
+    var g_host = _download(ctx, dgrad, max(n_free * cells, 1))
+    _ = dx^
+    _ = dls^
+    _ = dk^
+    _ = dstack^
+    _ = dgrad^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+
+    var factor = cholesky_factor_host(k_host, n, alpha)
+    if factor.info != 0:
+        return GPLmlGrad(
+            Float32(0.0),
+            List[Float32](length=n_free, fill=Float32(0.0)),
+            factor.info,
+        )
+    var dual = cholesky_solve_host(factor, y, 1)
+    var logdet = cholesky_logdet_host(factor)
+    var ydotalpha = _y_dot_alpha(y, dual, n, GP_SAB_NONE)
+    var lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n)
+    var eye = List[Float32](length=cells, fill=Float32(0.0))
+    for i in range(n):
+        eye[i * n + i] = Float32(1.0)
+    var kinv = cholesky_solve_host(factor, eye, n)
+    var grad = gp_lml_gradient_fold(dual, kinv, g_host, n, n_free)
+    return GPLmlGrad(lml, grad^, 0)
+
+
 def gpr_log_marginal_likelihood(model: GPRegressor) raises -> Float32:
     """`log_marginal_likelihood()` at the fitted kernel, scikit-learn
     `_gpr.py:575` (the `theta is None` arm, which returns the value
@@ -1116,49 +1205,180 @@ def gpr_classify_host(
     y: List[Int32],
     kernel: GPKernelSpec,
 ) raises -> List[Int32]:
-    """`GaussianProcessClassifier`, scikit-learn `_gpc.py`. **NOT IMPLEMENTED.**
-
-    Always raises. DEVIATION 1766.
+    """The regressor's classification door. It still raises, and names
+    where classification lives: `gaussian_process/classifier.mojo::
+    gpc_fit_binary_host` and `gpc_predict_binary_host`, exposed as
+    `mojolearn.GaussianProcessClassifier`. DEVIATION 1766's refusal is
+    closed by DEVIATION 2830 (the Newton loop's stop test reads an identical
+    float32 likelihood, so its iteration count is the same on every column).
     """
     raise Error(
-        "gpr_classify_host: Gaussian process CLASSIFICATION is NOT IMPLEMENTED"
-        " (DEVIATION 1766, gaussian_process/NOT_IMPLEMENTED.tsv). This lane is"
-        " rung 1: exact dense REGRESSION only.\n"
-        "  It is not a thin wrapper over the regressor. scikit-learn's"
-        " _gpc.py fits a LAPLACE APPROXIMATION to the posterior"
-        " (_gpc.py::_posterior_mode), a Newton iteration that runs until"
-        " the approximate log marginal likelihood stops improving --"
-        " a DATA-DEPENDENT ITERATION COUNT, which is the same objection"
-        " DEVIATION 1761 makes to the hyperparameter optimizer and for"
-        " the same reason: two vendors agreeing on every step still"
-        " return two different models if one takes 9 iterations and the"
-        " other 10. It also needs the logistic link and its derivatives,"
-        " and a one-versus-rest wrapper for more than two classes.\n"
-        "  To close this, pin the Newton loop's convergence test the way"
-        " an optimizer's would have to be pinned, and gate it. There is"
-        " no partial answer to hand back in the meantime, which is why"
-        " this raises rather than returning something"
+        "gpr_classify_host: the REGRESSOR does not classify. Gaussian process"
+        " classification is a Laplace approximation (scikit-learn _gpc.py"
+        " _posterior_mode), not a wrapper over this fit: it is"
+        " gaussian_process/classifier.mojo (gpc_fit_binary_host,"
+        " gpc_predict_binary_host), mojolearn.GaussianProcessClassifier in"
+        " Python. DEVIATION 1766 is closed by DEVIATION 2830"
     )
 
 
 def gpr_sample_y_host(
-    model: GPRegressor, x_star: List[Float32], n_star: Int, n_samples: Int
+    model: GPRegressor,
+    x_star: List[Float32],
+    n_star: Int,
+    n_samples: Int,
+    seed: UInt64,
+    elem_tpb: Int = GP_ELEM_TPB,
+    solve_tpb: Int = CHOL_SOLVE_TPB,
 ) raises -> List[Float32]:
-    """`sample_y`, scikit-learn `_gpr.py:502`. **NOT IMPLEMENTED.** Always
-    raises. DEVIATION 1766's sibling; see `gaussian_process/NOT_IMPLEMENTED.tsv`.
-    """
-    raise Error(
-        "gpr_sample_y_host: sample_y is NOT IMPLEMENTED"
-        " (gaussian_process/NOT_IMPLEMENTED.tsv). It draws from the full"
-        " posterior COVARIANCE (scikit-learn _gpr.py:530 calls"
-        " rng.multivariate_normal on predict(..., return_cov=True)), and"
-        " this lane computes only the DIAGONAL of that covariance"
-        " (DEVIATION 1759: a full V^T V would be an n_star x n_star"
-        " product of which n_star cells are wanted). It also needs a"
-        " second Cholesky, of the posterior covariance, and a normal"
-        " random stream inside a reproducibility claim.\n"
-        "  To close this, add a return_cov arm that keeps the full"
-        " V^T V, factor it through cholesky/, and take the RNG from"
-        " gbdt/gpu_util/kernel/random_gen.mojo, whose Box-Muller is"
-        " already routed through identical_sqrt/log/cos (DEVIATION 258)"
+    """`sample_y(X, n_samples, random_state)`, scikit-learn `_gpr.py`
+    `GaussianProcessRegressor.sample_y`: `n_star x n_samples` float32
+    row-major draws from the posterior at `x_star`, in the model's
+    normalized scale (the Python surface un-normalizes).
+
+    DEVIATION 2793 (`gaussian_process/checks/sample_y.mojo`) names every
+    step and its order: the cross-covariance, the mean and `V` exactly as
+    `gpr_predict_host` computes them; `V^T V` through the identical GEMM at
+    `OP_TN`; `K** = k(X, X)` with `is_self` true; `C` assembled and mirrored
+    on the host; the identical Cholesky of `C` at the pinned `2^-20` jitter
+    (a failed factor refused by name); the position-mapped normals `Z` on
+    the host; `L_C Z` through the identical GEMM at `OP_NN`; the mean added
+    on the host. `elem_tpb` and `solve_tpb` are scheduling only."""
+    gp_sample_y_validate(model.info, n_star, n_samples)
+    gp_validate_data(x_star, n_star, model.n_features, String("X_star"))
+
+    var n_train = model.n_train
+    var d = model.n_features
+    var trace = _trace_for("", False)
+    trace.header(
+        "gaussian_process sample_y: profile="
+        + GP_PROFILE
+        + " n_train="
+        + String(n_train)
+        + " n_star="
+        + String(n_star)
+        + " n_samples="
+        + String(n_samples)
+        + " d="
+        + String(d)
+        + " kernel="
+        + gp_kernel_name(model.kernel)
+        + " seed="
+        + String(seed)
     )
+
+    # --- the mean, V, V^T V and K** on the device --------------------------
+    var ctx = DeviceContext()
+    var dx = _upload(ctx, model.x_train)
+    var dxs = _upload(ctx, x_star)
+    var dls = _upload(ctx, _length_scale_table(model.kernel))
+    var ddual = _upload(ctx, model.dual_coef)
+    var dl = _upload(ctx, model.l)
+    var dkcross = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
+    var dstack = ctx.enqueue_create_buffer[DType.float32](
+        gp_kernel_stack_floats(n_train, n_star)
+    )
+    var dmean = ctx.enqueue_create_buffer[DType.float32](n_star)
+    var dws = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_workspace_max_floats(n_star, 1, n_train)
+    )
+    ctx.synchronize()
+    gp_kernel_matrix(
+        ctx,
+        dkcross,
+        dx,
+        dxs,
+        dls,
+        dstack,
+        n_train,
+        n_star,
+        d,
+        model.kernel,
+        False,
+        trace,
+        "gp.sample_y.kcross",
+        elem_tpb,
+    )
+    identical_gemm_into(
+        ctx, dmean, dkcross, ddual, dws, n_star, 1, n_train, OP_TN
+    )
+    var mean = _download(ctx, dmean, n_star)
+    trsm_lower(
+        ctx, dl, dkcross, n_train, n_star, trace, "gp.sample_y.v", solve_tpb
+    )
+    # GEMM takes two mutable operands, so V crosses once more as B.
+    var v_host = _download(ctx, dkcross, n_train * n_star)
+    var dv2 = _upload(ctx, v_host)
+    var dvtv = ctx.enqueue_create_buffer[DType.float32](n_star * n_star)
+    var dws2 = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_workspace_max_floats(n_star, n_star, n_train)
+    )
+    var dkss = ctx.enqueue_create_buffer[DType.float32](n_star * n_star)
+    var dstack2 = ctx.enqueue_create_buffer[DType.float32](
+        gp_kernel_stack_floats(n_star, n_star)
+    )
+    ctx.synchronize()
+    identical_gemm_into(
+        ctx, dvtv, dkcross, dv2, dws2, n_star, n_star, n_train, OP_TN
+    )
+    var vtv = _download(ctx, dvtv, n_star * n_star)
+    gp_kernel_matrix(
+        ctx,
+        dkss,
+        dxs,
+        dxs,
+        dls,
+        dstack2,
+        n_star,
+        n_star,
+        d,
+        model.kernel,
+        True,
+        trace,
+        "gp.sample_y.kss",
+        elem_tpb,
+    )
+    var kss = _download(ctx, dkss, n_star * n_star)
+    _ = dx^
+    _ = dxs^
+    _ = dls^
+    _ = ddual^
+    _ = dl^
+    _ = dkcross^
+    _ = dstack^
+    _ = dmean^
+    _ = dws^
+    _ = dv2^
+    _ = dvtv^
+    _ = dws2^
+    _ = dkss^
+    _ = dstack2^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+
+    # --- C on the host, then its identical Cholesky ------------------------
+    var cov = gp_sample_y_covariance(kss, vtv, n_star)
+    var factor = cholesky_factor_host(cov, n_star, chol_jitter_pinned())
+    gp_sample_y_check_factor(factor.info, n_star)
+    var z = gp_sample_y_normals(n_star, n_samples, seed)
+
+    # --- L_C Z on the device -----------------------------------------------
+    var ctx2 = DeviceContext()
+    var dfl = _upload(ctx2, factor.l)
+    var dz = _upload(ctx2, z)
+    var dlz = ctx2.enqueue_create_buffer[DType.float32](n_star * n_samples)
+    var dws3 = ctx2.enqueue_create_buffer[DType.float32](
+        identical_gemm_workspace_max_floats(n_star, n_samples, n_star)
+    )
+    ctx2.synchronize()
+    identical_gemm_into(
+        ctx2, dlz, dfl, dz, dws3, n_star, n_samples, n_star, OP_NN
+    )
+    var lz = _download(ctx2, dlz, n_star * n_samples)
+    trace.record_list_f32("gp.sample_y.lz", lz)
+    _ = dfl^
+    _ = dz^
+    _ = dlz^
+    _ = dws3^
+    _ = ctx2^
+    return gp_sample_y_add_mean(mean, lz, n_star, n_samples)

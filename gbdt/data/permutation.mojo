@@ -69,9 +69,13 @@ defaults to 1 (`permutation.h:98-104`). The block arm of `Shuffle`
 file and a hole in a implemented function is how a reader learns to distrust the
 whole file.
 
-`FillGroupOrder` and `GenerateQueryDocsOrder` are NOT implemented: both require
-`ObjectsGrouping`, and no groupwise loss is implemented, so `FillOrder`'s
-group branch (`permutation.cpp:9-11`) is unreachable here.
+`FillGroupOrder` and `GenerateQueryDocsOrder` are NOT implemented. Both read
+`ObjectsGrouping`, and the one groupwise loss implemented, QueryRMSE
+(lane/gbdt-learning-to-rank), reaches neither: its learn data sits in the
+identity permutation, whose group order is the pool's own
+(`permutation.cpp:22-27`), and `gbdt/train.mojo::train` refuses categorical
+features under it, which are what bring a second, shuffled permutation. So
+`FillOrder`'s group branch (`permutation.cpp:9-11`) stays unreachable here.
 """
 
 

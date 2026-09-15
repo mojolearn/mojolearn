@@ -1,0 +1,105 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 4 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host'] commit=1475db2741c6678e1327b4aa53e4235db401332c
+| lane/fixture                 | verdict    | arm64            | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-gfx942       | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| ivf-euclidean/base           | IDENTICAL x4 | c96b7d6a7ed08e9b | c96b7d6a7ed08e9b | c96b7d6a7ed08e9b | c96b7d6a7ed08e9b |
+| ivf-euclidean/denormal       | IDENTICAL x4 | bc555903de75c40e | bc555903de75c40e | bc555903de75c40e | bc555903de75c40e |
+| ivf-euclidean/denormal_ftz   | IDENTICAL x4 | bc555903de75c40e | bc555903de75c40e | bc555903de75c40e | bc555903de75c40e |
+| ivf-euclidean/dupes          | IDENTICAL x4 | eb269ad65df502ed | eb269ad65df502ed | eb269ad65df502ed | eb269ad65df502ed |
+| ivf-euclidean/hashed         | IDENTICAL x4 | cdff352d363caa07 | cdff352d363caa07 | cdff352d363caa07 | cdff352d363caa07 |
+| ivf-euclidean/negative       | IDENTICAL x4 | db3db68bcb7ef398 | db3db68bcb7ef398 | db3db68bcb7ef398 | db3db68bcb7ef398 |
+| ivf-euclidean/odd            | IDENTICAL x4 | ec9020ff5b2a6c07 | ec9020ff5b2a6c07 | ec9020ff5b2a6c07 | ec9020ff5b2a6c07 |
+| ivf-euclidean/ties           | IDENTICAL x4 | 2167394d0c80cc41 | 2167394d0c80cc41 | 2167394d0c80cc41 | 2167394d0c80cc41 |
+| ivf-euclidean/wide           | IDENTICAL x4 | d62c258ac8282595 | d62c258ac8282595 | d62c258ac8282595 | d62c258ac8282595 |
+| ivf/base                     | IDENTICAL x4 | e14f27972422d4e0 | e14f27972422d4e0 | e14f27972422d4e0 | e14f27972422d4e0 |
+| ivf/denormal                 | IDENTICAL x4 | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 |
+| ivf/denormal_ftz             | IDENTICAL x4 | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 |
+| ivf/dupes                    | IDENTICAL x4 | c9eaf39f6e83e625 | c9eaf39f6e83e625 | c9eaf39f6e83e625 | c9eaf39f6e83e625 |
+| ivf/hashed                   | IDENTICAL x4 | 6c061012dc979df5 | 6c061012dc979df5 | 6c061012dc979df5 | 6c061012dc979df5 |
+| ivf/negative                 | IDENTICAL x4 | 9a7f19689600453e | 9a7f19689600453e | 9a7f19689600453e | 9a7f19689600453e |
+| ivf/odd                      | IDENTICAL x4 | 26b26d7e4be5c50a | 26b26d7e4be5c50a | 26b26d7e4be5c50a | 26b26d7e4be5c50a |
+| ivf/ties                     | IDENTICAL x4 | b9d8790b40b5a6ac | b9d8790b40b5a6ac | b9d8790b40b5a6ac | b9d8790b40b5a6ac |
+| ivf/wide                     | IDENTICAL x4 | 8ee39ab9ae510966 | 8ee39ab9ae510966 | 8ee39ab9ae510966 | 8ee39ab9ae510966 |
+
+summary: IDENTICAL=18
+
+| lane/fixture                 | column | verdict      | arm64            | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-gfx942       | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| ivf-euclidean/base           | infer  | IDENTICAL x4 | f6f71f391727d74a | f6f71f391727d74a | f6f71f391727d74a | f6f71f391727d74a |
+| ivf-euclidean/base           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2c7ef8ed2b7dc541 |
+| ivf-euclidean/base           | batch  | IDENTICAL x4 | 0d3b322b4f251d85 | 0d3b322b4f251d85 | 0d3b322b4f251d85 | 0d3b322b4f251d85 |
+| ivf-euclidean/denormal       | infer  | IDENTICAL x4 | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c |
+| ivf-euclidean/denormal       | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 095ed72f60fec6ce |
+| ivf-euclidean/denormal       | batch  | IDENTICAL x4 | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 |
+| ivf-euclidean/denormal_ftz   | infer  | IDENTICAL x4 | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c |
+| ivf-euclidean/denormal_ftz   | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 5c190ab95e7501cd |
+| ivf-euclidean/denormal_ftz   | batch  | IDENTICAL x4 | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 |
+| ivf-euclidean/dupes          | infer  | IDENTICAL x4 | 5fb3dd756fa6a835 | 5fb3dd756fa6a835 | 5fb3dd756fa6a835 | 5fb3dd756fa6a835 |
+| ivf-euclidean/dupes          | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1d65036f19dde9e9 |
+| ivf-euclidean/dupes          | batch  | IDENTICAL x4 | 5fef40b00c474a24 | 5fef40b00c474a24 | 5fef40b00c474a24 | 5fef40b00c474a24 |
+| ivf-euclidean/hashed         | infer  | IDENTICAL x4 | 7d8a8506eeb9a78e | 7d8a8506eeb9a78e | 7d8a8506eeb9a78e | 7d8a8506eeb9a78e |
+| ivf-euclidean/hashed         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1c67c6b91b2e570b |
+| ivf-euclidean/hashed         | batch  | IDENTICAL x4 | a69643bf03ceccb2 | a69643bf03ceccb2 | a69643bf03ceccb2 | a69643bf03ceccb2 |
+| ivf-euclidean/negative       | infer  | IDENTICAL x4 | eacf2587f37d56cb | eacf2587f37d56cb | eacf2587f37d56cb | eacf2587f37d56cb |
+| ivf-euclidean/negative       | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 65dfdf6d49abc120 |
+| ivf-euclidean/negative       | batch  | IDENTICAL x4 | 1a302ceb75994c6f | 1a302ceb75994c6f | 1a302ceb75994c6f | 1a302ceb75994c6f |
+| ivf-euclidean/odd            | infer  | IDENTICAL x4 | 247b6a2b733e9ff2 | 247b6a2b733e9ff2 | 247b6a2b733e9ff2 | 247b6a2b733e9ff2 |
+| ivf-euclidean/odd            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 997e755024716b18 |
+| ivf-euclidean/odd            | batch  | IDENTICAL x4 | 4960b29bcd792dc0 | 4960b29bcd792dc0 | 4960b29bcd792dc0 | 4960b29bcd792dc0 |
+| ivf-euclidean/ties           | infer  | IDENTICAL x4 | 6ce659c7ea10311d | 6ce659c7ea10311d | 6ce659c7ea10311d | 6ce659c7ea10311d |
+| ivf-euclidean/ties           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 3632c01ae6112aca |
+| ivf-euclidean/ties           | batch  | IDENTICAL x4 | a22713485f1d9568 | a22713485f1d9568 | a22713485f1d9568 | a22713485f1d9568 |
+| ivf-euclidean/wide           | infer  | IDENTICAL x4 | ee34cd995ead59ba | ee34cd995ead59ba | ee34cd995ead59ba | ee34cd995ead59ba |
+| ivf-euclidean/wide           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 74da9b4decbbf211 |
+| ivf-euclidean/wide           | batch  | IDENTICAL x4 | 36fcc86c5ffc7e96 | 36fcc86c5ffc7e96 | 36fcc86c5ffc7e96 | 36fcc86c5ffc7e96 |
+| ivf/base                     | infer  | IDENTICAL x4 | fd6eed35b1338d17 | fd6eed35b1338d17 | fd6eed35b1338d17 | fd6eed35b1338d17 |
+| ivf/base                     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | dcfefe31adc21c6c |
+| ivf/base                     | batch  | IDENTICAL x4 | 6baf3cfbde509312 | 6baf3cfbde509312 | 6baf3cfbde509312 | 6baf3cfbde509312 |
+| ivf/denormal                 | infer  | IDENTICAL x4 | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf |
+| ivf/denormal                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | c3a1727313e23983 |
+| ivf/denormal                 | batch  | IDENTICAL x4 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 |
+| ivf/denormal_ftz             | infer  | IDENTICAL x4 | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf |
+| ivf/denormal_ftz             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1f2b8dd1cf726bc0 |
+| ivf/denormal_ftz             | batch  | IDENTICAL x4 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 |
+| ivf/dupes                    | infer  | IDENTICAL x4 | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 |
+| ivf/dupes                    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 3163ed44a2b28c07 |
+| ivf/dupes                    | batch  | IDENTICAL x4 | 99ec531fb8ae409f | 99ec531fb8ae409f | 99ec531fb8ae409f | 99ec531fb8ae409f |
+| ivf/hashed                   | infer  | IDENTICAL x4 | 49c22df302ee0334 | 49c22df302ee0334 | 49c22df302ee0334 | 49c22df302ee0334 |
+| ivf/hashed                   | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 9d809fde4ffc96cc |
+| ivf/hashed                   | batch  | IDENTICAL x4 | 648bf9fc3764372d | 648bf9fc3764372d | 648bf9fc3764372d | 648bf9fc3764372d |
+| ivf/negative                 | infer  | IDENTICAL x4 | 71333eccc89915b1 | 71333eccc89915b1 | 71333eccc89915b1 | 71333eccc89915b1 |
+| ivf/negative                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | ec79d31b3169a984 |
+| ivf/negative                 | batch  | IDENTICAL x4 | 9786387eb7123b42 | 9786387eb7123b42 | 9786387eb7123b42 | 9786387eb7123b42 |
+| ivf/odd                      | infer  | IDENTICAL x4 | 1e0c2401db49a53d | 1e0c2401db49a53d | 1e0c2401db49a53d | 1e0c2401db49a53d |
+| ivf/odd                      | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2ab1fd5fac4563e2 |
+| ivf/odd                      | batch  | IDENTICAL x4 | 8149b10d16c8ebaa | 8149b10d16c8ebaa | 8149b10d16c8ebaa | 8149b10d16c8ebaa |
+| ivf/ties                     | infer  | IDENTICAL x4 | c62b1be91d40fc43 | c62b1be91d40fc43 | c62b1be91d40fc43 | c62b1be91d40fc43 |
+| ivf/ties                     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2254dcdb3f209c1d |
+| ivf/ties                     | batch  | IDENTICAL x4 | 166f61a6e1f346b8 | 166f61a6e1f346b8 | 166f61a6e1f346b8 | 166f61a6e1f346b8 |
+| ivf/wide                     | infer  | IDENTICAL x4 | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 |
+| ivf/wide                     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 809bc63c73b2c093 |
+| ivf/wide                     | batch  | IDENTICAL x4 | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 |
+
+summary (infer/model): IDENTICAL=18, OWED=18
+summary (batch): IDENTICAL=18
+summary (rlpair): 
+require-columns 4 over ['ivf', 'ivf-euclidean']: OK (18 OWED)
+OWED ivf-euclidean/base model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf-euclidean/denormal model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf-euclidean/denormal_ftz model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf-euclidean/dupes model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf-euclidean/hashed model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf-euclidean/negative model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf-euclidean/odd model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf-euclidean/ties model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf-euclidean/wide model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf/base model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf/denormal model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf/denormal_ftz model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf/dupes model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf/hashed model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf/negative model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf/odd model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf/ties model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED ivf/wide model: no hash in arm64,nvidia-nvidia-h100-80gb-hbm3-sm_90a,amd-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+summary (owed): OWED=18; the next release record owes exactly these cell parts; wrote /root/leg_out/owed_iv.json

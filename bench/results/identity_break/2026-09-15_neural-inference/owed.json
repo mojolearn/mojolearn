@@ -1,0 +1,15 @@
+{
+ "columns": [
+  "apple-m4",
+  "nvidia-h100-sm_90a",
+  "amd-mi325x-gfx942",
+  "cpu-apple-m4"
+ ],
+ "require_columns": 4,
+ "lanes": [
+  "mlp",
+  "transformer",
+  "transformer-window"
+ ],
+ "owed": []
+}

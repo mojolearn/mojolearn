@@ -1,0 +1,122 @@
+NOTE: --lanes scopes this diff to 3 lane(s); 163 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_tsa_host'] commit=420a8ec73dee02ee6dde284ee37b7eaa785960ce
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9754-128-core-processor | amd-gfx942       |
+|------------------------------|------------|------------------|------------------|------------------|------------------|------------------|
+| holtwinters-multiplicative/base | IDENTICAL x5 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 |
+| holtwinters-multiplicative/denormal | IDENTICAL x5 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 |
+| holtwinters-multiplicative/denormal_ftz | IDENTICAL x5 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 |
+| holtwinters-multiplicative/dupes | IDENTICAL x5 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 |
+| holtwinters-multiplicative/hashed | IDENTICAL x5 | b4527085a076f4fe | b4527085a076f4fe | b4527085a076f4fe | b4527085a076f4fe | b4527085a076f4fe |
+| holtwinters-multiplicative/negative | IDENTICAL x5 | cbf95f4b980df3c4 | cbf95f4b980df3c4 | cbf95f4b980df3c4 | cbf95f4b980df3c4 | cbf95f4b980df3c4 |
+| holtwinters-multiplicative/odd | IDENTICAL x5 | 55b8c755b3169576 | 55b8c755b3169576 | 55b8c755b3169576 | 55b8c755b3169576 | 55b8c755b3169576 |
+| holtwinters-multiplicative/ties | IDENTICAL x5 | 8ea8adf3ce3677e9 | 8ea8adf3ce3677e9 | 8ea8adf3ce3677e9 | 8ea8adf3ce3677e9 | 8ea8adf3ce3677e9 |
+| holtwinters-multiplicative/wide | IDENTICAL x5 | e6cdbd540175f484 | e6cdbd540175f484 | e6cdbd540175f484 | e6cdbd540175f484 | e6cdbd540175f484 |
+| holtwinters/base             | IDENTICAL x5 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 |
+| holtwinters/denormal         | IDENTICAL x5 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 |
+| holtwinters/denormal_ftz     | IDENTICAL x5 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 |
+| holtwinters/dupes            | IDENTICAL x5 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 |
+| holtwinters/hashed           | IDENTICAL x5 | 66f688c307cabc3b | 66f688c307cabc3b | 66f688c307cabc3b | 66f688c307cabc3b | 66f688c307cabc3b |
+| holtwinters/negative         | IDENTICAL x5 | 8fa4116875bdf59c | 8fa4116875bdf59c | 8fa4116875bdf59c | 8fa4116875bdf59c | 8fa4116875bdf59c |
+| holtwinters/odd              | IDENTICAL x5 | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 |
+| holtwinters/ties             | IDENTICAL x5 | b2a5df45db1395b0 | b2a5df45db1395b0 | b2a5df45db1395b0 | b2a5df45db1395b0 | b2a5df45db1395b0 |
+| holtwinters/wide             | IDENTICAL x5 | 560cdc45a69cc987 | 560cdc45a69cc987 | 560cdc45a69cc987 | 560cdc45a69cc987 | 560cdc45a69cc987 |
+| par-holtwinters/base         | IDENTICAL x5 | aa71e2e60daefca2 | aa71e2e60daefca2 | aa71e2e60daefca2 | aa71e2e60daefca2 | aa71e2e60daefca2 |
+| par-holtwinters/denormal     | IDENTICAL x5 | e33dcd8e2af3c5ed | e33dcd8e2af3c5ed | e33dcd8e2af3c5ed | e33dcd8e2af3c5ed | e33dcd8e2af3c5ed |
+| par-holtwinters/denormal_ftz | IDENTICAL x5 | e33dcd8e2af3c5ed | e33dcd8e2af3c5ed | e33dcd8e2af3c5ed | e33dcd8e2af3c5ed | e33dcd8e2af3c5ed |
+| par-holtwinters/dupes        | IDENTICAL x5 | aa71e2e60daefca2 | aa71e2e60daefca2 | aa71e2e60daefca2 | aa71e2e60daefca2 | aa71e2e60daefca2 |
+| par-holtwinters/hashed       | IDENTICAL x5 | 372d451f62fa6901 | 372d451f62fa6901 | 372d451f62fa6901 | 372d451f62fa6901 | 372d451f62fa6901 |
+| par-holtwinters/negative     | IDENTICAL x5 | 27548b32b8c6abe8 | 27548b32b8c6abe8 | 27548b32b8c6abe8 | 27548b32b8c6abe8 | 27548b32b8c6abe8 |
+| par-holtwinters/odd          | IDENTICAL x5 | 02b67bfea83a5c15 | 02b67bfea83a5c15 | 02b67bfea83a5c15 | 02b67bfea83a5c15 | 02b67bfea83a5c15 |
+| par-holtwinters/ties         | IDENTICAL x5 | 7e871bd012a3962e | 7e871bd012a3962e | 7e871bd012a3962e | 7e871bd012a3962e | 7e871bd012a3962e |
+| par-holtwinters/wide         | IDENTICAL x5 | e8ca2175544f1a73 | e8ca2175544f1a73 | e8ca2175544f1a73 | e8ca2175544f1a73 | e8ca2175544f1a73 |
+
+summary: IDENTICAL=27
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9754-128-core-processor | amd-gfx942       |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|------------------|
+| holtwinters-multiplicative/base | infer  | IDENTICAL x5 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 |
+| holtwinters-multiplicative/base | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters-multiplicative/base | batch  | IDENTICAL x5 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 |
+| holtwinters-multiplicative/denormal | infer  | IDENTICAL x5 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 |
+| holtwinters-multiplicative/denormal | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters-multiplicative/denormal | batch  | IDENTICAL x5 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e |
+| holtwinters-multiplicative/denormal_ftz | infer  | IDENTICAL x5 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 |
+| holtwinters-multiplicative/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters-multiplicative/denormal_ftz | batch  | IDENTICAL x5 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e |
+| holtwinters-multiplicative/dupes | infer  | IDENTICAL x5 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 |
+| holtwinters-multiplicative/dupes | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters-multiplicative/dupes | batch  | IDENTICAL x5 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 |
+| holtwinters-multiplicative/hashed | infer  | IDENTICAL x5 | 4c14823c8b1dbcd7 | 4c14823c8b1dbcd7 | 4c14823c8b1dbcd7 | 4c14823c8b1dbcd7 | 4c14823c8b1dbcd7 |
+| holtwinters-multiplicative/hashed | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters-multiplicative/hashed | batch  | IDENTICAL x5 | 17d71141dbd7a3c6 | 17d71141dbd7a3c6 | 17d71141dbd7a3c6 | 17d71141dbd7a3c6 | 17d71141dbd7a3c6 |
+| holtwinters-multiplicative/negative | infer  | IDENTICAL x5 | 462c8ebc8d2efa04 | 462c8ebc8d2efa04 | 462c8ebc8d2efa04 | 462c8ebc8d2efa04 | 462c8ebc8d2efa04 |
+| holtwinters-multiplicative/negative | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters-multiplicative/negative | batch  | IDENTICAL x5 | 60acbb07363d6af3 | 60acbb07363d6af3 | 60acbb07363d6af3 | 60acbb07363d6af3 | 60acbb07363d6af3 |
+| holtwinters-multiplicative/odd | infer  | IDENTICAL x5 | 899a6730dedaa535 | 899a6730dedaa535 | 899a6730dedaa535 | 899a6730dedaa535 | 899a6730dedaa535 |
+| holtwinters-multiplicative/odd | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters-multiplicative/odd | batch  | IDENTICAL x5 | 2793fec672ddc457 | 2793fec672ddc457 | 2793fec672ddc457 | 2793fec672ddc457 | 2793fec672ddc457 |
+| holtwinters-multiplicative/ties | infer  | IDENTICAL x5 | 54aab1a29ccacdfe | 54aab1a29ccacdfe | 54aab1a29ccacdfe | 54aab1a29ccacdfe | 54aab1a29ccacdfe |
+| holtwinters-multiplicative/ties | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters-multiplicative/ties | batch  | IDENTICAL x5 | da0498edc9d73bae | da0498edc9d73bae | da0498edc9d73bae | da0498edc9d73bae | da0498edc9d73bae |
+| holtwinters-multiplicative/wide | infer  | IDENTICAL x5 | c0221c39c93138de | c0221c39c93138de | c0221c39c93138de | c0221c39c93138de | c0221c39c93138de |
+| holtwinters-multiplicative/wide | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters-multiplicative/wide | batch  | IDENTICAL x5 | 97d1ce7117d1cb95 | 97d1ce7117d1cb95 | 97d1ce7117d1cb95 | 97d1ce7117d1cb95 | 97d1ce7117d1cb95 |
+| holtwinters/base             | infer  | IDENTICAL x5 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 |
+| holtwinters/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters/base             | batch  | IDENTICAL x5 | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc |
+| holtwinters/denormal         | infer  | IDENTICAL x5 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 |
+| holtwinters/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters/denormal         | batch  | IDENTICAL x5 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e |
+| holtwinters/denormal_ftz     | infer  | IDENTICAL x5 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 |
+| holtwinters/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters/denormal_ftz     | batch  | IDENTICAL x5 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e |
+| holtwinters/dupes            | infer  | IDENTICAL x5 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 |
+| holtwinters/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters/dupes            | batch  | IDENTICAL x5 | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc |
+| holtwinters/hashed           | infer  | IDENTICAL x5 | bfa4a149ae74602c | bfa4a149ae74602c | bfa4a149ae74602c | bfa4a149ae74602c | bfa4a149ae74602c |
+| holtwinters/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters/hashed           | batch  | IDENTICAL x5 | f064bf24785a3ab0 | f064bf24785a3ab0 | f064bf24785a3ab0 | f064bf24785a3ab0 | f064bf24785a3ab0 |
+| holtwinters/negative         | infer  | IDENTICAL x5 | c03b71a1af7f0d5c | c03b71a1af7f0d5c | c03b71a1af7f0d5c | c03b71a1af7f0d5c | c03b71a1af7f0d5c |
+| holtwinters/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters/negative         | batch  | IDENTICAL x5 | 9c696ef56c5a8db9 | 9c696ef56c5a8db9 | 9c696ef56c5a8db9 | 9c696ef56c5a8db9 | 9c696ef56c5a8db9 |
+| holtwinters/odd              | infer  | IDENTICAL x5 | baeea8494596eeb9 | baeea8494596eeb9 | baeea8494596eeb9 | baeea8494596eeb9 | baeea8494596eeb9 |
+| holtwinters/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters/odd              | batch  | IDENTICAL x5 | 7428081677199491 | 7428081677199491 | 7428081677199491 | 7428081677199491 | 7428081677199491 |
+| holtwinters/ties             | infer  | IDENTICAL x5 | a48df2766423502f | a48df2766423502f | a48df2766423502f | a48df2766423502f | a48df2766423502f |
+| holtwinters/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters/ties             | batch  | IDENTICAL x5 | 91f206e60b961689 | 91f206e60b961689 | 91f206e60b961689 | 91f206e60b961689 | 91f206e60b961689 |
+| holtwinters/wide             | infer  | IDENTICAL x5 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 |
+| holtwinters/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| holtwinters/wide             | batch  | IDENTICAL x5 | 1121af8980a0f61f | 1121af8980a0f61f | 1121af8980a0f61f | 1121af8980a0f61f | 1121af8980a0f61f |
+| par-holtwinters/base         | infer  | IDENTICAL x5 | 649ba9e2deb0116b | 649ba9e2deb0116b | 649ba9e2deb0116b | 649ba9e2deb0116b | 649ba9e2deb0116b |
+| par-holtwinters/base         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-holtwinters/base         | batch  | IDENTICAL x5 | 232d55481f01f239 | 232d55481f01f239 | 232d55481f01f239 | 232d55481f01f239 | 232d55481f01f239 |
+| par-holtwinters/denormal     | infer  | IDENTICAL x5 | ae5d01a90ca7a3a0 | ae5d01a90ca7a3a0 | ae5d01a90ca7a3a0 | ae5d01a90ca7a3a0 | ae5d01a90ca7a3a0 |
+| par-holtwinters/denormal     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-holtwinters/denormal     | batch  | IDENTICAL x5 | 61ee91ed7913e382 | 61ee91ed7913e382 | 61ee91ed7913e382 | 61ee91ed7913e382 | 61ee91ed7913e382 |
+| par-holtwinters/denormal_ftz | infer  | IDENTICAL x5 | ae5d01a90ca7a3a0 | ae5d01a90ca7a3a0 | ae5d01a90ca7a3a0 | ae5d01a90ca7a3a0 | ae5d01a90ca7a3a0 |
+| par-holtwinters/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-holtwinters/denormal_ftz | batch  | IDENTICAL x5 | 61ee91ed7913e382 | 61ee91ed7913e382 | 61ee91ed7913e382 | 61ee91ed7913e382 | 61ee91ed7913e382 |
+| par-holtwinters/dupes        | infer  | IDENTICAL x5 | 649ba9e2deb0116b | 649ba9e2deb0116b | 649ba9e2deb0116b | 649ba9e2deb0116b | 649ba9e2deb0116b |
+| par-holtwinters/dupes        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-holtwinters/dupes        | batch  | IDENTICAL x5 | 232d55481f01f239 | 232d55481f01f239 | 232d55481f01f239 | 232d55481f01f239 | 232d55481f01f239 |
+| par-holtwinters/hashed       | infer  | IDENTICAL x5 | 87e9ebb626a4a6aa | 87e9ebb626a4a6aa | 87e9ebb626a4a6aa | 87e9ebb626a4a6aa | 87e9ebb626a4a6aa |
+| par-holtwinters/hashed       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-holtwinters/hashed       | batch  | IDENTICAL x5 | f5419cbf7bf23ec0 | f5419cbf7bf23ec0 | f5419cbf7bf23ec0 | f5419cbf7bf23ec0 | f5419cbf7bf23ec0 |
+| par-holtwinters/negative     | infer  | IDENTICAL x5 | 8b0aed3120b09339 | 8b0aed3120b09339 | 8b0aed3120b09339 | 8b0aed3120b09339 | 8b0aed3120b09339 |
+| par-holtwinters/negative     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-holtwinters/negative     | batch  | IDENTICAL x5 | 513abc3b48ebb80c | 513abc3b48ebb80c | 513abc3b48ebb80c | 513abc3b48ebb80c | 513abc3b48ebb80c |
+| par-holtwinters/odd          | infer  | IDENTICAL x5 | a3554de5fcae28c3 | a3554de5fcae28c3 | a3554de5fcae28c3 | a3554de5fcae28c3 | a3554de5fcae28c3 |
+| par-holtwinters/odd          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-holtwinters/odd          | batch  | IDENTICAL x5 | 65da76de08e2f1f4 | 65da76de08e2f1f4 | 65da76de08e2f1f4 | 65da76de08e2f1f4 | 65da76de08e2f1f4 |
+| par-holtwinters/ties         | infer  | IDENTICAL x5 | 6174df6113828371 | 6174df6113828371 | 6174df6113828371 | 6174df6113828371 | 6174df6113828371 |
+| par-holtwinters/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-holtwinters/ties         | batch  | IDENTICAL x5 | f061dca8388dc5d3 | f061dca8388dc5d3 | f061dca8388dc5d3 | f061dca8388dc5d3 | f061dca8388dc5d3 |
+| par-holtwinters/wide         | infer  | IDENTICAL x5 | 600b74954f7ec426 | 600b74954f7ec426 | 600b74954f7ec426 | 600b74954f7ec426 | 600b74954f7ec426 |
+| par-holtwinters/wide         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-holtwinters/wide         | batch  | IDENTICAL x5 | f035af87f7c31bfd | f035af87f7c31bfd | f035af87f7c31bfd | f035af87f7c31bfd | f035af87f7c31bfd |
+
+summary (infer/model): IDENTICAL=27, N/A=27
+summary (batch): IDENTICAL=27
+summary (rlpair): 
+require-columns 5 over ['holtwinters', 'holtwinters-multiplicative', 'par-holtwinters']: OK

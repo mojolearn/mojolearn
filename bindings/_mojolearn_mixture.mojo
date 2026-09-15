@@ -43,6 +43,7 @@ from mixture.estimator import (
     gaussian_mixture_fit,
     gaussian_mixture_predict,
     gaussian_mixture_predict_proba,
+    gaussian_mixture_sample,
     gaussian_mixture_score,
     gaussian_mixture_score_samples,
     init_params_from_name,
@@ -298,6 +299,46 @@ def gmm_predict_binding(
     return PythonObject(0)
 
 
+def _gmm_sample_run(
+    model: GaussianMixtureModel,
+    n: Int,
+    seed: UInt64,
+    xp: MutPointer[Float32, MutUntrackedOrigin],
+    yp: MutPointer[Int32, MutUntrackedOrigin],
+) raises:
+    var labels = List[Int32](length=max(0, n), fill=Int32(0))
+    var x = gaussian_mixture_sample(model, n, seed, labels)
+    copy_f32(x.unsafe_ptr(), xp, n * model.n_features)
+    for i in range(n):
+        yp.unsafe_store(i, labels[i])
+
+
+def gmm_sample_binding(
+    addrs: PythonObject, params: PythonObject, sample_params: PythonObject
+) raises -> PythonObject:
+    """`sample(n_samples)`: the model prefix is `_rebuild_model`'s with
+    `params[5]` (n) = 0; `addrs[5]` is X out (n_samples * d float32,
+    WRITTEN), `addrs[6]` y out (n_samples int32, WRITTEN).
+    `sample_params` is, in this order: 0 n_samples, 1 random_state's low 32
+    bits, 2 its high 32 bits. Returns n_samples."""
+    var model = _rebuild_model(addrs, params, String("gmm_sample"))
+    if len(sample_params) != 3:
+        raise Error(
+            "gmm_sample: sample_params must contain 3 values (n_samples,"
+            " random_state low, random_state high), got "
+            + String(len(sample_params))
+        )
+    var n = Int(py=sample_params[0])
+    var seed = (UInt64(Int(py=sample_params[2])) << 32) | UInt64(
+        Int(py=sample_params[1])
+    )
+    var xp = _f32_ptr(Int(py=addrs[5]))
+    var yp = _i32_ptr(Int(py=addrs[6]))
+    with GILReleased(Python()):
+        _gmm_sample_run(model, n, seed, xp, yp)
+    return PythonObject(n)
+
+
 def _gmm_score_bic_aic_run(
     model: GaussianMixtureModel,
     x: List[Float32],
@@ -337,6 +378,7 @@ def PyInit__mojolearn_mixture() abi("C") -> PythonObject:
         m.def_function[gmm_predict_proba_binding]("gmm_predict_proba")
         m.def_function[gmm_predict_binding]("gmm_predict")
         m.def_function[gmm_score_bic_aic_binding]("gmm_score_bic_aic")
+        m.def_function[gmm_sample_binding]("gmm_sample")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_mixture: ", e))

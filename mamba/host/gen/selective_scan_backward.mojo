@@ -82,7 +82,7 @@ two folds joined at S14'. Plan section 3.2 row B18 spells
 "interleaving pinned". Those are different numbers. **The interleaved form is
 pinned here** -- one accumulator, ascending `n`, per step the `B` term then
 the `A` term, two `fma`s into one register -- because it is the single
-ascending fused chain B18 inherits from S10, because it is upstream's own
+ascending fused chain B18 inherits from S10, because it is the reference's own
 shape (`ddelta_vals[i] += ddelta_u * u + dx * A * a`, one statement per state
 index), and because the two-fold form needs a second `N`-length accumulator
 for no numerical reason. `SAB_BWD_DDELTA_TWO_FOLDS` is section 2.2's reading.
@@ -233,7 +233,7 @@ comptime SAB_BWD_S9B_FORWARD = is_defined[
 ]()
 
 #: T1 multiplies by `da[t]` where `da[t+1]` belongs. `h[t]` influences
-#: `h[t+1]` through `da[t+1]`, never through `da[t]`; upstream spells the
+#: `h[t+1]` through `da[t+1]`, never through `da[t]`; the reference spells the
 #: shift explicitly as `thread_reverse_data[i-1].x = delta_a_exp`
 #: (`selective_scan_bwd_kernel.cuh:255`). **INERT at `L == 1` AND wherever
 #: every `delta` is equal across tokens**, so MB7's fixture must plant
@@ -259,11 +259,11 @@ comptime SAB_BWD_T1_SEED_ADD = is_defined[
     "MOJOLEARN_MAMBA_SABOTAGE_BWD_T1_SEED_ADD"
 ]()
 
-#: T2 refused: `h[t-1]`'s contribution recovered upstream's way, from
+#: T2 refused: `h[t-1]`'s contribution recovered the reference's way, from
 #: `a = h[t] - dbu[t]` (`selective_scan_bwd_kernel.cuh:290`), which is exact
 #: only when S9's fused rounding did nothing and which suffers unbounded
 #: relative cancellation whenever `|da*h[t-1]| << |dbu[t]|`. Spelled here in
-#: UPSTREAM'S OWN SHAPE -- their `a` is `da*h[t-1]`, so their `d_arg` is one
+#: THE REFERENCE'S OWN SHAPE -- their `a` is `da*h[t-1]`, so their `d_arg` is one
 #: multiply (`dh * a`) where ours is two (`(dh * h[t-1]) * da`) -- so gate MB9
 #: MEASURES the ulp distance instead of asserting that it matters. **If MB9
 #: records zero ulps everywhere, DEVIATION 1071's refusal must be downgraded
@@ -299,7 +299,7 @@ comptime SAB_BWD_DA_ASCENDING = is_defined[
 ]()
 
 #: T3 by float `atomicAdd` instead of the per-token `(1, N, d_inner)`
-#: contraction -- upstream's answer (`:486`, `:491`, `:306`, `:307`).
+#: contraction -- the reference's answer (`:486`, `:491`, `:306`, `:307`).
 #: **THIS ARM CANNOT BE SEEN BY A SINGLE-LAUNCH ORACLE COMPARISON**: an
 #: atomic accumulation is bit identical to a pinned fold on any run whose
 #: arrival order happens to match, so MB3 can pass with it armed and only
@@ -310,7 +310,7 @@ comptime SAB_BWD_DBDC_ATOMIC = is_defined[
 ]()
 
 #: T5's batch fold by float `atomicAdd` instead of private slots plus a second
-#: kernel -- upstream's `dA` accumulation (`:483`). MB4, not MB3, for the same
+#: kernel -- the reference's `dA` accumulation (`:483`). MB4, not MB3, for the same
 #: reason. INERT at `B == 1`, where there is one term and no order.
 comptime SAB_BWD_PARAM_ATOMIC = is_defined[
     "MOJOLEARN_MAMBA_SABOTAGE_BWD_PARAM_ATOMIC"
@@ -719,7 +719,7 @@ def selective_scan_bwd_scan_kernel[
             var d_arg: Float32
             comptime if SAB_BWD_H_SUBTRACT:
                 # SABOTAGE, DEVIATION 1071's refused alternative, in
-                # upstream's own shape: `a = h[t] - dbu[t]` recovers
+                # the reference's own shape: `a = h[t] - dbu[t]` recovers
                 # `da*h[t-1]` in ONE subtraction, so their `d_arg` is one
                 # multiply where ours is two. Unbounded relative
                 # cancellation when `|da*h[t-1]| << |dbu[t]|`, which is the
@@ -955,7 +955,7 @@ def mamba_bwd_dbc_atomic_kernel[
     l_in: Int32,
     di_in: Int32,
 ):
-    """SABOTAGE ONLY (`SAB_BWD_DBDC_ATOMIC`). Upstream's answer.
+    """SABOTAGE ONLY (`SAB_BWD_DBDC_ATOMIC`). The reference's answer.
 
     One `(token, channel)` per thread, each term added into the shared cell
     by a float `atomicAdd`. The SET of terms is the profile's; the ORDER is
@@ -1115,7 +1115,7 @@ def mamba_bwd_da_partial_kernel[
     equal and the cost is `identical_exp` calls, not a second answer.
 
     T5, DEVIATION 1074: the result goes to a PRIVATE SLOT `partial[b,d,n]`
-    with NO ATOMIC ANYWHERE, and a second kernel folds over `b`. Upstream
+    with NO ATOMIC ANYWHERE, and a second kernel folds over `b`. The reference
     does this with five `gpuAtomicAdd` calls, which makes its `dA` a function
     of block arrival order and therefore not reproducible run to run on one
     device. Metal check, done rather than assumed: this fold never enters

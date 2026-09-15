@@ -1,0 +1,2 @@
+owed: no OWED cell part in the list; nothing to move
+owed verdict OK (0 of 0 owed cell part(s) moved, 0 failure(s))

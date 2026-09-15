@@ -49,22 +49,23 @@ from checks.kernel_matrix import (
     column_name,
 )
 from std.math import isfinite
+from std.memory import bitcast
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from bindings.holtwinters_host_predict import (
+    HW_PREDICT_SABOTAGE,
+    holtwinters_forecast_binding,
+    holtwinters_predict_binding,
+)
 from holtwinters.host.hw_oracle import (
     HW_ORACLE_HOST_SABOTAGE,
-    HWOracleFit,
     oracle_fit,
-    oracle_forecast,
 )
 from holtwinters.impl.runner import (
     holtwinters_validate_data,
     holtwinters_validate_params,
 )
-from holtwinters.impl.tsa.holtwinters_params import (
-    SEASONAL_ADDITIVE,
-    seasonal_from_name,
-)
+from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE, kpss_host_f32
 
 
@@ -105,8 +106,9 @@ def tsa_host_column_binding() raises -> PythonObject:
 def tsa_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary splits the SSE fused multiply-add and walks the
     KPSS series sums descending on purpose (-D MOJOLEARN_HOST_SABOTAGE=1,
-    the gate's negative control; one define, both arms)."""
-    return PythonObject(HW_ORACLE_HOST_SABOTAGE or KPSS_ORACLE_HOST_SABOTAGE)
+    the gate's negative control; one define, every arm, the lowest-bit flip
+    of `bindings/holtwinters_host_predict.mojo` included)."""
+    return PythonObject(HW_ORACLE_HOST_SABOTAGE or KPSS_ORACLE_HOST_SABOTAGE or HW_PREDICT_SABOTAGE)
 
 
 # The GPU binding's names, same contract.
@@ -216,73 +218,26 @@ def holtwinters_fit_binding(
             sp[3 * batch_size + b] = fitted.gamma[b]
             fp[b] = Int32(fitted.niter[b])
             fp[batch_size + b] = Int32(fitted.criterion[b])
+        comptime if HW_ORACLE_HOST_SABOTAGE:
+            # THE FITTED-STATE ARM (lane/inference-holtwinters, 2026-09-15):
+            # the split SSE multiply-add leaves the fitted bytes unchanged on
+            # some fixtures (denormal, denormal_ftz, wide), so a saved model's
+            # file could not move under the negative control. Every finite
+            # per-series float (sse, alpha, beta, gamma) also has its lowest
+            # bit flipped, a value perturbation, so every saved file moves.
+            # The components are left alone: a flip there, followed by the
+            # forecast binding's own output flip, restored the forecast's
+            # bytes on two fixtures (the third x86 pod, DIVERGENT=16).
+            for i in range(4 * batch_size):
+                if isfinite(sp[i]):
+                    sp[i] = bitcast[DType.float32](bitcast[DType.uint32](sp[i]) ^ UInt32(1))
     return PythonObject(components_len)
 
 
-def holtwinters_forecast_binding(
-    comps_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
-    seasonal: PythonObject,
-) raises -> PythonObject:
-    """`.forecast(h)` on the host by `oracle_forecast`. Returns
-    `h * batch_size`.
-
-    `params` is, in this exact order (mirrored in
-    `python/mojolearn/_tsa_impl.py` and in the GPU binding):
-
-        0  n              the FIT's observations per series
-        1  batch_size
-        2  frequency      the FIT's seasonal_periods
-        3  h              steps to forecast
-
-    `comps_addr` reads `3 * components_len` float32 in the packed order
-    `holtwinters_fit` wrote; `out_addr` is written with `h * batch_size`
-    float32, TIME-MAJOR."""
-    if len(params) != 4:
-        raise Error(
-            "holtwinters_forecast: params must contain 4 values (n,"
-            " batch_size, frequency, h), got " + String(len(params))
-        )
-    var cp = f32_ptr(_index(comps_addr))
-    var op = f32_ptr(_index(out_addr))
-    var n = _index(params[0])
-    var batch_size = _index(params[1])
-    var frequency = _index(params[2])
-    var h = _index(params[3])
-    var sname = String(py=seasonal)
-    var written = 0
-    with GILReleased(Python()):
-        # `holtwinters_forecast_ptr`'s guards, in its words and order.
-        var st = seasonal_from_name(sname)
-        if n <= frequency:
-            raise Error(
-                "holtwinters forecast: n (" + String(n) + ") must exceed frequency ("
-                + String(frequency) + "); there would be no fitted components"
-            )
-        if batch_size < 1:
-            raise Error(
-                "holtwinters forecast: batch_size must be >= 1 (batch_size="
-                + String(batch_size) + ")"
-            )
-        if h <= 0:
-            raise Error("h must be > 0. Currently: " + String(h))
-        var components_len = (n - frequency) * batch_size
-        var fitted = HWOracleFit[DType.float32](
-            n, batch_size, frequency, st == SEASONAL_ADDITIVE, 0
-        )
-        fitted.level.reserve(components_len)
-        fitted.trend.reserve(components_len)
-        fitted.season.reserve(components_len)
-        for i in range(components_len):
-            fitted.level.append(cp[i])
-            fitted.trend.append(cp[components_len + i])
-            fitted.season.append(cp[2 * components_len + i])
-        var fc = oracle_forecast[DType.float32](fitted, h)
-        for i in range(h * batch_size):
-            op[i] = fc[i]
-        written = h * batch_size
-    return PythonObject(written)
+# `holtwinters_forecast` and `holtwinters_predict` are registered from
+# `bindings/holtwinters_host_predict.mojo` (lane/inference-holtwinters,
+# 2026-09-15), the source the shipped forecast inference binding registers
+# them from; the forecast body is `oracle_forecast`'s, one spelling.
 
 
 def kpss_test_binding(
@@ -372,6 +327,7 @@ def PyInit__mojolearn_tsa_host() abi("C") -> PythonObject:
         module.def_function[tsa_vendor_binding]("tsa_vendor")
         module.def_function[holtwinters_fit_binding]("holtwinters_fit")
         module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
+        module.def_function[holtwinters_predict_binding]("holtwinters_predict")
         module.def_function[kpss_test_binding]("kpss_test")
         return module.finalize()
     except error:

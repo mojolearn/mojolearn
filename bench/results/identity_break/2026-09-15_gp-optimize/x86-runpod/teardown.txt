@@ -1,0 +1,5 @@
+pod=j02fea57j2pcmr
+name=mojolearn-cpu-gp-optimizer-20260915-232840
+terminated_verified=1
+exit=0
+at=2026-09-15T23:31:33Z

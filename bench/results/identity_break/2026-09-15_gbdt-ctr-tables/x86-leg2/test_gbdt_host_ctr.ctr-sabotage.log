@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/root/mojolearn/python/mojolearn/tests/test_gbdt_host_ctr.py", line 144, in <module>
+    globals()[name]()
+    ~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/tests/test_gbdt_host_ctr.py", line 125, in test_ctr_lookup_unseen_seen_once_and_nan_when_built
+    assert got == [1.0, 1.0, 0.5, 0.25, 0.25], got
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [1.0, 0.5, 1.0, 0.25, 0.25]

@@ -1,0 +1,20 @@
+build	tokenizer	0	1
+sabotage-build	tokenizer	0	12
+generated-module	0
+surface	0
+manifest	0
+identity	0
+identity-sabotage	0
+diff-record	1
+diff-sabotage	1
+owed-check	2
+wheel	0
+wheel-scan	0
+install	0
+installed-import	0
+installed-tokenizer	0
+verify-tokenizer	0
+installed-identity	0
+installed-judge	0
+verify-lanes-tokenizer	0
+verify-quick	0

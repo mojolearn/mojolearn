@@ -1,0 +1,5 @@
+pod='ovb9le1qdopo4q'
+target='-p 25715 root@213.173.105.103'
+armed_utc='2026-09-15T22:08:14Z'
+deadline_epoch=1789513694
+minutes=60

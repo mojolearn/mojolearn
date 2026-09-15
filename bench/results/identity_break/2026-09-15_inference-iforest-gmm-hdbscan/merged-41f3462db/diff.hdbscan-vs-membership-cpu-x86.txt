@@ -1,0 +1,38 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 4 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_hdbscan_host'] commit=82248f7899cd8542338c782382375c0284b9abd8
+NOTE: column cpu-amd-epyc-7702p-64-core-processor is a CPU column: cpu_model='AMD EPYC 7702P 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_svm_host'] commit=41f3462dba148cc8d8561c9b7c297518f68fba39
+| lane/fixture                 | verdict    | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-7702p-64-core-processor |
+|------------------------------|------------|------------------|------------------|
+| hdbscan-leaf/base            | IDENTICAL x2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 |
+| hdbscan-leaf/dupes           | IDENTICAL x2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 |
+| hdbscan-leaf/ties            | IDENTICAL x2 | 41045554964e4bd8 | 41045554964e4bd8 |
+| hdbscan/base                 | IDENTICAL x2 | 1032d54b827b0e0c | 1032d54b827b0e0c |
+| hdbscan/dupes                | IDENTICAL x2 | 1032d54b827b0e0c | 1032d54b827b0e0c |
+| hdbscan/ties                 | IDENTICAL x2 | 444bc82f0a607cfb | 444bc82f0a607cfb |
+
+summary: IDENTICAL=6
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-7702p-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| hdbscan-leaf/base            | infer  | IDENTICAL x2 | 2117320835e91e8a | 2117320835e91e8a |
+| hdbscan-leaf/base            | model  | ONE-COLUMN   | n/a:no-save      | b3541c15572495c6 |
+| hdbscan-leaf/base            | batch  | IDENTICAL x2 | 927cb01ec674a031 | 927cb01ec674a031 |
+| hdbscan-leaf/dupes           | infer  | IDENTICAL x2 | 2117320835e91e8a | 2117320835e91e8a |
+| hdbscan-leaf/dupes           | model  | ONE-COLUMN   | n/a:no-save      | b3541c15572495c6 |
+| hdbscan-leaf/dupes           | batch  | IDENTICAL x2 | 927cb01ec674a031 | 927cb01ec674a031 |
+| hdbscan-leaf/ties            | infer  | IDENTICAL x2 | 47607746aff5c75c | 47607746aff5c75c |
+| hdbscan-leaf/ties            | model  | ONE-COLUMN   | n/a:no-save      | 7649091225d549bd |
+| hdbscan-leaf/ties            | batch  | IDENTICAL x2 | bfcae42c42ea55d7 | bfcae42c42ea55d7 |
+| hdbscan/base                 | infer  | IDENTICAL x2 | cfe5f8df2a406451 | cfe5f8df2a406451 |
+| hdbscan/base                 | model  | ONE-COLUMN   | n/a:no-save      | 886b0c2a69e8f5b9 |
+| hdbscan/base                 | batch  | IDENTICAL x2 | 43c868ddda4bae13 | 43c868ddda4bae13 |
+| hdbscan/dupes                | infer  | IDENTICAL x2 | cfe5f8df2a406451 | cfe5f8df2a406451 |
+| hdbscan/dupes                | model  | ONE-COLUMN   | n/a:no-save      | 886b0c2a69e8f5b9 |
+| hdbscan/dupes                | batch  | IDENTICAL x2 | 43c868ddda4bae13 | 43c868ddda4bae13 |
+| hdbscan/ties                 | infer  | IDENTICAL x2 | 6ec7f68f0f81ae9b | 6ec7f68f0f81ae9b |
+| hdbscan/ties                 | model  | ONE-COLUMN   | n/a:no-save      | a282d01525378b33 |
+| hdbscan/ties                 | batch  | IDENTICAL x2 | a5c1950592d1d992 | a5c1950592d1d992 |
+
+summary (infer/model): IDENTICAL=6, ONE-COLUMN=6
+summary (batch): IDENTICAL=6
+summary (rlpair): 

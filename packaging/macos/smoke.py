@@ -314,6 +314,45 @@ def _transformer():                                       # _mojolearn_transform
     assert np.all(np.isfinite(_tout)), "TransformerBlock returned non-finite cells"
 
 
+def _kernel_methods():                                    # _mojolearn_kernel_methods
+    # The identity_break kernel-ridge lane's call at a 32x3 slice: the rbf
+    # kernel matrix, potrf/potrs and the OP_NN GEMM in predict.
+    kr = mojolearn.KernelRidge(alpha=0.1, kernel="rbf", gamma=0.5).fit(xs[:32], xs[:32, 0] * 2.0)
+    kp = np.asarray(kr.predict(xs[32:48]))
+    assert kp.shape == (16,) and np.isfinite(kp).all(), kp
+
+
+def _mixture():                                           # _mojolearn_mixture
+    # Four well-separated clouds, four full-covariance components.
+    gm = mojolearn.GaussianMixture(n_components=4, max_iter=30, random_state=3).fit(X)
+    assert len(set(np.asarray(gm.predict(X)).tolist())) == 4, "GaussianMixture merged the four clouds"
+
+
+def _hdbscan():                                           # _mojolearn_hdbscan
+    hl = np.asarray(mojolearn.HDBSCAN(min_cluster_size=5).fit(X).labels_)
+    assert hl.shape == (400,) and len(set(hl[hl >= 0].tolist())) >= 2, "HDBSCAN found fewer than two clusters"
+
+
+def _resample():                                          # _mojolearn_resample
+    bs = mojolearn.resample.bootstrap(np.ascontiguousarray(yr), statistic="mean",
+                                      n_resamples=256, random_state=3)
+    bd = np.asarray(bs.distribution)
+    assert bd.shape == (256,) and np.isfinite(bd).all(), bd.shape
+
+
+def _ivf():                                               # _mojolearn_ivf
+    ix = mojolearn.IVFIndex(n_lists=4, n_probes=4, n_neighbors=3, random_state=3).fit(Xt)
+    idist, iidx = ix.search(Xt[:16])
+    assert (np.asarray(iidx)[:, 0] == np.arange(16)).all(), "IVF with every list probed missed a self match"
+    assert np.isfinite(np.asarray(idist)).all()
+
+
+def _embedding():                                         # _mojolearn_embedding
+    ew = rng.random((16, 4), dtype=np.float32)
+    ey = np.asarray(mojolearn.Embedding(16, 4, weight=ew).forward(np.array([0, 5, 15, 5], dtype=np.int32)))
+    assert np.array_equal(ey, ew[[0, 5, 15, 5]]), "Embedding gather did not return the weight rows"
+
+
 #: One entry per identical-only binding (two for `_mojolearn`, which carries
 #: both k-means and k-NN). packaging/check_ext_lists.py keeps the binding
 #: lists in step; this list is kept in step by the assertion right below it.
@@ -331,6 +370,12 @@ IDENTICAL_ONLY_LAUNCHES = [
     ("_mojolearn_training", _training),
     ("_mojolearn_mamba", _mamba),
     ("_mojolearn_transformer", _transformer),
+    ("_mojolearn_kernel_methods", _kernel_methods),
+    ("_mojolearn_mixture", _mixture),
+    ("_mojolearn_hdbscan", _hdbscan),
+    ("_mojolearn_resample", _resample),
+    ("_mojolearn_ivf", _ivf),
+    ("_mojolearn_embedding", _embedding),
 ]
 _covered = {name for name, _ in IDENTICAL_ONLY_LAUNCHES}
 _expected = set(mojolearn._backend._IDENTICAL_ONLY) - {"_mojolearn_byte_lm"}
@@ -419,7 +464,8 @@ print(
     f"v{mojolearn.__version__} py{sys.version_info.major}.{sys.version_info.minor}"
     f" mode={mode} vendor={vendor} gbdt rf et ok"
     + (f" | identical-only launched: {_extra} kmeans knn dbscan pca svd ols solver svm tsa"
-       f" metrics preprocessing arima gp linalg training mamba transformer ok"
+       f" metrics preprocessing arima gp linalg training mamba transformer"
+       f" kernel_methods mixture hdbscan resample ivf embedding ok"
        if _tier == "identical" else
        f" | {len(IDENTICAL_ONLY_LAUNCHES)} identical-only launches REFUSED by name under {_tier}")
 )

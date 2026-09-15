@@ -1,0 +1,135 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 167 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_svm_host'] commit=afd1dcd2af4ff33e2e4bddfaae58df0798732580
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-h100-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    amd-mi325x-gfx942: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    nvidia-h100-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    amd-mi325x-gfx942: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gp-matern12/base             | IDENTICAL x4 | a54e340b4a22147f | a54e340b4a22147f | a54e340b4a22147f | a54e340b4a22147f |
+| gp-matern12/dupes            | IDENTICAL x4 | dc7d705bf6b6fb42 | dc7d705bf6b6fb42 | dc7d705bf6b6fb42 | dc7d705bf6b6fb42 |
+| gp-matern12/ties             | IDENTICAL x4 | 2661efdd41bfdb23 | 2661efdd41bfdb23 | 2661efdd41bfdb23 | 2661efdd41bfdb23 |
+| gp-matern32/base             | IDENTICAL x4 | 03066455003d7df7 | 03066455003d7df7 | 03066455003d7df7 | 03066455003d7df7 |
+| gp-matern32/dupes            | IDENTICAL x4 | 5346a4ac3a9fb082 | 5346a4ac3a9fb082 | 5346a4ac3a9fb082 | 5346a4ac3a9fb082 |
+| gp-matern32/ties             | IDENTICAL x4 | f4c49d5c4fd7edda | f4c49d5c4fd7edda | f4c49d5c4fd7edda | f4c49d5c4fd7edda |
+| gp-matern52-ard/base         | IDENTICAL x4 | 68f9bac4021de057 | 68f9bac4021de057 | 68f9bac4021de057 | 68f9bac4021de057 |
+| gp-matern52-ard/dupes        | IDENTICAL x4 | c2a1b1e411a6de85 | c2a1b1e411a6de85 | c2a1b1e411a6de85 | c2a1b1e411a6de85 |
+| gp-matern52-ard/ties         | IDENTICAL x4 | e7965892a63545e5 | e7965892a63545e5 | e7965892a63545e5 | e7965892a63545e5 |
+| gp/base                      | IDENTICAL x4 | ea70c56b99a74791 | ea70c56b99a74791 | ea70c56b99a74791 | ea70c56b99a74791 |
+| gp/dupes                     | IDENTICAL x4 | fba9e6f4ea05af2c | fba9e6f4ea05af2c | fba9e6f4ea05af2c | fba9e6f4ea05af2c |
+| gp/ties                      | IDENTICAL x4 | c92496318cb78403 | c92496318cb78403 | c92496318cb78403 | c92496318cb78403 |
+
+summary: IDENTICAL=12
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gp-matern12/base             | infer  | IDENTICAL x4 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 |
+| gp-matern12/base             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | ea851543bc06b7ca |
+| gp-matern12/base             | batch  | IDENTICAL x4 | 60ba7e42986f842e | 60ba7e42986f842e | 60ba7e42986f842e | 60ba7e42986f842e |
+| gp-matern12/dupes            | infer  | IDENTICAL x4 | f28fbf34f5e2f5e4 | f28fbf34f5e2f5e4 | f28fbf34f5e2f5e4 | f28fbf34f5e2f5e4 |
+| gp-matern12/dupes            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | c5921757366a1180 |
+| gp-matern12/dupes            | batch  | IDENTICAL x4 | 9298e4ad500ce168 | 9298e4ad500ce168 | 9298e4ad500ce168 | 9298e4ad500ce168 |
+| gp-matern12/ties             | infer  | IDENTICAL x4 | a001b7e2647b5504 | a001b7e2647b5504 | a001b7e2647b5504 | a001b7e2647b5504 |
+| gp-matern12/ties             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2a12147f489372a1 |
+| gp-matern12/ties             | batch  | IDENTICAL x4 | afa881afdf169ffe | afa881afdf169ffe | afa881afdf169ffe | afa881afdf169ffe |
+| gp-matern32/base             | infer  | IDENTICAL x4 | a89afc94af5f084c | a89afc94af5f084c | a89afc94af5f084c | a89afc94af5f084c |
+| gp-matern32/base             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2f0aa7aa6d573e8f |
+| gp-matern32/base             | batch  | IDENTICAL x4 | 4d0c75f26ce30a17 | 4d0c75f26ce30a17 | 4d0c75f26ce30a17 | 4d0c75f26ce30a17 |
+| gp-matern32/dupes            | infer  | IDENTICAL x4 | e0a8a2dff9f3e703 | e0a8a2dff9f3e703 | e0a8a2dff9f3e703 | e0a8a2dff9f3e703 |
+| gp-matern32/dupes            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 95b09e16e1e4201d |
+| gp-matern32/dupes            | batch  | IDENTICAL x4 | 314fbd59f78d11be | 314fbd59f78d11be | 314fbd59f78d11be | 314fbd59f78d11be |
+| gp-matern32/ties             | infer  | IDENTICAL x4 | d4ebe9e3a969d687 | d4ebe9e3a969d687 | d4ebe9e3a969d687 | d4ebe9e3a969d687 |
+| gp-matern32/ties             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 643600b947937792 |
+| gp-matern32/ties             | batch  | IDENTICAL x4 | e0f8d36884ec439b | e0f8d36884ec439b | e0f8d36884ec439b | e0f8d36884ec439b |
+| gp-matern52-ard/base         | infer  | IDENTICAL x4 | 7ed07da2d9a2b815 | 7ed07da2d9a2b815 | 7ed07da2d9a2b815 | 7ed07da2d9a2b815 |
+| gp-matern52-ard/base         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 922c3b283f374ede |
+| gp-matern52-ard/base         | batch  | IDENTICAL x4 | b67e8be0fee4333d | b67e8be0fee4333d | b67e8be0fee4333d | b67e8be0fee4333d |
+| gp-matern52-ard/dupes        | infer  | IDENTICAL x4 | 4cb708614a14be4f | 4cb708614a14be4f | 4cb708614a14be4f | 4cb708614a14be4f |
+| gp-matern52-ard/dupes        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4df8669dab247308 |
+| gp-matern52-ard/dupes        | batch  | IDENTICAL x4 | 2d242b760df0c661 | 2d242b760df0c661 | 2d242b760df0c661 | 2d242b760df0c661 |
+| gp-matern52-ard/ties         | infer  | IDENTICAL x4 | d9e5f730b649eff6 | d9e5f730b649eff6 | d9e5f730b649eff6 | d9e5f730b649eff6 |
+| gp-matern52-ard/ties         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8dd23a27ab3a3f3b |
+| gp-matern52-ard/ties         | batch  | IDENTICAL x4 | 8d902360cd06f9c6 | 8d902360cd06f9c6 | 8d902360cd06f9c6 | 8d902360cd06f9c6 |
+| gp/base                      | infer  | IDENTICAL x4 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 |
+| gp/base                      | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8f4a54a0bd816175 |
+| gp/base                      | batch  | IDENTICAL x4 | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa |
+| gp/dupes                     | infer  | IDENTICAL x4 | 52e6b306c452f16c | 52e6b306c452f16c | 52e6b306c452f16c | 52e6b306c452f16c |
+| gp/dupes                     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0eca938df7a74371 |
+| gp/dupes                     | batch  | IDENTICAL x4 | 3caf5f428c1e5112 | 3caf5f428c1e5112 | 3caf5f428c1e5112 | 3caf5f428c1e5112 |
+| gp/ties                      | infer  | IDENTICAL x4 | 22b0b528124de8d0 | 22b0b528124de8d0 | 22b0b528124de8d0 | 22b0b528124de8d0 |
+| gp/ties                      | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 5a2f8a826a1aab15 |
+| gp/ties                      | batch  | IDENTICAL x4 | 42c01186900b0c68 | 42c01186900b0c68 | 42c01186900b0c68 | 42c01186900b0c68 |
+
+summary (infer/model): IDENTICAL=12, OWED=12
+summary (batch): IDENTICAL=12
+summary (rlpair): 
+require-columns 4 over ['gp', 'gp-matern12', 'gp-matern32', 'gp-matern52-ard']: OK (12 OWED)
+OWED gp-matern12/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-matern12/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-matern12/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-matern32/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-matern32/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-matern32/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-matern52-ard/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-matern52-ard/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-matern52-ard/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+summary (owed): OWED=12; the next release record owes exactly these cell parts; wrote bench/results/identity_break/2026-09-15_inference-gp-gpc-gmm-sample/x86/owed.gp.json

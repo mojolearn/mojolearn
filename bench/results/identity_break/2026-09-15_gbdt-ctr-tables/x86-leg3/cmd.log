@@ -1,0 +1,44 @@
+== ctr sabotage build Tue Sep 15 21:51:43 UTC 2026
+ctr sabotage build exit 0
+python/mojolearn/host:
+_mojolearn_forest_host.so
+
+python/mojolearn/host-ctr-sabotage:
+_mojolearn_forest_host.so
+
+python/mojolearn/host-sabotage:
+_mojolearn_forest_host.so
+998abd57d49a5481feaa8d1d872d1e17543b9b10556bc4f94fffa9456141cd13  python/mojolearn/host-ctr-sabotage/_mojolearn_forest_host.so
+ec93b5b3e8e18d6cdf1188a7dbbe4973f40c807f1683ee1e0e10c8578df7ce86  python/mojolearn/host-sabotage/_mojolearn_forest_host.so
+d7091b30123d265611c51f4a3f0306798595728bf2ec2ed9bed918668483ba6b  python/mojolearn/host/_mojolearn_forest_host.so
+== columns Tue Sep 15 21:51:55 UTC 2026
+cpu exit 0
+cells=6 stable=6 moved=0 refused=0
+infer: stable=6
+batch: stable=6
+cpu-forest-sabotage exit 0
+cells=6 stable=6 moved=0 refused=0
+infer: stable=6
+batch: stable=6
+cpu-ctr-sabotage exit 0
+cells=6 stable=6 moved=0 refused=0
+infer: stable=6
+batch: stable=6
+== diffs Tue Sep 15 21:52:04 UTC 2026
+diff production exit 0
+summary: OWED=6
+summary (infer/model): OWED=12
+summary (batch): OWED=6
+summary (rlpair): 
+require-columns 4 over ['gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables']: OK (24 OWED)
+summary (owed): OWED=24; the next release record owes exactly these cell parts; wrote /root/leg_out/owed.json
+diff cpu-forest-sabotage exit 1 (must be 1)
+summary: DIVERGENT=6
+summary (infer/model): DIVERGENT=6, IDENTICAL=6
+summary (batch): DIVERGENT=6
+summary (rlpair): 
+diff cpu-ctr-sabotage exit 1 (must be 1)
+summary: DIVERGENT=6
+summary (infer/model): DIVERGENT=6, IDENTICAL=6
+summary (batch): DIVERGENT=6
+summary (rlpair): 

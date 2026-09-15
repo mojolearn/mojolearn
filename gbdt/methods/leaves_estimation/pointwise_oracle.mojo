@@ -117,6 +117,19 @@ from gbdt.targets.kernel.pointwise_targets import (
     launch_approximate,
     launch_approximate_move_eval,
 )
+from gbdt.targets.kernel.query_rmse import (
+    QuerywiseTargetBuffers,
+    launch_query_rmse_with,
+)
+from gbdt.targets.kernel.pair_logit import (
+    PairwiseTargetBuffers,
+    launch_pair_logit_with,
+)
+from gbdt.targets.kernel.yeti_rank import (
+    YetiRankTargetBuffers,
+    launch_yeti_rank_with,
+)
+from gbdt.data.permutation import TRandom
 from std.sys.compile import is_defined
 
 # ================= DEVIATION BLOCK 2030 =================
@@ -297,6 +310,27 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: `MOJOLEARN_2030_FUSED_EST_MOVE` AND the loss is single-dim; every
     #: cursor reader outside the move/eval pair flushes it first.
     var pending_shift: Bool
+    #: the QUERYWISE target's grouping and scratch, present only for
+    #: QueryRMSE: their `TPermutationDerCalcer<TTarget, Querywise>`
+    #: (`targets/permutation_der_calcer.h:171-247`) reads the point through
+    #: the inverse of this oracle's bin order and keeps the targets in row
+    #: order, where the pointwise calcer gathers them (`:57-72`).
+    var query: Optional[QuerywiseTargetBuffers]
+    #: the PairLogit pairs and scratch, present only for PairLogit: the same
+    #: querywise der calcer over per-pair derivatives
+    #: (`gbdt/targets/kernel/pair_logit.mojo`)
+    var pairs: Optional[PairwiseTargetBuffers]
+    #: how many value partials an evaluation writes and the host folds: one
+    #: per 256 rows, or one per 256 PAIRS for PairLogit
+    var fv_blocks: Int
+    #: the YetiRank task table and scratch, present only for YetiRank: the
+    #: querywise der calcer over sampled permutations
+    #: (`gbdt/targets/kernel/yeti_rank.mojo`)
+    var yeti: Optional[YetiRankTargetBuffers]
+    #: this tree's YetiRank draw stream: one `NextUniformL` per evaluation,
+    #: the seed of that call's task streams (`querywise_targets_impl.h:214`;
+    #: the stream is the fit's per-tree draw, see `doc_parallel_boosting.mojo`)
+    var yeti_rng: TRandom
 
     def point_dim(self) -> Int:
         return self.bin_count * self.single_bin_dim
@@ -389,7 +423,12 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
 
         @parameter
         if FUSED_EST_MOVE_2030:
-            defer_shift = self.cursor_dim == 1 and self.single_bin_dim == 1
+            defer_shift = (
+                self.cursor_dim == 1 and self.single_bin_dim == 1
+                and not self.query.__bool__()
+                and not self.pairs.__bool__()
+                and not self.yeti.__bool__()
+            )
         if defer_shift:
             self.pending_shift = True
         else:
@@ -461,29 +500,66 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
 
         if self.single_bin_dim == 1:
             self.times.begin(self.ctx)
-            # DEVIATION 2030: a deferred MoveTo is applied INSIDE this
-            # evaluation -- the fused kernel performs the identical
-            # per-row cursor add, stores the identical bytes, and runs
-            # the unchanged evaluation body on the just-stored value.
-            # `pending_shift` clears here because the cursor is current
-            # from this launch on (queue order covers every later
-            # reader). `comptime if`, the house elision: with the flag
-            # off (every shipped build) the fused arm is not compiled
-            # and the else arm is byte-for-byte the old call.
-            comptime if FUSED_EST_MOVE_2030:
-                if self.pending_shift:
-                    launch_approximate_move_eval[True](
-                        self.ctx, self.objective,
-                        self.d_shift, self.d_bins,
-                        self.d_target, self.d_weights, Int32(self.n_rows),
-                        self.d_cursor,
-                        Int32(1) if self.has_weights else Int32(0),
-                        self.alpha, self.border,
-                        self.d_eval_stats, self.d_fv, Int32(1),
-                        self.d_mag_dummy, Int32(0),
-                        blocks,
-                    )
-                    self.pending_shift = False
+            # the QUERYWISE target (QueryRMSE): `ApproximateAt` through the
+            # querywise der calcer (`permutation_der_calcer.h:192-205`),
+            # the point read back to row order through `query.inverse`
+            # and the der/der2 planes written at each row's bin position.
+            if self.yeti.__bool__():
+                # YetiRank: one `NextUniformL` per evaluation seeds the
+                # call's task streams (`querywise_targets_impl.h:213-229`)
+                launch_yeti_rank_with[True](
+                    self.ctx, self.yeti.value(), self.d_cursor, True,
+                    self.yeti_rng.next_uniform_l(),
+                    self.d_eval_stats, self.d_fv, True,
+                    self.d_mag_dummy, False,
+                )
+            elif self.pairs.__bool__():
+                launch_pair_logit_with[True, False](
+                    self.ctx, self.pairs.value(), self.d_cursor, True,
+                    self.d_eval_stats, self.d_fv, True,
+                    self.d_mag_dummy, False,
+                )
+            elif self.query.__bool__():
+                launch_query_rmse_with[True](
+                    self.ctx, self.query.value(), self.d_cursor, True,
+                    self.d_eval_stats, self.d_fv, True,
+                    self.d_mag_dummy, False,
+                )
+            else:
+                # DEVIATION 2030: a deferred MoveTo is applied INSIDE this
+                # evaluation -- the fused kernel performs the identical
+                # per-row cursor add, stores the identical bytes, and runs
+                # the unchanged evaluation body on the just-stored value.
+                # `pending_shift` clears here because the cursor is current
+                # from this launch on (queue order covers every later
+                # reader). `comptime if`, the house elision: with the flag
+                # off (every shipped build) the fused arm is not compiled
+                # and the else arm is byte-for-byte the old call.
+                comptime if FUSED_EST_MOVE_2030:
+                    if self.pending_shift:
+                        launch_approximate_move_eval[True](
+                            self.ctx, self.objective,
+                            self.d_shift, self.d_bins,
+                            self.d_target, self.d_weights, Int32(self.n_rows),
+                            self.d_cursor,
+                            Int32(1) if self.has_weights else Int32(0),
+                            self.alpha, self.border,
+                            self.d_eval_stats, self.d_fv, Int32(1),
+                            self.d_mag_dummy, Int32(0),
+                            blocks,
+                        )
+                        self.pending_shift = False
+                    else:
+                        launch_approximate[True](
+                            self.ctx, self.objective,
+                            self.d_target, self.d_weights, Int32(self.n_rows),
+                            self.d_cursor,
+                            Int32(1) if self.has_weights else Int32(0),
+                            self.alpha, self.border,
+                            self.d_eval_stats, self.d_fv, Int32(1),
+                            self.d_mag_dummy, Int32(0),
+                            blocks,
+                        )
                 else:
                     launch_approximate[True](
                         self.ctx, self.objective,
@@ -495,17 +571,6 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                         self.d_mag_dummy, Int32(0),
                         blocks,
                     )
-            else:
-                launch_approximate[True](
-                    self.ctx, self.objective,
-                    self.d_target, self.d_weights, Int32(self.n_rows),
-                    self.d_cursor,
-                    Int32(1) if self.has_weights else Int32(0),
-                    self.alpha, self.border,
-                    self.d_eval_stats, self.d_fv, Int32(1),
-                    self.d_mag_dummy, Int32(0),
-                    blocks,
-                )
             self.times.end(self.ctx, "est.approx")
             self.times.begin(self.ctx)
             compute_partition_stats(
@@ -567,7 +632,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # 2026-08-22 in the Newton-walk audit; the walk-divergence
             # entry carries the measurement.
             var fv32 = Float32(0.0)
-            for b in range(blocks):
+            for b in range(self.fv_blocks):
                 fv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
             value = Float64(fv32)
             return
@@ -984,6 +1049,10 @@ def make_bin_optimized_oracle(
     sm_count: Int,
     estimation_method: Int = LEAF_ESTIMATION_NEWTON,
     num_classes: Int = 0,
+    var query: Optional[QuerywiseTargetBuffers] = None,
+    var pairs: Optional[PairwiseTargetBuffers] = None,
+    var yeti: Optional[YetiRankTargetBuffers] = None,
+    yeti_seed: UInt64 = UInt64(0),
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -1012,6 +1081,13 @@ def make_bin_optimized_oracle(
             )
         cursor_dim = num_classes
         single_bin_dim = num_classes
+    if (query.__bool__() or pairs.__bool__() or yeti.__bool__()) and estimation_method == LEAF_ESTIMATION_EXACT:
+        # `ComputeExactValue`'s querywise arm
+        # (`targets/permutation_der_calcer.h:206-216`), their message
+        raise Error(
+            "Exact leaves estimation method on GPU is not supported for"
+            " non-pointwise target"
+        )
     # one buffer wide enough for both the value pass (`cursor_dim`
     # planes) and the widest Hessian row (`single_bin_dim` columns)
     var multi_planes = single_bin_dim
@@ -1035,8 +1111,11 @@ def make_bin_optimized_oracle(
     )
     var d_eval_stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
     var blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
-    var d_fv = ctx.enqueue_create_buffer[DType.float32](blocks)
-    var h_fv = ctx.enqueue_create_host_buffer[DType.float32](blocks)
+    var fv_blocks = blocks
+    if pairs.__bool__():
+        fv_blocks = pairs.value().blocks()
+    var d_fv = ctx.enqueue_create_buffer[DType.float32](fv_blocks)
+    var h_fv = ctx.enqueue_create_host_buffer[DType.float32](fv_blocks)
     var d_mag_dummy = ctx.enqueue_create_buffer[DType.float32](2)
 
     var sm = sm_count
@@ -1209,4 +1288,9 @@ def make_bin_optimized_oracle(
         max_leaf,
         est_times^,
         False,  # pending_shift (DEVIATION 2030): no deferred move yet
+        query^,
+        pairs^,
+        fv_blocks,
+        yeti^,
+        TRandom(yeti_seed),
     )

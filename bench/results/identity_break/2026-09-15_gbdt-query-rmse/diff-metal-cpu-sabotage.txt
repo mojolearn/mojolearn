@@ -1,0 +1,25 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=4a7374ea786763a9096d15795d2c366236511ab8
+| lane/fixture                 | verdict    | apple-m4         | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| gbdt-query-rmse/base         | DIVERGENT  | parts differ: predict,loss_curve; agree: - | 90743a601c4ddf74 |
+| gbdt-query-rmse/odd          | DIVERGENT  | parts differ: predict,loss_curve; agree: - | 839e219d35e2cb5b |
+| gbdt-query-rmse/ties         | DIVERGENT  | parts differ: predict,loss_curve; agree: - | 6106db7f212331c3 |
+
+summary: DIVERGENT=3
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| gbdt-query-rmse/base         | infer  | DIVERGENT    | c5dd11cce5027431 | 3185dee88c2060e4 |
+| gbdt-query-rmse/base         | model  | DIVERGENT    | 773082ee900f4629 | e83083e0db84ceb1 |
+| gbdt-query-rmse/base         | batch  | DIVERGENT    | 2f9ae940636f0782 | 47efa1d9a17e9185 |
+| gbdt-query-rmse/odd          | infer  | DIVERGENT    | 66a562a9f1518dd7 | 8ac9fa458624cc85 |
+| gbdt-query-rmse/odd          | model  | DIVERGENT    | 850fcd0f8a7c5a1a | a2c574b840ee0663 |
+| gbdt-query-rmse/odd          | batch  | DIVERGENT    | 8990d2af358d0692 | 5d662f5d45c3bb55 |
+| gbdt-query-rmse/ties         | infer  | DIVERGENT    | 82656b1f96479524 | a45bb66940742356 |
+| gbdt-query-rmse/ties         | model  | DIVERGENT    | a00477457a3f0913 | 80df406b70bd1dda |
+| gbdt-query-rmse/ties         | batch  | DIVERGENT    | 348dc9138ec69402 | 6196212c3a82e7ad |
+
+summary (infer/model): DIVERGENT=6
+summary (batch): DIVERGENT=3
+summary (rlpair): 
