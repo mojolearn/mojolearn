@@ -378,7 +378,8 @@ TRAINING_LANE_NAMES = {
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
-    # the arima family's own host binding. par-arima is not declared. Gate
+    # the arima family's own host binding. par-arima was not declared until
+    # lane/cpu-training-par-classical (2026-09-15, below). Gate
     # run 34895909493 at 422a1b9e5: all 27 training and 27 infer cells
     # IDENTICAL x4; under the sabotage build 26 of 27 of each DIVERGENT
     # (arima-011/wide keeps its hash).
@@ -492,6 +493,19 @@ TRAINING_LANE_NAMES = {
     "byte-lm-host-infer": "the byte LM forward pass on its reference path (inference)",
     "byte-lm-host-infer-threaded": "the byte LM forward pass on its threaded path (inference)",
     "byte-lm-host-train": "the published byte LM host training step",
+    # CPU training for the par-* lanes whose driver shards in Python
+    # (lane/cpu-training-par-classical, 2026-09-15). fit_scaler and
+    # transform_scaler (four column shards), fit_arima and
+    # fit_exponential_smoothing (two series per shard) run each shard as a
+    # host fit in its own worker process and merge in shard order through
+    # the drivers' unchanged code (_parallel_pool.CPU_OPERATIONS); the
+    # cooperative drivers refuse by name. On the M4's CPU column (one core)
+    # every train, infer and batch cell of the three lanes read IDENTICAL x4
+    # against the 166-lane record before the gate ran, and the sabotage set
+    # DIVERGENT on every train cell.
+    "par-scaler": "the column-sharded standard scaler",
+    "par-arima": "series-sharded ARIMA",
+    "par-holtwinters": "series-sharded Holt-Winters",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -787,7 +801,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
-            "standard-scaler-no-std", "minmax-scaler-clip",
+            "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -809,7 +823,7 @@ FAMILIES = (
         routes="_mojolearn_tsa",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss"),
+        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss", "par-holtwinters"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ExponentialSmoothing", "kpss_test"),
@@ -1195,14 +1209,15 @@ FAMILIES = (
         # ARIMA's host binding. It routes `_mojolearn_arima` on a CPU-only
         # install with the GPU binding's whole surface (fit, predict,
         # forecast); p, q or P above 1, any Q, d + D of 2, p + q + k of 0
-        # and an in-sample prediction refuse by name. par-arima is not
-        # declared.
+        # and an in-sample prediction refuse by name. par-arima is declared
+        # since lane/cpu-training-par-classical (2026-09-15): fit_arima's
+        # series shards run as host fits in their own workers.
         family="arima",
         binding="_mojolearn_arima_host",
         routes="_mojolearn_arima",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("arima", "arima-011", "arima-seasonal-c"),
+        training_lanes=("arima", "arima-011", "arima-seasonal-c", "par-arima"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ARIMA",),

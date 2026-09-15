@@ -194,9 +194,10 @@ def test_manifest_covers_the_scalers():
         assert lane in host_surface.covered_lanes(), f"{lane} is not a covered training lane"
     fam = host_surface.family("preprocessing")
     assert fam["routes"] == "_mojolearn_preprocessing"
-    # The three parameter lanes joined on lane/cpu-training-batch2-declare.
+    # The three parameter lanes joined on lane/cpu-training-batch2-declare,
+    # par-scaler on lane/cpu-training-par-classical.
     assert fam["training_lanes"] == ("standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
-                                     "standard-scaler-no-std", "minmax-scaler-clip")
+                                     "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler")
     assert SCALER_ORACLE in fam["host_modules"] and (ROOT / SCALER_ORACLE).is_file()
     assert (ROOT / "bindings/build_preprocessing_host.sh").is_file()
     assert "_mojolearn_preprocessing" in host_surface.routed_modules()
