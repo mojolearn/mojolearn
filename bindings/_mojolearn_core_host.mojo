@@ -667,6 +667,182 @@ def knn_regress_binding(
 
 
 # ===========================================================================
+# THE MERGED-NEIGHBOR VOTES (lane/cpu-training-par-wave2, 2026-09-15). The
+# GPU binding's `knn_classify_neighbors` / `knn_regress_neighbors`
+# (`bindings/_mojolearn.mojo`, over `neighbors/estimator.mojo::
+# knn_classifier_from_neighbors` / `knn_regressor_from_neighbors`), which
+# `parallel_neighbors_reference._vote` calls on the neighbors the reference
+# shards merged in Python. The vote half of `knn_classify_binding` and
+# `knn_regress_binding` above, statement for statement, over the given
+# distances and global indices instead of a host search.
+# ===========================================================================
+
+
+def _host_validate_neighbors(
+    idx: List[UInt32], n_index: Int, n_queries: Int, k: Int,
+    n_outputs: Int, weights: Int,
+) raises:
+    """`neighbors/estimator.mojo::_validate_neighbors`, its words."""
+    if n_index < 1 or n_queries < 1 or k < 1 or k > n_index or n_outputs < 1:
+        raise Error("precomputed neighbors: invalid shape")
+    if weights != KNN_HOST_WEIGHTS_UNIFORM and weights != KNN_HOST_WEIGHTS_DISTANCE:
+        raise Error("precomputed neighbors: unsupported weights")
+    for i in range(n_queries * k):
+        if UInt64(idx[i]) >= UInt64(n_index):
+            raise Error("precomputed neighbor index outside reference data")
+
+
+def knn_classify_neighbors_binding(
+    dist_addr: PythonObject,
+    idx_addr: PythonObject,
+    y_addr: PythonObject,
+    out_labels_addr: PythonObject,
+    out_proba_addr: PythonObject,
+    out_uniq_addr: PythonObject,
+    params: PythonObject,
+    dist_params: PythonObject,
+) raises -> PythonObject:
+    """Vote on globally merged neighbors, the GPU binding's parameter layout
+    (`knn_classify_binding`'s; the feature count and query tile slots are
+    unread). float32 distances and uint32 global indices, both
+    n_queries x k. Returns zero on success."""
+    if len(params) < 7:
+        raise Error(
+            "knn_classify: params must hold at least 7 values, got "
+            + String(len(params))
+        )
+    var ni = _index(params[0])
+    var nq = _index(params[1])
+    var kk = _index(params[3])
+    var no = _index(params[5])
+    var want_proba = _index(params[6]) != 0
+    if len(params) != 7 + no:
+        raise Error(
+            "knn_classify: params must hold 7 + n_outputs ("
+            + String(7 + no)
+            + ") values, got "
+            + String(len(params))
+        )
+    var n_classes = List[Int]()
+    for i in range(no):
+        n_classes.append(_index(params[7 + i]))
+    var dist_address = _index(dist_addr)
+    var idx_address = _index(idx_addr)
+    var y_address = _index(y_addr)
+    var lp = i32_ptr(_index(out_labels_addr))
+    var pp = f32_ptr(_index(out_proba_addr))
+    var up = i32_ptr(_index(out_uniq_addr))
+    var dt = _dist_triple(dist_params)
+    with GILReleased(Python()):
+        if ni < 1 or nq < 1 or kk < 1 or kk > ni or no < 1:
+            raise Error("precomputed neighbors: invalid shape")
+        var xp = u32_ptr(idx_address)
+        var idx = List[UInt32](length=nq * kk, fill=UInt32(0))
+        for i in range(nq * kk):
+            idx[i] = xp[i]
+        _host_validate_neighbors(idx, ni, nq, kk, no, dt[2])
+        if len(n_classes) != no:
+            raise Error("precomputed neighbors: class-count shape mismatch")
+        for count in n_classes:
+            if count < 1:
+                raise Error("precomputed neighbors: class counts must be positive")
+        var weighted = dt[2] == KNN_HOST_WEIGHTS_DISTANCE
+        var w = List[Float32]()
+        if weighted:
+            w = host_distance_weights(read_f32(dist_address, nq * kk), nq, kk)
+        var ys = List[List[Int32]]()
+        var uniqs = List[List[Int32]]()
+        for i in range(no):
+            ys.append(read_i32(y_address + i * ni * 4, ni))
+            uniqs.append(host_unique_labels(ys[i], ni))
+            if len(uniqs[i]) != n_classes[i]:
+                raise Error(
+                    "knn_classifier_predict: the implemented getUniquelabels found "
+                    + String(len(uniqs[i]))
+                    + " classes for output "
+                    + String(i)
+                    + " and the caller sized its buffers for "
+                    + String(n_classes[i])
+                    + "; one of the two class sets is wrong and nothing is "
+                    + "written"
+                )
+        var labels_out = List[Int32](length=nq * no, fill=Int32(0))
+        var off = 0
+        for i in range(no):
+            var n_uniq = len(uniqs[i])
+            var mono = host_monotonic(ys[i], ni, uniqs[i])
+            var proba: List[Float32]
+            if weighted:
+                proba = host_weighted_class_probs(idx, mono, w, n_uniq, nq, kk)
+            else:
+                proba = host_class_probs(idx, mono, n_uniq, nq, kk)
+            if want_proba:
+                for j in range(nq * n_uniq):
+                    pp[off + j] = proba[j]
+                off += nq * n_uniq
+            else:
+                host_class_vote(proba, uniqs[i], n_uniq, nq, labels_out, no, i)
+        if not want_proba:
+            for j in range(nq * no):
+                lp[j] = labels_out[j]
+        var uoff = 0
+        for i in range(no):
+            for j in range(len(uniqs[i])):
+                up[uoff + j] = uniqs[i][j]
+            uoff += len(uniqs[i])
+    return PythonObject(0)
+
+
+def knn_regress_neighbors_binding(
+    dist_addr: PythonObject,
+    idx_addr: PythonObject,
+    y_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+    dist_params: PythonObject,
+) raises -> PythonObject:
+    """Regress on globally merged neighbors, `knn_regress_binding`'s
+    parameter layout (the feature count and query tile slots are unread).
+    Returns zero on success."""
+    if len(params) != 6:
+        raise Error(
+            "knn_regress: params must hold 6 values, got "
+            + String(len(params))
+        )
+    var dist_address = _index(dist_addr)
+    var idx_address = _index(idx_addr)
+    var y_address = _index(y_addr)
+    var op = f32_ptr(_index(out_addr))
+    var ni = _index(params[0])
+    var nq = _index(params[1])
+    var kk = _index(params[3])
+    var no = _index(params[5])
+    var dt = _dist_triple(dist_params)
+    with GILReleased(Python()):
+        if ni < 1 or nq < 1 or kk < 1 or kk > ni or no < 1:
+            raise Error("precomputed neighbors: invalid shape")
+        var xp = u32_ptr(idx_address)
+        var idx = List[UInt32](length=nq * kk, fill=UInt32(0))
+        for i in range(nq * kk):
+            idx[i] = xp[i]
+        _host_validate_neighbors(idx, ni, nq, kk, no, dt[2])
+        var weighted = dt[2] == KNN_HOST_WEIGHTS_DISTANCE
+        var w = List[Float32]()
+        if weighted:
+            w = host_distance_weights(read_f32(dist_address, nq * kk), nq, kk)
+        var out = List[Float32](length=nq * no, fill=Float32(0.0))
+        for i in range(no):
+            var y = read_f32(y_address + i * ni * 4, ni)
+            if weighted:
+                host_weighted_regress_avg(idx, y, w, nq, kk, out, no, i)
+            else:
+                host_regress_avg(idx, y, nq, kk, out, no, i)
+        for j in range(nq * no):
+            op[j] = out[j]
+    return PythonObject(0)
+
+
+# ===========================================================================
 # THE BALL COVER ENTRIES (lane/cpu-training-batch3, 2026-09-14). The GPU
 # binding's names and params lists (`bindings/_mojolearn.mojo:467-627`).
 # ===========================================================================
@@ -986,6 +1162,8 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[knn_search_binding]("knn_search")
         module.def_function[knn_classify_binding]("knn_classify")
         module.def_function[knn_regress_binding]("knn_regress")
+        module.def_function[knn_classify_neighbors_binding]("knn_classify_neighbors")
+        module.def_function[knn_regress_neighbors_binding]("knn_regress_neighbors")
         module.def_function[kmeans_fit_binding]("kmeans_fit")
         module.def_function[radius_neighbors_count_binding]("radius_neighbors_count")
         module.def_function[radius_neighbors_fill_binding]("radius_neighbors_fill")
