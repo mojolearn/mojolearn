@@ -702,7 +702,12 @@ _poll_end=$(( T_ARMED + LEASE * 60 - 300 ))
 _seen=0; _fails=0
 while :; do
     sleep 20
-    _o=$(bssh 'cat /root/leg_out/phases.tsv 2>/dev/null; [ -f /root/leg_out/DONE ] && echo __DONE__' 2>/dev/null) && _fails=0 || _fails=$((_fails + 1))
+    # ONLY AN SSH FAILURE COUNTS. The remote command ends in `true`: on
+    # 2026-09-15 it ended in `[ -f DONE ] && echo`, which exits 1 on every
+    # poll before DONE, so 15 ordinary polls read as 15 failures and the
+    # runner tore the pod down in the middle of the cache upload.
+    _o=$(bssh 'cat /root/leg_out/phases.tsv 2>/dev/null; if [ -f /root/leg_out/DONE ]; then echo __DONE__; fi; true' 2>/dev/null)
+    if [ $? = 0 ]; then _fails=0; else _fails=$((_fails + 1)); fi
     _n=$(printf '%s\n' "$_o" | grep -c "	")
     if [ "$_n" -gt "$_seen" ]; then
         printf '%s\n' "$_o" | grep "	" | tail -n $((_n - _seen)) | while IFS="	" read -r _k _t; do say "  box: $_k"; done
