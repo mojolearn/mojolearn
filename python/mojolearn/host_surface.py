@@ -1255,7 +1255,7 @@ FAMILIES = (
         exports=(
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
-            "gpr_fit", "gpr_predict", "cholesky_profile_jitter",
+            "gpr_fit", "gpr_predict", "gpr_sample_y", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
