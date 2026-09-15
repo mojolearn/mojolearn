@@ -37,3 +37,17 @@ Worktree: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/
 - 2026-09-15 19:05 ET: leg 1 pod z0jbxz113hwf3n (H100, driver 580.126.09),
   60-minute watchdog armed (deadline about 20:05 ET), shipped eda607eda, R2
   staged 2 keys in 64 s. If the Mac restarted: `TREES_LEG_STATE=$HOME/mojolearn-evidence/istella-rank/pod sh tools/trees_leg.sh reap`.
+- 2026-09-15 19:26 ET: leg 1 DONE. All ten cells recorded, pulled to
+  `bench/results/istella_ranking_2026-09-15/`, pod DELETED and verified gone
+  (HTTP 404), 21 minutes at $3.49/hr, about $1.22. Two fixes during the leg:
+  scikit-learn was missing on the pod (the XGBoost and LightGBM sklearn
+  wrappers need it, and the first LightGBM CUDA probe failure was that, not
+  CUDA), and the XGBoost arm now relabels qids by order of appearance.
+- Result in one line: our fastest cell (QueryRMSE 3,530 ms) against CatBoost's
+  fastest (2,355 ms) is 1.50x, against XGBoost's fastest 0.90x, against
+  LightGBM CUDA 0.65x; QueryRMSE and PairLogit gaps are fixed cost, YetiRank's
+  is per tree (6.57x of CatBoost's slope) and is the cell to work on next.
+
+## Owed
+- Nothing for this leg. A YetiRank per-tree investigation is the obvious next
+  lane; 1,278 ms of our fixed cost is the Python `_group_sizes` loop.
