@@ -193,6 +193,8 @@ sampler, a solver, a metric, a reduction).
       ivf-euclidean
     2026-09-15 (lane/embedding-owed, PLAN_SORT through Embedding(plan="sort"))
       embedding-sort
+    2026-09-15 (lane/cpu-training-small-gaps)
+      metrics-fowlkes-mallows
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -1987,6 +1989,30 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
+@lane("metrics-fowlkes-mallows")
+def _(ml, X, yc, yr, Xh=None):
+    """fowlkes_mallows_score (lane/cpu-training-small-gaps, 2026-09-15),
+    scikit-learn's definition over the integer contingency matrix. A lane
+    of its own so metrics-classification's committed train hashes do not
+    move. The clusterings are fixed host comparisons of fixture columns,
+    no fit: an eight-way split on the signs of columns 3, 4 and 5 against
+    the class labels, a relabeled copy (score 1.0), the all-singletons
+    split (tk == 0, score 0.0), and a two-row call."""
+    mt = ml.metrics
+    n = 3000
+    yt = np.ascontiguousarray(yc[:n]).astype(np.int32)
+    split = ((X[:n, 3] > 0).astype(np.int32) + 2 * (X[:n, 4] > 0).astype(np.int32)
+             + 4 * (X[:n, 5] > 0).astype(np.int32)).astype(np.int32)
+    parts = dict(
+        split=_h(np.float64(mt.fowlkes_mallows_score(yt, split))),
+        reversed=_h(np.float64(mt.fowlkes_mallows_score(split, yt))),
+        relabeled=_h(np.float64(mt.fowlkes_mallows_score(split, (np.int32(7) - split) * np.int32(3)))),
+        singletons=_h(np.float64(mt.fowlkes_mallows_score(yt, np.arange(n, dtype=np.int32)))),
+        two_rows=_h(np.float64(mt.fowlkes_mallows_score(yt[:2], split[:2]))),
+    )
+    return _fit(parts)
+
+
 @lane("tokenizer")
 def _(ml, X, yc, yr, Xh=None):
     """GPT2Tokenizer (python/mojolearn/tokenizer.py), host integers and
@@ -3611,7 +3637,7 @@ def _batch_gemm_transposed(ml, e, Xh):
 _batch_decl(_batch_gemm_pinned, "gemm-pinned")
 _batch_decl(_batch_gemm_transposed, "gemm-transposed")
 _batch_decl("n/a:function", "metrics", "metrics-classification", "cross-val", "bootstrap", "permutation-test",
-            "monte-carlo")
+            "monte-carlo", "metrics-fowlkes-mallows")
 _batch_decl("n/a:no-batch-axis", "tokenizer")
 _batch_decl("n/a:optimizer-step", "optim-sgd", "optim-adam-clip")
 _batch_decl("n/a:training-step", "byte-lm-host-train")

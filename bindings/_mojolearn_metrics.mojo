@@ -62,6 +62,7 @@ from metrics.estimator import (
     adjusted_rand_score_host,
     completeness_score_host,
     entropy_host,
+    fowlkes_mallows_score_host,
     homogeneity_score_host,
     kl_divergence_host,
     mutual_info_score_host,
@@ -225,6 +226,33 @@ def mutual_info_score_binding(
     var out = Float64(0.0)
     with GILReleased(Python()):
         out = mutual_info_score_host(yt, yp, n, lower, upper)
+    return PythonObject(out)
+
+
+def fowlkes_mallows_score_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """scikit-learn `fowlkes_mallows_score` (cuML has none) over the device
+    contingency matrix (`metrics/impl/fowlkes_mallows.mojo`).
+
+    `params`, in this exact order (mirrored in
+    `python/mojolearn/_metrics_impl.py`):
+
+        0  n
+        1  lower_class_range
+        2  upper_class_range
+    """
+    _want(String("fowlkes_mallows_score"), params, 3)
+    var n = Int(py=params[0])
+    var lower = Int32(Int(py=params[1]))
+    var upper = Int32(Int(py=params[2]))
+    var yt = _load_i32(Int(py=y_true_addr), n)
+    var yp = _load_i32(Int(py=y_pred_addr), n)
+    var out = Float64(0.0)
+    with GILReleased(Python()):
+        out = fowlkes_mallows_score_host(yt, yp, n, lower, upper)
     return PythonObject(out)
 
 
@@ -844,6 +872,7 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
         m.def_function[adjusted_rand_score_binding]("adjusted_rand_score")
         m.def_function[entropy_binding]("entropy")
         m.def_function[mutual_info_score_binding]("mutual_info_score")
+        m.def_function[fowlkes_mallows_score_binding]("fowlkes_mallows_score")
         m.def_function[homogeneity_score_binding]("homogeneity_score")
         m.def_function[completeness_score_binding]("completeness_score")
         m.def_function[v_measure_score_binding]("v_measure_score")

@@ -96,6 +96,7 @@ metrics have no fold and do not move under it. Read back by
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the metrics lane is the measurement.
 """
+from std.math import sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -350,6 +351,47 @@ def host_adjusted_rand_score(
     if max_index - expected_index != 0.0:
         return (index - expected_index) / (max_index - expected_index)
     return 0.0
+
+
+# ===========================================================================
+# fowlkes_mallows_score
+# ===========================================================================
+
+
+def host_fowlkes_mallows(
+    first: List[Int32], second: List[Int32], size: Int, lower: Int32, upper: Int32
+) raises -> Float64:
+    """`fowlkes_mallows_from_contingency`, `metrics/impl/fowlkes_mallows.mojo`
+    (scikit-learn `fowlkes_mallows_score`): exact Int64 `tk`, `pk`, `qk`
+    from the contingency matrix, then two Float64 divisions, two square
+    roots and one multiply, `tk == 0` returning 0.0."""
+    var k = Int(upper - lower + 1)
+    var c = host_contingency(first, second, size, lower, upper)
+    var n = Int64(size)
+    var sum_c2 = Int64(0)
+    for idx in range(k * k):
+        var v = Int64(c[idx])
+        sum_c2 += v * v
+    var a = host_row_sums(c, k)
+    var b = host_col_sums(c, k)
+    var sum_b2 = Int64(0)
+    var sum_a2 = Int64(0)
+    for j in range(k):
+        sum_b2 += b[j] * b[j]
+    for i in range(k):
+        sum_a2 += a[i] * a[i]
+    var tk = sum_c2 - n
+    comptime if METRICS_ORACLE_HOST_SABOTAGE:
+        # THE SABOTAGE ARM: one pair dropped from the numerator's count.
+        # Wrong on purpose; see METRICS_ORACLE_HOST_SABOTAGE.
+        if tk > 2:
+            tk -= 2
+    var pk = sum_b2 - n
+    var qk = sum_a2 - n
+    if tk == 0:
+        return 0.0
+    var ft = Float64(tk)
+    return sqrt(ft / Float64(pk)) * sqrt(ft / Float64(qk))
 
 
 # ===========================================================================
