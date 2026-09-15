@@ -172,7 +172,7 @@ def arima_fit_binding(
     `x_addr` and `x0_addr` are each written with `N * batch_size` float32 in
     that same packing, the unconstrained optimum and the starting point
     `estimate_x0` produced. Neither is on cuML's Python surface; both are
-    here because `estimate_x0` is the half of this lane with no upstream
+    here because `estimate_x0` is the half of this lane with no reference
     oracle.
 
     `stats_addr` is written with `2 * batch_size` float32, in this exact
@@ -296,7 +296,7 @@ def arima_forecast_binding(
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """`ARIMA.forecast(steps)` (arima/), which upstream is
+    """`ARIMA.forecast(steps)` (arima/), which in the reference is
     `predict(n_obs, n_obs + steps)` and is that here too. Returns
     `steps * batch_size`.
 

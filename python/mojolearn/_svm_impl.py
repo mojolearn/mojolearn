@@ -217,7 +217,7 @@ class SVC(NumericModeMixin):
                                   positive (DEVIATION 636)
         cache_size      honored   ONLY as the prediction buffer, see
                                   DEVIATION 871 below
-        class_weight    refused   upstream it becomes `sample_weight`, and
+        class_weight    refused   in the reference it becomes `sample_weight`, and
                                   `sample_weight` is not implemented: the
                                   weighted `InitPenalty` arm (C_vec = C * w)
                                   has no implementation (svm/NOT_IMPLEMENTED.tsv)
@@ -226,7 +226,7 @@ class SVC(NumericModeMixin):
         nochange_steps  honored   cuML's convergence rule, with
                                   its n_small_diff counter
         verbose         refused   anything truthy. It selects LOG LINES
-                                  upstream (CUML_LOG_DEBUG); this implementation
+                                  in the reference (CUML_LOG_DEBUG); this implementation
                                   prints none, so accepting it would be
                                   accepting-and-ignoring
         random_state    refused   anything but None. The binary C-SVC solver
@@ -265,7 +265,7 @@ class SVC(NumericModeMixin):
     'auto' is kept because `1 / n_features` is an integer reciprocal in
     float64 and is the same bits on every host.
 
-    DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT. Upstream it is
+    DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT. In the reference it is
     two things under one name: the training-time `raft::cache` LRU kernel
     cache, and the ceiling on the prediction kernel-tile buffer
     (`svm_base.pyx:554`, passed as `buffer_size` to `svcPredict`). The
@@ -274,8 +274,8 @@ class SVC(NumericModeMixin):
     holds the answer fixed over it from 0.001 MiB to 200 MiB. The training
     half is NOT implemented -- the solver always runs cuML's own
     `n_cache_sets == 0` path -- so `cache_size` does not affect training
-    time here the way it does upstream. It cannot affect training RESULTS
-    upstream either (`svm/NOT_IMPLEMENTED.tsv` carries that determinism
+    time here the way it does in the reference. It cannot affect training RESULTS
+    in the reference either (`svm/NOT_IMPLEMENTED.tsv` carries that determinism
     statement), so nothing numeric hangs on it.
 
     DEVIATION 873: the fitted model crosses back to the host and is
@@ -795,7 +795,7 @@ class SVR(NumericModeMixin):
                                   and `svm/impl/svm_parameter.mojo`
         cache_size      honored   ONLY as the prediction buffer, see
                                   DEVIATION 871 below. The TRAINING LRU it
-                                  also names upstream is unimplemented and
+                                  also names in the reference is unimplemented and
                                   `svm/impl/svm_parameter.mojo` refuses
                                   a non-zero one; `svm/estimator.mojo` pins
                                   the training value at 0 so that refusal
@@ -808,7 +808,7 @@ class SVR(NumericModeMixin):
                                   scikit-learn parameter; it is cuML's, and
                                   it is here because the solver reads it
         verbose         refused   `_svm_impl.py`, for anything truthy. It
-                                  selects LOG LINES upstream
+                                  selects LOG LINES in the reference
                                   (CUML_LOG_DEBUG); this implementation prints none,
                                   so accepting it would be
                                   accepting-and-ignoring
@@ -821,7 +821,7 @@ class SVR(NumericModeMixin):
                                   heuristic and cuML has no such thing:
                                   there is no row for it in
                                   `svm/NOT_IMPLEMENTED.tsv` because there is
-                                  nothing upstream of this implementation to leave
+                                  nothing in the reference to leave
                                   unimplemented. `SVC` omits it for the same
                                   reason
         sample_weight   refused   `_svm_impl.py`, in fit(). The weighted

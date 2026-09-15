@@ -101,7 +101,7 @@ optional cuML context fits a different forest and uses its cached GPU inference
 model; this is not a same-model algorithm comparison. The pinned cuML
 `265b9da6` `randomforest_common.pyx:665–693` initializes/caches nvForest, and
 `randomforestclassifier.py:396–409` converts public inputs to device arrays.
-The upstream nvForest pin and dispatch are documented in
+The reference nvForest pin and dispatch are documented in
 [the source audit](GPU_FOREST_INFERENCE_NEXT.md).
 
 ## Prior evidence and rental setup

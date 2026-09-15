@@ -239,9 +239,9 @@ def rbc_dbscan_take_one_pass(
     n_points: Int,
     max_k: Int,
 ) -> Bool:
-    """Whether DBSCAN may currently use the upstream max-k shortcut.
+    """Whether DBSCAN may currently use the reference max-k shortcut.
 
-    The upstream memory predicate remains in `rbc_take_one_pass`, and the
+    The reference memory predicate remains in `rbc_take_one_pass`, and the
     max-k kernel remains independently checked.  It is not safe to compose
     the two in DBSCAN on Metal yet: the max-k and count kernels disagreed at
     an epsilon boundary in the 400k x 32 reproducer.  Returning false makes
@@ -332,7 +332,7 @@ their code branches on is this Bool.
 
     `batch_size = 0` means one batch over the whole dataset.
 
-    `phase_timing` (archive/reference/PORTING.md 38) is the implementation of the instrumentation cuML
+    `phase_timing` is the implementation of the instrumentation cuML
     hangs on this function: their `verbosity` parameter gates a
     `CUML_LOG_DEBUG("- Batch %d / %ld ...")` per batch per loop, and every
     phase sits in an nvtx range (`Trace::Dbscan::VertexDeg` :255/:330,
@@ -651,7 +651,7 @@ their code branches on is this Bool.
     # `runner.cuh:257`: batch 0 is the one batch whose COLUMNS loop 1 also
     # produces, so loop 2 can skip its neighborhood pass (`:327`).
     #
-    # DEVIATION 39 (archive/reference/PORTING.md): theirs fills during loop 1 into `adj_graph`
+    # DEVIATION 39: theirs fills during loop 1 into `adj_graph`
     # sized to batch 0's own edge count (`algo.cuh:150`) and then GROWS it
     # to `maxadjlen` at `runner.cuh:317` -- `rmm::device_uvector::resize`
     # preserves contents when growing. `DeviceBuffer` has no growing resize,
@@ -681,7 +681,7 @@ their code branches on is this Bool.
             # at the epsilon boundary (observed at 400k x 32: loop 1 found a
             # maximum degree of 1, the max-k loop found 0).  A larger scratch
             # allocation cannot repair two different neighbourhoods.  Keep
-            # the upstream one-pass implementation available and tested, but
+            # the reference one-pass implementation available and tested, but
             # do not dispatch it from DBSCAN until both paths are bitwise the
             # same predicate.  The two-pass arm calls the SAME count kernel
             # used by loop 1, then fills from its CSR offsets.
@@ -807,7 +807,7 @@ their code branches on is this Bool.
 
         # Their ternary `i == 0 ? labels : labels_temp` is written out: a
         # pointer-valued conditional picks the wrong branch in this Mojo
-        # (`archive/reference/PORTING.md 19`), and buffers are not pointers here anyway. The
+        # and, besides, buffers are not pointers here anyway. The
         # merge is a separate `if (i > 0)` in theirs too (`runner.cuh:389`).
         var t_cc = perf_counter_ns()
         var batch_passes: Int

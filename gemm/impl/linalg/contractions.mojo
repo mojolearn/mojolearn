@@ -237,5 +237,5 @@ comptime Policy4x4SkinnyFloat = KernelPolicy[4, 8, 4, 4, 8, 8]
 comptime Policy4x4SkinnyFloatCol = ColKernelPolicy[4, 8, 4, 4, 8, 8]
 
 # `Policy2x8<float, _veclen> { KernelPolicy<float, _veclen, 16, 2, 8, 8, 32> }`
-# `:192-202`. 16 elements per thread with k-block 16. No `ColPolicy` upstream.
+# `:192-202`. 16 elements per thread with k-block 16. No `ColPolicy` in the reference.
 comptime Policy2x8Float = KernelPolicy[1, 16, 2, 8, 8, 32]

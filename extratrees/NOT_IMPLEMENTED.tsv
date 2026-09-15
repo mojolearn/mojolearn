@@ -1,10 +1,10 @@
 # upstream_file_or_symbol	status	upstream	notes
-# Files and symbols this section deliberately does NOT implementation, and why.
-# A file absent from both this list. Keep both complete.
+# Files and symbols this section deliberately does NOT implement, and why.
+# A file absent from this list has simply not been looked at. Keep it complete.
 #
 # STATUS VOCABULARY, written down 2026-08-31. This column answers a DIFFERENT question from the one
 # from the source files themselves: they say what a file does, this one says why a thing
-# upstream is not here. The two vocabularies are not interchangeable and neither belongs in the
+# from the reference is not here. The two vocabularies are not interchangeable and neither belongs in the
 # other file.
 #   deliberate    refused on purpose, permanently or until the reason in the notes stops holding.
 #                 Not a gap in effort. Where a caller could ask for it, it is REFUSED BY NAME at the

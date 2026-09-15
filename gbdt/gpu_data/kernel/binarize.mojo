@@ -33,7 +33,7 @@ several features are written concurrently into the same word. Metal HAS
 integer atomics, so unlike the float `atomicAdd` in the histogram flush, that
 one implements directly if we ever need it. Recorded because it is the one place
 CatBoost's atomics are portable to us and it would be easy to assume
-otherwise after archive/reference/PORTING.md item 7.
+otherwise.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx

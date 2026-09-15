@@ -21,7 +21,7 @@ FALLBACK for `selective_scan_fn`, and this file keeps that split: the
 recurrent core lives in
 `mamba/impl/ops/selective_scan_interface.mojo` (state-spaces/mamba
 `e9594ce`, `selective_scan_ref` :127-193), which this file CALLS. The four
-projections are not here either: `nn.Linear` is cuBLAS upstream and
+projections are not here either: `nn.Linear` is cuBLAS in the reference and
 `gemm.fp32.v1` here (`gemm/checks/gemm_identical.mojo::identical_gemm`,
 IDENTITY_PATHS row 40).
 
@@ -69,8 +69,8 @@ This file owns 725 through 731. 720 (`pinned_mul`) and 721 (the conv's bias
 SEED in both the prefill and the decode path) are the oracle's and the
 contract's; 722 and 723 are the scan file's. They are cited, not renumbered.
 
-**DEVIATION 725 -- the execution plan.** Upstream is torch ops over whole
-tensors; there is no upstream kernel decomposition to mirror for the
+**DEVIATION 725 -- the execution plan.** The reference is torch ops over whole
+tensors; there is no reference kernel decomposition for the
 elementwise seams. The plan here is one thread per output cell for every seam
 except S1 (one thread per token row, because the fold is per row) and S13
 (one thread per (batch, channel), because the conv chain is serial in `l` and
@@ -82,9 +82,9 @@ never the sequence of values accumulated into it.
 after the call is written into `MambaDeviceStages.conv_win` and copied into
 `MambaDeviceState.conv_win` afterwards. At `L < d_conv` a thread's four new
 window slots overlap the four old ones it still has to read, so an in-place
-roll reads its own writes. Upstream is out of place too (`causal_conv1d.py`'s
+roll reads its own writes. The reference is out of place too (`causal_conv1d.py`'s
 `conv_state.copy_(hidden_states_new[:, :, -state_len:])` copies from a
-CONCATENATION, not from `conv_state`), so this mirrors them; the note exists
+CONCATENATION, not from `conv_state`), so this matches them; the note exists
 only because the in-place spelling is the tempting one and `L >= 4` hides it.
 
 **DEVIATION 727 -- the fallback's bundled steps are SPLIT.**
@@ -95,7 +95,7 @@ tensor. Contract section 7 requires `softplus.out`, `scan.y`, `skip.out` and
 THIS file's kernels; S11 goes down with the recurrence because the scan file
 owns that seam (its DEVIATION 723); and the recurrent core is called with `z`
 and `delta_bias` NOT PRESENT and `delta_softplus` False. Same arithmetic, same
-order, four stages instead of one. Upstream's own kernel path splits the same
+order, four stages instead of one. The reference's own kernel path splits the same
 way when `mamba_selective_state_update` is used, so the split is theirs.
 
 **DEVIATION 728 -- `torch.split` is MATERIALIZED.** `torch.split(...)` (:437)
@@ -573,7 +573,7 @@ def mamba_scratch(
 
 
 struct MambaDeviceWeights(Movable):
-    """One block's parameters on the device, in the upstream shapes
+    """One block's parameters on the device, in the reference shapes
     (`MambaWeights`'s table, which is `mamba/corpus/gen_corpus.py`'s
     `shapes_for`, which is theirs). Row-major, contiguous, no padding.
 
@@ -844,13 +844,13 @@ def mamba_a_from_a_log_kernel(
 #     out = F.conv1d(x, weight.unsqueeze(1), bias, padding, groups)[:, :, :L]
 #     out = ACT2FN[activation](out)                                   :98
 #
-# Seam S13, then `identical_silu`. ONE kernel, because upstream applies the
+# Seam S13, then `identical_silu`. ONE kernel, because the reference applies the
 # activation INSIDE this function and its output is the scan's `u`.
 #
 # The spelling is the bias-SEEDED accumulator with taps k = 0..3 ascending
 # (oldest first), which is MAX `causal_conv1d.mojo:190-205` and the CUDA
 # `causal_conv1d` kernel; DEVIATION 721 records that `Mamba.step`'s
-# "sum then + bias" order (mamba_simple.py:218-220) is NOT mirrored, because
+# "sum then + bias" order (mamba_simple.py:218-220) is NOT followed, because
 # two spellings would make gate D false by construction.
 # ===========================================================================
 
@@ -1112,7 +1112,7 @@ def mamba_selective_scan(
     recurrent-iteration arm (`use_mambapy` False, `use_associative_scan`
     False -- contract section 9 claims no chunked or tree scan).
 
-    THE BUNDLE IS SPLIT, DEVIATION 727. Upstream this one function applies
+    THE BUNDLE IS SPLIT, DEVIATION 727. In the reference this one function applies
     `delta_bias` and the softplus (:202-205), runs the recurrence (:246-258),
     then `D` (:268) and `z` (:271), and returns one tensor. Contract section 7
     needs four recorded stages out of that, so:
@@ -1155,9 +1155,9 @@ def mamba_selective_scan(
     )
 
     # The recurrence (:246-258) == `selective_scan_ref:160-189`, seams S5-S11.
-    # ARGUMENT ORDER AND NAMES ARE UPSTREAM'S, over the oracle's buffer
+    # ARGUMENT ORDER AND NAMES ARE THE REFERENCE'S, over the oracle's buffer
     # conventions; the file's own header carries the signature verbatim.
-    # `z`, `delta_bias` False = upstream's `None`; `delta_softplus` False
+    # `z`, `delta_bias` False = the reference's `None`; `delta_softplus` False
     # because `delta` arrives post-softplus; `return_last_state` True because
     # `h_state` is in-and-out on every call (contract section 5).
     # It emits `scan.y`, `skip.out` and `scan.h` itself.

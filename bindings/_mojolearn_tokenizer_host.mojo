@@ -48,7 +48,18 @@ write the ids in REVERSE order. It is the Python gate's negative control: a
 build with it defined must fail `python/mojolearn/tests/
 test_tokenizer_surface.py`'s exact-id cases, or that test is not reading
 this binary's output. `tokenizer_host_sabotage()` reads it back and
-`_backend.load_host_module` refuses such a build outside the gate.
+`_backend.load_host_module` refuses such a build outside the gate; the
+batch entry honors it too (each document's ids reversed).
+
+THE BATCH ENTRY (lane/inference-tokenizer-neural, 2026-09-15).
+`gpt2_encode_batch` encodes many documents in one call, each ALONE, so
+its ids per document are `gpt2_encode`'s. It exists because the crossing
+is most of the cost for short documents: on the M4, one core, 20,000
+documents of about 18 bytes took 0.23 s through 20,000 `gpt2_encode`
+calls and 0.033 s as one call on the same bytes concatenated.
+`-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1` swaps ids across each document
+boundary inside a batch (a batch of one is untouched), the batch part's
+negative control; `tokenizer_host_sabotage()` reads True for either define.
 """
 from std.memory import memcpy
 from std.os import abort
@@ -71,6 +82,7 @@ from tokenizer.encoding import (
 )
 
 comptime TOKENIZER_HOST_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]()
+comptime TOKENIZER_BATCH_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_BATCH_SABOTAGE"]()
 
 
 struct Gpt2Handle(Movable, Writable):
@@ -152,7 +164,7 @@ def tokenizer_host_column_binding() raises -> PythonObject:
 def tokenizer_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary writes encode's ids in reverse order on purpose
     (-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1, the gate's negative control)."""
-    return PythonObject(TOKENIZER_HOST_SABOTAGE)
+    return PythonObject(TOKENIZER_HOST_SABOTAGE or TOKENIZER_BATCH_SABOTAGE)
 
 
 def gpt2_load_binding(
@@ -236,6 +248,119 @@ def gpt2_encode_binding(
     return PythonObject(count)
 
 
+def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
+    if addr == 0:
+        raise Error("mojolearn: null int64 buffer address")
+    return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def gpt2_encode_batch_binding(
+    handle: PythonObject,
+    text_addr: PythonObject,
+    offsets_addr: PythonObject,
+    out_addr: PythonObject,
+    counts_addr: PythonObject,
+    dims: PythonObject,
+) raises -> PythonObject:
+    """`GPT2Tokenizer.encode_batch` on the host: ONE crossing for many
+    documents. `dims` is `[n_docs, n_bytes, out_cap, allow_endoftext]`.
+    Reads the concatenated `n_bytes` uint8 at `text_addr` and `n_docs + 1`
+    int64 offsets at `offsets_addr` (0 first, nondecreasing, `n_bytes`
+    last); document k is bytes [offsets[k], offsets[k + 1]). Each document
+    is encoded ALONE, by the same `encode_bytes` call `gpt2_encode` makes on
+    its own buffer, so its ids are those of `gpt2_encode` on that document
+    byte for byte. Writes every document's ids back to back as int32 at
+    `out_addr` and each document's id count as int64 at `counts_addr`;
+    returns the total. `out_cap = n_bytes` always suffices. Every offset is
+    checked before any document is encoded; a total above `out_cap` is
+    refused with nothing written."""
+    var owner = handle.downcast_value_ptr[Gpt2Handle]()
+    _require_loaded(Bool(owner[].tok))
+    if Int(py=len(dims)) != 4:
+        raise Error("gpt2_encode_batch: dims must be [n_docs, n_bytes, out_cap, allow_endoftext]")
+    var n_docs = _index(dims[0])
+    var n = _index(dims[1])
+    var cap = _index(dims[2])
+    var allow = _flag(dims[3], "allow_endoftext")
+    if n_docs < 0:
+        raise Error("gpt2_encode_batch: n_docs must be >= 0, got " + String(n_docs))
+    if n < 0:
+        raise Error("gpt2_encode_batch: n_bytes must be >= 0, got " + String(n))
+    if cap < 0:
+        raise Error("gpt2_encode_batch: out_cap must be >= 0, got " + String(cap))
+    if n_docs == 0:
+        return PythonObject(0)
+    var text_address = _index(text_addr) if n > 0 else 0
+    var offsets_address = _index(offsets_addr)
+    var out_address = _index(out_addr) if cap > 0 else 0
+    var counts_address = _index(counts_addr)
+    var total = 0
+    with GILReleased(Python()):
+        var offs = _i64_ptr(offsets_address)
+        if Int(offs[0]) != 0 or Int(offs[n_docs]) != n:
+            raise Error(
+                "gpt2_encode_batch: offsets must start at 0 and end at n_bytes "
+                + String(n)
+                + ", got "
+                + String(Int(offs[0]))
+                + " and "
+                + String(Int(offs[n_docs]))
+            )
+        for k in range(n_docs):
+            if Int(offs[k + 1]) < Int(offs[k]):
+                raise Error(
+                    "gpt2_encode_batch: offsets decrease at document "
+                    + String(k)
+                )
+        var all_ids = List[Int](capacity=n)
+        var counts = List[Int](capacity=n_docs)
+        for k in range(n_docs):
+            var a = Int(offs[k])
+            var m = Int(offs[k + 1]) - a
+            var doc = List[UInt8](length=m, fill=UInt8(0))
+            if m > 0:
+                var src = _u8_ptr(text_address + a)
+                memcpy(dest=doc.unsafe_ptr(), src=src, count=m)
+            # THE SAME CALL gpt2_encode MAKES, on this document alone.
+            var ids = owner[].tok.value().encode_bytes(doc, allow)
+            var c = len(ids)
+            for j in range(c):
+                comptime if TOKENIZER_HOST_SABOTAGE:
+                    all_ids.append(ids[c - 1 - j])
+                else:
+                    all_ids.append(ids[j])
+            counts.append(c)
+        comptime if TOKENIZER_BATCH_SABOTAGE:
+            # The batch part's negative control: swap the last id of each
+            # document with the first id of the next non-empty one, which
+            # a batch of one document can never reach.
+            var start = 0
+            for k in range(n_docs - 1):
+                var end = start + counts[k]
+                if counts[k] > 0 and counts[k + 1] > 0:
+                    var t = all_ids[end - 1]
+                    all_ids[end - 1] = all_ids[end]
+                    all_ids[end] = t
+                start = end
+        total = len(all_ids)
+        if total > cap:
+            raise Error(
+                "gpt2_encode_batch: "
+                + String(total)
+                + " ids do not fit an output of "
+                + String(cap)
+                + "; nothing written"
+            )
+        var cnt = _i64_ptr(counts_address)
+        for k in range(n_docs):
+            cnt[k] = Int64(counts[k])
+        if total > 0:
+            var dst = i32_ptr(out_address)
+            for j in range(total):
+                dst[j] = Int32(all_ids[j])
+    return PythonObject(total)
+
+
 def gpt2_decode_binding(
     handle: PythonObject,
     ids_addr: PythonObject,
@@ -293,6 +418,7 @@ def PyInit__mojolearn_tokenizer_host() abi("C") -> PythonObject:
         module.def_function[gpt2_n_vocab_binding]("gpt2_n_vocab")
         module.def_function[gpt2_max_token_bytes_binding]("gpt2_max_token_bytes")
         module.def_function[gpt2_encode_binding]("gpt2_encode")
+        module.def_function[gpt2_encode_batch_binding]("gpt2_encode_batch")
         module.def_function[gpt2_decode_binding]("gpt2_decode")
         return module.finalize()
     except error:

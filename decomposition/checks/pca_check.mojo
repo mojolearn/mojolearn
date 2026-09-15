@@ -637,7 +637,7 @@ def check_tsvd_against_pca() raises:
 def check_covariance_is_symmetric() raises:
     """`X^T X` must be EXACTLY symmetric, and this is a tripwire not a formality.
 
-    `archive/reference/PORTING.md 23` records what a transposed contraction looks like here: it
+    A transposed contraction here
     does not produce an obviously wrong number, it produces a plausible and
     NON-SYMMETRIC matrix, and the symptom surfaced two files away as the
     Jacobi eigensolver running to its sweep limit and raising. That cost a
@@ -1051,7 +1051,7 @@ def _float_of(b: UInt32) -> Float32:
 
 
 def _hex8(b: UInt32) -> String:
-    """`String(Float32)` does not round trip (PORTING trap), so every float
+    """`String(Float32)` does not round trip (a known Mojo trap), so every float
     printed by a failure below is printed as its BITS."""
     var digits = String("0123456789abcdef")
     var out = String("0x")
@@ -1091,7 +1091,7 @@ def _sign_flip_roundtrip(
 
     # `buf` is READ here, after the launch and after the drain. Taking
     # `.unsafe_ptr()` above would otherwise have been its last use and Mojo
-    # frees a buffer at its last use (PORTING trap), which on a bad day means
+    # frees a buffer at its last use (a known Mojo trap), which on a bad day means
     # the kernel writes into freed memory.
     ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()

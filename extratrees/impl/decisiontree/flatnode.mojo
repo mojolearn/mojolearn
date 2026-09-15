@@ -80,7 +80,7 @@ comptime NODE_IS_LEAF: Int32 = -1
 # `SparseTreeNode<DataT, LabelT>` (`flatnode.h:62` and `:67`) — dropping
 # `IdxT`, so a caller who instantiated with a non-default `IdxT` gets a
 # node of a DIFFERENT type back from `CreateSplitNode`. Nobody in the tree
-# does, so it never fires upstream.
+# does, so it never fires in the reference.
 #
 # **What ours does.** One parameter, `dtype`, carrying `DataT`. `LabelT` is
 # not modelled at all. `IdxT` is `Int32` everywhere, spelled out rather than
@@ -400,7 +400,7 @@ def predict_leaf[
     `tl::Operator::kLE` means in their treelite export
     (`decisiontree.cuh:214-215`) and what scikit-learn `1.9.0`'s
     `partition_samples` does (`sklearn/tree/_partitioner.pyx:236-240`).
-    Both upstreams agree, so a boundary row whose feature value is EXACTLY
+    Both references agree, so a boundary row whose feature value is EXACTLY
     `quesval` goes LEFT.
 
     Splitting the leaf lookup out of the loop is not a deviation: it is the

@@ -6,6 +6,10 @@
 - Write anything that needs NVIDIA or AMD bits as OWED to the next release record.
 - At a PyPI release, take ONE record: 1 AMD, 1 NVIDIA, 1 Apple column. No second AMD model, no extra NVIDIA architecture, no two-device columns, no full re-record unless Andrew asks.
 - The box and leg rules in section 3 apply only to that release record.
+- **UPDATED Sep 15 ~11:00 ET (Andrew): "we should use runpod and cloudflare r2 for datasets for testing... it should be nvidia only... leave amd alone for now".**
+  - A lane MAY rent ONE small RunPod NVIDIA pod for identity testing, running only its own lanes on small fixtures, with datasets from R2. It is deleted after, and the delete is verified by API.
+  - RunPod CPU pods (`tools/runpod_cpu_leg.sh` once on main) are the default for long CPU work.
+  - Still NO AMD of any kind (no Hot Aisle, DigitalOcean or RunPod AMD), no full records, no extra NVIDIA architectures and no two-device columns between releases.
 
 
 ## 0. Round 2 updates (Sep 14 ~20:45 ET)

@@ -39,7 +39,7 @@ Both are theirs. This file implements the first; the searcher implements the
 second. Reversing either is invisible on any fixture whose candidates do not
 tie exactly, and changes which feature a tie resolves to on one that does.
 
-## THE SIGN CONVENTION (archive/reference/PORTING.md 94a)
+## THE SIGN CONVENTION
 
 `gbdt/methods/kernel/pointwise_scores.mojo` keeps CATBOOST's: `FLT_MAX`
 sentinel, `gain < bestGain`, LOWER IS BETTER. The greedy-subsets scorer in
@@ -48,7 +48,7 @@ host. Everything in this file and in the searcher above it is on CatBoost's
 side of that, and a reader carrying the greedy family's intuition here will
 read every comparison backwards.
 
-DEVIATION 103: `TScoreHelper` upstream also owns a `TComputationStream` and
+DEVIATION 103: `TScoreHelper` in the reference also owns a `TComputationStream` and
 `requestStream` decides whether it gets its own. There are no streams on
 Metal, so the field and the constructor argument are gone; every launch is
 ordered on the one queue. Nothing else about the class changes.
@@ -88,7 +88,7 @@ def folds_histogram_for(folds: List[UInt32]) raises -> FoldsHistogram:
     The one-byte fan-out needs it to size each bit width's multiplier, and
     `pointwise_kernels.cpp:57-60` reads it with the ranges `(4,5) (6,6)
     (7,7) (8,8)` -- so a 16-fold feature (IntLog2 == 4) counts toward the
-    FIVE-bit kernel. `archive/reference/PORTING.md` 102a.
+    FIVE-bit kernel.
     """
     var h = FoldsHistogram()
     for i in range(len(folds)):
@@ -111,8 +111,8 @@ def folds_histogram_for(folds: List[UInt32]) raises -> FoldsHistogram:
             # whatever the other policies offer. Caught by
             # `checks/pointwise_vs_greedy_check.mojo` on its first run.
             #
-            # It is also why their one-byte ranges start at FOUR
-            # (`archive/reference/PORTING.md` 102a): ceil(log2(16)) is 4, so a 16-fold
+            # It is also why their one-byte ranges start at FOUR:
+            # ceil(log2(16)) is 4, so a 16-fold
             # feature belongs to the 5-bit kernel, whose bound is (15, 32].
             var bit = 0
             while (1 << bit) < f:

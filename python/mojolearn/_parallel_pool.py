@@ -20,16 +20,47 @@ from concurrent.futures import ThreadPoolExecutor
 #: worker and its shards are device row tiles, chunks or ranges inside the
 #: GPU binding (`MOJOLEARN_<X>_DEVICE_COUNT`, `*/multi_gpu.mojo`), which a
 #: host binding does not restate, and the other non-cooperative operations
-#: (forest tree ranges, neighbor queries, neural gradients) have no host
-#: route declared yet. The operations run only inside
-#: `_cpu_reference.reference_training()` (the internal verifier); outside it
-#: the worker's fit refuses exactly as a plain CPU fit does.
-CPU_OPERATIONS = frozenset(('scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit'))
+#: (neural gradients among them) have no host route declared yet. The
+#: operations run only inside `_cpu_reference.reference_training()` (the
+#: internal verifier); outside it the worker's fit refuses exactly as a
+#: plain CPU fit does.
+#:
+#: Wave 2 (lane/cpu-training-par-wave2, 2026-09-15) adds the neighbor
+#: drivers, which cut query rows (`ParallelQueries`) or reference rows
+#: (`ReferenceShardedNeighbors`, merged by composite key in Python, then
+#: one vote request on the merged neighbors) in Python, and the forest
+#: driver (`parallel_ensemble.fit_forest`), which cuts global tree ID ranges
+#: in Python, fits each range through the rf and trees host bindings' shard
+#: fits (`rf_*_fit_shard`, `et_*_fit_shard`, the GPU bindings' tree_start
+#: offset restated on the host) and concatenates the trees in ID order.
+CPU_OPERATIONS = frozenset((
+    'scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit',
+    'neighbor_query', 'neighbor_reference', 'neighbor_vote',
+    'forest_fit', 'mlp_gradient',
+))
+
+#: The one cooperative operation the CPU route admits, and only from a
+#: ONE-device pool: ParallelNeuralTrainer's update (`mlp_update`), which folds
+#: the logical shards' gradients in Python (`ordered_sum_gradients`) and
+#: applies one optimizer step. Its gradient columns, clip tensors and
+#: optimizer ranges are split inside the GPU binding only at
+#: MOJOLEARN_OPTIMIZER_DEVICE_COUNT above one (`training/*_multi_gpu.mojo`
+#: take the plain path at one), so a one-device update hides no partition a
+#: host binding would have to restate; two or more devices refuse by name.
+CPU_SINGLE_DEVICE_COOPERATIVE = frozenset(('mlp_update',))
 
 
-def _cpu_refusal(requests, cooperative):
+def _cpu_refusal(requests, cooperative, n_devices=1):
     names = sorted({request[0] for request in requests})
     if cooperative:
+        if all(name in CPU_SINGLE_DEVICE_COOPERATIVE for name in names):
+            if n_devices == 1:
+                return None
+            return NotImplementedError(
+                'no CPU implementation of the cooperative multi-GPU driver ' + ', '.join(names) +
+                ' across ' + str(n_devices) + ' devices yet: its gradient columns, clip tensors and '
+                'optimizer ranges are split inside the GPU binding above one device, which no host '
+                'binding restates')
         return NotImplementedError(
             'no CPU implementation of the cooperative multi-GPU driver ' + ', '.join(names) + ' yet: '
             'its shards are device row tiles, chunks or ranges inside the GPU binding, '
@@ -71,9 +102,10 @@ class DevicePool:
                     env.pop('HIP_VISIBLE_DEVICES' if names[0] == 'ROCR_VISIBLE_DEVICES' else 'ROCR_VISIBLE_DEVICES', None)
                 elif vendor == 'metal' and group == (0,):
                     names = ()
-                elif vendor == 'cpu' and not self.cooperative:
+                elif vendor == 'cpu' and (not self.cooperative or len(group) == 1):
                     # A logical worker process per device index; map() has
-                    # already admitted only the CPU_OPERATIONS.
+                    # already admitted only the CPU_OPERATIONS (and, from a
+                    # one-device cooperative pool, CPU_SINGLE_DEVICE_COOPERATIVE).
                     names = ()
                 else:
                     raise ValueError('device selection is unavailable for this vendor/device group')
@@ -123,7 +155,7 @@ class DevicePool:
         requests = list(requests)
         from . import _backend
         if _backend._CPU_ONLY is not None and requests:
-            refusal = _cpu_refusal(requests, self.cooperative)
+            refusal = _cpu_refusal(requests, self.cooperative, len(self.devices))
             if refusal is not None:
                 raise refusal
             from ._cpu_reference import _active

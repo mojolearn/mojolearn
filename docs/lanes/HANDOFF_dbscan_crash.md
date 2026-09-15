@@ -14,10 +14,9 @@ Lane branch `lane/dbscan-compiler-crash`, based on main at 71d2ba71.
   (NOT filed).
 - the commit carrying this file.
 
-A note on two files the brief named: `PORTING.md` does not exist at
-71d2ba71 and `dbscan/README.md` at that commit no longer carries the
-"-O1 is the cure" paragraphs (both were rewritten by the Sep 9 lane
-merges). The surviving record of the -O1 cure was `IDENTITY_PATHS.md` row
+A note on a file the brief named: `dbscan/README.md` at 71d2ba71 no
+longer carries the "-O1 is the cure" paragraphs (it was rewritten by the
+Sep 9 lane merges). The surviving record of the -O1 cure was `IDENTITY_PATHS.md` row
 64, `dbscan/dbscan_main.mojo`, the check file and `pixi.toml`, and all
 four are corrected. The historical text remains in commit c0922140.
 

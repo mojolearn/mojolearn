@@ -49,7 +49,7 @@ Four prior retained default/alternate captures match every native array byte,
 including losses, full gradients, parameters, moments and flags over two steps.
 These are local numerical/regression checks, not new cross-vendor certification.
 
-The layer construction and iteration reference was read in upstream Transformers
+The layer construction and iteration reference was read in the Transformers reference
 `src/transformers/models/llama/modeling_llama.py:354-356,402-412`. The current
 stages are moved out of the list temporarily to make their mutable borrow disjoint
 from the preceding layer's residual. No activation-copy workaround was added.

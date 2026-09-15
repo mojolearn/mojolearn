@@ -80,7 +80,7 @@ carries `k - 1`. Therefore:
 returns `(n, n_classes)` raw scores and `predict_proba` applies CatBoost's
 `MultiProbability` elementwise sigmoid, without renormalizing the columns.
 Both multiclass losses use the symmetric GPU trainer registered in
-`cuda/train_lib/multiclass.cpp:5-7` at the pinned upstream `54a8143a`.
+`cuda/train_lib/multiclass.cpp:5-7` at the pinned reference `54a8143a`.
 
 Dropping MultiClass's last probability column and renormalising the rest
 gives a different and wrong answer: the pinned class is a real class whose
@@ -101,7 +101,7 @@ import struct
 #
 # It was COMMISSIONED for a different reason -- a supposed per-module cap on
 # ahead-of-time Metal compilation, keyed on the entry file's basename -- and
-# that reason turned out not to exist. See archive/reference/PORTING.md 70: the kernels were
+# that reason turned out not to exist: the kernels were
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
 from . import _backend, _mojolearn_gbdt, _serialize
@@ -137,11 +137,71 @@ LOSSES = (
     "Huber",
 )
 
+def _group_id_key(value, index):
+    """The bytes CatBoost hashes for one group id
+    (`_catboost.pyx:2171-2196`, `get_id_object_bytes_string_representation`):
+    a string or bytes object as itself, an integer as its decimal spelling.
+    A float, a bool or anything else is refused in their words."""
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        return value.encode("utf-8")
+    if isinstance(value, numbers.Integral) and not isinstance(value, bool):
+        return str(int(value)).encode("ascii")
+    raise ValueError(
+        f"mojolearn: group_id[{index}] object ({value!r}) is unsuitable "
+        "(should be string or integral type)"
+    )
+
+
+def _group_sizes(group_id, n_rows):
+    """`group_id` as the pool's run lengths, in row order.
+
+    Their grouping is built from runs of equal consecutive ids and a
+    repeated id is refused (`libs/data/objects.cpp:60-87`: the run starts
+    are collected, sorted, and `adjacent_find` raises "group Ids are not
+    consecutive"). The length check is their Pool's
+    (`core.py:1071-1076`)."""
+    ids = group_id.tolist() if hasattr(group_id, "tolist") else group_id
+    try:
+        ids = list(ids)
+    except TypeError:
+        raise ValueError(
+            f"mojolearn: Invalid group_id type={type(group_id)}: must be "
+            "array like."
+        ) from None
+    if len(ids) != n_rows:
+        raise ValueError(
+            f"mojolearn: Length of group_id={len(ids)} and length of "
+            f"data={n_rows} are different."
+        )
+    if n_rows > 0xFFFFFFFF:
+        raise ValueError("mojolearn: group_id needs at most 2**32 - 1 rows")
+    sizes = []
+    seen = set()
+    last = None
+    for i, value in enumerate(ids):
+        key = _group_id_key(value, i)
+        if i > 0 and key == last:
+            sizes[-1] += 1
+            continue
+        if key in seen:
+            raise ValueError(
+                "mojolearn: group Ids are not consecutive: the rows of group "
+                f"{value!r} are split into more than one run (row {i}); "
+                "CatBoost requires every group's rows to be contiguous"
+            )
+        seen.add(key)
+        sizes.append(1)
+        last = key
+    return sizes
+
+
 #: Their GPU target keeps numClasses - 1 planes for MultiClass and
 #: numClasses for OneVsAll (`multiclass_targets.h:129-134`, 54a8143a).
 MULTI_OUTPUT_LOSSES = ("MultiClass", "MultiClassOneVsAll")
 
-#: `gbdt_predict_multi`'s transform, mirroring their `EPredictionType`
+#: `gbdt_predict_multi`'s transform, following their `EPredictionType`
 #: (`libs/model/eval_processing.h:186-226`).
 _PREDICT_RAW = 0
 _PREDICT_SOFTMAX = 1   # their `Probability`,      MultiClass
@@ -717,7 +777,7 @@ class GradientBoosting(NumericModeMixin):
                 )
 
         # ---- the grow policy, and what CatBoost refuses beside it ----
-        # (DEVIATION 259; every refusal cites the line of theirs it mirrors)
+        # (DEVIATION 259; every refusal cites the line of theirs it follows)
         if grow_policy == "Region":
             raise NotImplementedError(
                 "mojolearn: grow_policy='Region' is EGrowPolicy::Region, "
@@ -1125,8 +1185,20 @@ class GradientBoosting(NumericModeMixin):
             )
         return Xea, yea, n_eval_rows
 
-    def fit(self, X, y, sample_weight=None, eval_set=None):
+    def fit(self, X, y, sample_weight=None, eval_set=None, group_id=None,
+            subgroup_id=None, pairs=None):
         """Fit the ensemble. `X` is (n_samples, n_features), `y` is 1-D.
+
+        `group_id` is CatBoost's Pool `group_id`: one id per row, a string
+        or an integer (integers compare by their decimal spelling, as
+        `get_id_object_bytes_string_representation` makes them, so 7 and
+        "7" are one group; floats are refused as theirs are). The rows of a
+        group must be CONSECUTIVE, their `group Ids are not consecutive`
+        refusal (`libs/data/objects.cpp:60-87`). The grouping is checked
+        here and in the binding, and every loss this implementation trains
+        today refuses it BY NAME: no querywise loss is implemented yet.
+        `subgroup_id` and `pairs` are their Pool arguments of the same
+        names and are refused by name for the same reason.
 
         `sample_weight` is a per-row weight, `None` meaning all ones. It
         MULTIPLIES with `class_weights` where both are given, which is
@@ -1177,7 +1249,7 @@ class GradientBoosting(NumericModeMixin):
         #
         # CatBoost raises on this pair. Filtering the NaNs during border
         # search would otherwise silently route them into an ordinary bin.
-        # The native quantizer enforces the same upstream CB_ENSURE for
+        # The native quantizer enforces the reference's CB_ENSURE for
         # direct Mojo callers; this guard avoids entering the GPU binding.
         # An inf is not a NaN and passes, as it did (`_has_nan`).
         if self.nan_mode == "Forbidden" and not all_finite(Xa):
@@ -1257,6 +1329,31 @@ class GradientBoosting(NumericModeMixin):
         params = self._params(
             n_rows, n_features, n_flags, n_weights, n_eval_rows
         )
+        # THE GROUP TAIL. `subgroup_id` and `pairs` are refused before
+        # anything crosses; `group_id` becomes run lengths and rides after
+        # the three optional float slots, which are filled with their
+        # disabled values when the fit left them out.
+        if subgroup_id is not None:
+            raise NotImplementedError(
+                "mojolearn: subgroup_id is read by no loss this implementation "
+                "trains; the ranking losses that read CatBoost's subgroup ids "
+                "are not implemented"
+            )
+        if pairs is not None:
+            raise NotImplementedError(
+                "mojolearn: pairs are read by no loss this implementation "
+                "trains; CatBoost's pairwise losses are not implemented"
+            )
+        group_holder = None
+        if group_id is not None:
+            sizes = _group_sizes(group_id, n_rows)
+            group_holder = Array.from_list(sizes, "<u4")
+            fixed = 35 + int(params[34])
+            tail = list(params[fixed:])
+            tail += [-1.0, -1.0, 1.0][len(tail):]
+            params = params[:fixed] + tail + [
+                addr_ro(group_holder, name="group_id"), len(sizes),
+            ]
         if self.od_type is not None and self.od_type not in OD_TYPES:
             raise ValueError(
                 f"mojolearn: od_type must be one of {OD_TYPES}, got "

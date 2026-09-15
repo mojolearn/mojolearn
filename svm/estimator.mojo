@@ -20,9 +20,9 @@ boundary at `fea6becc`.
 WHAT SEPARATES THE TWO PAIRS, and it is a short list. `svc_*` pins
 `svmType` at `C_SVC` and `epsilon` at 0; `svr_*` pins `svmType` at
 `EPSILON_SVR` and takes `epsilon` from the caller. `svc_fit_host` validates
-`y` as exactly two distinct labels (the solver does, and raises upstream's
+`y` as exactly two distinct labels (the solver does, and raises the reference's
 own sentence); `svr_fit_host` validates nothing about `y` but its
-finiteness, because the targets are continuous and upstream hands them
+finiteness, because the targets are continuous and the reference hands them
 straight to `Solve`. `svc_predict_host` can ask for the class epilogue;
 `svr_predict_host` cannot, and has no argument for it.
 
@@ -431,7 +431,7 @@ def svr_fit_host(
     THE 2 * n_rows DOMAIN IS INTERNAL. The solver carries alpha+ and alpha-
     as one `n_train = 2 * n_rows` vector, and `WorkingSet`, `SmoSolver` and
     `Results` are all sized by it. But `Results::combine_coefs` folds the
-    two halves (`coef_i = alpha_i - alpha*_i`, spelled upstream as an add
+    two halves (`coef_i = alpha_i - alpha*_i`, spelled in the reference as an add
     because `y` is `[+1]*n ++ [-1]*n`) and `get_dual_coefs`,
     `get_support_vector_indices` and `collect_support_vector_matrix` then
     select over `n_rows`. So `n_support <= n_rows`, never `2 * n_rows`, and

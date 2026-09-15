@@ -8,7 +8,7 @@ NO REFERENCE FILE. cuML has no Gaussian mixture model at the pin
 `python/cuml/cuml_accel_tests/upstream/scikit-learn/xfail-list.yaml`, which is
 a list of scikit-learn tests that are FLAKY UNDER `cuml.accel` and is
 therefore a record that cuML does NOT accelerate the estimator). So there are
-no upstream fixtures to mirror either. `sklearn/mixture/tests/
+no reference fixtures to follow either. `sklearn/mixture/tests/
 test_gaussian_mixture.py` samples from `np.random.RandomState`, which is a
 host RNG this tree cannot reproduce bit for bit on three vendors, and it
 compares at tolerances rather than at bits.
