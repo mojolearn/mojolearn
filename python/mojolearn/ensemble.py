@@ -135,6 +135,7 @@ LOSSES = (
     "Expectile",
     "Tweedie",
     "Huber",
+    "QueryRMSE",
 )
 
 def _group_id_key(value, index):
@@ -1194,11 +1195,17 @@ class GradientBoosting(NumericModeMixin):
         `get_id_object_bytes_string_representation` makes them, so 7 and
         "7" are one group; floats are refused as theirs are). The rows of a
         group must be CONSECUTIVE, their `group Ids are not consecutive`
-        refusal (`libs/data/objects.cpp:60-87`). The grouping is checked
-        here and in the binding, and every loss this implementation trains
-        today refuses it BY NAME: no querywise loss is implemented yet.
-        `subgroup_id` and `pairs` are their Pool arguments of the same
-        names and are refused by name for the same reason.
+        refusal (`libs/data/objects.cpp:60-87`). It is read by
+        `loss="QueryRMSE"`, which fits on the SymmetricTree greedy searcher
+        with no bootstrap, categorical features or eval set; every other
+        loss refuses a grouping BY NAME. A QueryRMSE fit given no
+        `group_id`, or one with as many groups as rows, trains on queries
+        of one row, as the CatBoost reference's `TWithoutQueriesGrouping`
+        does (`gpu_data/doc_parallel_dataset.h:26-38`): every query mean is
+        its row's own residual, every derivative is zero and the model
+        predicts zero. `subgroup_id` and `pairs` are their Pool arguments of
+        the same names; no loss here reads them and they are refused by
+        name.
 
         `sample_weight` is a per-row weight, `None` meaning all ones. It
         MULTIPLIES with `class_weights` where both are given, which is

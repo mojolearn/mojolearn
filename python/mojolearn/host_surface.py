@@ -380,6 +380,11 @@ TRAINING_LANE_NAMES = {
     "gbdt-lossguide-newtoncosine": "gradient boosting on lossguide trees with the NewtonCosine score and the searcher options",
     "gbdt-multiclass": "multiclass gradient boosting",
     "gbdt-onevsall": "one-vs-all gradient boosting",
+    # lane/gbdt-learning-to-rank stage 2 (2026-09-15): the QueryRMSE ranking
+    # loss on query groups trains through gbdt/host/gbdt_oracle_losses.mojo
+    # with the querywise target restated in gbdt/host/gbdt_oracle_query.mojo,
+    # from the same binding.
+    "gbdt-query-rmse": "gradient boosting with the QueryRMSE ranking loss on query groups",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -1141,6 +1146,7 @@ FAMILIES = (
             "gbdt-nan-modes", "gbdt-adapter-clf", "gbdt-adapter-reg",
             "gbdt-parametric-losses", "gbdt-exact-mae",
             "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall",
+            "gbdt-query-rmse",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1148,11 +1154,12 @@ FAMILIES = (
             "GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor",
             "model_selection.cross_val_score",
         ),
-        display="gradient boosting on symmetric trees with the pointwise and multiclass losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss",
+        display="gradient boosting on symmetric trees with the pointwise, multiclass and QueryRMSE losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
             "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
+            "gbdt/host/gbdt_oracle_query.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(
