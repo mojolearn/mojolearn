@@ -20,9 +20,9 @@ WHY: row 39 measured `max(+0.0, -0.0)` as `-0.0` on Apple (second operand)
 and `+0.0` on NVIDIA/AMD; `min` mirrors it. The bounded `alpha`, `beta`,
 `gamma` are RECORDED stages (`hw.params`) and feed every downstream bit (a
 `-0.0` alpha makes `alpha * x` a `-0.0` where NVIDIA makes `+0.0`), so the
-clamp may not be a hardware max. A COMPUTED NaN in the optimizer (their
-known instability, cuml#888; DEVIATION 662 closes the one legal-input
-route) reaches this clamp and must come out the same bits everywhere.
+clamp may not be a hardware max. A COMPUTED NaN in the optimizer (the
+reference optimizer's known instability; DEVIATION 662 closes the one
+legal-input route) reaches this clamp and must come out the same bits everywhere.
 MEASURED: `hw_check::check_hw_signed_zero_clamp` plants `-0.0` and NaN at
 the clamp on the host helper, as the `alpha/beta/gamma` of a direct eval
 launch (device and oracle), and at the RECORDED clamp (`hw.params` on the
@@ -104,6 +104,13 @@ comptime SAB_LS_TIE = is_defined["MOJOLEARN_HW_SABOTAGE_LS_TIE"]()
 #: Pure tie-break: no arithmetic changes, only the label -- and, because
 #: the criterion is what the fit returns, the answer a caller reads.
 comptime SAB_CRIT_ORDER = is_defined["MOJOLEARN_HW_SABOTAGE_CRIT_ORDER"]()
+#: DEVIATION 2717 off: when the line search hits `linesearch_iter_limit`,
+#: store the LAST trial point (the reference's behavior) instead of the
+#: trial with the lowest loss. Device only; the host oracle keeps the fix.
+#: MUST FAIL `check_hw_linesearch_limit_keeps_best` on every series where
+#: the last trial and the best trial differ in bits. UNBUILT as of
+#: 2026-09-15: no run has shown it failing yet.
+comptime SAB_LS_LAST = is_defined["MOJOLEARN_HW_SABOTAGE_LS_LAST"]()
 
 
 def hw_sabotage_name() -> String:
@@ -126,6 +133,8 @@ def hw_sabotage_name() -> String:
         s += "LS_TIE "
     comptime if SAB_CRIT_ORDER:
         s += "CRIT_ORDER "
+    comptime if SAB_LS_LAST:
+        s += "LS_LAST "
     if s == "":
         return String("none")
     return s

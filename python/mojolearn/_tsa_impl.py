@@ -9,7 +9,7 @@ by this file; that is the package owner's call. Import it as
 WHAT IS HERE
 
     ExponentialSmoothing   cuml.tsa.ExponentialSmoothing, backed by
-                           `holtwinters/` (DEVIATIONS 660-665, 697-699)
+                           `holtwinters/` (DEVIATIONS 660-665, 697-699, 2717)
     kpss_test              cuml.tsa.stationarity.kpss_test, backed by
                            `tsa/` (DEVIATIONS 671-672)
     select_d               auto_arima's "Choose the hyper-parameter d"
@@ -353,13 +353,12 @@ class ExponentialSmoothing:
                                   cuML writes this only in the arm its fit
                                   does not take.
 
-    A cuML DEFECT THAT IS REPRODUCED ON PURPOSE AND NOT FIXED. When the line
-    search hits its iteration limit, `hw_optim.cuh:485-508` stores the LAST
-    trial point rather than the one that minimized the loss. That is
-    rapidsai/cuml#888 and it is flagged in their own comment. It is
-    deterministic and vendor-independent, so fixing it would move the
-    fitted parameters away from cuML's for no identity gain
-    (`holtwinters/NOT_IMPLEMENTED.tsv`).
+    THE LINE-SEARCH LIMIT, DEVIATION 2717. When the BFGS line search hits
+    its iteration limit, this implementation stores the trial point with
+    the lowest loss (strictly lower replaces, so a tie keeps the earliest
+    trial), not the last trial the reference stores (rapidsai/cuml#888).
+    A line search that exits normally is unchanged. Fits that reach the
+    limit can therefore differ from the reference's parameters.
 
     A DIVERGENCE FROM cuML's PYTHON THAT IS NOT A NUMERIC ONE. cuML caches
     `forecasted_points` and recomputes only when `h` grows, so a second
