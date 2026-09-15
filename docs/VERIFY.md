@@ -39,7 +39,10 @@ requires equal values.
   (`host_surface.public_reference_lanes()`: gemm-pinned, kde, ols, ridge,
   knn, svc, pca, cholesky), fitted inside the verifier's reference scope.
 - **Portable models** run on every install: small models trained on a GPU
-  and saved, shipped in `mojolearn/verify_reference/models/`. Their file
+  and saved, shipped in `mojolearn/verify_reference/models/` (a random
+  forest, a symmetric boosting model, a linear regression and a PCA, 179 KB
+  together). A GPU install loads them with the class's `load`; a CPU-only
+  install with `mojolearn.host_model(path)`. Their file
   bytes must equal the recorded model hash, and the loaded model's answers
   on the held-out rows, whole, row by row and split, must equal the recorded
   GPU answers.
@@ -59,8 +62,8 @@ Each part reads one state.
 |---|---|
 | IDENTICAL | equal to the reference hash |
 | DIVERGENT | different from it, or this machine disagreed with itself between repeats, or batch invariance failed here |
-| OWED | no committed record carries this part yet, or the record's own columns disagree at one commit; not a pass |
-| REFUSED | the lane or probe raised; the sentence is printed (for example a function with no CPU implementation, refused by name) |
+| OWED | no committed record carries this part yet, the record's own columns disagree at one commit, or the part changed after the record (a hash here against an `n/a` there, as when a lane gained a batch declaration); not a pass |
+| REFUSED | the lane or probe raised; the sentence is printed (for example a function with no CPU implementation, or the tokenizer lane on a wheel that does not ship the GPT-2 tables, refused by name) |
 | N/A | the estimator has no such output (a transductive clusterer has no held-out answer) |
 
 The command prints a table per family and a verdict.
