@@ -1,0 +1,445 @@
+diff --git a/.github/workflows/cpu-identity-gate.yml b/.github/workflows/cpu-identity-gate.yml
+index 26d3433e8..26f174dfd 100644
+--- a/.github/workflows/cpu-identity-gate.yml
++++ b/.github/workflows/cpu-identity-gate.yml
+@@ -156,7 +156,7 @@ on:
+       - "bench/results/identity_break/2026-09-14_47-lanes/**"
+       - "bench/results/identity_break/2026-09-14_136-lanes/**"
+       - "bench/results/identity_break/2026-09-14_166-lanes/**"
+-      - "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/**"
++      - "bench/results/identity_break/2026-09-15_178-lanes/**"
+       - "bench/results/forest_host/**"
+       - ".github/workflows/cpu-identity-gate.yml"
+ 
+@@ -270,7 +270,7 @@ jobs:
+             /bench/results/identity_break/2026-09-14_47-lanes/
+             /bench/results/identity_break/2026-09-14_136-lanes/
+             /bench/results/identity_break/2026-09-14_166-lanes/
+-            /bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/
++            /bench/results/identity_break/2026-09-15_178-lanes/
+ 
+       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+         with:
+@@ -328,11 +328,9 @@ jobs:
+             echo "CLASSICAL_GPU_COLUMNS=$(python3 $manifest --classical-gpu-columns)"
+             echo "GPU_COLUMNS=$(python3 $manifest --training-gpu-columns)"
+             echo "RECORD_COVERED_LANES=$(python3 $manifest --record-covered-lanes)"
+-            echo "FIX_COVERED_LANES=$(python3 $manifest --fix-covered-lanes)"
+-            echo "FIX_COLUMNS=$(python3 $manifest --training-fix-columns)"
+           } | tee -a "$GITHUB_ENV" | tee "$GATE_OUT/manifest.txt"
+           python3 $manifest --json > "$GATE_OUT/host_surface.json"
+-          for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns) $(python3 $manifest --training-fix-columns); do
++          for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns); do
+             [ -e "$d" ] || { echo "manifest names $d, which is not in this checkout: the record lags the surface" >&2; exit 1; }
+           done
+ 
+@@ -464,18 +462,11 @@ jobs:
+             --report "$GATE_OUT/classical_gate_prod.json" 2>&1 | tee "$GATE_OUT/classical_gate_prod.log"
+ 
+       # The tool loads on this CPU and the three committed GPU columns diff
+-      # exactly as recorded (the 2026-09-14 166-lane record at 1eea14f80, the
+-      # batch part and 31 par-* lanes, AMD column MI325X): 1493 train cells
+-      # IDENTICAL x3 and ONE DIVERGENT, kmeans-sqrt/wide, where the H100
+-      # inertia stands alone (docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md).
+-      # --diff exits 1 on that cell, so the step requires exit 1 AND the exact
+-      # summary tokens AND that row: a second divergence, a diff that printed
+-      # nothing, or fewer cells changes a token and fails the step. The cell is
+-      # EXPLAINED AND FIXED since 9fde8f5f7 (NVIDIA's approximate sqrt in the
+-      # min-reduce kernels, DEVIATION 2715; that record's kmeans-sqrt labels are
+-      # also wrong on every column, DEVIATION 2716). These committed JSONs are
+-      # the 1eea14f80 bytes and keep their count; the kmeans lanes' current
+-      # cells are the kmeans-sqrt fix record, asserted two steps below.
++      # exactly as recorded (the 2026-09-15 178-lane record at df617c699, the
++      # batch part and 39 par-* lanes, AMD column MI325X): every train cell
++      # IDENTICAL x3, the kmeans-sqrt fix included. --diff exits 0, and the
++      # step requires the exact summary tokens: a divergence, a diff that
++      # printed nothing, or fewer cells changes a token and fails the step.
+       - name: identity_break --diff over the three committed GPU columns (require 3)
+         if: always()
+         run: |
+@@ -483,12 +474,11 @@ jobs:
+           python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 3 \
+             > "$GATE_OUT/diff_gpu3.txt" 2>&1 || st=$?
+           cat "$GATE_OUT/diff_gpu3.txt"
+-          grep -F 'summary: DIVERGENT=1, IDENTICAL=1493' "$GATE_OUT/diff_gpu3.txt"
+-          grep -F 'summary (infer/model): IDENTICAL=1899, N/A=1089' "$GATE_OUT/diff_gpu3.txt"
+-          grep -F 'summary (batch): IDENTICAL=1188, N/A=306' "$GATE_OUT/diff_gpu3.txt"
+-          grep -E '^\| kmeans-sqrt/wide +\| DIVERGENT +\| parts differ: inertia;' "$GATE_OUT/diff_gpu3.txt"
++          grep -Fx 'summary: IDENTICAL=1602' "$GATE_OUT/diff_gpu3.txt"
++          grep -Fx 'summary (infer/model): IDENTICAL=1998, N/A=1206' "$GATE_OUT/diff_gpu3.txt"
++          grep -Fx 'summary (batch): IDENTICAL=1278, N/A=324' "$GATE_OUT/diff_gpu3.txt"
+           grep -F 'require-columns 3 over' "$GATE_OUT/diff_gpu3.txt" | grep -F ': OK'
+-          [ "$st" = 1 ] || { echo "expected --diff to exit 1 on the one recorded DIVERGENT cell, got $st" >&2; exit 1; }
++          [ "$st" = 0 ] || { echo "expected --diff to exit 0 on the 178-lane record, got $st" >&2; exit 1; }
+ 
+       # The control for the step above: demanding a fourth real hash on a lane
+       # no CPU column has covered must FAIL. If it passes, --require-columns
+@@ -505,31 +495,6 @@ jobs:
+           grep -F 'REQUIRE FAIL gemm-pinned/base train' "$GATE_OUT/diff_gpu4_control.txt"
+           echo "control OK: --require-columns 4 refused three columns"
+ 
+-      # The kmeans lanes after the kmeans-sqrt fix (DEVIATIONS 2715 and 2716,
+-      # bench/results/identity_break/2026-09-14_kmeans-sqrt-fix): the three fixed
+-      # columns diff IDENTICAL on all 72 cells, and the unfixed columns of the
+-      # same boxes must still read the one NVIDIA inertia cell DIVERGENT, so the
+-      # record cannot pass by carrying identical files.
+-      - name: identity_break --diff over the kmeans-sqrt fix record (fixed IDENTICAL, unfixed DIVERGENT)
+-        if: always()
+-        run: |
+-          R=bench/results/identity_break/2026-09-14_kmeans-sqrt-fix
+-          st=0
+-          python3 tools/identity_break.py --diff $R/apple-m4.json $R/nvidia-h100-sm_90a.json \
+-            $R/amd-mi325x-gfx942.json --require-columns 3 > "$GATE_OUT/diff_kmsqrt_fixed.txt" 2>&1 || st=$?
+-          cat "$GATE_OUT/diff_kmsqrt_fixed.txt"
+-          [ "$st" = 0 ] || { echo "fixed kmeans columns: --diff exited $st" >&2; exit 1; }
+-          grep -F 'summary: IDENTICAL=72' "$GATE_OUT/diff_kmsqrt_fixed.txt"
+-          grep -F 'require-columns 3 over' "$GATE_OUT/diff_kmsqrt_fixed.txt" | grep -F ': OK'
+-          st=0
+-          python3 tools/identity_break.py --diff $R/unfixed/apple-m4.json $R/unfixed/nvidia-h100-sm_90a.json \
+-            $R/unfixed/amd-mi325x-gfx942.json $R/unfixed/nvidia-rtx-4090-sm_89.json --require-columns 4 \
+-            > "$GATE_OUT/diff_kmsqrt_unfixed.txt" 2>&1 || st=$?
+-          cat "$GATE_OUT/diff_kmsqrt_unfixed.txt"
+-          grep -F 'summary: DIVERGENT=1, IDENTICAL=8' "$GATE_OUT/diff_kmsqrt_unfixed.txt"
+-          grep -E '^\| kmeans-sqrt/wide +\| DIVERGENT +\| parts differ: inertia; agree: centers,labels,scales' "$GATE_OUT/diff_kmsqrt_unfixed.txt"
+-          [ "$st" = 1 ] || { echo "unfixed kmeans-sqrt columns: expected --diff to exit 1, got $st" >&2; exit 1; }
+-
+       # THE FOURTH COLUMN, THE PLUMBING SMOKE. Two lanes, one fixture, one
+       # repeat, on this CPU, through the CPU-only package. Every cell must
+       # exist and read REFUSED with the by-name sentence (or STABLE if the lane
+@@ -556,11 +521,9 @@ jobs:
+             --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_smoke_check.log"
+ 
+       # THE FOURTH COLUMN, THE COVERED LANES. Every fixture, two repeats, then
+-      # the four-way diff with --require-columns 4 on exactly those lanes:
+-      # RECORD_COVERED_LANES against GPU_COLUMNS, and FIX_COVERED_LANES (the
+-      # covered lanes whose record cells predate a fix on every column,
+-      # kmeans-sqrt) against FIX_COLUMNS, the same boxes after the fix
+-      # (python/mojolearn/host_surface.py, TRAINING_FIX_LANES).
++      # the four-way diff with --require-columns 4 on exactly those lanes
++      # (RECORD_COVERED_LANES, every covered lane since the 178-lane record)
++      # against GPU_COLUMNS.
+       # Empty COVERED_LANES runs nothing and says so; that is a statement about
+       # phase 1, not a pass.
+       - name: The CPU column, covered lanes (every fixture)
+@@ -579,10 +542,6 @@ jobs:
+             --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_column_check.log"
+           python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
+             --require-columns 4 --lanes "$RECORD_COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
+-          if [ -n "$FIX_COVERED_LANES" ]; then
+-            python3 tools/identity_break.py --diff $FIX_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
+-              --require-columns 4 --lanes "$FIX_COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns_fix.txt"
+-          fi
+ 
+       # The covered lanes' negative control (brief section 3.4). A gate that
+       # cannot fail proves nothing, so the whole host set is built again with
+@@ -663,14 +622,6 @@ jobs:
+             exit 1
+           fi
+           grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_sab.txt"
+-          if [ -n "$FIX_COVERED_LANES" ]; then
+-            if python3 tools/identity_break.py --diff $FIX_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
+-                 --require-columns 4 --lanes "$FIX_COVERED_LANES" > "$GATE_OUT/diff_four_columns_fix_sab.txt" 2>&1; then
+-              echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the fix columns on $FIX_COVERED_LANES" >&2
+-              exit 1
+-            fi
+-            grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_fix_sab.txt"
+-          fi
+           echo "sabotage caught on the covered lanes"
+ 
+       # The same sabotage host set (built by the step above into host-sab)
+diff --git a/python/mojolearn/_identity.py b/python/mojolearn/_identity.py
+index 93eeec089..8c21cee0b 100644
+--- a/python/mojolearn/_identity.py
++++ b/python/mojolearn/_identity.py
+@@ -6,13 +6,11 @@ shipped in the wheel (the packaging lane, 2026-09-14).
+ 
+ `python -m mojolearn verify` asks one pinned k-means fit one question. This
+ asks EVERY lane of the record the manifest names (python/mojolearn/
+-host_surface.py, `TRAINING_GPU_COLUMNS`; 166 lanes over 9 hostile fixtures
+-in the 2026-09-14 166-lane record) the same question the release did: does
++host_surface.py, `TRAINING_GPU_COLUMNS`; 178 lanes over 9 hostile fixtures
++in the 2026-09-15 178-lane record) the same question the release did: does
+ this box, running the installed binaries, produce the same train, infer and
+ model hashes as the Apple M4, the NVIDIA H100 and the AMD MI325X did at the
+-recorded commit. That record's three columns themselves disagree on one
+-cell, kmeans-sqrt/wide (the H100 inertia), so a box that runs that lane
+-reads MISMATCH there whatever it computes. It is the fourth column of `tools/identity_break.py`, run
++recorded commit. It is the fourth column of `tools/identity_break.py`, run
+ where the user is.
+ 
+ WHAT SHIPS AND WHERE IT COMES FROM. The wheel carries a COPY of
+@@ -303,9 +301,7 @@ def cmd_identity(args):
+     record = host_surface.training_gpu_column_record()
+     record_lanes, record_fixtures = _column_lanes_and_fixtures([p for _, p, _ in cols])
+     cpu_only = _backend.vendor() == "cpu"
+-    # A covered lane in TRAINING_FIX_LANES is diffed against the fix record by
+-    # the gate, not against the record this command ships, so a CPU-only
+-    # install does not run it here (host_surface.record_covered_lanes()).
++    # A CPU-only install runs the covered lanes (host_surface.record_covered_lanes()).
+     lanes = [l for l in record_lanes if not cpu_only or l in host_surface.record_covered_lanes()]
+     if args.lanes:
+         asked = [x for x in args.lanes.split(",") if x]
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index 040215b94..9cf1635a2 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -49,8 +49,6 @@ before the package can import (the gate runner has no binding built yet):
+ 
+     python3 python/mojolearn/host_surface.py --covered-lanes
+     python3 python/mojolearn/host_surface.py --record-covered-lanes
+-    python3 python/mojolearn/host_surface.py --fix-covered-lanes
+-    python3 python/mojolearn/host_surface.py --training-fix-columns
+     python3 python/mojolearn/host_surface.py --routed-families
+     python3 python/mojolearn/host_surface.py --bindings --sep ,
+     python3 python/mojolearn/host_surface.py --classical-recorded
+@@ -90,38 +88,21 @@ BUILDER = "bindings/build_host_family.sh"
+ #: hold against it. Since 2026-09-14 night the 166-lane record at 1eea14f80
+ #: (the batch part, fifteen more par-* lanes, every lane complete on all three
+ #: columns, the AMD column MI325X again) is the one; it carries one DIVERGENT
+-#: training cell, kmeans-sqrt/wide (the H100 inertia stands alone,
+-#: docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md), on a lane no
+-#: CPU column covers, and the workflow asserts that count exactly. That cell is
+-#: fixed since 9fde8f5f7 (DEVIATIONS 2715 and 2716); the kmeans lanes' cells
+-#: after the fix are bench/results/identity_break/2026-09-14_kmeans-sqrt-fix,
+-#: which the workflow asserts IDENTICAL x3 in its own step.
++#: training cell, kmeans-sqrt/wide (the H100 inertia stood alone,
++#: docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md), and its
++#: kmeans-sqrt labels predate the fix in 9fde8f5f7 (DEVIATIONS 2715 and 2716),
++#: so from 2026-09-15 the gate diffed that lane against the kmeans-sqrt fix
++#: record instead. Since 2026-09-15 the 178-lane record at df617c699 (every
++#: lane main carries, the kmeans-sqrt fix, the ivf and embedding lanes and
++#: 39 par-* lanes, the AMD column MI325X, every cell IDENTICAL x3) is the
++#: one, so every covered lane is diffed against it and the fix record is
++#: evidence only.
+ TRAINING_GPU_COLUMNS = (
+-    "bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json",
+-    "bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json",
+-    "bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json",
++    "bench/results/identity_break/2026-09-15_178-lanes/apple-m4.json",
++    "bench/results/identity_break/2026-09-15_178-lanes/nvidia-h100-sm_90a.json",
++    "bench/results/identity_break/2026-09-15_178-lanes/amd-mi325x-gfx942.json",
+ )
+ 
+-#: The covered lanes whose cells in TRAINING_GPU_COLUMNS predate a fix of
+-#: the lane on every GPU column, and the three columns of the same boxes
+-#: taken after the fix, which the training gate diffs those lanes against
+-#: instead (--require-columns 4, the same verdict rule). kmeans-sqrt is the
+-#: one (lane/cpu-training-misc, 2026-09-15): the 166-lane record carries its
+-#: pre-fix labels on all three columns and the H100's pre-fix inertia on
+-#: `wide` (DEVIATIONS 2716 and 2715), the fix record at 9fde8f5f7 carries the
+-#: fixed cells IDENTICAL x3, and the host oracle was fixed in the same
+-#: commit, so the CPU column reads IDENTICAL x4 against the fix record and
+-#: DIVERGENT on all nine fixtures against the 166-lane record. A lane leaves
+-#: this list the day TRAINING_GPU_COLUMNS names a record taken after its
+-#: fix. `python -m mojolearn identity` diffs against TRAINING_GPU_COLUMNS
+-#: alone, so on a CPU-only install it runs `record_covered_lanes()`.
+-TRAINING_FIX_COLUMNS = (
+-    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json",
+-    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/nvidia-h100-sm_90a.json",
+-    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/amd-mi325x-gfx942.json",
+-)
+-TRAINING_FIX_LANES = ("kmeans-sqrt",)
+-
+ #: The GPU columns the classical INFERENCE gate compares each host identity
+ #: hash against (tools/classical_host_gate.py check --gpu-column).
+ CLASSICAL_GPU_COLUMNS = (
+@@ -404,7 +385,7 @@ TRAINING_LANE_NAMES = {
+     # column, and cross_val_score over the gbdt family's RMSE fit, the core
+     # family's fold-row gather (gather_rows_bytes) and the metrics family's
+     # r2. On the M4, one core: all 36 cells IDENTICAL x4 (kmeans-sqrt
+-    # against TRAINING_FIX_COLUMNS), and the sabotage set DIVERGENT on
++    # against the kmeans-sqrt fix record), and the sabotage set DIVERGENT on
+     # kmeans-sqrt, kmeans-classic-pp and cross-val on every fixture.
+     "kmeans-sqrt": "k-means under the rooted euclidean metric",
+     "kmeans-classic-pp": "k-means from the classic k-means++ start",
+@@ -1261,21 +1242,12 @@ def covered_lanes():
+     return named
+ 
+ 
+-def fix_covered_lanes():
+-    """The covered lanes the training gate diffs against
+-    TRAINING_FIX_COLUMNS, in the gate's order. Every one must be covered."""
+-    covered = covered_lanes()
+-    unknown = [lane for lane in TRAINING_FIX_LANES if lane not in covered]
+-    if unknown:
+-        raise RuntimeError(f"host_surface: TRAINING_FIX_LANES names uncovered lanes {unknown}")
+-    return [lane for lane in covered if lane in TRAINING_FIX_LANES]
+-
+-
+ def record_covered_lanes():
+     """The covered lanes the training gate diffs against
+-    TRAINING_GPU_COLUMNS: every covered lane not in TRAINING_FIX_LANES."""
+-    fixed = fix_covered_lanes()
+-    return [lane for lane in covered_lanes() if lane not in fixed]
++    TRAINING_GPU_COLUMNS. Since the 178-lane record carries every lane after
++    the kmeans-sqrt fix, that is every covered lane; the name stays for the
++    gate and `python -m mojolearn identity`, which read it."""
++    return covered_lanes()
+ 
+ 
+ def inference_lanes():
+@@ -1353,13 +1325,11 @@ def as_dict():
+         routed=routed_modules(),
+         covered_lanes=covered_lanes(),
+         record_covered_lanes=record_covered_lanes(),
+-        fix_covered_lanes=fix_covered_lanes(),
+         inference_lanes=inference_lanes(),
+         forest_kinds=forest_kinds(),
+         classical_recorded=list(CLASSICAL_RECORDED),
+         classical_gpu_columns=list(CLASSICAL_GPU_COLUMNS),
+         training_gpu_columns=list(TRAINING_GPU_COLUMNS),
+-        training_fix_columns=list(TRAINING_FIX_COLUMNS),
+         training_gpu_column_record=training_gpu_column_record(),
+         wheel_families=wheel_families(),
+         wheel_bindings=wheel_bindings(),
+@@ -1377,7 +1347,6 @@ def main(argv=None):
+     g.add_argument("--routed-bindings", action="store_true", help="the routed families' basenames")
+     g.add_argument("--covered-lanes", action="store_true", help="identity_break lanes with a CPU training path (comma separated)")
+     g.add_argument("--record-covered-lanes", action="store_true", help="covered lanes diffed against --training-gpu-columns (comma separated)")
+-    g.add_argument("--fix-covered-lanes", action="store_true", help="covered lanes diffed against --training-fix-columns (comma separated)")
+     g.add_argument("--inference-lanes", action="store_true", help="classical gate lanes served from a saved model (comma separated)")
+     g.add_argument("--forest-kinds", action="store_true", help="forest gate kinds (comma separated)")
+     g.add_argument("--wheel-families", action="store_true", help="families whose host binding ships in the wheels")
+@@ -1386,7 +1355,6 @@ def main(argv=None):
+     g.add_argument("--classical-recorded", action="store_true", help="classical gate recording directories")
+     g.add_argument("--classical-gpu-columns", action="store_true", help="the GPU columns the classical gate compares against")
+     g.add_argument("--training-gpu-columns", action="store_true", help="the GPU columns the training gate diffs against")
+-    g.add_argument("--training-fix-columns", action="store_true", help="the GPU columns the training gate diffs --fix-covered-lanes against")
+     g.add_argument("--markdown", action="store_true", help="the surface as a Markdown table")
+     g.add_argument("--json", action="store_true", help="the whole manifest as JSON")
+     p.add_argument("--sep", default=None, help="separator for list output (default: comma for lanes and kinds, space otherwise)")
+@@ -1397,7 +1365,7 @@ def main(argv=None):
+     if args.markdown:
+         print(markdown_table())
+         return 0
+-    comma = (args.covered_lanes or args.record_covered_lanes or args.fix_covered_lanes
++    comma = (args.covered_lanes or args.record_covered_lanes
+              or args.inference_lanes or args.forest_kinds)
+     sep = args.sep if args.sep is not None else ("," if comma else " ")
+     if args.families:
+@@ -1418,10 +1386,6 @@ def main(argv=None):
+         items = covered_lanes()
+     elif args.record_covered_lanes:
+         items = record_covered_lanes()
+-    elif args.fix_covered_lanes:
+-        items = fix_covered_lanes()
+-    elif args.training_fix_columns:
+-        items = list(TRAINING_FIX_COLUMNS)
+     elif args.inference_lanes:
+         items = inference_lanes()
+     elif args.forest_kinds:
+diff --git a/python/mojolearn/tests/test_cpu_training_misc.py b/python/mojolearn/tests/test_cpu_training_misc.py
+index 261b428e0..2b300c954 100644
+--- a/python/mojolearn/tests/test_cpu_training_misc.py
++++ b/python/mojolearn/tests/test_cpu_training_misc.py
+@@ -10,14 +10,14 @@ path.
+ 
+ What the source checks hold: the manifest declares the three k-means lanes
+ on the core family and cross-val on the gbdt family, and names each for the
+-docs; kmeans-sqrt is the one lane the gate diffs against the fix record
+-(TRAINING_FIX_COLUMNS), because the 166-lane record carries its pre-fix
+-cells on every column, and the fix record's three columns carry the lane
+-STABLE and equal on every fixture; the covered lanes split into the record
+-set and the fix set with nothing lost; the CPU identity gate reads both sets
+-and the fix columns from the manifest and diffs each against its own columns
+-in the covered step and in the sabotage step; `python -m mojolearn identity`
+-runs only the record set on a CPU-only install; the core host binding
++docs; the record TRAINING_GPU_COLUMNS names (the 178-lane record) carries
++the kmeans-sqrt cells after the fix (DEVIATIONS 2715 and 2716), STABLE, equal
++on its three columns and equal to the kmeans-sqrt fix record's columns on
++every fixture, so every covered lane is a record lane and the manifest keeps
++no fix list; the CPU identity gate diffs the covered lanes against the GPU
++columns in the covered step and in the sabotage step, and has no fix-column
++diff left; `python -m mojolearn identity` runs the record set on a CPU-only
++install; the core host binding
+ registers `gather_rows_bytes` (cross_val_score's fold rows) under the base
+ binding's name, and the oracle refuses the cosine metric in the device's
+ words; the resample family routes `_mojolearn_resample` to its own host
+@@ -81,52 +81,47 @@ def test_manifest_covers_the_misc_lanes():
+     assert "model_selection.cross_val_score" in gbdt["classes"]
+ 
+ 
+-def test_fix_lanes_split_the_covered_lanes():
++def test_record_covers_every_covered_lane():
+     covered = host_surface.covered_lanes()
+-    record = host_surface.record_covered_lanes()
+-    fixed = host_surface.fix_covered_lanes()
+-    assert fixed == ["kmeans-sqrt"], fixed
+-    assert not set(record) & set(fixed)
+-    assert sorted(record + fixed) == sorted(covered)
+-    assert [l for l in covered if l in record] == record, "the record set lost the gate's order"
+-    assert host_surface.main(["--fix-covered-lanes"]) == 0
++    assert host_surface.record_covered_lanes() == covered
++    for gone in ("TRAINING_FIX_LANES", "TRAINING_FIX_COLUMNS", "fix_covered_lanes"):
++        assert not hasattr(host_surface, gone), f"host_surface still carries {gone}"
+     assert host_surface.main(["--record-covered-lanes"]) == 0
+-
+-
+-def test_fix_columns_carry_the_fixed_lane_on_every_fixture():
+-    """The three fix columns must exist, be the record boxes, and carry each
+-    fix lane STABLE with one hash per fixture across all three; the 166-lane
+-    record must NOT (otherwise the lane belongs back on the record)."""
+-    assert len(host_surface.TRAINING_FIX_COLUMNS) == 3
+-    for fix, rec in zip(host_surface.TRAINING_FIX_COLUMNS, host_surface.TRAINING_GPU_COLUMNS):
+-        assert fix.rsplit("/", 1)[1] == rec.rsplit("/", 1)[1], (fix, rec)
+-    cols = [json.loads(_read(rel))["cells"] for rel in host_surface.TRAINING_FIX_COLUMNS]
++    for flag in ("--fix-covered-lanes", "--training-fix-columns"):
++        try:
++            host_surface.main([flag])
++        except SystemExit as exc:
++            assert exc.code == 2, (flag, exc.code)
++        else:
++            raise AssertionError(f"host_surface accepted {flag}")
++
++
++def test_record_carries_the_fixed_kmeans_sqrt_cells():
++    """The record's three columns carry kmeans-sqrt STABLE, equal across the
++    three, and equal to the kmeans-sqrt fix record's columns on every fixture:
++    the record was taken after 9fde8f5f7, so no covered lane needs a fix list."""
++    fix_dir = "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix"
+     recs = [json.loads(_read(rel))["cells"] for rel in host_surface.TRAINING_GPU_COLUMNS]
+-    for lane in host_surface.fix_covered_lanes():
+-        differs = 0
+-        for fx in FIXTURES:
+-            key = f"{lane}/{fx}"
+-            hashes = set()
+-            for c in cols:
+-                assert c[key]["verdict"] == "STABLE", (key, c[key]["verdict"])
+-                hashes.add(c[key]["hashes"][0])
+-            assert len(hashes) == 1, f"{key}: the fix columns disagree {hashes}"
+-            if any(r[key]["hashes"][0] not in hashes for r in recs):
+-                differs += 1
+-        assert differs > 0, f"{lane}: the record already carries the fixed cells; drop it from TRAINING_FIX_LANES"
+-
+-
+-def test_workflow_diffs_each_set_against_its_columns():
++    fixes = [json.loads(_read(f"{fix_dir}/{rel.rsplit('/', 1)[1]}"))["cells"]
++             for rel in host_surface.TRAINING_GPU_COLUMNS]
++    for fx in FIXTURES:
++        key = f"kmeans-sqrt/{fx}"
++        hashes = set()
++        for c in recs + fixes:
++            assert c[key]["verdict"] == "STABLE", (key, c[key]["verdict"])
++            hashes.add(c[key]["hashes"][0])
++        assert len(hashes) == 1, f"{key}: the record and the fix columns disagree {hashes}"
++
++
++def test_workflow_diffs_the_covered_lanes_against_the_record():
+     text = _read(".github/workflows/cpu-identity-gate.yml")
+-    for flag in ("--record-covered-lanes", "--fix-covered-lanes", "--training-fix-columns"):
+-        assert flag in text, f"the workflow does not read {flag}"
++    assert "--record-covered-lanes" in text, "the workflow does not read --record-covered-lanes"
++    for gone in ("--fix-covered-lanes", "--training-fix-columns", "FIX_COLUMNS", "FIX_COVERED_LANES"):
++        assert gone not in text, f"the workflow still carries {gone}"
+     assert text.count('--diff $GPU_COLUMNS "$GATE_OUT/cpu-') == 2, "record diffs (covered and sabotage)"
+     assert text.count('--lanes "$RECORD_COVERED_LANES"') == 2
+-    assert text.count('--diff $FIX_COLUMNS "$GATE_OUT/cpu-') == 2, "fix diffs (covered and sabotage)"
+-    assert text.count('--lanes "$FIX_COVERED_LANES"') == 2
+-    for rel in host_surface.TRAINING_FIX_COLUMNS:
+-        directory = "/" + rel.rsplit("/", 1)[0] + "/"
+-        assert directory in text, f"the sparse checkout does not bring down {directory}"
++    directory = "/" + host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 1)[0] + "/"
++    assert directory in text, f"the sparse checkout does not bring down {directory}"
+     assert '- "python/mojolearn/model_selection.py"' in text
+ 
+ 

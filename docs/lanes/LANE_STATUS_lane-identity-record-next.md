@@ -1,52 +1,49 @@
 # Lane status: lane/identity-record-next (the 178-lane identity record)
 
-Updated 2026-09-15 13:25 UTC by the record2 agent. Work in progress.
+Updated 2026-09-15 14:20 UTC by the record2 agent. STOPPED on Andrew's order.
 
-## Goal
+## The order
 
-The next full identity record at main df617c699 (178 lanes, 39 of them par-*), to
-replace `bench/results/identity_break/2026-09-14_166-lanes` as the CPU gate's GPU
-columns (`TRAINING_GPU_COLUMNS` in `python/mojolearn/host_surface.py`), and to retire
-`TRAINING_FIX_LANES`, `TRAINING_FIX_COLUMNS` and the kmeans-sqrt fix step.
+GPU records are required only for PyPI releases, and then only one Apple, one NVIDIA and
+one AMD column. No full records otherwise, no two-device columns, no extra vendors, no
+new boxes. Running legs could finish. `TRAINING_GPU_COLUMNS` and the gate are NOT
+switched.
 
-## Done
+## What this branch carries
 
-- NVIDIA H100 one-device column: RunPod 2xH100 pod 2o8sm4yf2we58b, leg
-  `bench/results/e1g/2026-09-15_123248-nvidia-2xh100-rec2-all` (four one-device
-  processes, two per GPU): 1602 cells, every cell STABLE. Its two par2 processes were
-  too slow sharing the GPUs and were stopped after 17 complete lanes.
-- AMD MI325X column: DigitalOcean legs `2026-09-15_123228-amd-mi325x-do-rec2-a` (five
-  processes on the one GPU) and `2026-09-15_130122-amd-mi325x-do-rec2-m` (rf-reg-gamma-ig
-  and par-feature-freq alone, STABLE). Under five processes rf-reg-gamma-ig/base read MOVED
-  and par-feature-freq/denormal REFUSED (EOFError); both lanes were dropped from those parts
-  and taken from the lone rerun.
-- The H100 and MI325X one-device columns diff IDENTICAL=1602 (infer/model IDENTICAL=1998,
-  N/A=1206; batch IDENTICAL=1278, N/A=324).
-- The first 2xMI300X par2 leg (`2026-09-15_123314-amd-2xmi300x-rec2-par2`, four par2
-  processes at once) is NOT evidence: pooled workers failed (RuntimeError: GPU worker
-  failed, EOFError) on most cells. Lesson: one par2 process per box.
+- `bench/results/identity_break/2026-09-15_178-lanes/`: a PARTIAL record at df617c699,
+  README first. Complete: the Apple M4, NVIDIA H100 and AMD MI325X one-device columns,
+  1602 cells each, `diff.three-columns.txt` IDENTICAL=1602 (infer/model IDENTICAL=1998,
+  N/A=1206; batch IDENTICAL=1278, N/A=324); against the 166-lane record only the nine
+  kmeans-sqrt cells moved (the 9fde8f5f7 fix). Also the two-H100 par column (all 39 par
+  lanes, IDENTICAL x3 per vendor) and a two-MI300X par column missing par-samba-clip,
+  par-gmm, par-hdbscan, par-kernel-ridge and par-rbf-sampler.
+- `unmerged-gate-switch.patch` in that directory: the gate switch and the removal of
+  `TRAINING_FIX_*`, run locally only, not applied.
+- `docs/lanes/BRIEF_rf_reg_gamma_ig_moved_under_contention_2026-09-15.md`: one MOVED cell
+  on the MI325X with five processes sharing the GPU; OPEN.
+- No code change against main.
 
-Evidence copies: `~/mojolearn-evidence/identity-record-next/` (legs/ and scratch/, the
-merged parts in scratch/parts/).
+## Running
 
-## Running at this update
+Nothing. Every box this lane rented is verified deleted: RunPod pods 2o8sm4yf2we58b,
+dx1hal547mt7u2, d6guwv4ll9lyii, zzeusxtb0d7qmp and wnjvi7fhvdi0w1; DigitalOcean droplets
+600659534 and 600667291 (each leg log reads HTTP 404 after the delete).
 
-- Apple M4 column: local, one core, `$SP/record2/apple_column.sh df617c6997cdf9f794c073c2d027dc68c9b1191f 15`
-  in worktree `$SP/wt-apple-R` (12 fresh processes of 15 lanes), output `$SP/record2/applecol/`.
-- 2xMI300X par2 halves, one process each: pods d6guwv4ll9lyii (`...-131207-amd-2xmi300x-rec2-par2-A`)
-  and zzeusxtb0d7qmp (`...-131339-amd-2xmi300x-rec2-par2-B`).
-- 2xH100 par2 makeup, the 22 missing par lanes in one process: `...-131631-nvidia-2xh100-rec2-par2m`.
+## Evidence
 
-$SP is `/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad`.
-Leg dirs live under `$SP/wt-legs-R/bench/results/e1g/`.
+`~/mojolearn-evidence/record2/legs/` (every raw leg directory of this lane) and
+`~/mojolearn-evidence/record2/scratch/` (bodies, generator `make_body.py`, merge parts,
+Apple chunk logs). The 166-lane record's untracked raw legs that lived in the reused
+worktree are in `~/mojolearn-evidence/record166-legs-harness/`. The worktrees were removed.
 
-## Next
+## If a release wants these columns
 
-1. Merge the parts: `python3 tools/identity_break.py --merge <parts> --json <column>.json [--allow-separate-builds]`
-   (Apple chunks; NVIDIA par2 p1/p2 minus their unfinished lane plus par2m; AMD par2 A and B).
-2. Write `bench/results/identity_break/2026-09-15_178-lanes/` with the three-column diff, both
-   par two-device diffs, the five-column par diff, the batch diff and the diff against the 166-lane record.
-3. Point `TRAINING_GPU_COLUMNS` and the gate's GPU-column step at it with exact counts (seen to fail
-   with a wrong count first), remove `TRAINING_FIX_*` and the kmeans-sqrt fix step, update
-   `python/mojolearn/tests/test_cpu_training_misc.py`.
-4. Seven-runner gate on the branch, then merge to main.
+1. Take only the three one-device columns (already here and complete).
+2. `git apply bench/results/identity_break/2026-09-15_178-lanes/unmerged-gate-switch.patch`
+   on a branch from main, resolve against whatever main changed, then
+   `python3 tools/docs_facts.py --check`, `python3 packaging/wheel_ci.py pins .`,
+   `python3 packaging/wheel_ci.py inventory python/mojolearn`, and
+   `cd python && python -m pytest mojolearn/tests/test_host_surface.py mojolearn/tests/test_cpu_training_misc.py`
+   (needs built bindings), then the seven-runner gate. If main moved past df617c699 in a
+   way that changes GPU bits, the columns must be retaken instead.
