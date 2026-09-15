@@ -38,6 +38,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
+from mixture.checks.sample import gmm_sample_host
 from mixture.host.gmm_host_oracle import (
     GmmHostParams,
     gmmh_covariance_type_from_name,
@@ -254,6 +255,46 @@ def gmm_predict_binding(
     return PythonObject(0)
 
 
+def gmm_sample_binding(
+    addrs: PythonObject, params: PythonObject, sample_params: PythonObject
+) raises -> PythonObject:
+    """`sample(n_samples)` on the host, the GPU binding's name, arity and
+    lists: `addrs[0..4]` the model, `addrs[5]` X out (n_samples * d
+    float32), `addrs[6]` y out (n_samples int32); `params` k, d, n_iter,
+    converged, lower_bound, 0; `sample_params` n_samples, random_state low
+    32 bits, high 32 bits. The arithmetic is
+    `mixture/checks/sample.mojo::gmm_sample_host`, the device kernel row for
+    row. Returns n_samples."""
+    if len(addrs) != 7 or len(params) != 6 or len(sample_params) != 3:
+        raise Error(
+            "gmm_sample: needs 7 addresses, 6 params and 3 sample_params, got "
+            + String(len(addrs))
+            + ", "
+            + String(len(params))
+            + ", "
+            + String(len(sample_params))
+        )
+    var k = Int(py=params[0])
+    var d = Int(py=params[1])
+    var n = Int(py=sample_params[0])
+    var seed = (UInt64(Int(py=sample_params[2])) << 32) | UInt64(
+        Int(py=sample_params[1])
+    )
+    var weights = read_f32(Int(py=addrs[0]), max(0, k))
+    var means = read_f32(Int(py=addrs[1]), max(0, k * d))
+    var precisions = read_f32(Int(py=addrs[3]), max(0, k * d * d))
+    var xp = f32_ptr(Int(py=addrs[5]))
+    var yp = i32_ptr(Int(py=addrs[6]))
+    with GILReleased(Python()):
+        var labels = List[Int32](length=max(0, n), fill=Int32(0))
+        var x = gmm_sample_host(weights, means, precisions, k, d, n, seed, labels)
+        for i in range(n * d):
+            xp.unsafe_store(i, x[i])
+        for i in range(n):
+            yp.unsafe_store(i, labels[i])
+    return PythonObject(n)
+
+
 def gmm_score_bic_aic_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -287,6 +328,7 @@ def PyInit__mojolearn_mixture_host() abi("C") -> PythonObject:
         module.def_function[gmm_predict_proba_binding]("gmm_predict_proba")
         module.def_function[gmm_predict_binding]("gmm_predict")
         module.def_function[gmm_score_bic_aic_binding]("gmm_score_bic_aic")
+        module.def_function[gmm_sample_binding]("gmm_sample")
         return module.finalize()
     except e:
         abort(String("failed to create _mojolearn_mixture_host: ", e))

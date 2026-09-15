@@ -258,5 +258,52 @@ class GaussianMixture(NumericModeMixin):
     def aic(self, X):
         return self._score_bic_aic(X)[2]
 
+    def sample(self, n_samples=1):
+        """`n_samples` random rows from the fitted mixture: `(X, y)`, `X`
+        float32 `(n_samples, n_features)`, `y` int32 `(n_samples,)`.
+
+        scikit-learn's `BaseMixture.sample` is the reference: the component
+        counts are a multinomial draw over `weights_`, and the rows come out
+        GROUPED BY COMPONENT ascending, `y` naming each row's component. The
+        draws are position-mapped Philox keyed by `random_state` (DEVIATION
+        2791, `mixture/checks/sample.mojo`) and the normals go through the
+        fitted `precisions_cholesky_` (DEVIATION 2792), so the same model
+        and `random_state` give the same bits on every vendor and on every
+        call; they are not scikit-learn's bits. `X` is the model's float32
+        and `y` is `predict`'s int32, where scikit-learn returns float64
+        and int64. `n_samples < 1` is refused by name in Mojo.
+        """
+        if not hasattr(self, "weights_"):
+            raise ValueError("mojolearn GaussianMixture: call fit before sample")
+        if isinstance(n_samples, bool) or not isinstance(n_samples, int):
+            raise TypeError("mojolearn GaussianMixture: n_samples must be an int")
+        seed = self.random_state
+        if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2 ** 64:
+            raise ValueError(
+                "mojolearn GaussianMixture: sample needs random_state to be an int in "
+                f"[0, 2**64), got {seed!r}; it is the key of every draw (DEVIATION 2791)"
+            )
+        n = int(n_samples)
+        k = self.weights_.shape[0]
+        d = self.n_features_in_
+        flat_m = self.means_.reshape((k * d,))
+        flat_c = self.covariances_.reshape((k * d * d,))
+        flat_p = self.precisions_cholesky_.reshape((k * d * d,))
+        # Never a zero-length buffer: a refused n still addresses real memory.
+        x = empty((max(n, 1) * d,), "<f4")
+        y = empty((max(n, 1),), "<i4")
+        self._extension().gmm_sample(
+            # ORDER MATCHES bindings/_mojolearn_mixture.mojo::gmm_sample_binding.
+            # weights, means, covariances, precisions_chol, log_det_chol, X out, y out
+            [addr_ro(self.weights_, name="weights_"), addr_ro(flat_m, name="means_"),
+             addr_ro(flat_c, name="covariances_"), addr_ro(flat_p, name="precisions_cholesky_"),
+             addr_ro(self.log_det_chol_, name="log_det_chol_"), addr(x, name="X"), addr(y, name="y")],
+            # k, d, n_iter, converged, lower_bound, n (0: no X is read)
+            [k, d, self.n_iter_, 1 if self.converged_ else 0, self.lower_bound_, 0],
+            # n_samples, random_state low 32 bits, random_state high 32 bits
+            [n, seed & 0xFFFFFFFF, seed >> 32],
+        )
+        return x.reshape((n, d)), y
+
 
 __all__ = ["GaussianMixture"]

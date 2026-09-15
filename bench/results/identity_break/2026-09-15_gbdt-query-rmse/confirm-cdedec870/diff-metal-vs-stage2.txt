@@ -1,0 +1,24 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+| lane/fixture                 | verdict    | apple-m4         | apple-m4         |
+|------------------------------|------------|------------------|------------------|
+| gbdt-query-rmse/base         | IDENTICAL x2 | b3f448427d6e764f | b3f448427d6e764f |
+| gbdt-query-rmse/odd          | IDENTICAL x2 | 13b70161e523142f | 13b70161e523142f |
+| gbdt-query-rmse/ties         | IDENTICAL x2 | 40a5b5333f0a32ef | 40a5b5333f0a32ef |
+
+summary: IDENTICAL=3
+
+| lane/fixture                 | column | verdict      | apple-m4         | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|
+| gbdt-query-rmse/base         | infer  | IDENTICAL x2 | c5dd11cce5027431 | c5dd11cce5027431 |
+| gbdt-query-rmse/base         | model  | IDENTICAL x2 | 773082ee900f4629 | 773082ee900f4629 |
+| gbdt-query-rmse/base         | batch  | IDENTICAL x2 | 2f9ae940636f0782 | 2f9ae940636f0782 |
+| gbdt-query-rmse/odd          | infer  | IDENTICAL x2 | 66a562a9f1518dd7 | 66a562a9f1518dd7 |
+| gbdt-query-rmse/odd          | model  | IDENTICAL x2 | 850fcd0f8a7c5a1a | 850fcd0f8a7c5a1a |
+| gbdt-query-rmse/odd          | batch  | IDENTICAL x2 | 8990d2af358d0692 | 8990d2af358d0692 |
+| gbdt-query-rmse/ties         | infer  | IDENTICAL x2 | 82656b1f96479524 | 82656b1f96479524 |
+| gbdt-query-rmse/ties         | model  | IDENTICAL x2 | a00477457a3f0913 | a00477457a3f0913 |
+| gbdt-query-rmse/ties         | batch  | IDENTICAL x2 | 348dc9138ec69402 | 348dc9138ec69402 |
+
+summary (infer/model): IDENTICAL=6
+summary (batch): IDENTICAL=3
+summary (rlpair): 

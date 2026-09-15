@@ -1,0 +1,231 @@
+NOTE: --lanes scopes this diff to 5 lane(s); 161 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_arima_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_metrics_host'] commit=ae97a3e0ffe3b1a1abf4dcdabf0a021e1a4e6aae
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| arima-011/base               | IDENTICAL x4 | 444512355dd3dcc7 | 444512355dd3dcc7 | 444512355dd3dcc7 | 444512355dd3dcc7 |
+| arima-011/denormal           | IDENTICAL x4 | 1ec68f0334b2a8f7 | 1ec68f0334b2a8f7 | 1ec68f0334b2a8f7 | 1ec68f0334b2a8f7 |
+| arima-011/denormal_ftz       | IDENTICAL x4 | 1ec68f0334b2a8f7 | 1ec68f0334b2a8f7 | 1ec68f0334b2a8f7 | 1ec68f0334b2a8f7 |
+| arima-011/dupes              | IDENTICAL x4 | 444512355dd3dcc7 | 444512355dd3dcc7 | 444512355dd3dcc7 | 444512355dd3dcc7 |
+| arima-011/hashed             | IDENTICAL x4 | ed2fc6041b9e6b34 | ed2fc6041b9e6b34 | ed2fc6041b9e6b34 | ed2fc6041b9e6b34 |
+| arima-011/negative           | IDENTICAL x4 | 4510d9cca33c3880 | 4510d9cca33c3880 | 4510d9cca33c3880 | 4510d9cca33c3880 |
+| arima-011/odd                | IDENTICAL x4 | fe873ed580ec36a5 | fe873ed580ec36a5 | fe873ed580ec36a5 | fe873ed580ec36a5 |
+| arima-011/ties               | IDENTICAL x4 | 18ad2790f8b3319b | 18ad2790f8b3319b | 18ad2790f8b3319b | 18ad2790f8b3319b |
+| arima-011/wide               | IDENTICAL x4 | dcaecce707040ce1 | dcaecce707040ce1 | dcaecce707040ce1 | dcaecce707040ce1 |
+| arima-seasonal-c/base        | IDENTICAL x4 | 192cac65b75a4e9d | 192cac65b75a4e9d | 192cac65b75a4e9d | 192cac65b75a4e9d |
+| arima-seasonal-c/denormal    | IDENTICAL x4 | e22ec2fed1a5f9a0 | e22ec2fed1a5f9a0 | e22ec2fed1a5f9a0 | e22ec2fed1a5f9a0 |
+| arima-seasonal-c/denormal_ftz | IDENTICAL x4 | e22ec2fed1a5f9a0 | e22ec2fed1a5f9a0 | e22ec2fed1a5f9a0 | e22ec2fed1a5f9a0 |
+| arima-seasonal-c/dupes       | IDENTICAL x4 | 192cac65b75a4e9d | 192cac65b75a4e9d | 192cac65b75a4e9d | 192cac65b75a4e9d |
+| arima-seasonal-c/hashed      | IDENTICAL x4 | 2c8f2249375b77da | 2c8f2249375b77da | 2c8f2249375b77da | 2c8f2249375b77da |
+| arima-seasonal-c/negative    | IDENTICAL x4 | fa010819b07e078a | fa010819b07e078a | fa010819b07e078a | fa010819b07e078a |
+| arima-seasonal-c/odd         | IDENTICAL x4 | 638697a3196b80ea | 638697a3196b80ea | 638697a3196b80ea | 638697a3196b80ea |
+| arima-seasonal-c/ties        | IDENTICAL x4 | 226754a32af96ebb | 226754a32af96ebb | 226754a32af96ebb | 226754a32af96ebb |
+| arima-seasonal-c/wide        | IDENTICAL x4 | 79f2c8172e739a12 | 79f2c8172e739a12 | 79f2c8172e739a12 | 79f2c8172e739a12 |
+| arima/base                   | IDENTICAL x4 | 377790cb117abb61 | 377790cb117abb61 | 377790cb117abb61 | 377790cb117abb61 |
+| arima/denormal               | IDENTICAL x4 | 7dbefd70378dfac6 | 7dbefd70378dfac6 | 7dbefd70378dfac6 | 7dbefd70378dfac6 |
+| arima/denormal_ftz           | IDENTICAL x4 | 7dbefd70378dfac6 | 7dbefd70378dfac6 | 7dbefd70378dfac6 | 7dbefd70378dfac6 |
+| arima/dupes                  | IDENTICAL x4 | 377790cb117abb61 | 377790cb117abb61 | 377790cb117abb61 | 377790cb117abb61 |
+| arima/hashed                 | IDENTICAL x4 | d4ed8b9405da9691 | d4ed8b9405da9691 | d4ed8b9405da9691 | d4ed8b9405da9691 |
+| arima/negative               | IDENTICAL x4 | 29f18fa209679839 | 29f18fa209679839 | 29f18fa209679839 | 29f18fa209679839 |
+| arima/odd                    | IDENTICAL x4 | 20bf64323fc5fa12 | 20bf64323fc5fa12 | 20bf64323fc5fa12 | 20bf64323fc5fa12 |
+| arima/ties                   | IDENTICAL x4 | 990e96a6d7fd2874 | 990e96a6d7fd2874 | 990e96a6d7fd2874 | 990e96a6d7fd2874 |
+| arima/wide                   | IDENTICAL x4 | 440f5eba6a3ddede | 440f5eba6a3ddede | 440f5eba6a3ddede | 440f5eba6a3ddede |
+| pca-full-whiten/base         | IDENTICAL x4 | 45270a0e8f27cd6d | 45270a0e8f27cd6d | 45270a0e8f27cd6d | 45270a0e8f27cd6d |
+| pca-full-whiten/denormal     | IDENTICAL x4 | 61cf181eed072841 | 61cf181eed072841 | 61cf181eed072841 | 61cf181eed072841 |
+| pca-full-whiten/denormal_ftz | IDENTICAL x4 | 61cf181eed072841 | 61cf181eed072841 | 61cf181eed072841 | 61cf181eed072841 |
+| pca-full-whiten/dupes        | IDENTICAL x4 | 56ac0f3579ac6d83 | 56ac0f3579ac6d83 | 56ac0f3579ac6d83 | 56ac0f3579ac6d83 |
+| pca-full-whiten/hashed       | IDENTICAL x4 | 3ac062517b27d389 | 3ac062517b27d389 | 3ac062517b27d389 | 3ac062517b27d389 |
+| pca-full-whiten/negative     | IDENTICAL x4 | 1b0f14140ed067ef | 1b0f14140ed067ef | 1b0f14140ed067ef | 1b0f14140ed067ef |
+| pca-full-whiten/odd          | IDENTICAL x4 | 99b78b139f8fc21b | 99b78b139f8fc21b | 99b78b139f8fc21b | 99b78b139f8fc21b |
+| pca-full-whiten/ties         | IDENTICAL x4 | 2af64405abd586d8 | 2af64405abd586d8 | 2af64405abd586d8 | 2af64405abd586d8 |
+| pca-full-whiten/wide         | IDENTICAL x4 | 218cc831a9e9a64a | 218cc831a9e9a64a | 218cc831a9e9a64a | 218cc831a9e9a64a |
+| umap/base                    | IDENTICAL x4 | ab4c3cd4fd49687a | ab4c3cd4fd49687a | ab4c3cd4fd49687a | ab4c3cd4fd49687a |
+| umap/denormal                | IDENTICAL x4 | cbe8436743821717 | cbe8436743821717 | cbe8436743821717 | cbe8436743821717 |
+| umap/denormal_ftz            | IDENTICAL x4 | cbe8436743821717 | cbe8436743821717 | cbe8436743821717 | cbe8436743821717 |
+| umap/dupes                   | IDENTICAL x4 | ab4c3cd4fd49687a | ab4c3cd4fd49687a | ab4c3cd4fd49687a | ab4c3cd4fd49687a |
+| umap/hashed                  | IDENTICAL x4 | 599b7220e7521ae8 | 599b7220e7521ae8 | 599b7220e7521ae8 | 599b7220e7521ae8 |
+| umap/negative                | IDENTICAL x4 | 21f603efa2721d85 | 21f603efa2721d85 | 21f603efa2721d85 | 21f603efa2721d85 |
+| umap/odd                     | IDENTICAL x4 | 957d02d6d6f9dc71 | 957d02d6d6f9dc71 | 957d02d6d6f9dc71 | 957d02d6d6f9dc71 |
+| umap/ties                    | IDENTICAL x4 | f8e184c57a909342 | f8e184c57a909342 | f8e184c57a909342 | f8e184c57a909342 |
+| umap/wide                    | IDENTICAL x4 | fc649bf2d55856cd | fc649bf2d55856cd | fc649bf2d55856cd | fc649bf2d55856cd |
+
+summary: IDENTICAL=45
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| arima-011/base               | infer  | IDENTICAL x4 | 436e34843e2d7277 | 436e34843e2d7277 | 436e34843e2d7277 | 436e34843e2d7277 |
+| arima-011/base               | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | d10f42f4fa3ab9cb |
+| arima-011/base               | batch  | IDENTICAL x4 | 91fcd2a61774b596 | 91fcd2a61774b596 | 91fcd2a61774b596 | 91fcd2a61774b596 |
+| arima-011/denormal           | infer  | IDENTICAL x4 | 395747692aa405a7 | 395747692aa405a7 | 395747692aa405a7 | 395747692aa405a7 |
+| arima-011/denormal           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 944696485594466c |
+| arima-011/denormal           | batch  | IDENTICAL x4 | e3462e27f217a8a9 | e3462e27f217a8a9 | e3462e27f217a8a9 | e3462e27f217a8a9 |
+| arima-011/denormal_ftz       | infer  | IDENTICAL x4 | 395747692aa405a7 | 395747692aa405a7 | 395747692aa405a7 | 395747692aa405a7 |
+| arima-011/denormal_ftz       | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 223eca22fe4ed993 |
+| arima-011/denormal_ftz       | batch  | IDENTICAL x4 | e3462e27f217a8a9 | e3462e27f217a8a9 | e3462e27f217a8a9 | e3462e27f217a8a9 |
+| arima-011/dupes              | infer  | IDENTICAL x4 | 436e34843e2d7277 | 436e34843e2d7277 | 436e34843e2d7277 | 436e34843e2d7277 |
+| arima-011/dupes              | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | d10f42f4fa3ab9cb |
+| arima-011/dupes              | batch  | IDENTICAL x4 | 91fcd2a61774b596 | 91fcd2a61774b596 | 91fcd2a61774b596 | 91fcd2a61774b596 |
+| arima-011/hashed             | infer  | IDENTICAL x4 | 7ff4a9e790ef0f8b | 7ff4a9e790ef0f8b | 7ff4a9e790ef0f8b | 7ff4a9e790ef0f8b |
+| arima-011/hashed             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | aff5062457b3d2e6 |
+| arima-011/hashed             | batch  | IDENTICAL x4 | 903c1a2ac7948d1d | 903c1a2ac7948d1d | 903c1a2ac7948d1d | 903c1a2ac7948d1d |
+| arima-011/negative           | infer  | IDENTICAL x4 | 126a57415caeead2 | 126a57415caeead2 | 126a57415caeead2 | 126a57415caeead2 |
+| arima-011/negative           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6f23846990695b23 |
+| arima-011/negative           | batch  | IDENTICAL x4 | 17db770f01fb74e1 | 17db770f01fb74e1 | 17db770f01fb74e1 | 17db770f01fb74e1 |
+| arima-011/odd                | infer  | IDENTICAL x4 | b17ec31edbdbf345 | b17ec31edbdbf345 | b17ec31edbdbf345 | b17ec31edbdbf345 |
+| arima-011/odd                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | a1e2bf9001d05853 |
+| arima-011/odd                | batch  | IDENTICAL x4 | f37f4bc3878ceacb | f37f4bc3878ceacb | f37f4bc3878ceacb | f37f4bc3878ceacb |
+| arima-011/ties               | infer  | IDENTICAL x4 | b18657cbfbe91ac6 | b18657cbfbe91ac6 | b18657cbfbe91ac6 | b18657cbfbe91ac6 |
+| arima-011/ties               | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 171b7c3c93902b38 |
+| arima-011/ties               | batch  | IDENTICAL x4 | 26e5f53b13398024 | 26e5f53b13398024 | 26e5f53b13398024 | 26e5f53b13398024 |
+| arima-011/wide               | infer  | IDENTICAL x4 | f566c47f48821c72 | f566c47f48821c72 | f566c47f48821c72 | f566c47f48821c72 |
+| arima-011/wide               | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | a4b2a96029f6a692 |
+| arima-011/wide               | batch  | IDENTICAL x4 | 8d82402c30a63f76 | 8d82402c30a63f76 | 8d82402c30a63f76 | 8d82402c30a63f76 |
+| arima-seasonal-c/base        | infer  | IDENTICAL x4 | 51863aef53c592d2 | 51863aef53c592d2 | 51863aef53c592d2 | 51863aef53c592d2 |
+| arima-seasonal-c/base        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4b68b52e2c4312b5 |
+| arima-seasonal-c/base        | batch  | IDENTICAL x4 | c9f23e9e56d51e65 | c9f23e9e56d51e65 | c9f23e9e56d51e65 | c9f23e9e56d51e65 |
+| arima-seasonal-c/denormal    | infer  | IDENTICAL x4 | dd8a852ab073617c | dd8a852ab073617c | dd8a852ab073617c | dd8a852ab073617c |
+| arima-seasonal-c/denormal    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | fc65b3899d79005b |
+| arima-seasonal-c/denormal    | batch  | IDENTICAL x4 | 9317d76faabd662c | 9317d76faabd662c | 9317d76faabd662c | 9317d76faabd662c |
+| arima-seasonal-c/denormal_ftz | infer  | IDENTICAL x4 | dd8a852ab073617c | dd8a852ab073617c | dd8a852ab073617c | dd8a852ab073617c |
+| arima-seasonal-c/denormal_ftz | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2c910011c8584684 |
+| arima-seasonal-c/denormal_ftz | batch  | IDENTICAL x4 | 9317d76faabd662c | 9317d76faabd662c | 9317d76faabd662c | 9317d76faabd662c |
+| arima-seasonal-c/dupes       | infer  | IDENTICAL x4 | 51863aef53c592d2 | 51863aef53c592d2 | 51863aef53c592d2 | 51863aef53c592d2 |
+| arima-seasonal-c/dupes       | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4b68b52e2c4312b5 |
+| arima-seasonal-c/dupes       | batch  | IDENTICAL x4 | c9f23e9e56d51e65 | c9f23e9e56d51e65 | c9f23e9e56d51e65 | c9f23e9e56d51e65 |
+| arima-seasonal-c/hashed      | infer  | IDENTICAL x4 | fa0e863d9ac994d8 | fa0e863d9ac994d8 | fa0e863d9ac994d8 | fa0e863d9ac994d8 |
+| arima-seasonal-c/hashed      | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | a3440799cbaf2776 |
+| arima-seasonal-c/hashed      | batch  | IDENTICAL x4 | 1f446b75dd151172 | 1f446b75dd151172 | 1f446b75dd151172 | 1f446b75dd151172 |
+| arima-seasonal-c/negative    | infer  | IDENTICAL x4 | 6e18078db22d851f | 6e18078db22d851f | 6e18078db22d851f | 6e18078db22d851f |
+| arima-seasonal-c/negative    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 03944e32fe4ec8c9 |
+| arima-seasonal-c/negative    | batch  | IDENTICAL x4 | f83eb3f3f676182b | f83eb3f3f676182b | f83eb3f3f676182b | f83eb3f3f676182b |
+| arima-seasonal-c/odd         | infer  | IDENTICAL x4 | f4ef2ece26c02783 | f4ef2ece26c02783 | f4ef2ece26c02783 | f4ef2ece26c02783 |
+| arima-seasonal-c/odd         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | f1da7032b63a307e |
+| arima-seasonal-c/odd         | batch  | IDENTICAL x4 | 0da2e77d1a656b25 | 0da2e77d1a656b25 | 0da2e77d1a656b25 | 0da2e77d1a656b25 |
+| arima-seasonal-c/ties        | infer  | IDENTICAL x4 | d75b867e7900df54 | d75b867e7900df54 | d75b867e7900df54 | d75b867e7900df54 |
+| arima-seasonal-c/ties        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 95387cc89a6d3b76 |
+| arima-seasonal-c/ties        | batch  | IDENTICAL x4 | aa51c6b43366533d | aa51c6b43366533d | aa51c6b43366533d | aa51c6b43366533d |
+| arima-seasonal-c/wide        | infer  | IDENTICAL x4 | a60f83352adc3c98 | a60f83352adc3c98 | a60f83352adc3c98 | a60f83352adc3c98 |
+| arima-seasonal-c/wide        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 20dd396319d4dc0b |
+| arima-seasonal-c/wide        | batch  | IDENTICAL x4 | 10421c6b3abc2563 | 10421c6b3abc2563 | 10421c6b3abc2563 | 10421c6b3abc2563 |
+| arima/base                   | infer  | IDENTICAL x4 | 9f76be0396a666ca | 9f76be0396a666ca | 9f76be0396a666ca | 9f76be0396a666ca |
+| arima/base                   | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6ae822845884aedf |
+| arima/base                   | batch  | IDENTICAL x4 | cef3c859431cbbaf | cef3c859431cbbaf | cef3c859431cbbaf | cef3c859431cbbaf |
+| arima/denormal               | infer  | IDENTICAL x4 | aab930a9e876ec1e | aab930a9e876ec1e | aab930a9e876ec1e | aab930a9e876ec1e |
+| arima/denormal               | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | b1397e7ed5a747b5 |
+| arima/denormal               | batch  | IDENTICAL x4 | a5e918e8c07deeeb | a5e918e8c07deeeb | a5e918e8c07deeeb | a5e918e8c07deeeb |
+| arima/denormal_ftz           | infer  | IDENTICAL x4 | aab930a9e876ec1e | aab930a9e876ec1e | aab930a9e876ec1e | aab930a9e876ec1e |
+| arima/denormal_ftz           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 87b2ac97204e1a6e |
+| arima/denormal_ftz           | batch  | IDENTICAL x4 | a5e918e8c07deeeb | a5e918e8c07deeeb | a5e918e8c07deeeb | a5e918e8c07deeeb |
+| arima/dupes                  | infer  | IDENTICAL x4 | 9f76be0396a666ca | 9f76be0396a666ca | 9f76be0396a666ca | 9f76be0396a666ca |
+| arima/dupes                  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6ae822845884aedf |
+| arima/dupes                  | batch  | IDENTICAL x4 | cef3c859431cbbaf | cef3c859431cbbaf | cef3c859431cbbaf | cef3c859431cbbaf |
+| arima/hashed                 | infer  | IDENTICAL x4 | 06461dad67cfb784 | 06461dad67cfb784 | 06461dad67cfb784 | 06461dad67cfb784 |
+| arima/hashed                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 913af384ea04d543 |
+| arima/hashed                 | batch  | IDENTICAL x4 | 4d744e464df6b3d6 | 4d744e464df6b3d6 | 4d744e464df6b3d6 | 4d744e464df6b3d6 |
+| arima/negative               | infer  | IDENTICAL x4 | 4e0defb4e0feb99f | 4e0defb4e0feb99f | 4e0defb4e0feb99f | 4e0defb4e0feb99f |
+| arima/negative               | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | d3fa0fbbec979263 |
+| arima/negative               | batch  | IDENTICAL x4 | a00b86402bf13b42 | a00b86402bf13b42 | a00b86402bf13b42 | a00b86402bf13b42 |
+| arima/odd                    | infer  | IDENTICAL x4 | 4aa662dbcc728e65 | 4aa662dbcc728e65 | 4aa662dbcc728e65 | 4aa662dbcc728e65 |
+| arima/odd                    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 859442a49f63a8d0 |
+| arima/odd                    | batch  | IDENTICAL x4 | 8e0a0c4068873ad7 | 8e0a0c4068873ad7 | 8e0a0c4068873ad7 | 8e0a0c4068873ad7 |
+| arima/ties                   | infer  | IDENTICAL x4 | e699bca0934688f0 | e699bca0934688f0 | e699bca0934688f0 | e699bca0934688f0 |
+| arima/ties                   | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | a70bbb860b0f3fcf |
+| arima/ties                   | batch  | IDENTICAL x4 | 7abdf42416059c68 | 7abdf42416059c68 | 7abdf42416059c68 | 7abdf42416059c68 |
+| arima/wide                   | infer  | IDENTICAL x4 | 956bebc3f45a1c69 | 956bebc3f45a1c69 | 956bebc3f45a1c69 | 956bebc3f45a1c69 |
+| arima/wide                   | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1f7be9c37fb3f5d6 |
+| arima/wide                   | batch  | IDENTICAL x4 | 9103785606065f64 | 9103785606065f64 | 9103785606065f64 | 9103785606065f64 |
+| pca-full-whiten/base         | infer  | IDENTICAL x4 | 3ccd30a2642983c5 | 3ccd30a2642983c5 | 3ccd30a2642983c5 | 3ccd30a2642983c5 |
+| pca-full-whiten/base         | model  | IDENTICAL x4 | 54a4ab300cb790c3 | 54a4ab300cb790c3 | 54a4ab300cb790c3 | 54a4ab300cb790c3 |
+| pca-full-whiten/base         | batch  | IDENTICAL x4 | dbd184bd6ef6cc1b | dbd184bd6ef6cc1b | dbd184bd6ef6cc1b | dbd184bd6ef6cc1b |
+| pca-full-whiten/denormal     | infer  | IDENTICAL x4 | b535e39677821151 | b535e39677821151 | b535e39677821151 | b535e39677821151 |
+| pca-full-whiten/denormal     | model  | IDENTICAL x4 | 56b7dcfd41448c7b | 56b7dcfd41448c7b | 56b7dcfd41448c7b | 56b7dcfd41448c7b |
+| pca-full-whiten/denormal     | batch  | IDENTICAL x4 | 89b41b67a9542107 | 89b41b67a9542107 | 89b41b67a9542107 | 89b41b67a9542107 |
+| pca-full-whiten/denormal_ftz | infer  | IDENTICAL x4 | b535e39677821151 | b535e39677821151 | b535e39677821151 | b535e39677821151 |
+| pca-full-whiten/denormal_ftz | model  | IDENTICAL x4 | 56b7dcfd41448c7b | 56b7dcfd41448c7b | 56b7dcfd41448c7b | 56b7dcfd41448c7b |
+| pca-full-whiten/denormal_ftz | batch  | IDENTICAL x4 | 89b41b67a9542107 | 89b41b67a9542107 | 89b41b67a9542107 | 89b41b67a9542107 |
+| pca-full-whiten/dupes        | infer  | IDENTICAL x4 | d43bf917dbd688b3 | d43bf917dbd688b3 | d43bf917dbd688b3 | d43bf917dbd688b3 |
+| pca-full-whiten/dupes        | model  | IDENTICAL x4 | 810988d17082be93 | 810988d17082be93 | 810988d17082be93 | 810988d17082be93 |
+| pca-full-whiten/dupes        | batch  | IDENTICAL x4 | 4f7124df29a568c4 | 4f7124df29a568c4 | 4f7124df29a568c4 | 4f7124df29a568c4 |
+| pca-full-whiten/hashed       | infer  | IDENTICAL x4 | 4bbd98a59bc7b338 | 4bbd98a59bc7b338 | 4bbd98a59bc7b338 | 4bbd98a59bc7b338 |
+| pca-full-whiten/hashed       | model  | IDENTICAL x4 | 6428a6396b1354a5 | 6428a6396b1354a5 | 6428a6396b1354a5 | 6428a6396b1354a5 |
+| pca-full-whiten/hashed       | batch  | IDENTICAL x4 | 5ebf09d89aabb248 | 5ebf09d89aabb248 | 5ebf09d89aabb248 | 5ebf09d89aabb248 |
+| pca-full-whiten/negative     | infer  | IDENTICAL x4 | 5cbd3f28356522a4 | 5cbd3f28356522a4 | 5cbd3f28356522a4 | 5cbd3f28356522a4 |
+| pca-full-whiten/negative     | model  | IDENTICAL x4 | 5ec1e8221dcfb910 | 5ec1e8221dcfb910 | 5ec1e8221dcfb910 | 5ec1e8221dcfb910 |
+| pca-full-whiten/negative     | batch  | IDENTICAL x4 | d11bc595a9fd062e | d11bc595a9fd062e | d11bc595a9fd062e | d11bc595a9fd062e |
+| pca-full-whiten/odd          | infer  | IDENTICAL x4 | 9131931086b674f3 | 9131931086b674f3 | 9131931086b674f3 | 9131931086b674f3 |
+| pca-full-whiten/odd          | model  | IDENTICAL x4 | cee2a2baed48b91d | cee2a2baed48b91d | cee2a2baed48b91d | cee2a2baed48b91d |
+| pca-full-whiten/odd          | batch  | IDENTICAL x4 | 19ef3f7d235f8905 | 19ef3f7d235f8905 | 19ef3f7d235f8905 | 19ef3f7d235f8905 |
+| pca-full-whiten/ties         | infer  | IDENTICAL x4 | fedaf5cfb53bfb56 | fedaf5cfb53bfb56 | fedaf5cfb53bfb56 | fedaf5cfb53bfb56 |
+| pca-full-whiten/ties         | model  | IDENTICAL x4 | 86b9349a03a32b9f | 86b9349a03a32b9f | 86b9349a03a32b9f | 86b9349a03a32b9f |
+| pca-full-whiten/ties         | batch  | IDENTICAL x4 | daff7b2a4e2e9a91 | daff7b2a4e2e9a91 | daff7b2a4e2e9a91 | daff7b2a4e2e9a91 |
+| pca-full-whiten/wide         | infer  | IDENTICAL x4 | 189abcd8ba5402d7 | 189abcd8ba5402d7 | 189abcd8ba5402d7 | 189abcd8ba5402d7 |
+| pca-full-whiten/wide         | model  | IDENTICAL x4 | 69a5aaf10e20b62b | 69a5aaf10e20b62b | 69a5aaf10e20b62b | 69a5aaf10e20b62b |
+| pca-full-whiten/wide         | batch  | IDENTICAL x4 | 9510680ddf796f71 | 9510680ddf796f71 | 9510680ddf796f71 | 9510680ddf796f71 |
+| umap/base                    | infer  | IDENTICAL x4 | 5a4ef62db605973a | 5a4ef62db605973a | 5a4ef62db605973a | 5a4ef62db605973a |
+| umap/base                    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | fe1804a5876e88e3 |
+| umap/base                    | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/denormal                | infer  | IDENTICAL x4 | 278fb3d51d1c9b82 | 278fb3d51d1c9b82 | 278fb3d51d1c9b82 | 278fb3d51d1c9b82 |
+| umap/denormal                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 819c0afc9bc29e9e |
+| umap/denormal                | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/denormal_ftz            | infer  | IDENTICAL x4 | 278fb3d51d1c9b82 | 278fb3d51d1c9b82 | 278fb3d51d1c9b82 | 278fb3d51d1c9b82 |
+| umap/denormal_ftz            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6e890c83b4d575da |
+| umap/denormal_ftz            | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/dupes                   | infer  | IDENTICAL x4 | 5a4ef62db605973a | 5a4ef62db605973a | 5a4ef62db605973a | 5a4ef62db605973a |
+| umap/dupes                   | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | fe1804a5876e88e3 |
+| umap/dupes                   | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/hashed                  | infer  | IDENTICAL x4 | aa9e7249278630e5 | aa9e7249278630e5 | aa9e7249278630e5 | aa9e7249278630e5 |
+| umap/hashed                  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4bf1d74b94129843 |
+| umap/hashed                  | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/negative                | infer  | IDENTICAL x4 | 96a457e7da0684ae | 96a457e7da0684ae | 96a457e7da0684ae | 96a457e7da0684ae |
+| umap/negative                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | f110c804d4fcd89f |
+| umap/negative                | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/odd                     | infer  | IDENTICAL x4 | 4a46872567fef4d1 | 4a46872567fef4d1 | 4a46872567fef4d1 | 4a46872567fef4d1 |
+| umap/odd                     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | e34157da2cddfa68 |
+| umap/odd                     | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/ties                    | infer  | IDENTICAL x4 | cfe8cc2494350a30 | cfe8cc2494350a30 | cfe8cc2494350a30 | cfe8cc2494350a30 |
+| umap/ties                    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | fc7ef4ccd4d719f3 |
+| umap/ties                    | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+| umap/wide                    | infer  | IDENTICAL x4 | 99d9533a655689c9 | 99d9533a655689c9 | 99d9533a655689c9 | 99d9533a655689c9 |
+| umap/wide                    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 77c9cf75a55e1eb4 |
+| umap/wide                    | batch  | N/A          | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results) | n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) |
+
+summary (infer/model): IDENTICAL=54, OWED=36
+summary (batch): IDENTICAL=36, N/A=9
+summary (rlpair): 
+require-columns 4 over ['arima', 'arima-011', 'arima-seasonal-c', 'pca-full-whiten', 'umap']: OK (36 OWED)
+OWED arima-011/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-011/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-011/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-011/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-011/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-011/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-011/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-011/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-011/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-seasonal-c/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-seasonal-c/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-seasonal-c/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-seasonal-c/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-seasonal-c/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-seasonal-c/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-seasonal-c/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-seasonal-c/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima-seasonal-c/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED arima/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED umap/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED umap/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED umap/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED umap/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED umap/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED umap/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED umap/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED umap/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED umap/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+summary (owed): OWED=36; the next release record owes exactly these cell parts; wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-inf-forecast/bench/results/identity_break/2026-09-15_inference-forecast-umap-pca/owed_cells.json

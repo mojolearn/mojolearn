@@ -20,8 +20,9 @@ binding reads it back.
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): the three lane orders fit twice on a small draw
 through the host binding and return the same bytes, `forecast(h)` equals
-`predict(n_obs, n_obs + h)` byte for byte, and an in-sample prediction and a
-second AR coefficient refuse by name. It is a plumbing check. The bit claim
+`predict(n_obs, n_obs + h)` byte for byte, an in-sample prediction agrees
+with a prediction straddling the end of the series (since 2026-09-15), and a
+second AR coefficient refuses by name. It is a plumbing check. The bit claim
 against the GPU columns is the CPU identity gate's, not this file's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_arima
@@ -63,7 +64,10 @@ def test_manifest_declares_the_arima_family():
 
 
 def test_binding_registers_the_gpu_names():
-    src = _read(host_surface.binding_source("arima"))
+    # arima_predict and arima_forecast live in bindings/arima_host_predict.mojo
+    # since lane/inference-forecast-umap-pca (2026-09-15), shared with the
+    # forecast inference binding; the reference binding imports them.
+    src = _read(host_surface.binding_source("arima")) + _read("bindings/arima_host_predict.mojo")
     exports = host_surface.family("arima")["exports"]
     gpu = _read("bindings/_mojolearn_arima.mojo")
     for name in ("arima_fit", "arima_predict", "arima_forecast", "arima_vendor", "arima_numeric_mode"):
@@ -142,13 +146,15 @@ def test_arima_fits_on_the_host_when_built():
             assert fc.tobytes() == pr.tobytes(), f"{kw}: forecast(h) and predict(n_obs, n_obs + h) differ"
             outs.append((np.asarray(m.params_).tobytes(), fc.tobytes()))
         assert outs[0] == outs[1], f"{kw}: two host fits returned different bytes"
-    m = mojolearn.ARIMA(order=(1, 0, 0)).fit(series)
-    try:
-        m.predict(0, m.n_obs_)
-    except Exception as exc:
-        assert "no CPU implementation of" in str(exc), exc
-    else:
-        raise AssertionError("an in-sample prediction did not refuse by name")
+        # In-sample prediction runs on the host since 2026-09-15: the tail of
+        # predict(0, n_obs) is the head of a prediction straddling n_obs,
+        # whose tail is the forecast.
+        ins = np.asarray(m.predict(0, m.n_obs_))
+        st = np.asarray(m.predict(m.n_obs_ - 4, m.n_obs_ + 4))
+        assert st[:, :4].tobytes() == ins[:, -4:].tobytes(), f"{kw}: the straddle's in-sample half moved"
+        assert st[:, 4:].tobytes() == np.asarray(m.forecast(4)).tobytes(), f"{kw}: the straddle's forecast half moved"
+        nan_prefix = kw["order"][1] + kw.get("seasonal_order", (0, 0, 0, 0))[1] * kw.get("seasonal_order", (0, 0, 0, 0))[3]
+        assert np.isnan(ins[:, :nan_prefix]).all() and not np.isnan(ins[:, nan_prefix:]).any(), kw
     try:
         mojolearn.ARIMA(order=(2, 0, 0)).fit(series)
     except Exception as exc:

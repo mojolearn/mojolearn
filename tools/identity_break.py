@@ -43,12 +43,16 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whose estimator has no out-of-sample method records
             `n/a:<reason>` and never a hash of training-row output.
             transductive means the labels belong to the fitted rows only
-            (DBSCAN, agglomerative, spectral: `fit` and `fit_predict`, and
+            (spectral: `fit` and `fit_predict`, and
             SpectralClustering.predict raises NotImplementedError by
-            design); KMeans answered no-predict until 2026-09-15, when
-            `predict` arrived (no `transform`) and its lanes' probe became
-            `predict` on the held-out rows, with `predict` on the training
-            rows held to `labels_`; function means the lane is not an estimator
+            design; DBSCAN and agglomerative answered transductive until
+            2026-09-15, when `predict` from a `prediction_data=True` fit
+            arrived, DEVIATION 2740, and their lanes' probe became
+            `predict` on the held-out rows); KMeans answered no-predict until 2026-09-15, when
+            `predict` arrived and its lanes' probe became `predict` on the
+            held-out rows, with `predict` on the training rows held to
+            `labels_`; `transform` joined the probe later that day, with
+            `transform(X)` at `labels_` held to each row's minimum; function means the lane is not an estimator
             (linalg, metrics). THE FORECASTERS (holtwinters, arima; the
             infer probes of 2026-09-14) take no new rows, so their held-out
             axis is TIME: the infer column hashes the forecast beyond the
@@ -280,7 +284,7 @@ evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15, then `gmm-sample` and `gmm-random-init-sample` for GaussianMixture.sample the same day). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -300,7 +304,7 @@ sampler, a solver, a metric, a reduction).
                gbdt-multiclass gbdt-onevsall gbdt-parametric-losses
                gbdt-lossguide-newtoncosine gbdt-pointwise-l2-bayesian-eval
                gbdt-exact-mae gbdt-categorical-ctr gbdt-nan-modes gbdt-adapter-clf
-               gbdt-adapter-reg iforest-tuned (last, with iforest)
+               gbdt-adapter-reg gbdt-query-rmse iforest-tuned (last, with iforest)
       neural   mamba2-dtlimit transformer-window byte-lm-resident
                byte-lm-host-infer-threaded (the SHIPPED default arm; the
                2026-09-13 lane pins the reference arm) samba-untied-dropout-accum
@@ -334,6 +338,8 @@ sampler, a solver, a metric, a reduction).
       par-forest-pool par-gmm par-resample par-hdbscan
     2026-09-15 (the Cholesky and kernel-method drivers; devices=_par_devices())
       par-cholesky par-kernel-ridge par-nystroem par-rbf-sampler
+    2026-09-15 (GaussianMixture.sample, DEVIATIONS 2791 and 2792)
+      gmm-sample gmm-random-init-sample
     2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
       ivf embedding
     2026-09-14 night (fix/ivf-l2sqrt, metric='euclidean' no longer refused)
@@ -591,6 +597,15 @@ def _h(*arrays):
     return m.hexdigest()[:16]
 
 
+def _train_hash(parts):
+    """The train column's cell hash of one fit: `_h` over the lane's parts
+    dict spelled `key=value`, sorted by key, joined by `|`. The run loop and
+    `python -m mojolearn verify --all` (python/mojolearn/_verify_all.py, which
+    imports this module) both call this, so the shipped verifier cannot hash
+    a cell differently from the record."""
+    return _h(np.frombuffer("|".join(f"{k}={v}" for k, v in sorted(parts.items())).encode(), dtype=np.uint8))
+
+
 def _hfile(path):
     with open(path, "rb") as fh:
         return hashlib.sha256(fh.read()).hexdigest()[:16]
@@ -815,12 +830,19 @@ def _km_probe(X, Xh):
     assignment (cluster/estimator.mojo::kmeans_predict and
     cluster/host/kmeans_oracle.mojo::host_kmeans_predict); where it is not,
     the probe raises naming the pair and only the infer cell reads REFUSED.
+    `transform` (2026-09-15, cluster/estimator.mojo::kmeans_transform) is
+    asked too: each cell is the fused kernel's cell, so `transform(X)` at
+    `labels_` must be every training row's minimum bit for bit, and the
+    held-out distances are hashed beside the held-out labels.
     Only the held-out rows are hashed, never the training-row output, and
     the train column hashes the fit's own attributes, so no train cell
     moves."""
     def probe(e):
         _same_bytes("predict(X)", e.predict(X), "labels_", e.labels_)
-        return (e.predict(Xh),)
+        t = np.asarray(e.transform(X))
+        at_label = t[np.arange(t.shape[0]), np.asarray(e.labels_, dtype=np.int64)]
+        _same_bytes("transform(X)[i, labels_[i]]", at_label, "transform(X).min(axis=1)", t.min(axis=1))
+        return (e.predict(Xh), e.transform(Xh))
     return probe
 
 
@@ -852,8 +874,11 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("dbscan")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4])
-    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+    # prediction_data=True (2026-09-15) copies the fit's core mask out and
+    # moves no train byte; infer is DBSCAN.predict on 256 held-out rows, the
+    # nearest core sample within eps (DEVIATION 2740).
+    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:6000, :4])
+    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("pca")
@@ -925,8 +950,11 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("agglomerative")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.AgglomerativeClustering(n_clusters=4).fit(X[:2000, :4])
-    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+    # prediction_data=True (2026-09-15) keeps the training rows and moves no
+    # train byte; infer is predict on 256 held-out rows, the single-linkage
+    # rule (DEVIATION 2740).
+    m = ml.AgglomerativeClustering(n_clusters=4, prediction_data=True).fit(X[:2000, :4])
+    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("spectral")
@@ -1677,6 +1705,49 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
+#: the gbdt-query-rmse lane's query sizes, cycled in row order: sizes of one
+#: and two rows (a query of one has zero QueryRMSE derivative on every row)
+#: beside larger ones, uneven on purpose so the 32-lane query reduce sees
+#: queries shorter than, near and longer than one lane stride.
+RANK_QUERY_SIZES = (1, 2, 7, 3, 16, 1, 5, 40, 2, 9)
+
+#: the relevance cut points: comparisons only, no float arithmetic, so every
+#: box hands the lane the same grades
+RANK_CUTS = (-1.0, 0.0, 1.0, 2.0)
+
+
+def _rank_groups(n):
+    """The gbdt-query-rmse group ids, one per row, consecutive by
+    construction (`RANK_QUERY_SIZES` cycled; the last query truncated at
+    `n`). Shared with the CatBoost CPU reference script, so both sides read
+    the same grouping."""
+    ids = []
+    q = 0
+    while len(ids) < n:
+        ids.extend([q] * RANK_QUERY_SIZES[q % len(RANK_QUERY_SIZES)])
+        q += 1
+    return np.asarray(ids[:n], dtype=np.int64)
+
+
+def _relevance(yr):
+    """Tie-heavy graded relevance 0..4 from the fixture's regression target,
+    cut at `RANK_CUTS` (`np.digitize`, comparisons only), as float32."""
+    return np.digitize(yr, np.asarray(RANK_CUTS, dtype=np.float32)).astype(np.float32)
+
+
+@lane("gbdt-query-rmse")
+def _(ml, X, yc, yr, Xh=None):
+    """QueryRMSE (learning to rank, the querywise target) on uneven queries
+    with tie-heavy grades: 20 depth-6 symmetric trees, the predictions and
+    the learn loss curve hashed. Predict is row-wise, so the held-out probe
+    and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="QueryRMSE").fit(X, rel, group_id=g)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64))),
+                m, lambda e: (e.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -1917,15 +1988,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("dbscan-brute-l1")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.DBSCAN(eps=0.9, min_samples=5, metric="manhattan", algorithm="brute").fit(X[:6000, :4])
-    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+    m = ml.DBSCAN(eps=0.9, min_samples=5, metric="manhattan", algorithm="brute",
+                  prediction_data=True).fit(X[:6000, :4])
+    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("dbscan-weighted")
 def _(ml, X, yc, yr, Xh=None):
     w = _hw((6000,), "dbscan:sample_weight", 0.5, 1.5)
-    m = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4], sample_weight=w)
-    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:6000, :4], sample_weight=w)
+    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 def _kde_lane(kernel, metric):
@@ -2394,6 +2466,23 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.score_samples(Xh[:64, :4]),))
 
 
+def _gmm_sample_lane(init_params):
+    def body(ml, X, yc, yr, Xh=None):
+        m = ml.GaussianMixture(n_components=4, max_iter=30, random_state=3, init_params=init_params).fit(X[:6000, :4])
+        xs, ys = m.sample(256)
+        _same_bytes("sample(256) X", xs, "sample(256) X again", m.sample(256)[0])
+        return _fit(dict(sample_X=_h(xs), sample_y=_h(ys)), m, lambda e: tuple(e.sample(1024)))
+    body.__doc__ = (f"GaussianMixture.sample (2026-09-15) on the gmm{'' if init_params == 'kmeans' else '-random-init'} "
+                    "lane's fit: train hashes sample(256), held to a second call bit for bit; infer hashes "
+                    "sample(1024). Position-mapped Philox draws (DEVIATION 2791) through precisions_cholesky_ "
+                    "(DEVIATION 2792). A separate lane so the gmm lanes' recorded cells do not move.")
+    return body
+
+
+lane("gmm-sample")(_gmm_sample_lane("kmeans"))
+lane("gmm-random-init-sample")(_gmm_sample_lane("random"))
+
+
 @lane("hdbscan")
 def _(ml, X, yc, yr, Xh=None):
     """HDBSCAN (python/mojolearn/hdbscan.py), cuML's runner path at its
@@ -2404,11 +2493,14 @@ def _(ml, X, yc, yr, Xh=None):
     counts); the integer stages are where a divergence first shows.
     The fit keeps prediction_data (2026-09-15), which moves no train byte;
     infer is approximate_predict's labels and probabilities on 256
-    held-out rows (hdbscan.pyx:1264, predict.cuh:220-262)."""
+    held-out rows (hdbscan.pyx:1264, predict.cuh:220-262), then
+    membership_vector on the same rows and all_points_membership_vectors
+    (hdbscan.pyx:1180, :1114, soft_clustering.cuh:385-627, DEVIATION 1616)."""
     m = ml.HDBSCAN(min_cluster_size=5, prediction_data=True).fit(X[:6000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
-                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
+                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
+                + (ml.hdbscan.membership_vector(e, Xh[:256, :4]), ml.hdbscan.all_points_membership_vectors(e)))
 
 
 @lane("hdbscan-leaf")
@@ -2421,7 +2513,8 @@ def _(ml, X, yc, yr, Xh=None):
                    prediction_data=True).fit(X[:6000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
-                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
+                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
+                + (ml.hdbscan.membership_vector(e, Xh[:256, :4]), ml.hdbscan.all_points_membership_vectors(e)))
 
 
 @lane("bootstrap")
@@ -2812,10 +2905,10 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("par-dbscan")
 def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_dbscan
-    par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5), X[:6000, :4], devices=_par_devices())
+    par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
     plain = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4])
     _same_bytes("fit_dbscan labels", par.labels_, "plain labels", plain.labels_)
-    return _fit(dict(labels=_h(par.labels_)), par, "n/a:transductive")
+    return _fit(dict(labels=_h(par.labels_)), par, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("par-scaler")
@@ -3037,11 +3130,12 @@ def _(ml, X, yc, yr, Xh=None):
     and merge tree."""
     from mojolearn.parallel_graph import fit_graph
     A = np.ascontiguousarray(X[:2000, :4])
-    par = fit_graph(ml.AgglomerativeClustering(n_clusters=4), A, devices=_par_devices())
+    par = fit_graph(ml.AgglomerativeClustering(n_clusters=4, prediction_data=True), A, devices=_par_devices())
     plain = ml.AgglomerativeClustering(n_clusters=4).fit(A)
     _same_bytes("fit_graph labels_", par.labels_, "plain labels_", plain.labels_)
     _same_bytes("fit_graph children_", par.children_, "plain children_", plain.children_)
-    return _fit(dict(labels=_h(par.labels_), children=_h(par.children_)), par, "n/a:transductive")
+    return _fit(dict(labels=_h(par.labels_), children=_h(par.children_)), par,
+                lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("par-graph-spectral")
@@ -3761,7 +3855,8 @@ _batch_decl(_rows_calls("predict", "predict_proba"),
 _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
-            "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et")
+            "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
+            "gbdt-query-rmse")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 
@@ -3781,40 +3876,40 @@ def _batch_iforest(ml, e, Xh):
 
 _batch_decl(_batch_iforest, "iforest", "iforest-tuned", "par-iforest")
 
-_batch_decl(_rows_calls("predict"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted", "kmeans-sqrt",
-            "kmeans-classic-pp", "par-kmeans")
+_batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
+            "kmeans-sqrt", "kmeans-classic-pp", "par-kmeans")
 # cosine fit is refused by name, so there is no fitted model to ask
 _batch_decl("n/a:fit-refused", "kmeans-cosine")
 # The transductive clustering lanes (read 2026-09-15 against the Python
-# estimator, the GPU binding, the CPU host binding and cuML v26.08.00): none
-# has a held-out row call on EITHER backend, so no batch part exists to ask.
-#   DBSCAN: density.py:189,286 fit and fit_predict only; _mojolearn_estimators
-#     and _mojolearn_estimators_host export dbscan_fit only; cuML dbscan.pyx
-#     has fit (:301) and fit_predict (:478) only.
-#   AgglomerativeClustering: _hierarchy_impl.py:311 fit_predict only; the
-#     solver and solver host bindings export linkage_fit only; cuML
-#     agglomerative.pyx has fit (:139) and fit_predict (:216) only.
+# estimator, the GPU binding, the CPU host binding and cuML v26.08.00).
+#   DBSCAN and AgglomerativeClustering are NOT transductive since
+#     lane/inference-transductive-predict (2026-09-15): with
+#     prediction_data=True both have `predict` on the GPU and CPU host
+#     estimators bindings (labeled_reference_predict, DEVIATION 2740, NEW
+#     capability: cuML dbscan.pyx has fit (:301) and fit_predict (:478) only,
+#     agglomerative.pyx fit (:139) and fit_predict (:216) only), so the part
+#     asks predict on 64 held-out rows.
 #   SpectralClustering: _spectral_impl.py:547 predict raises
 #     NotImplementedError; the metrics bindings export spectral_fit_predict_
 #     dataset and _graph only; cuML spectral_clustering.pyx has fit (:263) and
 #     fit_predict (:239) only.
 #   HDBSCAN is NOT transductive since 2026-09-15: HDBSCAN(prediction_data=True)
 #     and mojolearn.hdbscan.approximate_predict (cuML hdbscan.pyx:1264,
-#     predict.cuh:220-262) on both bindings, below. membership_vector (:1180)
-#     and all_points_membership_vectors (:1114) are still NOT IMPLEMENTED and
-#     refuse by name (hdbscan/NOT_IMPLEMENTED.tsv), so the part asks
-#     approximate_predict only.
-_batch_decl("n/a:transductive (DBSCAN has no predict on GPU, CPU or cuML; fit and fit_predict only)",
-            "dbscan", "dbscan-brute-l1", "dbscan-weighted", "par-dbscan")
-_batch_decl("n/a:transductive (AgglomerativeClustering has no predict on GPU, CPU or cuML; fit and fit_predict only)",
-            "agglomerative")
+#     predict.cuh:220-262) on both bindings, below, and since the same day
+#     membership_vector (:1180, soft_clustering.cuh:501-627, DEVIATION 1616),
+#     which the part asks too. all_points_membership_vectors (:1114) has no
+#     held-out rows; the lanes' infer probe hashes it.
+_batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]),
+            "dbscan", "dbscan-brute-l1", "dbscan-weighted", "par-dbscan", "agglomerative")
 _batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
             "spectral", "spectral-precomputed")
 
 
 def _batch_hdbscan(ml, e, Xh):
-    """approximate_predict's labels and probabilities, 64 held-out rows."""
-    return [_BatchRows("approximate_predict", Xh[:64, :4], lambda r: tuple(ml.hdbscan.approximate_predict(e, r)))]
+    """approximate_predict's labels and probabilities and membership_vector's
+    rows, 64 held-out rows."""
+    return [_BatchRows("approximate_predict", Xh[:64, :4], lambda r: tuple(ml.hdbscan.approximate_predict(e, r))),
+            _BatchRows("membership_vector", Xh[:64, :4], lambda r: (ml.hdbscan.membership_vector(e, r),))]
 
 
 _batch_decl(_batch_hdbscan, "hdbscan", "hdbscan-leaf")
@@ -3900,6 +3995,9 @@ _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "kernel-ridg
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "nystroem")
 _batch_decl(_rows_calls("score_samples", "predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gmm")
 _batch_decl(_rows_calls("score_samples", sl=(slice(0, 64), slice(0, 4))), "gmm-random-init")
+# GaussianMixture.sample draws n_samples rows from the fitted model and reads no
+# input rows, so there is no row axis to split (mixture/checks/sample.mojo)
+_batch_decl("n/a:no-batch-axis (GaussianMixture.sample takes no input rows)", "gmm-sample", "gmm-random-init-sample")
 
 
 def _batch_cholesky(ml, e, Xh):
@@ -4352,9 +4450,9 @@ _batch_decl(_batch_pq("radius_neighbors", sl=slice(0, 64), ragged=True, sort_res
 _batch_decl(_batch_pq("score_samples", sl=(slice(0, 256), slice(0, 4))), "par-queries-kde")
 _batch_decl(_batch_rsn("kneighbors", "predict", "predict_proba"), "par-reference-knn")
 _batch_decl(_batch_rsn("predict"), "par-reference-knn-reg")
-# parallel_graph.fit_graph is fit-only; see the agglomerative and spectral reasons above
-_batch_decl("n/a:transductive (AgglomerativeClustering has no predict on GPU, CPU or cuML; fit and fit_predict only)",
-            "par-graph-agglomerative")
+# parallel_graph.fit_graph fits; the fitted AgglomerativeClustering(prediction_data=True)
+# predicts like the plain lane's (DEVIATION 2740)
+_batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]), "par-graph-agglomerative")
 _batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
             "par-graph-spectral")
 _batch_decl(_rows_calls("predict"), "par-ordered-rmse")
@@ -5755,7 +5853,7 @@ def _run_reference(args):
                     _DUMP_TAG = f"{name}/{f}/{repeat}"
                     p = LANES[name](ml, X, yc, yr, held[f].copy())
                     parts.append(dict(p))
-                    hs.append(_h(np.frombuffer("|".join(f"{k}={v}" for k, v in sorted(p.items())).encode(), dtype=np.uint8)))
+                    hs.append(_train_hash(p))
                 except Exception as exc:
                     err = f"{type(exc).__name__}: {exc}"
                     if args.verbose:

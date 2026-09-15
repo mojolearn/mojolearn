@@ -25,9 +25,43 @@ by name here and on the Mojo host. `gamma=None` is scikit-learn's
 
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
-from . import _backend
+from . import _backend, _serialize
+from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
+
+#: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
+#: `mojolearn.host_model(path)` predicts or transforms from each on a CPU.
+_KERNEL_RIDGE_FORMAT = "mojolearn-kernel-ridge-1"
+_NYSTROEM_FORMAT = "mojolearn-nystroem-1"
+_RBF_SAMPLER_FORMAT = "mojolearn-rbf-sampler-1"
+
+
+def _km_header(arrays, path, cls, meta_fields, hyper_fields):
+    """The estimator, `meta` `<i8` and `hyper` `<f8` checks the three loads
+    share; returns `(meta, hyper)`."""
+    from .linear_model import _check_saved_by
+    _check_saved_by(arrays, path, cls)
+    meta = _serialize.exact(arrays, "meta", "<i8")
+    if meta.size != meta_fields:
+        raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, {meta_fields} are needed")
+    hyper = _serialize.exact(arrays, "hyper", "<f8")
+    if hyper.size != hyper_fields:
+        raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, {hyper_fields} are needed")
+    return meta, hyper
+
+
+def _km_array(arrays, name, dtype, shape, path):
+    value = _serialize.exact(arrays, name, dtype)
+    if tuple(value.shape) != tuple(shape):
+        raise ValueError(f"mojolearn: {path!r} {name} shape {tuple(value.shape)} is not {tuple(shape)}")
+    return value
+
+
+def _km_write(est, path, fmt, arrays):
+    from .linear_model import _saved_mode
+    arrays.update(format=fmt, estimator=type(est).__name__, numeric_mode=_saved_mode(est))
+    return _serialize.write_npz(path, arrays)
 
 #: `checks/numerics.mojo` codes, duplicated on purpose (the GP's reason):
 #: the read-back must not share a table with the thing it checks.
@@ -229,6 +263,46 @@ class KernelRidge(_KernelMethodBase):
             return out
         return out.reshape((q, t))
 
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: `X_fit_` and
+        `dual_coef_` (flat, `n * n_targets`) as fitted, `hyper` `<f8`
+        [gamma, coef0, alpha] as the fit resolved them, `meta` `<i8` [n,
+        n_features, n_targets, kernel code, degree, info, 1-D target] and
+        the numeric mode. `mojolearn.host_model(path)` predicts from it on a
+        CPU with no GPU."""
+        if not hasattr(self, "dual_coef_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        kernel, degree, gamma, coef0, alpha = self._kernel_params
+        n, t = self.X_fit_.shape[0], self.n_targets_
+        return _km_write(self, path, _KERNEL_RIDGE_FORMAT, {
+            "x_fit": self.X_fit_,
+            "dual": self.dual_coef_.reshape((n * t,)),
+            "hyper": Array.from_list([float(gamma), float(coef0), float(alpha)], "<f8"),
+            "meta": Array.from_list([int(n), int(self.n_features_in_), int(t), int(kernel), int(degree),
+                                     int(self.info_), 1 if self._squeeze else 0], "<i8"),
+        })
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts; it does not
+        refit."""
+        from .linear_model import _restore_mode
+        arrays = _serialize.read_npz(path, _KERNEL_RIDGE_FORMAT)
+        meta, hyper = _km_header(arrays, path, cls, 7, 3)
+        n, d, t, kernel, degree, info, squeeze = (int(v) for v in meta.tolist())
+        gamma, coef0, alpha = (float(v) for v in hyper.tolist())
+        obj = cls(alpha=alpha, kernel=kernel, gamma=gamma, degree=degree, coef0=coef0)
+        _restore_mode(obj, arrays)
+        obj.X_fit_ = _km_array(arrays, "x_fit", "<f4", (n, d), path)
+        dual = _km_array(arrays, "dual", "<f4", (n * t,), path)
+        obj.n_features_in_ = d
+        obj.n_targets_ = t
+        obj._squeeze = bool(squeeze)
+        obj.dual_coef_ = dual if squeeze else dual.reshape((n, t))
+        obj.info_ = info
+        obj._kernel_params = (kernel, degree, gamma, coef0, alpha)
+        return obj
+
 
 class Nystroem(_KernelMethodBase):
     """`sklearn.kernel_approximation.Nystroem` on the GPU.
@@ -342,6 +416,47 @@ class Nystroem(_KernelMethodBase):
     def fit_transform(self, X, y=None):
         return self.fit(X).transform(X)
 
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: every model array as
+        fitted, `hyper` `<f8` [gamma, coef0] as the fit resolved them, `meta`
+        `<i8` [n_components, n_features, kernel code, degree, seed, sweeps]
+        and the numeric mode. `mojolearn.host_model(path)` transforms from it
+        on a CPU with no GPU."""
+        if not hasattr(self, "components_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        kernel, degree, gamma, coef0, seed = self._kernel_params
+        q, d = self.components_.shape
+        return _km_write(self, path, _NYSTROEM_FORMAT, {
+            "components": self.components_,
+            "component_indices": self.component_indices_,
+            "normalization": self.normalization_,
+            "eigenvalues": self.eigenvalues_,
+            "eigenvectors": self.eigenvectors_,
+            "hyper": Array.from_list([float(gamma), float(coef0)], "<f8"),
+            "meta": Array.from_list([int(q), int(d), int(kernel), int(degree), int(seed), int(self.sweeps_)], "<i8"),
+        })
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result transforms; it does not
+        refit."""
+        from .linear_model import _restore_mode
+        arrays = _serialize.read_npz(path, _NYSTROEM_FORMAT)
+        meta, hyper = _km_header(arrays, path, cls, 6, 2)
+        q, d, kernel, degree, seed, sweeps = (int(v) for v in meta.tolist())
+        gamma, coef0 = (float(v) for v in hyper.tolist())
+        obj = cls(kernel=kernel, gamma=gamma, degree=degree, coef0=coef0, n_components=q, random_state=seed)
+        _restore_mode(obj, arrays)
+        obj.n_features_in_ = d
+        obj.components_ = _km_array(arrays, "components", "<f4", (q, d), path)
+        obj.component_indices_ = _km_array(arrays, "component_indices", "<i4", (q,), path)
+        obj.normalization_ = _km_array(arrays, "normalization", "<f4", (q, q), path)
+        obj.eigenvalues_ = _km_array(arrays, "eigenvalues", "<f4", (q,), path)
+        obj.eigenvectors_ = _km_array(arrays, "eigenvectors", "<f4", (q, q), path)
+        obj.sweeps_ = sweeps
+        obj._kernel_params = (kernel, degree, gamma, coef0, seed)
+        return obj
+
 
 class RBFSampler(_KernelMethodBase):
     """`sklearn.kernel_approximation.RBFSampler` on the GPU: random
@@ -440,6 +555,42 @@ class RBFSampler(_KernelMethodBase):
 
     def fit_transform(self, X, y=None):
         return self.fit(X).transform(X)
+
+    def save(self, path):
+        """Write the fitted sampler to `path` as an npz: the weights and
+        offsets as drawn, `hyper` `<f8` [gamma, sigma_, scale_], `meta`
+        `<i8` [n_features, n_components, seed] and the numeric mode.
+        `mojolearn.host_model(path)` transforms from it on a CPU with no
+        GPU."""
+        if not hasattr(self, "random_weights_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        gamma, seed = self._params
+        d, q = self.random_weights_.shape
+        return _km_write(self, path, _RBF_SAMPLER_FORMAT, {
+            "random_weights": self.random_weights_,
+            "random_offset": self.random_offset_,
+            "hyper": Array.from_list([float(gamma), float(self.sigma_), float(self.scale_)], "<f8"),
+            "meta": Array.from_list([int(d), int(q), int(seed)], "<i8"),
+        })
+
+    @classmethod
+    def load(cls, path):
+        """Load a sampler saved by `save`. The result transforms; it does
+        not draw again."""
+        from .linear_model import _restore_mode
+        arrays = _serialize.read_npz(path, _RBF_SAMPLER_FORMAT)
+        meta, hyper = _km_header(arrays, path, cls, 3, 3)
+        d, q, seed = (int(v) for v in meta.tolist())
+        gamma, sigma, scale = (float(v) for v in hyper.tolist())
+        obj = cls(gamma=gamma, n_components=q, random_state=seed)
+        _restore_mode(obj, arrays)
+        obj.n_features_in_ = d
+        obj.random_weights_ = _km_array(arrays, "random_weights", "<f4", (d, q), path)
+        obj.random_offset_ = _km_array(arrays, "random_offset", "<f4", (q,), path)
+        obj.sigma_ = sigma
+        obj.scale_ = scale
+        obj._params = (gamma, seed)
+        return obj
 
 
 __all__ = ["KernelRidge", "Nystroem", "RBFSampler"]

@@ -10,6 +10,48 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- New `KMeans.transform` and `KMeans.fit_transform`, with cuML's `KMeans.transform` as the
+  reference: the distance from every row to every fitted center under the model's `metric`
+  (squared for the default `'euclidean'`, cuVS `L2Expanded`; the root for
+  `'l2_sqrt_expanded'`), float32 `(n_samples, n_clusters)`. Each cell is the fused
+  assignment kernel's cell, so the distance at `predict`'s label is the row minimum bit for
+  bit. On the GPU binding and the CPU core host binding; cosine refuses by name as its fit
+  does. The seven fitting k-means lanes add `transform` to their infer and batch cells.
+  Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the release
+  record.
+- Public CPU inference for saved ARIMA models, UMAP embeddings and the whitened full-SVD PCA.
+  `ARIMA.save`/`load` and `UMAP.save`/`load` are new; `mojolearn.host_model(path)`, or the
+  classes on a CPU-only install, predict (in sample and out of sample), forecast and read the
+  fitted ARIMA attributes, and transform with a saved UMAP embedding. A UMAP transform's answer
+  depends on the query batch by its contract; the CPU answers the GPU's bytes for the same batch.
+  ARIMA inference ships in a new host binding, `_mojolearn_forecast_host`, which carries
+  predict and forecast and no fit (about 270 KB on macOS arm64); the ARIMA fit stays a source
+  reference build. `ExponentialSmoothing.fit` now refuses on a CPU-only install outside the
+  internal reference context, as every other CPU fit does. Apple M4 CPU column against the
+  committed Apple, NVIDIA and AMD columns; the model cells of the new save formats are owed to
+  the release record.
+- New `GaussianMixture.sample(n_samples)`, with scikit-learn's `BaseMixture.sample` as the
+  reference: `(X, y)` with the component counts a multinomial draw over `weights_` and the
+  rows grouped by component ascending. Every draw is position-mapped Philox keyed by
+  `random_state` (DEVIATION 2791), the normals are RAFT's Box-Muller with the pinned seams,
+  and each row is the forward substitution through the fitted `precisions_cholesky_`
+  (DEVIATION 2792), so one model and one `random_state` give the same bits on every vendor;
+  they are not scikit-learn's bits. `X` is float32 and `y` int32. On the GPU mixture binding
+  and the internal mixture host binding; public CPU exposure from a saved model is left to
+  the neighbors and density inference lane. New `gmm-sample` and `gmm-random-init-sample`
+  identity lanes, so the gmm lanes' recorded cells do not move. Apple M4 Metal and CPU
+  columns only; the NVIDIA and AMD cells are owed to the release record.
+
+- CPU inference from saved models for StandardScaler, MinMaxScaler, Lasso, ElasticNet,
+  KernelRidge (linear and rbf kernels), Nystroem (linear and rbf) and RBFSampler: each
+  gains `save` and `load`, and `mojolearn.host_model(path)` transforms or predicts on a
+  CPU-only install. The shipped estimators host binding serves the six entries
+  (`standard_transform`, `minmax_transform`, `cd_predict`, `kernel_ridge_predict`,
+  `nystroem_transform`, `rbf_sampler_transform`); the preprocessing, solver and
+  kernel_methods reference bindings still do not ship. The saved-model classical lanes
+  grow from 12 to 29, adding the ols, ridge and logistic option variants. On a CPU-only
+  install `StandardScaler.fit`, `MinMaxScaler.fit`, `Lasso.fit` and `ElasticNet.fit` now
+  refuse by name outside the internal reference scope, as every other estimator fit does.
 - Public CPU `Cholesky` inference. On a CPU-only install `Cholesky().fit(A)` factors a given
   matrix and `solve` answers from it, and `Cholesky.save` / `Cholesky.load` (or
   `mojolearn.host_model`, which returns a `HostCholesky`) carry a factor from a GPU box to a
@@ -62,14 +104,30 @@ Linux legs are OWED before this heading reads published.
   `hdbscan-leaf` lanes still match. Those lanes and `par-hdbscan` now carry infer and batch
   cells instead of `n/a:transductive`, with the batch and host sabotage builds required to
   move them. Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the
-  release record. `membership_vector` and `all_points_membership_vectors` are not
-  implemented and refuse by name.
+  release record.
+- New `mojolearn.hdbscan.membership_vector(clusterer, points_to_predict, batch_size=4096)` and
+  `all_points_membership_vectors(clusterer, batch_size=4096)`, cuML's soft clustering: for each
+  point and each selected cluster, the probability of membership. They need
+  `HDBSCAN(prediction_data=True)` and refuse by name without it. cuML computes four of the steps in
+  float64, which an Apple GPU cannot run; here every step is float32 with pinned seams on the GPU
+  binding and the CPU host binding, and rows where cuML overflows to NaN (duplicated points) are
+  finite (DEVIATION 1616). The `hdbscan` and `hdbscan-leaf` identity lanes hash both calls in their
+  infer cells, and their batch part asks `membership_vector` alone and split.
 - `GradientBoosting.fit` takes `group_id`, CatBoost's Pool argument: one string or integer id per
   row (an integer compares by its decimal spelling, as their Pool hashes it), each group's rows
   consecutive or the fit raises "group Ids are not consecutive". The grouping crosses into the GPU
-  binding and the GBDT host binding as run lengths, and every loss this implementation trains
-  refuses it BY NAME there, because no querywise loss is implemented yet. `subgroup_id` and `pairs`
-  are refused by name in Python. A fit without them sends the same parameter layout as before.
+  binding and the GBDT host binding as run lengths. `loss="QueryRMSE"` reads it; every other loss
+  refuses it BY NAME. `subgroup_id` and `pairs` are refused by name in Python. A fit without them
+  sends the same parameter layout as before.
+- New `loss="QueryRMSE"` for `GradientBoosting`, the first learning-to-rank loss, with the CatBoost
+  reference's querywise target (`query_rmse.cu`, the group means and ids of `query_helper.cu`, the
+  querywise der calcer's inverse bin order in leaf estimation) on the GPU and restated in the GBDT
+  host binding for the CPU reference column. SymmetricTree with the greedy searcher, Newton leaves at
+  one iteration by default; a bootstrap, categorical features, an eval set, the pointwise searcher
+  and the non-symmetric policies are refused by name. Without `group_id` every row is its own
+  query, as in the reference, so the fit learns nothing. Prediction is the ordinary row-wise raw
+  score, so saved-model CPU inference covers it. New identity lane `gbdt-query-rmse` with a batch
+  part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed to the release record.
 - Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
   namely the byte LM's, the forest's, the tokenizer's and the twelve routed families (core,
   linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp, arima), fifteen in

@@ -458,7 +458,7 @@ def mamba3_backward_workspace_max_floats(dims: Mamba3Dims, m: Int) -> Int:
 
 
 def mamba3_backward_state_floats(b: Int, l: Int, dims: Mamba3Dims) -> Int:
-    """`B * C * H * P * N`, the incoming-per-chunk state the backward reads. Mamba-1's T2 is deleted here for Mamba-2's reason: the quantity upstream's `h[t] - dbu[t]` recovery fights to obtain is materialized at chunk boundaries by construction, so there is nothing to refuse and nothing to price."""
+    """`B * C * H * P * N`, the incoming-per-chunk state the backward reads. Mamba-1's T2 is deleted here for Mamba-2's reason: the quantity the reference's `h[t] - dbu[t]` recovery fights to obtain is materialized at chunk boundaries by construction, so there is nothing to refuse and nothing to price."""
     var c = (l + M3_CHUNK_SIZE - 1) // M3_CHUNK_SIZE
     if l <= 0:
         c = 0
