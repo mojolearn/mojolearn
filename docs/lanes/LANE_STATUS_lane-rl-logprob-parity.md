@@ -16,7 +16,7 @@ TransformerBlock, Mamba1/2/3Block and SambaStack.
 - Evidence: bench/results/identity_break/2026-09-15_rlpair/; docs: IDENTITY_PATHS.md section.
 
 ## Running
-- nothing rented. The CPU identity gate on this branch (see gh run list --branch lane/rl-logprob-parity).
+- nothing rented. CPU identity gate run 34980556800 (workflow_dispatch on 7ae35df48; lane/rl-* pushes do not trigger it). When green: fetch, merge origin/main, light checks, push HEAD:main.
 
 ## Owed, with commands
 - AMD column: with the next release record (GPU runs only for PyPI releases, 2026-09-15 rule).
