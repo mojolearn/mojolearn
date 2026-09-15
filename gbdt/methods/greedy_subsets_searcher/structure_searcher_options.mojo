@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The eleven knobs the structure searcher reads, and nothing else.
 
-FOLLOWS `TTreeStructureSearcherOptions` in
+Reference: `TTreeStructureSearcherOptions`,
 `catboost/cuda/methods/greedy_subsets_searcher/structure_searcher_options.h`
-at CatBoost `54a8143a`. Followed statement for statement.
+(CatBoost `54a8143a`).
 
-Theirs is a plain struct with defaults, built once per fit by
+The reference is a plain struct with defaults, built once per fit by
 `CreateStructureSearcher` and then read by `TGreedySearchHelper` at every
 level. It is worth having as its own type rather than eleven parameters
 because THREE of its fields change meaning with `Policy`, and a struct is

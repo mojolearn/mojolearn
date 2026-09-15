@@ -76,7 +76,7 @@ GATES -- each is a distinct MECHANISM, not a distinct assertion:
       grid.
   F11 THE `learnPermutationCount - 1` MODULUS. At the default
       `permutation_count = 4` the structure search never sees permutation 2,
-      and that is transcribed, not corrected.
+      and that is matched, not corrected.
   F12 `IntLog2` at the powers of two, where a float `ceil(log2(x))` is most
       likely to land a hair off, plus the full identity over [1, 1 << 20].
 
@@ -117,8 +117,8 @@ WHAT IS NOT GATED, AND WHY
 (`:201`) is UNREACHABLE. It runs after the group-count ensure, so `n >= 4`;
 `MinEstimationSize` returns at least 1 on every arm; and
 `NextQueryOffsetForLine(>= 1)` is at least 2 under both groupings. The
-`devCount > 1` arm only ever raises it further. It is transcribed because it
-is theirs; there is no input that fires it.
+`devCount > 1` arm only ever raises it further. It is kept because the
+reference has it; there is no input that fires it.
 
 The `static_cast<ui32>` wrap described in DEVIATION 111 is likewise not
 gated: reaching it needs `sampleCount * growthRate >= 2^32` with

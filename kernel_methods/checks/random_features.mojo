@@ -13,10 +13,10 @@ GENERATOR AND ITS TRANSFORM:
 
   - `core/philox.mojo` holds RAFT's `PhiloxGenerator` (cuRAND's
     `curandStatePhilox4_32_10_t`), its `next_float` and its Lemire range
-    reduction, transcribed line by line and held to an oracle built by
-    COMPILING their generator.
+    reduction, implemented line by line and held to an oracle built by
+    COMPILING the reference generator.
   - `km_boxmuller_pair` below is `raft::random::detail::box_muller_transform`
-    (`raft/random/detail/rng_device.cuh:133-142`), five lines, in their order.
+    (`raft/random/detail/rng_device.cuh:133-142`), five lines, in the reference order.
   - `resample/checks/index_map.mojo` holds the POSITION MAP -- the derived
     key, the subsequence packing, the single position-mapped uniform and the
     permutation key -- and this file CALLS it rather than re-spelling it.
@@ -464,7 +464,7 @@ def feature_map_epilogue_kernel(
     THE ORDER IS NOT FREE. `cos(p + b) * scale` and `cos(p) * scale + ...`
     are different functions; `scale * cos(p + b)` and `cos(p + b) * scale`
     are the same bits by commutativity but the ADD and the MULTIPLY cannot be
-    exchanged. Their sequence is transcribed and `identical_cos` carries
+    exchanged. The reference sequence is kept and `identical_cos` carries
     IDENTITY_PATHS row 12.
     """
     var d = Int(n_components_in)

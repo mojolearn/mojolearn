@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Distance and argmin FUSED, so the distance matrix is never written.
 
-FOLLOWS `cuvs/src/distance/detail/fused_distance_nn/simt_kernel.cuh` at cuVS
-`94c2819`, built on their `linalg/contractions.cuh` policy and the
+Reference: `cuvs/src/distance/detail/fused_distance_nn/simt_kernel.cuh` (cuVS
+`94c2819`), built on the `linalg/contractions.cuh` policy and the
 `PairwiseDistances` loop structure of
 `raft/distance/detail/pairwise_distance_base.cuh`. Partial.
 
@@ -27,14 +27,14 @@ fused arm is what runs on the hardware most people have, and its CUTLASS
 version is unportable but THIS one is not: `simt_kernel.cuh` is the SIMT
 path, plain CUDA cores, no tensor-core instructions anywhere.
 
-THE POLICY IS A PARAMETER AND THE SELECTION IS THEIRS
-------------------------------------------------------
+THE POLICY IS A PARAMETER AND THE SELECTION IS THE REFERENCE'S
+---------------------------------------------------------------
 The kernel is parameterized on `[veclen, kblk, tr, tc]`, which is
 `KernelPolicy<float, _veclen, _kblk, 4, 4, _tr, _tc>`
 (`raft/linalg/contractions.cuh:63-107`; `AccRowsPerTh = AccColsPerTh = 4` in
 both policies their float dispatch instantiates, so those two are fixed
-here). The host picks the instantiation with THEIR selection computation,
-transcribed in `fused_veclen_for` and `fused_is_skinny` below from
+here). The host picks the instantiation with the reference selection computation,
+implemented in `fused_veclen_for` and `fused_is_skinny` below, per
 `cuvs/src/distance/fused_distance_nn-inl.cuh:102-233`:
 
 - veclen 4 when `4k % 16 == 0` and both base pointers are 16-byte aligned

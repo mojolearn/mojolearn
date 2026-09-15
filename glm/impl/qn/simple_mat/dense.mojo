@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`SimpleVec` / `SimpleDenseMat`: the vector operations the QN solver is written in.
 
-FOLLOWS `cuml/cpp/src/glm/qn/simple_mat/dense.hpp` at cuML `00094f7`:
+Reference: `cuml/cpp/src/glm/qn/simple_mat/dense.hpp` (cuML `00094f7`):
 `ax`, `axpy`, `dot`, `squaredNorm`, `nrmMax`, `nrm2`, `copy_async`, `fill`.
 Partial (`assign_gemm` is `core/gemm.mojo`'s business and is called from
 `glm_base.mojo` directly; the sparse twin `sparse.hpp` is not implemented). Do

@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The BINARY driver: 32 one-bit features per block.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_binary.cu` at CatBoost
-`54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_hist2_binary.cu` (CatBoost
+`54a8143a`).
 
 `ComputeSplitPropertiesBImpl`. It builds its histogram with
 `TPointHistHalfByte` -- the same accumulator the half-byte kernel uses, not a

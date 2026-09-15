@@ -31,7 +31,7 @@ fp32.v1` dot (`solver/checks/profile_dot.mojo`), whose fold is a pure
 function of `n_rows`.
 
 THE KERNEL, `coalescedSumMediumKernel<TPB=256>` (`-inl.cuh:288-322`),
-transcribed branch for branch:
+branch for branch:
 
     thread_data = init; thread_c = 0
     for i = threadIdx.x; i < D; i += TPB:
@@ -79,8 +79,8 @@ def _kbn_sum(mut sum: Float32, mut c: Float32, cur: Float32):
     IDENTITY_PATHS row 39: the `>=` selects which compensation FORMULA
     runs, not a value; both operands are `abs()` (never -0.0), on a tie of
     magnitudes the two formulas compute the same `c` (`t` is then exact,
-    `+-0` or `2 sum`), so `>=` versus `>` moves no bit and mirrors RAFT's
-    spelling; a NaN makes `>=` false and takes the second arm, as theirs.
+    `+-0` or `2 sum`), so `>=` versus `>` moves no bit and matches RAFT's
+    spelling; a NaN makes `>=` false and takes the second arm, as in RAFT.
     FAST-only in any case (the `comptime assert` below)."""
     var t = sum + cur
     if abs(sum) >= abs(cur):

@@ -13,7 +13,7 @@ stages `lstsq_eig` and `svd_eig` reach on the device), the small dense
 products are `core/classical_host_predict.mojo::host_gemm_nt` (the pinned
 `gemm_nt` and `gemv_n` cell), and every elementwise kernel is spelled a
 second time here from `core/column_stats.mojo` and
-`glm/impl/matrix/math.mojo`, statement for statement.
+`glm/impl/matrix/math.mojo`, line for line.
 
 WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
 

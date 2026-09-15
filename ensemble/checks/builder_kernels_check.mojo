@@ -475,7 +475,7 @@ def expected_histogram(fx: Fixture) -> List[UInt32]:
     """The tally their `:336-342` must produce, computed here row by row
     with the LINEAR bin search and an explicit `label * n_bins + b` offset.
 
-    Layout is theirs (`:315`):
+    Layout (`:315`):
     `(nid * gridDim.y + blockIdx.y) * max_n_bins * n_classes`, and within
     a (node, column) block, `label * n_bins + bin` (`bins.cuh:26`). Note
     the stride is `max_n_bins`, the offset uses `n_bins`; a check that

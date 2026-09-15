@@ -3,7 +3,7 @@
 """The batched Isolation Forest tree builder: one block per tree, thread 0
 walks the stack.
 
-MIRRORS `cpp/src/isolation_forest/isolation_tree_builder.cuh` at
+Reference: `cpp/src/isolation_forest/isolation_tree_builder.cuh` at
 rapidsai/cuml v26.08.00, branch for branch and loop for loop:
 `StackEntry` (`:37-42`), `compute_c_n` (`:48-55`), `IFNode` (`:63-69`),
 `curand_u64` / `sample_bounded` (`:84-101`), `contains_sample` /
@@ -53,8 +53,8 @@ scores device-vs-oracle under IDENTICAL; on Apple the mul-add pin is
 bit-inert (Metal contracts) exactly as numerics.mojo says.
 
 DEVIATION 685. NODE STORAGE IS FOUR ARRAYS, NOT AN ARRAY OF `IFNode`.
-Theirs: `IFNode<T>{int feature_idx; T threshold; int left_child; int
-right_child;}` in one `rmm::device_buffer`. Ours: `node_feature` (Int32),
+Reference: `IFNode<T>{int feature_idx; T threshold; int left_child; int
+right_child;}` in one `rmm::device_buffer`. Here: `node_feature` (Int32),
 `node_threshold` (Float32), `node_left` (Int32), `node_right` (Int32),
 same indices, same `tree_offsets`. WHAT is said is unchanged (every field,
 every index); HOW changed because a whole-struct load through a pointer

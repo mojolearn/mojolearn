@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Apply a stored oblivious tree to rows, by EVALUATING it.
 
-FOLLOWS `AddObliviousTreeImpl`, `catboost/cuda/models/kernel/add_model_value.cu:70-120`
-at CatBoost `54a8143a`, which is the kernel their own `AppendModels` reaches
+Reference: `AddObliviousTreeImpl`, `catboost/cuda/models/kernel/add_model_value.cu:70-120`
+(CatBoost `54a8143a`), which is the kernel their own `AppendModels` reaches
 on the learn set as well as the test set
 (`add_oblivious_tree_model_doc_parallel.cpp:191-192`).
 
@@ -44,7 +44,7 @@ def compute_bins_and_add_kernel(
     dim_count_in: Int32,
     cursor_stride_in: Int32,
 ):
-    """Their `AddObliviousTreeImpl`, transcribed.
+    """`AddObliviousTreeImpl`.
 
     Their loop, `add_model_value.cu:106-117`:
 

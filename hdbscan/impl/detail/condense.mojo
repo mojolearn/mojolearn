@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The condensed tree: collapse every subtree below `min_cluster_size`.
 
-FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/detail/condense.cuh`
+Reference: `cuml-v26.08.00/cpp/src/hdbscan/detail/condense.cuh`
 (cuML `265b9da`): `bfs_from_node` (`:37-66`), `_build_condensed_hierarchy`
-(`:91-212`) and `build_condensed_hierarchy` (`:237-286`). Followed statement for statement,
-their branches in their order.
+(`:91-212`) and `build_condensed_hierarchy` (`:237-286`), with the
+reference branches in the reference order.
 
 THIS IS A HOST FUNCTION ON THEIR SIDE TOO, and that is worth stating
 because the file name says `.cuh`. cuML 26.08 rewrote condense as a
@@ -400,7 +400,7 @@ def _collapse(
     LEAF found, and mark every visited node -- leaf or internal -- to be
     ignored.
 
-    Their three copies are one function here; the body is transcribed
+    The reference's three copies are one function here; the body is written
     once because it is three copies of one paragraph, and
 
     """

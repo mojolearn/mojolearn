@@ -3,8 +3,8 @@
 """`ML::knn_classify`, `ML::knn_regress`, `ML::knn_class_proba`: the entry
 points cuML's Python calls after `kneighbors`.
 
-FOLLOWS `cuml/cpp/src/knn/knn.cu:328-389` at cuML `00094f7` (branch-25.08).
-Followed statement for statement. The rest of `knn.cu` -- `brute_force_knn`,
+Reference: `cuml/cpp/src/knn/knn.cu:328-389` (cuML `00094f7`, branch-25.08).
+The rest of `knn.cu` -- `brute_force_knn`,
 `approx_knn_build_index`, `approx_knn_search` -- is cuVS's `brute_force` /
 `ivf_*` behind a cuML facade; the brute-force half of it is
 `neighbors/impl/detail/knn_brute_force.mojo` and the approximate

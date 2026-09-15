@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`random_strength`'s magnitude: how big the score noise is.
 
-FOLLOWS `catboost/cuda/methods/random_score_helper.h` at CatBoost
-`54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/random_score_helper.h` (CatBoost
+`54a8143a`).
 
 Three functions, and between them they decide the ONE scalar every noisy
 score kernel multiplies its normal draw by:
@@ -48,7 +48,7 @@ DIFFERENT: the standard deviation itself, in TWO ways.
      with a non-zero gradient contributes an inf and poisons the whole
      reduction to NaN.
 
-Neither is corrected here. Both are followed statement for statement where their file puts
+Neither is corrected here. Both are kept where the reference puts
 them: this one here, `compute_target_std_dev` in `greedy_search_helper`.
 =========================================================================
 

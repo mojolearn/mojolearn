@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Truncated SVD, which is PCA without the centering.
 
-FOLLOWS `cuml/cpp/src/tsvd/tsvd.cuh::tsvdFit` at cuML `00094f7`
-(branch-25.08). Partial.
+Reference: `cuml/cpp/src/tsvd/tsvd.cuh::tsvdFit` (cuML `00094f7`,
+branch-25.08). Partial.
 
 The path this file used to cite, `raft/linalg/detail/tsvd.cuh`, does not
 exist and never has. Truncated SVD lives in cuML.
@@ -23,7 +23,7 @@ else. It does not call `truncCompExpVars`, so it computes no
 which is the PCA-shaped routine, so it fills all five fields of `PCAResult`
 on the tSVD path too.
 
-Three of those five are OURS, and the third one is the one to watch:
+Three of those five are added by this implementation, and the third one is the one to watch:
 **their `explained_var` for truncated SVD is not the eigenvalue at all.**
 `tsvdFitTransform` computes it as `raft::stats::vars` of the TRANSFORMED
 data, after the transform and after the sign flip (`tsvd.cuh:272-276`). On
@@ -55,7 +55,7 @@ the shared function. `pcaFit` never flips; `tsvdFitTransform` DOES, at
 `tsvd.cuh:270`, and its flip is U-based -- the argmax runs down the columns
 of the TRANSFORMED data, not of the components -- so a `TruncatedSVD` user
 of cuML gets a sign convention that a `PCA` user does not, and it is not
-this one. Ours is V-based on both paths. Recorded in `NOT_IMPLEMENTED.tsv`.
+this one. This implementation is V-based on both paths. Recorded in `NOT_IMPLEMENTED.tsv`.
 
 Set that beside `pca_fit` and the whole difference is visible: PCA subtracts
 the column means first and divides by `n_rows - 1`, truncated SVD does

@@ -549,7 +549,7 @@ def check_subtraction() raises:
     downstream reads its output and a wrong sign or a wrong offset produces
     plausible numbers rather than obvious garbage.
 
-    Layout is theirs: `histogram[leaf * binFeatureCount * statCount +
+    Layout: `histogram[leaf * binFeatureCount * statCount +
     stat * binFeatureCount + binFeature]`. Three leaves, one stat. Leaf 0 is
     the PARENT total, leaf 1 the smaller child that was actually built, and
     the kernel must overwrite leaf 0 with `parent - smaller`, in place, which

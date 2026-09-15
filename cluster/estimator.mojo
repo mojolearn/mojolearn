@@ -17,8 +17,8 @@ repository, for two reasons that are both this file's job to fix:
      existing caller is a check that computed them from a fixture it
      generated itself.
 
-Nothing here is an implementation. `cluster/impl/` mirrors cuVS and is governed by
-This file is host-side policy cuVS has no counterpart
+Nothing here is an implementation; that is `cluster/impl/`, whose reference
+is cuVS. This file is host-side policy cuVS has no counterpart
 for, in the same category as `checks/`. It follows
 `neighbors/estimator.mojo`, which is the first file of this kind, including
 its convention that data crosses as raw pointers plus lengths so a CPython

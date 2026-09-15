@@ -249,7 +249,7 @@ def main() raises:
     cells += 4
     # cuML's OWN budget, under cuML's own name, is HONOURED and REACHES the
     # params (2026-09-01). `resolve` pinned `params.max_leaves = -1` until
-    # then, so `builder.mojo:292-296` and `:341-345` were transcribed,
+    # then, so `builder.mojo:292-296` and `:341-345` were implemented,
     # checked by `builder_check`, and unreachable from any fit.
     var c9b = base.copy()
     c9b.max_leaves = 8

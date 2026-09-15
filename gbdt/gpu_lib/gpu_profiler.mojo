@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Named, nested, scoped timers over the control plane.
 
-FOLLOWS `catboost/cuda/cuda_lib/cuda_profiler.h` at CatBoost `54a8143a`.
-Followed statement for statement where it follow statement for statements. See the DEVIATION BLOCK.
+Reference: `catboost/cuda/cuda_lib/cuda_profiler.h` (CatBoost `54a8143a`).
+Differences from the reference are listed in the DEVIATION BLOCK.
 
 This is not instrumentation bolted on afterwards; it is how CatBoost knows
 where a tree's time goes, and their driver is full of it:

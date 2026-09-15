@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`WorkingSet`: which `n_ws` training vectors the next block solve gets.
 
-FOLLOWS `cuml/cpp/src/svm/workingset.h` + `workingset.cuh` at cuML
-v26.08.00: `SetSize`, `Select` (the FIFO arm), `SimpleSelect`,
+Reference: `cuml/cpp/src/svm/workingset.h` + `workingset.cuh` (cuML
+v26.08.00): `SetSize`, `Select` (the FIFO arm), `SimpleSelect`,
 `GatherAvailable`, `Initialize`, `AllocateBuffers`. NOT implemented:
 `PrioritySelect`, `SelectPrevWs`, `ws_priority*` -- the `FIFO_strategy =
-false` arm, which their own header marks untested ("note that only FIFO is
+false` arm, which the reference header marks untested ("note that only FIFO is
 tested so far", `workingset.h:36`) and nothing dispatches to; see
 `svm/NOT_IMPLEMENTED.tsv`. The `n_train = 2 * n_rows` SVR doubling is carried as a
 variable and is always `n_rows` in rung 1.
@@ -188,8 +188,8 @@ struct WorkingSet(Movable):
         mut y: DeviceBuffer[DType.float32],
         mut C: DeviceBuffer[DType.float32],
     ) raises:
-        """`Select(f, alpha, y, C)`, the FIFO arm, transcribed
-        (`workingset.h:157-189`)."""
+        """`Select(f, alpha, y, C)`, the FIFO arm
+        (reference: `workingset.h:157-189`)."""
         if self.n_ws >= self.n_train:
             # All elements are selected, we have initialized idx to cover
             # this case

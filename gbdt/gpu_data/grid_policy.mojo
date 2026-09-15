@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Feature grouping and bit packing.
 
-FOLLOWS `catboost/cuda/gpu_data/grid_policy.h` at CatBoost `54a8143a`.
-Followed statement for statement.
+Reference: `catboost/cuda/gpu_data/grid_policy.h` (CatBoost `54a8143a`).
 
 This is the file that makes CatBoost's histogram read 32 features out of one
 4-byte load on binary data. A feature is assigned to one of three policies by
