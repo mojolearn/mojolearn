@@ -300,7 +300,7 @@ sampler, a solver, a metric, a reduction).
                gbdt-multiclass gbdt-onevsall gbdt-parametric-losses
                gbdt-lossguide-newtoncosine gbdt-pointwise-l2-bayesian-eval
                gbdt-exact-mae gbdt-categorical-ctr gbdt-nan-modes gbdt-adapter-clf
-               gbdt-adapter-reg iforest-tuned (last, with iforest)
+               gbdt-adapter-reg gbdt-query-rmse iforest-tuned (last, with iforest)
       neural   mamba2-dtlimit transformer-window byte-lm-resident
                byte-lm-host-infer-threaded (the SHIPPED default arm; the
                2026-09-13 lane pins the reference arm) samba-untied-dropout-accum
@@ -589,6 +589,15 @@ def _h(*arrays):
         m.update(str(a.shape).encode())
         m.update(a.tobytes())
     return m.hexdigest()[:16]
+
+
+def _train_hash(parts):
+    """The train column's cell hash of one fit: `_h` over the lane's parts
+    dict spelled `key=value`, sorted by key, joined by `|`. The run loop and
+    `python -m mojolearn verify --all` (python/mojolearn/_verify_all.py, which
+    imports this module) both call this, so the shipped verifier cannot hash
+    a cell differently from the record."""
+    return _h(np.frombuffer("|".join(f"{k}={v}" for k, v in sorted(parts.items())).encode(), dtype=np.uint8))
 
 
 def _hfile(path):
@@ -1636,6 +1645,49 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     m = ml.GradientBoostingRegressor(n_estimators=20, max_depth=6).fit(X, yr)
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+#: the gbdt-query-rmse lane's query sizes, cycled in row order: sizes of one
+#: and two rows (a query of one has zero QueryRMSE derivative on every row)
+#: beside larger ones, uneven on purpose so the 32-lane query reduce sees
+#: queries shorter than, near and longer than one lane stride.
+RANK_QUERY_SIZES = (1, 2, 7, 3, 16, 1, 5, 40, 2, 9)
+
+#: the relevance cut points: comparisons only, no float arithmetic, so every
+#: box hands the lane the same grades
+RANK_CUTS = (-1.0, 0.0, 1.0, 2.0)
+
+
+def _rank_groups(n):
+    """The gbdt-query-rmse group ids, one per row, consecutive by
+    construction (`RANK_QUERY_SIZES` cycled; the last query truncated at
+    `n`). Shared with the CatBoost CPU reference script, so both sides read
+    the same grouping."""
+    ids = []
+    q = 0
+    while len(ids) < n:
+        ids.extend([q] * RANK_QUERY_SIZES[q % len(RANK_QUERY_SIZES)])
+        q += 1
+    return np.asarray(ids[:n], dtype=np.int64)
+
+
+def _relevance(yr):
+    """Tie-heavy graded relevance 0..4 from the fixture's regression target,
+    cut at `RANK_CUTS` (`np.digitize`, comparisons only), as float32."""
+    return np.digitize(yr, np.asarray(RANK_CUTS, dtype=np.float32)).astype(np.float32)
+
+
+@lane("gbdt-query-rmse")
+def _(ml, X, yc, yr, Xh=None):
+    """QueryRMSE (learning to rank, the querywise target) on uneven queries
+    with tie-heavy grades: 20 depth-6 symmetric trees, the predictions and
+    the learn loss curve hashed. Predict is row-wise, so the held-out probe
+    and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="QueryRMSE").fit(X, rel, group_id=g)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64))),
+                m, lambda e: (e.predict(Xh),))
 
 
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
@@ -3722,7 +3774,8 @@ _batch_decl(_rows_calls("predict", "predict_proba"),
 _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
-            "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et")
+            "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
+            "gbdt-query-rmse")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 
@@ -5713,7 +5766,7 @@ def _run_reference(args):
                     _DUMP_TAG = f"{name}/{f}/{repeat}"
                     p = LANES[name](ml, X, yc, yr, held[f].copy())
                     parts.append(dict(p))
-                    hs.append(_h(np.frombuffer("|".join(f"{k}={v}" for k, v in sorted(p.items())).encode(), dtype=np.uint8)))
+                    hs.append(_train_hash(p))
                 except Exception as exc:
                     err = f"{type(exc).__name__}: {exc}"
                     if args.verbose:

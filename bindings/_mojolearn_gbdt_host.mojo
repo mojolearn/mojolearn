@@ -116,6 +116,7 @@ from gbdt.host.gbdt_oracle_losses import (
     GBDT_OBJ_MAPE,
     GBDT_OBJ_POISSON,
     GBDT_OBJ_QUANTILE,
+    GBDT_OBJ_QUERY_RMSE,
     GBDT_OBJ_TWEEDIE,
     GbdtHostLoss,
     gbdt_losses_host_fit,
@@ -249,6 +250,8 @@ def _pointwise_objective(loss: String) -> Int:
         return GBDT_OBJ_TWEEDIE
     if loss == String("Huber"):
         return GBDT_OBJ_HUBER
+    if loss == String("QueryRMSE"):
+        return GBDT_OBJ_QUERY_RMSE
     return -1
 
 
@@ -593,8 +596,12 @@ def gbdt_fit_binding(
     if len(params) >= fixed_and_weights + 3:
         feature_fraction = Float64(py=params[fixed_and_weights + 2])
     # the pool's grouping (`bindings/_mojolearn_gbdt.mojo`'s group tail),
-    # checked and refused in the words `gbdt/train.mojo::train` uses, so the
-    # CPU column refuses exactly where the device column does
+    # checked, refused and resolved in the words and by the rule
+    # `gbdt/train.mojo::train` uses, so the CPU column refuses exactly where
+    # the device column does and QueryRMSE sees the same queries
+    var tail_loss = String(py=strs[0])
+    var tail_rows = Int(py=params[0])
+    var host_group_sizes = List[Int]()
     if len(params) == fixed_and_weights + 5:
         var n_groups = Int(py=params[fixed_and_weights + 4])
         if n_groups < 1:
@@ -609,18 +616,26 @@ def gbdt_fit_binding(
             if size == UInt32(0):
                 raise Error("group_id: group " + String(g) + " has no rows")
             covered += Int(size)
-        if covered != Int(py=params[0]):
+            host_group_sizes.append(Int(size))
+        if covered != tail_rows:
             raise Error(
                 "group_id: the group sizes cover " + String(covered)
-                + " rows of " + String(Int(py=params[0]))
+                + " rows of " + String(tail_rows)
             )
-        raise Error(
-            "group_id is read only by the querywise and pairwise losses"
-            " (QueryRMSE, PairLogit, YetiRank, QuerySoftMax,"
-            " QueryCrossEntropy), which this implementation does not train"
-            " yet; loss='" + String(py=strs[0]) + "' does not use it, so it"
-            " is refused by name rather than carried and ignored"
-        )
+        if tail_loss != String("QueryRMSE"):
+            raise Error(
+                "group_id is read only by the querywise and pairwise losses"
+                " (QueryRMSE is trained here; PairLogit, YetiRank,"
+                " QuerySoftMax and QueryCrossEntropy are not implemented);"
+                " loss='" + tail_loss + "' does not use it, so it is refused by"
+                " name rather than carried and ignored"
+            )
+    if tail_loss == String("QueryRMSE"):
+        # `TDocParallelSplit` (`gpu_data/doc_parallel_dataset.h:26-38`): the
+        # pool's queries only with fewer groups than rows, otherwise every
+        # row a query of one (`TWithoutQueriesGrouping`)
+        if not (len(host_group_sizes) > 0 and len(host_group_sizes) < tail_rows):
+            host_group_sizes = List[Int](length=tail_rows, fill=1)
 
     var border_count = Int(py=params[4])
     var n_estimators = Int(py=params[5])
@@ -729,6 +744,13 @@ def gbdt_fit_binding(
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton, or Gradient under Lossguide)")
     if is_pointwise and leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (Gradient, Newton or Exact)")
+    if loss == String("QueryRMSE") and bootstrap_type != String("") and bootstrap_type != String("No"):
+        raise Error(
+            "loss='QueryRMSE' with a bootstrap is not implemented here:"
+            " the reference samples whole queries for querywise targets,"
+            " which this implementation does not restate; use"
+            " bootstrap_type='No'"
+        )
     if bootstrap_type != String("") and bootstrap_type != String("No"):
         var pw_boot = is_pointwise and (
             bootstrap_type == String("Poisson") or bootstrap_type == String("Bernoulli")
@@ -938,7 +960,9 @@ def gbdt_fit_binding(
             losses = multi_model.losses.copy()
         elif is_pointwise:
             # gbdt/host/gbdt_oracle_losses.mojo
-            var pw_model = gbdt_losses_host_fit(x, y, n_rows, n_features, p, pw_loss)
+            var pw_model = gbdt_losses_host_fit(
+                x, y, n_rows, n_features, p, pw_loss, host_group_sizes
+            )
             text = gbdt_host_model_text(pw_model)
             losses = pw_model.losses.copy()
             best_iteration = pw_model.best_iteration

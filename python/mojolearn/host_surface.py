@@ -461,6 +461,11 @@ TRAINING_LANE_NAMES = {
     # CPU column (one core) before the gate ran, the sabotage build
     # DIVERGENT on every cell.
     "gbdt-categorical-ctr": "gradient boosting with one-hot categorical columns",
+    # lane/gbdt-learning-to-rank stage 2 (2026-09-15): the QueryRMSE ranking
+    # loss on query groups trains through gbdt/host/gbdt_oracle_losses.mojo
+    # with the querywise target restated in gbdt/host/gbdt_oracle_query.mojo,
+    # from the same binding.
+    "gbdt-query-rmse": "gradient boosting with the QueryRMSE ranking loss on query groups",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -1363,6 +1368,7 @@ FAMILIES = (
             "gbdt-ordered-rmse", "gbdt-feature-freq",
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
+            "gbdt-query-rmse",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1370,13 +1376,14 @@ FAMILIES = (
             "GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor",
             "model_selection.cross_val_score", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="gradient boosting on symmetric trees with the pointwise and multiclass losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
+        display="gradient boosting on symmetric trees with the pointwise, multiclass and QueryRMSE losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
             "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
             "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
             "gbdt/host/gbdt_oracle_pointwise.mojo", "gbdt/host/gbdt_oracle_onehot.mojo",
+            "gbdt/host/gbdt_oracle_query.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(
