@@ -23,13 +23,23 @@ The binding lives in `bindings/_mojolearn_metrics.mojo` alongside the
 metrics functions and is loaded through `_metrics_impl._get_binding`.
 """
 
+from . import _serialize
+from ._array import Array
 from ._buffer import (
     _native, addr, addr_ro, all_finite, as_f32_c, as_f64_c, as_i32_c, empty,
 )
 from ._metrics_impl import _get_binding
-from .linear_model import _shape_of
+from .density import _check_queries
+from .linear_model import _check_saved_by, _restore_mode, _saved_mode, _shape_of
 
 __all__ = ["SpectralClustering"]
+
+#: `SpectralClustering.save`'s format tag (lane/spectral-predict,
+#: 2026-09-15): the prediction data of a `prediction_data=True` fit.
+_SPECTRAL_FORMAT = "mojolearn-spectral-1"
+
+#: The prediction data a `prediction_data=True` fit keeps.
+_PREDICTION_ATTRS = ("_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X")
 
 _AFFINITIES = ("nearest_neighbors", "precomputed")
 
@@ -275,8 +285,19 @@ class SpectralClustering:
         affinity_matrix_ absent  cuVS builds the connectivity graph inside
                                  the fit and does not hand it back; this
                                  binding has no arm that returns it.
-        predict()      absent    spectral clustering is transductive.
-                                 scikit-learn has no `predict` either.
+        prediction_data honored  False (the default) fits exactly as before.
+                                 True also copies out of the fit the Ritz
+                                 values, the Ritz vectors before the degree
+                                 division, the degree scaling and the final
+                                 k-means centroids (and, for
+                                 'nearest_neighbors', keeps the training
+                                 rows), which `predict` and `save` need. The
+                                 copies add no arithmetic; the fit's labels
+                                 and embedding are the same bytes
+        predict()      NEW       DEVIATION 2860, the Nystrom out-of-sample
+                                 extension (Bengio et al., NIPS 2003) and the
+                                 fit's own k-means assignment. Neither cuML
+                                 nor scikit-learn has one. See `predict`
 
     NORMALIZATION IS NOT A PARAMETER HERE, and that is theirs.
     `cluster/detail/spectral.cuh:35-36` hard-codes `norm_laplacian = true`
@@ -315,6 +336,7 @@ class SpectralClustering:
         kernel_params=None,
         n_jobs=None,
         verbose=False,
+        prediction_data=False,
     ):
         if affinity not in _AFFINITIES:
             raise ValueError(
@@ -415,6 +437,18 @@ class SpectralClustering:
         self.affinity = affinity
         self.assign_labels = "kmeans"
         self._seed = seed
+        self.prediction_data = prediction_data
+
+    #: The binding `predict` asks; a host subclass answers the metrics host
+    #: binding, which ships in the inference wheel.
+    _BINDING = "_mojolearn_metrics"
+
+    def _bind(self, name=None):
+        return _get_binding(getattr(self, "numeric_mode", None))
+
+    def _state_arrays(self, n, k):
+        return (empty((k,), "<f4"), empty((n, k), "<f4"), empty((n,), "<f4"),
+                empty((self.n_clusters, k), "<f4"))
 
     def _n_components(self):
         """cuML's rule: `n_components` defaults to `n_clusters` when None
@@ -424,8 +458,16 @@ class SpectralClustering:
         )
 
     def fit(self, X, y=None):
+        if not isinstance(self.prediction_data, bool):
+            raise TypeError(
+                "mojolearn SpectralClustering: prediction_data must be a bool, "
+                f"got {type(self.prediction_data).__name__}"
+            )
+        for name in _PREDICTION_ATTRS:
+            self.__dict__.pop(name, None)
         k = self._n_components()
         labels_out = None
+        state = None
         if self.affinity == "precomputed":
             rows, cols, vals, n = _coo_triples(X)
             if vals.size == 0:
@@ -453,25 +495,38 @@ class SpectralClustering:
             # spectral_fit_predict_graph_binding.
             # n_samples, nnz, n_clusters, n_components, n_init, n_neighbors,
             # eigen_tol, seed
-            n_out = int(
-                _get_binding().spectral_fit_predict_graph(
-                    addr_ro(rows, name="rows"),
-                    addr_ro(cols, name="cols"),
-                    addr_ro(vals, name="vals"),
-                    addr(labels, name="labels"),
-                    addr(embedding, name="embedding"),
-                    [
-                        n,
-                        int(vals.shape[0]),
-                        self.n_clusters,
-                        k,
-                        self.n_init,
-                        self.n_neighbors,
-                        self.eigen_tol,
-                        self._seed,
-                    ],
+            params = [
+                n,
+                int(vals.shape[0]),
+                self.n_clusters,
+                k,
+                self.n_init,
+                self.n_neighbors,
+                self.eigen_tol,
+                self._seed,
+            ]
+            if self.prediction_data:
+                state = self._state_arrays(n, k)
+                # spectral_fit_predict_graph_state_binding: the same call,
+                # plus copies of the prediction data.
+                n_out = int(_get_binding().spectral_fit_predict_graph_state(
+                    [addr_ro(rows, name="rows"), addr_ro(cols, name="cols"),
+                     addr_ro(vals, name="vals"), addr(labels, name="labels"),
+                     addr(embedding, name="embedding")]
+                    + [addr(a, name="prediction data") for a in state],
+                    params,
+                ))
+            else:
+                n_out = int(
+                    _get_binding().spectral_fit_predict_graph(
+                        addr_ro(rows, name="rows"),
+                        addr_ro(cols, name="cols"),
+                        addr_ro(vals, name="vals"),
+                        addr(labels, name="labels"),
+                        addr(embedding, name="embedding"),
+                        params,
+                    )
                 )
-            )
             labels_out = labels
         else:
             x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
@@ -494,23 +549,36 @@ class SpectralClustering:
             # spectral_fit_predict_dataset_binding.
             # n_samples, n_features, n_clusters, n_components, n_init,
             # n_neighbors, eigen_tol, seed
-            n_out = int(
-                _get_binding().spectral_fit_predict_dataset(
-                    addr_ro(x, name="x"),
-                    addr(labels, name="labels"),
-                    addr(embedding, name="embedding"),
-                    [
-                        n,
-                        int(x.shape[1]),
-                        self.n_clusters,
-                        k,
-                        self.n_init,
-                        self.n_neighbors,
-                        self.eigen_tol,
-                        self._seed,
-                    ],
+            params = [
+                n,
+                int(x.shape[1]),
+                self.n_clusters,
+                k,
+                self.n_init,
+                self.n_neighbors,
+                self.eigen_tol,
+                self._seed,
+            ]
+            if self.prediction_data:
+                state = self._state_arrays(n, k)
+                n_out = int(_get_binding().spectral_fit_predict_dataset_state(
+                    [addr_ro(x, name="x"), addr(labels, name="labels"),
+                     addr(embedding, name="embedding")]
+                    + [addr(a, name="prediction data") for a in state],
+                    params,
+                ))
+                # A borrowed input is copied so a caller's later write cannot
+                # move what predict reads.
+                self._fit_X = x if self.input_copied_ else x.copy()
+            else:
+                n_out = int(
+                    _get_binding().spectral_fit_predict_dataset(
+                        addr_ro(x, name="x"),
+                        addr(labels, name="labels"),
+                        addr(embedding, name="embedding"),
+                        params,
+                    )
                 )
-            )
             labels_out = labels
             self.n_features_in_ = int(x.shape[1])
         if n_out != k:
@@ -525,6 +593,9 @@ class SpectralClustering:
         self.labels_ = labels_out
         self.embedding_ = embedding
         self.n_components_ = k
+        if state is not None:
+            (self._pd_eigenvalues, self._pd_eigenvectors, self._pd_diag,
+             self._pd_centroids) = state
         return self
 
     def _check_shape(self, n, k):
@@ -545,9 +616,216 @@ class SpectralClustering:
         return self.fit(X, y=y).labels_
 
     def predict(self, X):
-        raise NotImplementedError(
-            "mojolearn SpectralClustering: predict() does not exist. "
-            "Spectral clustering is transductive -- the labels belong to the "
-            "rows that were fit -- and scikit-learn has no predict either. "
-            "Use fit_predict(X)."
+        """Label NEW rows under the fitted clustering. NEW CAPABILITY
+        (DEVIATION 2860): neither scikit-learn's nor cuML's
+        SpectralClustering has a `predict`, and this is not either library's
+        behavior.
+
+        THE METHOD is the Nystrom out-of-sample extension of Bengio,
+        Paiement, Vincent, Delalleau, Le Roux and Ouimet, "Out-of-Sample
+        Extensions for LLE, Isomap, MDS, Eigenmaps, and Spectral Clustering"
+        (NIPS 2003), as Fowlkes et al. (TPAMI 2004) use it for spectral
+        grouping, followed by the fit's own k-means assignment. For a new row
+        `x` and each embedding column `c`,
+
+            e_c(x) = (1 / mu_c) * sum_i Ktilde(x, x_i) u_c[i] / sqrt(d(x))
+            Ktilde(x, x_i) = K(x, x_i) / (sqrt(d(x)) * sqrt(d_i))
+
+        where `u_c` is the fit's unit eigenvector before its degree division,
+        `mu_c = 1 + theta_c` the normalized affinity's eigenvalue (`theta_c`
+        the Ritz value of the negated normalized Laplacian), `d_i` the fit's
+        degree and `d(x) = sum_i K(x, x_i)`. The last division by
+        `sqrt(d(x))` is the fit's own row scaling. The row is then assigned
+        to the nearest fitted k-means centroid, ties to the lowest centroid
+        index.
+
+        THE AFFINITY OF A NEW ROW.
+          'nearest_neighbors'  its `n_neighbors` nearest training rows under
+                               the fit's own k-NN (L2, ties by the search's
+                               own order), each with weight 0.5: the fit's
+                               symmetrization `0.5 * (a + b)` of an edge with
+                               no reverse edge, since a new row has none. The
+                               training degrees are not changed.
+          'precomputed'        X is the affinity between the new rows and
+                               the training rows, shape (n_new, n_train),
+                               finite and non-negative (a sparse matrix is
+                               densified with `toarray()`).
+        Every fold (the degree, each projection) runs over the training rows
+        in ascending index, seeded +0.0, one query at a time, so a row's
+        label does not depend on the batch, and the GPU binding and the CPU
+        host binding compute the same bytes.
+
+        THE THRESHOLD. Nothing is dropped (the clustering fit keeps every
+        column, the trivial one included). A column whose `|mu_c|` is below
+        1e-3 would be amplified by more than 1000x, so predict REFUSES BY
+        NAME, naming the column.
+
+        ON THE TRAINING ROWS the extension reproduces `embedding_` only in
+        exact arithmetic and only for the fit's own affinity: asked as a
+        query, a training row sees itself at 0.5 where the fit's graph had
+        1.0, has no reverse edges, and the eigenpairs hold to `eigen_tol`.
+        `predict(X_train) == labels_` is therefore not promised; how often it
+        holds is measured in
+        bench/results/identity_break/2026-09-15_spectral-predict/.
+
+        Requires `prediction_data=True` at fit; refused by name otherwise.
+        Returns int32 labels, the dtype and numbering of `labels_`.
+        """
+        return self._predict_embedding(X)[0]
+
+    def _predict_embedding(self, X):
+        """`predict`'s labels and the extended embedding (n_new x
+        n_components float32)."""
+        if not hasattr(self, "labels_"):
+            raise ValueError(
+                "mojolearn SpectralClustering.predict: this instance is not "
+                "fitted yet; call fit first"
+            )
+        if getattr(self, "_pd_eigenvalues", None) is None:
+            raise ValueError(
+                "mojolearn SpectralClustering.predict: prediction data was not "
+                "stored. Fit with SpectralClustering(prediction_data=True), which "
+                "keeps the eigenpairs, degrees and centroids the Nystrom extension "
+                "needs (DEVIATION 2860)"
+            )
+        if self.affinity not in _AFFINITIES:
+            raise ValueError(
+                f"mojolearn SpectralClustering.predict: affinity={self.affinity!r} "
+                "has no out-of-sample rule; it must be one of "
+                f"{list(_AFFINITIES)}"
+            )
+        k = int(self.n_components_)
+        n_train = int(self._pd_diag.shape[0])
+        if self.affinity == "precomputed":
+            A = X.toarray() if callable(getattr(X, "toarray", None)) else X
+            shape = _shape_of(A)
+            if len(shape) != 2 or shape[1] != n_train:
+                raise ValueError(
+                    "mojolearn SpectralClustering.predict: with affinity="
+                    "'precomputed', X must be the affinity between the new rows "
+                    f"and the {n_train} training rows, shape (n_new, {n_train}); "
+                    f"got shape {shape}"
+                )
+            q, _ = as_f32_c(A, ndim=2, name="X")
+            if q.shape[0] < 1:
+                raise ValueError("mojolearn SpectralClustering.predict: X has no rows; refused by name")
+            if not all_finite(q):
+                raise ValueError(
+                    "mojolearn SpectralClustering.predict: the affinity has a "
+                    "non-finite entry; refused by name"
+                )
+            if q.min() < 0:
+                raise ValueError(
+                    "mojolearn SpectralClustering.predict: the affinity has a "
+                    "negative entry; refused by name, as the fit refuses one"
+                )
+            train_addr, n_features, affinity = 0, 0, 1
+        else:
+            q = _check_queries(X, self.n_features_in_, "SpectralClustering.predict")
+            train_addr = addr_ro(self._fit_X, name="training rows")
+            n_features, affinity = int(self.n_features_in_), 0
+        nq = int(q.shape[0])
+        labels = empty((nq,), "<i4")
+        emb = empty((nq, k), "<f4")
+        self._bind().spectral_predict(
+            # ORDER MATCHES bindings/_mojolearn_metrics.mojo::spectral_predict_binding.
+            [addr_ro(q, name="X"), train_addr,
+             addr_ro(self._pd_eigenvalues, name="eigenvalues"),
+             addr_ro(self._pd_eigenvectors, name="eigenvectors"),
+             addr_ro(self._pd_diag, name="degree scaling"),
+             addr_ro(self._pd_centroids, name="centroids"),
+             addr(labels, name="labels"), addr(emb, name="embedding")],
+            # n_train, n_queries, n_features, n_components, n_clusters,
+            # n_neighbors, affinity
+            [n_train, nq, n_features, k, int(self.n_clusters), int(self.n_neighbors), affinity],
         )
+        return labels, emb
+
+    def save(self, path):
+        """Write the prediction data of a `prediction_data=True` fit to
+        `path` as an npz: `eigenvalues` `<f4` (k), `eigenvectors` `<f4`
+        (n_train, k), `diag` `<f4` (n_train), `centroids` `<f4`
+        (n_clusters, k), `labels` `<i4`, `x` `<f4` (the training rows,
+        'nearest_neighbors' only), `affinity`, `numeric_mode`, `eigen_tol`
+        `<f8` and `meta` `<i8` [n_clusters, n_components_, n_neighbors,
+        n_init, seed, random_state_is_none, n_train, n_features_in_ (0 for
+        precomputed)]. A loaded model predicts; it does not refit. On a
+        CPU-only install `SpectralClustering.load(path).predict(X)` runs
+        through `_mojolearn_metrics_host.spectral_predict`."""
+        if not hasattr(self, "labels_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        if getattr(self, "_pd_eigenvalues", None) is None:
+            raise ValueError(
+                "mojolearn SpectralClustering.save: prediction data was not stored; "
+                "fit with SpectralClustering(prediction_data=True). A model without "
+                "it can label no new row, so there is nothing a saved file could serve"
+            )
+        nn = self.affinity == "nearest_neighbors"
+        n_train = int(self._pd_diag.shape[0])
+        arrays = {
+            "format": _SPECTRAL_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "affinity": str(self.affinity),
+            "eigenvalues": self._pd_eigenvalues,
+            "eigenvectors": self._pd_eigenvectors,
+            "diag": self._pd_diag,
+            "centroids": self._pd_centroids,
+            "labels": self.labels_,
+            "eigen_tol": Array.from_list([float(self.eigen_tol)], "<f8"),
+            "meta": Array.from_list(
+                [int(self.n_clusters), int(self.n_components_), int(self.n_neighbors),
+                 int(self.n_init), int(self._seed), 1 if self.random_state is None else 0,
+                 n_train, int(self.n_features_in_) if nn else 0],
+                "<i8",
+            ),
+        }
+        if nn:
+            arrays["x"] = self._fit_X
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts; every array is
+        read at its saved dtype and never cast."""
+        arrays = _serialize.read_npz(path, _SPECTRAL_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 8:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 8 are needed")
+        n_clusters, k, n_neighbors, n_init, seed, seed_none, n_train, nf = (int(v) for v in meta.tolist())
+        tol = _serialize.exact(arrays, "eigen_tol", "<f8")
+        if tol.size != 1:
+            raise ValueError(f"mojolearn: {path!r} eigen_tol must hold one value")
+        affinity = _serialize.scalar_str(arrays, "affinity")
+        obj = cls(
+            n_clusters=n_clusters, n_components=k, n_neighbors=n_neighbors, n_init=n_init,
+            random_state=None if seed_none else seed, eigen_tol=float(tol[0]),
+            affinity=affinity, prediction_data=True,
+        )
+        _restore_mode(obj, arrays)
+        ev = _serialize.exact(arrays, "eigenvalues", "<f4")
+        evec = _serialize.exact(arrays, "eigenvectors", "<f4")
+        dg = _serialize.exact(arrays, "diag", "<f4")
+        cent = _serialize.exact(arrays, "centroids", "<f4")
+        labels = _serialize.exact(arrays, "labels", "<i4")
+        if (ev.size != k or evec.ndim != 2 or tuple(evec.shape) != (n_train, k) or dg.size != n_train
+                or cent.ndim != 2 or tuple(cent.shape) != (n_clusters, k) or labels.size != n_train):
+            raise ValueError(
+                f"mojolearn: {path!r} prediction data shapes do not match n_train={n_train}, "
+                f"n_components={k}, n_clusters={n_clusters}"
+            )
+        obj._fit_X = None
+        if affinity == "nearest_neighbors":
+            x = _serialize.exact(arrays, "x", "<f4")
+            if x.ndim != 2 or tuple(x.shape) != (n_train, nf):
+                raise ValueError(f"mojolearn: {path!r} x shape {tuple(x.shape)} is not ({n_train}, {nf})")
+            obj._fit_X = x
+            obj.n_features_in_ = nf
+        obj._pd_eigenvalues = ev
+        obj._pd_eigenvectors = evec
+        obj._pd_diag = dg
+        obj._pd_centroids = cent
+        obj.labels_ = labels
+        obj.n_components_ = k
+        return obj

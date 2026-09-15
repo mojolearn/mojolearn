@@ -1109,6 +1109,7 @@ FAMILIES = (
             "metrics/host/metrics_oracle.mojo",
             "metrics/host/classification_oracle.mojo",
             "spectral/host/spectral_oracle.mojo",
+            "spectral/host/spectral_predict_host.mojo",
             "cluster/host/kmeans_oracle.mojo",
             "core/knn_host_predict.mojo",
             "umap/host/umap_oracle.mojo",
@@ -1124,6 +1125,11 @@ FAMILIES = (
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
             "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
+            # lane/spectral-predict (2026-09-15): the fit entries that keep
+            # the prediction data and SpectralClustering.predict (DEVIATION
+            # 2860), so a saved model predicts from the inference wheel.
+            "spectral_fit_predict_dataset_state", "spectral_fit_predict_graph_state",
+            "spectral_predict",
             "umap_fit_transform", "umap_transform", "umap_numeric_mode",
             "rand_score", "mean_squared_error", "mean_absolute_error",
             "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",

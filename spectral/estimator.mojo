@@ -62,11 +62,16 @@ Nothing else in this file computes.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
+from spectral.host.spectral_predict_host import (
+    SpectralPrediction,
+    SpectralPredictionState,
+)
 from spectral.impl.spectral_clustering import (
     MLSpectralClusteringParams,
-    fit_predict,
-    fit_predict_connectivity,
+    fit_predict_connectivity_keep,
+    fit_predict_keep,
 )
+from spectral.impl.spectral_predict import spectral_predict_device
 from spectral.impl.sparse.coo import CooGraph
 
 
@@ -140,6 +145,29 @@ def spectral_fit_predict_dataset_host(
     mut labels: List[Int32],
     mut embedding: List[Float32],
 ) raises -> Int:
+    """`spectral_fit_predict_dataset_host_keep` keeping nothing."""
+    var state = SpectralPredictionState()
+    return spectral_fit_predict_dataset_host_keep(
+        dataset, n_samples, n_features, n_clusters, n_components, n_init,
+        n_neighbors, eigen_tol, seed, labels, embedding, state, False,
+    )
+
+
+def spectral_fit_predict_dataset_host_keep(
+    dataset: List[Float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    n_components: Int,
+    n_init: Int,
+    n_neighbors: Int,
+    eigen_tol: Float32,
+    seed: UInt64,
+    mut labels: List[Int32],
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+) raises -> Int:
     """`ML::SpectralClustering::fit_predict(handle, config, dataset,
     labels)` (`spectral_clustering.cu:35-41`), which is cuVS's dataset
     overload (`cluster/detail/spectral.cuh:64-80`): the kNN connectivity
@@ -180,8 +208,8 @@ def spectral_fit_predict_dataset_host(
         + " eigen_tol=" + String(eigen_tol)
         + " seed=" + String(seed)
     )
-    fit_predict(
-        ctx, config, dataset, n_samples, n_features, labels, embedding, trace
+    fit_predict_keep(
+        ctx, config, dataset, n_samples, n_features, labels, embedding, state, keep, trace
     )
     return len(embedding) // n_samples
 
@@ -199,6 +227,30 @@ def spectral_fit_predict_graph_host(
     seed: UInt64,
     mut labels: List[Int32],
     mut embedding: List[Float32],
+) raises -> Int:
+    """`spectral_fit_predict_graph_host_keep` keeping nothing."""
+    var state = SpectralPredictionState()
+    return spectral_fit_predict_graph_host_keep(
+        rows, cols, vals, n_samples, n_clusters, n_components, n_init,
+        n_neighbors, eigen_tol, seed, labels, embedding, state, False,
+    )
+
+
+def spectral_fit_predict_graph_host_keep(
+    rows: List[Int32],
+    cols: List[Int32],
+    vals: List[Float32],
+    n_samples: Int,
+    n_clusters: Int,
+    n_components: Int,
+    n_init: Int,
+    n_neighbors: Int,
+    eigen_tol: Float32,
+    seed: UInt64,
+    mut labels: List[Int32],
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
 ) raises -> Int:
     """`ML::SpectralClustering::fit_predict(handle, config, rows, cols,
     vals, labels)` (`spectral_clustering.cu:51-64`), cuVS's graph overload
@@ -248,5 +300,28 @@ def spectral_fit_predict_graph_host(
     var c = cols.copy()
     var v = vals.copy()
     var graph = CooGraph(n_samples, r^, c^, v^)
-    fit_predict_connectivity(ctx, config, graph, labels, embedding, trace)
+    fit_predict_connectivity_keep(ctx, config, graph, labels, embedding, state, keep, trace)
     return len(embedding) // n_samples
+
+
+def spectral_predict_host(
+    input: List[Float32],
+    train_x: List[Float32],
+    n_train: Int,
+    n_queries: Int,
+    n_features: Int,
+    n_components: Int,
+    n_clusters: Int,
+    n_neighbors: Int,
+    affinity: Int,
+    state: SpectralPredictionState,
+) raises -> SpectralPrediction:
+    """`SpectralClustering.predict` (lane/spectral-predict, 2026-09-15;
+    DEVIATION 2860): the Nystrom extension and the fit's k-means assignment,
+    `spectral/impl/spectral_predict.mojo` on the device. The rule is stated
+    in `spectral/host/spectral_predict_host.mojo`."""
+    var ctx = DeviceContext()
+    return spectral_predict_device(
+        ctx, input, train_x, n_train, n_queries, n_features, n_components,
+        n_clusters, n_neighbors, affinity, state,
+    )

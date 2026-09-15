@@ -43,9 +43,9 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whose estimator has no out-of-sample method records
             `n/a:<reason>` and never a hash of training-row output.
             transductive means the labels belong to the fitted rows only
-            (spectral: `fit` and `fit_predict`, and
-            SpectralClustering.predict raises NotImplementedError by
-            design; DBSCAN and agglomerative answered transductive until
+            (spectral answered transductive until 2026-09-15, when `predict`
+            from a `prediction_data=True` fit arrived, DEVIATION 2860, and
+            its two lanes' probe became `predict` on the held-out rows; DBSCAN and agglomerative answered transductive until
             2026-09-15, when `predict` from a `prediction_data=True` fit
             arrived, DEVIATION 2740, and their lanes' probe became
             `predict` on the held-out rows); KMeans answered no-predict until 2026-09-15, when
@@ -969,9 +969,12 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("spectral")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.SpectralClustering(n_clusters=4, random_state=3).fit(X[:2000, :4])
-    # SpectralClustering.predict raises NotImplementedError by design
-    return _fit(dict(labels=_h(m.labels_)), m, "n/a:transductive")
+    # prediction_data=True (lane/spectral-predict, 2026-09-15) copies the
+    # eigenpairs, degree scaling and centroids out of the fit and moves no
+    # train byte; infer is predict on 256 held-out rows, the Nystrom
+    # extension and the fit's k-means assignment (DEVIATION 2860).
+    m = ml.SpectralClustering(n_clusters=4, random_state=3, prediction_data=True).fit(X[:2000, :4])
+    return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("holtwinters")
@@ -1529,6 +1532,23 @@ def _affinity(P):
     t = float(np.median(d2))
     A = np.where(d2 < t, 1.0 / (1.0 + d2), 0.0)
     return np.ascontiguousarray(A.astype(np.float32))
+
+
+def _cross_affinity(Q, P):
+    """The affinity of rows Q to the training rows P under `_affinity`'s
+    rule: 1 / (1 + d2) where d2 is under the TRAINING matrix's median (the
+    threshold `_affinity(P)` used), else exactly zero. Fixed-order float64
+    host arithmetic, elementwise."""
+    Pd = P.astype(np.float64)
+    Qd = Q.astype(np.float64)
+    d2 = np.zeros((Pd.shape[0], Pd.shape[0]), dtype=np.float64)
+    c2 = np.zeros((Qd.shape[0], Pd.shape[0]), dtype=np.float64)
+    for j in range(Pd.shape[1]):
+        col = Pd[:, j]
+        d2 = d2 + (col[:, None] - col[None, :]) ** 2
+        c2 = c2 + (Qd[:, j][:, None] - col[None, :]) ** 2
+    t = float(np.median(d2))
+    return np.ascontiguousarray(np.where(c2 < t, 1.0 / (1.0 + c2), 0.0).astype(np.float32))
 
 
 def _exact_prob(n, seed):
@@ -2239,8 +2259,15 @@ def _(ml, X, yc, yr, Xh=None):
     nearest-neighbors graph; the affinity is _affinity's, host-derived in
     fixed order so the input is the same bytes on every box."""
     A = _affinity(X[:1000, :4])
-    m = ml.SpectralClustering(n_clusters=4, affinity="precomputed", random_state=3).fit(A)
-    return _fit(dict(affinity=_h(A), labels=_h(m.labels_)), m, "n/a:transductive")
+    m = ml.SpectralClustering(n_clusters=4, affinity="precomputed", random_state=3,
+                              prediction_data=True).fit(A)
+    # infer (lane/spectral-predict, 2026-09-15, DEVIATION 2860): predict on
+    # the affinity of 256 held-out rows to the 1000 training rows, under
+    # _affinity's rule with the training matrix's threshold. The batch part
+    # reads the same matrix from the estimator.
+    Ah = _cross_affinity(Xh[:256, :4], X[:1000, :4])
+    m._identity_heldout_affinity = Ah
+    return _fit(dict(affinity=_h(A), labels=_h(m.labels_)), m, lambda e: (e.predict(Ah),))
 
 
 @lane("holtwinters-multiplicative")
@@ -4042,10 +4069,12 @@ _batch_decl("n/a:fit-refused", "kmeans-cosine")
 #     capability: cuML dbscan.pyx has fit (:301) and fit_predict (:478) only,
 #     agglomerative.pyx fit (:139) and fit_predict (:216) only), so the part
 #     asks predict on 64 held-out rows.
-#   SpectralClustering: _spectral_impl.py:547 predict raises
-#     NotImplementedError; the metrics bindings export spectral_fit_predict_
-#     dataset and _graph only; cuML spectral_clustering.pyx has fit (:263) and
-#     fit_predict (:239) only.
+#   SpectralClustering is NOT transductive since lane/spectral-predict
+#     (2026-09-15): with prediction_data=True it has `predict` on the GPU and
+#     CPU host metrics bindings (spectral_predict, the Nystrom extension,
+#     DEVIATION 2860, NEW capability: cuML spectral_clustering.pyx has fit
+#     (:263) and fit_predict (:239) only), so the part asks predict on 64
+#     held-out rows, or on their affinity rows for the precomputed lane.
 #   HDBSCAN is NOT transductive since 2026-09-15: HDBSCAN(prediction_data=True)
 #     and mojolearn.hdbscan.approximate_predict (cuML hdbscan.pyx:1264,
 #     predict.cuh:220-262) on both bindings, below, and since the same day
@@ -4054,8 +4083,9 @@ _batch_decl("n/a:fit-refused", "kmeans-cosine")
 #     held-out rows; the lanes' infer probe hashes it.
 _batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]),
             "dbscan", "dbscan-brute-l1", "dbscan-weighted", "par-dbscan", "agglomerative")
-_batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
-            "spectral", "spectral-precomputed")
+_batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]), "spectral")
+_batch_decl(lambda ml, e, Xh: [_BatchRows("predict", e._identity_heldout_affinity[:64], lambda r: (e.predict(r),))],
+            "spectral-precomputed")
 
 
 def _batch_hdbscan(ml, e, Xh):
@@ -4625,8 +4655,10 @@ _batch_decl(_batch_rsn("predict"), "par-reference-knn-reg")
 # parallel_graph.fit_graph fits; the fitted AgglomerativeClustering(prediction_data=True)
 # predicts like the plain lane's (DEVIATION 2740)
 _batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]), "par-graph-agglomerative")
-_batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
-            "par-graph-spectral")
+# par-graph-spectral fits without prediction_data; its train cells hold the
+# fit_graph labels and embedding to the plain fit's, and it asks no predict
+_batch_decl("n/a:transductive (the par-graph-spectral lane fits without prediction_data; "
+            "SpectralClustering.predict is the spectral lane's)", "par-graph-spectral")
 _batch_decl(_rows_calls("predict"), "par-ordered-rmse")
 _batch_decl(_rows_calls("predict", prep=_coded), "par-feature-freq")
 _batch_decl(_rows_calls("predict", "predict_proba"), "par-boosting-pointwise")
