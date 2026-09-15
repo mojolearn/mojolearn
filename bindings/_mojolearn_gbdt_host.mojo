@@ -85,6 +85,7 @@ from gbdt.host.gbdt_oracle_depthwise import (
 )
 from gbdt.options.data_processing_options import nan_mode_from_name
 from gbdt.host.gbdt_oracle_feature_freq import gbdt_feature_freq_host_fit
+from gbdt.host.gbdt_oracle_ordered import gbdt_ordered_rmse_host_fit
 
 
 #: `SCORE_FUNCTION_COSINE` and `LEAF_ESTIMATION_NEWTON`
@@ -916,6 +917,59 @@ def gbdt_fit_two_level_feature_freq_binding(
     return PythonObject(text)
 
 
+def gbdt_fit_ordered_rmse_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    weights_addr: PythonObject, permutation_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`gbdt_fit_ordered_rmse_binding` (`bindings/_mojolearn_gbdt.mojo:
+    535-591`): the same nine params in the same order, `[n_rows,
+    n_features, n_weights, n_permutation, n_estimators, max_depth,
+    border_count, learning_rate, l2_leaf_reg]`, the model text back, through
+    `gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_rmse_host_fit` (the
+    gbdt-ordered-rmse lane). `sample_weight` refuses by name."""
+    if len(params) != 9:
+        raise Error("ordered RMSE params must have nine values")
+    var n_rows = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_weights = Int(py=params[2])
+    var n_permutation = Int(py=params[3])
+    var n_estimators = Int(py=params[4])
+    var max_depth = Int(py=params[5])
+    var border_count = Int(py=params[6])
+    var learning_rate = Float32(Float64(py=params[7]))
+    var l2_leaf_reg = Float32(Float64(py=params[8]))
+    if n_rows < 4 or n_features < 1 or n_permutation != n_rows:
+        raise Error("ordered RMSE requires >=4 rows, features and a full permutation")
+    if n_weights != 0 and n_weights != n_rows:
+        raise Error("ordered RMSE sample weight shape mismatch")
+    if n_weights != 0:
+        raise Error(
+            "no CPU implementation of _mojolearn_gbdt.gbdt_fit_ordered_rmse"
+            " for sample_weight; the gbdt host binding trains the"
+            " gbdt-ordered-rmse lane only (unit weights), see"
+            " gbdt/host/gbdt_oracle_ordered.mojo"
+        )
+    var x_address = Int(py=x_addr)
+    var y_address = Int(py=y_addr)
+    _ = f32_ptr(x_address)
+    _ = f32_ptr(y_address)
+    _ = f32_ptr(Int(py=weights_addr))
+    var pp = u32_ptr(Int(py=permutation_addr))
+    var permutation = List[UInt32]()
+    for i in range(n_rows):
+        permutation.append(pp.unsafe_load(i))
+    var text = String("")
+    with GILReleased(Python()):
+        var x = read_f32(x_address, n_rows * n_features)
+        var y = read_f32(y_address, n_rows)
+        text = gbdt_ordered_rmse_host_fit(
+            x, y, n_rows, n_features, permutation, n_estimators, max_depth,
+            border_count, learning_rate, l2_leaf_reg,
+        )
+    return PythonObject(text)
+
+
 def gbdt_sigmoid_binding(
     raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
 ) raises -> PythonObject:
@@ -947,6 +1001,7 @@ def PyInit__mojolearn_gbdt_host() abi("C") -> PythonObject:
         module.def_function[gbdt_fit_two_level_feature_freq_binding](
             "gbdt_fit_two_level_feature_freq"
         )
+        module.def_function[gbdt_fit_ordered_rmse_binding]("gbdt_fit_ordered_rmse")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_gbdt_host: ", error))
