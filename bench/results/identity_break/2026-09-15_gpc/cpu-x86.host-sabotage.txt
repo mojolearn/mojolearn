@@ -1,0 +1,24 @@
+552 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7194c0000000, nodemask=1)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=a3357cd9857cd79035f25d0c5147dbe592309252 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_core_host', '_mojolearn_gp_host']
+# identity_break  mode=identical  2026-09-15 17:30:22  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gp                     | e15b5efc40ea26f8 | bebf0692fc6e2b8c | 51b0598a1d45605b | 61387dec206612a1 | c625a2141dd6acdd | c625a2141dd6acdd | 2e2a10344363b280 | 3be623d029fa736a | 9f0c3b73267773eb |
+| gp infer               | 8e7139702b9e9c32 | 7df6cdfa2c7e252d | 6fef05e1e0c24ced | e98844487c1664c4 | 6d5eec9721715f56 | 6d5eec9721715f56 | a32b7a94d0af7d89 | ab8d6e4330031ce3 | bb60c94ed8b79fbc |
+| gp batch               | 2dd95259cddc4efe | 846c1ab1a4386ddb | c044011838fde80e | 2694c6417830a85d | 6f12932408d1c006 | 6f12932408d1c006 | 6a4d743577528bba | acc8b158e837ff90 | b1378db6e40a2f6b |
+| gpc                    | 04e55361ae6eac6a | c1adcfb716563fdd | 9b458faaf4fd2c84 | 76e219efd19e0767 | 7a7b05eee8bb544d | 7a7b05eee8bb544d | 04e55361ae6eac6a | 1ed8ba01c1ad634d | 97fe7ce1b7685d8d |
+| gpc infer              | b0f8d27a5a36fe19 | a09e2d86b2bf3a24 | baa2a5b4d2a2993a | f236b0144d4bfb49 | 341a5578a67b2eb2 | 341a5578a67b2eb2 | b0f8d27a5a36fe19 | 42fe4b1ff22d5fa1 | 234314b21d6c386b |
+| gpc model              | e3fac3eecd7973e1 | ea0a6578a3d338e0 | a7f2fc326ae764f3 | de008a3224926493 | 42a0eecd6a102567 | e758af0d58e286cc | e3fac3eecd7973e1 | 1952421448b017aa | 5d504c4ff89dcbe0 |
+| gpc batch              | 93ce22166fab8be7 | fad0e1a75018ae42 | e18963f8acf2e5b8 | 32ad0b95fdbeaafe | 322b23c4462a6bf9 | 322b23c4462a6bf9 | 93ce22166fab8be7 | 3df9c163dba531a9 | 92ee69ae75ba7931 |
+| gpc-multiclass         | 74b11d950d05c6ca | 56b3aad7dfdc45d1 | 8dc459abfa02a13c | f752f1bda08fa644 | e08082b402e73fb0 | e08082b402e73fb0 | 74b11d950d05c6ca | 75c98698d31da8b2 | 3160bad223620990 |
+| gpc-multiclass infer   | 5cdb66152ec2b641 | b210fbcd41874f1f | d6c09978bf825455 | 84f72782bc08b704 | 8671e4f695ac8d45 | 8671e4f695ac8d45 | 5cdb66152ec2b641 | ceb7bf7d51eb1fbf | 8b4616c4fbfc8fdb |
+| gpc-multiclass model   | 59b2f522baafab59 | b0094ee8b360b4c6 | 3bfd7a499365098b | bbcaf55a6067acee | ad7684fdc4d80a9f | ec238ec62a073e96 | 59b2f522baafab59 | 7ae72179a752276a | 0807e7254b6545c2 |
+| gpc-multiclass batch   | a893e927880a597a | cb367f29dd1960dc | 70296a14bbb590e6 | 008706fd09eb7a42 | b8d0d35954b54522 | b8d0d35954b54522 | a893e927880a597a | 2bc42ae2be8b7db0 | 440251db5e43e5fb |
+
+cells=27 stable=27 moved=0 refused=0
+infer: stable=27
+model: stable=18 n/a=9
+batch: stable=27
+n/a: gp model n/a:no-save
+wrote /root/leg_out/cpu-x86.host-sabotage.json

@@ -1,0 +1,704 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-6.8.0-87-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-7702p-64-core-processor",
+ "commit": "ce2f8c399720e371cb4978e7073da1354bbffcd8",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "gp/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ea70c56b99a74791"
+   ],
+   "parts": [
+    {
+     "alpha": "b2bd856db191067c",
+     "L": "02bd406c9f990a9e",
+     "lml": "f8fab1e0c3692fb8",
+     "mean": "0f15f665974cce89",
+     "std": "e010094572c05e33"
+    }
+   ],
+   "infer": [
+    "1e032c58b3e9cd14"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x3f0444c1 vs alone 0x3f0444c0"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "gp/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c92496318cb78403"
+   ],
+   "parts": [
+    {
+     "alpha": "0df98fc93d8f97a7",
+     "L": "ad07c62b4f7b82e9",
+     "lml": "614a94c171f7b583",
+     "mean": "8f51d102fbd0cce1",
+     "std": "2933f5e7cf56b4d0"
+    }
+   ],
+   "infer": [
+    "22b0b528124de8d0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x3ff119f9 vs alone 0x3ff119f8"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "gp/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f01c58a79fb1af27"
+   ],
+   "parts": [
+    {
+     "alpha": "d87b04f0a9151f17",
+     "L": "946d09425efb81ba",
+     "lml": "11861e9ddbe7980f",
+     "mean": "f2b55651bfe65413",
+     "std": "acff867f03b33ebb"
+    }
+   ],
+   "infer": [
+    "6eec04108625b28e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0xbeca23d9 vs alone 0xbeca23d8"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "gp/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ca779c84b786d493"
+   ],
+   "parts": [
+    {
+     "alpha": "72684c7a23e5875d",
+     "L": "59b7041f1a10bfbd",
+     "lml": "e234bef85e489b95",
+     "mean": "18486a5fe1a45257",
+     "std": "dd2185273a59f2c3"
+    }
+   ],
+   "infer": [
+    "890cda1ff831faab"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x43d5f801 vs alone 0x43d5f800"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "gp/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f0986dd9686ae3c2"
+   ],
+   "parts": [
+    {
+     "alpha": "d285afe97c9ab650",
+     "L": "375621676b406cb8",
+     "lml": "24b8d985f4df0ef1",
+     "mean": "1dee448ebb413624",
+     "std": "3974fca499c63ae7"
+    }
+   ],
+   "infer": [
+    "353cd97119d0e754"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x3fc0a581 vs alone 0x3fc0a580"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "gp/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f0986dd9686ae3c2"
+   ],
+   "parts": [
+    {
+     "alpha": "d285afe97c9ab650",
+     "L": "375621676b406cb8",
+     "lml": "24b8d985f4df0ef1",
+     "mean": "1dee448ebb413624",
+     "std": "3974fca499c63ae7"
+    }
+   ],
+   "infer": [
+    "353cd97119d0e754"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x3fc0a581 vs alone 0x3fc0a580"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "gp/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fba9e6f4ea05af2c"
+   ],
+   "parts": [
+    {
+     "alpha": "dc3b9d790b0b0114",
+     "L": "02bd406c9f990a9e",
+     "lml": "8176c804193a0b8c",
+     "mean": "4fd82bdf8cf57df6",
+     "std": "e010094572c05e33"
+    }
+   ],
+   "infer": [
+    "52e6b306c452f16c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0xbf5178c1 vs alone 0xbf5178c0"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "gp/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cbdbd1248c92a3f8"
+   ],
+   "parts": [
+    {
+     "alpha": "9fb4e05b52e19061",
+     "L": "5bf7024831e3bbca",
+     "lml": "9eb3988d6af165e4",
+     "mean": "20a7a3d5e966c4bf",
+     "std": "522cf15ab2bd5685"
+    }
+   ],
+   "infer": [
+    "9e3f1cf6c455f0fa"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x408952f5 vs alone 0x408952f4"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "gp/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "40fd2f479f775ec4"
+   ],
+   "parts": [
+    {
+     "alpha": "80ca23448f1608ed",
+     "L": "440e3cd9e3d290ed",
+     "lml": "dee623887840197e",
+     "mean": "0cca39696b8a46c2",
+     "std": "97b51bd8686e317d"
+    }
+   ],
+   "infer": [
+    "b2713d53a58fa4c9"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0xc09bad73 vs alone 0xc09bad72"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "gpc/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc/ties": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc/hashed": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc/wide": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc/denormal": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc/denormal_ftz": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc/dupes": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc/odd": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc/negative": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc-multiclass/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc-multiclass/ties": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc-multiclass/hashed": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc-multiclass/wide": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc-multiclass/denormal": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc-multiclass/denormal_ftz": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc-multiclass/dupes": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc-multiclass/odd": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  },
+  "gpc-multiclass/negative": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn.gather_i64 yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_gp_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a ho",
+   "hashes": [],
+   "parts": []
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": true,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "host": {
+  "cpu_model": "AMD EPYC 7702P 64-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gpc",
+   "gpc-multiclass",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "byte-lm",
+   "byte-lm-resident"
+  ],
+  "families": {
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sha256": "95d6b996255de21a45182119799b824c06b769203533397327817d4ce7bb6d01",
+    "size": 376784,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ }
+}

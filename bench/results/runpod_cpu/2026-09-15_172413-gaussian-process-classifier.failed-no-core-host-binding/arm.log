@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod 0232pt2jda6n9r ...
+ARMED. Pod 0232pt2jda6n9r is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-gpc/bench/results/runpod_cpu/2026-09-15_172413-gaussian-process-classifier/lease/0232pt2jda6n9r.lease
+  extend with: tools/runpod_guard.sh extend 0232pt2jda6n9r '-p 19490 root@154.54.102.18' <minutes>

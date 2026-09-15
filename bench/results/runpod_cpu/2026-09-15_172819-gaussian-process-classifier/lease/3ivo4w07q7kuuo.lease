@@ -1,0 +1,5 @@
+pod='3ivo4w07q7kuuo'
+target='-p 42420 root@38.80.152.147'
+armed_utc='2026-09-15T17:29:32Z'
+deadline_epoch=1789496972
+minutes=60

@@ -171,6 +171,10 @@ CLASSICAL_RECORDED = (
     # lane/inference-forecast-umap-pca (2026-09-15): pca-full-whiten and umap,
     # recorded on the M4's Metal set; both bind families the gate builds.
     "bench/results/classical_host/2026-09-15-apple-m4-umap-pca",
+    # lane/inference-svm (2026-09-15): svc-linear, svc-poly, svr and
+    # svr-linear, recorded on the M4's Metal set on all nine fixtures. The
+    # NVIDIA and AMD recordings are owed to the next release record.
+    "bench/results/classical_host/2026-09-15-apple-m4-svm",
 )
 
 #: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
@@ -282,6 +286,13 @@ TRAINING_LANE_NAMES = {
     # lane/cpu-training-small-gaps (2026-09-15): normalize_y=True, the folds
     # through the preprocessing host binding's standard_fit and standard_transform.
     "gp-normalize-y": "the Gaussian process with normalized targets",
+    # Gaussian process classification (lane/gaussian-process-classifier,
+    # 2026-09-15): gaussian_process/host/gpc_oracle.mojo over the gp oracle's
+    # kernel matrix, the Cholesky oracle and gemm_oracle, the Newton steps in
+    # gaussian_process/host/gpc_steps.mojo (the GPU path compiles the same
+    # file). No GPU record carries these lanes yet, so their cells are OWED.
+    "gpc": "the binary Gaussian process classifier",
+    "gpc-multiclass": "the one-vs-rest Gaussian process classifier",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
     # variants of families that already had a host path, every one in the
     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
@@ -757,12 +768,23 @@ FAMILIES = (
         forest_kinds=(
             "rf_classifier", "rf_regressor", "et_classifier", "et_regressor",
             "gbdt_symmetric", "gbdt_depthwise", "gbdt_lossguide", "gbdt_rmse",
+            # lane/inference-gbdt-modes (2026-09-15): saved OrderedRMSE,
+            # ExperimentalTwoLevelFeatureFreq, pointwise Bayesian eval and
+            # one-hot categorical models through HostGBDT. Their CPU
+            # predictions read IDENTICAL against the 166-lane GPU columns
+            # (identity_break MOJOLEARN_IDENTITY_HOST_INFER on the
+            # gbdt-ordered-rmse, gbdt-feature-freq,
+            # gbdt-pointwise-l2-bayesian-eval and gbdt-categorical-ctr lanes);
+            # their forest gate fixtures are OWED to the next release record.
+            "gbdt_ordered_rmse", "gbdt_feature_freq", "gbdt_pointwise_bayesian_eval",
+            "gbdt_categorical_onehot",
         ),
         classes=(
             "RandomForestClassifier", "RandomForestRegressor",
             "ExtraTreesClassifier", "ExtraTreesRegressor", "GradientBoosting",
+            "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="random forests, Extra Trees and the four gradient boosting variants",
+        display="random forests, Extra Trees and eight gradient boosting variants",
         host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo"),
         exports=(
             "forest_host_numeric_mode", "forest_host_vendor", "forest_host_column",
@@ -1136,7 +1158,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear", "svc-poly"),
-        inference_lanes=("svc",),
+        inference_lanes=("svc", "svc-linear", "svc-poly", "svr", "svr-linear"),
         forest_kinds=(),
         classes=("SVC", "IsolationForest", "SVR"),
         display="SVC",
@@ -1242,20 +1264,26 @@ FAMILIES = (
         routes="_mojolearn_gp",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y"),
+        # GaussianProcessClassifier joined on
+        # lane/gaussian-process-classifier (2026-09-15): gpc_fit and
+        # gpc_predict under the GPU binding's contract.
+        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
+                        "gpc", "gpc-multiclass"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("GaussianProcessRegressor",),
-        display="the Gaussian process regressor",
+        classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
+        display="the Gaussian process regressor and classifier",
         host_modules=(
             "gaussian_process/host/gpr_oracle.mojo",
+            "gaussian_process/host/gpc_oracle.mojo",
+            "gaussian_process/host/gpc_steps.mojo",
             "cholesky/host/chol_oracle.mojo",
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
-            "gpr_fit", "gpr_predict", "gpr_sample_y", "cholesky_profile_jitter",
+            "gpr_fit", "gpr_predict", "gpr_sample_y", "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
@@ -1325,7 +1353,7 @@ FAMILIES = (
             "mixture_host_column", "mixture_host_sabotage",
             "mixture_vendor", "mixture_numeric_mode", "gmm_fit",
             "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
-            "gmm_score_bic_aic",
+            "gmm_score_bic_aic", "gmm_sample",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,

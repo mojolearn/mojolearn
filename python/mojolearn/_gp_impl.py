@@ -327,8 +327,9 @@ class GaussianProcessRegressor(NumericModeMixin):
     cells are wanted (DEVIATION 1759). `sample_y(X, n_samples, random_state)`
     is honored on a fitted model: it builds and factors that full matrix
     inside its own call (DEVIATION 2793). GP CLASSIFICATION is a different algorithm (a
-    Laplace approximation with a data-dependent Newton iteration) and is
-    not here at all (DEVIATION 1766).
+    Laplace approximation with a Newton iteration) and lives in
+    `_gpc_impl.py` as `GaussianProcessClassifier` (DEVIATION 2830 closes
+    DEVIATION 1766).
 
     CROSS-VENDOR STANDING: the IDENTICAL card is byte-identical Apple M4
     against AMD MI325X on every shipped-path line (the 8-line divergence

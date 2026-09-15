@@ -7,7 +7,9 @@ KernelDensity and SVC models, since the knn host inference lane
 (2026-09-14) NearestNeighbors, KNeighborsClassifier and KNeighborsRegressor,
 and since lane/inference-linear-svm (2026-09-15) StandardScaler,
 MinMaxScaler, ElasticNet, Lasso, KernelRidge, Nystroem and RBFSampler, whose
-entries the estimators host binding serves.
+entries the estimators host binding serves, and since lane/inference-svm
+(2026-09-15) SVR (rbf and linear) beside SVC's linear and polynomial
+kernels, through the svm host binding's `svr_predict` and `svc_predict`.
 
 `host_model(path)` loads a file written by one of those classes' `save` and
 returns an instance of a HOST SUBCLASS of the same class: the same Python
@@ -51,8 +53,9 @@ import hashlib
 from . import _backend, _serialize
 from ._arima_impl import ARIMA, _ARIMA_FORMAT
 from ._cholesky_impl import _CHOLESKY_FORMAT, HostCholesky
+from ._gpc_impl import _GPC_FORMAT, HostGaussianProcessClassifier
 from ._solver_impl import ElasticNet, Lasso, _CD_FORMAT
-from ._svm_impl import SVC, _SVC_FORMAT
+from ._svm_impl import SVC, SVR, _SVC_FORMAT, _SVR_FORMAT
 from ._umap_impl import UMAP, _UMAP_FORMAT
 from .decomposition import PCA, TruncatedSVD, _PCA_FORMAT, _TSVD_FORMAT
 from ._hierarchy_impl import AgglomerativeClustering, _AGGLOMERATIVE_FORMAT
@@ -203,6 +206,12 @@ class HostSVC(_HostBound, SVC):
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
 
 
+class HostSVR(_HostBound, SVR):
+    """`SVR.predict` from a saved model through
+    `_mojolearn_svm_host.svr_predict` (lane/inference-svm, 2026-09-15)."""
+    _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
+
+
 class HostDBSCAN(_HostBound, DBSCAN):
     """`DBSCAN.predict` from a saved `prediction_data=True` model through
     `_mojolearn_estimators_host.labeled_reference_predict`
@@ -343,6 +352,7 @@ _FORMATS = {
     _PCA_FORMAT: {"PCA": HostPCA},
     _KDE_FORMAT: {"KernelDensity": HostKernelDensity},
     _SVC_FORMAT: {"SVC": HostSVC},
+    _SVR_FORMAT: {"SVR": HostSVR},
     _DBSCAN_FORMAT: {"DBSCAN": HostDBSCAN},
     _AGGLOMERATIVE_FORMAT: {"AgglomerativeClustering": HostAgglomerativeClustering},
     _KNN_FORMAT: {
@@ -353,6 +363,9 @@ _FORMATS = {
     # A saved Cholesky factor (lane/inference-embedding-ivf-cholesky,
     # 2026-09-15): `HostCholesky` solves on `_mojolearn_linalg_host`.
     _CHOLESKY_FORMAT: {"Cholesky": HostCholesky},
+    # A saved GaussianProcessClassifier (lane/gaussian-process-classifier,
+    # 2026-09-15): predicts on `_mojolearn_gp_host`.
+    _GPC_FORMAT: {"GaussianProcessClassifier": HostGaussianProcessClassifier},
 }
 CLASSICAL_FORMATS = tuple(_FORMATS)
 
