@@ -154,8 +154,7 @@ _DIST_LP_UNEXPANDED = 9
 #:                       identity `||a||^2 + ||b||^2 - 2ab` and the other
 #:                       directly permits a boundary case where a point is
 #:                       inside by one formula and outside by the other
-#:                       (DEVIATION 2 in `ball_cover.mojo`, and `archive/reference/PORTING.md
-#:                       21` for what the identity costs in float32).
+#:                       (DEVIATION 2 in `ball_cover.mojo`).
 #:   'sqeuclidean'       is ABSENT. Squared Euclidean distance is not a
 #:                       metric even though Euclidean distance is: on three
 #:                       collinear points at unit spacing it gives 4 against
@@ -442,7 +441,7 @@ class NearestNeighbors(NumericModeMixin):
     `tools/e2u_matrix_fit.py`):
 
         n_neighbors   honored   k. Refused above n_samples_fit (the
-                                upstream's short-index fill is not implemented:
+                                reference's short-index fill is not implemented:
                                 knn_brute_force.mojo) and, UNDER
                                 IDENTICAL/DETERMINISTIC, above 1024 -- the
                                 pinned selector's strided rank pass bounds

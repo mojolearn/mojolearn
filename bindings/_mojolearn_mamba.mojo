@@ -99,14 +99,14 @@ cross in `params`: `buf_len`, whose valid range is [0, 64] INCLUSIVE --
 DELIBERATELY unlike mamba2's [0, 256) exclusive, because the mamba3
 buffer NEVER EMPTIES (DEVIATION 832(i): r in [1, Q] after every call; 0
 only before the first token) -- and `pending`, a 0/1 flag saying the
-k/v pair (with theta and h) is an upstream Input_States continuation.
+k/v pair (with theta and h) is a reference Input_States continuation.
 `pending` crosses IN only: in a shipped binding it is ALWAYS False on
 return, because the unarmed core consumes it (`mamba3_block_forward`
 clears it after S22) and an armed build aborts at PyInit below -- so
 the return value stays `buf_len` alone, mamba2's shape, and the wrapper
 reassigns `state.pending = False` on that guarantee. The pending path
 goes through the lane's OWN `Mamba3DeviceState.set_input_states`, so
-its fresh-state refusal (Input_States only has upstream meaning at
+its fresh-state refusal (Input_States only has reference meaning at
 buf_len 0) stays reachable from Python instead of being respelled here.
 FOUR report buffers are written on every Mamba-3 call -- h_last,
 k_last, v_last, theta_last, the contract's REPORT stages, distinct from
@@ -332,7 +332,7 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False) rai
     var xr = dims.x_proj_rows()
 
     # Host weights, THROUGH the lane's own struct (its field table is the
-    # upstream shape authority); values arrive as given bits, unjudged
+    # reference shape authority); values arrive as given bits, unjudged
     # (the initializer rows of FEATURE_PARITY.md are REFUSED as bitwise
     # claims; weights-in is what ships).
     var w = MambaWeights(dims)
@@ -385,7 +385,7 @@ def _mamba1_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
     var xr = dims.x_proj_rows()
 
     # Host weights, THROUGH the lane's own struct (its field table is the
-    # upstream shape authority); values arrive as given bits, unjudged
+    # reference shape authority); values arrive as given bits, unjudged
     # (the initializer rows of FEATURE_PARITY.md are REFUSED as bitwise
     # claims; weights-in is what ships).
     var w = MambaWeights(dims)
@@ -517,7 +517,7 @@ def mamba1_decode_step_binding(
     """One decode token: `Mamba.step`'s semantics, the profile's
     spelling -- the block forward at L = 1 with the state carried, NO
     arithmetic of its own (`mamba_step`'s rule, mamba1 DEVIATIONS
-    721/732/733: upstream's step arm rounds differently and is the
+    721/732/733: the reference's step arm rounds differently and is the
     lane's required-RED sabotage, so there is deliberately no second
     entry path to drift).
 
@@ -732,7 +732,7 @@ def mamba2_decode_step_binding(
     """One decode token: `Mamba2.step`'s semantics, the profile's
     spelling -- PREFILL RESUMPTION at L = 1 (DEVIATION 786), through the
     same `mamba2_block_forward` the forward entry calls, with NO
-    arithmetic of its own (`mamba2_step`'s rule; the upstream per-token
+    arithmetic of its own (`mamba2_step`'s rule; the reference per-token
     recurrence rounds differently and is the required-RED
     STEP_UPSTREAM_RECURRENCE arm, never a mode).
 
@@ -930,8 +930,8 @@ def mamba3_forward_binding(
 ) raises -> PythonObject:
     """One Mamba-3 (SISO) block call: prefill from the state the caller
     hands in -- fresh (all zeros, buf_len 0, pending 0), resumed (a
-    carried ten-piece state: chunked-prefill continuation), or an
-    upstream Input_States continuation (pending 1 on a FRESH state; the
+    carried ten-piece state: chunked-prefill continuation), or a
+    reference Input_States continuation (pending 1 on a FRESH state; the
     lane's own set_input_states refuses anything else by name). Returns
     the post-call `buf_len`.
 
@@ -988,7 +988,7 @@ def mamba3_forward_binding(
                         [0, 64] INCLUSIVE (DEVIATION 794); 0 for a
                         fresh sequence ONLY
         4  pending     0 or 1; 1 marks theta/h/pending_k/pending_v as
-                        an upstream Input_States continuation, consumed
+                        a reference Input_States continuation, consumed
                         by this call (DEVIATION 794)
 
     There is NO dt clamp parameter: mamba3 S6 is bias -> softplus and
@@ -1049,7 +1049,7 @@ def mamba3_decode_step_binding(
     """One decode token: `Mamba3.step`'s semantics, the profile's
     spelling -- PREFILL RESUMPTION at L = 1 (DEVIATION 831), through the
     same `mamba3_block_forward` the forward entry calls, with NO
-    arithmetic of its own (`mamba3_step`'s rule; the upstream per-token
+    arithmetic of its own (`mamba3_step`'s rule; the reference per-token
     recurrence rounds differently and is the required-RED
     STEP_UPSTREAM_RECURRENCE arm, never a mode).
 

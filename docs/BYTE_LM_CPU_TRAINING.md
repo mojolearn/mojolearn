@@ -31,6 +31,25 @@ The wrong-gradient build got 8 of 10 arrays wrong and 2 right, and the 2 right
 are the loss: a backward-only corruption leaves the forward exact and then
 propagates from the gradient into both moments and the updated parameters. The
 gate named the tensor, `block0.w_q` element 0, with both bit patterns.
+- The GPU trainer class on a CPU-only install, for the internal verifier only
+  (2026-09-15, lane/cpu-training-embedding-ivf). Inside
+  `_cpu_reference.reference_training()` (which `tools/identity_break.py` enters),
+  `SmallByteLanguageModelTrainer` and its alias `LanguageModelTrainer`,
+  stateless or `resident=True`, run through
+  `python/mojolearn/_byte_lm_trainer_host.py`, which serves the GPU binding's
+  single-device entries (the step, evaluation, logits and the resident session)
+  over this binding's step, loss and reference-path logits and holds no
+  arithmetic; the multi-GPU entries are absent and refuse by name. Outside that
+  scope the class refuses on a CPU-only install, as every public CPU fit does;
+  `LanguageModelHostTrainer` stays the published CPU trainer. The `byte-lm` and
+  `byte-lm-resident` identity_break lanes (three AdamW steps at weight decay
+  0.01, the exported gradient, the logits, the checkpoint bytes and the batch
+  part) read IDENTICAL x4 on all 72 train, infer, model and batch cells against
+  the 166-lane record's Apple M4, NVIDIA H100 and AMD MI325X columns on the
+  M4's CPU column (one core), and a build with `-D MOJOLEARN_HOST_SABOTAGE=1`
+  (the host GEMM oracle's descending leaf) reads DIVERGENT on all 72. Before
+  that change `byte_lm_host_sabotage` did not report that arm, and such a build
+  loaded outside the gate reading clean.
 
 ## What this does NOT say
 
@@ -349,29 +368,34 @@ byte LM's. Each also builds from source through
 
 <!--fact:host_surface_table-->| family | binding under `mojolearn/host/` | routes (CPU-only install) | internal CPU reference lanes | predicts on a CPU from a saved model | gate | in a wheel |
 |---|---|---|---|---|---|---|
-| byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train | LanguageModelInference, LanguageModelHostTrainer | .github/workflows/byte-lm-cpu-gate.yml | yes |
+| byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train, byte-lm, byte-lm-resident | LanguageModelInference, LanguageModelHostTrainer, SmallByteLanguageModelTrainer | .github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | forest | `_mojolearn_forest_host.so` | loaded by path | no | RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor, GradientBoosting (rf_classifier, rf_regressor, et_classifier, et_regressor, gbdt_symmetric, gbdt_depthwise, gbdt_lossguide, gbdt_rmse) | tools/forest_host_gate.py (.github/workflows/forest-host-gate.yml) | yes |
 | tokenizer | `_mojolearn_tokenizer_host.so` | loaded by path | no | GPT2Tokenizer | pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py | yes |
+| neural | `_mojolearn_neural_host.so` | loaded by path | no | MLPInference, TransformerBlockInference | python/mojolearn/tests/test_neural_inference.py and tools/identity_break.py (mlp, transformer, transformer-window) | yes |
 | core | `_mojolearn_core_host.so` | `_mojolearn` | knn, knn-clf, knn-reg, kmeans, kmeans-random, kmeans-array, kmeans-weighted, knn-sqeuclidean, knn-clf-distance, knn-reg-distance, knn-manhattan, knn-chebyshev, knn-cosine, knn-minkowski-p3, knn-rbc, radius, radius-manhattan, radius-chebyshev, radius-minkowski-p3, kmeans-sqrt, kmeans-classic-pp, kmeans-cosine, par-queries-knn, par-queries-radius, par-reference-knn, par-reference-knn-reg | NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor, KMeans, RadiusNeighbors (knn, knn-clf, knn-reg, knn-sqeuclidean, knn-manhattan, knn-chebyshev, knn-cosine, knn-minkowski-p3, knn-rbc, knn-clf-distance, knn-reg-distance, radius, radius-manhattan, radius-chebyshev, radius-minkowski-p3) | tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
-| linalg | `_mojolearn_linalg_host.so` | `_mojolearn_linalg` | gemm-pinned, gemm-transposed | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
-| estimators | `_mojolearn_estimators_host.so` | `_mojolearn_estimators` | kde, pca, pca-whiten, tsvd, ols, ridge, dbscan, logistic, dbscan-brute-l1, kde-tophat-sqeuclidean, kde-epanechnikov-l1, kde-exponential-chebyshev, kde-linear-cosine, kde-cosine-minkowski, kde-weighted, ols-no-intercept, ols-weighted, ridge-no-intercept, logistic-unpenalized-no-intercept, dbscan-weighted, logistic-l1, logistic-elasticnet, logistic-multiclass, pca-full-whiten, par-queries-kde | LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, KernelDensity, DBSCAN (ols, ridge, tsvd, logistic, logistic-multiclass, pca, pca-whiten, kde, kde-tophat-sqeuclidean, kde-epanechnikov-l1, kde-exponential-chebyshev, kde-linear-cosine, kde-cosine-minkowski, kde-weighted) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
-| metrics | `_mojolearn_metrics_host.so` | `_mojolearn_metrics` | metrics, spectral, spectral-precomputed, umap, metrics-classification, metrics-fowlkes-mallows | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| linalg | `_mojolearn_linalg_host.so` | `_mojolearn_linalg` | gemm-pinned, gemm-transposed, cholesky | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| estimators | `_mojolearn_estimators_host.so` | `_mojolearn_estimators` | kde, pca, pca-whiten, tsvd, ols, ridge, dbscan, logistic, dbscan-brute-l1, kde-tophat-sqeuclidean, kde-epanechnikov-l1, kde-exponential-chebyshev, kde-linear-cosine, kde-cosine-minkowski, kde-weighted, ols-no-intercept, ols-weighted, ridge-no-intercept, logistic-unpenalized-no-intercept, dbscan-weighted, logistic-l1, logistic-elasticnet, logistic-multiclass, pca-full-whiten, par-queries-kde | LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, KernelDensity, DBSCAN, StandardScaler, MinMaxScaler, Lasso, ElasticNet, KernelRidge, Nystroem, RBFSampler (ols, ridge, tsvd, logistic, logistic-multiclass, pca, pca-whiten, kde, ols-no-intercept, ols-weighted, ridge-no-intercept, logistic-l1, logistic-elasticnet, logistic-unpenalized-no-intercept, standard-scaler, standard-scaler-no-mean, standard-scaler-no-std, minmax-scaler, minmax-scaler-clip, lasso, elasticnet, elasticnet-l2end-no-intercept, kernel-ridge, nystroem, rbf-sampler, pca-full-whiten, kde-tophat-sqeuclidean, kde-epanechnikov-l1, kde-exponential-chebyshev, kde-linear-cosine, kde-cosine-minkowski, kde-weighted) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
+| metrics | `_mojolearn_metrics_host.so` | `_mojolearn_metrics` | metrics, spectral, spectral-precomputed, umap, metrics-classification, metrics-fowlkes-mallows | SpectralClustering, UMAP, metrics.accuracy_score, metrics.adjusted_rand_score, metrics.entropy, metrics.mutual_info_score, metrics.homogeneity_score, metrics.completeness_score, metrics.v_measure_score, metrics.r2_score, metrics.silhouette_score, metrics.silhouette_samples, metrics.rand_score, metrics.precision_score, metrics.recall_score, metrics.f1_score, metrics.log_loss, metrics.roc_auc_score, metrics.confusion_matrix, metrics.precision_recall_curve, metrics.mean_squared_error, metrics.mean_absolute_error, metrics.root_mean_squared_error, metrics.kl_divergence, metrics.trustworthiness, metrics.fowlkes_mallows_score (umap) | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | preprocessing | `_mojolearn_preprocessing_host.so` | `_mojolearn_preprocessing` | standard-scaler, minmax-scaler, standard-scaler-no-mean, standard-scaler-no-std, minmax-scaler-clip, par-scaler | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_preprocessing_host.sh` |
 | tsa | `_mojolearn_tsa_host.so` | `_mojolearn_tsa` | holtwinters, holtwinters-multiplicative, kpss, par-holtwinters | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_tsa_host.sh` |
 | solver | `_mojolearn_solver_host.so` | `_mojolearn_solver` | lasso, elasticnet, agglomerative, elasticnet-l2end-no-intercept | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_solver_host.sh` |
 | svm | `_mojolearn_svm_host.so` | `_mojolearn_svm` | svc, iforest, svc-linear, iforest-tuned, svr, svr-linear | SVC, IsolationForest, SVR (svc, iforest, iforest-tuned) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
 | trees | `_mojolearn_trees_host.so` | `_mojolearn_trees` | et-clf, et-reg, et-clf-entropy-bestfirst, et-reg-bootstrap-parallel, par-forest-et | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_trees_host.sh` |
-| rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg, rf-clf-entropy-log2-noboot, rf-clf-balanced-parallel, rf-reg-poisson, rf-reg-gamma-ig, par-forest | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_rf_host.sh` |
-| gp | `_mojolearn_gp_host.so` | `_mojolearn_gp` | gp, gp-matern12, gp-matern32, gp-matern52-ard, cholesky | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_gp_host.sh` |
+| rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg, rf-clf-entropy-log2-noboot, rf-clf-balanced-parallel, rf-reg-poisson, rf-reg-gamma-ig, par-forest, rf-score-weighted | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_rf_host.sh` |
+| gp | `_mojolearn_gp_host.so` | `_mojolearn_gp` | gp, gp-matern12, gp-matern32, gp-matern52-ard | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_gp_host.sh` |
 | kernel_methods | `_mojolearn_kernel_methods_host.so` | `_mojolearn_kernel_methods` | rbf-sampler, kernel-ridge, nystroem | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_kernel_methods_host.sh` |
 | mixture | `_mojolearn_mixture_host.so` | `_mojolearn_mixture` | gmm, gmm-random-init | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_mixture_host.sh` |
 | mixture_infer | `_mojolearn_mixture_infer_host.so` | loaded by path | no | GaussianMixture (gmm, gmm-random-init) | tools/classical_host_gate.py | yes |
 | hdbscan | `_mojolearn_hdbscan_host.so` | `_mojolearn_hdbscan` | hdbscan, hdbscan-leaf | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_hdbscan_host.sh` |
 | hdbscan_infer | `_mojolearn_hdbscan_infer_host.so` | loaded by path | no | hdbscan.approximate_predict (hdbscan, hdbscan-leaf) | tools/classical_host_gate.py | yes |
-| gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric, gbdt-rmse, gbdt-depthwise, gbdt-lossguide, cross-val, gbdt-nan-modes, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-parametric-losses, gbdt-exact-mae, gbdt-lossguide-newtoncosine, gbdt-multiclass, gbdt-onevsall | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_gbdt_host.sh` |
-| training | `_mojolearn_training_host.so` | `_mojolearn_training` | mlp, optim-sgd, optim-adam-clip, cross-entropy-arms, training-primitives | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_training_host.sh` |
+| gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric, gbdt-rmse, gbdt-depthwise, gbdt-lossguide, cross-val, gbdt-nan-modes, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-parametric-losses, gbdt-exact-mae, gbdt-lossguide-newtoncosine, gbdt-multiclass, gbdt-onevsall, gbdt-ordered-rmse, gbdt-feature-freq, gbdt-pointwise-l2-bayesian-eval, gbdt-categorical-ctr, gbdt-adapter-score-weighted | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_gbdt_host.sh` |
+| training | `_mojolearn_training_host.so` | `_mojolearn_training` | mlp, optim-sgd, optim-adam-clip, cross-entropy-arms, training-primitives, par-mlp | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_training_host.sh` |
 | resample | `_mojolearn_resample_host.so` | `_mojolearn_resample` | bootstrap, permutation-test, monte-carlo | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_resample_host.sh` |
+| mamba | `_mojolearn_mamba_host.so` | `_mojolearn_mamba` | mamba2, mamba2-dtlimit, mamba1, mamba3 | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_mamba_host.sh` |
 | arima | `_mojolearn_arima_host.so` | `_mojolearn_arima` | arima, arima-011, arima-seasonal-c, par-arima | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_arima_host.sh` |
+| embedding | `_mojolearn_embedding_host.so` | `_mojolearn_embedding` | embedding, embedding-sort | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_embedding_host.sh` |
+| ivf | `_mojolearn_ivf_host.so` | `_mojolearn_ivf` | ivf, ivf-euclidean | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_ivf_host.sh` |
+| forecast | `_mojolearn_forecast_host.so` | `_mojolearn_arima` when its reference binding is not built | no | ARIMA (arima, arima-011, arima-seasonal-c) | tools/classical_host_gate.py and tools/identity_break.py | yes |
 | transformer | `_mojolearn_transformer_host.so` | `_mojolearn_transformer` | transformer, transformer-window | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_transformer_host.sh` |<!--/fact-->
 
 ## The import question, measured

@@ -6,6 +6,10 @@
 - Write anything that needs NVIDIA or AMD bits as OWED to the next release record.
 - At a PyPI release, take ONE record: 1 AMD, 1 NVIDIA, 1 Apple column. No second AMD model, no extra NVIDIA architecture, no two-device columns, no full re-record unless Andrew asks.
 - The box and leg rules in section 3 apply only to that release record.
+- **UPDATED Sep 15 ~11:00 ET (Andrew): "we should use runpod and cloudflare r2 for datasets for testing... it should be nvidia only... leave amd alone for now".**
+  - A lane MAY rent ONE small RunPod NVIDIA pod for identity testing, running only its own lanes on small fixtures, with datasets from R2. It is deleted after, and the delete is verified by API.
+  - RunPod CPU pods (`tools/runpod_cpu_leg.sh` once on main) are the default for long CPU work.
+  - Still NO AMD of any kind (no Hot Aisle, DigitalOcean or RunPod AMD), no full records, no extra NVIDIA architectures and no two-device columns between releases.
 
 
 ## 0. Round 2 updates (Sep 14 ~20:45 ET)
@@ -114,6 +118,7 @@ saved-model inference and the already-published byte-LM trainer remain.
 - Community health (a ten minute doc and diagnostics check) still runs on pushes that touch its paths. The external contribution checks still run on outside pull requests.
 - Lanes never wait on CI. A lane merges on its one-core M4 small-fixture evidence plus `python3 tools/docs_facts.py --check` and `python3 packaging/wheel_ci.py pins .`.
 - Never workflow_dispatch a full gate for a single lane.
+- Long local CPU work goes to `tools/runpod_cpu_leg.sh` (Andrew, Sep 15 2026: "move things to runpod cpu"). That means host binding builds past a quick check, identity_break CPU columns, sabotage builds and pytest modules. The Mac keeps Metal checks and one-core quick checks. A CPU pod is one per lane, with the on-pod watchdog and the Mac dead-man armed, and a delete verified through the API. Dry run first, then `--rent`. See `docs/RUNPOD_CPU_LEG.md`.
 
 ### CI shape since the light-touch rewrite
 

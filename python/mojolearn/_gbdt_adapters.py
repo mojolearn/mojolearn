@@ -181,15 +181,17 @@ class GradientBoostingClassifier(_GBDTAdapter):
         return decode_labels(self.classes_, self._binary_output(X, False))
 
     def score(self, X, y, sample_weight=None):
+        """Accuracy, weighted by `sample_weight` when given (scikit-learn's
+        `np.average(y == predict(X), weights=sample_weight)` on the pinned-sum
+        path, `metrics.accuracy_score`)."""
         self._check_fitted()
-        if sample_weight is not None:
-            raise NotImplementedError('GBDT adapter score does not support sample_weight')
         target, kind = metrics._classification_labels(y, 'y')
         if kind != self._label_kind_:
             raise TypeError('score labels must have the training label type')
         vocabulary = {label: i for i, label in enumerate(self.classes_)}
         encoded = Array.from_list([vocabulary.get(label, -1) for label in target], '<i4')
         return metrics.accuracy_score(encoded, self._binary_output(X, False),
+                                      sample_weight=sample_weight,
                                       numeric_mode=self.numeric_mode_)
 
 
@@ -229,10 +231,11 @@ class GradientBoostingRegressor(_GBDTAdapter):
         return self._learner_.predict(X)
 
     def score(self, X, y, sample_weight=None):
+        """R2, weighted by `sample_weight` when given (scikit-learn's weighted
+        `r2_score` on the pinned-sum path, `metrics.r2_score`)."""
         self._check_fitted()
-        if sample_weight is not None:
-            raise NotImplementedError('GBDT adapter score does not support sample_weight')
         target = _materialize(y, "input")[0]
         self._regression_target(target, 'y')
         return metrics.r2_score(target, self.predict(X),
+                                sample_weight=sample_weight,
                                 numeric_mode=self.numeric_mode_)

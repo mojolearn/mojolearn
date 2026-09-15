@@ -244,7 +244,7 @@ def m3_weights(rng, dm):
     """Fixture-scale weights (the ranges `mamba3_fixture.mojo`'s scale
     note documents: dt_bias in [-7, -2] so dt is small and the chunked
     recurrence actually recurses; fan-in-scaled projections; near-ones
-    B/C biases, their upstream ones-init neighborhood)."""
+    B/C biases, their reference ones-init neighborhood)."""
     di = 2 * dm
     h = di // 64
     dip = 2 * di + 256 + 3 * h + 32

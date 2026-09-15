@@ -3,7 +3,7 @@
 """Independent Mamba 1/2/3 whole-block gradient oracle.
 
 The forward functions come from ``mamba/corpus/gen_corpus.py``: literal,
-cited PyTorch transcriptions of the upstream reference implementations.  This
+cited PyTorch transcriptions of the reference implementations.  This
 program differentiates their float64 block result with PyTorch autograd and
 then audits selected cells with central finite differences.  The latter is
 deliberately independent of autograd and catches a self-consistent bad

@@ -472,7 +472,7 @@ path. Do not weaken IDENTICAL to make the comparison green.
 - Consider AutoARIMA/search only after the existing ARIMA fit is independently
   validated across vendors.
 - Optimize only profiles that show a representative workload gap. Do not add
-  estimators merely because an upstream implementation exists.
+  estimators merely because another library implements them.
 
 ## Release rule
 

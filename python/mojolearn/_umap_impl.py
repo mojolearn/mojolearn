@@ -12,6 +12,9 @@ from .linear_model import _round_f32
 #: `np.finfo(np.float32).max`, as a literal: the largest finite float32.
 _F32_MAX = 3.4028234663852886e+38
 
+#: The saved-model format tag (`UMAP.save`, lane/inference-forecast-umap-pca).
+_UMAP_FORMAT = "mojolearn-umap-1"
+
 
 def _integer(value, name, minimum, maximum=(1 << 63) - 1):
     # A bool is an int to `operator.index` and is refused by name here; the
@@ -60,7 +63,7 @@ class UMAP(NumericModeMixin):
     learning rate is learning_rate/4; repulsion_strength and
     negative_sample_rate apply to both fit and transform. Query batching
     can change results. This path has its own qualification requirements;
-    existing fit certificates do not certify transform or upstream RNG bits.
+    existing fit certificates do not certify transform or reference RNG bits.
     Supervised UMAP and alternate metrics/init are unsupported.
 
     `embedding_` and every returned embedding are `_array.Array`s of float32
@@ -170,6 +173,12 @@ class UMAP(NumericModeMixin):
         Identical training-input bytes return a copy of the saved embedding.
         Parameter or mode changes require a successful refit. Later edits of
         public embedding_ or the original X do not alter the retained model.
+
+        The answer for a row depends on the other rows in the same call (the
+        batch mean sigma floor, the batch maximum edge weight and the
+        batch-position negative-sample draws of umap/transform.mojo), so the
+        bitwise promise across devices, and from a saved model on a CPU, is
+        for the same query batch.
         """
         if not hasattr(self, "_transform_training"):
             raise ValueError("UMAP transform requires a successful fit")
@@ -202,3 +211,87 @@ class UMAP(NumericModeMixin):
         if columns != config[1] or not all_finite(output):
             raise RuntimeError("UMAP transform returned an invalid embedding")
         return output
+
+    def save(self, path):
+        """Write the fitted embedding to `path` as an npz: the retained
+        training rows and embedding (float32), `meta` `<i8` [n_neighbors,
+        n_components, n_epochs, random_state, negative_sample_rate,
+        n_epochs_is_none, input_copied], `controls` `<f4` [min_dist, spread,
+        set_op_mix_ratio, local_connectivity, learning_rate,
+        repulsion_strength], `metric`, `init` and `numeric_mode`
+        (lane/inference-forecast-umap-pca, 2026-09-15).
+
+        A loaded model transforms; it does not refit. On a CPU-only install
+        that is public inference through the metrics host binding
+        (`mojolearn.host_model(path)` or `UMAP.load(path)`).
+
+        THE RESULT DEPENDS ON THE QUERY BATCH, by the transform's contract
+        (umap/transform.mojo): the sigma floor is a mean over every query's
+        neighbor distances, each edge weight is scaled by the maximum over
+        the batch, the negative-sample draws are keyed by a row's position in
+        the batch, and with n_epochs unset the epoch count depends on the
+        number of queries. A loaded model on a CPU answers the GPU's bytes
+        for the SAME query batch; a row asked alone, or in a different
+        batch, may embed differently on every device alike."""
+        if not hasattr(self, "_transform_training"):
+            raise ValueError("UMAP save requires a successful fit")
+        from . import _serialize
+        from ._array import Array
+        c = self._transform_config
+        arrays = {
+            "format": _UMAP_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": self._transform_mode,
+            "metric": str(self.metric),
+            "init": str(self.init),
+            "training": self._transform_training,
+            "embedding": self._transform_embedding,
+            "meta": Array.from_list(
+                [int(c[0]), int(c[1]), int(c[2]), int(c[7]), int(c[10]),
+                 1 if self.n_epochs is None else 0,
+                 1 if getattr(self, "input_copied_", False) else 0],
+                "<i8"),
+            "controls": Array.from_list([c[3], c[4], c[5], c[6], c[8], c[9]], "<f4"),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load an embedding saved by `save`. The result transforms new
+        rows against the saved training rows and embedding; it does not
+        refit. Transform results depend on the query batch (see `save`)."""
+        from . import _serialize
+        from .decomposition import _check_saved_by, _restore_mode
+        arrays = _serialize.read_npz(path, _UMAP_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        controls = _serialize.exact(arrays, "controls", "<f4")
+        if meta.size != 7 or controls.size != 6:
+            raise ValueError(f"mojolearn: {path!r} holds {meta.size} meta and {controls.size} control "
+                             "fields; 7 and 6 are needed")
+        m = [int(meta[i]) for i in range(7)]
+        f = [float(controls[i]) for i in range(6)]
+        obj = cls(n_neighbors=m[0], n_components=m[1], n_epochs=None if m[5] else m[2],
+                  random_state=m[3], min_dist=f[0], spread=f[1], set_op_mix_ratio=f[2],
+                  local_connectivity=f[3], metric=_serialize.scalar_str(arrays, "metric"),
+                  init=_serialize.scalar_str(arrays, "init"), learning_rate=f[4],
+                  repulsion_strength=f[5], negative_sample_rate=m[4])
+        _restore_mode(obj, arrays)
+        config = tuple(obj._parameters())
+        saved = (m[0], m[1], m[2], f[0], f[1], f[2], f[3], m[3], f[4], f[5], m[4])
+        if config != saved:
+            raise ValueError(f"mojolearn: {path!r} controls {saved} do not survive validation as {config}")
+        training = _serialize.exact(arrays, "training", "<f4")
+        embedding = _serialize.exact(arrays, "embedding", "<f4")
+        if (training.ndim != 2 or embedding.ndim != 2 or embedding.shape[0] != training.shape[0]
+                or embedding.shape[1] != m[1]):
+            raise ValueError(f"mojolearn: {path!r} training {tuple(training.shape)} and embedding "
+                             f"{tuple(embedding.shape)} do not agree with n_components={m[1]}")
+        obj._transform_training = training
+        obj._transform_embedding = embedding
+        obj._transform_config = config
+        obj._transform_mode = obj.numeric_mode
+        obj.embedding_ = embedding.copy()
+        obj.n_features_in_ = int(training.shape[1])
+        obj.input_copied_ = bool(m[6])
+        return obj

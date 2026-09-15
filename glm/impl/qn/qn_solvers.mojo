@@ -464,5 +464,5 @@ def qn_minimize(
             num_iters, n, trace,
         )
     # `:452-457`: "Maximum iterations reached before solver is converged"
-    # is a WARNING upstream, not an error; the retcode carries it.
+    # is a WARNING in the reference, not an error; the retcode carries it.
     return ret

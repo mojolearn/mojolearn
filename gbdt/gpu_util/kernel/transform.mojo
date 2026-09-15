@@ -129,7 +129,7 @@ def split_planes_f32_kernel(
 ):
     """Two planes of one buffer into two buffers, on the device.
 
-    NO CATBOOST COUNTERPART, deliberately: upstream never packs the two
+    NO CATBOOST COUNTERPART, deliberately: the reference never packs the two
     stat planes into one buffer, so it never unpacks them. This kernel
     exists for `split_stat_planes`' bridge between this tree's
     two-plane convention and the pointwise kernels' two-buffer one

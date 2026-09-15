@@ -25,19 +25,38 @@ read-back names the host loader requires are the `linalg_host_*` five.
 `linalg_vendor` answers "cpu", not `COMPILED_VENDOR`'s "none": on a
 CPU-only install `_backend.vendor()` is "cpu" and the read-back cross-check
 expects the same string from every host binding (brief section 3.2).
+
+THE CHOLESKY DOOR (lane/inference-embedding-ivf-cholesky, 2026-09-15).
+`cholesky_profile_jitter`, `cholesky_factor` (3 addresses, 2 params) and
+`cholesky_solve` (3 addresses, 6 params) carry the GPU binding
+`bindings/_mojolearn_gp.mojo`'s names and contracts over
+`cholesky/host/chol_oracle.mojo`, the same entries the gp host binding
+exports. They live HERE so that public CPU Cholesky inference (a factor
+from a saved model, or a factor of a given matrix, then solve) ships in the
+inference wheel: this family ships and the gp family does not. On a
+CPU-only install `python/mojolearn/_cholesky_impl.py` binds
+`_mojolearn_linalg` for that reason. The sabotage arm reaches the factor
+through the trailing update's `gemm_oracle` leaf walk (chol_oracle's
+header, THE SABOTAGE).
 """
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, read_f32
+from bindings.hostptr import f32_ptr, f64_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from cholesky.host.chol_oracle import (
+    CholHostFactor,
+    chol_host_jitter_pinned,
+    chol_host_potrf,
+    chol_host_solve,
+)
 from gemm.host.gemm_oracle import (
     GEMM_ORACLE_HOST_SABOTAGE,
     OP_NN,
@@ -177,6 +196,116 @@ def gemm_binding(
     return PythonObject(wrote)
 
 
+# ===========================================================================
+# THE CHOLESKY DOOR, on the host (the GPU gp binding's workstream D entries,
+# the same contract word for word; see the module docstring).
+# ===========================================================================
+
+
+def cholesky_profile_jitter_binding() raises -> PythonObject:
+    """The profile's pinned ridge, 2^-20, as a Python float."""
+    return PythonObject(Float64(chol_host_jitter_pinned()))
+
+
+def _cholesky_factor_run(
+    a: List[Float32],
+    n: Int,
+    jitter: Float32,
+    lp: MutPointer[Float32, MutUntrackedOrigin],
+    sp: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> Int:
+    """The GIL-free half of `cholesky_factor_binding`."""
+    var f = chol_host_potrf(a, n, jitter)
+    for i in range(n * n):
+        lp.unsafe_store(i, f.l[i])
+    # info, nb, logdet, jitter -- the GPU binding's order.
+    sp.unsafe_store(0, Float64(f.info))
+    sp.unsafe_store(1, Float64(f.nb))
+    sp.unsafe_store(2, Float64(f.logdet))
+    sp.unsafe_store(3, Float64(f.jitter))
+    var info = f.info
+    _ = f^
+    return info
+
+
+def cholesky_factor_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`cholesky_factor_host(a, n, jitter)` on the host. `addrs`: 0 a,
+    1 l_out, 2 scalars_out (info, nb, logdet, jitter). `params`: 0 n,
+    1 jitter (unclamped, so the pin refuses by name). Returns `info`."""
+    if len(addrs) != 3:
+        raise Error(
+            "cholesky_factor: addrs must contain 3 addresses (a, l_out,"
+            " scalars_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 2:
+        raise Error(
+            "cholesky_factor: params must contain 2 values (n, jitter), got "
+            + String(len(params))
+        )
+    var lp = f32_ptr(_index(addrs[1]))
+    var sp = f64_ptr(_index(addrs[2]))
+    var n = _index(params[0])
+    if n < 1 or n > 46340:
+        raise Error(
+            "cholesky_factor: n must be in [1, 46340] so n * n cells stay"
+            " addressable, got " + String(n)
+        )
+    var jitter = Float32(Float64(py=params[1]))
+    var a = read_f32(_index(addrs[0]), n * n)
+    var info = 0
+    with GILReleased(Python()):
+        info = _cholesky_factor_run(a, n, jitter, lp, sp)
+    _ = a^
+    return PythonObject(info)
+
+
+def cholesky_solve_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`cholesky_solve_host(factor, b, nrhs)` on the host. `addrs`: 0 l,
+    1 b, 2 x_out. `params`: 0 n, 1 nrhs, 2 info (passed through, so the
+    refusal to solve against a failed factor fires by name), 3 nb, 4 logdet,
+    5 jitter. Returns 0."""
+    if len(addrs) != 3:
+        raise Error(
+            "cholesky_solve: addrs must contain 3 addresses (l, b, x_out),"
+            " got "
+            + String(len(addrs))
+        )
+    if len(params) != 6:
+        raise Error(
+            "cholesky_solve: params must contain 6 values (n, nrhs, info,"
+            " nb, logdet, jitter), got "
+            + String(len(params))
+        )
+    var xp = f32_ptr(_index(addrs[2]))
+    var n = _index(params[0])
+    var nrhs = _index(params[1])
+    if n < 1 or n > 46340 or nrhs < 1 or nrhs > LINALG_HOST_MAX_EXTENT // n:
+        raise Error(
+            "cholesky_solve: n must be in [1, 46340] and nrhs in [1, 2^30 / n],"
+            " got n=" + String(n) + " nrhs=" + String(nrhs)
+        )
+    var info = _index(params[2])
+    var nb = _index(params[3])
+    var logdet = Float32(Float64(py=params[4]))
+    var jitter = Float32(Float64(py=params[5]))
+    var l = read_f32(_index(addrs[0]), n * n)
+    var b = read_f32(_index(addrs[1]), n * nrhs)
+    var factor = CholHostFactor(l^, n, info, logdet, nb, jitter)
+    with GILReleased(Python()):
+        var x = chol_host_solve(factor, b, nrhs)
+        for i in range(n * nrhs):
+            xp.unsafe_store(i, x[i])
+        _ = x^
+    _ = factor^
+    _ = b^
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_linalg_host() abi("C") -> PythonObject:
     try:
@@ -189,6 +318,9 @@ def PyInit__mojolearn_linalg_host() abi("C") -> PythonObject:
         module.def_function[linalg_numeric_mode_binding]("linalg_numeric_mode")
         module.def_function[linalg_profile_version_binding]("linalg_profile_version")
         module.def_function[gemm_binding]("gemm")
+        module.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
+        module.def_function[cholesky_factor_binding]("cholesky_factor")
+        module.def_function[cholesky_solve_binding]("cholesky_solve")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_linalg_host: ", error))

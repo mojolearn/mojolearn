@@ -794,7 +794,7 @@ class Ridge(NumericModeMixin):
             raise ValueError("mojolearn Ridge feature count differs from fit")
         out = empty((x.shape[0],), "<f4")
         # The same gemv + intercept epilogue OLS predicts with
-        # (`gemmPredict` upstream serves both, `base.pyx:134`).
+        # (`gemmPredict` in the reference serves both, `base.pyx:134`).
         self._bind("_mojolearn_estimators").ols_predict(
             addr_ro(x, name="X"), addr_ro(self.coef_, name="coef_"),
             addr(out, name="predictions"),
@@ -905,10 +905,10 @@ class LogisticRegression(NumericModeMixin):
                                   host centering here, unlike the linear
                                   models
         max_iter        honored   the L-BFGS iteration cap; reaching it is
-                                  a WARNING upstream and `n_iter_ ==
+                                  a WARNING in the reference and `n_iter_ ==
                                   max_iter` with `retcode_ == 3` here
         linesearch_max_iter honored  default 50 as theirs
-        class_weight    refused   becomes a sample_weight upstream
+        class_weight    refused   becomes a sample_weight in the reference
                                   (logistic_regression.py:400-436), and
                                   sample_weight is not implemented
         sample_weight   refused   GLMBase::add_sample_weights and the

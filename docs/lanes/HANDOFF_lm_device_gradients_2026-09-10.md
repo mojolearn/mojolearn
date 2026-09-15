@@ -45,7 +45,7 @@ The generalized LM traverses all layers in reverse using the successor's
 mutable borrows; reinsertion preserves layer order. The one-layer path reads
 the head gradient directly too.
 
-Upstream tensor graph: transformers/models/llama/modeling_llama.py:402–412.
+Reference tensor graph: transformers/models/llama/modeling_llama.py:402–412.
 No arithmetic kernel, rounding, reduction order or acceptance tolerance changes.
 The device nonfinite scan remains; an invalid gradient downloads only its first
 bad scalar to preserve NaN versus infinity diagnostics. Existing synchronization

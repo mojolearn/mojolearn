@@ -1,0 +1,276 @@
+NOTE: --lanes scopes this diff to 3 lane(s); 163 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host'] commit=3bd918d515c390599f6867585d9d0867101de872
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    nvidia-h100-sm_90a: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    amd-mi325x-gfx942: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-h100-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    amd-mi325x-gfx942: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    nvidia-h100-sm_90a: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    amd-mi325x-gfx942: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    nvidia-h100-sm_90a: {'X': 'e4b16c115962dfcd'}
+    amd-mi325x-gfx942: {'X': 'e4b16c115962dfcd'}
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    nvidia-h100-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    amd-mi325x-gfx942: {'X': '32ea0bbed60b8e6c'}
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': 'd1ba686494256660'}
+    nvidia-h100-sm_90a: {'X': 'd1ba686494256660'}
+    amd-mi325x-gfx942: {'X': 'd1ba686494256660'}
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-apple-m4: None
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+| lane/fixture                 | verdict    | cpu-apple-m4     | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| kmeans/base                  | IDENTICAL x4 | 5aa44cc11034dec9 | 5aa44cc11034dec9 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+| kmeans/denormal              | IDENTICAL x3 | (not run)        | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c |
+| kmeans/denormal_ftz          | IDENTICAL x3 | (not run)        | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c |
+| kmeans/dupes                 | IDENTICAL x3 | (not run)        | 2ae942d45a51757a | 2ae942d45a51757a | 2ae942d45a51757a |
+| kmeans/hashed                | IDENTICAL x3 | (not run)        | 0a570e84b0002723 | 0a570e84b0002723 | 0a570e84b0002723 |
+| kmeans/negative              | IDENTICAL x3 | (not run)        | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 |
+| kmeans/odd                   | IDENTICAL x3 | (not run)        | 43d8a3d3859f4143 | 43d8a3d3859f4143 | 43d8a3d3859f4143 |
+| kmeans/ties                  | IDENTICAL x3 | (not run)        | 3de3e103006de69c | 3de3e103006de69c | 3de3e103006de69c |
+| kmeans/wide                  | IDENTICAL x3 | (not run)        | 6f0529fcb3d60536 | 6f0529fcb3d60536 | 6f0529fcb3d60536 |
+| ols/base                     | IDENTICAL x4 | 3d1d7c30b12d9872 | 3d1d7c30b12d9872 | 3d1d7c30b12d9872 | 3d1d7c30b12d9872 |
+| ols/denormal                 | IDENTICAL x3 | (not run)        | f0e2e46f2203e17d | f0e2e46f2203e17d | f0e2e46f2203e17d |
+| ols/denormal_ftz             | IDENTICAL x3 | (not run)        | f0e2e46f2203e17d | f0e2e46f2203e17d | f0e2e46f2203e17d |
+| ols/dupes                    | IDENTICAL x3 | (not run)        | 5d93af9edf61d3e7 | 5d93af9edf61d3e7 | 5d93af9edf61d3e7 |
+| ols/hashed                   | IDENTICAL x3 | (not run)        | 7a4cc4b643207e04 | 7a4cc4b643207e04 | 7a4cc4b643207e04 |
+| ols/negative                 | IDENTICAL x3 | (not run)        | 737566e6c5e95e7d | 737566e6c5e95e7d | 737566e6c5e95e7d |
+| ols/odd                      | IDENTICAL x3 | (not run)        | bfb2368a5a4871ba | bfb2368a5a4871ba | bfb2368a5a4871ba |
+| ols/ties                     | IDENTICAL x3 | (not run)        | c73c0c1158ebcb9e | c73c0c1158ebcb9e | c73c0c1158ebcb9e |
+| ols/wide                     | IDENTICAL x3 | (not run)        | 880f803e2a9840cf | 880f803e2a9840cf | 880f803e2a9840cf |
+| ridge/base                   | IDENTICAL x4 | a91478be750dc756 | a91478be750dc756 | a91478be750dc756 | a91478be750dc756 |
+| ridge/denormal               | IDENTICAL x3 | (not run)        | 2eed6e454ed965da | 2eed6e454ed965da | 2eed6e454ed965da |
+| ridge/denormal_ftz           | IDENTICAL x3 | (not run)        | 2eed6e454ed965da | 2eed6e454ed965da | 2eed6e454ed965da |
+| ridge/dupes                  | IDENTICAL x3 | (not run)        | c69b8fef7932da21 | c69b8fef7932da21 | c69b8fef7932da21 |
+| ridge/hashed                 | IDENTICAL x3 | (not run)        | fb5037b3d70d60ee | fb5037b3d70d60ee | fb5037b3d70d60ee |
+| ridge/negative               | IDENTICAL x3 | (not run)        | 473e3ff40fc67b0e | 473e3ff40fc67b0e | 473e3ff40fc67b0e |
+| ridge/odd                    | IDENTICAL x3 | (not run)        | bdaf14e02a8f07ec | bdaf14e02a8f07ec | bdaf14e02a8f07ec |
+| ridge/ties                   | IDENTICAL x3 | (not run)        | 42410e35cdae30cb | 42410e35cdae30cb | 42410e35cdae30cb |
+| ridge/wide                   | IDENTICAL x3 | (not run)        | 7215c2605901cdc6 | 7215c2605901cdc6 | 7215c2605901cdc6 |
+
+summary: IDENTICAL=27
+
+| lane/fixture                 | column | verdict      | cpu-apple-m4     | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| kmeans/base                  | infer  | ONE-COLUMN   | b9a7dd27a045bc21 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/base                  | batch  | ONE-COLUMN   | 2dc7903bd0a181f5 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/denormal              | infer  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/denormal              | model  | N/A          | (not run)        | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/denormal              | batch  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/denormal_ftz          | infer  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/denormal_ftz          | model  | N/A          | (not run)        | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/denormal_ftz          | batch  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/dupes                 | infer  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/dupes                 | model  | N/A          | (not run)        | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/dupes                 | batch  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/hashed                | infer  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/hashed                | model  | N/A          | (not run)        | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/hashed                | batch  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/negative              | infer  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/negative              | model  | N/A          | (not run)        | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/negative              | batch  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/odd                   | infer  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/odd                   | model  | N/A          | (not run)        | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/odd                   | batch  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/ties                  | infer  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/ties                  | model  | N/A          | (not run)        | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/ties                  | batch  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/wide                  | infer  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/wide                  | model  | N/A          | (not run)        | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/wide                  | batch  | N/A          | (not run)        | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| ols/base                     | infer  | IDENTICAL x4 | 2546a13c03838433 | 2546a13c03838433 | 2546a13c03838433 | 2546a13c03838433 |
+| ols/base                     | model  | IDENTICAL x4 | a84289377ea9180f | a84289377ea9180f | a84289377ea9180f | a84289377ea9180f |
+| ols/base                     | batch  | IDENTICAL x4 | b578bef320871443 | b578bef320871443 | b578bef320871443 | b578bef320871443 |
+| ols/denormal                 | infer  | IDENTICAL x3 | (not run)        | 050118359943fcd8 | 050118359943fcd8 | 050118359943fcd8 |
+| ols/denormal                 | model  | IDENTICAL x3 | (not run)        | 1c22cb64d07612e4 | 1c22cb64d07612e4 | 1c22cb64d07612e4 |
+| ols/denormal                 | batch  | IDENTICAL x3 | (not run)        | f43e33d63aa99b1f | f43e33d63aa99b1f | f43e33d63aa99b1f |
+| ols/denormal_ftz             | infer  | IDENTICAL x3 | (not run)        | 050118359943fcd8 | 050118359943fcd8 | 050118359943fcd8 |
+| ols/denormal_ftz             | model  | IDENTICAL x3 | (not run)        | 1c22cb64d07612e4 | 1c22cb64d07612e4 | 1c22cb64d07612e4 |
+| ols/denormal_ftz             | batch  | IDENTICAL x3 | (not run)        | f43e33d63aa99b1f | f43e33d63aa99b1f | f43e33d63aa99b1f |
+| ols/dupes                    | infer  | IDENTICAL x3 | (not run)        | 09ac924358918527 | 09ac924358918527 | 09ac924358918527 |
+| ols/dupes                    | model  | IDENTICAL x3 | (not run)        | ef68b4364cd0fa2d | ef68b4364cd0fa2d | ef68b4364cd0fa2d |
+| ols/dupes                    | batch  | IDENTICAL x3 | (not run)        | a38ddf4744dc462e | a38ddf4744dc462e | a38ddf4744dc462e |
+| ols/hashed                   | infer  | IDENTICAL x3 | (not run)        | 73b6c23acb537f4f | 73b6c23acb537f4f | 73b6c23acb537f4f |
+| ols/hashed                   | model  | IDENTICAL x3 | (not run)        | 5de64f00889bfe52 | 5de64f00889bfe52 | 5de64f00889bfe52 |
+| ols/hashed                   | batch  | IDENTICAL x3 | (not run)        | a4956d9ac7b79682 | a4956d9ac7b79682 | a4956d9ac7b79682 |
+| ols/negative                 | infer  | IDENTICAL x3 | (not run)        | ddf1f9ebb606db70 | ddf1f9ebb606db70 | ddf1f9ebb606db70 |
+| ols/negative                 | model  | IDENTICAL x3 | (not run)        | f534c0184e2b735f | f534c0184e2b735f | f534c0184e2b735f |
+| ols/negative                 | batch  | IDENTICAL x3 | (not run)        | 134a538ba901d0d4 | 134a538ba901d0d4 | 134a538ba901d0d4 |
+| ols/odd                      | infer  | IDENTICAL x3 | (not run)        | 60eb6ff64dfbea28 | 60eb6ff64dfbea28 | 60eb6ff64dfbea28 |
+| ols/odd                      | model  | IDENTICAL x3 | (not run)        | fcd41cbad6561bbb | fcd41cbad6561bbb | fcd41cbad6561bbb |
+| ols/odd                      | batch  | IDENTICAL x3 | (not run)        | 5dbe95f10a137c72 | 5dbe95f10a137c72 | 5dbe95f10a137c72 |
+| ols/ties                     | infer  | IDENTICAL x3 | (not run)        | 55f61f34cae7e5ff | 55f61f34cae7e5ff | 55f61f34cae7e5ff |
+| ols/ties                     | model  | IDENTICAL x3 | (not run)        | b25d3a2214bc6196 | b25d3a2214bc6196 | b25d3a2214bc6196 |
+| ols/ties                     | batch  | IDENTICAL x3 | (not run)        | 9dbfb3084184e215 | 9dbfb3084184e215 | 9dbfb3084184e215 |
+| ols/wide                     | infer  | IDENTICAL x3 | (not run)        | c40c1d99f114c282 | c40c1d99f114c282 | c40c1d99f114c282 |
+| ols/wide                     | model  | IDENTICAL x3 | (not run)        | 926f863307451ea0 | 926f863307451ea0 | 926f863307451ea0 |
+| ols/wide                     | batch  | IDENTICAL x3 | (not run)        | 7b5124d64616ae30 | 7b5124d64616ae30 | 7b5124d64616ae30 |
+| ridge/base                   | infer  | IDENTICAL x4 | a5a404bb201b0eeb | a5a404bb201b0eeb | a5a404bb201b0eeb | a5a404bb201b0eeb |
+| ridge/base                   | model  | IDENTICAL x4 | efada80fdc2d4259 | efada80fdc2d4259 | efada80fdc2d4259 | efada80fdc2d4259 |
+| ridge/base                   | batch  | IDENTICAL x4 | 5817cf4d9fb9bd91 | 5817cf4d9fb9bd91 | 5817cf4d9fb9bd91 | 5817cf4d9fb9bd91 |
+| ridge/denormal               | infer  | IDENTICAL x3 | (not run)        | 4233d399ae41d2e6 | 4233d399ae41d2e6 | 4233d399ae41d2e6 |
+| ridge/denormal               | model  | IDENTICAL x3 | (not run)        | 80113efe9b48cc79 | 80113efe9b48cc79 | 80113efe9b48cc79 |
+| ridge/denormal               | batch  | IDENTICAL x3 | (not run)        | 3d155f9f8c15eb89 | 3d155f9f8c15eb89 | 3d155f9f8c15eb89 |
+| ridge/denormal_ftz           | infer  | IDENTICAL x3 | (not run)        | 4233d399ae41d2e6 | 4233d399ae41d2e6 | 4233d399ae41d2e6 |
+| ridge/denormal_ftz           | model  | IDENTICAL x3 | (not run)        | 80113efe9b48cc79 | 80113efe9b48cc79 | 80113efe9b48cc79 |
+| ridge/denormal_ftz           | batch  | IDENTICAL x3 | (not run)        | 3d155f9f8c15eb89 | 3d155f9f8c15eb89 | 3d155f9f8c15eb89 |
+| ridge/dupes                  | infer  | IDENTICAL x3 | (not run)        | 3e10053ac0b9fbd4 | 3e10053ac0b9fbd4 | 3e10053ac0b9fbd4 |
+| ridge/dupes                  | model  | IDENTICAL x3 | (not run)        | 11e592057872c1e0 | 11e592057872c1e0 | 11e592057872c1e0 |
+| ridge/dupes                  | batch  | IDENTICAL x3 | (not run)        | 4a7166ff8bd89cf3 | 4a7166ff8bd89cf3 | 4a7166ff8bd89cf3 |
+| ridge/hashed                 | infer  | IDENTICAL x3 | (not run)        | 1f692bf67099df47 | 1f692bf67099df47 | 1f692bf67099df47 |
+| ridge/hashed                 | model  | IDENTICAL x3 | (not run)        | 05a9504a256753f0 | 05a9504a256753f0 | 05a9504a256753f0 |
+| ridge/hashed                 | batch  | IDENTICAL x3 | (not run)        | 1b476bdac9aeaa84 | 1b476bdac9aeaa84 | 1b476bdac9aeaa84 |
+| ridge/negative               | infer  | IDENTICAL x3 | (not run)        | 174ab0d4049ee591 | 174ab0d4049ee591 | 174ab0d4049ee591 |
+| ridge/negative               | model  | IDENTICAL x3 | (not run)        | ad885ca7374525bd | ad885ca7374525bd | ad885ca7374525bd |
+| ridge/negative               | batch  | IDENTICAL x3 | (not run)        | 670e062d2ee831b0 | 670e062d2ee831b0 | 670e062d2ee831b0 |
+| ridge/odd                    | infer  | IDENTICAL x3 | (not run)        | 83420de0d62b5c95 | 83420de0d62b5c95 | 83420de0d62b5c95 |
+| ridge/odd                    | model  | IDENTICAL x3 | (not run)        | 3f77c9c16c29bd84 | 3f77c9c16c29bd84 | 3f77c9c16c29bd84 |
+| ridge/odd                    | batch  | IDENTICAL x3 | (not run)        | 34d5126ca77a014e | 34d5126ca77a014e | 34d5126ca77a014e |
+| ridge/ties                   | infer  | IDENTICAL x3 | (not run)        | d23a652e5f82906f | d23a652e5f82906f | d23a652e5f82906f |
+| ridge/ties                   | model  | IDENTICAL x3 | (not run)        | 824a2e3b44b31af4 | 824a2e3b44b31af4 | 824a2e3b44b31af4 |
+| ridge/ties                   | batch  | IDENTICAL x3 | (not run)        | 6928f85b10dd8f49 | 6928f85b10dd8f49 | 6928f85b10dd8f49 |
+| ridge/wide                   | infer  | IDENTICAL x3 | (not run)        | cc8d5d1192f32b52 | cc8d5d1192f32b52 | cc8d5d1192f32b52 |
+| ridge/wide                   | model  | IDENTICAL x3 | (not run)        | 2869ff3b7b3a7558 | 2869ff3b7b3a7558 | 2869ff3b7b3a7558 |
+| ridge/wide                   | batch  | IDENTICAL x3 | (not run)        | 5f47b5b61a45d567 | 5f47b5b61a45d567 | 5f47b5b61a45d567 |
+
+summary (infer/model): IDENTICAL=36, N/A=17, ONE-COLUMN=1
+summary (batch): IDENTICAL=18, N/A=8, ONE-COLUMN=1
+summary (rlpair): 
+REQUIRE FAIL kmeans/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/dupes model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/ties model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ols/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/denormal model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/denormal_ftz model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/dupes model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/hashed model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/negative model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/odd model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/ties model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/wide model: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL ridge/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 4 over ['kmeans', 'ols', 'ridge']: 74 short

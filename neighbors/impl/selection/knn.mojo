@@ -249,14 +249,14 @@ def _clf_tag(stage: StringSlice, i: Int, n_outputs: Int) -> String:
 #   `neighbors/impl/selection/distance_weights.mojo`'s, whose semantics
 #   are scikit-learn's `_get_weights` / `_classification.py:404-410` /
 #   `_regression.py` and whose file says so at length.
-# REASON: "the upstream does not have it" stopped being a reason to refuse
+# REASON: "the reference does not have it" stopped being a reason to refuse
 #   on 2026-09-01. A refusal is now legitimate only when the thing is
 #   genuinely impossible here (a closed vendor library with no portable
 #   path) or when refusing IS the right behaviour for the input. Neither
 #   applies: the definition is four lines of arithmetic and this library
 #   already goes beyond cuML in several directions.
 # WHERE IT LIVES: the KERNELS are in their own file because they have no
-#   upstream to sit beside; the PARAMETER is here because ENGINEERING_RULES
+#   reference to sit beside; the PARAMETER is here because ENGINEERING_RULES
 #   rule 4 wants a departure in the file it departs from, so a reader
 #   diffing this file against `knn.cuh` sees it.
 # ===========================================================================

@@ -5,7 +5,7 @@ constructor. This wires the allocation mode already implemented by fused
 attention. All eight quadratic stage buffers start at one element per layer;
 eager execution and diagnostic fallback retain their existing grow-on-demand
 behavior. No arithmetic, kernel dispatch, tolerance, or timing gate changed.
-The upstream decoder layer loop remains the reference control flow:
+The Transformers decoder layer loop remains the reference control flow:
 `upstream/transformers/src/transformers/models/llama/modeling_llama.py:402-412`.
 The lazy stage allocation is our existing identity instrumentation mechanism.
 

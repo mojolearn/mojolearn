@@ -19,7 +19,7 @@ CatBoost source inspected at commit `54a8143a`:
 `catboost/cuda/methods/greedy_subsets_searcher/greedy_search_helper.cpp:397-443`
 and `split_properties_helper.cpp:918-936`. Its split chain updates child
 statistics. This optimization preserves mojolearn's pinned reductions rather
-than replacing them with a different upstream numerical schedule. It is not a
+than replacing them with a different reference numerical schedule. It is not a
 claim of full CatBoost numerical or feature parity.
 
 Reference and diagnostic defines:

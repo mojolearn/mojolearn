@@ -60,6 +60,37 @@ from forest_host_gate import (  # noqa: E402
 
 #: Held-out rows each lane probes, `identity_break.py`'s `Xh[:256]`.
 PROBE_ROWS = 256
+
+
+def _forecast_pair(e):
+    """identity_break's forecaster infer probe, the same call and the same
+    byte check (`_same_bytes`), so its hash is that column's cell."""
+    ib = identity_tool()
+    h = ib.FORECAST_HORIZON
+    return ib._same_bytes("forecast(h)", e.forecast(h),
+                          "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + h))
+
+
+def _radius_probe(e, X):
+    """identity_break's radius infer probe: `_ragged` over the sorted query
+    of the first 64 held-out rows."""
+    return identity_tool()._ragged(e.radius_neighbors(X[:64], sort_results=True))
+
+
+def _approximate_predict(e, X):
+    """identity_break's hdbscan infer probe: approximate_predict's labels and
+    probabilities on the held-out rows' first four columns."""
+    from mojolearn.hdbscan import approximate_predict
+    return tuple(approximate_predict(e, X[:, :4]))
+
+
+#: The surfaces every ARIMA lane adds beside its identity probe.
+_ARIMA_EXTRAS = {
+    'predict_in_sample': lambda e, X: e.predict(0, e.n_obs_),
+    'predict_straddle': lambda e, X: e.predict(e.n_obs_ - 16, e.n_obs_ + 16),
+    'params': lambda e, X: e.params_,
+    'sigma2': lambda e, X: e.sigma2_,
+}
 #: lane -> (estimator, identity_break probe, extra surfaces). The identity
 #: probe is the tuple `identity_break` hashes for the `infer` column, in its
 #: order (the knn lanes probe `Xh[:64]`, as `identity_break` does); the
@@ -102,29 +133,41 @@ LANES = {
     # each probed exactly as its identity_break lane probes the held-out
     # rows (the radius probe is identity_break's `_ragged` over the sorted
     # query; the cosine KDE pair shifts its rows by 8, as the lane does).
-    **{f'knn-{name}': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
-                       {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]})
-       for name in ('sqeuclidean', 'manhattan', 'chebyshev', 'cosine', 'minkowski-p3', 'rbc')},
+    'knn-sqeuclidean': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                               {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-manhattan': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                             {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-chebyshev': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                             {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-cosine': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                          {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-minkowski-p3': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                                {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-rbc': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                       {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
     'knn-clf-distance': ('KNeighborsClassifier',
                          lambda e, X: (e.predict(X[:64]), e.predict_proba(X[:64])),
                          {'predict_proba': lambda e, X: e.predict_proba(X[:64])}),
     'knn-reg-distance': ('KNeighborsRegressor', lambda e, X: (e.predict(X[:64]),), {}),
-    **{lane: ('RadiusNeighbors',
-              lambda e, X: identity_tool()._ragged(e.radius_neighbors(X[:64], sort_results=True)), {})
-       for lane in ('radius', 'radius-manhattan', 'radius-chebyshev', 'radius-minkowski-p3')},
-    **{f'kde-{kernel}-{metric}': ('KernelDensity',
-                                  (lambda shift: lambda e, X: (e.score_samples(X[:, :4] + shift),))(
-                                      8.0 if metric == 'cosine' else 0.0), {})
-       for kernel, metric in (('tophat', 'sqeuclidean'), ('epanechnikov', 'l1'), ('exponential', 'chebyshev'),
-                              ('linear', 'cosine'), ('cosine', 'minkowski'))},
+    'radius': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'radius-manhattan': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'radius-chebyshev': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'radius-minkowski-p3': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'kde-tophat-sqeuclidean': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'kde-epanechnikov-l1': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'kde-exponential-chebyshev': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'kde-linear-cosine': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4] + 8.0),), {}),
+    'kde-cosine-minkowski': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
     'kde-weighted': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
     # IsolationForest (same lane): identity_break scores every held-out row
     # and predicts the first 512, so these two lanes probe the whole
     # held-out draw (LANE_PROBE_ROWS) rather than its first PROBE_ROWS.
-    **{lane: ('IsolationForest', lambda e, X: (e.score_samples(X), e.predict(X[:512])),
-              {'predict': lambda e, X: e.predict(X[:512]),
-               'decision_function': lambda e, X: e.decision_function(X)})
-       for lane in ('iforest', 'iforest-tuned')},
+    'iforest': ('IsolationForest', lambda e, X: (e.score_samples(X), e.predict(X[:512])),
+               {'predict': lambda e, X: e.predict(X[:512]),
+                'decision_function': lambda e, X: e.decision_function(X)}),
+    'iforest-tuned': ('IsolationForest', lambda e, X: (e.score_samples(X), e.predict(X[:512])),
+                     {'predict': lambda e, X: e.predict(X[:512]),
+                      'decision_function': lambda e, X: e.decision_function(X)}),
     # GaussianMixture (same lane), through the inference-only mixture
     # binding: 64 held-out rows of the first four columns, as the lanes ask.
     'gmm': ('GaussianMixture',
@@ -135,19 +178,79 @@ LANES = {
                         {'predict': lambda e, X: e.predict(X[:64, :4])}),
     # HDBSCAN (same lane): approximate_predict's labels and probabilities on
     # the first 256 held-out rows of four columns, as both lanes ask.
-    **{lane: ('HDBSCAN',
-              lambda e, X: tuple(__import__('mojolearn.hdbscan', fromlist=['approximate_predict'])
-                                 .approximate_predict(e, X[:, :4])),
-              {'probabilities': lambda e, X: __import__('mojolearn.hdbscan', fromlist=['approximate_predict'])
-                                 .approximate_predict(e, X[:, :4])[1]})
-       for lane in ('hdbscan', 'hdbscan-leaf')},
+    'hdbscan': ('HDBSCAN', lambda e, X: _approximate_predict(e, X),
+               {'probabilities': lambda e, X: _approximate_predict(e, X)[1]}),
+    'hdbscan-leaf': ('HDBSCAN', lambda e, X: _approximate_predict(e, X),
+                    {'probabilities': lambda e, X: _approximate_predict(e, X)[1]}),
+    # lane/inference-forecast-umap-pca (2026-09-15). pca-full-whiten is the
+    # dense SVD fit with the whitened pair. umap probes identity_break's
+    # batch of 64 held-out rows in one call: the transform's answer depends
+    # on the batch, so the claim is the same bytes for the same batch.
+    'pca-full-whiten': ('PCA', lambda e, X: (e.transform(X),),
+                        {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'umap': ('UMAP', lambda e, X: (e.transform(X[:64, :8]),), {}),
+    # The forecasters take no rows: the probe is identity_break's pair,
+    # forecast(H) and predict(n_obs, n_obs + H), held to the same bytes. The
+    # extras are what the CPU inference surface adds beyond that cell: the
+    # in-sample prediction, a prediction straddling the end of the series,
+    # and the fitted-state accessors of the loaded model.
+    'arima': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
+        _ARIMA_EXTRAS, ar=lambda e, X: e.ar_, mu=lambda e, X: e.mu_)),
+    'arima-011': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
+        _ARIMA_EXTRAS, ma=lambda e, X: e.ma_)),
+    'arima-seasonal-c': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
+        _ARIMA_EXTRAS, ar=lambda e, X: e.ar_, sar=lambda e, X: e.sar_, mu=lambda e, X: e.mu_)),
+    # lane/inference-linear-svm (2026-09-15): the option variants of ols,
+    # ridge and logistic through the formats above, and the scalers,
+    # coordinate descent and the kernel methods through formats of their
+    # own. Each probe is its identity_break lane's infer probe; the extras
+    # are the other public surfaces of the loaded model.
+    'ols-no-intercept': ('LinearRegression', lambda e, X: (e.predict(X),), {}),
+    'ols-weighted': ('LinearRegression', lambda e, X: (e.predict(X),), {}),
+    'ridge-no-intercept': ('Ridge', lambda e, X: (e.predict(X),), {}),
+    'logistic-l1': ('LogisticRegression', lambda e, X: (e.predict_proba(X),),
+                    {'predict': lambda e, X: e.predict(X),
+                     'decision_function': lambda e, X: e.decision_function(X)}),
+    'logistic-elasticnet': ('LogisticRegression', lambda e, X: (e.predict_proba(X),),
+                            {'predict': lambda e, X: e.predict(X),
+                             'decision_function': lambda e, X: e.decision_function(X)}),
+    'logistic-unpenalized-no-intercept': ('LogisticRegression', lambda e, X: (e.predict_proba(X),),
+                                          {'predict': lambda e, X: e.predict(X),
+                                           'decision_function': lambda e, X: e.decision_function(X)}),
+    'standard-scaler': ('StandardScaler', lambda e, X: (e.transform(X),),
+                        {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'standard-scaler-no-mean': ('StandardScaler', lambda e, X: (e.transform(X),),
+                                {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'standard-scaler-no-std': ('StandardScaler', lambda e, X: (e.transform(X),),
+                               {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'minmax-scaler': ('MinMaxScaler', lambda e, X: (e.transform(X),),
+                      {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'minmax-scaler-clip': ('MinMaxScaler', lambda e, X: (e.transform(X),),
+                           {'inverse_transform': lambda e, X: e.inverse_transform(e.transform(X))}),
+    'lasso': ('Lasso', lambda e, X: (e.predict(X),), {}),
+    'elasticnet': ('ElasticNet', lambda e, X: (e.predict(X),), {}),
+    'elasticnet-l2end-no-intercept': ('ElasticNet', lambda e, X: (e.predict(X),), {}),
+    'kernel-ridge': ('KernelRidge', lambda e, X: (e.predict(X[:64, :4]),), {}),
+    'nystroem': ('Nystroem', lambda e, X: (e.transform(X[:64, :4]),), {}),
+    'rbf-sampler': ('RBFSampler', lambda e, X: (e.transform(X),), {}),
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'logistic': 'predict_proba', 'pca': 'transform',
                'kde': 'score_samples', 'svc': 'decision_function',
                'pca-whiten': 'transform',
                'knn': 'kneighbors_distances', 'knn-clf': 'predict',
-               'knn-reg': 'predict', 'logistic-multiclass': 'predict_proba'}
+               'knn-reg': 'predict', 'logistic-multiclass': 'predict_proba',
+               'pca-full-whiten': 'transform', 'umap': 'transform',
+               'arima': 'forecast', 'arima-011': 'forecast', 'arima-seasonal-c': 'forecast',
+               'ols-no-intercept': 'predict', 'ols-weighted': 'predict',
+               'ridge-no-intercept': 'predict', 'logistic-l1': 'predict_proba',
+               'logistic-elasticnet': 'predict_proba',
+               'logistic-unpenalized-no-intercept': 'predict_proba',
+               'standard-scaler': 'transform', 'standard-scaler-no-mean': 'transform',
+               'standard-scaler-no-std': 'transform', 'minmax-scaler': 'transform',
+               'minmax-scaler-clip': 'transform', 'lasso': 'predict', 'elasticnet': 'predict',
+               'elasticnet-l2end-no-intercept': 'predict', 'kernel-ridge': 'predict',
+               'nystroem': 'transform', 'rbf-sampler': 'transform'}
 PROBE_NAMES.update({lane: {'NearestNeighbors': 'kneighbors_distances', 'KNeighborsClassifier': 'predict',
                            'KNeighborsRegressor': 'predict', 'RadiusNeighbors': 'radius_neighbors_counts',
                            'KernelDensity': 'score_samples', 'IsolationForest': 'score_samples',

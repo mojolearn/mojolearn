@@ -47,9 +47,11 @@ On Apple M4, one numerical process/thread at a time:
 
 ## Follow-up: inference-only bindings (lane/inference-neighbors-density)
 
-The eight-family count above is the state this document recorded. Since the
-neighbors and density inference lane, wheels ship ten: the eight plus
-`mixture_infer` and `hdbscan_infer`, two INFERENCE-ONLY host bindings. A
+The eight-family count above is the state this document recorded. Wheels now
+ship twelve: the eight, `neural` (lane/inference-tokenizer-neural), `forecast`
+(lane/inference-forecast-umap-pca), and, since the neighbors and density
+inference lane, `mixture_infer` and `hdbscan_infer`, two more INFERENCE-ONLY
+host bindings. A
 family whose reference binding carries a fit (mixture, hdbscan) stays a source
 build; its scoring or prediction entries move into a shared module
 (`bindings/mixture_host_scoring.mojo`, `bindings/hdbscan_host_predict.mojo`)
@@ -70,3 +72,37 @@ GPU qualification was needed for this Python/package-policy change. This
 is a local packaging/inference test, not release certification. Hosted CI for
 the new commit must still be observed; PyPI publication is not part of this
 change. Earlier full hosted run 34978769155 passed on all three CPU hosts.
+
+## Addendum, the same day (lane/inference-tokenizer-neural)
+
+- A ninth shipped family, `neural` (`_mojolearn_neural_host`, loaded by
+  path), carries the forward entries of two training-only families:
+  `MLPInference` and `TransformerBlockInference`. It exports no training
+  entry, and `nm` finds no backward, optimizer or decode symbol in it.
+  The same check on the GPU transformer and training binaries finds 15 and
+  21, so a zero from this check is meaningful.
+- `GPT2Tokenizer.encode_batch` joins the tokenizer family's surface.
+- The results above are unchanged by either. The new cells are in
+  `bench/results/identity_break/2026-09-15_tokenizer-batch` and
+  `2026-09-15_neural-inference`.
+
+## Forecasting, UMAP transform and full-SVD PCA (lane/inference-forecast-umap-pca, 2026-09-15)
+
+- Saved ARIMA models (`ARIMA.save`/`load`, format `mojolearn-arima-1`) predict in sample and
+  out of sample, forecast and answer the fitted attributes on a CPU with no GPU. The fit stays
+  a reference build: the new host family `forecast` ships `_mojolearn_forecast_host`, which
+  registers `arima_predict` and `arima_forecast` from `bindings/arima_host_predict.mojo` and no
+  fit. The manifest's `serves` key routes `_mojolearn_arima` to it on a CPU-only install when
+  the reference `_mojolearn_arima_host` is not built (`host_surface.inference_routes()`,
+  `_backend._HOST_INFERENCE_MODULES`). With the neural family above, ten host families ship.
+- Saved UMAP embeddings (`UMAP.save`/`load`, format `mojolearn-umap-1`) transform through the
+  already shipped metrics host binding. The transform's answer depends on the query batch
+  (umap/transform.mojo: the batch mean sigma floor, the batch maximum edge weight and the
+  batch-position negative-sample draws), so the CPU claim is the GPU's bytes for the same batch.
+- `pca-full-whiten` joins the inference lanes: a saved `svd_solver='full'` whitened PCA
+  transforms and inverse transforms through the estimators host binding.
+- `ExponentialSmoothing.fit` refuses on a CPU-only install outside `reference_training()`; it
+  is not a `NumericModeMixin`, so the mixin's guard never reached it and it used to run.
+- Holt-Winters saved-model inference waits for the line search change to its fit, which moves
+  its fitted parameters and hashes.
+- Evidence: bench/results/identity_break/2026-09-15_inference-forecast-umap-pca/README.md.

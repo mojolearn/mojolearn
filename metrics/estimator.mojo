@@ -52,6 +52,7 @@ from metrics.impl.adjusted_rand_index import adjusted_rand_index
 from metrics.impl.completeness_score import completeness_score
 from metrics.impl.entropy import entropy
 from metrics.impl.fowlkes_mallows import fowlkes_mallows_score
+from metrics.impl.weighted_scores import weighted_accuracy_score, weighted_r2_score
 from metrics.impl.homogeneity_score import homogeneity_score
 from metrics.impl.kl_divergence import kl_divergence
 from metrics.impl.mutual_info_score import mutual_info_score
@@ -210,6 +211,47 @@ def mutual_info_score_host(
     var out = mutual_info_score(ctx, dt, dp, n, lower, upper)
     _ = dt^
     _ = dp^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return out
+
+
+def accuracy_score_weighted_host(
+    y_true: List[Int32], y_pred: List[Int32], w: List[Float32], n: Int
+) raises -> Float32:
+    """scikit-learn's weighted `accuracy_score` on the pinned-sum path
+    (`metrics/impl/weighted_scores.mojo`)."""
+    _check_pair(y_true, y_pred, n)
+    if len(w) < n:
+        raise Error("accuracy_score: sample_weight holds " + String(len(w)) + " values for n=" + String(n))
+    var ctx = DeviceContext()
+    var dt = upload_i32(ctx, y_true)
+    var dp = upload_i32(ctx, y_pred)
+    var dw = upload_f32(ctx, w)
+    var out = weighted_accuracy_score(ctx, dt, dp, dw, n)
+    _ = dt^
+    _ = dp^
+    _ = dw^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return out
+
+
+def r2_score_weighted_host(
+    y: List[Float32], y_hat: List[Float32], w: List[Float32], n: Int
+) raises -> Float32:
+    """scikit-learn's weighted `r2_score` (`force_finite=True`) on the
+    pinned-sum path (`metrics/impl/weighted_scores.mojo`)."""
+    if n <= 0 or len(y) < n or len(y_hat) < n or len(w) < n:
+        raise Error("r2_score: y, y_pred and sample_weight must hold n=" + String(n) + " values")
+    var ctx = DeviceContext()
+    var dy = upload_f32(ctx, y)
+    var dyh = upload_f32(ctx, y_hat)
+    var dw = upload_f32(ctx, w)
+    var out = weighted_r2_score(ctx, dy, dyh, dw, n)
+    _ = dy^
+    _ = dyh^
+    _ = dw^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
     return out

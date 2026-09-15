@@ -27,4 +27,4 @@ pixi run check-metrics-silhouette
 pixi run check-metrics-trust
 ```
 
-New metrics need an upstream mapping, an adversarial fixture, and a documented reduction policy.
+New metrics need a reference mapping, an adversarial fixture, and a documented reduction policy.

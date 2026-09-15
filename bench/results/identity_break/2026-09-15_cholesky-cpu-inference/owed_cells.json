@@ -1,0 +1,140 @@
+{
+ "columns": [
+  "apple-m4",
+  "nvidia-h100-sm_90a",
+  "amd-mi325x-gfx942",
+  "cpu-apple-m4"
+ ],
+ "require_columns": 4,
+ "lanes": [
+  "cholesky"
+ ],
+ "owed": [
+  {
+   "lane": "cholesky",
+   "fixture": "base",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "cholesky",
+   "fixture": "denormal",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "cholesky",
+   "fixture": "denormal_ftz",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "cholesky",
+   "fixture": "dupes",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "cholesky",
+   "fixture": "hashed",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "cholesky",
+   "fixture": "negative",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "cholesky",
+   "fixture": "odd",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "cholesky",
+   "fixture": "ties",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "cholesky",
+   "fixture": "wide",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 1
+  }
+ ]
+}

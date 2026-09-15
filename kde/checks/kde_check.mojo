@@ -438,7 +438,7 @@ def check_kde_refusals() raises:
     # DEVIATION 552: p by VALUE at the 26.08 entry. `metric_arg=3.0` used to
     # be refused HERE with "is read only by metric='minkowski', which is NOT
     # IMPLEMENTED"; it is now accepted for Lp and discarded for everything else,
-    # exactly as every `distance_impl` overload but one does upstream. What
+    # exactly as every `distance_impl` overload but one does in the reference. What
     # is still refused is a p that cannot be one arithmetic.
     var ctx = DeviceContext()
     var train = _train_fixture(4, 2, 0)

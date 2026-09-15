@@ -617,7 +617,7 @@ def sample_indices_for_borders(
     `TRestorableFastRng64` and ours is `TRandom`, so the SET drawn is not
     theirs at the same seed -- only the SEMANTICS (size, no repetition,
     shared across features) match. The rejection branch returns hash
-    order upstream and insertion order here, which is order-equivalent
+    order in the reference and insertion order here, which is order-equivalent
     because the sample is sorted before borders are built.
 
     MODULE LEVEL ON PURPOSE. It used to be inline in `train()`, which
@@ -766,6 +766,13 @@ def train(
     # default (`-D MOJOLEARN_2550_HOST_COPY=1` opts out); every other
     # caller passes the List.
     x_borrow: Optional[MutPointer[Float32, MutUntrackedOrigin]] = None,
+    # THE POOL'S GROUPING, their `TQueriesGrouping` sizes in row order: one
+    # entry per query, each the number of CONSECUTIVE rows carrying that
+    # `group_id` (`libs/data/objects.cpp:60-87` builds the groups from runs
+    # and refuses a repeated id as "group Ids are not consecutive"; the
+    # Python wrapper applies that rule before the sizes cross). Empty means
+    # no grouping, which is every existing caller.
+    group_sizes: List[UInt32] = List[UInt32](),
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -852,7 +859,7 @@ def train(
 
     **ALL `permutation_count` COLUMN SETS ARE BUILT** as of 2026-08-21, one
     compressed index each (DEVIATION 89), where this used to build only the
-    estimation permutation's -- the sentence archive/reference/PORTING.md 55 recorded, now
+    estimation permutation's, which is now
     false. `permutation_count` resolves the way `UpdateGpuSpecificDefaults`
     resolves it (`cuda/train_lib/train.cpp:99-108`): their default of 4,
     ASSIGNED down to 1 when no categorical feature feeds a CTR -- an
@@ -1005,9 +1012,35 @@ def train(
         )
     if len(y) != n_rows:
         raise Error("y size mismatch")
+    # ---- group_id: the grouping is checked, then refused by name ----
+    # Every loss this implementation trains is pointwise and reads no query
+    # structure. CatBoost's readers of the grouping are the querywise and
+    # pairwise targets (`cuda/targets/querywise_targets_impl.h`,
+    # `pair_logit_pairwise.h`), none of which is implemented yet, so a
+    # grouping arriving here is refused rather than carried and ignored.
+    if len(group_sizes) > 0:
+        var covered = 0
+        for g in range(len(group_sizes)):
+            if group_sizes[g] == UInt32(0):
+                raise Error(
+                    "group_id: group " + String(g) + " has no rows"
+                )
+            covered += Int(group_sizes[g])
+        if covered != n_rows:
+            raise Error(
+                "group_id: the group sizes cover " + String(covered)
+                + " rows of " + String(n_rows)
+            )
+        raise Error(
+            "group_id is read only by the querywise and pairwise losses"
+            " (QueryRMSE, PairLogit, YetiRank, QuerySoftMax,"
+            " QueryCrossEntropy), which this implementation does not train"
+            " yet; loss='" + loss + "' does not use it, so it is refused by"
+            " name rather than carried and ignored"
+        )
     # Validate dense class codes before class-weight indexing or allocating
     # prediction planes. The later objective check was too late to protect
-    # MakeClassificationWeights (upstream data_providers.cpp:162-168).
+    # MakeClassificationWeights (reference data_providers.cpp:162-168).
     if loss == "MultiClass" or loss == "MultiClassOneVsAll":
         for r in range(n_rows):
             var label = y[r]
@@ -1098,7 +1131,7 @@ def train(
     # categorical feature it overrides an explicit `permutation_count`
     # too, because four identical permutations of a dataset with no
     # permutation-dependent column are four identical datasets. This implementation
-    # is Plain (archive/reference/PORTING.md 88), so the second half of their condition
+    # is Plain, so the second half of their condition
     # holds unconditionally here.
     #
     # `HasPermutationFeatures` (`:86-98`) is "some cat feature is used for
