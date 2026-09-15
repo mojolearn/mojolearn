@@ -281,7 +281,7 @@ evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15, then `gmm-sample` and `gmm-random-init-sample` for GaussianMixture.sample the same day). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -335,6 +335,8 @@ sampler, a solver, a metric, a reduction).
       par-forest-pool par-gmm par-resample par-hdbscan
     2026-09-15 (the Cholesky and kernel-method drivers; devices=_par_devices())
       par-cholesky par-kernel-ridge par-nystroem par-rbf-sampler
+    2026-09-15 (GaussianMixture.sample, DEVIATIONS 2791 and 2792)
+      gmm-sample gmm-random-init-sample
     2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
       ivf embedding
     2026-09-14 night (fix/ivf-l2sqrt, metric='euclidean' no longer refused)
@@ -2415,6 +2417,23 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.score_samples(Xh[:64, :4]),))
 
 
+def _gmm_sample_lane(init_params):
+    def body(ml, X, yc, yr, Xh=None):
+        m = ml.GaussianMixture(n_components=4, max_iter=30, random_state=3, init_params=init_params).fit(X[:6000, :4])
+        xs, ys = m.sample(256)
+        _same_bytes("sample(256) X", xs, "sample(256) X again", m.sample(256)[0])
+        return _fit(dict(sample_X=_h(xs), sample_y=_h(ys)), m, lambda e: tuple(e.sample(1024)))
+    body.__doc__ = (f"GaussianMixture.sample (2026-09-15) on the gmm{'' if init_params == 'kmeans' else '-random-init'} "
+                    "lane's fit: train hashes sample(256), held to a second call bit for bit; infer hashes "
+                    "sample(1024). Position-mapped Philox draws (DEVIATION 2791) through precisions_cholesky_ "
+                    "(DEVIATION 2792). A separate lane so the gmm lanes' recorded cells do not move.")
+    return body
+
+
+lane("gmm-sample")(_gmm_sample_lane("kmeans"))
+lane("gmm-random-init-sample")(_gmm_sample_lane("random"))
+
+
 @lane("hdbscan")
 def _(ml, X, yc, yr, Xh=None):
     """HDBSCAN (python/mojolearn/hdbscan.py), cuML's runner path at its
@@ -3919,6 +3938,9 @@ _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "kernel-ridg
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "nystroem")
 _batch_decl(_rows_calls("score_samples", "predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gmm")
 _batch_decl(_rows_calls("score_samples", sl=(slice(0, 64), slice(0, 4))), "gmm-random-init")
+# GaussianMixture.sample draws n_samples rows from the fitted model and reads no
+# input rows, so there is no row axis to split (mixture/checks/sample.mojo)
+_batch_decl("n/a:no-batch-axis (GaussianMixture.sample takes no input rows)", "gmm-sample", "gmm-random-init-sample")
 
 
 def _batch_cholesky(ml, e, Xh):

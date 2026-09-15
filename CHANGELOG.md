@@ -30,6 +30,17 @@ Linux legs are OWED before this heading reads published.
   internal reference context, as every other CPU fit does. Apple M4 CPU column against the
   committed Apple, NVIDIA and AMD columns; the model cells of the new save formats are owed to
   the release record.
+- New `GaussianMixture.sample(n_samples)`, with scikit-learn's `BaseMixture.sample` as the
+  reference: `(X, y)` with the component counts a multinomial draw over `weights_` and the
+  rows grouped by component ascending. Every draw is position-mapped Philox keyed by
+  `random_state` (DEVIATION 2791), the normals are RAFT's Box-Muller with the pinned seams,
+  and each row is the forward substitution through the fitted `precisions_cholesky_`
+  (DEVIATION 2792), so one model and one `random_state` give the same bits on every vendor;
+  they are not scikit-learn's bits. `X` is float32 and `y` int32. On the GPU mixture binding
+  and the internal mixture host binding; public CPU exposure from a saved model is left to
+  the neighbors and density inference lane. New `gmm-sample` and `gmm-random-init-sample`
+  identity lanes, so the gmm lanes' recorded cells do not move. Apple M4 Metal and CPU
+  columns only; the NVIDIA and AMD cells are owed to the release record.
 
 - CPU inference from saved models for StandardScaler, MinMaxScaler, Lasso, ElasticNet,
   KernelRidge (linear and rbf kernels), Nystroem (linear and rbf) and RBFSampler: each
