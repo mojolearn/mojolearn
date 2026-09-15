@@ -367,6 +367,92 @@ def ivf_validate_data(
             )
 
 
+def ivf_validate_index_arrays(
+    n_lists: Int,
+    dim: Int,
+    n_rows: Int,
+    metric: Int,
+    centers: List[Float32],
+    center_norms: List[Float32],
+    offsets: List[Int32],
+    list_indices: List[UInt32],
+    list_data: List[Float32],
+) raises:
+    """A BUILT index handed back from outside (a saved file, a caller's
+    arrays), refused BY NAME unless it is a layout `ivf_flat_build` could
+    have written (lane/inference-embedding-ivf-cholesky, 2026-09-15): the
+    extents, the metric, finite values under the magnitude bound, a CSR
+    row pointer from 0 to `n_rows` that never decreases, and carried ids
+    that are a permutation of `[0, n_rows)` ascending within every list
+    (DEVIATIONS 1783/1784). The search trusts every one of these; a file
+    that breaks one would read past a list or answer ids nobody stored.
+    `center_norms` is not recomputed: a norm that is not the centre's own
+    gives a deterministic but wrong coarse step, the caller's file."""
+    if n_lists < 1 or dim < 1 or n_rows < 1:
+        raise Error(
+            "ivf_flat index: n_lists, dim and n_rows must all be at least 1,"
+            " got n_lists=" + String(n_lists) + " dim=" + String(dim)
+            + " n_rows=" + String(n_rows)
+        )
+    if n_rows < n_lists:
+        raise Error(
+            "ivf_flat index: number of rows (" + String(n_rows)
+            + ") can't be less than n_lists (" + String(n_lists) + ")"
+        )
+    if metric != METRIC_L2_EXPANDED and metric != METRIC_L2_SQRT_EXPANDED:
+        raise Error(
+            "ivf_flat index: metric code " + String(metric)
+            + " is not 0 (L2Expanded) or 1 (L2SqrtExpanded)"
+        )
+    ivf_validate_data(centers, n_lists, dim, "index centers")
+    ivf_validate_data(center_norms, n_lists, 1, "index center norms")
+    ivf_validate_data(list_data, n_rows, dim, "index list data")
+    if len(offsets) != n_lists + 1:
+        raise Error(
+            "ivf_flat index: list offsets has " + String(len(offsets))
+            + " entries, expected n_lists + 1 = " + String(n_lists + 1)
+        )
+    if len(list_indices) != n_rows:
+        raise Error(
+            "ivf_flat index: list indices has " + String(len(list_indices))
+            + " entries, expected n_rows = " + String(n_rows)
+        )
+    if Int(offsets[0]) != 0 or Int(offsets[n_lists]) != n_rows:
+        raise Error(
+            "ivf_flat index: list offsets must run from 0 to n_rows = "
+            + String(n_rows) + ", got " + String(Int(offsets[0])) + " to "
+            + String(Int(offsets[n_lists]))
+        )
+    var seen = List[Bool](length=n_rows, fill=False)
+    for l in range(n_lists):
+        var lo = Int(offsets[l])
+        var hi = Int(offsets[l + 1])
+        if hi < lo:
+            raise Error(
+                "ivf_flat index: list offsets decrease at list " + String(l)
+                + " (" + String(lo) + " then " + String(hi) + ")"
+            )
+        for s in range(lo, hi):
+            var id = Int(list_indices[s])
+            if id >= n_rows:
+                raise Error(
+                    "ivf_flat index: slot " + String(s) + " carries row id "
+                    + String(id) + ", outside [0, " + String(n_rows) + ")"
+                )
+            if seen[id]:
+                raise Error(
+                    "ivf_flat index: row id " + String(id)
+                    + " is stored twice; the carried ids must be a permutation"
+                )
+            seen[id] = True
+            if s > lo and Int(list_indices[s - 1]) >= id:
+                raise Error(
+                    "ivf_flat index: list " + String(l)
+                    + " does not carry its ids ascending at slot " + String(s)
+                    + " (DEVIATION 1783)"
+                )
+
+
 def ivf_index_params_validate(
     params: IvfFlatIndexParams, n_rows: Int, dim: Int
 ) raises:

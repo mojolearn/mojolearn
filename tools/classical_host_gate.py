@@ -75,6 +75,29 @@ _ARIMA_EXTRAS = {
     'params': lambda e, X: e.params_,
     'sigma2': lambda e, X: e.sigma2_,
 }
+def _ivf_probe(e, Q):
+    """identity_break's ivf infer probe: `search` then `n_candidates_`."""
+    d, i = e.search(Q)
+    return (d, i, e.n_candidates_)
+
+
+_IVF_EXTRAS = {
+    'search_second_batch_ids': lambda e, X: e.search(X[64:128])[1],
+    'list_indices': lambda e, X: e.list_indices_,
+    'list_data': lambda e, X: e.list_data_,
+}
+
+
+def _embedding_probe(e, X):
+    """identity_break's embedding infer probe: the 512 held-out ids (the
+    first 512 bytes of the held-out rows, which `Xh[:256]` holds)."""
+    import numpy as np
+    ib = identity_tool()
+    V, T = e.num_embeddings, 512
+    ids = (ib._ids(X, 1, T).reshape(T) % V).astype(np.int32)
+    return (np.asarray(e.forward(ids)),)
+
+
 #: lane -> (estimator, identity_break probe, extra surfaces). The identity
 #: probe is the tuple `identity_break` hashes for the `infer` column, in its
 #: order (the knn lanes probe `Xh[:64]`, as `identity_break` does); the
@@ -162,6 +185,23 @@ LANES = {
     'kernel-ridge': ('KernelRidge', lambda e, X: (e.predict(X[:64, :4]),), {}),
     'nystroem': ('Nystroem', lambda e, X: (e.transform(X[:64, :4]),), {}),
     'rbf-sampler': ('RBFSampler', lambda e, X: (e.transform(X),), {}),
+    # lane/inference-embedding-ivf-cholesky (2026-09-15). The IVF lanes probe
+    # identity_break's 64 held-out queries over the saved, GPU-built index
+    # (distances, ids, candidate counts); the extras search a second query
+    # batch and read the index arrays back. The embedding lane's probe is
+    # identity_break's 512 held-out ids through the saved table.
+    'ivf': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),
+    'ivf-euclidean': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),
+    'embedding': ('Embedding', lambda e, X: _embedding_probe(e, X), {}),
+    # lane/inference-svm (2026-09-15): SVC's linear and polynomial kernels
+    # through the svc format, and SVR (rbf and linear) through its own. Each
+    # probe is its identity_break lane's infer probe.
+    'svc-linear': ('SVC', lambda e, X: (e.decision_function(X), e.predict(X)),
+                   {'predict': lambda e, X: e.predict(X)}),
+    'svc-poly': ('SVC', lambda e, X: (e.decision_function(X), e.predict(X)),
+                 {'predict': lambda e, X: e.predict(X)}),
+    'svr': ('SVR', lambda e, X: (e.predict(X),), {}),
+    'svr-linear': ('SVR', lambda e, X: (e.predict(X),), {}),
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'logistic': 'predict_proba', 'pca': 'transform',
@@ -179,7 +219,10 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'standard-scaler-no-std': 'transform', 'minmax-scaler': 'transform',
                'minmax-scaler-clip': 'transform', 'lasso': 'predict', 'elasticnet': 'predict',
                'elasticnet-l2end-no-intercept': 'predict', 'kernel-ridge': 'predict',
-               'nystroem': 'transform', 'rbf-sampler': 'transform'}
+               'nystroem': 'transform', 'rbf-sampler': 'transform',
+               'ivf': 'search_distances', 'ivf-euclidean': 'search_distances', 'embedding': 'forward',
+               'svc-linear': 'decision_function', 'svc-poly': 'decision_function',
+               'svr': 'predict', 'svr-linear': 'predict'}
 
 
 def _fit_logistic_multiclass(ml, X, yc, yr, Xh=None):

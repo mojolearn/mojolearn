@@ -211,20 +211,34 @@ def host_sort_slots_by_distance_then_index(
         idx[base + b + 1] = iv
 
 
-def host_ivf_build_and_search(
+@fieldwise_init
+struct IvfHostIndex(Movable):
+    """`IvfFlatIndex`'s search half on the host: the centroids, their
+    squared norms and the CSR triple (`labels` is build workspace the search
+    never reads)."""
+
+    var n_lists: Int
+    var dim: Int
+    var n_rows: Int
+    var metric: Int
+    var centers: List[Float32]
+    var center_norms: List[Float32]
+    var offsets: List[Int32]
+    var list_indices: List[UInt32]
+    var list_data: List[Float32]
+
+
+def host_ivf_build(
     x: List[Float32],
     n_rows: Int,
     dim: Int,
     n_lists: Int,
-    queries: List[Float32],
-    n_queries: Int,
-    k: Int,
-    n_probes: Int,
     kmeans_n_iters: Int,
     metric: Int,
     seed: UInt64,
-) raises -> IvfHostResult:
-    """`ivf_flat_build_and_search_host` on the host (module docstring)."""
+) raises -> IvfHostIndex:
+    """`ivf_flat_build_host` on the host (module docstring): the quantizer,
+    the squared centre norms, the fresh assignment and the CSR layout."""
     ivf_refuse_algorithm(String("ivf_flat"))
     var params = IvfFlatIndexParams.default()
     params.n_lists = n_lists
@@ -232,9 +246,7 @@ def host_ivf_build_and_search(
     params.kmeans_trainset_fraction = Float64(1.0)
     params.metric = metric
     params.seed = seed
-    var sp = IvfFlatSearchParams(n_probes)
 
-    # ---- ivf_flat_build ------------------------------------------------
     ivf_index_params_validate(params, n_rows, dim)
     ivf_validate_data(x, n_rows, dim, "dataset")
     var sum_scale = host_plan_sum_scale(x, n_rows, dim)
@@ -258,8 +270,27 @@ def host_ivf_build_and_search(
         host_metric_is_sqrt(metric), labels, min_dist,
     )
     var layout = build_list_layout(labels, x, n_rows, dim, n_lists)
+    return IvfHostIndex(
+        n_lists, dim, n_rows, metric, centers^, center_norms^,
+        layout.offsets.copy(), layout.list_indices.copy(), layout.list_data.copy(),
+    )
 
-    # ---- ivf_flat_search_traced ------------------------------------------
+
+def host_ivf_search(
+    index: IvfHostIndex,
+    queries: List[Float32],
+    n_queries: Int,
+    k: Int,
+    n_probes: Int,
+) raises -> IvfHostResult:
+    """`ivf_flat_search_host` on the host (module docstring), over a built
+    index: from the build, or from arrays `ivf_validate_index_arrays` has
+    admitted."""
+    var n_lists = index.n_lists
+    var dim = index.dim
+    var n_rows = index.n_rows
+    var metric = index.metric
+    var sp = IvfFlatSearchParams(n_probes)
     ivf_search_params_validate(sp, n_lists, n_queries, k)
     ivf_validate_data(queries, n_queries, dim, "queries")
     var dist_is_identity = postprocess_distances_is_identity(metric)
@@ -273,7 +304,7 @@ def host_ivf_build_and_search(
             " the final one and inherits its refusal."
         )
     var q_norm = host_row_norms(queries, n_queries, dim, False)
-    var list_norm = host_row_norms(layout.list_data, n_rows, dim, False)
+    var list_norm = host_row_norms(index.list_data, n_rows, dim, False)
 
     # step 1 and step 2: the coarse distances and the n_probes nearest lists
     var probe_dist = List[Float32](capacity=n_queries * n_probes)
@@ -281,7 +312,7 @@ def host_ivf_build_and_search(
     for q in range(n_queries):
         var coarse = List[Float32](capacity=n_lists)
         for l in range(n_lists):
-            coarse.append(host_pinned_distance(queries, q, centers, l, dim, q_norm[q], center_norms[l], False))
+            coarse.append(host_pinned_distance(queries, q, index.centers, l, dim, q_norm[q], index.center_norms[l], False))
         var picked = host_select_top_k(coarse, n_lists, n_probes)
         for p in range(n_probes):
             probe_dist.append(coarse[Int(picked[p])])
@@ -291,12 +322,12 @@ def host_ivf_build_and_search(
 
     # steps 3 to 5: the candidates of each query
     var probe_layout = ListLayout(
-        n_lists, n_rows, dim, layout.offsets.copy(), layout.list_indices.copy(),
-        layout.list_data.copy(),
+        n_lists, n_rows, dim, index.offsets.copy(), index.list_indices.copy(),
+        index.list_data.copy(),
     )
     var list_sizes = List[Int32](capacity=n_lists)
     for l in range(n_lists):
-        list_sizes.append(layout.offsets[l + 1] - layout.offsets[l])
+        list_sizes.append(index.offsets[l + 1] - index.offsets[l])
 
     var out_dist = List[Float32](capacity=n_queries * k)
     var out_idx = List[UInt32](capacity=n_queries * k)
@@ -341,3 +372,25 @@ def host_ivf_build_and_search(
             out_dist.append(sel_dist[i])
             out_idx.append(sel_orig[i])
     return IvfHostResult(out_dist^, out_idx^, cand_counts^)
+
+
+def host_ivf_build_and_search(
+    x: List[Float32],
+    n_rows: Int,
+    dim: Int,
+    n_lists: Int,
+    queries: List[Float32],
+    n_queries: Int,
+    k: Int,
+    n_probes: Int,
+    kmeans_n_iters: Int,
+    metric: Int,
+    seed: UInt64,
+) raises -> IvfHostResult:
+    """`ivf_flat_build_and_search_host` on the host (module docstring): the
+    build, then the search over the index it returned. Since
+    lane/inference-embedding-ivf-cholesky (2026-09-15) the two halves are
+    `host_ivf_build` and `host_ivf_search`, the same statements in the same
+    order, so a saved index answers what this call answers."""
+    var index = host_ivf_build(x, n_rows, dim, n_lists, kmeans_n_iters, metric, seed)
+    return host_ivf_search(index, queries, n_queries, k, n_probes)

@@ -71,6 +71,8 @@ from .linear_model import (
 
 #: `SVC.save`'s format tag (the kde svc host lane, 2026-09-14).
 _SVC_FORMAT = "mojolearn-svc-1"
+#: `SVR.save`'s format tag (lane/inference-svm, 2026-09-15).
+_SVR_FORMAT = "mojolearn-svr-1"
 
 # cuML's `KernelType` values (kernel_params.hpp). Only two are implemented.
 _KERNEL_LINEAR = 0
@@ -962,6 +964,12 @@ class SVR(NumericModeMixin):
     n_features_in_ : int
     """
 
+    #: This family's binding, for `NumericModeMixin._bind`
+    #: (lane/inference-svm, 2026-09-15): `predict` binds through
+    #: `self._bind`, which resolves what `_extension` resolves, so
+    #: `_classical_host.HostSVR` answers the CPU binding as `HostSVC` does.
+    _BINDING = _EXT_NAME
+
     def __init__(
         self,
         *,
@@ -1194,7 +1202,7 @@ class SVR(NumericModeMixin):
         # borrows these addresses and owns nothing (`_buffer.py`).
         dual = self.dual_coef_
         sv = self.support_vectors_
-        _extension(getattr(self, 'numeric_mode', None)).svr_predict(
+        self._bind(_EXT_NAME).svr_predict(
             addr_ro(q, name="q"),
             addr_ro(dual, name="dual") if self.n_support_ > 0 else 0,
             addr_ro(sv, name="sv") if self.n_support_ > 0 else 0,
@@ -1236,3 +1244,83 @@ class SVR(NumericModeMixin):
             # otherwise; the ratio is undefined and this is its convention.
             return 1.0 if ss_res == 0.0 else 0.0
         return 1.0 - ss_res / ss_tot
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: `dual_coef_`,
+        `support_vectors_`, `intercept_` as fitted (float32), `support_`
+        `<i4`, `hyper` `<f8` [C, epsilon, tol, cache_size, the gamma the FIT
+        resolved], `kernel` and `gamma` (the constructor's setting, 'auto'
+        or a number) as strings, `meta` `<i8` [n_features_in_, n_support_,
+        n_iter_, max_iter, nochange_steps] (lane/inference-svm, 2026-09-15).
+        `mojolearn.host_model(path)` predicts from it on a CPU with no GPU
+        through `_mojolearn_svm_host.svr_predict`."""
+        if not hasattr(self, "dual_coef_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        return _serialize.write_npz(path, {
+            "format": _SVR_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "kernel": str(self.kernel),
+            "gamma": str(self.gamma),
+            "dual_coef": self.dual_coef_,
+            "support_vectors": self.support_vectors_,
+            "support": self.support_,
+            "intercept": self.intercept_,
+            "hyper": Array.from_list(
+                [float(self.C), float(self.epsilon), float(self.tol),
+                 float(self.cache_size), float(self._gamma)],
+                "<f8",
+            ),
+            "meta": Array.from_list(
+                [int(self.n_features_in_), int(self.n_support_), int(self.n_iter_),
+                 int(self.max_iter), int(self.nochange_steps)],
+                "<i8",
+            ),
+        })
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts; every array
+        is read at its saved dtype and never cast."""
+        arrays = _serialize.read_npz(path, _SVR_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 5:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 5 are needed")
+        hyper = _serialize.exact(arrays, "hyper", "<f8")
+        if hyper.size != 5:
+            raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, 5 are needed")
+        gamma_setting = _serialize.scalar_str(arrays, "gamma")
+        obj = cls(
+            C=float(hyper[0]),
+            epsilon=float(hyper[1]),
+            kernel=_serialize.scalar_str(arrays, "kernel"),
+            gamma="auto" if gamma_setting == "auto" else float(gamma_setting),
+            tol=float(hyper[2]),
+            cache_size=float(hyper[3]),
+            max_iter=int(meta[3]),
+            nochange_steps=int(meta[4]),
+        )
+        _restore_mode(obj, arrays)
+        nf, n_support = int(meta[0]), int(meta[1])
+        dual = _serialize.exact(arrays, "dual_coef", "<f4")
+        if dual.ndim != 2 or tuple(dual.shape) != (1, n_support):
+            raise ValueError(f"mojolearn: {path!r} dual_coef shape {tuple(dual.shape)} is not (1, {n_support})")
+        sv = _serialize.exact(arrays, "support_vectors", "<f4")
+        if sv.ndim != 2 or tuple(sv.shape) != (n_support, nf):
+            raise ValueError(f"mojolearn: {path!r} support_vectors shape {tuple(sv.shape)} is not ({n_support}, {nf})")
+        support = _serialize.exact(arrays, "support", "<i4")
+        if support.ndim != 1 or support.size != n_support:
+            raise ValueError(f"mojolearn: {path!r} support does not match n_support_")
+        intercept = _serialize.exact(arrays, "intercept", "<f4")
+        if intercept.ndim != 1 or intercept.size != 1:
+            raise ValueError(f"mojolearn: {path!r} intercept must hold one float32")
+        obj.n_features_in_ = nf
+        obj.n_support_ = n_support
+        obj.n_iter_ = int(meta[2])
+        obj.intercept_ = intercept
+        obj.support_ = support
+        obj.support_vectors_ = sv
+        obj.dual_coef_ = dual
+        obj._gamma = float(hyper[4])
+        return obj

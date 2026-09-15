@@ -24,7 +24,9 @@ from std.python.bindings import PythonModuleBuilder
 from bindings.hostptr import copy_f32, f32_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from ivf.host.ivf_host import IVF_HOST_SABOTAGE, host_ivf_build_and_search
+from bindings.ivf_host_search import ivf_flat_search_binding
+from bindings.ivf_index_arrays import ivf_build_extents, ivf_write_index_arrays
+from ivf.host.ivf_host import IVF_HOST_SABOTAGE, host_ivf_build, host_ivf_build_and_search
 
 
 def ivf_host_numeric_mode_binding() raises -> PythonObject:
@@ -118,6 +120,26 @@ def ivf_flat_build_and_search_binding(
     return PythonObject(0)
 
 
+def ivf_flat_build_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`ivf_flat::build` restated, the index written to the caller's five
+    buffers (`bindings/ivf_index_arrays.mojo`; lane/inference-embedding-ivf-
+    cholesky, 2026-09-15). Returns 0. Reference only: the shipped search
+    binding carries no build."""
+    var ext = ivf_build_extents(addrs, params, String("ivf_flat_build"))
+    var n = ext[0]
+    var dim = ext[1]
+    var n_lists = ext[2]
+    var x = read_f32(Int(py=addrs[0]), n * dim)
+    var index = host_ivf_build(x, n, dim, n_lists, ext[3], ext[4], ext[5])
+    ivf_write_index_arrays(
+        addrs, index.n_rows, index.dim, index.n_lists, index.centers,
+        index.center_norms, index.offsets, index.list_indices, index.list_data,
+    )
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_ivf_host() abi("C") -> PythonObject:
     try:
@@ -129,6 +151,8 @@ def PyInit__mojolearn_ivf_host() abi("C") -> PythonObject:
         m.def_function[ivf_vendor_binding]("ivf_vendor")
         m.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
         m.def_function[ivf_flat_build_and_search_binding]("ivf_flat_build_and_search")
+        m.def_function[ivf_flat_build_binding]("ivf_flat_build")
+        m.def_function[ivf_flat_search_binding]("ivf_flat_search")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_ivf_host: ", e))
