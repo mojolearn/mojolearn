@@ -48,12 +48,12 @@ def _read(rel):
 def test_manifest_declares_the_gp_family():
     fam = host_surface.family("gp")
     assert fam["routes"] == "_mojolearn_gp"
-    # The cholesky lane joined the family on lane/cpu-training-d-estimators
-    # (ad7a1b933) and moved to the linalg family on
-    # lane/inference-embedding-ivf-cholesky (2026-09-15); the classifier's
-    # lanes joined on lane/gaussian-process-classifier (2026-09-15,
-    # tests/test_gpc_surface.py).
-    assert fam["training_lanes"] == LANES + ("gpc", "gpc-multiclass")
+    # The cholesky lane joined this family on lane/cpu-training-d-estimators
+    # (ad7a1b933) and moved to the linalg family with public CPU Cholesky
+    # inference; gp-normalize-y joined on lane/cpu-training-small-gaps and the
+    # classifier's lanes on lane/gaussian-process-classifier
+    # (tests/test_gpc_surface.py).
+    assert fam["training_lanes"] == LANES + ("gp-normalize-y", "gpc", "gpc-multiclass")
     for module in (GP_ORACLE, CHOL_ORACLE):
         assert module in fam["host_modules"] and (ROOT / module).is_file()
     assert (ROOT / host_surface.build_shim("gp")).is_file()

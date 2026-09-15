@@ -171,9 +171,9 @@ def main(out=sys.stdout):
     rep.raises(arm, NotImplementedError, "n_restarts_optimizer",
                "n_restarts_optimizer=3 is refused",
                GaussianProcessRegressor, n_restarts_optimizer=3)
-    rep.raises(arm, NotImplementedError, "DEVIATION 1764",
-               "normalize_y=True is refused",
-               GaussianProcessRegressor, normalize_y=True)
+    rep.raises(arm, TypeError, "normalize_y must be a bool",
+               "a non-bool normalize_y is refused by name",
+               GaussianProcessRegressor, normalize_y="yes")
     rep.raises(arm, NotImplementedError, "copy_X_train",
                "copy_X_train=False is refused",
                GaussianProcessRegressor, copy_X_train=False)

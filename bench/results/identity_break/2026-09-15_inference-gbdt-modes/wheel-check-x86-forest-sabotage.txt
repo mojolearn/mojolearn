@@ -1,0 +1,39 @@
+mojolearn from /root/wtarget/mojolearn/__init__.py
+forest binary /root/host-sabotage-forest/_mojolearn_forest_host.so
+gbdt-ordered-rmse.base                        OrderedRMSE                      DIFFER 9e77f19cee7eee5f apple-m4=3113f83d552f6e3e nvidia-h100-sm_90a=3113f83d552f6e3e amd-mi325x-gfx942=3113f83d552f6e3e
+gbdt-feature-freq.base                        ExperimentalTwoLevelFeatureFreq  DIFFER 4a8021d26d86c62b apple-m4=95b976d85efc7f2d nvidia-h100-sm_90a=95b976d85efc7f2d amd-mi325x-gfx942=95b976d85efc7f2d
+gbdt-pointwise-l2-bayesian-eval.base          GradientBoosting                 DIFFER 6c7cfb99772a379d apple-m4=2754757c200872f3 nvidia-h100-sm_90a=2754757c200872f3 amd-mi325x-gfx942=2754757c200872f3
+gbdt-categorical-ctr.base                     GradientBoosting                 DIFFER 20440c1e37c7d87a apple-m4=01fd6a33928b42a8 nvidia-h100-sm_90a=01fd6a33928b42a8 amd-mi325x-gfx942=01fd6a33928b42a8
+gbdt-ordered-rmse.ties                        OrderedRMSE                      DIFFER 009977f9a3bbf980 apple-m4=ca0189610e51bc17 nvidia-h100-sm_90a=ca0189610e51bc17 amd-mi325x-gfx942=ca0189610e51bc17
+gbdt-feature-freq.ties                        ExperimentalTwoLevelFeatureFreq  DIFFER 13f3fffedbeb6d3c apple-m4=41371bafcf6397a3 nvidia-h100-sm_90a=41371bafcf6397a3 amd-mi325x-gfx942=41371bafcf6397a3
+gbdt-pointwise-l2-bayesian-eval.ties          GradientBoosting                 DIFFER e6f02bbe3730ee0c apple-m4=92b20ebae1dabad7 nvidia-h100-sm_90a=92b20ebae1dabad7 amd-mi325x-gfx942=92b20ebae1dabad7
+gbdt-categorical-ctr.ties                     GradientBoosting                 DIFFER d767e5ec67de7aca apple-m4=7e2f6402af40601a nvidia-h100-sm_90a=7e2f6402af40601a amd-mi325x-gfx942=7e2f6402af40601a
+gbdt-ordered-rmse.hashed                      OrderedRMSE                      DIFFER 3de4b5192a5dc2ae apple-m4=405de4dd63f5341a nvidia-h100-sm_90a=405de4dd63f5341a amd-mi325x-gfx942=405de4dd63f5341a
+gbdt-feature-freq.hashed                      ExperimentalTwoLevelFeatureFreq  DIFFER 906dc6c792e21429 apple-m4=cf308a4c656bfbdc nvidia-h100-sm_90a=cf308a4c656bfbdc amd-mi325x-gfx942=cf308a4c656bfbdc
+gbdt-pointwise-l2-bayesian-eval.hashed        GradientBoosting                 DIFFER a3b20f759fc8e0fe apple-m4=c873cc2813bbb900 nvidia-h100-sm_90a=c873cc2813bbb900 amd-mi325x-gfx942=c873cc2813bbb900
+gbdt-categorical-ctr.hashed                   GradientBoosting                 DIFFER 21b4e80e34b6648a apple-m4=59ada771e335830b nvidia-h100-sm_90a=59ada771e335830b amd-mi325x-gfx942=59ada771e335830b
+gbdt-ordered-rmse.wide                        OrderedRMSE                      DIFFER d4d152e8e0dd0678 apple-m4=7172e83c3f745933 nvidia-h100-sm_90a=7172e83c3f745933 amd-mi325x-gfx942=7172e83c3f745933
+gbdt-feature-freq.wide                        ExperimentalTwoLevelFeatureFreq  DIFFER 09899d4fdc71201b apple-m4=2a4274996f907f13 nvidia-h100-sm_90a=2a4274996f907f13 amd-mi325x-gfx942=2a4274996f907f13
+gbdt-pointwise-l2-bayesian-eval.wide          GradientBoosting                 DIFFER 4afe1d54bd99d536 apple-m4=194456fd0ea51325 nvidia-h100-sm_90a=194456fd0ea51325 amd-mi325x-gfx942=194456fd0ea51325
+gbdt-categorical-ctr.wide                     GradientBoosting                 DIFFER e15d1e2ac3076b17 apple-m4=4904fc9a408f2e1e nvidia-h100-sm_90a=4904fc9a408f2e1e amd-mi325x-gfx942=4904fc9a408f2e1e
+gbdt-ordered-rmse.denormal                    OrderedRMSE                      DIFFER 2a39588b48f9f8ea apple-m4=52d52c2862c2d480 nvidia-h100-sm_90a=52d52c2862c2d480 amd-mi325x-gfx942=52d52c2862c2d480
+gbdt-feature-freq.denormal                    ExperimentalTwoLevelFeatureFreq  DIFFER d85f588c2a51849d apple-m4=973775798c10da25 nvidia-h100-sm_90a=973775798c10da25 amd-mi325x-gfx942=973775798c10da25
+gbdt-pointwise-l2-bayesian-eval.denormal      GradientBoosting                 DIFFER 6c7cfb99772a379d apple-m4=2754757c200872f3 nvidia-h100-sm_90a=2754757c200872f3 amd-mi325x-gfx942=2754757c200872f3
+gbdt-categorical-ctr.denormal                 GradientBoosting                 DIFFER 20440c1e37c7d87a apple-m4=01fd6a33928b42a8 nvidia-h100-sm_90a=01fd6a33928b42a8 amd-mi325x-gfx942=01fd6a33928b42a8
+gbdt-ordered-rmse.denormal_ftz                OrderedRMSE                      DIFFER 93034608dc844bd6 apple-m4=9f09dbf44c4ea866 nvidia-h100-sm_90a=9f09dbf44c4ea866 amd-mi325x-gfx942=9f09dbf44c4ea866
+gbdt-feature-freq.denormal_ftz                ExperimentalTwoLevelFeatureFreq  DIFFER d85f588c2a51849d apple-m4=973775798c10da25 nvidia-h100-sm_90a=973775798c10da25 amd-mi325x-gfx942=973775798c10da25
+gbdt-pointwise-l2-bayesian-eval.denormal_ftz  GradientBoosting                 DIFFER 6c7cfb99772a379d apple-m4=2754757c200872f3 nvidia-h100-sm_90a=2754757c200872f3 amd-mi325x-gfx942=2754757c200872f3
+gbdt-categorical-ctr.denormal_ftz             GradientBoosting                 DIFFER 20440c1e37c7d87a apple-m4=01fd6a33928b42a8 nvidia-h100-sm_90a=01fd6a33928b42a8 amd-mi325x-gfx942=01fd6a33928b42a8
+gbdt-ordered-rmse.dupes                       OrderedRMSE                      DIFFER 9b2623a8ef527265 apple-m4=957a66a8423c3f6d nvidia-h100-sm_90a=957a66a8423c3f6d amd-mi325x-gfx942=957a66a8423c3f6d
+gbdt-feature-freq.dupes                       ExperimentalTwoLevelFeatureFreq  DIFFER a79779a4587dd832 apple-m4=3a9423e4f0d23cad nvidia-h100-sm_90a=3a9423e4f0d23cad amd-mi325x-gfx942=3a9423e4f0d23cad
+gbdt-pointwise-l2-bayesian-eval.dupes         GradientBoosting                 DIFFER 99a2b3b74ec07ac0 apple-m4=9c447c2e24529fa4 nvidia-h100-sm_90a=9c447c2e24529fa4 amd-mi325x-gfx942=9c447c2e24529fa4
+gbdt-categorical-ctr.dupes                    GradientBoosting                 DIFFER 22efab3bb9832f9a apple-m4=ebf616782020460e nvidia-h100-sm_90a=ebf616782020460e amd-mi325x-gfx942=ebf616782020460e
+gbdt-ordered-rmse.odd                         OrderedRMSE                      DIFFER 7626a8bb7a9fc14b apple-m4=c7f0cb99b920a716 nvidia-h100-sm_90a=c7f0cb99b920a716 amd-mi325x-gfx942=c7f0cb99b920a716
+gbdt-feature-freq.odd                         ExperimentalTwoLevelFeatureFreq  DIFFER ae2d324f2d01a4d3 apple-m4=711887d930537c47 nvidia-h100-sm_90a=711887d930537c47 amd-mi325x-gfx942=711887d930537c47
+gbdt-pointwise-l2-bayesian-eval.odd           GradientBoosting                 DIFFER 1eda534258a3d545 apple-m4=e1aec5dad8dc37f0 nvidia-h100-sm_90a=e1aec5dad8dc37f0 amd-mi325x-gfx942=e1aec5dad8dc37f0
+gbdt-categorical-ctr.odd                      GradientBoosting                 DIFFER b8c47fc90c044131 apple-m4=6db4a8fb8ffcc4df nvidia-h100-sm_90a=6db4a8fb8ffcc4df amd-mi325x-gfx942=6db4a8fb8ffcc4df
+gbdt-ordered-rmse.negative                    OrderedRMSE                      DIFFER f76d4b9c8d840151 apple-m4=82e128c769eb2778 nvidia-h100-sm_90a=82e128c769eb2778 amd-mi325x-gfx942=82e128c769eb2778
+gbdt-feature-freq.negative                    ExperimentalTwoLevelFeatureFreq  DIFFER 2212c5d072a1c897 apple-m4=5a5944c8b884be8c nvidia-h100-sm_90a=5a5944c8b884be8c amd-mi325x-gfx942=5a5944c8b884be8c
+gbdt-pointwise-l2-bayesian-eval.negative      GradientBoosting                 DIFFER 77282fe9e0db9440 apple-m4=69fe3fa629a1097d nvidia-h100-sm_90a=69fe3fa629a1097d amd-mi325x-gfx942=69fe3fa629a1097d
+gbdt-categorical-ctr.negative                 GradientBoosting                 DIFFER 8b25bf7881079381 apple-m4=9b0045ff2be0ff78 nvidia-h100-sm_90a=9b0045ff2be0ff78 amd-mi325x-gfx942=9b0045ff2be0ff78
+summary: IDENTICAL=0 DIFFER=36

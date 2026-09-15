@@ -279,6 +279,9 @@ TRAINING_LANE_NAMES = {
     "gp-matern12": "the Gaussian process with a Matern kernel at nu 0.5",
     "gp-matern32": "the Gaussian process with a Matern kernel at nu 1.5",
     "gp-matern52-ard": "the Gaussian process with an ARD Matern kernel at nu 2.5",
+    # lane/cpu-training-small-gaps (2026-09-15): normalize_y=True, the folds
+    # through the preprocessing host binding's standard_fit and standard_transform.
+    "gp-normalize-y": "the Gaussian process with normalized targets",
     # Gaussian process classification (lane/gaussian-process-classifier,
     # 2026-09-15): gaussian_process/host/gpc_oracle.mojo over the gp oracle's
     # kernel matrix, the Cholesky oracle and gemm_oracle, the Newton steps in
@@ -316,6 +319,9 @@ TRAINING_LANE_NAMES = {
     "elasticnet-l2end-no-intercept": "elasticnet at the l2 end without an intercept",
     "holtwinters-multiplicative": "multiplicative Holt-Winters",
     "svc-linear": "the linear SVC",
+    # lane/cpu-training-small-gaps (2026-09-15): SVC(kernel='poly') through the
+    # svm host binding's svc_fit and svc_predict (degree and coef0 in params).
+    "svc-poly": "the polynomial SVC",
     "iforest-tuned": "the tuned isolation forest",
     # Same batch, each needing a host restatement it did not have: the
     # cosine, manhattan, chebyshev and minkowski k-NN metrics
@@ -758,12 +764,23 @@ FAMILIES = (
         forest_kinds=(
             "rf_classifier", "rf_regressor", "et_classifier", "et_regressor",
             "gbdt_symmetric", "gbdt_depthwise", "gbdt_lossguide", "gbdt_rmse",
+            # lane/inference-gbdt-modes (2026-09-15): saved OrderedRMSE,
+            # ExperimentalTwoLevelFeatureFreq, pointwise Bayesian eval and
+            # one-hot categorical models through HostGBDT. Their CPU
+            # predictions read IDENTICAL against the 166-lane GPU columns
+            # (identity_break MOJOLEARN_IDENTITY_HOST_INFER on the
+            # gbdt-ordered-rmse, gbdt-feature-freq,
+            # gbdt-pointwise-l2-bayesian-eval and gbdt-categorical-ctr lanes);
+            # their forest gate fixtures are OWED to the next release record.
+            "gbdt_ordered_rmse", "gbdt_feature_freq", "gbdt_pointwise_bayesian_eval",
+            "gbdt_categorical_onehot",
         ),
         classes=(
             "RandomForestClassifier", "RandomForestRegressor",
             "ExtraTreesClassifier", "ExtraTreesRegressor", "GradientBoosting",
+            "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="random forests, Extra Trees and the four gradient boosting variants",
+        display="random forests, Extra Trees and eight gradient boosting variants",
         host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo"),
         exports=(
             "forest_host_numeric_mode", "forest_host_vendor", "forest_host_column",
@@ -1136,7 +1153,7 @@ FAMILIES = (
         routes="_mojolearn_svm",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear"),
+        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear", "svc-poly"),
         inference_lanes=("svc",),
         forest_kinds=(),
         classes=("SVC", "IsolationForest", "SVR"),
@@ -1246,7 +1263,8 @@ FAMILIES = (
         # GaussianProcessClassifier joined on
         # lane/gaussian-process-classifier (2026-09-15): gpc_fit and
         # gpc_predict under the GPU binding's contract.
-        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gpc", "gpc-multiclass"),
+        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
+                        "gpc", "gpc-multiclass"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
@@ -1331,7 +1349,7 @@ FAMILIES = (
             "mixture_host_column", "mixture_host_sabotage",
             "mixture_vendor", "mixture_numeric_mode", "gmm_fit",
             "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
-            "gmm_score_bic_aic",
+            "gmm_score_bic_aic", "gmm_sample",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
