@@ -151,6 +151,7 @@ on:
       - "cluster/host/kmeans_oracle.mojo"
       - "bench/results/classical_host/**"
       - "tools/cpu_identity_gate_check.py"
+      - "tools/test_cpu_identity_gate.py"
       - "bench/results/identity_break/2026-09-13_three-columns/**"
       - "bench/results/identity_break/2026-09-14_46-lanes/**"
       - "bench/results/identity_break/2026-09-14_47-lanes/**"
@@ -159,6 +160,11 @@ on:
       - "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/**"
       - "bench/results/forest_host/**"
       - ".github/workflows/cpu-identity-gate.yml"
+
+# Superseded branch runs only. Each main run has its own group.
+concurrency:
+  group: cpu-identity-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.run_id || 'branch' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions: {}
 
@@ -213,32 +219,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # GitHub does not let a workflow choose Intel or AMD for x86-64; Azure
-        # assigns the host. So x86-64 runs as several independent draws on two
-        # images, each report records the CPU it got, and a vendor enters the
-        # certified table only from a report that names it.
+        # One CPU environment per OS/architecture. GPU release evidence is
+        # separately one Apple, one AMD and one NVIDIA column.
         include:
           - runner: ubuntu-24.04-arm
             slot: arm64
             label: ARM64 Linux (Azure Cobalt 100)
           - runner: macos-15
             slot: macos15
-            label: Apple M1 macOS (hosted)
+            label: Apple silicon macOS (hosted)
           - runner: ubuntu-24.04
             slot: x86-a
-            label: x86-64 Linux draw a (24.04)
-          - runner: ubuntu-24.04
-            slot: x86-b
-            label: x86-64 Linux draw b (24.04)
-          - runner: ubuntu-24.04
-            slot: x86-c
-            label: x86-64 Linux draw c (24.04)
-          - runner: ubuntu-22.04
-            slot: x86-d
-            label: x86-64 Linux draw d (22.04)
-          - runner: ubuntu-22.04
-            slot: x86-e
-            label: x86-64 Linux draw e (22.04)
+            label: x86-64 Linux (24.04)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
@@ -246,6 +238,8 @@ jobs:
     env:
       MOJOLEARN_COMMIT: ${{ github.sha }}
       MOJOLEARN_GATE_COMMIT: ${{ github.sha }}
+      OMP_NUM_THREADS: "1"
+      MOJOLEARN_CPU_THREADS: "1"
       MOJOLEARN_NUMERIC_MODE: identical
       PYTHONPATH: ${{ github.workspace }}/python
       GATE_OUT: ${{ github.workspace }}/cpu-identity-gate-out
@@ -307,6 +301,13 @@ jobs:
             *) target=none ;;
           esac
           echo "MOJOLEARN_TARGET_CPU=$target" >> "$GITHUB_ENV"
+          # The covered-lanes steps split their lanes into one identity_break
+          # process per CPU the runner reports (tools/cpu_identity_gate_check.py
+          # run-column); the one-core rule is the developer Mac's, not CI's.
+          shards="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)"
+          [ "$shards" -le 4 ] || shards=4
+          echo "GATE_SHARDS=$shards" >> "$GITHUB_ENV"
+          echo "identity_break shards on this runner: $shards"
           python3 -m pip install --quiet numpy
           ls bench/results/forest_host/ bench/results/identity_break/2026-09-13_three-columns/
 
@@ -315,6 +316,9 @@ jobs:
       # runner); `python3 -m mojolearn.host_surface` says the same thing
       # where it can. A manifest that names a recording directory that is
       # not checked out fails here, before a build is spent.
+      - name: Gate orchestration regression tests
+        run: python3 -m unittest discover -s tools -p test_cpu_identity_gate.py -v
+
       - name: CPU surface manifest
         run: |
           set -o pipefail
@@ -339,16 +343,32 @@ jobs:
       - uses: prefix-dev/setup-pixi@v0.10.1
         with:
           run-install: true
-          cache: false
+          cache: true
 
-      - name: Build the byte LM host binding (CPU column)
+      - name: Record toolchain and runner image
         run: |
-          set -o pipefail
           pixi run mojo --version | tee "$GATE_OUT/mojo_version.txt"
           echo "MOJOLEARN_MOJO_VERSION=$(pixi run mojo --version | head -1)" >> "$GITHUB_ENV"
+          echo "GATE_IMAGE=${ImageOS}-${ImageVersion}" >> "$GITHUB_ENV"
+
+      # Exact matches only. This includes every Mojo source, build scripts,
+      # lockfile, target, runner image and workflow flags. No fallback keys.
+      # Only production binaries enter this cache; sabotage builds stay in temp.
+      - name: Cache production host bindings
+        id: host-cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: python/mojolearn/host/*.so
+          key: host-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.GATE_IMAGE }}-${{ env.MOJOLEARN_TARGET_CPU }}-identical-${{ hashFiles('**/*.mojo', 'bindings/*.sh', 'pixi.lock', 'pixi.toml', 'python/mojolearn/host_surface.py', '.github/workflows/cpu-identity-gate.yml') }}
+
+      - name: Build the byte LM host binding (CPU column)
+        if: steps.host-cache.outputs.cache-hit != 'true'
+        run: |
+          set -o pipefail
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host.log"
 
       - name: Build the forest host binding (CPU column)
+        if: steps.host-cache.outputs.cache-hit != 'true'
         run: |
           set -o pipefail
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host.log"
@@ -358,6 +378,7 @@ jobs:
       # manifest declares, so a declared family this workflow does not
       # build fails there on the first runner.
       - name: Build the tokenizer host binding (CPU column)
+        if: steps.host-cache.outputs.cache-hit != 'true'
         run: |
           set -o pipefail
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_tokenizer_host.sh 2>&1 | tee "$GATE_OUT/build_tokenizer_host.log"
@@ -365,6 +386,7 @@ jobs:
       # The phase 1 host set, one binding per family in HOST_FAMILIES, each
       # exporting the GPU binding's names for the fits it covers.
       - name: Build the phase 1 host bindings (CPU column)
+        if: steps.host-cache.outputs.cache-hit != 'true'
         run: |
           set -o pipefail
           for family in $HOST_FAMILIES; do
@@ -556,7 +578,15 @@ jobs:
             --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_smoke_check.log"
 
       # THE FOURTH COLUMN, THE COVERED LANES. Every fixture, two repeats, then
-      # the four-way diff with --require-columns 4 on exactly those lanes:
+      # the four-way diff with --require-columns 4 on exactly those lanes.
+      # The lanes run as GATE_SHARDS parallel identity_break processes joined
+      # by identity_break --merge (tools/cpu_identity_gate_check.py
+      # run-column, 2026-09-15): at 2cf5562b1 one process took 24 to 30
+      # minutes per step and two runners hit the job's 60-minute limit (run
+      # 34956243867). Every lane still runs every fixture and repeat; the
+      # merge refuses parts that ran a different machine, commit, fixture set
+      # or host binding bytes, and any shard exiting non-zero fails the step.
+      # The diffs read
       # RECORD_COVERED_LANES against GPU_COLUMNS, and FIX_COVERED_LANES (the
       # covered lanes whose record cells predate a fix on every column,
       # kmeans-sqrt) against FIX_COLUMNS, the same boxes after the fix
@@ -572,7 +602,7 @@ jobs:
             echo "no identity_break lane has a CPU implementation yet (COVERED_LANES is empty); phase 1 of docs/lanes/BRIEF_cpu_training_2026-09-13.md adds the first (gemm-pinned). Nothing run, nothing certified." | tee "$GATE_OUT/cpu_column.log"
             exit 0
           fi
-          python3 tools/identity_break.py --lanes "$COVERED_LANES" \
+          python3 tools/cpu_identity_gate_check.py run-column --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
             --json "$GATE_OUT/cpu-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_column.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
             --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" \
@@ -625,15 +655,19 @@ jobs:
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
-      # covered lanes, and the four-way diff must exit non-zero with
+      # covered lanes (all nine fixtures, one repeat: negative controls
+      # test detection, while production retains two stability repeats;
+      # sharded as above; the build is its own step since
+      # 2026-09-15 so the run step's time is the lanes'), and the four-way
+      # diff must exit non-zero with
       # DIVERGENT on them. Every covered cell must still be STABLE (a wrong
       # answer, not a refusal). A fixture on which the moved fold is exact
       # (gemm-pinned/ties, an integer grid) stays IDENTICAL; the requirement
       # is DIVERGENT in the summary, not on every cell. Empty COVERED_LANES
       # skips it with the same statement as above.
-      - name: The CPU column, covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE
+      - name: Build the sabotage host set (MOJOLEARN_HOST_SABOTAGE)
         if: always()
-        timeout-minutes: 50
+        timeout-minutes: 20
         env:
           MOJOLEARN_BYTE_LM_HOST_OUTDIR: ${{ runner.temp }}/host-sab
           MOJOLEARN_FOREST_HOST_OUTDIR: ${{ runner.temp }}/host-sab
@@ -644,17 +678,34 @@ jobs:
         run: |
           set -o pipefail
           if [ -z "$COVERED_LANES" ]; then
-            echo "no covered lane, no sabotage arm to run (COVERED_LANES is empty)" | tee "$GATE_OUT/cpu_sabotage.log"
+            echo "no covered lane, no sabotage host set to build (COVERED_LANES is empty)"
             exit 0
           fi
+          rm -rf "${{ runner.temp }}/host-sab"
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_byte_lm_host.sh 2>&1 | tee "$GATE_OUT/build_byte_lm_host_sab.log"
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_host_sab.log"
           for family in $HOST_FAMILIES; do
             MOJOLEARN_BUILD_JOBS=2 sh "bindings/build_${family}_host.sh" 2>&1 | tee "$GATE_OUT/build_${family}_host_sab.log"
           done
+
+      - name: The CPU column, covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE
+        if: always()
+        timeout-minutes: 50
+        run: |
+          set -o pipefail
+          if [ -z "$COVERED_LANES" ]; then
+            echo "no covered lane, no sabotage arm to run (COVERED_LANES is empty)" | tee "$GATE_OUT/cpu_sabotage.log"
+            exit 0
+          fi
+          # Every routed family, the byte LM and the forest binding must be in
+          # the sabotage set: a missing one would load nothing and read
+          # REFUSED, which the diff below would count as a catch.
+          for b in _mojolearn_byte_lm_host _mojolearn_forest_host $HOST_BINDINGS; do
+            [ -f "${{ runner.temp }}/host-sab/$b.so" ] || { echo "the sabotage host set lacks $b.so" >&2; exit 1; }
+          done
           export MOJOLEARN_HOST_DIR="${{ runner.temp }}/host-sab" MOJOLEARN_HOST_ALLOW_SABOTAGE=1
-          python3 tools/identity_break.py --lanes "$COVERED_LANES" \
-            --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
+          python3 tools/cpu_identity_gate_check.py run-column --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
+            --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" -- --repeats 1 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
             --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
           if python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
