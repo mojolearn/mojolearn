@@ -4,7 +4,7 @@ Written 2026-09-15 about 09:30 ET by the orchestrator session. Andrew may run ou
 under a different Claude account. This file lets a fresh session pick up every lane with no memory of the
 old one. It is on `main`; branch names below are on `origin`.
 
-**Andrew's instruction at the time of writing: do NOT start new lanes; let each lane below finish.**
+**SUPERSEDED FOR STATUS by docs/lanes/STOP_STATE_2026-09-15.md (Andrew stopped all lanes, Sep 15 ~10:25 ET). Rules below still hold.**
 
 
 
