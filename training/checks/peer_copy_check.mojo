@@ -16,6 +16,7 @@ bit for bit with the one-device forward substitution of the same factor and
 right-hand sides. The variants are named in `variant_name`.
 """
 from std.os import getenv, setenv
+from std.python import Python
 from std.memory import bitcast
 from std.time import perf_counter_ns
 from std.gpu import block_dim, block_idx, thread_idx
@@ -631,6 +632,15 @@ def peerrace(trials: Int) raises -> Int:
 def main() raises:
     if String(getenv("RUNPOD_POD_ID")) == "":
         raise Error("RunPod required; no local execution")
+    if String(getenv("MOJOLEARN_PEERCOPY_ENABLE_PEER", "0")) == "1":
+        # MAX's Python driver exposes peer access; the Mojo DeviceContext calls
+        # these drivers use do not. Enabled before any context is created.
+        try:
+            var driver = Python.import_module("max.driver")
+            _ = driver.enable_all_peer_access()
+            print("PEERACCESS enable_all_peer_access returned")
+        except e:
+            print("PEERACCESS enable_all_peer_access raised:", e)
     var failures = 0
     if String(getenv("MOJOLEARN_PEERCOPY_SKIP_BARE", "0")) != "1":
         var sizes: List[Int] = [4096, 65536, 262144, 262145, 263169, 524288, 1048576, 4194304]
