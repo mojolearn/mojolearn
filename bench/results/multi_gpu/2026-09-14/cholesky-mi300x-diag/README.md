@@ -29,3 +29,14 @@ All legs are RunPod 2x AMD Instinct MI300X (gfx942), 2026-09-14/15.
    passes 40 cases twice and the 300..1024 sweep passes all 26 cases.
    `host-staged-full-digests.txt` (152 trace files, one and two devices)
    equals the two-H100 `chol_trace_digests.txt` line for line.
+
+## Update, 2026-09-15
+
+The cause of item 4 is now characterized in
+`../../2026-09-15/peer-copy-mi300x/`. The Cholesky transport rebuilt inside
+`training/checks/peer_copy_check.mojo` (PEERSOLVE) fails on two MI300X and
+never on two H100s; the wrong values are the previous contents of the owner's
+memory, read by the owner's kernel after the copy and `synchronize()` on both
+contexts, while a bare copy (item 4 and PEERRACE) never shows it. It is
+recorded as a platform behavior of these SR-IOV MI300X, and the host-staged
+solve of item 5 stays.

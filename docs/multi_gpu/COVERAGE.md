@@ -40,17 +40,24 @@ Initial fixtures cover two RTX 4090s and two H100s. A frozen-source replay on
 two RTX 5090s matches all 16 H100 receipt groups for pooled neural optimizers,
 MLP/Samba, boosting, wider Gram and tall full PCA. Pointwise histogram dump
 bytes and OrderedRMSE trace records also match across those architectures.
-Those receipts cover NVIDIA architectures. A separate earlier-source
-[136-lane identity record](../../bench/results/identity_break/2026-09-14_136-lanes/README.md)
-now covers sixteen parallel-driver lanes on two MI300X GPUs and two H100s,
-matching their single-device AMD and Apple replay columns. Its 144 training
-cells establish cross-vendor equality for those fixtures, not every later
-pooling change or parameter combination. The new layer-pool and offload
-implementations still require their own AMD/Apple qualification.
+Those receipts cover NVIDIA architectures. The
+[166-lane identity record](../../bench/results/identity_break/2026-09-14_166-lanes/README.md)
+covers 31 parallel-driver lanes, including the layer-pool and offload byte-LM
+trainers, on two MI300X GPUs and two H100s (IDENTICAL=279 per vendor against
+the single-device columns), and
+[eight more par lanes](../../bench/results/identity_break/2026-09-15_par-lanes-new/README.md)
+(the forest pool, GaussianMixture, resampling, HDBSCAN, Cholesky, KernelRidge,
+Nystroem and RBFSampler drivers) read IDENTICAL on one and two devices of both
+vendors. Those cells establish equality for the lanes' fixtures, not every
+later pooling change, parameter combination or buffer size: on two MI300X a
+device-to-device copy above 1 MiB can be read before it lands
+([peer-copy-mi300x](../../bench/results/multi_gpu/2026-09-15/peer-copy-mi300x/README.md)),
+and the [transport audit](../../bench/results/multi_gpu/2026-09-15/transport-audit/README.md)
+lists which drivers have been asked above 1 MiB.
 
 | Surface | Current multi-GPU coverage | Remaining numerical work |
 | --- | --- | --- |
-| SmallByteLanguageModelTrainer / LanguageModelTrainer | Replica training with pooled optimizer/reduction buffers; separate layer-owned model trainer with RTX 5090 capacity and H100/5090 ordered-replay gates; host-offloaded single-GPU replay | Broader shapes; RTX5090 and AMD/Apple qualification of host-offloaded replay; eight-device qualification |
+| SmallByteLanguageModelTrainer / LanguageModelTrainer | Replica training with pooled optimizer/reduction buffers; separate layer-owned model trainer with RTX 5090 capacity and H100/5090 ordered-replay gates; host-offloaded single-GPU replay. The replica pools' cross-device copies are staged through host memory on AMD (`core/multi_gpu.mojo::transfer_bytes`) after they diverged on two MI300X at 2.1 million parameters; the fixed par-byte-lm lanes at that width are equal on one and two devices on two MI300X and two H100s ([transport audit](../../bench/results/multi_gpu/2026-09-15/transport-audit/README.md)) | Broader shapes; RTX5090 and AMD/Apple qualification of host-offloaded replay; eight-device qualification |
 | SmallMLPTrainer | Fixed 8→16→3 model (195 parameters), concurrent microbatch gradients, ordered sum and host-staged optimizer ranges | Broader admitted batch/optimizer fixtures and scheduling qualification; larger model architectures are not part of this estimator |
 | SambaStack | Concurrent microbatch gradients, pooled gradient columns, whole clipping tensors and optimizer ranges; original norm and ordered sum; streamed host checkpoints | End-to-end large-model capacity qualification; host/IPC memory, int32 registry limit, individual block/tensor/activation capacity |
 | RandomForestClassifier / RandomForestRegressor | Global tree-ID fit ranges over full data; separate resident-grove GPU prediction driver preserving the existing fixed32 engine; its native and 16 public prediction gates pass on two H100s and two MI300X with equal public receipts | Training-data partitioning; actual beyond-one-GPU model capacity, broader fixtures |
@@ -58,7 +65,7 @@ implementations still require their own AMD/Apple qualification.
 | GradientBoosting / GradientBoostingClassifier / GradientBoostingRegressor | Greedy and pointwise feature groups; full histogram bytes and adapter contracts pass on two H100s | Broader configurations; root-state memory partitioning; cross-vendor qualification |
 | OrderedRMSE | Pointwise feature groups with original permutation/fold updates; trace/model gates pass on two H100s | Root-state pooling; broader configurations and cross-vendor qualification |
 | ExperimentalTwoLevelFeatureFreq | Both levels use greedy feature histograms after original categorical generation; model/prediction gates pass on two H100s | Candidate/root-state pooling; broader configurations and cross-vendor qualification |
-| KMeans | Parallel row-tile assignment | Resident staging; memory-bounded full-data updates |
+| KMeans | Parallel row-tile assignment; one-device and two-device par-kmeans equal on two MI300X at 80000x16 rows (transport audit) | Resident staging; memory-bounded full-data updates |
 | LinearRegression / Ridge | Original Gram chunks plus wider v1 output rows and minimum-norm OLS; two-H100 state/output gates pass | Larger shapes; root-state pooling; cross-vendor qualification |
 | LogisticRegression | QN gradient feature columns; binary/multiclass two-H100 gates pass | Root-state partitioning; broader configurations and cross-vendor qualification |
 | ElasticNet / Lasso | Original dot leaves across GPUs; cyclic fit and FP32 oracle gates pass on two H100s | Resident shard reuse; root-state partitioning and cross-vendor qualification |
@@ -76,11 +83,11 @@ implementations still require their own AMD/Apple qualification.
 | ARIMA | Independent-series fit; two-H100 fit/forecast equality gates passed | Broader orders, large-memory and cross-vendor qualification; distributed prediction |
 | ExponentialSmoothing | Independent-series additive/multiplicative fit; two-H100 fit/forecast gates pass | Distributed prediction; broader configurations and capacity qualification |
 | StandardScaler / MinMaxScaler | Column-sharded fit/transform/inverse; two-H100 gates passed | Large-memory and cross-vendor qualification |
-| HDBSCAN | fit_hdbscan: core-distance k-NN query rows and dense pairwise distance rows through the neighbors and hierarchy row drivers; mutual reachability, MST, condensed tree and selection on the root; traces and attributes equal one device on two H100s and two MI300X with equal receipts across vendors | MST, hierarchy and m x m graph pooling; sparse graph arm (not implemented in the lane); capacity |
-| KernelRidge / Nystroem | fit_kernel_method / apply_kernel_method: kernel-matrix output rows through the SVM seam for linear, rbf, poly and sigmoid ('laplacian' refused by name); KernelRidge factor rows and target columns through the Cholesky driver; Nystroem basis and Jacobi on the root; state and outputs equal one device on two H100s and two MI300X with equal receipts across vendors | Kernel matrix, factor and eigensolver pooling; laplacian rows; capacity |
-| RBFSampler | transform_rbf_sampler: whole query row ranges on one-device workers with the position-mapped fitted weights; transforms equal the one-call transform on two H100s and two MI300X with equal receipts | Fit has no data to partition; capacity |
-| GaussianMixture | Row-sharded E-steps (fit, score_samples, predict_proba, predict) with the root M-step, Cholesky and convergence test; KMeans init through its row-tile driver; full covariance with kmeans and random init (the only exposed type; the others are refused by name); traces, state and outputs equal one device on two H100s and two MI300X, and the two vendors' receipts and trace files are equal | M-step statistics and responsibilities on the root; capacity and throughput unqualified |
-| Cholesky | fit_cholesky / solve_cholesky (and MOJOLEARN_CHOLESKY_DEVICE_COUNT inside potrf_lower and cho_solve): each panel's trailing-update product by whole output rows, the solve by whole right-hand-side columns staged through host memory; panel order, pivots and root matrix unchanged; traces equal one device on two H100s and two MI300X with equal digests across vendors | Panel order is sequential and not partitioned; a single right-hand side is not partitioned; matrix pooling and capacity |
+| HDBSCAN | fit_hdbscan: core-distance k-NN query rows and dense pairwise distance rows through the neighbors and hierarchy row drivers; mutual reachability, MST, condensed tree and selection on the root; traces and attributes equal one device on two H100s and two MI300X with equal receipts across vendors; the par-hdbscan lane reads IDENTICAL on one and two devices of both vendors | MST, hierarchy and m x m graph pooling; sparse graph arm (not implemented in the lane); capacity |
+| KernelRidge / Nystroem | fit_kernel_method / apply_kernel_method: kernel-matrix output rows through the SVM seam for linear, rbf, poly and sigmoid ('laplacian' refused by name); KernelRidge factor rows and target columns through the Cholesky driver; Nystroem basis and Jacobi on the root; state and outputs equal one device on two H100s and two MI300X with equal receipts across vendors; the par-kernel-ridge (600 rows, two targets) and par-nystroem identity_break lanes read IDENTICAL on one and two devices of both vendors | Kernel matrix, factor and eigensolver pooling; laplacian rows; capacity |
+| RBFSampler | transform_rbf_sampler: whole query row ranges on one-device workers with the position-mapped fitted weights; transforms equal the one-call transform on two H100s and two MI300X with equal receipts; the par-rbf-sampler lane (1024 features, shards of 300 rows) reads IDENTICAL on one and two devices of both vendors | Fit has no data to partition; capacity |
+| GaussianMixture | Row-sharded E-steps (fit, score_samples, predict_proba, predict) with the root M-step, Cholesky and convergence test; KMeans init through its row-tile driver; full covariance with kmeans and random init (the only exposed type; the others are refused by name); traces, state and outputs equal one device on two H100s and two MI300X, and the two vendors' receipts and trace files are equal; the par-gmm lane reads IDENTICAL on one and two devices of both vendors | M-step statistics and responsibilities on the root; capacity and throughput unqualified |
+| Cholesky | fit_cholesky / solve_cholesky (and MOJOLEARN_CHOLESKY_DEVICE_COUNT inside potrf_lower and cho_solve): each panel's trailing-update product by whole output rows (their owner copies staged through host memory on AMD after an n=4500 factor differed on two MI300X; fixed and equal on both vendors, transport audit), the solve by whole right-hand-side columns staged through host memory (a device-to-device solve reads stale target memory on two MI300X, a platform behavior: [peer-copy-mi300x](../../bench/results/multi_gpu/2026-09-15/peer-copy-mi300x/README.md)); panel order, pivots and root matrix unchanged; traces equal one device on two H100s and two MI300X with equal digests across vendors, and the par-cholesky lane (600 x 600, three right-hand sides) reads IDENTICAL on one and two devices of both vendors | Panel order is sequential and not partitioned; a single right-hand side is not partitioned; matrix pooling and capacity |
 
 The newer binding availability flags do not establish complete estimator
 dispatch or qualification. IVF-FLAT is public as `mojolearn.IVFIndex` since

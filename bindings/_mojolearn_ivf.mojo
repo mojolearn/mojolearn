@@ -54,10 +54,6 @@ def ivf_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def ivf_parallel_available() raises -> PythonObject:
-    return PythonObject(1)
-
-
 def _ivf_run(
     x: List[Float32],
     n: Int,
@@ -186,7 +182,6 @@ def ivf_flat_build_and_search_binding(
 def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_ivf")
-        m.def_function[ivf_parallel_available]("ivf_parallel_available")
         m.def_function[ivf_vendor_binding]("ivf_vendor")
         m.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
         m.def_function[ivf_flat_build_and_search_binding](

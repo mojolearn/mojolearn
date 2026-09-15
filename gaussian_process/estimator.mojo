@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Host-pointer surface for exact dense GP REGRESSION: what a binding calls.
 
-**NOT YET WIRED** into `bindings/_mojolearn_estimators.mojo` or
-`python/mojolearn/` -- those directories are not this lane's. The README's
-WHAT THE ORCHESTRATOR MUST WIRE names the tasks; this file is the entry a
-binding should reach, shaped like `cholesky/estimator.mojo` and
+Wired: `bindings/_mojolearn_gp.mojo` (built by `bindings/build_gp.sh`)
+calls this file, and `python/mojolearn/_gp_impl.py` exposes it as
+`mojolearn.GaussianProcessRegressor`. This file is the entry that binding
+reaches, shaped like `cholesky/estimator.mojo` and
 `kde/estimator.mojo::kde_score_samples_host`.
 
 **THERE IS NO UPSTREAM GAUSSIAN PROCESS.** cuML, cuVS and RAFT implement

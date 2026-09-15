@@ -9,6 +9,14 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 comptime _REVERSE_TIES = is_defined["MOJOLEARN_EMB_SORT_NEGATIVE_CONTROL"]()
+# Contract 11.1's EMB_SORT_KEY_ID_ONLY_UNSTABLE (built 2026-09-15): the
+# compare/exchange network compares the id half of the key ONLY. The key still
+# carries the position in its low half, so `_perm` decodes a real position,
+# but ties inside a run are left wherever the bitonic network moves them, and
+# a bitonic network is not stable. `_runs` stays correct: `key < v << 32` is
+# still `id < v`, so the run boundaries do not move and only `emb.perm` (and
+# through it `emb.dw`) can.
+comptime _ID_ONLY_UNSTABLE = is_defined["MOJOLEARN_EMB_SABOTAGE_SORT_KEY_ID_ONLY_UNSTABLE"]()
 
 comptime PLAN_SCAN = 0
 comptime PLAN_SORT = 1
@@ -37,7 +45,12 @@ def _exchange(keys: MutPointer[UInt64, MutAnyOrigin], size: Int32, span: Int32, 
         return
     var a = keys.unsafe_load(i)
     var b = keys.unsafe_load(j)
-    if (a > b) == ((i & Int(span)) == 0):
+    var a_cmp = a
+    var b_cmp = b
+    comptime if _ID_ONLY_UNSTABLE:
+        a_cmp = a >> 32
+        b_cmp = b >> 32
+    if (a_cmp > b_cmp) == ((i & Int(span)) == 0):
         keys.unsafe_store(i, b)
         keys.unsafe_store(j, a)
 

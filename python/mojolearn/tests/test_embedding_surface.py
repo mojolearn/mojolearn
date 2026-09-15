@@ -3,7 +3,8 @@
 """The gate for the Python surface of `mojolearn.Embedding` (2026-09-14): a
 gate on the WIRING (the two params lists, the padding row, the carried
 accumulator, every refusal by name) with NumPy as an independent reference
-for the gather and the ascending fold on normal values. The profile's
+for the gather and the ascending fold on normal values, and plan="sort"
+(PLAN_SORT) held bit-identical to plan="scan". The profile's
 arithmetic and its sixteen sabotage arms are gated by `pixi run
 check-embedding` and `tools/embedding_sabotage_arm.sh`.
 
@@ -86,6 +87,38 @@ def arm_padding_and_carry(rep):
     rep.check("CARRY", np.array_equal(_bits(g1), _bits(before)), "grad= is copied, never written")
 
 
+def arm_plan_sort(rep):
+    """plan="sort" is PLAN_SORT (contract 6.2), the device total-key sort. The plan
+    is an execution plan and not the specification, so every gradient below must
+    equal plan="scan"'s bit for bit: plain, padded, carried, and a degenerate
+    one-id run whose length is not a power of two (the sort's sentinel slack)."""
+    w, ids, dy = _data(2)
+    scan = Embedding(V, D, weight=w)
+    sort = Embedding(V, D, weight=w, plan="sort")
+    rep.check("PLAN", scan.plan == "scan" and sort.plan == "sort", "plan is stored, default 'scan'", (scan.plan, sort.plan))
+    dw_scan = np.asarray(scan.backward(ids, dy))
+    dw_sort = np.asarray(sort.backward(ids, dy))
+    rep.check("PLAN", np.array_equal(_bits(dw_sort), _bits(dw_scan)), "plan='sort' backward equals plan='scan' bit for bit")
+    if mode() == "identical":
+        rep.check("PLAN", np.array_equal(_bits(dw_sort), _bits(_numpy_fold(ids, dy))), "plan='sort' equals NumPy's ascending += fold bit for bit")
+    pad = int(ids[7])
+    p_scan = np.asarray(Embedding(V, D, padding_idx=pad, weight=w).backward(ids, dy))
+    p_sort = np.asarray(Embedding(V, D, padding_idx=pad, weight=w, plan="sort").backward(ids, dy))
+    rep.check("PLAN", np.array_equal(_bits(p_sort), _bits(p_scan)), "padded plan='sort' equals padded plan='scan' bit for bit")
+    rep.check("PLAN", np.all(_bits(p_sort[pad]) == 0), "plan='sort' stores +0.0 in row padding_idx")
+    g1 = sort.backward(ids[:97], dy[:97])
+    g2 = np.asarray(sort.backward(ids[97:], dy[97:], grad=g1))
+    rep.check("PLAN", np.array_equal(_bits(g2), _bits(dw_scan)), "plan='sort' carried split at t0=97 reproduces the unsplit scan gradient")
+    hot = np.full(T, 5, np.int32)
+    rep.check("PLAN", np.array_equal(_bits(np.asarray(sort.backward(hot, dy))), _bits(np.asarray(scan.backward(hot, dy)))),
+              "one id at every position (R = T = 211, not a power of two) agrees across plans")
+    rep.check("PLAN", np.array_equal(_bits(np.asarray(sort.forward(ids))), _bits(w[ids])), "the forward ignores plan")
+    for bad in ("radix", "SORT", 1, None):
+        rep.raises("PLAN", ValueError, "plan must be", f"plan={bad!r} refused by name", Embedding, V, D, weight=w, plan=bad)
+    fp = Embedding.from_pretrained(w, plan="sort")
+    rep.check("PLAN", fp.plan == "sort", "from_pretrained carries plan", fp.plan)
+
+
 def arm_refusals(rep):
     w, ids, dy = _data()
     rep.raises("REFUSE", ValueError, "max_norm", "max_norm by name", Embedding, V, D, max_norm=1.0, weight=w)
@@ -117,6 +150,7 @@ def main(out=sys.stdout):
     bind_or_exit("_mojolearn_embedding", "build_embedding.sh")
     rep = Report("test_embedding_surface")
     return run("test_embedding_surface", [("FOLD", arm_forward_backward), ("PAD", arm_padding_and_carry),
+                                          ("PLAN", arm_plan_sort),
                                           ("REFUSE", arm_refusals), ("PROVENANCE", arm_provenance)], rep, out)
 
 
