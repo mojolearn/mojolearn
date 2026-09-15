@@ -409,7 +409,7 @@ def reference_log_kernel_norm_f64(kernel: Int, h: Float64, d: Int) raises -> Flo
         # DEVIATION 602: the TRUE radial integral `I_{d-1}` by its
         # recurrence, not scikit-learn's loop (`:465-470`), which drops
         # `I_1`'s second term for even d (NaN at d = 4). The reference is
-        # the mathematics, not the upstream defect.
+        # the mathematics, not the reference defect.
         var two_over_pi = 2.0 / Float64(pi)
         var c = two_over_pi * two_over_pi
         var n = d - 1

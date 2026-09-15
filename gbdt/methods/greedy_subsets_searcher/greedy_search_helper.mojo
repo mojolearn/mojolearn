@@ -336,7 +336,7 @@ comptime IDENTICAL_DRAIN_SCHEDULE = HIST_BUILD_MODE == NUMERIC_IDENTICAL
 # lifetime ends at its last `enqueue_copy` again -- the PRE-FIX ctor,
 # recreated verbatim: thirteen intervening host allocations between the
 # first stager's death and the drain, two exact size-and-type matches
-# among the followers (archive/reference/PORTING.md 134d's ranked greedy candidate for the
+# among the followers (the ranked greedy candidate for the
 # 2/12 first-div-t2 sighting). A comptime define, not an env var, for
 # the same reason `GLOBAL_NUMERIC_MODE` is one: destruction points are
 # decided at compile time and no runtime branch can move them -- a
@@ -350,7 +350,7 @@ comptime IDENTICAL_DRAIN_SCHEDULE = HIST_BUILD_MODE == NUMERIC_IDENTICAL
 # pass -- it is a finding: the 134b load window (20-30 concurrent GPU
 # processes), not the lifetime alone, was the missing ingredient, and
 # 134 STAYS OPEN. Run it quiet-box first, then under the synthetic load
-# recipe in archive/reference/PORTING.md 134f. This define must never reach a shipped
+# recipe. This define must never reach a shipped
 # build; nothing but the soak invocation passes it.
 comptime SOAK_134_CONTROL = is_defined["MOJOLEARN_134_CONTROL"]()
 

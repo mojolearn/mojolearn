@@ -100,7 +100,7 @@ from std.math import sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from checks.numerics import ftz, identical_log, identical_mul_add, identical_sqrt
+from checks.numerics import ftz, identical_div, identical_log, identical_mul_add, identical_sqrt
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -351,6 +351,77 @@ def host_adjusted_rand_score(
     if max_index - expected_index != 0.0:
         return (index - expected_index) / (max_index - expected_index)
     return 0.0
+
+
+# ===========================================================================
+# weighted accuracy_score and weighted r2_score
+# (metrics/impl/weighted_scores.mojo; the sabotage arm is host_tree_sum's)
+# ===========================================================================
+
+
+def host_weighted_accuracy(
+    y_true: List[Int32], y_pred: List[Int32], w: List[Float32], n: Int
+) raises -> Float32:
+    """`weighted_accuracy_score`: `tree(w where equal) / tree(w)` through
+    `identical_div`."""
+    if n <= 0:
+        raise Error("weighted accuracy_score: n must be positive, got " + String(n))
+    var num = List[Float32](length=n, fill=Float32(0.0))
+    var den = List[Float32](length=n, fill=Float32(0.0))
+    for i in range(n):
+        var wi = ftz(w[i])
+        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+            # THE WEIGHTED SABOTAGE ARM: sample 0's weight dropped. Wrong on
+            # purpose; the tree shift alone cannot move a tied fixture.
+            if i == 0 and n > 1:
+                wi = Float32(0.0)
+        den[i] = wi
+        if y_true[i] == y_pred[i]:
+            num[i] = wi
+    var sn = host_tree_sum(num, n)
+    var sd = host_tree_sum(den, n)
+    if sd <= Float32(0.0):
+        raise Error("weighted accuracy_score: the weights must have positive total")
+    return ftz(identical_div(sn, sd))
+
+
+def host_weighted_r2(
+    y: List[Float32], y_hat: List[Float32], w: List[Float32], n: Int
+) raises -> Float32:
+    """`weighted_r2_score`: the weighted mean, then `tree(w * (y - y_hat)^2)`
+    and `tree(w * (y - y_avg)^2)`, then the unweighted metric's epilogue."""
+    if n <= 0:
+        raise Error("weighted r2_score: n must be positive, got " + String(n))
+    var wy = List[Float32](length=n, fill=Float32(0.0))
+    var ww = List[Float32](length=n, fill=Float32(0.0))
+    for i in range(n):
+        var wi = ftz(w[i])
+        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+            # THE WEIGHTED SABOTAGE ARM, as in host_weighted_accuracy.
+            if i == 0 and n > 1:
+                wi = Float32(0.0)
+        wy[i] = ftz(wi * ftz(y[i]))
+        ww[i] = wi
+    var swy = host_tree_sum(wy, n)
+    var sw = host_tree_sum(ww, n)
+    if sw <= Float32(0.0):
+        raise Error("weighted r2_score: the weights must have positive total")
+    var y_avg = ftz(identical_div(swy, sw))
+    var se = List[Float32](length=n, fill=Float32(0.0))
+    var st = List[Float32](length=n, fill=Float32(0.0))
+    for i in range(n):
+        var wi = ftz(w[i])
+        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+            if i == 0 and n > 1:
+                wi = Float32(0.0)
+        var yi = ftz(y[i])
+        var d1 = ftz(yi - ftz(y_hat[i]))
+        var d2 = ftz(yi - y_avg)
+        se[i] = ftz(wi * ftz(d1 * d1))
+        st[i] = ftz(wi * ftz(d2 * d2))
+    var sse = host_tree_sum(se, n)
+    var ssto = host_tree_sum(st, n)
+    return host_r2_epilogue(sse, ssto)
 
 
 # ===========================================================================

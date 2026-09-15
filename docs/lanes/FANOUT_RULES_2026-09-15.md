@@ -118,6 +118,7 @@ saved-model inference and the already-published byte-LM trainer remain.
 - Community health (a ten minute doc and diagnostics check) still runs on pushes that touch its paths. The external contribution checks still run on outside pull requests.
 - Lanes never wait on CI. A lane merges on its one-core M4 small-fixture evidence plus `python3 tools/docs_facts.py --check` and `python3 packaging/wheel_ci.py pins .`.
 - Never workflow_dispatch a full gate for a single lane.
+- Long local CPU work goes to `tools/runpod_cpu_leg.sh` (Andrew, Sep 15 2026: "move things to runpod cpu"). That means host binding builds past a quick check, identity_break CPU columns, sabotage builds and pytest modules. The Mac keeps Metal checks and one-core quick checks. A CPU pod is one per lane, with the on-pod watchdog and the Mac dead-man armed, and a delete verified through the API. Dry run first, then `--rent`. See `docs/RUNPOD_CPU_LEG.md`.
 
 ### CI shape since the light-touch rewrite
 

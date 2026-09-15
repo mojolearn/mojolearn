@@ -129,7 +129,7 @@ struct Fixture(Movable):
     `stats` and `row_index` IN PLACE -- that is the whole design
     (`split_points.cu`, their segmented gather), and it is why a leaf is a
     contiguous range at all. CatBoost's boosting loop re-supplies both every
-    tree, so upstream never notices.
+    tree, so the reference never notices.
 
     A CHECK THAT FITS THE SAME FIXTURE TWICE DOES NOTICE, and what it sees
     is not a library defect. The second fit starts from a permuted row

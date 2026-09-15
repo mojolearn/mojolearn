@@ -146,7 +146,7 @@ def ls_backtrack(
 #      value that includes the penalty against a slope that does not is the
 #      obvious way to get this wrong.
 #
-# `ls_success` is reused unchanged: upstream calls the SAME function and
+# `ls_success` is reused unchanged: the reference calls the SAME function and
 # passes `pseudo_grad` in its `grad` parameter (`qn_linesearch.cuh:186-187`).
 
 
@@ -166,7 +166,7 @@ def owlqn_objective(
         return tmp + l1_penalty * nrm1(mask, dev_scalar, stream);
 
     **The value carries the l1 term and `grad` does not.** That asymmetry is
-    deliberate upstream and is commented there ("fx is loss+regularizer,
+    deliberate in the reference and is commented there ("fx is loss+regularizer,
     grad is grad of loss only", `:322-323`); the pseudo-gradient is what
     stands in for the missing piece.
 

@@ -64,7 +64,7 @@ struct MambaDims(Copyable, Movable):
 
 
 struct MambaWeights(Copyable, Movable):
-    """One block's parameters, host side, in the upstream shapes
+    """One block's parameters, host side, in the reference shapes
     (`shapes_for` in `mamba/corpus/gen_corpus.py`), all row-major:
 
         norm_w   [d_model]

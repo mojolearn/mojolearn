@@ -3,7 +3,7 @@
 """The callable surface over DBSCAN.
 
 `dbscan/impl.mojo:132` already has `dbscan_fit_impl`,
-mirroring `cuml/cpp/src/dbscan/dbscan.cuh:101`. It takes `DeviceBuffer`s, so
+matching the reference `cuml/cpp/src/dbscan/dbscan.cuh:101`. It takes `DeviceBuffer`s, so
 a caller holding a numpy array cannot reach it. This file is the same shape as
 `neighbors/estimator.mojo` and `cluster/estimator.mojo`: host pointers in,
 device work owned here, results read back.
@@ -76,7 +76,7 @@ THE POLICY CHOICES
    2026-09-01, DEVIATION 27). `metric = DBSCAN_METRIC_L2` is the implemented
    arm. `DBSCAN_METRIC_L1` is not an implementation of anything: cuML's DBSCAN offers
    euclidean, cosine and precomputed and no Manhattan
-   (`dbscan.pyx:110-115`), so there is no upstream eps-neighbourhood kernel
+   (`dbscan.pyx:110-115`), so there is no reference eps-neighbourhood kernel
    to be faithful to and nothing here follows a reference file.
    The per-pair arithmetic IS credited, to RAFT's `l1.cuh:49`. The one thing
    a reader must know before touching it: the L2 arm compares a SQUARED

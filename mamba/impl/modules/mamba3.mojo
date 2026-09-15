@@ -17,7 +17,7 @@ carrying the state (DEVIATION 831: decode is PREFILL RESUMPTION; the
 carried state is theta, the SEALED boundary h and the last working
 chunk's buffered rows -- DEVIATION 832, the oracle's docstring is the
 authority). ONE spelling for both paths is what makes gate (d) a theorem
-the gate verifies. The upstream per-token recurrence
+the gate verifies. The reference per-token recurrence
 (`mamba3_siso_step_ref`:99-146; the CuteDSL `mamba3_step_fn`, "Only
 tested on H100", mamba3.py:320) rounds differently BY CONSTRUCTION and is
 kept in this file ONLY as the required-RED arm STEP_UPSTREAM_RECURRENCE.
@@ -178,7 +178,7 @@ def mamba3_sabotage_name() -> String:
 
 
 struct Mamba3DeviceWeights(Movable):
-    """One block's parameters on the device, upstream shapes
+    """One block's parameters on the device, reference shapes
     (`Mamba3Weights`'s table), row-major, contiguous. `weights_checked` is
     DEVIATION 1886's cache: the nine weight names are refusal-walked
     once, x and the state on every call."""
@@ -290,7 +290,7 @@ struct Mamba3DeviceState(Movable):
         k_in: List[Float32],
         v_in: List[Float32],
     ) raises:
-        """The upstream four-piece continuation (contract section 5 claim
+        """The reference four-piece continuation (contract section 5 claim
         2); fresh state only; k/v held pending for S22."""
         if self.buf_len != 0:
             raise Error(
@@ -744,7 +744,7 @@ def m3_buffer_update_kernel(
 
 # ===========================================================================
 # THE REQUIRED-RED ARM: STEP_UPSTREAM_RECURRENCE (mamba3_siso_step_ref
-# :99-146). The upstream torch step's own rounding: alpha = exp(ADT),
+# :99-146). The reference torch step's own rounding: alpha = exp(ADT),
 # beta = ((1 - sigma) * dt) * alpha, gamma = sigma * dt, the THREE-term
 # in-place state update S = alpha*S + beta*(K_st (x) V_st) +
 # gamma*(k_rot (x) v), readout q_rot . S AFTER the update, D last, and
@@ -1225,7 +1225,7 @@ def mamba3_block_forward(
     ctx.synchronize()
 
     m3_phase_tick(ctx, phase_tick, String("block.assembly"))
-    # THE REQUIRED-RED ARM (DEVIATION 831): the upstream step's own
+    # THE REQUIRED-RED ARM (DEVIATION 831): the reference step's own
     # per-token recurrence replaces the resumption for the new token --
     # AND IT ENGAGES ONLY AT l == 1 (the mamba2 lesson: an armed decode
     # gate runs a prefill leg through this entry point first, untouched).

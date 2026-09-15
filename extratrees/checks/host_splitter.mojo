@@ -142,14 +142,14 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
 #   (`builder_kernels.cuh:152`, `:246`, launched at `builder.cuh:427`), and
 #   nothing in their pipeline can ask for more once a column turns out
 #   constant. Re-invoking the sampler under a different key to get more
-#   columns is not in either upstream, so it would be invention, and rule 0b
+#   columns is not in either reference, so it would be invention, and rule 0b
 #   forbids it. DECLINED, with the price below.
 #
 # WHICH UPSTREAM THIS SIDES WITH. cuML's. Their `computeSplitKernel` scores
 #   the sampled `colids` and nothing else; a node whose sampled columns yield
 #   no valid split becomes a leaf via `split_not_valid`
 #   (`builder_kernels.cuh:59-67`). So this is not a third behaviour invented
-#   between two upstreams -- it is one upstream's behaviour where the two
+#   between two references -- it is one reference's behaviour where the two
 #   disagree, chosen because the sampler is already theirs.
 #
 # PRICE, PAID IN TREES NOT IN CYCLES. A node all of whose SAMPLED columns are

@@ -96,7 +96,7 @@ class AgglomerativeClustering:
                                       'precomputed' is refused (this entry
                                       takes points, not a distance matrix).
                                       The kernels also accept L2Expanded (0,
-                                      squared distances), but no upstream
+                                      squared distances), but no reference
                                       NAME maps to it, so none is offered.
         linkage             honored   'single' only (see above)
         connectivity        honored   'pairwise' (the default) and None,

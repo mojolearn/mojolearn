@@ -2,7 +2,7 @@
 
 Cross-vendor exact dense Gaussian-process regression in FP32.
 
-The implementation, upstream mapping, and refused surface live in `estimator.mojo`,
+The implementation, reference mapping, and refused surface live in `estimator.mojo`,
 `NOT_IMPLEMENTED.tsv`. The identity check covers factorization, solves,
 prediction, and uncertainty output rather than accepting a final-value-only comparison.
 

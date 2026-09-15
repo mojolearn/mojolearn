@@ -117,6 +117,17 @@ same 43 cases plus every refusal by name, and a build with
 `-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1` (ids written in reverse) must fail
 it. The lane brief is `docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md`.
 
+`GPT2Tokenizer.encode_batch(documents, allow_endoftext=False)` (2026-09-15)
+passes every document to `gpt2_encode_batch` in ONE call; the binding
+encodes each document alone with the same `encode_bytes` call, so each
+document's ids equal `encode` on it. The single call exists because the
+Python to Mojo crossing dominates short documents (M4, one core: 20,000
+documents of about 18 bytes, 0.23 s as 20,000 calls, 0.033 s as one call on
+the concatenated bytes). `decode_batch` and `decode_bytes_batch` are a loop
+over `decode_bytes`. `-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1` swaps ids
+across document boundaries inside a batch and must fail the surface test's
+batch checks and the `tokenizer` identity lane's batch part.
+
 ## Hand-off
 
 * Adding an encoding means a new rank table AND a new hand-rolled pattern

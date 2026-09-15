@@ -3,9 +3,9 @@
 """mojolearn adapters for NVIDIA's gbm-bench.
 
 This file is injected into a gbm-bench checkout by
-`bench/external/patch_gbm_bench.py`. Each mojolearn arm deliberately mirrors
-the gbm-bench arm of the library it is an implementation of -- the GBDT arm mirrors
-`CatAlgorithm`, the forest arm mirrors `SkRandomForestAlgorithm` -- because
+`bench/external/patch_gbm_bench.py`. Each mojolearn arm deliberately follows
+the matching gbm-bench arm (the GBDT arm follows `CatAlgorithm`, the forest
+arm follows `SkRandomForestAlgorithm`) because
 the whole point of running someone else's harness is that our arm is
 configured the way theirs is and not the way we would have chosen. Where a
 parameter has no mojolearn equivalent the difference is recorded in

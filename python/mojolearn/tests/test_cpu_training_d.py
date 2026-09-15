@@ -34,7 +34,9 @@ from mojolearn import _backend, host_surface
 ROOT = Path(__file__).resolve().parents[3]
 
 LANES = {
-    "gp": ("cholesky",),
+    # The linalg family since lane/inference-embedding-ivf-cholesky
+    # (2026-09-15): its host binding ships, so public CPU Cholesky does.
+    "linalg": ("cholesky",),
     "kernel_methods": ("rbf-sampler", "kernel-ridge", "nystroem"),
     "mixture": ("gmm", "gmm-random-init"),
     "hdbscan": ("hdbscan", "hdbscan-leaf"),
