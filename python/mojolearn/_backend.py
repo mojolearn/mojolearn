@@ -1025,8 +1025,11 @@ def host_families_built():
 #:     and (lane/cpu-training-misc, 2026-09-15) clip_grad_norm over the same
 #:     optimizer oracle, and accumulate, accumulation_is_aligned and the
 #:     embedding, RMSNorm and linear forward and backward over
-#:     training/host/samba_ops_oracle.mojo; the Samba stack's block
-#:     operations and the neural RNG are absent.
+#:     training/host/samba_ops_oracle.mojo; and (lane/cpu-training-samba,
+#:     2026-09-15) neural_rng over core/philox_neural.mojo as
+#:     tools/mamba_host_gen.py writes it out for the host
+#:     (mamba/host/gen/philox_neural.mojo), so SambaStack trains on the CPU
+#:     with the mamba and transformer families' blocks.
 #:   _mojolearn_resample -> _mojolearn_resample_host (bootstrap,
 #:     permutation-test, monte-carlo; lane/cpu-training-misc, 2026-09-15):
 #:     bootstrap, permutation_test and monte_carlo_integrate over

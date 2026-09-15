@@ -509,6 +509,10 @@ def host_sorted_row(row: List[Int32]) -> List[Int32]:
 struct DBSCANHostFit(Movable):
     var labels: List[Int32]
     var passes: Int
+    #: the core mask the propagation read, 1 where the core test held
+    #: (lane/inference-transductive-predict, 2026-09-15, for
+    #: `DBSCAN(prediction_data=True)`); the device copies its own.
+    var core: List[UInt8]
 
 
 def host_dbscan_fit(
@@ -634,4 +638,4 @@ def host_dbscan_fit(
     var labels = List[Int32](length=n_rows, fill=MAX_LABEL)
     var passes = host_weak_cc(labels, row_ptr, col_ind, core, n_rows, cap)
     host_make_monotonic(labels, n_rows)
-    return DBSCANHostFit(labels^, passes)
+    return DBSCANHostFit(labels^, passes, core^)

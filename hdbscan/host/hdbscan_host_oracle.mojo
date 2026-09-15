@@ -64,8 +64,10 @@ from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE, mr_max3, mr_scale
 from hdbscan.checks.mutual_reachability_dense import refuse_nonfinite_host
 from hdbscan.impl.condensed_hierarchy import CondensedHierarchy
 from hdbscan.impl.prediction_data import (
+    PredictionData,
     prediction_neighborhood,
     refuse_nonfinite_queries,
+    refuse_soft_clustering_inputs,
 )
 from hdbscan.impl.detail.condense import _add_edge, _collapse, bfs_from_node
 from hdbscan.impl.detail.extract import do_labelling_on_host
@@ -90,7 +92,14 @@ from hierarchy.checks.linkage_oracle import (
     host_row_norms_pinned,
 )
 from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
-from checks.numerics import ftz, identical_div, identical_mul_add
+from checks.numerics import (
+    ftz,
+    identical_div,
+    identical_exp,
+    identical_mul,
+    identical_mul_add,
+    identical_sqrt,
+)
 from std.memory import bitcast
 
 comptime HDBH_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -123,6 +132,11 @@ struct HdbscanHostFit(Movable):
 struct HdbscanHostPredict(Movable):
     var labels: List[Int32]
     var probabilities: List[Float32]
+    var min_mr_inds: List[Int32]
+    """The nearest mutual reachability neighbor of each query, which
+    `hdbh_membership_vector` reads."""
+    var prediction_lambdas: List[Float32]
+    """`1 / min_mr_dist` (FLOAT32_MAX at zero), before any sabotage."""
 
 
 comptime HDBH_PREDICT_SABOTAGE = (
@@ -166,6 +180,8 @@ def hdbh_approximate_predict(
     host_knn_search(x, m, queries, nq, n, k, KNN_HOST_METRIC_FROM_IS_SQRT, True, dist, idx)
     var out_labels = List[Int32](capacity=nq)
     var out_probs = List[Float32](capacity=nq)
+    var out_inds = List[Int32](capacity=nq)
+    var out_lams = List[Float32](capacity=nq)
     var nl = Int32(n_leaves)
     for q in range(nq):
         # core_distances_kernel, slot min_samples - 1
@@ -187,6 +203,8 @@ def hdbh_approximate_predict(
         var lam = HDBH_FLOAT32_MAX
         if best > Float32(0.0):
             lam = identical_div(Float32(1.0), best)
+        out_inds.append(Int32(best_ind))
+        out_lams.append(lam)
         # cluster_probability_kernel
         var cl = labels[best_ind]
         var got = Int32(-1)
@@ -213,7 +231,296 @@ def hdbh_approximate_predict(
                 bitcast[DType.uint32](prob) ^ UInt32(1)
             )
         out_probs.append(prob)
-    return HdbscanHostPredict(out_labels^, out_probs^)
+    return HdbscanHostPredict(out_labels^, out_probs^, out_inds^, out_lams^)
+
+
+comptime HDBH_SOFT_FLOAT32_MAX = Float32(3.4028234663852886e38)
+comptime HDBH_SOFT_EPS = Float32(1e-8)
+comptime HDBH_SOFT_PREDICT = 0
+comptime HDBH_SOFT_ALL_POINTS = 1
+
+
+def hdbh_soft_normalize(mut v: List[Float32], base: Int, n: Int):
+    """`soft_clustering.mojo::soft_normalize_row`: the ascending L1 fold,
+    saturated at FLT_MAX, a zero sum left at zero (DEVIATION 1616)."""
+    var s = Float32(0.0)
+    for c in range(n):
+        s = ftz(s + v[base + c])
+    if s > HDBH_SOFT_FLOAT32_MAX:
+        s = HDBH_SOFT_FLOAT32_MAX
+    if s == Float32(0.0):
+        return
+    for c in range(n):
+        v[base + c] = identical_div(v[base + c], s)
+
+
+def hdbh_soft_pass(
+    mode: Int,
+    rows: List[Float32],
+    n_rows: Int,
+    n: Int,
+    x: List[Float32],
+    parents: List[Int32],
+    lambdas: List[Float32],
+    pd: PredictionData,
+    min_mr_inds: List[Int32],
+    prediction_lambdas: List[Float32],
+    row0: Int,
+) raises -> List[Float32]:
+    """`hdbscan/impl/detail/soft_clustering.mojo::_soft_pass` on the host,
+    each kernel restated beside its device line."""
+    var ns = pd.n_selected_clusters
+    var nx = pd.n_exemplars
+    var nl = Int(pd.n_leaves)
+    var cells = n_rows * ns
+    # copy_rows, then soft_row_norm_kernel over the rows and the exemplars
+    var ex = List[Float32](capacity=nx * n)
+    for j in range(nx):
+        for f in range(n):
+            ex.append(x[Int(pd.exemplar_idx[j]) * n + f])
+    var rnorm = List[Float32](capacity=n_rows)
+    for r in range(n_rows):
+        var acc = Float32(0.0)
+        for f in range(n):
+            var v = ftz(rows[r * n + f])
+            acc = ftz(identical_mul_add(v, v, acc))
+        rnorm.append(acc)
+    var enorm = List[Float32](capacity=nx)
+    for j in range(nx):
+        var acc = Float32(0.0)
+        for f in range(n):
+            var v = ftz(ex[j * n + f])
+            acc = ftz(identical_mul_add(v, v, acc))
+        enorm.append(acc)
+    var dist_mv = List[Float32](length=cells, fill=Float32(0.0))
+    var heights = List[Float32](length=cells, fill=Float32(0.0))
+    var outlier = List[Float32](length=cells, fill=Float32(0.0))
+    var out = List[Float32](length=cells, fill=Float32(0.0))
+    for r in range(n_rows):
+        var base = r * ns
+        # exemplar_min_dist_kernel
+        var rn = ftz(rnorm[r])
+        for c in range(ns):
+            var best = HDBH_SOFT_FLOAT32_MAX
+            for j in range(
+                Int(pd.exemplar_label_offsets[c]),
+                Int(pd.exemplar_label_offsets[c + 1]),
+            ):
+                var acc = Float32(0.0)
+                for f in range(n):
+                    acc = ftz(
+                        identical_mul_add(ftz(rows[r * n + f]), ftz(ex[j * n + f]), acc)
+                    )
+                var dist = ftz(
+                    identical_mul_add(Float32(-2.0), acc, ftz(rn + ftz(enorm[j])))
+                )
+                if dist <= Float32(0.0):
+                    dist = Float32(0.0)
+                dist = ftz(identical_sqrt(dist))
+                if dist < best:
+                    best = dist
+            # dist_membership_kernel
+            if best > Float32(0.0):
+                dist_mv[base + c] = identical_div(Float32(1.0), best)
+            else:
+                dist_mv[base + c] = identical_div(
+                    HDBH_SOFT_FLOAT32_MAX, Float32(ns)
+                )
+        hdbh_soft_normalize(dist_mv, base, ns)
+        # soft_row_prep_kernel
+        var point = row0 + r
+        if mode == HDBH_SOFT_PREDICT:
+            point = Int(min_mr_inds[r])
+        var edge = Int(pd.index_into_children[point])
+        var lam = lambdas[edge]
+        if mode == HDBH_SOFT_PREDICT:
+            if prediction_lambdas[r] < lam:
+                lam = prediction_lambdas[r]
+        var death = pd.deaths[Int(parents[edge]) - nl]
+        # soft_merge_height_kernel
+        var leaf_parent = parents[edge]
+        for c in range(ns):
+            var right = pd.selected_clusters[c]
+            var left = leaf_parent
+            var took_r = False
+            var took_l = False
+            var last = Int32(0)
+            while left != right:
+                if left > right:
+                    took_l = True
+                    last = left
+                    left = parents[Int(pd.index_into_children[Int(left)])]
+                else:
+                    took_r = True
+                    last = right
+                    right = parents[Int(pd.index_into_children[Int(right)])]
+            if took_l and took_r:
+                heights[base + c] = lambdas[Int(pd.index_into_children[Int(last)])]
+            else:
+                heights[base + c] = lam
+        # soft_outlier_kernel
+        for c in range(ns):
+            var h = heights[base + c]
+            var o: Float32
+            if mode == HDBH_SOFT_PREDICT:
+                var den = ftz(death - h)
+                if den <= Float32(0.0):
+                    den = HDBH_SOFT_EPS
+                o = identical_div(death, den)
+                if o > HDBH_SOFT_FLOAT32_MAX:
+                    o = HDBH_SOFT_FLOAT32_MAX
+            else:
+                var t = identical_div(ftz(death + HDBH_SOFT_EPS), h)
+                if t > HDBH_SOFT_FLOAT32_MAX:
+                    t = HDBH_SOFT_FLOAT32_MAX
+                o = identical_exp(-t)
+            outlier[base + c] = o
+        var mx = outlier[base]
+        for c in range(1, ns):
+            if outlier[base + c] > mx:
+                mx = outlier[base + c]
+        for c in range(ns):
+            outlier[base + c] = identical_exp(ftz(outlier[base + c] - mx))
+        hdbh_soft_normalize(outlier, base, ns)
+        # soft_prob_kernel
+        var best_c = 0
+        var bh = heights[base]
+        for c in range(1, ns):
+            if heights[base + c] > bh:
+                bh = heights[base + c]
+                best_c = c
+        var dsel = pd.deaths[Int(pd.selected_clusters[best_c]) - nl]
+        var ml = lam
+        if ml < dsel:
+            ml = dsel
+        if mode == HDBH_SOFT_PREDICT:
+            ml = ftz(ml + HDBH_SOFT_EPS)
+        var prob = Float32(0.0)
+        if ml > Float32(0.0):
+            prob = identical_div(bh, ml)
+        # soft_combine_kernel
+        for c in range(ns):
+            var mo = outlier[base + c]
+            var dm = dist_mv[base + c]
+            if mode == HDBH_SOFT_PREDICT:
+                out[base + c] = ftz(
+                    identical_mul(ftz(identical_mul(mo, mo)), ftz(identical_sqrt(dm)))
+                )
+            else:
+                out[base + c] = ftz(identical_mul(dm, mo))
+        hdbh_soft_normalize(out, base, ns)
+        for c in range(ns):
+            var v = ftz(identical_mul(out[base + c], prob))
+            comptime if HDBH_PREDICT_SABOTAGE:
+                # THE SABOTAGE ARM: the lowest bit of every membership cell.
+                # Wrong on purpose.
+                v = bitcast[DType.float32](bitcast[DType.uint32](v) ^ UInt32(1))
+            out[base + c] = v
+    return out^
+
+
+def _hdbh_soft_pd(
+    m: Int,
+    n_edges: Int,
+    n_clusters: Int,
+    deaths: List[Float32],
+    selected_clusters: List[Int32],
+    index_into_children: List[Int32],
+    exemplar_idx: List[Int32],
+    exemplar_label_offsets: List[Int32],
+) -> PredictionData:
+    return PredictionData(
+        m, n_edges, n_clusters, len(selected_clusters), len(exemplar_idx),
+        deaths.copy(), exemplar_idx.copy(), exemplar_label_offsets.copy(),
+        selected_clusters.copy(), index_into_children.copy(),
+    )
+
+
+def hdbh_membership_vector(
+    x: List[Float32],
+    m: Int,
+    n: Int,
+    input_core: List[Float32],
+    labels: List[Int32],
+    parents: List[Int32],
+    tree_lambdas: List[Float32],
+    n_edges: Int,
+    n_clusters: Int,
+    deaths: List[Float32],
+    selected_clusters: List[Int32],
+    index_into_children: List[Int32],
+    exemplar_idx: List[Int32],
+    exemplar_label_offsets: List[Int32],
+    queries: List[Float32],
+    nq: Int,
+    min_samples: Int,
+) raises -> List[Float32]:
+    """`soft_clustering.mojo::membership_vector` (cuML
+    `soft_clustering.cuh:501-627`) on the host: the refusals in its order,
+    `hdbh_approximate_predict` for the nearest neighbor and its lambda,
+    then `hdbh_soft_pass`."""
+    if nq < 1:
+        raise Error(
+            "hdbscan.membership_vector: points_to_predict has no rows;"
+            " refused by name"
+        )
+    refuse_nonfinite_queries(queries, nq, n)
+    var pd = _hdbh_soft_pd(
+        m, n_edges, n_clusters, deaths, selected_clusters, index_into_children,
+        exemplar_idx, exemplar_label_offsets,
+    )
+    refuse_soft_clustering_inputs(
+        parents, tree_lambdas, pd, m, "hdbscan.membership_vector"
+    )
+    var near = hdbh_approximate_predict(
+        x, m, n, input_core, labels, tree_lambdas, m, deaths,
+        selected_clusters, index_into_children, queries, nq, min_samples,
+    )
+    return hdbh_soft_pass(
+        HDBH_SOFT_PREDICT, queries, nq, n, x, parents, tree_lambdas, pd,
+        near.min_mr_inds, near.prediction_lambdas, 0,
+    )
+
+
+def hdbh_all_points_membership_vectors(
+    x: List[Float32],
+    m: Int,
+    n: Int,
+    parents: List[Int32],
+    tree_lambdas: List[Float32],
+    n_edges: Int,
+    n_clusters: Int,
+    deaths: List[Float32],
+    selected_clusters: List[Int32],
+    index_into_children: List[Int32],
+    exemplar_idx: List[Int32],
+    exemplar_label_offsets: List[Int32],
+    row0: Int,
+    count: Int,
+) raises -> List[Float32]:
+    """`soft_clustering.mojo::all_points_membership_vectors` (cuML
+    `soft_clustering.cuh:385-482`) on the host, training rows `row0 ..
+    row0 + count - 1`."""
+    if count < 1 or row0 < 0 or row0 + count > m:
+        raise Error(
+            "hdbscan.all_points_membership_vectors: rows " + String(row0)
+            + " + " + String(count) + " are outside the " + String(m)
+            + " training rows; refused by name"
+        )
+    var pd = _hdbh_soft_pd(
+        m, n_edges, n_clusters, deaths, selected_clusters, index_into_children,
+        exemplar_idx, exemplar_label_offsets,
+    )
+    refuse_soft_clustering_inputs(
+        parents, tree_lambdas, pd, m, "hdbscan.all_points_membership_vectors"
+    )
+    var rows = List[Float32](capacity=count * n)
+    for i in range(count * n):
+        rows.append(x[row0 * n + i])
+    return hdbh_soft_pass(
+        HDBH_SOFT_ALL_POINTS, rows, count, n, x, parents, tree_lambdas, pd,
+        List[Int32](), List[Float32](), row0,
+    )
 
 
 @fieldwise_init

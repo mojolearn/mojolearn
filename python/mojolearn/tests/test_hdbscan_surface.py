@@ -147,9 +147,111 @@ def arm_predict(rep):
     rep.raises("PREDICT", Exception, "min_samples", "min_samples=1 has an empty prediction neighborhood, refused by name",
                hd.approximate_predict, m1, x[:4])
     rep.raises("PREDICT", TypeError, "prediction_data", "prediction_data must be a bool", HDBSCAN(prediction_data=1).fit, x)
-    rep.raises("PREDICT", NotImplementedError, "NOT IMPLEMENTED", "membership_vector refused by name", hd.membership_vector, m, x)
-    rep.raises("PREDICT", NotImplementedError, "NOT IMPLEMENTED", "all_points_membership_vectors refused by name",
-               hd.all_points_membership_vectors, m)
+
+
+def _bits(a):
+    return np.asarray(a, dtype=np.float32).view(np.uint32)
+
+
+def arm_soft(rep):
+    """membership_vector and all_points_membership_vectors (cuML
+    soft_clustering.cuh:385-627, DEVIATION 1616)."""
+    from mojolearn import hdbscan as hd
+    x, planted = _blobs()
+    plain = HDBSCAN(min_cluster_size=8).fit(x)
+    m = HDBSCAN(min_cluster_size=8, prediction_data=True).fit(x)
+    ns = m.n_clusters_
+    lab = np.asarray(m.labels_)
+
+    mv = np.asarray(hd.membership_vector(m, x))
+    rep.check("SOFT", mv.dtype == np.float32 and mv.shape == (120, ns), "membership_vector float32 (n, n_clusters_)", (mv.dtype, mv.shape))
+    rep.check("SOFT", bool(np.isfinite(mv).all() and (mv >= 0).all()), "membership_vector finite and non-negative")
+    s = mv.sum(axis=1, dtype=np.float64)
+    rep.check("SOFT", bool(np.all(s <= 1.0 + 1e-5)), "a row sums to at most 1 (the joint distribution)", float(s.max()))
+    kept = lab >= 0
+    rep.check("SOFT", bool(np.all(np.argmax(mv[kept], axis=1) == lab[kept])),
+              "on two planted blobs a clustered training row is most likely its own label")
+
+    ap = np.asarray(hd.all_points_membership_vectors(m))
+    rep.check("SOFT", ap.dtype == np.float32 and ap.shape == (120, ns), "all_points_membership_vectors float32 (n, n_clusters_)", (ap.dtype, ap.shape))
+    rep.check("SOFT", bool(np.isfinite(ap).all() and (ap >= 0).all()), "all_points_membership_vectors finite and non-negative")
+    pd = m._prediction_data
+    ex = np.asarray(pd["exemplar_idx"])[: pd["n_exemplars"]]
+    exs = ap[ex].sum(axis=1, dtype=np.float64)
+    # An exemplar's lambda is its cluster's death, so its probability of
+    # being in some cluster is exactly 1 and its row sums to 1, as cuML's does.
+    rep.check("SOFT", bool(np.all(np.abs(exs - 1.0) <= 1e-5)), "every exemplar's all-points row sums to 1",
+              (float(exs.min()), float(exs.max())))
+    aps = ap.sum(axis=1, dtype=np.float64)
+    rep.check("SOFT", bool(np.all(aps <= 1.0 + 1e-5)), "every all-points row sums to at most 1", float(aps.max()))
+    rep.check("SOFT", bool(np.all(np.argmax(ap[kept], axis=1) == lab[kept])),
+              "every clustered training row's largest all-points membership is its own label")
+
+    far = np.asarray([[1000.0, -1000.0], [-500.0, 700.0]], dtype=np.float32)
+    fv = np.asarray(hd.membership_vector(m, far))
+    fsum = fv.sum(axis=1, dtype=np.float64)
+    # A far point keeps a small floor: where the tree walk climbs both sides
+    # the merge height is the split's lambda, not the query's
+    # (kernels/soft_clustering.cuh:90-92), so its row is small, not zero.
+    rep.check("SOFT", bool(np.isfinite(fv).all() and np.all(fsum < 0.05) and np.all(fsum < s[kept].min())),
+              "a point far from every cluster has a row below 0.05 and below every clustered training row (noise)",
+              (list(fsum), float(s[kept].min())))
+
+    one = [np.asarray(hd.membership_vector(m, x[i:i + 1])) for i in range(5)]
+    rows_alone = all(np.array_equal(_bits(one[i][0]), _bits(mv[i])) for i in range(5))
+    again = np.array_equal(_bits(hd.membership_vector(m, x)), _bits(mv))
+    small = np.array_equal(_bits(hd.membership_vector(m, x, batch_size=7)), _bits(mv))
+    ap_small = np.array_equal(_bits(hd.all_points_membership_vectors(m, batch_size=13)), _bits(ap))
+    if mode() == "identical":
+        rep.check("SOFT", again and rows_alone, "two calls agree bit for bit, and a row alone equals its row in the batch")
+        rep.check("SOFT", small and ap_small, "batch_size changes no byte of either call")
+    else:
+        rep.report_only("SOFT", again and rows_alone and small and ap_small, "repeat, rows alone, batch_size")
+
+    dx = _dupes()
+    dm = HDBSCAN(min_cluster_size=6, min_samples=4, prediction_data=True).fit(dx)
+    d1 = np.asarray(hd.membership_vector(dm, dx))
+    d2 = np.asarray(hd.membership_vector(dm, dx[::-1].copy()))
+    dap = np.asarray(hd.all_points_membership_vectors(dm))
+    rep.check("SOFT", bool(np.isfinite(d1).all() and np.isfinite(dap).all()),
+              "duplicated rows (zero distances, FLT_MAX lambdas) give finite rows where cuML's overflow to NaN (DEVIATION 1616)")
+    rep.check("SOFT", bool(np.all(d1.sum(axis=1) <= 1.0 + 1e-5) and np.all(dap.sum(axis=1) <= 1.0 + 1e-5)),
+              "duplicated rows: every row sums to at most 1")
+    rev = np.array_equal(_bits(d1[::-1]), _bits(d2))
+    if mode() == "identical":
+        rep.check("SOFT", rev, "duplicated rows and tied distances: reversing the query order reverses the membership bytes")
+    else:
+        rep.report_only("SOFT", rev, "duplicated rows, reversed query order")
+
+    rep.raises("SOFT", ValueError, "Prediction data", "membership_vector without prediction_data=True refused by name",
+               hd.membership_vector, plain, x)
+    rep.raises("SOFT", ValueError, "Prediction data", "all_points_membership_vectors without prediction_data=True refused by name",
+               hd.all_points_membership_vectors, plain)
+    rep.raises("SOFT", ValueError, "batch_size", "batch_size=0 refused", hd.membership_vector, m, x, 0)
+    rep.raises("SOFT", ValueError, "batch_size", "all points batch_size=-1 refused", hd.all_points_membership_vectors, m, -1)
+    rep.raises("SOFT", ValueError, "features", "a query with the wrong feature count", hd.membership_vector, m, x[:, :1])
+    bad = x[:3].copy(); bad[1, 1] = np.float32("nan")
+    rep.raises("SOFT", Exception, "1607", "a NaN query refused by name (DEVIATION 1607)", hd.membership_vector, m, bad)
+    m1 = HDBSCAN(min_cluster_size=8, min_samples=1, prediction_data=True).fit(x)
+    rep.raises("SOFT", Exception, "min_samples", "min_samples=1 has an empty prediction neighborhood, refused by name",
+               hd.membership_vector, m1, x[:4])
+
+    rng = np.random.default_rng(5)
+    u = rng.random((40, 2), dtype=np.float32)
+    zm = HDBSCAN(min_cluster_size=25, prediction_data=True).fit(u)
+    if zm.n_clusters_ == 0:
+        zv = np.asarray(hd.membership_vector(zm, u[:3]))
+        za = np.asarray(hd.all_points_membership_vectors(zm))
+        rep.check("SOFT", zv.shape == (3, 0) and za.shape == (40, 0), "no cluster: (n, 0) arrays", (zv.shape, za.shape))
+    else:
+        rep.report_only("SOFT", False, f"the no-cluster fixture found {zm.n_clusters_} clusters; the (n, 0) shape is unchecked")
+
+    # Last, because the float64 cast goes through the base binding.
+    f64 = np.array_equal(_bits(hd.membership_vector(m, x[:17].astype(np.float64))), _bits(mv[:17]))
+    if mode() == "identical":
+        rep.check("SOFT", f64, "a float64 query converts to float32 and returns the float32 query's bytes")
+    else:
+        rep.report_only("SOFT", f64, "float64 query")
 
 
 def arm_provenance(rep):
@@ -160,8 +262,16 @@ def arm_provenance(rep):
 def main(out=sys.stdout):
     bind_or_exit("_mojolearn_hdbscan", "build_hdbscan.sh")
     rep = Report("test_hdbscan_surface")
+    # A CPU-only install fits only inside the verifier's scope
+    # (_cpu_reference.py); on a GPU binding the scope changes nothing.
+    from mojolearn._cpu_reference import reference_training
+    with reference_training():
+        return _run(rep, out)
+
+
+def _run(rep, out):
     return run("test_hdbscan_surface", [("FIT", arm_fit), ("REFUSE", arm_refusals), ("PREDICT", arm_predict),
-                                        ("PROVENANCE", arm_provenance)], rep, out)
+                                        ("SOFT", arm_soft), ("PROVENANCE", arm_provenance)], rep, out)
 
 
 if __name__ == "__main__":

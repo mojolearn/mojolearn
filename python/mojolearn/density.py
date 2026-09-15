@@ -4,12 +4,37 @@
 
 from . import _mojolearn_estimators, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, frombytes, full, zeros
 from ._mode import NumericModeMixin
 from .linear_model import _check_saved_by, _restore_mode, _saved_mode, _shape_of
 
 #: `KernelDensity.save`'s format tag (the kde svc host lane, 2026-09-14).
 _KDE_FORMAT = "mojolearn-kde-1"
+
+#: `DBSCAN.save`'s format tag (lane/inference-transductive-predict,
+#: 2026-09-15): the prediction data of a `prediction_data=True` fit.
+_DBSCAN_FORMAT = "mojolearn-dbscan-1"
+
+
+def _check_queries(X, n_features, where):
+    """The query checks `DBSCAN.predict` and
+    `AgglomerativeClustering.predict` share: float32 C order, the fitted
+    feature count, at least one row, and every value finite (a NaN query
+    has no distance order to take a nearest row from)."""
+    q, _ = as_f32_c(X, ndim=2, name="X")
+    if q.shape[1] != n_features:
+        raise ValueError(
+            f"mojolearn {where}: X has {q.shape[1]} features, the fit saw {n_features}"
+        )
+    if q.shape[0] < 1:
+        raise ValueError(f"mojolearn {where}: X has no rows; refused by name")
+    if not all_finite(q):
+        raise ValueError(
+            f"mojolearn {where}: X contains a NaN or an infinity; a non-finite "
+            "query has no distance order to take a nearest row from, so it is "
+            "refused by name"
+        )
+    return q
 
 EPS_NN_BRUTE_FORCE = 0
 EPS_NN_RBC = 1
@@ -110,9 +135,21 @@ class DBSCAN(NumericModeMixin):
                                        optimization level rather than the
                                        source. Measured on an Apple M4 only;
                                        a three-vendor leg is owed
-        core_sample_indices_ absent    not computed by the implementation
-                                       (dbscan.cuh:171-173 notes cuML does
-                                       not return theirs either)
+        prediction_data      honored   False (the default) fits exactly as
+                                       before. True also copies the fit's
+                                       own core mask out of the fit
+                                       (`dbscan_fit_core`, a read back
+                                       after every recorded stage; no
+                                       arithmetic is added) and keeps
+                                       `core_sample_indices_` (int32, where
+                                       scikit-learn's is intp),
+                                       `components_` (the core rows,
+                                       float32) and their labels, which
+                                       `predict` and `save` need
+        core_sample_indices_ with prediction_data=True only (cuML does
+                                       not return theirs, dbscan.cuh:171-173)
+        predict              NEW       DEVIATION 2740; neither cuML nor
+                                       scikit-learn has one. See `predict`
 
     **`algorithm='rbc'` IS THE DEFAULT AND IT IS NOT cuML's** (DEVIATION 35,
     `dbscan/impl/runner.mojo`): cuML's Python default is `'brute'`,
@@ -178,6 +215,7 @@ class DBSCAN(NumericModeMixin):
         algorithm="rbc",
         max_mbytes_per_batch=None,
         max_iterations=None,
+        prediction_data=False,
     ):
         self.eps = eps
         self.min_samples = min_samples
@@ -185,8 +223,14 @@ class DBSCAN(NumericModeMixin):
         self.algorithm = algorithm
         self.max_mbytes_per_batch = max_mbytes_per_batch
         self.max_iterations = max_iterations
+        self.prediction_data = prediction_data
 
     def fit(self, X, y=None, sample_weight=None):
+        if not isinstance(self.prediction_data, bool):
+            raise TypeError(
+                "mojolearn DBSCAN: prediction_data must be a bool, got "
+                f"{type(self.prediction_data).__name__}"
+            )
         metric_key = str(self.metric).lower()
         if metric_key not in _METRICS:
             raise ValueError(
@@ -268,23 +312,188 @@ class DBSCAN(NumericModeMixin):
                 )
             weight_addr = addr_ro(w, name="sample_weight")
 
-        self.n_iter_ = self._bind("_mojolearn_estimators").dbscan_fit(
-            addr_ro(x, name="x"),
-            addr(labels, name="labels"),
-            weight_addr,
-            # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding.
-            # n_rows, n_features, eps, min_samples, budget_mb, max_iter,
-            # eps_nn_method, metric
-            [x.shape[0], x.shape[1], float(self.eps), int(self.min_samples),
-             budget, cap, _ALGORITHMS[self.algorithm], metric],
-        )
+        # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding.
+        # n_rows, n_features, eps, min_samples, budget_mb, max_iter,
+        # eps_nn_method, metric
+        params = [x.shape[0], x.shape[1], float(self.eps), int(self.min_samples),
+                  budget, cap, _ALGORITHMS[self.algorithm], metric]
+        binding = self._bind("_mojolearn_estimators")
+        core = None
+        if self.prediction_data:
+            # dbscan_fit_core_binding: the same call, plus n_rows uint8 core flags.
+            core = zeros((x.shape[0],), "<u1")
+            self.n_iter_ = binding.dbscan_fit_core(
+                addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr,
+                addr(core, name="core"), params,
+            )
+        else:
+            self.n_iter_ = binding.dbscan_fit(
+                addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr, params,
+            )
         del w
         self.labels_ = labels
         self.n_features_in_ = x.shape[1]
+        self.n_samples_fit_ = x.shape[0]
+        for name in ("core_sample_indices_", "components_", "_core_labels"):
+            self.__dict__.pop(name, None)
+        if core is not None:
+            self._store_core(x, labels, core)
         return self
+
+    def _store_core(self, x, labels, core):
+        """Keep the core rows, their training indices and their labels, in
+        ascending training index, from the fit's own core mask."""
+        flags = core.tolist()
+        if any(f not in (0, 1) for f in flags):
+            raise RuntimeError("mojolearn DBSCAN: the fit's core mask holds a value other than 0 or 1")
+        idx = [i for i, f in enumerate(flags) if f]
+        lab = labels.tolist()
+        d = int(x.shape[1])
+        raw = bytes(x.tobytes())
+        width = 4 * d
+        self.core_sample_indices_ = Array.from_list(idx, "<i4") if idx else empty((0,), "<i4")
+        self.components_ = frombytes(b"".join(raw[i * width:(i + 1) * width] for i in idx), "<f4", (len(idx), d))
+        self._core_labels = Array.from_list([lab[i] for i in idx], "<i4") if idx else empty((0,), "<i4")
 
     def fit_predict(self, X, y=None, sample_weight=None):
         return self.fit(X, y=y, sample_weight=sample_weight).labels_
+
+    def predict(self, X):
+        """Label NEW rows under the fitted clustering. NEW CAPABILITY
+        (DEVIATION 2740): neither scikit-learn's nor cuML's DBSCAN has a
+        `predict`, and this is not either library's behavior.
+
+        THE RULE. A row gets the label of the NEAREST CORE SAMPLE WITHIN EPS,
+        and -1 (noise) when no core sample is within eps. Distance and
+        "within eps" are the fit's own eps predicate: the brute arm's
+        accumulator (`dbscan/impl/neighbors/epsilon_neighborhood.mojo::
+        _eps_acc`, features ascending, the core row flushed), a squared
+        distance compared with `Float32(eps * eps)` on 'euclidean' and the
+        L1 sum compared with `Float32(eps)` on 'manhattan'. A point exactly
+        at eps is within eps, as in the fit. Ties go to the lowest
+        (distance, core sample index). One thread per query row and no
+        fold across rows, so the answer does not depend on the batch, and
+        the GPU binding and the CPU host binding
+        (`core/labeled_reference_host_predict.mojo`) compute the same bytes.
+
+        ON THE TRAINING ROWS, what the rule guarantees and what it does not:
+
+          core samples  predict their fitted label exactly. A core row is at
+                        distance 0 from itself, and a core row at distance 0
+                        from it is a neighbor in the fit on either arm, so
+                        it is in the same cluster.
+          noise rows    predict -1 exactly on algorithm='brute', where the
+                        fit's neighborhood is this same accumulator. On
+                        'rbc' the neighborhood is the ball cover's
+                        (`check_dbscan_rbc_matches_brute` holds its labels to
+                        the brute arm's), so this holds where the two
+                        predicates agree and is not promised past that.
+          border rows   are NOT guaranteed. The fit gives a border row the
+                        label of the lowest-numbered cluster among its core
+                        neighbors (the propagation's minimum); this rule
+                        gives the NEAREST core neighbor's. They differ for a
+                        border row within eps of two clusters.
+
+        Requires `prediction_data=True` at fit; refused by name otherwise.
+        Returns int32 labels, the dtype of `labels_`.
+        """
+        if not hasattr(self, "labels_"):
+            raise ValueError("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
+        if getattr(self, "components_", None) is None:
+            raise ValueError(
+                "mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
+                "DBSCAN(prediction_data=True), which keeps the core samples this "
+                "rule needs (DEVIATION 2740)"
+            )
+        q = _check_queries(X, self.n_features_in_, "DBSCAN.predict")
+        nq = int(q.shape[0])
+        n_core = int(self.components_.shape[0])
+        if n_core == 0:
+            return full((nq,), -1, "<i4")
+        out = empty((nq,), "<i4")
+        chosen = empty((nq,), "<i4")
+        self._bind("_mojolearn_estimators").labeled_reference_predict(
+            # ORDER MATCHES bindings/_mojolearn_estimators.mojo::labeled_reference_predict_binding.
+            [addr_ro(self.components_, name="components_"),
+             addr_ro(self.core_sample_indices_, name="core_sample_indices_"),
+             addr_ro(self._core_labels, name="core labels"),
+             addr_ro(q, name="X"), addr(out, name="labels"), addr(chosen, name="core rows")],
+            # n_refs, n_queries, n_features, metric, eps, has_thresh
+            [n_core, nq, int(self.n_features_in_), _METRICS[str(self.metric).lower()], float(self.eps), 1],
+        )
+        return out
+
+    def save(self, path):
+        """Write the prediction data of a `prediction_data=True` fit to
+        `path` as an npz: `components` `<f4` (the core rows),
+        `core_sample_indices` and `core_labels` `<i4`, `labels` `<i4`,
+        `eps` `<f8`, `metric` and `algorithm` as names, `meta` `<i8`
+        [n_features_in_, n_samples_fit_, min_samples]. On a CPU-only install
+        `DBSCAN.load(path).predict(X)` runs through
+        `_mojolearn_estimators_host.labeled_reference_predict`."""
+        if not hasattr(self, "labels_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        if getattr(self, "components_", None) is None:
+            raise ValueError(
+                "mojolearn DBSCAN.save: prediction data was not stored; fit with "
+                "DBSCAN(prediction_data=True). A model without it can label no new "
+                "row, so there is nothing a saved file could serve"
+            )
+        arrays = {
+            "format": _DBSCAN_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "metric": str(self.metric).lower(),
+            "algorithm": str(self.algorithm),
+            "components": self.components_,
+            "core_sample_indices": self.core_sample_indices_,
+            "core_labels": self._core_labels,
+            "labels": self.labels_,
+            "eps": Array.from_list([float(self.eps)], "<f8"),
+            "meta": Array.from_list(
+                [int(self.n_features_in_), int(self.n_samples_fit_), int(self.min_samples)], "<i8"
+            ),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts; every array is
+        read at its saved dtype and never cast."""
+        arrays = _serialize.read_npz(path, _DBSCAN_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 3:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
+        eps = _serialize.exact(arrays, "eps", "<f8")
+        if eps.size != 1:
+            raise ValueError(f"mojolearn: {path!r} eps must hold one value")
+        nf, n_fit, min_samples = int(meta[0]), int(meta[1]), int(meta[2])
+        obj = cls(
+            eps=float(eps[0]), min_samples=min_samples,
+            metric=_serialize.scalar_str(arrays, "metric"),
+            algorithm=_serialize.scalar_str(arrays, "algorithm"),
+            prediction_data=True,
+        )
+        _restore_mode(obj, arrays)
+        if str(obj.metric) not in _METRICS:
+            raise ValueError(f"mojolearn: {path!r} metric {obj.metric!r} is not one DBSCAN serves")
+        comps = _serialize.exact(arrays, "components", "<f4")
+        idx = _serialize.exact(arrays, "core_sample_indices", "<i4")
+        core_labels = _serialize.exact(arrays, "core_labels", "<i4")
+        labels = _serialize.exact(arrays, "labels", "<i4")
+        n_core = int(idx.size)
+        if comps.ndim != 2 or tuple(comps.shape) != (n_core, nf):
+            raise ValueError(f"mojolearn: {path!r} components shape {tuple(comps.shape)} is not ({n_core}, {nf})")
+        if core_labels.size != n_core or labels.size != n_fit:
+            raise ValueError(f"mojolearn: {path!r} core labels or labels do not match the saved counts")
+        obj.components_ = comps
+        obj.core_sample_indices_ = idx
+        obj._core_labels = core_labels
+        obj.labels_ = labels
+        obj.n_features_in_ = nf
+        obj.n_samples_fit_ = n_fit
+        return obj
 
 
 class KernelDensity(NumericModeMixin):
