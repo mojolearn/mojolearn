@@ -105,6 +105,9 @@ on:
       - "gbdt/host/gbdt_oracle_depthwise.mojo"
       - "gbdt/host/gbdt_oracle_lossguide.mojo"
       - "arima/host/arima_oracle.mojo"
+      - "training/host/mlp_oracle.mojo"
+      - "training/checks/loss_oracle.mojo"
+      - "training/checks/optimizer_oracle.mojo"
       - "arima/impl/tsa/arima_common.mojo"
       - "spectral/checks/symmetric_eig_host.mojo"
       - "core/knn_host_predict.mojo"
@@ -496,6 +499,7 @@ jobs:
       # to be core, in
       # pca_full_oracle by folding every QR trailing-column dot product's
       # lanes serially descending, in
+      # mlp_oracle by walking every MLP row sum descending, in
       # rf_oracle by drawing every bootstrap row from the next Philox
       # subsequence, in gpr_oracle by walking the scaled distance's
       # feature axis descending, in gbdt_oracle by adding 1.0 to the

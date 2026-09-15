@@ -284,6 +284,13 @@ TRAINING_LANE_NAMES = {
     # nine train cells on the M4's CPU column (one core) before the gate ran,
     # and the sabotage build DIVERGENT on all nine.
     "metrics-classification": "the classification, ranking and regression metrics",
+    # The mlp lane (lane/cpu-training-mlp, 2026-09-14): SmallMLPTrainer's
+    # step through the training family's host binding (the three MLP
+    # operations in training/host/mlp_oracle.mojo, the loss and AdamW over
+    # training/checks/loss_oracle.mojo and optimizer_oracle.mojo) and the
+    # linalg host GEMM. IDENTICAL x4 on all 27 train, infer and model cells on
+    # the M4's CPU column (one core) before the gate ran.
+    "mlp": "the small MLP",
     # Workstream E batch 3 (2026-09-14): gradient boosting on its default
     # symmetric tree with the Logloss loss trains through
     # gbdt/host/gbdt_oracle.mojo, the device trainer restated on the host,
@@ -778,6 +785,38 @@ FAMILIES = (
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # The mlp lane (lane/cpu-training-mlp, 2026-09-14): the training
+        # family's host binding. It routes `_mojolearn_training` on a
+        # CPU-only install with the GPU binding's optimizer_step, ce_loss and
+        # the three small MLP operations, so SmallMLPTrainer (and the
+        # optimizers and cross_entropy on their own) run unchanged; the clip
+        # on its own, the accumulation, the Samba operations, the neural RNG
+        # and the multi-GPU probes stay absent and refuse by name.
+        family="training",
+        binding="_mojolearn_training_host",
+        routes="_mojolearn_training",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("mlp",),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("SmallMLPTrainer", "SGD", "Adam", "AdamW", "cross_entropy"),
+        display="the small MLP trainer, the optimizers and the cross-entropy loss",
+        host_modules=(
+            "training/host/mlp_oracle.mojo",
+            "training/checks/loss_oracle.mojo",
+            "training/checks/optimizer_oracle.mojo",
+        ),
+        exports=(
+            "training_host_numeric_mode", "training_host_vendor",
+            "training_host_column", "training_host_sabotage",
+            "training_numeric_mode", "training_vendor", "optimizer_step",
+            "ce_loss", "mlp_bias_activation", "mlp_relu_backward", "mlp_sum_rows",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

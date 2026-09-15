@@ -1007,6 +1007,14 @@ def host_families_built():
 #:     the ordered and FeatureFreq fits and the adapters' binary transforms
 #:     are absent. Its own family for the reason the rf family is: the
 #:     forest host binding exports other names under another contract.
+#:   _mojolearn_training -> _mojolearn_training_host (the mlp lane,
+#:     2026-09-14): optimizer_step and ce_loss over
+#:     training/checks/optimizer_oracle.mojo and loss_oracle.mojo (the
+#:     normative answers of the optimizer and loss profiles) and
+#:     mlp_bias_activation, mlp_relu_backward and mlp_sum_rows over
+#:     training/host/mlp_oracle.mojo, so SmallMLPTrainer trains on the CPU;
+#:     the clip on its own, the accumulation, the Samba operations and the
+#:     neural RNG are absent.
 #:   _mojolearn_arima -> _mojolearn_arima_host (arima, arima-011,
 #:     arima-seasonal-c; workstream E, 2026-09-14): arima_fit,
 #:     arima_predict and arima_forecast over arima/host/arima_oracle.mojo
