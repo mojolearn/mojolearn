@@ -3,8 +3,8 @@
 """Launch the brute-force k-NN, and sabotage it.
 
 NO CUVS COUNTERPART. Same discipline as `cluster/checks/kmeans_check.mojo`
-and for the same reason: a kernel is not implemented until it has been enqueued
-(`archive/reference/PORTING.md 9`), and a correct answer is not by itself evidence that a
+and for the same reason: a kernel is not implemented until it has been enqueued,
+and a correct answer is not by itself evidence that a
 kernel ran.
 
 THE FIXTURE IS RANDOM, AND THE FIRST ONE WAS NOT, AND THAT COST A RUN
@@ -1806,7 +1806,7 @@ comptime FKNN_SMEM_BYTES = (FKNN_SMEM_PAGE_X + FKNN_SMEM_PAGE_Y) * 4
 
 
 def check_launch_config_values() raises:
-    """`launch_config_generator` at pinned inputs, against hand-transcribed
+    """`launch_config_generator` at pinned inputs, against hand-computed
     evaluations of `pairwise_distance_base.cuh:308-319` with the M4 numbers
     (10 cores x 12 blocks of 256 threads = minGridSize 120).
 

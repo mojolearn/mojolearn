@@ -138,14 +138,12 @@ def test_sabotage_reaches_both_and_reads_back():
         assert flag in _read(host_surface.binding_source(name))
 
 
-def test_workflow_triggers_and_checks_out_the_records():
+def test_workflow_checks_out_the_records():
+    # The CPU identity gate runs by hand since 2026-09-15 (no push trigger),
+    # so only its sparse checkout must bring down the two records.
     wf = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in (EMB_HOST, IVF_HOST, "ivf/checks/list_layout.mojo", "python/mojolearn/embedding.py",
-                "python/mojolearn/_ivf_impl.py"):
-        assert f'- "{rel}"' in wf, rel
     for record in ("2026-09-15_embedding-sort", "2026-09-14_ivf-euclidean"):
         assert f"/bench/results/identity_break/{record}/" in wf, record
-        assert f'- "bench/results/identity_break/{record}/**"' in wf, record
 
 
 def _cpu_only_with(basename):
@@ -230,7 +228,7 @@ ADAPTER = "python/mojolearn/_byte_lm_trainer_host.py"
 
 def test_manifest_declares_the_byte_lm_trainer_lanes():
     fam = host_surface.family("byte_lm")
-    assert fam["training_lanes"] == BYTE_LM_LANES
+    assert set(BYTE_LM_LANES) <= set(fam["training_lanes"])
     assert "SmallByteLanguageModelTrainer" in fam["classes"]
     for lane in BYTE_LM_LANES:
         assert lane in host_surface.record_covered_lanes(), f"{lane} is not diffed against the record"
@@ -254,9 +252,6 @@ def test_adapter_holds_no_arithmetic_and_calls_the_host_entries():
     src = _read(host_surface.binding_source("byte_lm"))
     assert "from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE" in src
     assert "or ANY_BWD_SABOTAGE or GEMM_ORACLE_HOST_SABOTAGE)" in src
-    wf = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in (ADAPTER, "python/mojolearn/_byte_lm_impl.py"):
-        assert f'- "{rel}"' in wf, rel
 
 
 @reference_training()

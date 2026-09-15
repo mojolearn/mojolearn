@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`SmoSolver`: the outer decomposition loop.
 
-FOLLOWS `cuml/cpp/src/svm/smosolver.h` + `smosolver.cuh` at cuML v26.08.00:
+Reference: `cuml/cpp/src/svm/smosolver.h` + `smosolver.cuh` (cuML v26.08.00):
 `Solve`, `UpdateF`, `Initialize`, `InitPenalty` (unweighted arm), `SvcInit`,
 `SvrInit`, the `EPSILON_SVR` doubling and its second `UpdateF` gemv,
 `GetNonzeroDeltaAlpha`, `CheckStoppingCondition`, `GetDefaultMaxIter`,
@@ -18,7 +18,7 @@ gated 44 of 44 and the refusal in `solve` came out.
     unaryOp(f = -y)                          -> svc_init_kernel
     thrust::copy_if (GetNonzeroDeltaAlpha)   -> flag_nonzero + SelectScratch
     raft::update_host(host_return_buff)      -> one 2-float read, per outer
-                                                iteration, as theirs
+                                                iteration, as the reference
     cublasgemv (UpdateF)                     -> update_f_kernel (DEVIATION 634)
 
 # =========================================================================
@@ -58,10 +58,10 @@ gated 44 of 44 and the refusal in `solve` came out.
 # `svc_check.mojo::check_nan_never_recorded` (an overflowing fixture).
 # =========================================================================
 
-THE STOPPING RULE is host Float64 exactly as theirs is host double on a
+THE STOPPING RULE is host Float64 exactly as the reference is host double on a
 float `diff`: `diff > diff_prev * 1.5` and `abs(diff - diff_prev) < 0.001
 * tol` promote through the double literals, `diff < tol` is float. The
-`nochange_steps` rule and its `n_small_diff` counter are transcribed; the
+`nochange_steps` rule and its `n_small_diff` counter are implemented; the
 NaN throw is the same sentence.
 """
 
@@ -381,7 +381,7 @@ struct SmoSolver(Movable):
     below reads it rather than the caller's `y`. For C_SVC it is a bitwise
     copy of `y` over `n_rows`, which costs one n-element device copy per fit
     and changes no number; for EPSILON_SVR it is `[+1]*n_rows ++ [-1]*n_rows`,
-    which is exactly what upstream's `y_label` holds at the same point. ONE
+    which is exactly what the reference's `y_label` holds at the same point. ONE
     code path, no branch at four call sites, and no way for one of those
     sites to be left reading the regression targets."""
     var C_vec: DeviceBuffer[DType.float32]
@@ -443,7 +443,7 @@ struct SmoSolver(Movable):
         # since DEVIATION 515 and the arm had never been reachable.
         self.n_train = n_rows * 2 if param.svmType == EPSILON_SVR else n_rows
         # `n_ws = min(1024, n_train)`, over the DOUBLED domain for SVR:
-        # upstream's SetSize takes n_train, not n_rows.
+        # the reference's SetSize takes n_train, not n_rows.
         var ws = SMO_WS_SIZE
         if ws > self.n_train:
             ws = self.n_train
@@ -540,7 +540,7 @@ struct SmoSolver(Movable):
 
         Both arms leave `self.y_train` holding the labels the REST OF THE
         SOLVER reads; see the field's own docstring for why that replaces
-        upstream's `*y = y_label.data()` pointer swap."""
+        the reference's `*y = y_label.data()` pointer swap."""
         var nt = self.n_train
         ctx.enqueue_function[fill_f32_kernel](
             self.alpha.unsafe_ptr(), Float32(0.0), Int32(nt),
@@ -568,7 +568,7 @@ struct SmoSolver(Movable):
                 grid_dim=_grid(self.n_rows), block_dim=SEL_TPB,
             )
         else:
-            # Upstream's own sentence, and upstream reaches it only for the
+            # The reference's own sentence, and the reference reaches it only for the
             # NU_* types (`smosolver.cuh:321`).
             raise Error(
                 "SMO initialization not implemented SvmType="
@@ -589,7 +589,7 @@ struct SmoSolver(Movable):
     ) raises:
         """`Solve(matrix, n_rows, n_cols, y, sample_weight, &dual_coefs,
         &n_support, &support_matrix, &idx, &b, max_iter, max_outer_iter,
-        max_inner_iter)`, transcribed (`smosolver.cuh:99-221`). `card` is
+        max_inner_iter)` (reference: `smosolver.cuh:99-221`). `card` is
         the stage recorder (DISABLED is a no-op)."""
         var n_rows = self.n_rows
         var n_cols = self.n_cols

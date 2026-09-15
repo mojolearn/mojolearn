@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The half-byte histogram kernel: 8 features per 4-byte load.
 
-FOLLOWS `hist_half_byte.cu` plus the loop it instantiates,
+Reference: `hist_half_byte.cu` plus the loop it instantiates,
 `compute_hist_loop_one_stat.cuh` (`ALIGN_MEMORY`,
 `TComputeHistogramImpl<FourElements>::Compute`,
-`ComputeSplitPropertiesDirectLoadsImpl`), at CatBoost `54a8143a`.
-Followed statement for statement.
+`ComputeSplitPropertiesDirectLoadsImpl`) (CatBoost `54a8143a`).
 
 The features that need 2 to 15 folds land here: one `UInt32` of the
 compressed index holds EIGHT of them at 4 bits each, so one load feeds eight
@@ -515,7 +514,7 @@ def half_byte_hist_kernel(
                 if det:
                     if active_block_count > 1:
                         var q = Int32(val * fixed_scale)
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(
@@ -543,7 +542,7 @@ def half_byte_hist_kernel(
                     # wanted; that branch is now a CHOICE rather than the
                     # only thing that compiles.
                     if active_block_count > 1:
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             dst.unsafe_offset(fold), val
@@ -1003,7 +1002,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
                 if det:
                     if active_block_count > 1:
                         var q = Int32(val * fixed_scale)
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(
@@ -1031,7 +1030,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
                     # wanted; that branch is now a CHOICE rather than the
                     # only thing that compiles.
                     if active_block_count > 1:
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             dst.unsafe_offset(fold), val

@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Epsilon neighborhood: the boolean adjacency and the vertex degree.
 
-FOLLOWS `cuml/cpp/src/dbscan/vertexdeg/algo.cuh::launcher` at cuML `00094f7`.
+Reference: `cuml/cpp/src/dbscan/vertexdeg/algo.cuh::launcher` (cuML `00094f7`).
 Partial.
 
-Their `launcher` is a metric switch and then ONE call. For the L2 arm with no
+The reference `launcher` is a metric switch and then ONE call. For the L2 arm with no
 ball-cover index -- which is `algo == 1`, `metric == L2SqrtExpanded` /
 `L2SqrtUnexpanded`, `eps_nn_method == BRUTE_FORCE`, the default dispatch for
 these parameters -- it is `algo.cuh:224-231`:
@@ -16,13 +16,13 @@ these parameters -- it is `algo.cuh:224-231`:
                n, m, k, eps2, stream);
 
 so that is what `vertex_deg_run` calls on its L2 arm, and the kernel itself
-lives beside its own upstream in
+lives beside its own reference citation in
 `dbscan/impl/neighbors/epsilon_neighborhood.mojo`.
 
 **ON THE L2 ARM `eps` IS SQUARED ONCE ON THE HOST AND NEVER PER PAIR**
 (`algo.cuh:225`). DBSCAN's radius is a distance and their accumulator is a
 squared distance; squaring the threshold instead of rooting a million
-distances is theirs.
+distances is the reference behavior.
 
 **ON THE L1 ARM IT IS NOT SQUARED AT ALL**, because an L1 sum has no squared
 form. That is DEVIATION 27, it lives in the kernel file it changes, and the
@@ -87,13 +87,13 @@ NOT IMPLEMENTED FROM THIS FILE, and named so it is not forgotten:
 DEVIATION BLOCK 28: THE WEIGHTED DEGREE'S FOLD IS PINNED, AND THAT IS A
 REPLACEMENT OF BOTH OF THEIR REDUCERS
 -----------------------------------------------------------------------
-THEIRS, dense arm: `raft::linalg::coalescedReduction<bool, value_t,
+REFERENCE, dense arm: `raft::linalg::coalescedReduction<bool, value_t,
 index_t>` (`algo.cuh:243`), a RAFT thread-strided reduction closed by CUB.
-THEIRS, CSR arm: one WARP per row and `cub::WarpReduce<math_t>(...).Sum(...)`
+REFERENCE, CSR arm: one WARP per row and `cub::WarpReduce<math_t>(...).Sum(...)`
 (`algo.cuh:72-88`), 32 lanes wide because `warpsize` defaults to 32 at the
 call site (`:236`).
 
-OURS: one BLOCK per row in both, `WVD_TPB` threads striding the row
+HERE: one BLOCK per row in both, `WVD_TPB` threads striding the row
 ascending, closed by `core/pinned_reduce.pinned_block_sum[WVD_TPB]`.
 
 REASON, and it is the reason `pinned_reduce.mojo` exists at all. This is a
@@ -409,7 +409,7 @@ def eps_neighborhood_kernel(
     unfused implementation of a step that is already unfused is not, which is
     why `core/gemm.mojo`'s standalone contraction is gone and this is not.
 
-    It has no upstream counterpart: cuML never materializes this matrix.
+    It has no reference counterpart: cuML never materializes this matrix.
     Nothing in `dbscan/gbdt/` calls it and nothing should.
     """
     var n_cols = Int(n_cols_in)

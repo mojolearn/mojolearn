@@ -159,9 +159,9 @@ features (`pointwise_kernels.cpp:70`) and removing that guard changes no
 cell here -- because a binary feature has ONE fold and the implemented scan
 kernel returns early on `folds <= 1`, so the extra launch is a no-op at
 every cell. The guard is a launch saved, not a value protected, and no
-output check can distinguish the two. It is transcribed because it is
-theirs and because the kernel's `folds <= 1` early-out is OURS (the
-greedy-subsets scan's, adopted here) rather than CatBoost's -- their warp
+output check can distinguish the two. It is kept because the reference
+has it and because the kernel's `folds <= 1` early-out belongs to this
+implementation (the greedy-subsets scan's, adopted here) rather than CatBoost -- the reference warp
 scan would run 32 lanes over a 1-fold feature and write the same value
 back. Leaning on our early-out to justify dropping their guard would be
 depending on a deviation to excuse skipping an implementation.

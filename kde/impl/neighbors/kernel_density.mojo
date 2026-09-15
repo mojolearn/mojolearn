@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """cuML's `KernelDensity`: the six log-kernels, their norms, the logsumexp.
 
-FOLLOWS cuML `python/cuml/cuml/neighbors/kernel_density.py` at cuML
-`00094f7` (the 25.08 Python layer: `*_log_kernel` at `:43-99`,
+Reference: `python/cuml/cuml/neighbors/kernel_density.py` (cuML
+`00094f7`, the 25.08 Python layer: `*_log_kernel` at `:43-99`,
 `logVn`/`logSn`/`norm_log_probabilities` at `:112-141`,
 `logsumexp_kernel` at `:144-156`, `KernelDensity.fit` at `:220-262`,
 `KernelDensity.score_samples` at `:264-363`). Five
@@ -26,9 +26,9 @@ per-row logsumexp -- and is the version read symbol by symbol here.
 signature, `sum_weights` passed in) over this algorithm. When cuVS 26.08
 is cloned the fused kernel is the next implementation; `kde/NOT_IMPLEMENTED.tsv` names it.
 
-THE SIX LOG-KERNELS, TRANSCRIBED WITH THEIR CUPY SEMANTICS
+THE SIX LOG-KERNELS, WITH THE REFERENCE CUPY SEMANTICS
 ----------------------------------------------------------
-Their kernels are `cp.fuse` elementwise functions over a float32 distance
+The reference kernels are `cp.fuse` elementwise functions over a float32 distance
 matrix with Python-float `h`. Three things about them are not obvious and
 are kept ON PURPOSE (sklearn's `_binary_tree.pxi:377-414` differs on all
 three, and sklearn is the oracle for SEMANTICS, not bits):
@@ -58,12 +58,12 @@ float32 end to end and the Float64 host reference in
 `kde/checks/kde_oracle.mojo` measures what that costs.
 
 ============ DEVIATION 600 (2026-08-23): FLOAT32 END TO END ============
-THEIRS: `distances` is float32 (cuML casts the inputs, `fit:248`), the
+REFERENCE: `distances` is float32 (cuML casts the inputs, `fit:248`), the
 log-kernels are float32, but `logsumexp_kernel` (`:144-156`) sums
 `math.exp(float32)` into a float64 `sum`, `log_probabilities` is
 `cp.zeros(n)` = float64, and the two normalizations (`:343`, `:356`) are
 float64 host scalars subtracted from it.
-OURS: float32 throughout -- the exp sum, the `log(sum) + max`, the two
+HERE: float32 throughout -- the exp sum, the `log(sum) + max`, the two
 subtractions -- because this library's device target set has no float64
 (`mojolearn hardware limits`: Apple has none on device) and one source
 serves every vendor. MEASURED: `check_kde_oracle_vs_float64` prints the
@@ -75,11 +75,11 @@ name.
 
 ============ DEVIATION 601 (2026-08-23): THE NORMALIZATION CONSTANT UNDER
 ============ IDENTICAL IS A FLOAT32 CONSTRUCTION, NOT A HOST libm CALL ====
-THEIRS: `norm_log_probabilities` (`:112-141`) is host float64 through
+REFERENCE: `norm_log_probabilities` (`:112-141`) is host float64 through
 `np.log` and `math.lgamma`.
-OURS, FAST: the same, host float64 through `std.math.log`/`lgamma`, cast
+HERE, FAST: the same, host float64 through `std.math.log`/`lgamma`, cast
 to float32 once (`log_kernel_norm_fast`).
-OURS, IDENTICAL: a host libm's `log` and `lgamma` are not one arithmetic
+HERE, IDENTICAL: a host libm's `log` and `lgamma` are not one arithmetic
 across hosts (IDENTITY_PATHS row 18's class: cross-vendor is cross-HOST),
 and `checks/numerics.mojo` has no portable float64 log or lgamma. So
 under IDENTICAL the constant is built from `identical_log` over float32:
@@ -153,7 +153,7 @@ comptime KDE_LOG_FLOOR = Float32(1e-30)
 
 # ============ DEVIATION 604 (2026-08-23): INPUTS WHOSE FLOAT32 ARITHMETIC IS
 # ============ NaN ARE REFUSED BY NAME BEFORE ANY LAUNCH ==================
-# THEIRS: `fit`/`score_samples` (`:220-363`) validate `bandwidth > 0`, the
+# REFERENCE: `fit`/`score_samples` (`:220-363`) validate `bandwidth > 0`, the
 # kernel and metric names, `sample_weight.min() > 0` and its length; the
 # data is `input_to_cuml_array` with no finiteness check, so a NaN or an
 # infinity in X, a subnormal or infinite weight, a bandwidth whose square
@@ -161,7 +161,7 @@ comptime KDE_LOG_FLOOR = Float32(1e-30)
 # identity all flow to the device and come back as NaN (or, for the
 # subnormals, as a column-dependent value: `log(1e-40)` is -92 where
 # denormals are kept and -inf where they flush).
-# OURS: REFUSED BY NAME on the host before a buffer is uploaded. The
+# HERE: REFUSED BY NAME on the host before a buffer is uploaded. The
 # reason is IDENTITY_PATHS row 39's FACT 2: every stage of this estimator
 # is recorded on the card (`kde.dists` ... `kde.scores`) and a COMPUTED
 # NaN carries the vendor's payload, so it can never be allowed to reach a
@@ -256,7 +256,7 @@ def kde_validate_data(
 # DEVIATION 2660 (2026-09-11): DEVIATION 604'S DATA RULES OVER THE CALLER'S
 # MEMORY, BLOCK SCREENED
 # ---------------------------------------------------------------------------
-# THEIRS: cuML's `fit` and `score_samples` read the caller's array in place
+# REFERENCE: cuML's `fit` and `score_samples` read the caller's array in place
 # (`input_to_cuml_array`); no host copy.
 # OURS BEFORE: `kde_score_samples_binding` copied X and the queries into two
 # `List`s (36 to 54 ms at 100,000 x 220 on the H100), then
@@ -530,7 +530,7 @@ def compute_log_kernel(x: Float32, h: Float32, kernel: Int) -> Float32:
 
 # ============ DEVIATION 602 (2026-08-23): THE COSINE KERNEL'S NORM IS WRONG
 # ============ UPSTREAM FOR EVEN d, AND IS NOT IMPLEMENTED AS WRITTEN ============
-# THEIRS (`kernel_density.py:131-137`, copied from scikit-learn
+# REFERENCE (`kernel_density.py:131-137`, copied from scikit-learn
 # `_binary_tree.pxi:465-470`):
 #
 #     factor = 0; tmp = 2/pi
@@ -556,7 +556,7 @@ def compute_log_kernel(x: Float32, h: Float32, kernel: Int) -> Float32:
 # `check_kde_log_norm_closed_form` at d = 2 (`log(4 - 8/pi) + 2 log h`)
 # and d = 4 (`log(2 pi^2 (2/pi - 6(2/pi)^3 + 6(2/pi)^4)) + 4 log h`).
 #
-# OURS: `I_{d-1}` by its power series (see `_cosine_radial_integral_fast`
+# HERE: `I_{d-1}` by its power series (see `_cosine_radial_integral_fast`
 # for why not the corrected recurrence). ASSUME-OUR-CODE-IS-BROKEN's corollary is "do not implement their
 # BUGS": a `cosine` KDE in 2 or 4 dimensions would otherwise be
 # misnormalized or NaN by construction, and scikit-learn -- the oracle
@@ -564,7 +564,7 @@ def compute_log_kernel(x: Float32, h: Float32, kernel: Int) -> Float32:
 # agreement about the wrong number. Consequence stated plainly: for EVEN
 # d, `metric='euclidean', kernel='cosine'` here does NOT match
 # `sklearn.neighbors.KernelDensity`; the difference is their bug and is
-# the subject of a report owed upstream (README, HAND-OFF).
+# the subject of a report owed to the reference maintainers (README, HAND-OFF).
 # ==========================================================================
 
 
@@ -573,7 +573,7 @@ def _cosine_radial_integral_fast(n: Int) -> Float64:
     ((2k)! (n + 2k + 1))`, `a = (pi/2)^2`, float64.
 
     THE SERIES AND NOT THE RECURRENCE, MEASURED: the by-parts recurrence
-    `I_m = 2/pi - m(m-1)(2/pi)^2 I_{m-2}` is what the upstream loop
+    `I_m = 2/pi - m(m-1)(2/pi)^2 I_{m-2}` is what the reference loop
     unrolls, and it CANCELS -- each step subtracts two terms near 0.6 to
     leave a result near 0.02 -- so in float32 it was off by 2.8e-3 at
     d = 9 (`check_kde_log_norm_closed_form` under IDENTICAL, 2026-08-23:
@@ -621,8 +621,8 @@ def _cosine_radial_integral_identical(n: Int) -> Float32:
 
 
 def log_kernel_norm_fast(kernel: Int, h: Float64, d: Int) raises -> Float32:
-    """Their float64 host arithmetic, `std.math` for `np.log`/`math.lgamma`,
-    transcribed line for line; cast to float32 once at the end."""
+    """The reference float64 host arithmetic, `std.math` for `np.log`/`math.lgamma`,
+    in the same order; cast to float32 once at the end."""
     var dd = Float64(d)
     var factor: Float64
     if kernel == KDE_KERNEL_GAUSSIAN:
@@ -807,7 +807,7 @@ def logsumexp_kernel(
     no block fold, no warp primitive and no atomic to pin because their
     kernel has none; the brief's alternative (a `pinned_block_sum` tree plus
     a cross-block fold) was not taken because it is a different summation
-    order from the one upstream ships and COPY-DO-NOT-IMPROVE decides it.
+    order from the one the reference ships and COPY-DO-NOT-IMPROVE decides it.
     `rowmax` is this lane's addition for the card (`kde.rowmax`); their
     kernel keeps `max_exp` in a register.
 
@@ -848,13 +848,13 @@ def logsumexp_kernel(
 
     ============ DEVIATION 603 (2026-08-23): A ROW OF ALL -inf IS -inf, NOT
     ============ NaN ====================================================
-    THEIRS (`logsumexp_kernel:144-156`): `max_exp = -inf` when every cell
+    REFERENCE (`logsumexp_kernel:144-156`): `max_exp = -inf` when every cell
     is `-inf` (gaussian/exponential with `x*x/(2 h^2)` or `x/h`
     overflowed -- legal finite input, e.g. h = 2^-62 and points 3 apart),
     then `math.exp(-inf - (-inf))` = `exp(NaN)` = NaN, so `log(sum) + max`
     is NaN and the score is NaN. scikit-learn (the semantics oracle)
     folds the same row with `logaddexp`, whose `(-inf, -inf)` is `-inf`.
-    OURS: `if max_exp == -inf: lse = -inf` before the sum -- the value
+    HERE: `if max_exp == -inf: lse = -inf` before the sum -- the value
     the mathematics and sklearn give. WHY: IDENTITY_PATHS row 39's FACT
     2 -- a COMPUTED NaN carries the vendor's payload (Apple 0x7fc00000,
     NVIDIA 0x7fffffff, AMD 0xffc00000) and can never sit in a certified
@@ -996,7 +996,7 @@ def host_sum_weights(weights: List[Float32]) -> Float32:
 # device traffic per cell for arithmetic that needs none, and it caps the
 # problem at the matrices' size (2 x 4 bytes x cells: 16k x 16k already
 # holds 2 GB, 100k x 100k cannot be allocated at all). It is the shape
-# upstream ships (`kernel_density.py:332-342`, cupy matrices between numba
+# the reference ships (`kernel_density.py:332-342`, cupy matrices between numba
 # kernels), and IDENTICAL keeps it because the card certifies each stage
 # (`kde.dists`, `kde.logk`, `kde.rowmax`) and its serial ascending fold.
 #
@@ -1583,7 +1583,7 @@ def _kde_score_samples_fused(
 # ---------------------------------------------------------------------------
 # DEVIATION 2625 (2026-09-11): THE TILED IDENTICAL SCORE PASS, SAME BITS
 # ---------------------------------------------------------------------------
-# THEIRS (cuVS 26.08 `cpp/src/distance/kde.cu:335-441`, `kde_tiled_kernel`):
+# REFERENCE (cuVS 26.08 `cpp/src/distance/kde.cu:335-441`, `kde_tiled_kernel`):
 # one thread per query, the training rows cooperatively loaded into shared
 # memory in tiles of `feat_tile x CELL_TILE` (64 x 64), a per-train-row
 # accumulator in registers that persists across the feature tiles, and a 2D

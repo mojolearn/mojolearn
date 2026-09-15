@@ -32,7 +32,7 @@ VALIDATION HONESTY, which is this repo's stated posture
 - APPLE is the VALIDATED column: one M4, and the values below are bit-for-bit
   the constants the 2026-08-19 measurement rounds ran on. The k-NN AUTO
   default and DEVIATION 36's tables depend on them; they must not drift.
-- NVIDIA and AMD are SUPPORTED-NOT-VALIDATED: honest values transcribed from
+- NVIDIA and AMD are SUPPORTED-NOT-VALIDATED: honest values taken from
   the vendors' architecture documents (cited per row), never measured by this
   repo, and pinned to ONE representative device each -- NVIDIA's A100
   (GA100, compute capability 8.0), the device cuVS's own tuning targets, and
@@ -248,7 +248,7 @@ def smem_per_core_for[column: Int]() -> Int:
         #: (16MB+)" (Pallas TPU details page). The stated lower bound.
         return 16 * 1024 * 1024
     if column == COLUMN_TRAINIUM:
-        return 32 * 1024  # PLACEHOLDER: the SBUF partition size is not transcribed
+        return 32 * 1024  # PLACEHOLDER: the SBUF partition size is not recorded
     return 32 * 1024  # apple, and the bit-identical intersection
 
 

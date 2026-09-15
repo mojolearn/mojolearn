@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The connectivities graph single linkage hands its MST.
 
-FOLLOWS `cuvs/cpp/src/cluster/detail/connectivities.cuh`, cuVS `94c2819`,
-the `Linkage::PAIRWISE` specialization (`:110-204`) and `get_distance_graph`
-(`:222-239`). The `Linkage::KNN_GRAPH` specialization (`:60-108`) is NOT
+Reference: the `Linkage::PAIRWISE` specialization (`:110-204`) and
+`get_distance_graph` (`:222-239`), `cuvs/cpp/src/cluster/detail/connectivities.cuh`
+(cuVS `94c2819`). The `Linkage::KNN_GRAPH` specialization (`:60-108`) is NOT
 implemented in this rung and is REFUSED BY NAME below; `hierarchy/NOT_IMPLEMENTED.tsv`.
 
 THE DISTANCE STEP, AND WHICH ARM. `pairwise_distances` (`:133-176`) calls
@@ -13,7 +13,7 @@ cuh:292-322`), which for `L2Expanded`/`L2SqrtExpanded` is
 `cuvs::distance::distance<...>`: the expanded identity `||x||^2 + ||y||^2 -
 2 x.y` over precomputed row norms. This tree's spelling of that identity is
 the one `neighbors/impl/detail/knn_brute_force.mojo:160-202`
-already uses for the same upstream call:
+already uses for the same reference call:
 
     FAST       `core/row_norms.row_norm_kernel` -> `core/gemm.gemm_nt` (MAX
                matmul) -> `core/expand_distances.expand_distances_kernel`
@@ -33,13 +33,13 @@ THE SELF-LOOP. `:162-175` sets the diagonal to `numeric_limits<value_t>::
 max()` after the distance call, with a `thrust::transform` over the zipped
 counting iterator; `self_loop_max_kernel` below is that transform.
 
-THE `nnz` TYPE. Theirs is `value_idx nnz = m * m` (`:145`), an `int` that
+THE `nnz` TYPE. The reference has `value_idx nnz = m * m` (`:145`), an `int` that
 overflows silently at `m >= 46341`. Refused by name at `pairwise_distances`
 rather than inherited.
 
 THE NaN GUARD (DEVIATION 623, `hierarchy/checks/nan_guard.mojo`). After
 the self-loop transform the matrix is scanned once and any NaN cell raises
-by name. Theirs has no such line; ours needs it because a computed NaN's
+by name. The reference has no such line; this implementation needs it because a computed NaN's
 payload is the vendor's (IDENTITY_PATHS row 39) and `linkage_main.mojo`
 records these bytes. The clamp inside both distance arms is `if dist <=
 0.0: dist = 0.0`, which maps `-0.0` AND every negative cancellation

@@ -1,7 +1,7 @@
 # Decision-tree competitor feature matrix and delivery queue
 
 Audited 2026-09-10 against MojoLearn lane base `f84f8e6b`, local source and
-upstream documentation. This is part of the [execution roadmap](DECISION_TREE_ROADMAP.md).
+reference documentation. This is part of the [execution roadmap](DECISION_TREE_ROADMAP.md).
 
 ## Where we stand
 
@@ -119,14 +119,14 @@ feature slices alongside the measurement work.
 | --- | --- | --- |
 | Completed / F2a | Numeric per-tree feature fraction and reusable projection buffers are implemented in native train/prepared, binding, legacy estimator and adapters. | Portable TRandom mapping is an explicit deviation from LightGBM RNG. Default-one fingerprints and selected-feature witnesses are separate from large-data timing and cross-device qualification; see [contract](GBDT_FEATURE_FRACTION.md). |
 | 1 / F8 then F6 | Optional strict minimum child counts, followed by learned missing routing for numeric Depthwise/Lossguide. | Current min_data_in_leaf stops parent leaves; it does not require both children to meet the bound. Extend candidate eligibility, then compare both missing-statistics assignments before selecting a winner. Persist route bits through model IO and inference; preserve existing Min/Max defaults. |
-| 2 / F3 then F2b | Path-aware interaction masks, initially numeric Depthwise/Lossguide; then node/level sampling with explicit mask intersection. | Reuse F2 candidate-mask plumbing, but separate sampling from allowed features. Choose one upstream's overlap semantics. Exhaustive tiny-path oracle, invalid IDs, serialization; define symmetric shared-depth behavior separately. |
+| 2 / F3 then F2b | Path-aware interaction masks, initially numeric Depthwise/Lossguide; then node/level sampling with explicit mask intersection. | Reuse F2 candidate-mask plumbing, but separate sampling from allowed features. Choose one reference's overlap semantics. Exhaustive tiny-path oracle, invalid IDs, serialization; define symmetric shared-depth behavior separately. |
 | 3 / F5 then F4 | Coherent L1/bounded leaf updates, followed by monotonic descendant bounds. | Pin XGBoost implementation first; modify both split scoring and final/iterative leaf estimation. Start scalar RMSE/Logloss. Closed-form optimum and monotonic prediction checks; split filtering alone cannot guarantee monotonicity. |
 | Parallel foundation / P6 | Python prepared data and owned reusable workspace. | Extend existing Mojo prepared implementation, not a second trainer. Training-fold-only quantization, lifetime/refit identity and actual repeated-fit time. |
 | Next / C1 then C2/C3 | Stable category schema/unseen handling; general combinations; broader Ordered boosting. | CatBoost mapping/table and permutation-state algorithms. Persist dictionaries/tables, prove train/eval separation; arbitrary-depth combinations are not a wrapper-only change. |
 | Next / F7 | Multiclass Depthwise/Lossguide and public multiclass adapters. | Explicit classwise versus vector-leaf design; loss, dimensions, score and inference together. An extension beyond the audited CatBoost GPU non-symmetric registry. |
 | Workload-selected / R1 | One ranking objective with groups/pairs and group-aware splitting. | Choose CatBoost or LambdaRank algorithm explicitly; GPU derivatives and metrics; independent gradients, ties and group integrity. AUC is a classification score, not this feature. |
 | Later / L1–L4 | Portable adapter archives/inspection, continuation, extension hooks, SHAP. | Version training state and retained metadata before continuation/attribution. Preserve mode and category schema. |
-| Later / F9 | Feature weights, fixed splits and feature-use penalties. | Distinguish score multipliers from sampling weights and penalties; pin the chosen upstream dispatch. |
+| Later / F9 | Feature weights, fixed splits and feature-use penalties. | Distinguish score multipliers from sampling weights and penalties; pin the chosen reference dispatch. |
 | Deferred / F10, R2–R3, C4, S1–S2 | Linear leaves; objective-by-objective multi-target/survival/uncertainty; DART/GOSS; text/embeddings; sparse; distributed. | Separate designs and workload justification. Keep these visible without labeling general CPU support as a GPU implementation obligation. |
 
 ### Implemented per-tree sampling and remaining node sampling

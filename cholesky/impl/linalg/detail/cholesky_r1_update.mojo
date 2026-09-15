@@ -11,7 +11,7 @@ Everything else is a closed-library call: cuVS's only factorization from
 scratch is `cusolverDnpotrf` + `cusolverDnpotrs`
 (`cuvs/src/neighbors/scann/detail/scann_avq.cuh:179-200`) and cuML has none
 at all. So this file, and `raft/matrix/detail/matrix.cuh`'s four triangular
-and diagonal helpers, are the whole of what `cholesky/impl/` can contain says so rather than implying a wider mirror.
+and diagonal helpers, are the whole of what `cholesky/impl/` can contain, and this header says so rather than implying a wider scope.
 
 WHO CALLS IT UPSTREAM, corrected against the checkout
 ------------------------------------------------------

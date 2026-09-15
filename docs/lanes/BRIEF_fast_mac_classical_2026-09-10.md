@@ -14,7 +14,7 @@ and the next lanes in order.
 | b1ba346d | SVM: shuffle arg-reductions in the block solve (2491, all tiers), fused FAST RBF tile (2492), SMO stage clock | HIGGS 50k x 28 fit 7.45 s to 1.87 s; vs sklearn libsvm at 20k: fit 10,561 vs 531 ms, predict 10k 6,561 vs 68 ms. `bench/results/svm_fast_2026-09-10/` |
 | a93bef9d | SVR rows | 20k: 10.9 s vs 1.2 s fit, RMSE equal |
 
-The recurring shape of the win: upstream materializes an `n x m` matrix
+The recurring shape of the win: the reference materializes an `n x m` matrix
 between library calls (numba kernels, cub, cuBLAS) and walks it again;
 one fused pass over tiles in shared memory removes the matrix, the
 traffic and the batching that its size forced.

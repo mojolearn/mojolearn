@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Border selection: turning a raw float column into split points.
 
-FOLLOWS `library/cpp/grid_creator/binarization.cpp` at CatBoost `54a8143a`,
+Reference: `library/cpp/grid_creator/binarization.cpp` (CatBoost `54a8143a`),
 the `GreedyLogSum` path, which is CatBoost's DEFAULT
 (`catboost/private/libs/options/data_processing_options.cpp:15`).
 
@@ -398,7 +398,7 @@ def _penalty_min_entropy(weight: Float64) -> Float64:
     ROUNDED product. One ULP, and it lands exactly where it does damage: on
     a plateau the two arms of a symmetric pair stop being equal and the
     tie-break fires on the difference. `@no_inline` restores every
-    symmetric pair bit-identically. Recorded as archive/reference/PORTING.md 54.
+    symmetric pair bit-identically. Recorded as deviation 54.
 
     ## Why this does NOT call `std.math.log` (history: the libm fix)
 

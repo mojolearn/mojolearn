@@ -9,12 +9,12 @@ THE ENTRY SIGNATURE, verbatim, so the caller has one place to read it:
         mut out: DeviceBuffer[DType.float32],       # [M, dim]  S11, stage skip.out
         mut y: DeviceBuffer[DType.float32],         # [M, dim]  S5-S10, stage scan.y
         mut h_state: DeviceBuffer[DType.float32],   # [B, dim, 16] IN and OUT, stage scan.h
-        mut u: DeviceBuffer[DType.float32],         # [M, dim]      upstream `u`
-        mut delta: DeviceBuffer[DType.float32],     # [M, dim]      upstream `delta`, POST-softplus
-        mut A: DeviceBuffer[DType.float32],         # [dim, 16]     upstream `A`
-        mut B: DeviceBuffer[DType.float32],         # [M, 16]       upstream `B`
-        mut C: DeviceBuffer[DType.float32],         # [M, 16]       upstream `C`
-        mut D: DeviceBuffer[DType.float32],         # [dim]         upstream `D`
+        mut u: DeviceBuffer[DType.float32],         # [M, dim]      reference `u`
+        mut delta: DeviceBuffer[DType.float32],     # [M, dim]      reference `delta`, POST-softplus
+        mut A: DeviceBuffer[DType.float32],         # [dim, 16]     reference `A`
+        mut B: DeviceBuffer[DType.float32],         # [M, 16]       reference `B`
+        mut C: DeviceBuffer[DType.float32],         # [M, 16]       reference `C`
+        mut D: DeviceBuffer[DType.float32],         # [dim]         reference `D`
         batch: Int, seqlen: Int, dim: Int,
         z: Bool, delta_bias: Bool,                  # PRESENCE flags; True is REFUSED (DEVIATION 723)
         delta_softplus: Bool,                       # True is REFUSED (DEVIATION 723)
@@ -32,14 +32,14 @@ additions are `out`/`D` (the oracle's block applies seam S11 after the scan
 returns; the seam is this lane's, so it is applied here and both results are
 written) and the `ctx`/`trace`/`block_size` machinery a device launch needs.
 
-Arguments after the outputs are upstream's ORDER and NAMES --
+Arguments after the outputs are the reference's ORDER and NAMES --
 `(u, delta, A, B, C, D, z, delta_bias, delta_softplus, return_last_state)`,
 `selective_scan_interface.py:127-128`. Outputs come first because the device
 kernel shape this file takes does that (`max/kernels/src/state_space/
 selective_scan.mojo::selective_scan_fwd_gpu:95-105`, `output` then `x` then
 `out_z` then `u`).
 
-WHAT IS MIRRORED, AND FROM WHICH SOURCE
+WHAT IS FOLLOWED, AND FROM WHICH SOURCE
 ---------------------------------------
 - The ARITHMETIC and its rounding ORDER: `selective_scan_ref` (state-spaces/
   mamba `e9594ce`, `mamba_ssm/ops/selective_scan_interface.py:127-193`),
@@ -118,8 +118,8 @@ moving the computation moves no bit; what it buys is that the kernel needs no
 storage that grows with `L`, which is what lets one thread own a whole
 sequence.
 
-**DEVIATION 723**: the entry point mirrors upstream's argument order and
-names but REFUSES four of the configurations they admit, each refused BY NAME
+**DEVIATION 723**: the entry point matches the reference's argument order and
+names but REFUSES four of the configurations the reference admits, each refused BY NAME
 at the door rather than implemented and left untested (`reached-but-inert`).
 `z` and `delta_bias` are presence flags and True raises, because S12 and S14
 are the block's recorded stages; `delta_softplus` True raises for the same
@@ -155,7 +155,7 @@ comptime MAX_DSTATE = 16
 """`MAX_DSTATE` in BOTH device kernels -- `selective_scan.mojo:39` and
 `selective_scan_fwd_kernel.cuh`'s `MAX_DSTATE` -- and `d_state` in contract
 section 3. Declared here rather than imported from
-`mamba/checks/mamba_fixture.mojo` because both upstream kernels declare it
+`mamba/checks/mamba_fixture.mojo` because both reference kernels declare it
 themselves, and because the device spelling is an INDEPENDENT transcription
 of the arithmetic (the oracle's header states that separation); the only
 things shared with the host side are the seam functions in
@@ -444,7 +444,7 @@ def selective_scan_fwd_kernel[
 
         # S11: `out = y + u * D` (ref:189). UNFUSED -- both the reference and
         # the CUDA kernel round `u * D` as its own product -- and D LAST,
-        # which is where the two upstreams part company (cuh:163 puts D
+        # which is where the two references part company (cuh:163 puts D
         # first). `SAB_S11_D_FIRST` above is their order.
         comptime if SAB_S11_D_FIRST:
             out_ptr.unsafe_store(t * dim + d, acc)
@@ -490,8 +490,8 @@ def selective_scan_fn(
     delta_softplus, return_last_state)` (`selective_scan_interface.py:118-125`)
     under profile `mojolearn.identical.mamba1.fp32.v1`, seams S5-S11.
 
-    ARGUMENT NAMES AND ORDER ARE UPSTREAM'S. `z` and `delta_bias` are
-    PRESENCE flags rather than buffers -- `False` is upstream's `None` -- and
+    ARGUMENT NAMES AND ORDER ARE THE REFERENCE'S. `z` and `delta_bias` are
+    PRESENCE flags rather than buffers -- `False` is the reference's `None` -- and
     both are REFUSED when True (DEVIATION 723): the profile's block owns S12
     (`gate.out`) and S14 (`softplus.out`) as recorded stages of its own, and
     a second spelling of a seam this file does not own is a second place for

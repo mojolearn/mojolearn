@@ -169,7 +169,7 @@ struct Mamba3Dims(Copyable, Movable):
 
 
 struct Mamba3Weights(Copyable, Movable):
-    """One block's parameters, host side, upstream shapes, row-major.
+    """One block's parameters, host side, reference shapes, row-major.
     `in_proj`/`out_proj` carry no bias (mamba3.py:108, :157); there is no
     conv. `mimo_rank = 1` is squeezed out of the B/C bias shapes
     (mamba3.py:121-122 give [H, 1, N]; the SISO call squeezes, :256-257).
@@ -268,7 +268,7 @@ struct Mamba3CorpusCase(Copyable, Movable):
     M3_TID_INIT_* tensors (contract section 5 claim 2 -- SUPPORTED,
     tolerance-checked against an unbroken prefill, NEVER bit-gated
     against one; device-vs-oracle on the SAME continuation call is still
-    bitwise). False: zeros (upstream's None)."""
+    bitwise). False: zeros (the reference's None)."""
 
 
 def m3_corpus_case(k: Int) raises -> Mamba3CorpusCase:

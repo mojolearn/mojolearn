@@ -2,16 +2,16 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ML::KDE::score_samples`: cuML 26.08's C++ entry, over the 25.08 algorithm.
 
-FOLLOWS cuML `cpp/include/cuml/neighbors/kde.hpp` and `cpp/src/kde/kde.cu`
-at cuML `265b9da` (v26.08.00). Partial.
+Reference: `cpp/include/cuml/neighbors/kde.hpp` and `cpp/src/kde/kde.cu`
+(cuML `265b9da`, v26.08.00). Partial.
 
-Their file is a delegation: it wraps the six pointers in mdspans and calls
+The reference file is a delegation: it wraps the six pointers in mdspans and calls
 `cuvs::distance::kde(handle, query, train, weights, output, bandwidth,
 sum_weights, kernel, metric, metric_arg)` (`kde.cu:45-55`). That cuVS entry
 is in cuVS 26.08, which this tree's pinned checkout (25.08, `94c2819`) does
 not have, so the delegate here is `kde/impl/neighbors/kernel_density.mojo`
 -- the 25.08 Python-layer algorithm the fused kernel reproduces. The SHAPE
-of this entry is theirs: the `DensityKernelType` values, the argument order,
+of this entry matches the reference: the `DensityKernelType` values, the argument order,
 `weights` nullable, `sum_weights` supplied by the caller (`kde.hpp:44`:
 "sum of `weights`, or `n_train` when weights is null"), `metric` as a
 DistanceType value, `metric_arg` as Minkowski's `p`.
@@ -22,7 +22,7 @@ IMPLEMENTED"; `LpUnexpanded` is implemented now (`neighbors/impl/distance/detail
 distance_ops.mojo`), so the argument is forwarded to the distance dispatch
 and VALIDATED there by value (DEVIATION 552: p must be finite, positive
 and normal). A non-Lp metric still accepts and discards it, which is what
-every `distance_impl` overload but one does upstream (`distance.cuh:193`,
+every `distance_impl` overload but one does in the reference (`distance.cuh:193`,
 `DataT)  // unused`).
 """
 

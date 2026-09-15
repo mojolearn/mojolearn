@@ -3,8 +3,8 @@
 """The one-byte DRIVER: which accumulator runs, on which features, and where
 the result goes.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_templ.cuh` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_templ.cuh`
+(CatBoost `54a8143a`).
 
 The six accumulators know how to add a point. This file is everything else:
 
@@ -168,7 +168,7 @@ def get_max_bin_count[
         if (threadIdx.x < 1) smem[tid] = max(smem[tid], smem[tid + 1]);
 
     Every `__syncthreads()` is OUTSIDE the `if`, which is what keeps it
-    legal under a threadgroup barrier (archive/reference/PORTING.md 11).
+    legal under a threadgroup barrier.
 
     It borrows the histogram scratch, which is why it must run and finish
     BEFORE the accumulator is constructed -- the constructor zeroes that
@@ -223,7 +223,7 @@ def pw_bounds[bits: Int]() -> Tuple[Int, Int]:
 def compute_split_properties_nb_kernel[
     bits: Int, full_pass: Bool, m: Int
 ](
-    # `TCFeature*`, flattened to parallel arrays (archive/reference/PORTING.md 9 rule 2).
+    # `TCFeature*`, flattened to parallel arrays.
     # `Mask` and `Shift` are absent because this family never reads them:
     # a one-byte feature IS a byte of the word `Offset` selects.
     feature_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -423,7 +423,7 @@ def compute_split_properties_nb_kernel[
                 elif m > 1:
                     # several document blocks per feature, so the writes
                     # collide; theirs is a global float atomicAdd
-                    # DEVIATION 1898: upstream's atomicAdd is relaxed; the non-
+                    # DEVIATION 1898: the reference's atomicAdd is relaxed; the non-
                     # Apple Mojo default is seq_cst.
                     _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                         bin_sums.unsafe_offset(at), val

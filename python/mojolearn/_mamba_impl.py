@@ -35,7 +35,7 @@ serialize, inspect and round-trip byte for byte -- which is the
 exact-state-handoff requirement, and why there is no hidden cache object.
 Prefill, chunked-prefill continuation, `initial_states` (a nonzero h in a
 fresh `Mamba2State`) and single-token decode are ALL the same certified
-entry point on the Mojo side; `step` exists as a name because upstream's
+entry point on the Mojo side; `step` exists as a name because the reference's
 `step` is the name a reader expects, and it forwards to the same spelling
 at L = 1 (mamba1 contract section 5; mamba2 DEVIATION 786, decode is
 prefill resumption).
@@ -98,6 +98,7 @@ from . import _backend
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
 from ._bufcheck import dtype_name, is_native_f32, memcopy, probe
 from ._mode import NumericModeMixin
+from . import _ragged
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose, for `_arima_impl.py`'s reason: the read-back must not share a
@@ -167,7 +168,7 @@ def _f32_strict(a, what, name):
 
 def _want_shape(a, what, name, shape, alt=None):
     """Exact-shape check with the expected spelling in the message.
-    `alt` admits one alternative spelling (the conv weight's upstream
+    `alt` admits one alternative spelling (the conv weight's reference
     `[C, 1, 4]` beside the squeezed `[C, 4]` -- same bytes)."""
     if a.shape == shape or (alt is not None and a.shape == alt):
         return a
@@ -294,7 +295,7 @@ class Mamba2State:
         h               : (B, H, 64, 128) float32 -- the chunk-BOUNDARY
                           SSM state (the S17 value as of the last
                           COMPLETED chunk). Setting this nonzero on a
-                          FRESH state (buffered_tokens 0) IS upstream's
+                          FRESH state (buffered_tokens 0) IS the reference's
                           `initial_states` (ssd_minimal.py:64-66)
         buffer_xbc      : (B, 256, CD) float32 -- the open chunk's
                           post-conv/post-SiLU xBC rows
@@ -394,7 +395,7 @@ class Mamba1Block(_MambaBase):
     IDENTICAL prefill backward operation.
 
     WEIGHTS IN, AS GIVEN BITS. The constructor takes a dict keyed by the
-    upstream parameter names (the corpus's names,
+    reference parameter names (the corpus's names,
     `mamba/corpus/README.md`); there is no initializer, deliberately --
     bit-reproducing torch's RNG is a refused validation target
     (FEATURE_PARITY.md section 1's initializer row), and a cross-check
@@ -419,14 +420,14 @@ class Mamba1Block(_MambaBase):
         d_state/d_conv/ FIXED     16 / 4 / 2 / ceil(dm/16): profile
           expand/dt_rank          constants, a different value is a v2
                                   (SHIP LATER, triggers named there)
-        conv_bias/bias  FIXED     True / False (the upstream defaults);
+        conv_bias/bias  FIXED     True / False (the reference defaults);
                                   the shapes above encode them
-        use_fast_path   refused   no such knob: upstream's two arms round
+        use_fast_path   refused   no such knob: the reference's two arms round
                                   differently (DEVIATION 732), the
                                   reference rounding IS the profile
         initializers    refused   weights arrive as given bits (above)
         dtype           refused   float32 ONLY; bf16/fp16/float64 by name
-        activation      silu only, as upstream itself asserts
+        activation      silu only, as the reference itself asserts
 
     STATE IS EXPLICIT (DEVIATION 792): `allocate_state(B)` makes the
     zero state, `forward`/`step` update it in place, and prefill ==
@@ -537,7 +538,7 @@ class Mamba1Block(_MambaBase):
             ext.mamba1_forward(addrs, [b, l, self.d_model])
         return y
 
-    def forward(self, x, state=None):
+    def forward(self, x, state=None, *, lengths=None):
         """One block call: `(B, L, d_model)` float32 in, the block
         output (residual add included) back, any B and L.
 
@@ -545,7 +546,21 @@ class Mamba1Block(_MambaBase):
         DISCARDS the final state. Pass a `Mamba1State` to carry it: the
         state is read at entry and updated IN PLACE, so a second call
         continues the sequence exactly (the decode gate's per-token
-        claim, at any L)."""
+        claim, at any L).
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
+        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
+        after. Every real position's output is byte for byte the row run
+        alone at its own length (the scan is causal and the contract's
+        clause (c) makes a row independent of its batch; no arithmetic
+        changes, `_ragged.py` says why) and every padding position's
+        output is exactly `+0.0`, whatever the input held there. Refused
+        with a carried `state`."""
+        if lengths is not None:
+            what = type(self).__name__ + ".forward"
+            x = _batch_tokens(x, what, self.d_model, False)
+            return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
+                                          x, state, lengths, "<f4", what)[0]
         return self._call(x, state, step=False)
 
     def backward(self, x, grad_output):
@@ -817,14 +832,28 @@ class Mamba2Block(_MambaBase):
         self.h_last_ = h_last
         return y
 
-    def forward(self, x, state=None):
+    def forward(self, x, state=None, *, lengths=None):
         """One block call: `(B, L, d_model)` float32 in, the block
         output back, any B and L. `state=None` runs a self-contained
         prefill from zeros and DISCARDS the final state; pass a
         `Mamba2State` to carry it -- a later `forward` or `step` on that
         state is chunked-prefill continuation / decode, bit-for-bit the
         prefill that ran the whole sequence at once (DEVIATION 786's
-        construction; the identical tier's gates verify it)."""
+        construction; the identical tier's gates verify it).
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
+        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
+        after. Every real position's output is byte for byte the row run
+        alone at its own length (the scan is causal and the contract's
+        clause (c) makes a row independent of its batch; no arithmetic
+        changes, `_ragged.py` says why) and every padding position's
+        output is exactly `+0.0`, whatever the input held there. Refused
+        with a carried `state`."""
+        if lengths is not None:
+            what = type(self).__name__ + ".forward"
+            x = _batch_tokens(x, what, self.d_model, False)
+            return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
+                                          x, state, lengths, "<f4", what)[0]
         return self._call(x, state, step=False)
 
     def backward(self, x, grad_output):
@@ -842,7 +871,7 @@ class Mamba2Block(_MambaBase):
     def step(self, x, state):
         """One decode token: `Mamba2.step`'s semantics, the profile's
         spelling -- PREFILL RESUMPTION at L = 1 through the same entry as
-        `forward` (DEVIATION 786; upstream's own per-token recurrence
+        `forward` (DEVIATION 786; the reference's own per-token recurrence
         rounds differently BY CONSTRUCTION and is the lane's required-RED
         sabotage arm, never a mode here). `state` is REQUIRED."""
         if state is None:
@@ -881,7 +910,7 @@ class Mamba3State:
                           (DEVIATION 832(i): in [1, Q] after every
                           call); 0 only before the first token
         pending         : bool -- True marks theta/h/pending_k/pending_v
-                          as an upstream Input_States continuation
+                          as a reference Input_States continuation
                           (contract section 5 claim 2), CONSUMED by the
                           next call (DEVIATION 794)
 
@@ -906,13 +935,13 @@ class Mamba3State:
         self.pending = bool(pending)
 
     def set_input_states(self, theta, h, k, v):
-        """The upstream four-piece `Input_States` continuation (contract
+        """The reference four-piece `Input_States` continuation (contract
         section 5 claim 2): copy the given bits into theta/h/pending_k/
         pending_v and mark them pending for the next call. dtype and
         shape are refused here (bits must arrive as made -- a silent
         cast would break the certification); whether the state is FRESH
         is judged IN MOJO at the next call, by the lane's own
-        set_input_states refusal (Input_States only has upstream meaning
+        set_input_states refusal (Input_States only has reference meaning
         at buffered_tokens 0), which this method deliberately does not
         respell (DEVIATION 794)."""
         what = "Mamba3State.set_input_states"
@@ -969,7 +998,7 @@ class Mamba3Block(_MambaBase):
         dt_bias            (H,)
         B_norm.weight      (N,)               the S21 B RMSNorm, eps 1e-5
         C_norm.weight      (N,)               the S21 C RMSNorm
-        B_bias             (H, N)             ones-init upstream; arrives
+        B_bias             (H, N)             reference ones-init; arrives
                                               as given bits like all the
                                               rest (mimo_rank 1 squeezed)
         C_bias             (H, N)
@@ -1067,8 +1096,8 @@ class Mamba3Block(_MambaBase):
 
     def allocate_state(self, batch_size):
         """The zero ten-piece state (`allocate_inference_cache`,
-        mamba3.py:442-482, plus DEVIATION 832's buffer pieces). For an
-        upstream Input_States continuation call
+        mamba3.py:442-482, plus DEVIATION 832's buffer pieces). For a
+        reference Input_States continuation call
         `set_input_states(theta, h, k, v)` on the fresh state."""
         b = int(batch_size)
         if b < 1:
@@ -1198,14 +1227,28 @@ class Mamba3Block(_MambaBase):
         self.theta_last_ = theta_last
         return y
 
-    def forward(self, x, state=None):
+    def forward(self, x, state=None, *, lengths=None):
         """One block call: `(B, L, d_model)` float32 in, the block
         output back, any B and L. `state=None` runs a self-contained
         prefill from zeros and DISCARDS the final state; pass a
         `Mamba3State` to carry it -- a later `forward` or `step` on that
         state is chunked-prefill continuation / decode, bit-for-bit the
         prefill that ran the whole sequence at once (DEVIATION 831's
-        construction; the identical tier's gates verify it)."""
+        construction; the identical tier's gates verify it).
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
+        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
+        after. Every real position's output is byte for byte the row run
+        alone at its own length (the scan is causal and the contract's
+        clause (c) makes a row independent of its batch; no arithmetic
+        changes, `_ragged.py` says why) and every padding position's
+        output is exactly `+0.0`, whatever the input held there. Refused
+        with a carried `state`."""
+        if lengths is not None:
+            what = type(self).__name__ + ".forward"
+            x = _batch_tokens(x, what, self.d_model, False)
+            return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
+                                          x, state, lengths, "<f4", what)[0]
         return self._call(x, state, step=False)
 
     def backward(self, x, grad_output):
@@ -1223,7 +1266,7 @@ class Mamba3Block(_MambaBase):
     def step(self, x, state):
         """One decode token: `Mamba3.step`'s semantics, the profile's
         spelling -- PREFILL RESUMPTION at L = 1 through the same entry
-        as `forward` (DEVIATION 831; upstream's own per-token recurrence
+        as `forward` (DEVIATION 831; the reference's own per-token recurrence
         rounds differently BY CONSTRUCTION and is the lane's
         required-RED STEP_UPSTREAM_RECURRENCE arm, never a mode here).
         `state` is REQUIRED."""

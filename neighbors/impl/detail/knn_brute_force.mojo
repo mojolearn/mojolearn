@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Brute-force k-nearest-neighbors: their DISPATCH, and their FALLBACK.
 
-FOLLOWS `cuvs/src/neighbors/detail/knn_brute_force.cuh` at cuVS `94c2819`:
+Reference: `cuvs/src/neighbors/detail/knn_brute_force.cuh` (cuVS `94c2819`):
 `brute_force_knn_impl`'s dispatch (`:443-447`) and `tiled_brute_force_knn`
 (`:69-340`). Partial.
 
@@ -353,7 +353,7 @@ def compute_norms_for_metric(
 ) raises:
     """`knn_brute_force.cuh:117-140`: WHICH norm, decided by the metric.
 
-    Their branch, statement for statement:
+    The reference branch:
 
         if (metric == L2Expanded || L2SqrtExpanded || CosineExpanded) {
           if (metric == CosineExpanded) rowNorm<L2Norm,true>(..., sqrt_op{});
@@ -1166,7 +1166,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     comptime if knn_warpsort_select_for[TARGET_COLUMN, False]():
                         if k > 2 and k <= MAX_CAPACITY:
                             # `bound_by_power_of_two(k)` with a floor of 32;
-                            # the four instantiations mirror RAFT's template
+                            # the four instantiations match RAFT's template
                             # dispatch over capacities.
                             if k <= 32:
                                 _warpsort_select_tile[32](
@@ -1342,7 +1342,7 @@ def brute_force_knn_impl(
     `fused_l2_knn` is entered ONLY for the four members of their set, which
     is exactly their `:444-447`; everything else takes their `else` and
     goes to `tiled_brute_force_knn`, which is exactly their `:485-511`
-    default. Cosine is NEVER fusable upstream either, and it is worth
+    default. Cosine is NEVER fusable in the reference either, and it is worth
     saying why rather than only that: `fusedL2Knn`'s whole trick is that
     the expanded L2 epilogue `xn + yn - 2 dot` is MONOTONE in `-dot`, so
     the register queue can rank on the raw accumulator and fix the value
@@ -1534,7 +1534,7 @@ def brute_force_knn_impl(
 
     # A METRIC OUTSIDE THE FUSABLE SET IS NOT AN ERROR, IT IS THEIR `else`.
     # `KNN_METHOD_FUSED` asks for an arm; asking for it with cosine or Lp
-    # is asking for an arm that does not exist upstream either, so it is
+    # is asking for an arm that does not exist in the reference either, so it is
     # refused BY NAME rather than silently substituted -- the same rule
     # DEVIATION 512 applies to a column whose lane width cannot express
     # the FAISS queue.

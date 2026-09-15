@@ -8,7 +8,7 @@
 Covers `core/philox.mojo` against
 `ensemble/bench/philox_oracle.txt`, which is the output of THEIR generator
 compiled and run (`ensemble/tools/philox_oracle/`): cuRAND's own Philox bytes,
-fetched at build time, under RAFT v26.08.00's own wrapper, transcribed line by
+fetched at build time, under RAFT v26.08.00's wrapper, restated line by
 line.
 
 WHY THE SABOTAGE RULE RELAXES HERE, and why one is included anyway. The
@@ -381,8 +381,8 @@ def main() raises:
             # chain, `rs = fnv1a32(fnv1a32(basis, lo(seed)), tree)`; our
             # `fnv1a32_hash_seed_tree` folds the high half when nonzero.
             # Three assertions replace the old single parity line:
-            #   (a) the ORACLE row still equals the transcribed truncating
-            #       chain -- holds the fixture and the transcription;
+            #   (a) the ORACLE row still equals the restated truncating
+            #       chain -- holds the fixture and the restatement;
             #   (b) our chain equals the truncating chain for lo-only
             #       seeds (exact RAFT parity, the unchanged rows) and the
             #       truncating chain PLUS the one high round otherwise;

@@ -61,11 +61,11 @@ Every division is a single IEEE `/` (row 10: correct on normals on every
 column measured); every seam a kernel writes is flushed.
 
 ============ DEVIATION 772: THE START VECTOR `v0` ==========================
-THEIRS: `lanczos_compute_eigenpairs:777-794` draws `v0 ~ U(0, 1)^n` from
+REFERENCE: `lanczos_compute_eigenpairs:777-794` draws `v0 ~ U(0, 1)^n` from
 `raft::random::uniform` on `RngState(seed)` (Philox 4x32-10 through RAFT's
 generator, on the device), or from `std::random_device` when no seed is
 given. cuVS passes the user's seed (`spectral_embedding.cuh:70`).
-OURS: `v0[i] = splitmix64(seed, i) >> 40` as a 24-bit integer times `2^-24`
+HERE: `v0[i] = splitmix64(seed, i) >> 40` as a 24-bit integer times `2^-24`
 -- a host hashed uniform in `[0, 1)` that is a pure function of `(seed, n)`
 and performs no host rounding -- uploaded once, recorded as `spectral.
 lanczos.v0`. RAFT's Philox + uniform mapping is not implemented: it is ~600
@@ -75,20 +75,20 @@ The bits of the trajectory do, which is why the card records it. The
 no-seed arm is REFUSED BY NAME (`seed=None: std::random_device is not
 reproducible; pass a seed`).
 ============ DEVIATION 773: `V` IS ZERO-FILLED ============================
-THEIRS: `V = make_device_matrix(ncv, n)` (`:429`) is NOT initialized, and
+REFERENCE: `V = make_device_matrix(ncv, n)` (`:429`) is NOT initialized, and
 the first `lanczos_aux` pass at `i = 0` reads `V[(0 - 1 + ncv) % ncv] =
 V[ncv - 1]` scaled by `beta[ncv - 1] = 0` (`:333-340`). `0 * garbage` is
 `0` unless the garbage is `inf`/`NaN`, in which case the first `u` is
 poisoned.
-OURS: `V` is memset to zero. `fma(0, 0, vv) == vv` bit for bit, so against
+HERE: `V` is memset to zero. `fma(0, 0, vv) == vv` bit for bit, so against
 a zero `V[ncv - 1]` the axpy is an exact no-op and the bits equal a
 reference-BLAS `saxpy` that returns early on `alpha == 0`; the deviation
 only removes the poison arm.
 ============ DEVIATION 779: `u -= V^T uu` IS TWO ROUNDINGS, NOT ONE =======
-THEIRS: ONE `cublas gemv` with `CUBLAS_OP_N`, `alpha = -1`, `beta = 1`
+REFERENCE: ONE `cublas gemv` with `CUBLAS_OP_N`, `alpha = -1`, `beta = 1`
 (`:357-369`), which is free to fuse its `beta` epilogue into the last
 accumulation of each coordinate.
-OURS: `identical_gemm` `OP_TN` into a temporary, then `sub_kernel`'s
+HERE: `identical_gemm` `OP_TN` into a temporary, then `sub_kernel`'s
 `ftz(y - x)`. ONE EXTRA ROUNDING PER COORDINATE, taken deliberately:
 the contraction belongs to profile `mojolearn.identical.gemm.fp32.v1`,
 which owns the rounding of its own accumulator and has no `beta` entry
@@ -122,7 +122,7 @@ have, and claiming a deviation we did not make is exactly as bad as
 missing one.
 
 WHAT REMAINS UNDER 780, and both live in code that stands where a CLOSED
-vendor library does, not in the mirrored driver:
+vendor library does, not in the referenced driver:
   (a) the host Jacobi's sweep cap of 60, which RETURNS an unconverged
       basis instead of raising, where Numerical Recipes uses 50 and calls
       `nrerror` (`checks/symmetric_eig_host.mojo`, contract seam J6);
@@ -133,7 +133,7 @@ vendor library does, not in the mirrored driver:
       a direct caller.
 The `NCV` and `MAXITER` sabotage arms below KEEP THEIR VALUE and change
 their meaning: they no longer test a choice of ours, they inject cuVS
-25.08's older spelling and so test that this lane mirrors the 26.08 one.
+25.08's older spelling and so test that this lane matches the 26.08 one.
 ============ THEIR TRANSPOSED LAUNCH BOUNDS, NOT IMPLEMENTED, NO BITS MOVED ====
 `lanczos_solve_ritz` launches `kernel_triangular_populate` as
 `<<<blockSize, numBlocks>>>` (`:161-162`) with `blockSize = 256` and
@@ -144,11 +144,11 @@ COVER every row, because `256 * ceil(ncv/256) >= ncv` at every `ncv`, and
 the kernel writes each cell once, so NO BIT MOVES. Recorded, not implemented:
 ours builds the projected matrix in a host loop over all `ncv` rows.
 ============ DEVIATION 774: A RESTART BREAKDOWN IS REFUSED, NOT DIVIDED ====
-THEIRS: after the restart, `V[k + 1] = u / beta[k]` (`:681-687`) with NO
+REFERENCE: after the restart, `V[k + 1] = u / beta[k]` (`:681-687`) with NO
 zero guard (unlike `kernel_normalize`'s `beta == 0 -> / 1`, `:106-110`), so
 `beta[k] == 0` -- an exactly invariant subspace -- produces `inf`/`NaN` in
 `V[k + 1]` and every stage after it, and the returned eigenpairs are NaN.
-OURS: raises `lanczos: restart breakdown, beta[k] == 0` by name. No NaN
+HERE: raises `lanczos: restart breakdown, beta[k] == 0` by name. No NaN
 can reach a card (ADDENDUM 11). Reached only if `u` is exactly zero after
 the re-orthogonalization, which no fixture here produces; the clamp at
 `1e-6` makes it reachable for a graph whose residual is tiny but nonzero.
@@ -204,7 +204,7 @@ comptime SAB_STD_SQRT = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT"]()
 #: so `ncv = min(n_samples, max(2k + 1, 20))` -- cuVS 25.08's spelling,
 #: which 26.08 replaced (`detail/spectral_embedding.cuh:67`). This is not a
 #: choice of ours being tested; it is a REGRESSION ARM against the older
-#: upstream. READ BY
+#: reference. READ BY
 #: `impl/preprocessing/detail/spectral_embedding.mojo`; it
 #: lives here because that module imports this one and the reverse would
 #: be a cycle. The device arm's `ncv` then differs from the oracle's, which

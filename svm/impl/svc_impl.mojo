@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`svcFit` / `svcPredict`: the C-SVC entry points, dense FP32.
 
-FOLLOWS `cuml/cpp/src/svm/svc_impl.cuh` + `svc.cu` at cuML v26.08.00:
+Reference: `cuml/cpp/src/svm/svc_impl.cuh` + `svc.cu` (cuML v26.08.00):
 `svcFitX` (dense), `svcPredictX` (dense, dense support), `applyPrediction`,
 `computeBatchDecisionFunction`, and the `SVC` class's `fit` / `predict` /
 `decisionFunction`. NOT implemented: `svcFitSparse` / `svcPredictSparse` and the
-CSR arms, the PRECOMPUTED arm, multiclass (their own `ASSERT(model.n_classes
+CSR arms, the PRECOMPUTED arm, multiclass (the reference `ASSERT(model.n_classes
 == 2, "Only binary classification is implemented at the moment")` is kept
 as a raise), `svmFreeBuffers` (host lists).
 
@@ -18,8 +18,8 @@ as a raise), `svmFreeBuffers` (host lists).
                                      else -1 -- `getOvrlabels(..., idx=1)`
     raft::linalg::gemv (predict)   -> decision_kernel, one thread per query
                                      row, ascending over the support vectors
-                                     (DEVIATION 634's rule again; theirs is
-                                     cuBLAS)
+                                     (DEVIATION 634's rule again; the reference
+                                     uses cuBLAS)
     applyPrediction                -> the same kernel's epilogue:
                                      `val + b < 0 ? labels[0] : labels[1]`
                                      or `val + b`
@@ -273,7 +273,7 @@ def _svc_fit_staged(
 # ---------------------------------------------------------------------------
 # DEVIATION 2493 (2026-09-10): THE FUSED FAST DECISION PASS
 # ---------------------------------------------------------------------------
-# `svc_predict` below is upstream's shape: a `[batch x n_support]` kernel
+# `svc_predict` below is the reference's shape: a `[batch x n_support]` kernel
 # tile per batch (`kernel_op`), then `decision_kernel` folding each row of
 # the tile against the dual coefficients, batches sized by `cache_size`.
 # The fold reads the tile with a stride of `n_support` between neighbouring

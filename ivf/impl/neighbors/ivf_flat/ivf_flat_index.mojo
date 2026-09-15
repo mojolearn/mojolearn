@@ -2,21 +2,21 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IVF-FLAT's parameters, its index, and every refusal by name.
 
-FOLLOWS `cuvs/include/cuvs/neighbors/ivf_flat.hpp` (`index_params` :28-66,
+Reference: `cuvs/include/cuvs/neighbors/ivf_flat.hpp` (`index_params` :28-66,
 `search_params` :76-82, `index` :137-274) and
 `cuvs/src/neighbors/ivf_flat_index.cpp` (the constructor's
-`check_consistency` at :206-215) at cuVS `6ba2ce2`. Partial.
+`check_consistency` at :206-215) (cuVS `6ba2ce2`). Partial.
 
-WHAT AN IVF-FLAT INDEX IS, IN THEIR WORDS AND IN OURS
-------------------------------------------------------
-Theirs is `n_lists` centroids plus `n_lists` separately allocated lists,
+WHAT AN IVF-FLAT INDEX IS, IN THE REFERENCE AND HERE
+----------------------------------------------------
+The reference index is `n_lists` centroids plus `n_lists` separately allocated lists,
 each holding its members' vectors in INTERLEAVED GROUPS of
 `kIndexGroupSize = 32` (`ivf_flat.hpp:25`, `list_spec::make_list_extents`
 at `:110-115`) so that `ivfflat_interleaved_scan` can issue vectorized
-loads of `veclen` elements per lane. Ours is the same centroids plus ONE
+loads of `veclen` elements per lane. This index is the same centroids plus ONE
 CSR-shaped triple -- offsets, carried original indices, and the permuted
 vectors -- because the layout exists to feed a scan, and the scan we run
-is not theirs. **DEVIATION 1782**, and `ivf/README.md` carries the whole
+is not the reference scan. **DEVIATION 1782**, and `ivf/README.md` carries the whole
 reason.
 
 THE FIELD THAT IS THE WHOLE LANE
@@ -24,8 +24,8 @@ THE FIELD THAT IS THE WHOLE LANE
 `list_indices`. Their `build_index_kernel` writes
 `list_index[inlist_id] = source_ix` (`ivf_flat_build.cuh:135`), so the
 ORIGINAL row id travels with the vector into the layout and their
-`postprocess_neighbors` reads it back out (`ivf_common.cuh:133`). Ours does
-the same thing and then does the thing theirs cannot: it puts that original
+`postprocess_neighbors` reads it back out (`ivf_common.cuh:133`). This index does
+the same thing and then does the thing the reference does not: it puts that original
 id into the SELECTION KEY, which is what makes `n_probe == n_lists` reduce
 to brute force bit for bit. **DEVIATION 1784**, and IVF's classic identity
 bug is the version of this file where `list_indices` holds a position

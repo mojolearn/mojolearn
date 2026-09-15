@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`min_lbfgs`, `update_and_check`, `qn_minimize`: the L-BFGS driver.
 
-FOLLOWS `cuml/cpp/src/glm/qn/qn_solvers.cuh` at cuML `00094f7`. WHOLE FILE
+Reference: `cuml/cpp/src/glm/qn/qn_solvers.cuh` (cuML `00094f7`). WHOLE FILE
 since 2026-09-01: `min_owlqn` is at the bottom and `qn_minimize` dispatches
-to it on `l1 != 0` exactly as theirs does (DEVIATION 552). `update_pseudo`
+to it on `l1 != 0` exactly as the reference does (DEVIATION 552). `update_pseudo`
 is in `qn_util.mojo`, beside the operator it applies.
 
-THE LOOP, `min_lbfgs` (`qn_solvers.cuh:136-227`), in their order:
+THE LOOP, `min_lbfgs` (`qn_solvers.cuh:136-227`), in the reference order:
 
     fx = f(x, grad); gnorm = nrmMax(grad)
     converged at x0?                 -> OPT_SUCCESS, k = 0
@@ -464,5 +464,5 @@ def qn_minimize(
             num_iters, n, trace,
         )
     # `:452-457`: "Maximum iterations reached before solver is converged"
-    # is a WARNING upstream, not an error; the retcode carries it.
+    # is a WARNING in the reference, not an error; the retcode carries it.
     return ret

@@ -9,7 +9,7 @@ NO CATBOOST COUNTERPART AS A KERNEL. Their level blocks the host TWICE:
 argmax to the host, which reduces the block winners (`:520-529`), packs
 the split descriptors (`split_properties_helper.cpp:872-905`) and uploads
 them; then `RebuildLeavesSizes` blocks again (`:800-813`). On CUDA a
-drain is cheap and their design tolerates two per level. On THIS box a
+drain is cheap and the reference tolerates two per level. On THIS box a
 drain (submit + wait round trip) measures ~191 us plus the queue-empty
 bubble behind it, and the fixed per-tree floor those drains sit in is
 9.3-11.5 ms of a 19.7 ms covtype tree (scratchpad `fixedfloor_probe`,
@@ -185,7 +185,7 @@ def plan_level_kernel(
     and the strict `<` is on the LEFT. **ON AN EXACT TIE THE `else`
     BRANCH FIRES AND THE RIGHT CHILD IS COMPUTED**, which is why the
     condition below is `left_sz < right_sz` and `small` starts on the
-    right. archive/reference/PORTING.md 136: it was the other way round from `409a16c`
+    right. It was the other way round from `409a16c`
     until 2026-08-21.
 
     The host used to make this choice from a per-level size read;
@@ -279,8 +279,8 @@ def leaf_winner_fold_kernel(
       to `folds - 1`) -- the host fold resolves through `table.to_split`
       and the comparator reads the CLAMPED bin, so the clamp must sit
       before the compare here too.
-    * COMPARE LAST: `best_split_properties_less(cand, best)` transcribed
-      (`helpers.mojo:112-141`, their `operator<`,
+    * COMPARE LAST: `best_split_properties_less(cand, best)` inlined
+      (`helpers.mojo:112-141`, the reference `operator<`,
       `gpu_structures.h:80-93`): gain ascending under THEIR sign (the
       score kernel's gain negated), feature id as ui32, bin id as ui32,
       all strict -- so a full tie keeps the INCUMBENT, i.e. the earlier
@@ -354,7 +354,7 @@ def leaf_winner_fold_kernel(
             max_bin = bf_folds.unsafe_load(Int(bf))
         if cand_bin > max_bin:
             cand_bin = max_bin
-        # `best_split_properties_less(cand, best)`, transcribed: strict
+        # `best_split_properties_less(cand, best)`, inlined: strict
         # everywhere, feature and bin compared as ui32 so the -1 sentinel
         # loses every gain tie instead of winning it
         var take = False

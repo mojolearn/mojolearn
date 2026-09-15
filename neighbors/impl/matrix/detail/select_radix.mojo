@@ -2,18 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Radix top-k, one block per row.
 
-FOLLOWS `raft/matrix/detail/select_radix.cuh` at RAFT `9aa17e5`. Partial.
+Reference: `raft/matrix/detail/select_radix.cuh` (RAFT `9aa17e5`). Partial.
 
-**THIS IS A `gbdt/` FILE WHOSE UPSTREAM IS RAFT, WHICH REFINES THE RULE IN
+**THIS IS A `gbdt/` FILE WHOSE REFERENCE IS RAFT, WHICH REFINES THE RULE IN
 `cluster/README.md`.** That rule said a RAFT call is not a `gbdt/` file
-because RAFT is a general library this tree does not mirror. That is still
+because RAFT is a general library this tree does not cite file by file. That is still
 right for a call we merely STAND IN FOR, like `raft::linalg::norm`. It is
-wrong for a file we actually READ AND FOLLOW STATEMENT FOR STATEMENT, which is what this is,
-and which makes it a derivative work of RAFT with the attribution duty that
-follows. The refined rule:
+wrong for a file whose behavior is CHECKED LINE BY LINE AGAINST A RAFT FILE, which is what this is,
+and which therefore cites RAFT as its reference. The refined rule:
 
     a RAFT call we stand in for   ->  checks/, naming the call
-    a RAFT file we follow statement for statement  ->  gbdt/,  with raft as its upstream
+    a RAFT file checked line by line  ->  gbdt/,  with raft as its reference
 
 WHY THIS ONE FIRST, AND THE OTHER ONE IS **NOT** RULED OUT
 ----------------------------------------------------------
@@ -62,7 +61,7 @@ INDICES nor their positions are, whenever more elements tie at the k-th value
 than there are slots left. Two runs on one device can return different
 neighbors of equal distance.
 
-That is a real property of the upstream and it is NOT fixed here, because
+That is a real property of the reference and it is NOT fixed here, because
 fixing it is an improvement on RAFT and improvements do not belong in
 `impl/`. What it costs was worth stating and used to end: "an `IDENTICAL`
 column cannot cover k-NN indices without an index tie-break that RAFT does
@@ -83,7 +82,7 @@ DEVIATIONS
 1. `BitsPerPass = 8`, so 256 buckets and 4 passes over a 32-bit key. RAFT's
    tuned setting is 11 bits (2048 buckets, 3 passes). Eight keeps the
    histogram at 1 KB against Metal's 32 KB threadgroup budget
-   (`archive/reference/PORTING.md 1`) and makes the block scan exactly one element per thread.
+   and makes the block scan exactly one element per thread.
    A pass costs a full sweep of the survivors, so this trades one extra pass
    for a much smaller scan. Measure before changing it.
 2. `vectorized_process` is not implemented. It is a 16-byte-load optimization
@@ -104,7 +103,7 @@ What that bought: the loop ran 2 barriers x 8 rounds = **16 barriers per
 radix pass per row**, against one collective call. The counts are integers,
 so the result is bit-for-bit the same sequence the loop produced and there is
 no fidelity cost anywhere in it. The scan is now the same KIND of thing
-upstream's is, so it is ordinary implemented code, not a substitution to declare.
+the reference's is, so it is ordinary implemented code, not a substitution to declare.
 See `archive/reference/VENDOR_LIBRARIES.md`.
 
 `Atomic.fetch_add` on the SHARED histogram is NOT in that category and stays.

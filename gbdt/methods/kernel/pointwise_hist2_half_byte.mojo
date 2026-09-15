@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The HALF-BYTE driver: 8 features of up to 16 bins per block.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_half_byte.cu` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_hist2_half_byte.cu`
+(CatBoost `54a8143a`).
 
 `ComputeSplitPropertiesHalfByteImpl`. Same accumulator as the binary kernel
 (`TPointHistHalfByte`), same loop choice, and a writeback that reads the
@@ -36,7 +36,7 @@ Measured against `checks/pointwise_small_bin_driver_check.mojo`:
     BOTH removed              E1, 22 of 158 cells wrong
 
 So each guard alone is sufficient and neither is individually observable.
-Both are transcribed because both are theirs, and because the fold guard is
+Both are kept because the reference has both, and because the fold guard is
 the one that still holds if a feature's declared `Folds` ever disagrees with
 the bins its column actually contains -- which is a corruption the epsilon
 guard cannot see, since those bins would be non-zero.
@@ -174,7 +174,7 @@ def compute_split_properties_half_byte_kernel[
                         result,
                     )
                 elif m > 1:
-                    # DEVIATION 1898: upstream's atomicAdd is relaxed; the non-
+                    # DEVIATION 1898: the reference's atomicAdd is relaxed; the non-
                     # Apple Mojo default is seq_cst.
                     _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                         bin_sums.unsafe_offset(at), result

@@ -51,7 +51,7 @@ _METRICS = {
 _METRIC_CODES = (METRIC_L2_EXPANDED, METRIC_L2_SQRT_EXPANDED)
 
 class IVFIndex(NumericModeMixin):
-    """cuVS `ivf_flat` build plus search in one call.
+    """IVF-Flat build plus search in one call (reference: cuVS `ivf_flat`).
 
     Parameters
     ----------

@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`svdEig`: the SVD of a tall matrix through the eigendecomposition of its Gram.
 
-FOLLOWS `raft/cpp/include/raft/linalg/detail/svd.cuh::svdEig` at RAFT
-`661a3b8`. Partial: `svdEig` only (`svdQR`, `svdJacobi` and `svdReconstruction`
+Reference: `svdEig`, `raft/cpp/include/raft/linalg/detail/svd.cuh` (RAFT
+`661a3b8`). Partial: `svdEig` only (`svdQR`, `svdJacobi` and `svdReconstruction`
 are not implemented; see `glm/NOT_IMPLEMENTED.tsv`).
 
-Their steps, copied (`svd.cuh:112-171`):
+The reference steps (`svd.cuh:112-171`):
 
     in_cross_mult = A^T A          gemm, CUBLAS_OP_T / CUBLAS_OP_N
     eigDC(in_cross_mult) -> V, S   cuSOLVER syevd; S ASCENDING
@@ -34,7 +34,7 @@ and for the same reason) applied on the device by `gather_columns_kernel`.
 For ridge the order is not even observable in exact arithmetic -- `w = V
 diag(.) V^T A^T b` is permutation-invariant -- but the final `w = V S_nnz`
 sums over columns IN INDEX ORDER, so the order is a rounding order, and
-mirroring theirs is how a cross-vendor card stays comparable stage for
+matching the reference is how a cross-vendor card stays comparable stage for
 stage.
 
 WHAT IS NOT IMPLEMENTED: `gen_left_vec == false` returns before `U`; both callers

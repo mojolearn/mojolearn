@@ -3,7 +3,7 @@
 """tsa: cuML `cpp/src/tsa/` (the stationarity test and the differencing-order
 choice of auto_arima) and the `src_prims/timeSeries/` primitives they call.
 
-`tsa/impl/` mirrors their files one for one; `tsa/checks/` is what they
-never needed (the host oracles, the hashed fixtures, the checks). See
+`tsa/impl/` has one file per reference file; `tsa/checks/` is what the
+references never needed (the host oracles, the hashed fixtures, the checks). See
 `arima/README.md` (one README covers both lanes) and `tsa/README.md`.
 """

@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The 8-bit pointwise accumulator: `TPointHist<2, 1, BlockSize>`.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_8bit.cu` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_8bit.cu`
+(CatBoost `54a8143a`).
 
 Up to 256 bins per feature. **This one is not the 5/6/7 progression continued
 -- it is a different design**, and the reason is that the progression runs
@@ -172,7 +172,7 @@ struct PointHist8[origin: MutOrigin](PointHist2):
     def _add(mut self, slot: Int, qval: Int32):
         """Their `Add(float val, float* dst)` (`:85-87`), which is
         `atomicAdd(dst, val)`. Int32 here; see DEVIATION 93."""
-        # DEVIATION 1898: upstream's atomicAdd is relaxed; the non-Apple Mojo
+        # DEVIATION 1898: the reference's atomicAdd is relaxed; the non-Apple Mojo
         # default is seq_cst.
         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
             self.base.unsafe_offset(self.buffer_offset + slot), qval

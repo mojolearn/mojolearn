@@ -18,7 +18,7 @@ which of those this implementation honours, which it silently ignores, and which
 exist. That gap is what DEVIATION 154 recorded as a debt against whoever wrote
 this layer, and this file is that layer.
 
-Nothing here is an implementation. `impl/` mirrors cuML and is governed by COPY, DO NOT
+Nothing here is an implementation. `impl/` cites cuML as its reference and is governed by DO NOT
 IMPROVE; this file is host-side policy neither cuML nor sklearn has a
 counterpart for, in the same category as `checks/`. It follows
 `cluster/estimator.mojo` and `neighbors/estimator.mojo`, which are the first
@@ -270,10 +270,10 @@ struct ExtraTreesConfig(ImplicitlyCopyable, Movable):
     (`decisiontree.cu:30-32`) unless -1 or strictly positive. NOT sklearn's `max_leaf_nodes` and deliberately not
     spelled like it: this is a cap on the leaf COUNT of a breadth-first
     frontier, honoured at `builder.cuh:89` (`IsExpandable`) and `:106` (the
-    `break` in `Push`), both of which this lane transcribes at
+    `break` in `Push`), both of which this lane implements at
     `builder.mojo:292-296` and `:341-345`.
 
-    ADDED TO THIS STRUCT 2026-09-01. The transcription was already here and
+    ADDED TO THIS STRUCT 2026-09-01. The implementation was already here and
     already checked by `builder_check`, but `resolve` hard-coded
     `params.max_leaves = -1`, so NO FIT COULD REACH IT -- the lane's own
     `archive/plans/UNWIRED.md` rule 3 state, which that file now records. This field is
@@ -788,6 +788,7 @@ def fit_extra_trees_classifier_host_exact(
     n_features: Int32,
     n_classes: Int32,
     config: ExtraTreesConfig,
+    tree_start: Int = 0,
 ) raises -> FitResult:
     """THE CPU COLUMN'S CLASSIFIER FIT (the CPU training lane, phase 1,
     et-clf, 2026-09-14): `fit_extra_trees_classifier_device` restated on
@@ -815,6 +816,7 @@ def fit_extra_trees_classifier_host_exact(
         Float32(1.0),
         plan.bootstrap,
         plan.n_sampled_rows,
+        tree_start,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
@@ -826,6 +828,7 @@ def fit_extra_trees_regressor_host_exact(
     n_rows: Int32,
     n_features: Int32,
     config: ExtraTreesConfig,
+    tree_start: Int = 0,
 ) raises -> FitResult:
     """THE CPU COLUMN'S REGRESSOR FIT (et-reg, 2026-09-14):
     `fit_extra_trees_regressor_device` restated on the host. The labels
@@ -853,6 +856,7 @@ def fit_extra_trees_regressor_host_exact(
         Float32(1.0 / ql[1]),
         plan.bootstrap,
         plan.n_sampled_rows,
+        tree_start,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)

@@ -82,7 +82,7 @@ from checks.numerics import (
 # were the host libm through `external_call` -- `log`, `logf`, `expf`,
 # `ceil` -- chosen (DEVIATION 158) because `std.math.log` on the host
 # carries ~5e-8 absolute error (`objectives.mojo` DEVIATION 113,
-# `binarization.mojo` archive/reference/PORTING.md 54) and cuML's types are
+# `binarization.mojo`) and cuML's types are
 # `double`/`float` through `std::` exactly. That made the HOST algo-L
 # sampler -- which IS the identical path on a device without float64
 # (`builder.mojo`'s `sample_features_*` dispatch) -- depend on which C
@@ -219,7 +219,7 @@ struct FeatureSamplerPlan(ImplicitlyCopyable, Movable):
 
 
 def n_parallel_samples_for(n: Int, k: Int) -> Int:
-    """`builder.cuh:419-421`, transcribed with their comment intact."""
+    """`builder.cuh:419-421`, with the reference comment intact."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         return n_parallel_samples_portable(n, k)
     return n_parallel_samples_libm(n, k)

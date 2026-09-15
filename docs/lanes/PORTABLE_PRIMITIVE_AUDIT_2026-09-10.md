@@ -61,7 +61,7 @@ Explicit precision-specific findings requested in the continuation:
 - `log2(Float32)`: `gbdt/methods/kernel/split_properties_helpers.mojo:119`
   explicitly evaluates ceil(log2(Float32(self.fold_count))). It is called
   through data_partition_offset by pointwise_scores and pointwise_kernels.
-  Its source docstring explicitly preserves the upstream float expression.
+  Its source docstring explicitly preserves the reference float expression.
   This is an existing tree seam, left unchanged and untested under the user's
   no-tree scope; it must not be mislabeled as a comment or closed by adding
   the separate binary64 UMAP wrapper. Other generic log2-name hits do not

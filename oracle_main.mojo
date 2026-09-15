@@ -38,9 +38,7 @@ def main() raises:
     # from `pointwise_kernels.cpp:57-60` on the host and the bounds at
     # `pointwise_hist2_one_byte_templ.cuh:179-183` on the device. The two
     # middle fixtures were added 2026-08-21: before them the 6-bit
-    # accumulator had NO differential against CatBoost at all, and
-    # `archive/reference/PORTING.md` 108 is the record of what a kernel reached by exactly one
-    # fixture costs. Which accumulator each fixture actually enters is
+    # accumulator had NO differential against CatBoost at all. Which accumulator each fixture actually enters is
     # OBSERVED, not assumed -- `pixi run check-onebyte-reach`.
     var fixtures = List[String]()
     fixtures.append(String("bench/oracle.txt"))
@@ -55,7 +53,7 @@ def main() raises:
     #
     # ONE-HOT ONLY, and that is a statement about what CatBoost's CPU
     # learner can be asked for rather than a fixture picked to pass: the
-    # CTR set this implementation mirrors is their GPU one, whose frequency column is
+    # CTR set this implementation follows is their GPU one, whose frequency column is
     # `FeatureFreq`, and `IsSupportedCtrType(CPU, FeatureFreq)` is FALSE
     # (`private/libs/options/restrictions.h:18-48`). See DEVIATION 113 and
     # the module note in `tools/catboost_cat_oracle.py`.
@@ -79,7 +77,7 @@ def main() raises:
         # BOTH SEARCHERS against CatBoost's own dumped decisions. The
         # greedy one is what this repository has always shipped; the
         # pointwise one is the implementation of the learner CatBoost itself uses for
-        # single-target symmetric trees (`archive/reference/PORTING.md` 91 F), and until this
+        # single-target symmetric trees, and until this
         # ran, every gate on it compared it against a host recomputation or
         # against the other searcher -- never against CatBoost's output.
         check_tree_structure(path, False)

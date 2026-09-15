@@ -9,16 +9,16 @@ What the source checks hold: the manifest declares the gbdt family, routes
 `_mojolearn_gbdt`, covers gbdt-symmetric only and names the rest of gradient
 boosting training as having no CPU path; the binding registers the GPU
 binding's fit, predict, model-dim and sigmoid names and leaves the
-multi-dimensional predict, the ordered and FeatureFreq fits and the
-adapters' binary transforms absent so they refuse by name; every parameter
+multi-dimensional predict and the adapters' binary transforms absent so
+they refuse by name (the ordered and FeatureFreq fits are registered since
+lane/cpu-training-gbdt-ordered, test_cpu_training_gbdt_ordered.py); every parameter
 refusal inside `gbdt_fit` carries the sentence the CPU identity gate's
 column check keys on; the oracle imports no GPU module, and the gbdt host
 modules it reuses import none either; the oracle spells the device
 constructs a bit claim rests on (the pinned 32, the dithered quantizer, the
 row-count scale limit, the half-byte block partial flush, the Newton epsilon,
 the fused cursor update, the phase B border search's subnormal flush); the sabotage define reaches the leaf walker and
-the binding reads it back; the CPU identity gate workflow triggers on the
-oracle.
+the binding reads it back.
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): a small Logloss fit runs twice through the host
@@ -83,8 +83,7 @@ def test_binding_registers_the_gpu_names():
                  "gbdt_binary_classes", "gbdt_predict_multi"):
         assert f'("{name}")' in src, f"the gbdt host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name} for gbdt"
-    for absent in ("gbdt_fit_ordered_rmse",
-                   "gbdt_fit_two_level_feature_freq", "gbdt_per_round_paths",
+    for absent in ("gbdt_per_round_paths",
                    "gbdt_parallel_available", "pointwise_parallel_available"):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
@@ -95,7 +94,7 @@ def test_every_fit_refusal_names_the_missing_cpu_implementation():
     for what in ("loss='", "grow_policy code", "use_pointwise_searcher=True",
                  "score_function code", "leaf_estimation_method code",
                  "bootstrap_type='", '"sample_weight"', '"class_weights outside',
-                 '"cat_features or one_hot_features"', '"eval_set"',
+                 '"cat_features or one_hot_features outside SymmetricTree with Logloss"', '"eval_set"',
                  "random_strength=", "boost_from_average=True",
                  "feature_fraction=", "an X carrying NaN"):
         assert f"_refuse(" in src and what in src, f"no by-name refusal for {what}"
@@ -123,7 +122,7 @@ def test_nan_modes_and_adapters_are_declared():
         "the class code is strict raw > 0 read from the bits"
     )
     assert '"binary prediction: finite Float32 margins required"' in src
-    assert "if is_rmse or grow_code != 0 or is_pointwise or is_multi:" in src, "NaN refused outside the measured fit"
+    assert "if is_rmse or grow_code != 0 or is_pointwise or is_multi or len(flags) != 0:" in src, "NaN refused outside the measured fit"
     kernel = _read("gbdt/binary_prediction.mojo")
     assert "var positive = ftz(identical_sigmoid(ftz(margin)))" in kernel, (
         "the device kernel moved; the host restatement must move with it"
@@ -177,10 +176,6 @@ def test_sabotage_define_moves_the_leaf_walker():
     assert "lambda_reg = lambda_reg + 1.0" in text
     assert "GBDT_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("gbdt"))
 
-
-def test_workflow_triggers_on_the_oracle():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {ORACLE}"
 
 
 @reference_training()

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Training options, under CatBoost's own names.
 
-MIRRORS `catboost/private/libs/options/`, principally
+Reference: `catboost/private/libs/options/`, principally
 `catboost_options.cpp`, `boosting_options.cpp`, `oblivious_tree_options.cpp`,
 `bootstrap_options.h` and `data_processing_options.cpp`. Their spellings are
 kept exactly, including the ones this implementation does not honor yet, because a name
@@ -494,7 +494,7 @@ struct CatBoostOptions(Copyable, Movable):
     var boost_from_average: Bool
     """`boost_from_average`. Default false (`boosting_options.cpp:17`);
     their data-dependent auto-true (`AdjustBoostFromAverageDefaultValue`)
-    is resolved by `train`, not here, mirroring their layering. IMPLEMENTED
+    is resolved by `train`, not here, following their layering. IMPLEMENTED
     2026-08-22 for RMSE, Logloss and CrossEntropy: `fit_with_test` seeds
     every cursor with `CalcOptimumConstApprox`
     (`gbdt/metrics/optimal_const_for_loss.mojo`) and the model records the
@@ -794,7 +794,7 @@ struct CatBoostOptions(Copyable, Movable):
 # CATEGORICAL FEATURES AND CTRs
 # ==========================================================================
 #
-# MIRRORS `private/libs/options/cat_feature_options.{h,cpp}` and the two
+# Reference: `private/libs/options/cat_feature_options.{h,cpp}` and the two
 # functions of `catboost_options.cpp` that resolve their defaults:
 # `CreateDefaultCounter` (`:392-415`) and `SetCtrDefaults` (`:429-478`).
 #
@@ -1026,7 +1026,7 @@ struct TCatFeatureParams(Copyable, Movable):
         ordered statistic would have to run in ROW order -- a different and
         much worse estimator rather than a slower one.
         `gbdt/data/permutation.mojo` implemented `TDataPermutation` on
-        2026-08-21 (`archive/reference/PORTING.md` 55). The second said a `Borders` model
+        2026-08-21. The second said a `Borders` model
         could not carry its apply-time CTR tables, so the fallback stayed
         here to avoid shipping a default that trains and cannot score;
         `build_ctr_tables` grew the target-class histogram arm and that is
@@ -1221,7 +1221,7 @@ struct TCatFeatureParams(Copyable, Movable):
 # =========================================================================
 # THE LEAF-ESTIMATION DEFAULTS.
 #
-# FOLLOWS `GetEstimationMethodDefaults` (`catboost_options.cpp:30-271`) and
+# Reference: `GetEstimationMethodDefaults` (`catboost_options.cpp:30-271`) and
 # `TCatBoostOptions::SetLeavesEstimationDefault` (`:273-360`).
 #
 # THEY LIVE HERE BECAUSE THEY LIVE THERE. Both were written into

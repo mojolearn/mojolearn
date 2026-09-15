@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`cuml/cpp/include/cuml/solvers/params.hpp`, followed statement for statement.
+"""Reference: `cuml/cpp/include/cuml/solvers/params.hpp`.
 
 Three enums. `cdFit` accepts only `loss_funct::SQRD_LOSS` (`cd.cuh:130`);
 `lr_type` and `penalty` belong to the SGD solver (`sgd.cuh`) and are kept

@@ -3,13 +3,13 @@
 """The LINEAR and RBF kernel matrices: `GramMatrixBase::linear`,
 `RBFKernel::evaluate`, `rbf_kernel_expanded`, `matrixRowNormL2`.
 
-FOLLOWS `cuvs/cpp/src/distance/detail/kernels/kernel_matrices.cu` at cuVS
-`94c2819` (the `cuvs::distance::kernels` cuML 26.08 links; RAFT's
+Reference: `cuvs/cpp/src/distance/detail/kernels/kernel_matrices.cu` (cuVS
+`94c2819`; the `cuvs::distance::kernels` cuML 26.08 links; RAFT's
 `distance/detail/kernels/kernel_matrices.cuh` is the same code one
 repository earlier). Dense, row-major, FP32. POLYNOMIAL and TANH are NOT
 implemented (refused by name in `svm_parameter.mojo`; `svm/NOT_IMPLEMENTED.tsv`).
 
-THE ROUNDING SEQUENCE (svm/README.md, identity content section 1). Theirs:
+THE ROUNDING SEQUENCE (svm/README.md, identity content section 1). The reference:
 
     linear:  out = x1 . x2^T                          (cuBLAS gemm)
     rbf:     out = exp(-1.0 * gain * (norm_x[i] + norm_y[j] - out * 2))
@@ -17,7 +17,7 @@ THE ROUNDING SEQUENCE (svm/README.md, identity content section 1). Theirs:
              math_t = float the `-1.0 *` promotes to DOUBLE so the exp is
              the double one, rounded to float on store. No clamp at zero.
 
-Ours, both modes the same association, the pins under IDENTICAL:
+This implementation, both modes the same association, the pins under IDENTICAL:
 
     dot  = gemm_nt (MAX matmul) under FAST / identical_gemm v1 under IDENTICAL
     norm = per-row SERIAL ascending chain, acc = ftz(fma(x, x, acc))
@@ -163,7 +163,7 @@ def kernel_workspace_floats(m: Int, n: Int, k: Int) -> Int:
 # DEVIATION 2492 (2026-09-10): THE FUSED FAST RBF TILE
 # ---------------------------------------------------------------------------
 # `kernel_op` is a GEMM over k = n_features followed by the expansion
-# epilogue, which is upstream's shape (`GramMatrixBase::evaluate`, then
+# epilogue, which is the reference's shape (`GramMatrixBase::evaluate`, then
 # `rbf_kernel_expanded`). For the SMO's tiles k is small (tens of features)
 # and the product is `nnz x n_rows` cells, so the GEMM is skinny in exactly
 # the dimension a GEMM is tiled for: measured on the M4 at

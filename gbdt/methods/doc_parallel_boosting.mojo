@@ -910,7 +910,7 @@ def fit_with_test(
     # run and what CatBoost runs for MULTICLASS symmetric trees. True is
     # `TDocParallelObliviousTreeSearcher`, which is what CatBoost runs for
     # SINGLE-TARGET symmetric trees at `boosting_type=Plain`
-    # (`archive/reference/PORTING.md` 91 F) -- the arm every matched benchmark pins CatBoost
+    # -- the arm every matched benchmark pins CatBoost
     # to.
     #
     # Additive with a default, like `test` above and for the same reason:
@@ -1213,7 +1213,7 @@ def fit_with_test(
     # their `functionValue`: ONE float, accumulated by `pointwise_target_kernel`'s block
     # reduce + atomicAdd (`pointwise_targets.cu:309-317`). This replaces a
     # HOST loop over every row per iteration (~5 ms/tree at 800k), which
-    # was never their design.
+    # the reference never does.
     var fv = ctx.enqueue_create_buffer[DType.float32](1)
     var h_fv = ctx.enqueue_create_host_buffer[DType.float32](1)
     # per-block partials for `pointwise_target_kernel`'s reduces, folded in one fixed
@@ -1440,8 +1440,8 @@ def fit_with_test(
         # `learnPermutationCount`**, so at their default of four
         # permutations the structure comes from permutation 0 or 1 and
         # permutation 2 is never searched on. That reads like an
-        # off-by-one in their code and it is transcribed rather than
-        # corrected, because a fit that searched on a permutation theirs
+        # off-by-one in the reference and it is kept rather than
+        # corrected, because a fit that searched on a permutation the reference
         # never searches on would not be answering the same question. It is
         # the same expression in their feature-parallel
         # learner (`dynamic_boosting.h:286-289`), which is evidence it is

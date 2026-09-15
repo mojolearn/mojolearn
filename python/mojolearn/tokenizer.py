@@ -160,6 +160,60 @@ class GPT2Tokenizer:
         """The ids of `text` (str, UTF-8 encoded first, or bytes-like)."""
         return self.encode_bytes(self._text_bytes(text), allow_endoftext)
 
+    def encode_batch(self, documents, allow_endoftext=False):
+        """The ids of each document, as a list of lists of int, in order.
+
+        Each document is a str (UTF-8 encoded first) or bytes-like and is
+        encoded ALONE: `encode_batch(docs)[k] == encode(docs[k])` id for id,
+        whatever else is in the batch. This is tiktoken's `encode_batch`
+        with `allow_endoftext` in place of `allowed_special` and no
+        `num_threads`: the documents are encoded one after another inside
+        ONE binding call (`gpt2_encode_batch`), which saves the per-call
+        crossing that dominates short documents."""
+        if isinstance(documents, (str, bytes, bytearray, memoryview)):
+            raise TypeError(
+                f"mojolearn: encode_batch takes a sequence of documents, got {type(documents).__name__}"
+            )
+        try:
+            docs = list(documents)
+        except TypeError:
+            raise TypeError(
+                f"mojolearn: encode_batch takes a sequence of documents, got {type(documents).__name__}"
+            ) from None
+        allow = self._flag(allow_endoftext)
+        raws = []
+        for k, d in enumerate(docs):
+            if not isinstance(d, (str, bytes, bytearray, memoryview)):
+                raise TypeError(
+                    f"mojolearn: document {k} must be str or bytes-like, got {type(d).__name__}"
+                )
+            raws.append(self._text_bytes(d))
+        n_docs = len(raws)
+        if n_docs == 0:
+            return []
+        text = b"".join(raws)
+        n = len(text)
+        offsets = array.array("q", bytes(8 * (n_docs + 1)))
+        pos = 0
+        for k, r in enumerate(raws):
+            pos += len(r)
+            offsets[k + 1] = pos
+        counts = array.array("q", bytes(8 * n_docs))
+        ids = array.array("i", bytes(4 * max(n, 1)))
+        text_buf = text if n > 0 else b"\0"
+        total = int(self._m.gpt2_encode_batch(
+            self._handle, addr_ro(text_buf, name="text"), addr_ro(offsets, name="offsets"),
+            addr(ids, name="ids"), addr(counts, name="counts"), [n_docs, n, n, allow]))
+        if not 0 <= total <= n or sum(counts) != total:
+            raise RuntimeError(
+                f"mojolearn: gpt2_encode_batch returned {total} ids for {n} bytes (counts sum {sum(counts)})"
+            )
+        out, at = [], 0
+        for c in counts:
+            out.append(ids[at:at + c].tolist())
+            at += c
+        return out
+
     # ------------------------------------------------------------ decode
 
     def _ids_array(self, ids):
@@ -203,6 +257,18 @@ class GPT2Tokenizer:
     def decode(self, ids, errors="replace"):
         """`decode_bytes(ids)` as text; `errors` is passed to `bytes.decode`."""
         return self.decode_bytes(ids).decode("utf-8", errors)
+
+    def decode_bytes_batch(self, batch):
+        """`[decode_bytes(ids) for ids in batch]`. A thin loop over the one
+        `gpt2_decode` call per sequence: decode is a table copy, and a
+        sequence of ids already carries its own boundaries."""
+        if isinstance(batch, (str, bytes, bytearray)):
+            raise TypeError(f"mojolearn: decode_bytes_batch takes a sequence of id sequences, got {type(batch).__name__}")
+        return [self.decode_bytes(ids) for ids in batch]
+
+    def decode_batch(self, batch, errors="replace"):
+        """`[decode(ids, errors) for ids in batch]`, tiktoken's `decode_batch`."""
+        return [b.decode("utf-8", errors) for b in self.decode_bytes_batch(batch)]
 
     def __repr__(self):
         return f"GPT2Tokenizer(n_vocab={self._n_vocab}, data_directory={self._data_dir!r})"

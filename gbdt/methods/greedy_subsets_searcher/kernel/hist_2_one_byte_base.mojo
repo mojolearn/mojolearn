@@ -2,23 +2,23 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The fused TWO-STAT one-byte histogram: both stat columns in one pass.
 
-FOLLOWS `hist_2_one_byte_base.cuh` (`TPointHist2OneByteBase`, the
+Reference: `hist_2_one_byte_base.cuh` (`TPointHist2OneByteBase`, the
 `ComputeHist2OneByteBits` launch plumbing) and the two-stat kernel loop it
 runs under, `compute_hist_loop_two_stats.cuh`
 (`ComputeSplitPropertiesDirectLoadsTwoStastImpl`,
 `ComputeSplitPropertiesTwoStatsGatherImpl`, `TComputeHistogramTwoStatsImpl`
-and its `AlignMemoryAccess`), at CatBoost `54a8143a`. Followed statement for statement. Do not
+and its `AlignMemoryAccess`) (CatBoost `54a8143a`). Do not
 improve.
 
 The per-bit accumulators live beside this file exactly as theirs do:
-`hist_2_one_byte_5bit.mojo`, `_6bit.mojo`, `_7bit.mojo` mirror their
+`hist_2_one_byte_5bit.mojo`, `_6bit.mojo`, `_7bit.mojo` match their
 `hist_2_one_byte_{5,6,7}bit.cu`. Their CRTP (`TImpl* impl =
 static_cast<TImpl*>(this)`) becomes a comptime `bits` dispatch in the three
 `hist2_*` helpers below, which is the same static resolution spelled the way
 Mojo can say it. The two-stat loop file is INLINED into the two kernels here
 rather than kept as a separate module, exactly as the PASS family inlines
-`compute_hist_loop_one_stat.cuh` into `hist_one_byte.mojo` (archive/reference/PORTING.md 10
-and 13 record why the loop cannot be a freestanding function yet).
+`compute_hist_loop_one_stat.cuh` into `hist_one_byte.mojo`
+(the loop cannot be a freestanding function yet).
 
 WHY THIS FAMILY EXISTS, AND WHEN CATBOOST TAKES IT
 --------------------------------------------------
@@ -40,7 +40,7 @@ odd, their `HIST2_PASS` macro first covers stat 0 with a one-stat
 count with `SkipFirst = true` (`hist_one_byte.cu:306-312`); the `skip_first`
 comptime parameter below is that template bool.
 
-DEVIATION (archive/reference/PORTING.md 1): CatBoost runs this at `BlockSize = 384`
+DEVIATION: CatBoost runs this at `BlockSize = 384`
 (`hist_2_one_byte_base.cuh:169`), so `384 * 32` floats is 49,152 bytes and
 Apple gives 32,768. The matrix row `K_HIST_2_ONE_BYTE` resolves the block to
 256, which asks for exactly 32,768 bytes and keeps their per-warp slice
@@ -191,7 +191,7 @@ def hist2_acc_dtype[smem_mode: Int]() -> DType:
 
 def hist2_smem_slots[smem_mode: Int]() -> Int:
     """`GetHistSize()` = `BlockSize * 32` (`hist_2_one_byte_base.cuh:20-22`)
-    in their design, i.e. one 1024-slot slice per warp. The shared-Int32
+    in the reference, i.e. one 1024-slot slice per warp. The shared-Int32
     variant keeps 1024-slot slices but hands one to each warp PAIR, so it is
     half as many slices at the doubled block: the same 8192 slots at 512
     threads, or 4096 at 256."""
@@ -516,7 +516,7 @@ def hist2_add_to_global_memory[
                     var q = rebind[Scalar[DType.int32]](cell)
                     if q != Int32(0):
                         if block_count > 1:
-                            # DEVIATION 1898: upstream's atomicAdd is relaxed;
+                            # DEVIATION 1898: the reference's atomicAdd is relaxed;
                             # the non-Apple Mojo default is seq_cst.
                             _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                                 acc_i32.unsafe_offset(dst_base + fold), q
@@ -546,7 +546,7 @@ def hist2_add_to_global_memory[
                             if block_count > 1:
                                 # `NUMERIC_IDENTICAL`: partials sum as Int32.
                                 var q = Int32(val * fixed_scale)
-                                # DEVIATION 1898: upstream's atomicAdd is
+                                # DEVIATION 1898: the reference's atomicAdd is
                                 # relaxed; the non-Apple Mojo default is
                                 # seq_cst.
                                 _ = Atomic.fetch_add[
@@ -560,7 +560,7 @@ def hist2_add_to_global_memory[
                             # `atomicAdd(dst + fold, val)`, theirs verbatim
                             # (`hist_2_one_byte_base.cuh:137`).
                             if block_count > 1:
-                                # DEVIATION 1898: upstream's atomicAdd is
+                                # DEVIATION 1898: the reference's atomicAdd is
                                 # relaxed; the non-Apple Mojo default is
                                 # seq_cst.
                                 _ = Atomic.fetch_add[
@@ -665,7 +665,7 @@ def hist2_one_byte_kernel[
     )
     var qs_p = rebind[MutPointer[Int32, MutAnyOrigin]](stats_p)
 
-    # `TPointHist2OneByteBase`'s constructor, inlined (archive/reference/PORTING.md 10):
+    # `TPointHist2OneByteBase`'s constructor, inlined:
     #     for (i = threadIdx.x; i < histSize; i += BlockSize) hist[i] = 0;
     #     Histogram = hist + impl->SliceOffset();
     #     __syncthreads();

@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host-side facade every caller goes through.
 
-FOLLOWS `catboost/cuda/cuda_lib/cuda_manager.h` and the parts of
-`cuda_manager.cpp` that back it, at CatBoost `54a8143a`. Followed statement for statement where
-it follow statement for statements. See the DEVIATION BLOCK.
+Reference: `catboost/cuda/cuda_lib/cuda_manager.h` and the parts of
+`cuda_manager.cpp` that back it (CatBoost `54a8143a`). Differences from the
+reference are listed in the DEVIATION BLOCK.
 
 `TCudaManager` is what `greedy_search_helper.cpp` actually talks to:
 `NCudaLib::GetCudaManager().DefaultStream().Synchronize()`

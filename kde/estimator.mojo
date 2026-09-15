@@ -91,7 +91,7 @@ def kde_score_samples_host(
     `metric_arg` is Minkowski's `p`, their name for it. cuML's
     `KernelDensity` has no `p` parameter at all; it takes `metric_params`
     and forwards `list(metric_params.values())[0]` as `metric_arg`
-    (`kernel_density.py:302-313`), so a caller mirroring their surface
+    (`kernel_density.py:302-313`), so a caller following their surface
     passes the single value of that dict here. Defaults to their
     `pairwise_distances` default of 2 (`pairwise_distances.pyx:266`), which
     is also what `score_samples` uses when `metric_params` is empty. It is

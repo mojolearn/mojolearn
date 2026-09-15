@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The trained tree, and the ensemble of them.
 
-FOLLOWS `catboost/cuda/models/oblivious_model.h` and `additive_model.h` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/models/oblivious_model.h` and `additive_model.h`
+(CatBoost `54a8143a`).
 
-Their structure is remarkably small:
+The reference structure is remarkably small:
 
     struct TObliviousTreeStructure { TVector<TBinarySplit> Splits; };
 
@@ -32,7 +32,7 @@ for free, and it would not have if we had kept `2i` and `2i+1`.
 
 # `TNonSymmetricTree` imports `TBinarySplit` from THIS file and this file
 # imports it back: a package-level cycle Mojo resolves (probed 2026-08-23
-# on a two-module package before relying on it here). It mirrors their
+# on a two-module package before relying on it here). It matches their
 # include graph, where `additive_model.h` is templated over both shapes.
 from gbdt.models.non_symmetric_tree import TNonSymmetricTree
 

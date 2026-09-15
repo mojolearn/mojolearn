@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Isolation Forest on the GPU, mirroring cuML's `IsolationForest`.
+"""Isolation Forest on the GPU. Reference: cuML's `IsolationForest`.
 
 PRIVATE MODULE. `IsolationForest` is named exactly as scikit-learn names
 it, but nothing here is re-exported from `mojolearn/__init__.py`; that
@@ -56,7 +56,7 @@ _WANT_PREDICT = 2
 
 
 class IsolationForest(NumericModeMixin):
-    """Isolation Forest backed by the implemented cuML path
+    """Isolation Forest backed by a GPU implementation
     (`isolation_forest/`, DEVIATIONS 680-686 and 750-751), the
     scikit-learn surface.
 
@@ -65,8 +65,8 @@ class IsolationForest(NumericModeMixin):
         n_estimators    honored   the tree count (cuML's default 100)
         max_samples     honored   'auto' (= min(256, n_samples)), a
                                   positive int (clipped to n_samples), or
-                                  a float in (0, 1]; cuML's `fit`
-                                  resolution, transcribed
+                                  a float in (0, 1]; the same
+                                  resolution as cuML's `fit`
         max_depth       honored   None (the default) is their auto, an
                                   integer ceil(log2(max_samples_)) computed
                                   in integers rather than through a libm
@@ -81,9 +81,9 @@ class IsolationForest(NumericModeMixin):
                                   quantile exactly as theirs does
         random_state    honored   an int in [0, 2**32 - 1]. None is 0 HERE,
                                   not a fresh draw -- DEVIATION 875 below
-        warm_start      refused   `UnsupportedOnGPU` upstream too
+        warm_start      refused   `UnsupportedOnGPU` in the reference too
                                   (isolation_forest.pyx:592-595)
-        sample_weight   refused   in fit(); `UnsupportedOnGPU` upstream too
+        sample_weight   refused   in fit(); `UnsupportedOnGPU` in the reference too
         n_jobs          refused   scikit-learn's thread count; there is no
                                   CPU path in this library to spread
         verbose         refused   anything truthy; this implementation prints no log
@@ -137,8 +137,8 @@ class IsolationForest(NumericModeMixin):
         `Array` of `(n_samples,)`. LOWER is more anomalous, which is
         scikit-learn's convention and theirs.
     decision_function(X)
-        `score_samples(X) - offset_`, in float32 as the Python layer
-        upstream computes it; a float32 `Array`. Negative is predicted
+        `score_samples(X) - offset_`, in float32 as the reference's Python layer
+        computes it; a float32 `Array`. Negative is predicted
         anomalous.
     predict(X)
         -1 for an anomaly, 1 for an inlier, an int32 `Array`, thresholded

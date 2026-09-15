@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The 7-bit pointwise accumulator: `TPointHist<0, 2, BlockSize>`.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_7bit.cu` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_7bit.cu`
+(CatBoost `54a8143a`).
 
 Up to 128 bins per feature, 128 as the absent marker, and **the whole 1024
 slots of a warp slice go to ONE copy.** This is the end of the progression:
@@ -32,7 +32,7 @@ The slot map is the simplest of the three:
 Same two family conventions as the 5-bit file -- WEIGHT even, TARGET odd, and
 a stat-MINOR reduce -- and they are still the ones that change no total.
 
-DEVIATION (archive/reference/PORTING.md 11 and 92): `thread_block_tile<32>::sync()` becomes a
+DEVIATION: `thread_block_tile<32>::sync()` becomes a
 threadgroup `barrier()`. At 32 lanes their tile is a full warp, so this is
 the case where the substitution costs most in absolute terms and least in
 meaning: it widens a warp sync to a block sync 32 times per point.

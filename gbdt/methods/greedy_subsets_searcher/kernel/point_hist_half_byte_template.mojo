@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The conflict-free shared-memory histogram accumulator.
 
-FOLLOWS `catboost/cuda/methods/greedy_subsets_searcher/kernel/
-point_hist_half_byte_template.cuh` at CatBoost `54a8143a`.
-Followed statement for statement.
+Reference: `catboost/cuda/methods/greedy_subsets_searcher/kernel/
+point_hist_half_byte_template.cuh` (CatBoost `54a8143a`).
 
 **This is the file the whole experiment is about.** It is how CatBoost
 accumulates a histogram on the GPU with NO ATOMICS in the inner loop, and it
@@ -29,7 +28,7 @@ The mechanism, in their words rearranged:
 each, so one load feeds eight histogram updates. That is the read-density
 win: mojotrees issues eight one-byte loads for the same work.
 
-DEVIATION (archive/reference/PORTING.md 1): `BLOCK_SIZE` is 512 rather than their 768 because
+DEVIATION: `BLOCK_SIZE` is 512 rather than their 768 because
 Apple caps threadgroup memory at 32 KB and this accumulator wants 16 floats
 per thread, so 32,768 / (16 * 4) = 512 threads is the largest block that
 fits. Their `tiled_partition<8>::sync()` becomes `turn_sync()`, which is

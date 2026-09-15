@@ -130,7 +130,7 @@ def column_has_float32_atomics(column: Int) -> Bool:
     """Whether `atomicAdd` on a `Float32` exists, in global memory.
 
     Needed only by the regression and weighted bins, whose accumulators are
-    `double` upstream (`bins.cuh:101`, `:114`) and cannot be that here.
+    `double` in the reference (`bins.cuh:101`, `:114`) and cannot be that here.
 
     - apple    True. MEASURED. Note this row was recorded as FALSE in this
                repository for a while and the denial was WRONG -- it came

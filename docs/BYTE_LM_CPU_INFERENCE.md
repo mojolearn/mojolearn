@@ -10,6 +10,7 @@ import mojolearn
 model = mojolearn.LanguageModelInference.from_checkpoint("final.checkpoint.json")
 logits = model.logits(ids)          # int32 [batch, length] -> float32 [batch, length, 256]
 bits = model.loss_bits(batch_ids)   # int32 [2, 33] -> IEEE-754 bits of the mean loss
+logits = model.logits(ids, lengths=[32, 5, 17])  # ragged, right-padded rows; padding reads +0.0
 ```
 
 ## What it computes and why it can match the GPUs

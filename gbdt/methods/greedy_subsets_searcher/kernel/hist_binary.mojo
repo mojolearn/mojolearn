@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The binary-feature histogram kernel: 32 features per 4-byte load.
 
-FOLLOWS `hist_binary.cu` plus the loop it instantiates,
+Reference: `hist_binary.cu` plus the loop it instantiates,
 `compute_hist_loop_one_stat.cuh` (`ALIGN_MEMORY`,
 `TComputeHistogramImpl<FourElements>::Compute`,
-`ComputeSplitPropertiesDirectLoadsImpl`), at CatBoost `54a8143a`.
-Followed statement for statement.
+`ComputeSplitPropertiesDirectLoadsImpl`) (CatBoost `54a8143a`).
 
 **This is the kernel that should matter most on covtype**, where 44 of 54
 columns are 0/1 and route to `BinaryFeatures`. One `UInt32` of the compressed
@@ -511,7 +510,7 @@ def binary_hist_kernel(
                         # there is ONE feature block and the id list is the
                         # identity. That is every single-policy check in this
                         # repository, which is why it survived.
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(
@@ -539,7 +538,7 @@ def binary_hist_kernel(
                     # wanted; that branch is now a CHOICE rather than the
                     # only thing that compiles.
                     if active_block_count > 1:
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             dst.unsafe_offset(fold), val
@@ -1027,7 +1026,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
                         # there is ONE feature block and the id list is the
                         # identity. That is every single-policy check in this
                         # repository, which is why it survived.
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             acc_i32.unsafe_offset(
@@ -1055,7 +1054,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
                     # wanted; that branch is now a CHOICE rather than the
                     # only thing that compiles.
                     if active_block_count > 1:
-                        # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+                        # DEVIATION 1898: the reference's atomicAdd is relaxed; the
                         # non-Apple Mojo default is seq_cst.
                         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                             dst.unsafe_offset(fold), val

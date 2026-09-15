@@ -9,7 +9,7 @@ was empty and every entry point under `neighbors/` was a `*_main.mojo` driver
 or a `checks/*_check.mojo` verifier. Five algorithms measured, zero
 reachable.
 
-Nothing here is an implementation. `neighbors/gbdt/` mirrors cuVS and is governed by
+Nothing here is an implementation. `neighbors/gbdt/` cites cuVS as its reference and is governed by
 This file is host-side policy that cuVS does not have a
 counterpart for, in the same category as `checks/`. Every choice it makes
 that a caller could observe is named in THE POLICY CHOICES below rather than

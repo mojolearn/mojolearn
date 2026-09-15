@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Reorder each leaf's index range so its two children are contiguous.
 
-FOLLOWS `catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu`
-at CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu`
+(CatBoost `54a8143a`).
 
 This is what keeps `TDataPartition{Offset, Size}` true after a split. A leaf
 IS a contiguous range, so splitting one means physically partitioning its
@@ -29,7 +29,7 @@ future reader does not mistake it for a design to preserve:
 
 So the per-leaf `cub::DeviceRadixSort::SortPairs` in a host loop, 255 of them
 for a depth-8 tree, is the one part of this design its authors say is wrong.
-DEVIATION (archive/reference/PORTING.md 4): there is no CUB in Mojo, and the sort is being used
+DEVIATION: there is no CUB in Mojo, and the sort is being used
 only as a stable 1-bit partition, so that is what is written.
 """
 
@@ -277,7 +277,7 @@ def update_partitions_and_plan_kernel(
     writes `ids_c[j] = n_live + j`, with `half` next level equal to
     `n_live` now. So the plan store moves into the border branch: same
     comparison, same operands, same tie rule (an exact tie computes the
-    RIGHT child -- archive/reference/PORTING.md 136), one fewer launch per planned level.
+    RIGHT child), one fewer launch per planned level.
     NO arithmetic moves: the choice is an integer compare on the same two
     numbers `plan_level_kernel` loads, and every partition store is
     byte-identical to the unfused kernel's.
@@ -594,8 +594,8 @@ comptime GATHER_INPLACE_SIZE = 1024
 #: `const ui32 blockSize = 1024` (`split_points.cu:103`), which is also the
 #: kernel's `BlockSize` template default (`split_points.cu:52`).
 #:
-#: `Size == BlockSize`, so their strided `for (i = tid; i < Size; i += BlockSize)`
-#: runs exactly once per thread. The loop is transcribed in that form anyway,
+#: `Size == BlockSize`, so the reference's strided `for (i = tid; i < Size; i += BlockSize)`
+#: runs exactly once per thread. The loop is written in that form anyway,
 #: because the stride is what keeps the kernel correct at ANY block size: if a
 #: device refuses a 1024-wide threadgroup this constant drops on its own and
 #: the body does not change.

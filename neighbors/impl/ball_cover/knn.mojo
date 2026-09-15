@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The k-NEAREST-NEIGHBOUR query over the random ball cover.
 
-FOLLOWS `cuvs/src/neighbors/ball_cover/ball_cover.cuh::rbc_knn_query`
+Reference: `cuvs/src/neighbors/ball_cover/ball_cover.cuh::rbc_knn_query`
 (`:446-498`), `perform_rbc_query` (`:240-270`) and
 `cuvs/src/neighbors/ball_cover/registers.cuh::block_rbc_kernel_registers`
 (`:305-441`) plus `perform_post_filter_registers` (`:64-121`) and
@@ -93,12 +93,12 @@ still the true one; only the ORDER is taken in comparison space.
 
 DEVIATION 558: A BLOCK-LEVEL SELECTOR, NOT FAISS'S `KeyValueBlockSelect`
 -------------------------------------------------------------------------
-THEIRS: `registers.cuh:339` instantiates
+REFERENCE: `registers.cuh:339` instantiates
 `faiss_select::KeyValueBlockSelect<..., warp_q, thread_q, tpb>`, a
 register-resident warp queue whose capacity is a template parameter, chosen
 by a six-way host dispatch on `k` (`:1016-1128`).
 
-OURS: one query per BLOCK, `RBC_KNN_TPB` threads, and the running answer in
+HERE: one query per BLOCK, `RBC_KNN_TPB` threads, and the running answer in
 SHARED memory with the merge done by rank-by-counting (DEVIATION 566). Three
 reasons, and the first is not a preference.
 
@@ -119,7 +119,7 @@ reasons, and the first is not a preference.
 
 DEVIATION 559: THE PTOLEMAIC `z` BOUND IS NOT IMPLEMENTED
 ------------------------------------------------------
-THEIRS: inside the group walk, `registers.cuh:390-395` computes
+REFERENCE: inside the group walk, `registers.cuh:390-395` computes
 
     z = (|warpKTop - warpKTopRDist| * |warpKTopRDist - cur_candidate_dist|
          - warpKTop * cur_candidate_dist) / warpKTopRDist
@@ -130,7 +130,7 @@ that also needs the queue to carry a SECOND key per entry (the candidate's
 landmark distance), which is the whole reason their selector is a
 `KeyValue` one rather than a plain one.
 
-OURS: the plain two-sided triangle bound of test 3 above and nothing else.
+HERE: the plain two-sided triangle bound of test 3 above and nothing else.
 It is exact, it needs no second key, no division, and no NaN/inf repair, and
 dropping it removes the only division from the inner loop. What it costs is
 distances that their bound would have skipped; what it buys is a selector
@@ -141,12 +141,12 @@ pays for itself, it lands here with that measurement attached.
 
 DEVIATION 560: `D` COMES FROM THE SAME SELECTOR, NOT FROM A SECOND k-NN
 -------------------------------------------------------------------------
-THEIRS: `k_closest_landmarks` (`ball_cover.cuh:180-200`) builds a whole
+REFERENCE: `k_closest_landmarks` (`ball_cover.cuh:180-200`) builds a whole
 `cuvs::neighbors::brute_force` index over the landmarks and runs a k-NN
 search against it, materializing `R_knn_inds` and `R_knn_dists`, both
 `n_query_pts x k`, which the kernel then reads back.
 
-OURS: stage one of the same kernel runs the landmarks through the same
+HERE: stage one of the same kernel runs the landmarks through the same
 block selector, reads `D` out of slot `k - 1`, and RESETS the selector.
 No second index, no second kernel, no `2 * k * n_queries` allocation. This
 is DEVIATION 2's argument (the fused 1-NN) applied one level up, and it is
@@ -160,14 +160,14 @@ landmark at distance zero), so leaving them in would duplicate indices.
 
 DEVIATION 561: ONE PASS, NO BITSET, NO POST-FILTER KERNEL
 -----------------------------------------------------------
-THEIRS: three kernels. `block_rbc_kernel_registers` visits only the k
+REFERENCE: three kernels. `block_rbc_kernel_registers` visits only the k
 closest landmarks; `perform_post_filter_registers` then builds an
 `n_queries x ceil(n_landmarks/32)` BITSET marking which of the REMAINING
 landmarks still have to be checked; `compute_final_dists_registers` walks
 those. The split exists because their pass one is also usable ALONE as an
 approximate query (`perform_post_filtering = false`, `ball_cover.cuh:246`).
 
-OURS: one kernel that walks every landmark surviving tests 1 and 2. There
+HERE: one kernel that walks every landmark surviving tests 1 and 2. There
 is no approximate mode to keep separate (DEVIATION 562), so there is
 nothing for the bitset to communicate between passes, and the bitset's own
 allocation and its two extra launches are removed. The set of landmarks
@@ -177,13 +177,13 @@ union is "everything that survives the two tests".
 
 DEVIATION 562: NO `weight`, BECAUSE THIS QUERY IS EXACT OR IT IS NOTHING
 --------------------------------------------------------------------------
-THEIRS: `rbc_knn_query` takes `float weight = 1.0` and multiplies the
+REFERENCE: `rbc_knn_query` takes `float weight = 1.0` and multiplies the
 landmark bound by it (`registers.cuh:363`, `:110`). At `weight < 1` the
 prune is no longer implied by the triangle inequality and the answer
 becomes approximate with no error bound and no recall reported. Combined
 with `perform_post_filtering = false` it is their approximate mode.
 
-OURS: neither parameter exists. `ROADMAP.md` rules out approximate search;
+HERE: neither parameter exists. `ROADMAP.md` rules out approximate search;
 an index that returns a different answer than brute force is a different
 algorithm with a different contract, and this library does not ship one.
 `prune_scale` on the kernel below looks like `weight` and is NOT it: it is
@@ -194,16 +194,16 @@ failing does not count.
 
 DEVIATION 563: `n_landmarks < k` DEGRADES, IT DOES NOT ASSERT
 ---------------------------------------------------------------
-THEIRS: `ASSERT(index.n_landmarks >= k, ...)` (`ball_cover.cuh:459`), and
+REFERENCE: `ASSERT(index.n_landmarks >= k, ...)` (`ball_cover.cuh:459`), and
 separately `ASSERT(index.n <= 3, "only 2d and 3d vectors are supported")`
 (`:458`).
 
-OURS: neither. `n_landmarks` is `floor(sqrt(m))`, so their assert refuses
+HERE: neither. `n_landmarks` is `floor(sqrt(m))`, so their assert refuses
 `k > sqrt(m)` -- at m = 100 that is any k above 10, which is an ordinary
 request. Here `D` is simply `+inf` when fewer than k landmarks exist, tests
 1 and 2 then never fire, and the query degrades to an exact full scan
 driven by `tau` alone. Slower, never wrong. The dimension assert is not
-copied either: it exists upstream because their kernels stage the query row
+copied either: it exists in the reference because their kernels stage the query row
 in a `local_x_ptr[MAX_COL_Q]` register array with `MAX_COL_Q == 3`
 (`registers.cuh:41`), which this file does not do -- it reads the query row
 from global memory like the eps kernels do. High dimensions make the cover

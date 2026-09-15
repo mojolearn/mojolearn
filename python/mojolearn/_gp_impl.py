@@ -20,8 +20,8 @@ byte-identical Apple M4 against AMD MI325X on the other 3,486 lines. See
 `gaussian_process/README.md`. With the sole blocker withdrawn, Andrew
 delegated the exposure decision and the orchestrator took it: expose.
 
-**THERE IS NO UPSTREAM GAUSSIAN PROCESS.** cuML, cuVS and RAFT implement
-none at the pinned commits, so this lane is ORIGINAL WORK per `ok-to-add-capability`.
+**THERE IS NO REFERENCE GAUSSIAN PROCESS.** cuML, cuVS and RAFT implement
+none at the pinned commits, so this lane adds the capability per `ok-to-add-capability`.
 scikit-learn's `sklearn/gaussian_process/_gpr.py` is the SEMANTICS
 reference and the oracle, never the design source; every name this surface
 shares with scikit-learn means what scikit-learn means by it.
@@ -262,7 +262,7 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   sample_y's prior draws, and sample_y is
                                   unimplemented
         random_state    refused   anything but None; only sample_y draws
-                                  random numbers upstream, and sample_y is
+                                  random numbers in the reference, and sample_y is
                                   unimplemented
         sparse X        refused   dense row-major float32 only
                                   (_buffer.py::as_f32_c)
@@ -643,7 +643,7 @@ class GaussianProcessRegressor(NumericModeMixin):
                 "mojolearn GaussianProcessRegressor: call fit() first"
             )
         if self.info_ != 0:
-            # gpr_log_marginal_likelihood's refusal, transcribed: this is
+            # gpr_log_marginal_likelihood's refusal, restated: this is
             # the one Mojo guard the binding cannot serve (fit already
             # returned), so its sentences live here too. DEVIATION 1634.
             raise RuntimeError(

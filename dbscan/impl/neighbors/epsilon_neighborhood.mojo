@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The epsilon neighborhood, FUSED: no distance matrix is ever written.
 
-FOLLOWS `raft/spatial/knn/detail/epsilon_neighborhood.cuh` at RAFT `661a3b8`
-(`EpsUnexpL2SqNeighborhood`, `epsUnexpL2SqNeighKernel`,
-`epsUnexpL2SqNeighborhood`), built on their
+Reference: `raft/spatial/knn/detail/epsilon_neighborhood.cuh` (RAFT `661a3b8`):
+`EpsUnexpL2SqNeighborhood`, `epsUnexpL2SqNeighKernel`,
+`epsUnexpL2SqNeighborhood`, built on the
 `raft/linalg/detail/contractions.cuh` policy.
 
 This is what `cuml/cpp/src/dbscan/vertexdeg/algo.cuh:229` actually calls for
@@ -14,8 +14,8 @@ the brute-force arm:
       index_t>(data.adj, data.vd, data.x + start_vertex_id * k, data.x,
                n, m, k, eps2, stream);
 
-WHY THIS FILE EXISTS: THEIRS IS FUSED AND OURS WAS NOT
-------------------------------------------------------
+WHY THIS FILE EXISTS: THE REFERENCE IS FUSED AND THIS TREE'S FIRST VERSION WAS NOT
+-----------------------------------------------------------------------------------
 `EpsUnexpL2SqNeighborhood` is a `Contractions_NT` tile kernel. It accumulates
 `acc[i][j]` in REGISTERS (`epsilon_neighborhood.cuh:41`), tests
 `acc[i][j] <= eps` in its `epilog()` (`:106`), writes the boolean `adj` and
@@ -27,7 +27,7 @@ What this repository did instead was `gemm_nt` into an `m x N` float32
 `dist` buffer, then `expand_distances_kernel` over that buffer, then a third
 kernel that read it back to threshold it. Per batch that is one `m*N` float
 write, one `m*N` float read-modify-write, and one `m*N` float read that
-upstream does not perform at all: 16 bytes of traffic per pair against
+the reference does not perform at all: 16 bytes of traffic per pair against
 their 1. The measured consequence is in `bench/results/FIRST_RUN_2026-08-19.md`
 and the scaling run after it -- 0.021x of scikit-learn at 100,000 rows, on a
 problem where the arithmetic is 8 multiply-adds per pair.
@@ -43,7 +43,7 @@ computed straight from the coordinates. The old path used the expanded
 identity `||x||^2 + ||y||^2 - 2 x.y` so that the cross term could go through
 a GEMM. That is not a different route to the same number: when the norms
 dominate the distances, the subtraction cancels and float32 loses the
-answer. This tree has already paid for that once -- `archive/reference/PORTING.md 21`, and the
+answer. This tree has already paid for that once; see the
 comment in `dbscan_check.mojo` that keeps the fixture coordinates small on
 purpose. Unexpanded needs no norms, so `row_norm_kernel`, `x_norm` and
 `xn_alias` leave the DBSCAN path entirely.
@@ -62,7 +62,7 @@ sets `SmemStride` here, so their bank-conflict padding is kept.
 
 DEVIATION BLOCK 27: THE L1 ARM, AND WHY IT COULD NOT BE A BRANCH ON `eps`
 -------------------------------------------------------------------------
-ORIGINAL WORK. There is no upstream eps-neighborhood kernel to be faithful
+ORIGINAL WORK. There is no reference eps-neighborhood kernel to be faithful
 to here: `epsilon_neighborhood.cuh` carries the squared-L2 formulation and
 nothing else, and cuML's DBSCAN surface never offers Manhattan. So this arm
 credits nothing and nothing here follows a reference file. What
@@ -117,11 +117,11 @@ so the fold is the same pure function of `(k, KBLK)` on every vendor.
 
 DEVIATION BLOCK 30: THE ROW REDUCTION IS A BUTTERFLY, NOT A ROTATE
 ------------------------------------------------------------------
-THEIRS: `raft::logicalWarpReduce<P::AccThCols>(sums[i], raft::add_op())`
+REFERENCE: `raft::logicalWarpReduce<P::AccThCols>(sums[i], raft::add_op())`
 (`:150`) reduces across the 16 threads that share an output row using
 `shfl_xor` inside a width-16 logical warp.
-OURS: `shuffle_xor` at offsets 1, 2, 4, 8. Mojo's `shuffle_idx` has no width
-argument (`archive/reference/PORTING.md`, the `simt_kernel.mojo` note), but `shuffle_xor` needs
+HERE: `shuffle_xor` at offsets 1, 2, 4, 8. Mojo's `shuffle_idx` has no width
+argument (the `simt_kernel.mojo` note), but `shuffle_xor` needs
 none: XOR with an offset below `AccThCols` only ever flips the low lane bits,
 so it stays inside the same aligned 16-lane group their logical warp is, and
 every lane of the group ends holding the group's sum.
@@ -160,9 +160,9 @@ on 2026-09-01 and this file is one of the reasons:
 
 DEVIATION BLOCK 31: `vd` IS ZEROED BY `enqueue_memset`, NOT `cudaMemsetAsync`
 -----------------------------------------------------------------------------
-THEIRS: `epsUnexpL2SqNeighborhood` opens with
+REFERENCE: `epsUnexpL2SqNeighborhood` opens with
 `cudaMemsetAsync(vd, 0, (m + 1) * sizeof(IdxT), stream)` (`:228`).
-OURS: the caller does it with `ctx.enqueue_memset` on the sub-buffer.
+HERE: the caller does it with `ctx.enqueue_memset` on the sub-buffer.
 REASON: same operation, and MAX has no in-kernel counterpart to hoist it
 into. It is called out because the kernel ACCUMULATES into `vd` and produces
 garbage without it -- the old unfused kernel ASSIGNED, so this is a new
@@ -349,7 +349,7 @@ def eps_unexp_neigh_kernel[
     # (`epsilon_neighborhood.cuh:41`). SIMD values and not
     # `stack_allocation`: without an address space that is thread-local
     # MEMORY, which is what made the first register-tiled GEMM here slower
-    # than the naive one (`archive/reference/PORTING.md 26`).
+    # than the naive one.
     var acc0 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
     var acc1 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
     var acc2 = SIMD[DType.float32, GEMM_ACC_COLS_PER_TH](0.0)
@@ -524,7 +524,7 @@ def eps_unexp_neighborhood[
 
     Both operands are the same buffer here, which the old expanded path could
     not do: `gemm_nt` takes `DeviceBuffer` arguments and Mojo refuses one
-    buffer as two mutable kernel arguments (`archive/reference/PORTING.md 24`), so the runner
+    buffer as two mutable kernel arguments, so the runner
     carried an `x_alias` COPY of the whole dataset and a second copy of its
     norms. `enqueue_function` takes raw pointers, so the fused kernel simply
     reads `x` twice and both copies are gone.

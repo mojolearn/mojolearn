@@ -3,7 +3,7 @@
 """`TTreeUpdater`: the per-document bin array the FEATURE-PARALLEL searcher
 splits on, and the compressed-bit chain that fills it.
 
-FOLLOWS, in one file because they are one call chain:
+Reference, in one file because they are one call chain:
 
     `catboost/cuda/gpu_data/oblivious_tree_bin_builder.{h,cpp}`
         `IBinarySplitProvider`, `TSplitHelper::Split`,
@@ -21,11 +21,11 @@ FOLLOWS, in one file because they are one call chain:
     `catboost/cuda/cuda_util/compression_helpers_gpu.cpp`
         `CompressedSizeImpl<ui64>` (`:249-254`)
 
-at CatBoost `54a8143a`. Followed statement for statement.
+(CatBoost `54a8143a`).
 
-WHY THIS FILE EXISTS AT ALL, AND WHY `archive/reference/PORTING.md` 91 B IS WRONG ABOUT IT
-------------------------------------------------------------------------
-91 B says the feature-parallel and doc-parallel searchers "share their
+WHY THIS FILE EXISTS AT ALL, AND WHY AN EARLIER NOTE IS WRONG ABOUT IT
+----------------------------------------------------------------------
+That note says the feature-parallel and doc-parallel searchers "share their
 entire stack" and differ in "exactly three lines of `CreateSubsets`". The
 first half is nearly true and the second half is not, and THIS IS THE
 COUNTEREXAMPLE: the two `TSubsetsHelper::Split` specializations are
@@ -125,7 +125,7 @@ comptime SPLIT_BITS_PER_KEY = 1
 is one bit.
 
 `NCB::IntLog2` is `ceil(log2(v))` (`libs/helpers/math_utils.h:14-16`), the
-same CEIL that `archive/reference/PORTING.md` 107 records costing a day when it was read as
+same CEIL that once cost a day when it was read as
 floor. At two unique values ceil and floor agree, so this constant is not
 where that trap lives -- it is recorded because the SPELLING is the same.
 """
@@ -305,7 +305,7 @@ def create_compressed_split(
     Their `if (numBlocks)` is the whole of their empty-grid guard on this
     call and it is kept.
 
-    `has_indices` is `readIndices != nullptr` upstream. `TSplitHelper::
+    `has_indices` is `readIndices != nullptr` in the reference. `TSplitHelper::
     GetCompressedBits` passes `nullptr` for an ordinary feature (`:25`) and
     `&DataSet.GetInverseIndices()` for a PERMUTATION-DEPENDENT one (`:27-29`)
     -- a simple-CTR column, whose compressed index is stored in the

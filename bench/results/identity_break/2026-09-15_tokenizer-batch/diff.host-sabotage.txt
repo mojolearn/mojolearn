@@ -1,0 +1,49 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 165 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_tokenizer_host'] commit=be61d7fe09f7ca438e7583f20c5a8ee8824b36a3
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| tokenizer/base               | IDENTICAL x3 | 517f2f49a8b132ca | 517f2f49a8b132ca | 517f2f49a8b132ca | REFUSED          |
+| tokenizer/denormal           | IDENTICAL x3 | f6b394c18a5aaa7d | f6b394c18a5aaa7d | f6b394c18a5aaa7d | REFUSED          |
+| tokenizer/denormal_ftz       | IDENTICAL x3 | 78c666f6eec7ff12 | 78c666f6eec7ff12 | 78c666f6eec7ff12 | REFUSED          |
+| tokenizer/dupes              | IDENTICAL x3 | 66adf17fb3d2e10d | 66adf17fb3d2e10d | 66adf17fb3d2e10d | REFUSED          |
+| tokenizer/hashed             | IDENTICAL x3 | 06facfcc72bd8bbe | 06facfcc72bd8bbe | 06facfcc72bd8bbe | REFUSED          |
+| tokenizer/negative           | IDENTICAL x3 | fe6242fcbfde85f1 | fe6242fcbfde85f1 | fe6242fcbfde85f1 | REFUSED          |
+| tokenizer/odd                | IDENTICAL x3 | 517f2f49a8b132ca | 517f2f49a8b132ca | 517f2f49a8b132ca | REFUSED          |
+| tokenizer/ties               | IDENTICAL x3 | 5a785172c94613e5 | 5a785172c94613e5 | 5a785172c94613e5 | REFUSED          |
+| tokenizer/wide               | IDENTICAL x3 | 4622630cfcdf7025 | 4622630cfcdf7025 | 4622630cfcdf7025 | REFUSED          |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| tokenizer/base               | infer  | IDENTICAL x3 | 41c748b68629980a | 41c748b68629980a | 41c748b68629980a | REFUSED          |
+| tokenizer/base               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| tokenizer/base               | batch  | N/A          | n/a:no-batch-axis | n/a:no-batch-axis | n/a:no-batch-axis | REFUSED          |
+| tokenizer/denormal           | infer  | IDENTICAL x3 | 62f32161a9d8cb5a | 62f32161a9d8cb5a | 62f32161a9d8cb5a | REFUSED          |
+| tokenizer/denormal           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| tokenizer/denormal           | batch  | N/A          | n/a:no-batch-axis | n/a:no-batch-axis | n/a:no-batch-axis | REFUSED          |
+| tokenizer/denormal_ftz       | infer  | IDENTICAL x3 | fac4ddb673bb07e9 | fac4ddb673bb07e9 | fac4ddb673bb07e9 | REFUSED          |
+| tokenizer/denormal_ftz       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| tokenizer/denormal_ftz       | batch  | N/A          | n/a:no-batch-axis | n/a:no-batch-axis | n/a:no-batch-axis | REFUSED          |
+| tokenizer/dupes              | infer  | IDENTICAL x3 | 7ab3d96850c8d03e | 7ab3d96850c8d03e | 7ab3d96850c8d03e | REFUSED          |
+| tokenizer/dupes              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| tokenizer/dupes              | batch  | N/A          | n/a:no-batch-axis | n/a:no-batch-axis | n/a:no-batch-axis | REFUSED          |
+| tokenizer/hashed             | infer  | IDENTICAL x3 | c6e83493b99eaa03 | c6e83493b99eaa03 | c6e83493b99eaa03 | REFUSED          |
+| tokenizer/hashed             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| tokenizer/hashed             | batch  | N/A          | n/a:no-batch-axis | n/a:no-batch-axis | n/a:no-batch-axis | REFUSED          |
+| tokenizer/negative           | infer  | IDENTICAL x3 | bda2f03dde645cbc | bda2f03dde645cbc | bda2f03dde645cbc | REFUSED          |
+| tokenizer/negative           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| tokenizer/negative           | batch  | N/A          | n/a:no-batch-axis | n/a:no-batch-axis | n/a:no-batch-axis | REFUSED          |
+| tokenizer/odd                | infer  | IDENTICAL x3 | 41c748b68629980a | 41c748b68629980a | 41c748b68629980a | REFUSED          |
+| tokenizer/odd                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| tokenizer/odd                | batch  | N/A          | n/a:no-batch-axis | n/a:no-batch-axis | n/a:no-batch-axis | REFUSED          |
+| tokenizer/ties               | infer  | IDENTICAL x3 | cea676361afdd883 | cea676361afdd883 | cea676361afdd883 | REFUSED          |
+| tokenizer/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| tokenizer/ties               | batch  | N/A          | n/a:no-batch-axis | n/a:no-batch-axis | n/a:no-batch-axis | REFUSED          |
+| tokenizer/wide               | infer  | IDENTICAL x3 | 031065bfeb8c23b7 | 031065bfeb8c23b7 | 031065bfeb8c23b7 | REFUSED          |
+| tokenizer/wide               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| tokenizer/wide               | batch  | N/A          | n/a:no-batch-axis | n/a:no-batch-axis | n/a:no-batch-axis | REFUSED          |
+
+summary (infer/model): IDENTICAL=9, N/A=9
+summary (batch): N/A=9
+summary (rlpair): 

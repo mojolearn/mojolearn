@@ -802,9 +802,9 @@ def main() raises:
     # =====================================================================
     # THIS SECTION USED TO ASSERT THE OPPOSITE. It pinned cuML's two
     # structural biases in place on the reasoning that they are what
-    # `builder_kernels.cuh:231-232` and `:201-203` do and that COPY, DO NOT
-    # IMPROVE therefore required reproducing them. Andrew, 2026-08-21: **do
-    # not implementation bugs, fix them.** Deviations 164 and 165 are the fixes and this
+    # `builder_kernels.cuh:231-232` and `:201-203` do and that matching
+    # the reference therefore required reproducing them. Andrew, 2026-08-21:
+    # **do not reproduce bugs, fix them.** Deviations 164 and 165 are the fixes and this
     # section is now the regression guard for them, in the direction that
     # makes the learner right.
     #

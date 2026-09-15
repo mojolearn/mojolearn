@@ -2,16 +2,16 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`SvmParameter`, `SvmModel`, `KernelParams`: the parameter and model records.
 
-FOLLOWS `cuml/cpp/include/cuml/svm/svm_parameter.h`, `svm_model.h` and
-`cuml/cpp/include/cuml/matrix/kernel_params.hpp` at cuML v26.08.00.
-Every field of theirs is here; every field we do not honor RAISES BY NAME
+Reference: `cuml/cpp/include/cuml/svm/svm_parameter.h`, `svm_model.h` and
+`cuml/cpp/include/cuml/matrix/kernel_params.hpp` (cuML v26.08.00).
+Every reference field is here; every field this implementation does not honor RAISES BY NAME
 in `check_rung1_scope` (called by `svcFit`), never silently ignored.
 
 What the record carries that the brief's rung 1 does not use, and what
 happens to it:
 
     svmType                C_SVC and EPSILON_SVR are honored; NU_SVC and
-                           NU_SVR are raised by name, which is upstream's own
+                           NU_SVR are raised by name, which is the reference's own
                            boundary. This line read "SVR is rung 2" until
                            `fea6becc` (2026-08-31)
     epsilon                honored only as SVR's parameter: raised if non-zero
@@ -19,7 +19,7 @@ happens to it:
                            silently ignored parameter is the failure mode;
                            under EPSILON_SVR it must be finite and >= 0
     cache_size != 0        raised by name (the LRU cache; README "cache decision")
-    verbosity              accepted and ignored: it selects LOG LINES in theirs
+    verbosity              accepted and ignored: it selects LOG LINES in the reference
                            (`CUML_LOG_DEBUG`), we print none
     kernel POLYNOMIAL,     raised by name (TANH has no identical_tanh;
       TANH, PRECOMPUTED    POLYNOMIAL is one identical_pow away and is left
@@ -145,7 +145,7 @@ def check_rung1_scope(
     # the two differ in the gradient initialization, the domain size and how
     # the coefficients are combined, not in the solver.
     #
-    # NU_SVC and NU_SVR stay refused, and that is upstream's own boundary
+    # NU_SVC and NU_SVR stay refused, and that is the reference's own boundary
     # rather than ours: `smosolver.cuh`'s Initialize has no arm for them
     # either.
     if param.svmType != C_SVC and param.svmType != EPSILON_SVR:
@@ -154,7 +154,7 @@ def check_rung1_scope(
             + " is not implemented (C_SVC and EPSILON_SVR are; NU_SVC/NU_SVR are"
             + " unimplemented upstream too)"
         )
-    # `epsilon` IS THE SVR PARAMETER AND ONLY THAT. C_SVC ignores it upstream,
+    # `epsilon` IS THE SVR PARAMETER AND ONLY THAT. C_SVC ignores it in the reference,
     # so a non-zero value on a classifier is still refused rather than
     # silently dropped; on a regressor it is required to be finite and
     # non-negative, which is DEVIATION 636's family (NaN fails `< 0.0` and

@@ -3,8 +3,8 @@
 """Brute-force exact k-nearest-neighbours on the GPU, and the classifier and
 regressor built on it.
 
-`NearestNeighbors` mirrors cuVS's brute force; `KNeighborsClassifier` and
-`KNeighborsRegressor` mirror cuML's `kneighbors_classifier.pyx` /
+`NearestNeighbors` references cuVS's brute force; `KNeighborsClassifier` and
+`KNeighborsRegressor` reference cuML's `kneighbors_classifier.pyx` /
 `kneighbors_regressor.pyx` over `ML::knn_classify` / `ML::knn_regress`
 (`neighbors/impl/knn/knn.mojo`, `neighbors/impl/selection/knn.mojo`).
 """
@@ -147,8 +147,7 @@ _DIST_LP_UNEXPANDED = 9
 #:                       identity `||a||^2 + ||b||^2 - 2ab` and the other
 #:                       directly permits a boundary case where a point is
 #:                       inside by one formula and outside by the other
-#:                       (DEVIATION 2 in `ball_cover.mojo`, and `archive/reference/PORTING.md
-#:                       21` for what the identity costs in float32).
+#:                       (DEVIATION 2 in `ball_cover.mojo`).
 #:   'sqeuclidean'       is ABSENT. Squared Euclidean distance is not a
 #:                       metric even though Euclidean distance is: on three
 #:                       collinear points at unit spacing it gives 4 against
@@ -423,7 +422,7 @@ def _resolve_rbc_metric(cls_name, metric, p):
 
 
 class NearestNeighbors(NumericModeMixin):
-    """Exact k-NN by brute force, mirroring cuVS's fused L2 kernel.
+    """Exact k-NN by brute force. Reference: cuVS's fused L2 kernel.
 
     EXACT, not approximate. There is no index to build and no recall to trade
     away: every query is compared against every index point. That is a
@@ -435,14 +434,14 @@ class NearestNeighbors(NumericModeMixin):
     `tools/e2u_matrix_fit.py`):
 
         n_neighbors   honored   k. Refused above n_samples_fit (the
-                                upstream's short-index fill is not implemented:
+                                reference's short-index fill is not implemented:
                                 knn_brute_force.mojo) and, UNDER
                                 IDENTICAL/DETERMINISTIC, above 1024 -- the
                                 pinned selector's strided rank pass bounds
                                 its shared staging and quadratic work (
                                 neighbors/checks/select_radix_identical
                                 .mojo). FAST runs k > 256 through the
-                                implemented RAFT radix select.
+                                radix select (reference: RAFT).
         query_tile    honored   a MEMORY number; the answer does not depend
                                 on it (`check_knn_tiled_is_query_tile_
                                 invariant`), only the workspace does
@@ -708,7 +707,7 @@ class NearestNeighbors(NumericModeMixin):
 
 class KNeighborsClassifier(NearestNeighbors):
     """k-NN classification by UNWEIGHTED majority vote over the `n_neighbors`
-    nearest index points, mirroring cuML's `KNeighborsClassifier`.
+    nearest index points. Reference: cuML's `KNeighborsClassifier`.
 
     `predict` is cuML's `knn_classify`: for each query, count the classes of
     its `k` neighbours (each worth `1/k`), take the argmax, and on a tie
@@ -745,7 +744,7 @@ class KNeighborsClassifier(NearestNeighbors):
         metric, p     honored   as NearestNeighbors
         algorithm     refused   anything but 'brute' / 'auto'. 'rbc' is
                                 refused HERE though NearestNeighbors takes
-                                it: this class calls cuML's knn_classify,
+                                it: this class calls knn_classify (as cuML does),
                                 which searches inside its own entry point,
                                 so 'rbc' would be accepted and inert
         y             honored   int labels, ANY values (negative, gaps);
@@ -980,7 +979,7 @@ class KNeighborsClassifier(NearestNeighbors):
 
 class KNeighborsRegressor(NearestNeighbors):
     """k-NN regression by the UNWEIGHTED mean of the `n_neighbors` nearest
-    targets, mirroring cuML's `KNeighborsRegressor` (`ML::knn_regress`,
+    targets. Reference: cuML's `KNeighborsRegressor` (`ML::knn_regress`,
     `regress_avg_kernel`, `src_prims/selection/knn.cuh:112-131`).
 
     The mean is a serial float32 fold per query in neighbour order, then one

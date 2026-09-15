@@ -1114,7 +1114,7 @@ def main() raises:
     # ---------------- n_streams is HONORED now -------------------------
     #
     # DEVIATION 117, IMPLEMENTED: the forest loop pipelines n_streams trees
-    # over the one queue, mirroring their omp/stream pool
+    # over the one queue, matching their omp/stream pool
     # (`randomforest.cuh:336-367`). This block used to assert that
     # `check()` REFUSES n_streams=4 and that `set_rf_params` clamps it to
     # 1 -- both were the SERIAL implementation's contract and the implementation of the

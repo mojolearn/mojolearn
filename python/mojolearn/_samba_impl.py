@@ -33,11 +33,12 @@ import math
 from ._training_impl import _round_f32
 
 from . import _backend
+from . import _ragged
 from . import _training_impl as T
 from ._mamba_impl import Mamba3Block
 from ._transformer_impl import TransformerBlock
 
-__all__ = ["SambaConfig", "SambaStack"]
+__all__ = ["SambaConfig", "SambaStack", "SambaState"]
 
 PROFILE = "mojolearn.samba-stack.fp32.v1"
 _STATE_SCHEMA = "mojolearn.samba-stack-state.v1"
@@ -176,6 +177,19 @@ def _init_tensor(gen, name, shape):
     return _buffers.full(shape, 1.0, '<f4')
 
 
+class SambaState(object):
+    """The stack's decode state (2026-09-15): `layers[i]` is layer i's own
+    block state (`Mamba3State` or `TransformerState`), caller-owned and laid
+    out as its block class documents, for `batch_size` rows and up to
+    `max_tokens` positions. `SambaStack.forward(inputs, state)` and
+    `SambaStack.step` update every piece in place."""
+
+    def __init__(self, batch_size, max_tokens, layers):
+        self.batch_size = int(batch_size)
+        self.max_tokens = int(max_tokens)
+        self.layers = list(layers)
+
+
 class SambaStack(object):
     """The stack, its optimizer, schedule and RNG, over one flat float32
     parameter buffer whose registry views the blocks read directly.
@@ -304,11 +318,98 @@ class SambaStack(object):
         return {"ids": ids, "key": key, "xs": xs, "h": x, "hn": hn,
                 "logits": logits}
 
-    def forward(self, inputs):
-        """`(B, L)` ids in, `(B, L, vocab)` float32 logits out, no dropout."""
+    def forward(self, inputs, state=None, *, lengths=None):
+        """`(B, L)` ids in, `(B, L, vocab)` float32 logits out, no dropout.
+
+        `state=None` is the TRAINING forward: the same `_forward` that
+        `loss` and `loss_and_grads` run, every block from a zero state.
+        Pass a `SambaState` (`allocate_state`) to carry the decode state
+        instead: every block's own state is read at entry and updated in
+        place, so a later `forward` or `step` on that state continues the
+        sequence (2026-09-15, the rlpair part of tools/identity_break.py).
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
+        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
+        after. Every real position's logits are byte for byte the row run
+        alone at its own length (the stack is a per-token embedding, causal
+        blocks, a per-token norm and head; no arithmetic changes,
+        `_ragged.py` says why) and every padding position's logits are
+        exactly `+0.0`, whatever id the input held there. It applies to the
+        stateless forward only; `lengths` with a `state` is refused."""
+        if lengths is not None:
+            if state is not None:
+                raise ValueError("mojolearn.SambaStack.forward: lengths= applies to the "
+                                 "stateless forward only; pass state=None")
+            ids = self._ids(inputs, "inputs")
+            return _ragged.ragged_forward(self.forward, ids, None, lengths, "<i4",
+                                          "SambaStack.forward")[0]
+        if state is not None:
+            return self._forward_state(inputs, state, step=False)
         acts = self._forward(inputs)
         b, l = acts["ids"].shape
         return acts["logits"].reshape((b, l, self.config.vocab))
+
+    # -- decode (2026-09-15) --------------------------------------------------
+    def allocate_state(self, batch_size, max_tokens):
+        """The zero decode state for `batch_size` sequences of up to
+        `max_tokens` positions: one block state per layer, in stack order
+        (`Mamba3Block.allocate_state(B)`, `TransformerBlock.allocate_state(B,
+        max_tokens)`). Every piece is caller-owned and documented by its
+        block class; nothing is hidden here."""
+        b, smax = int(batch_size), int(max_tokens)
+        if b < 1 or smax < 1:
+            raise ValueError("mojolearn.SambaStack.allocate_state: batch_size "
+                             "and max_tokens must be positive")
+        layers = []
+        for i, kind in enumerate(self.config.layers):
+            blk = self._block(i)
+            layers.append(blk.allocate_state(b) if kind == "mamba3"
+                          else blk.allocate_state(b, smax))
+        return SambaState(b, smax, layers)
+
+    def step(self, inputs, state):
+        """One decode token per row: `(B,)` or `(B, 1)` ids in, `(B, vocab)`
+        float32 logits out, `state` updated in place. It is the stateful
+        `forward` at L = 1 with each block's `step` (the blocks' one
+        spelling for decode, their contracts' section on prefill
+        resumption); the embedding, the final RMSNorm, the head and the
+        loss arithmetic are the training primitives `_forward` calls. No
+        dropout."""
+        if state is None:
+            raise ValueError("mojolearn.SambaStack.step: state is required "
+                             "(allocate_state(B, max_tokens) makes the fresh one)")
+        pb = _checks.probe(inputs)
+        if not _checks.is_integer(pb.format) or len(pb.shape) not in (1, 2) \
+                or (len(pb.shape) == 2 and pb.shape[1] != 1):
+            raise ValueError("mojolearn.SambaStack.step: inputs must be (B,) or "
+                             "(B, 1) integer ids")
+        ids = _buffers.as_i32_c(inputs, ndim=None, name="inputs")[0].reshape((pb.shape[0], 1))
+        out = self._forward_state(ids, state, step=True)
+        return out.reshape((pb.shape[0], self.config.vocab))
+
+    def _forward_state(self, inputs, state, step):
+        c = self.config
+        what = "mojolearn.SambaStack.step" if step else "mojolearn.SambaStack.forward"
+        if not isinstance(state, SambaState):
+            raise TypeError("%s: state must be a SambaState (allocate_state)" % what)
+        ids = self._ids(inputs, "inputs")
+        b, l = ids.shape
+        if ids.min() < 0 or ids.max() >= c.vocab:
+            raise ValueError("%s: inputs must be in [0, vocab)" % what)
+        if state.batch_size != b or len(state.layers) != len(c.layers):
+            raise ValueError("%s: the state holds %d rows and %d layers, the call "
+                             "has B = %d and the stack %d layers"
+                             % (what, state.batch_size, len(state.layers), b, len(c.layers)))
+        x = T.embedding_forward(self.arrays["embed.weight"], ids.reshape(-1),
+                                self.numeric_mode).reshape((b, l, c.d_model))
+        for i in range(len(c.layers)):
+            blk = self._block(i)
+            x = blk.step(x, state.layers[i]) if step else blk.forward(x, state.layers[i])
+        hn = T.rms_norm_forward(x, self.arrays["norm_f.weight"], c.norm_eps,
+                                self.numeric_mode)
+        logits = T.linear_forward(hn.reshape((b * l, c.d_model)),
+                                  self._head_weight(), self.numeric_mode)
+        return logits.reshape((b, l, c.vocab))
 
     def loss(self, inputs, targets):
         """Mean cross-entropy over the targets (no dropout, no gradient)."""

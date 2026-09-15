@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Building the random ball cover index, and the eps query entry points.
 
-FOLLOWS `cuvs/src/neighbors/ball_cover/ball_cover.cuh` at cuVS `94c2819`:
+Reference: `cuvs/src/neighbors/ball_cover/ball_cover.cuh` (cuVS `94c2819`):
 `sample_landmarks` (`:62`), `construct_landmark_1nn` (`:121`),
 `k_closest_landmarks` (`:180`), `compute_landmark_radii` (`:212`),
 `rbc_build_index` (`:330`), `perform_rbc_eps_nn_query` (`:277`, `:300`) and
@@ -70,8 +70,8 @@ landmark matrix is small enough to stay in cache for every query row.
 **This also makes the build and the query agree arithmetically.** Their
 brute_force under `L2SqrtExpanded` uses the expanded identity
 `||a||^2 + ||b||^2 - 2ab`, while their query kernel's `EuclideanSqFunc` sums
-the differences directly. `archive/reference/PORTING.md 21` already records what the expanded
-identity costs in float32 — for collinear points the closest-pair distance
+the differences directly. The expanded
+identity has a known cost in float32 — for collinear points the closest-pair distance
 falls below the ulp of the norms at any scale — and here the two formulas are
 being COMPARED to each other, `R_radius` from one against `cur_R_dist` from
 the other. Ours sums the differences directly in both, so `R_1nn_dists` and

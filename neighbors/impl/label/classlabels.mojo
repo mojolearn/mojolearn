@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`getUniquelabels` and `make_monotonic` for ARBITRARY int32 class labels.
 
-FOLLOWS `raft/label/detail/classlabels.cuh::getUniquelabels` (`:50-82`),
-`map_label_kernel` (`:122-140`) and `make_monotonic` (`:164-200`) at RAFT
-`661a3b8`. Followed statement for statement except where the DEVIATION BLOCK below says so. Do
+Reference: `raft/label/detail/classlabels.cuh::getUniquelabels` (`:50-82`),
+`map_label_kernel` (`:122-140`) and `make_monotonic` (`:164-200`) (RAFT
+`661a3b8`). Behavior matches except where the DEVIATION BLOCK below says so. Do
 not improve.
 
 WHY THIS IS A SECOND TREATMENT OF THE SAME HEADER, AND NOT A REUSE
@@ -15,7 +15,7 @@ is the same function ONLY under a precondition -- every label is an integer
 in `1..N` or `MAX_LABEL` -- which `weak_cc` guarantees and a CLASSIFICATION
 target does not: a caller's `y` may be `{-1, 7, 1000000}`. So the k-NN
 classifier needs the GENERAL route, which is what RAFT's header is, and
-this file is that route. The two files implementation the same upstream symbols at
+this file is that route. The two files implement the same reference symbols at
 the same pin and differ exactly where the DBSCAN file's DEVIATION 33 says
 it differs.
 

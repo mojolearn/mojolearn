@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest on the GPU: cuML's forest, and cuML's defaults.
 
-The learner is `ensemble/`: the implementation of cuML's `ML::RandomForest`
-(`randomforest.cuh`) with its batched-levelalgo tree builder, quantile
+The learner is `ensemble/`: a random forest (reference: cuML's `ML::RandomForest`,
+`randomforest.cuh`) with a batched-levelalgo tree builder, quantile
 binning, and the with-replacement `RowSampler` -- THIS wrapper is that
 sampler's first Python caller (the `extratrees` surface refuses
 `bootstrap=True` by name because its copy has no caller).
 
 THE DEFAULTS ARE cuML's, NOT scikit-learn's, per the package rule
-("the defaults follow the upstream each algorithm mirrors") -- with no
+("the defaults follow each algorithm's reference") -- with no
 exception since 2026-09-01, when DEVIATION 409 (this surface shipped
 cuML's RETIRED pre-26.08 `max_depth=16`) was CLOSED by aligning; full
 history at the constant below. Two notes for an sklearn user,
@@ -22,7 +22,7 @@ documented on the classes as well:
   pins) and sklearn. Until 2026-09-01 an unspecified depth meant 16
   here; pass `max_depth=16` to keep that behaviour (DEVIATION 409).
 * splits are searched over at most `n_bins` (default 128) per-feature
-  QUANTILES, cuML's design, not sklearn's exact thresholds. Faster, and a
+  QUANTILES, as in cuML, not sklearn's exact thresholds. Faster, and a
   different algorithm -- a comparison against sklearn must say so.
 
 EVERY sklearn-SHAPED PARAMETER IS EITHER HONOURED OR REFUSED BY NAME. None
@@ -196,7 +196,7 @@ _UNSUPPORTED_CRITERIA = {
 # until exactly k leaves exist. cuML's `max_leaves` bounds a LEVEL-ORDER
 # grower and reorders nothing: `NodeQueue::Pop` takes from the FRONT of a
 # FIFO and `Push` appends to the BACK (`builder.cuh:70-78`, `:117`,
-# transcribed at `ensemble/decisiontree/batched_levelalgo/builder.mojo`),
+# matched at `ensemble/decisiontree/batched_levelalgo/builder.mojo`),
 # and the budget is spent by whichever nodes that order reaches first --
 # tested in `IsExpandable` (`builder.cuh:82-88`) and again inside `Push`
 # (`:101`). Same k, different tree, no error and no warning.

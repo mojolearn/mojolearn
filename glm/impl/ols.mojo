@@ -3,7 +3,7 @@
 """`olsFit`: the entry point, its guards, its SAMPLE WEIGHTS and its SOLVER
 DISPATCH.
 
-FOLLOWS `cuml/cpp/src/glm/ols.cuh::olsFit` at cuML `00094f7`. Partial.
+Reference: `olsFit`, `cuml/cpp/src/glm/ols.cuh` (cuML `00094f7`). Partial.
 
 WHY THIS FILE EXISTS, AND IT IS NOT A WRAPPER
 ---------------------------------------------
@@ -176,7 +176,7 @@ comptime OLS_ALGO_SVD_QR = 3
 
 #: OURS, NOT THEIRS. `lstsq_min_norm`, the minimum-norm route for
 #: `n_cols > n_rows` (DEVIATION 550). It is numbered 100 and not 4 so that
-#: nobody reads it as a cuML `algo` id that upstream might one day take:
+#: nobody reads it as a cuML `algo` id that the reference might one day take:
 #: their enumeration is 0..3 and this is not in it.
 comptime OLS_ALGO_MIN_NORM_EIG = 100
 

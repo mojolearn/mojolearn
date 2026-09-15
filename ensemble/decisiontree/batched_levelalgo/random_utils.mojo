@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """FNV-1a32, the seed chain the whole forest's determinism hangs on.
 
-MIRRORS `cpp/src/decisiontree/batched-levelalgo/random_utils.cuh` at
+Reference: `cpp/src/decisiontree/batched-levelalgo/random_utils.cuh` at
 rapidsai/cuml `v26.08.00`
 (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`).
 
-Their file is 52 lines and is transcribed here constant for constant and
+The reference file is 52 lines, and this one matches it constant for constant and
 shift for shift. It matters far out of proportion to its size, because
 it is the ONLY thing standing between "this forest is reproducible" and
 "this forest is reproducible on NVIDIA". Two call sites consume it:
@@ -70,7 +70,7 @@ THE FIX, in `fnv1a32_hash_seed_tree` below: the high half is folded in
 one extra round, BUT ONLY WHEN IT IS NONZERO. The condition is what
 makes the fix free where cuML is not broken: for every seed below 2^32
 -- cuML's Python surface passes exactly these (`random_state` is hashed
-to 32 bits upstream, and `None` becomes 0), every committed oracle
+to 32 bits in the reference, and `None` becomes 0), every committed oracle
 fixture, and this repository's default 0 -- the extra round does not
 execute and the output is bit-for-bit the transcription's output. Seeds
 with high bits set (reachable through our own UInt64 `seed` parameter)
@@ -140,11 +140,11 @@ def fnv1a32_hash_seed_tree(seed: UInt64, treeid: Int32) -> UInt32:
     tree_id);` on a `rs` initialized to `fnv1a32_basis` -- note that
     this call site uses `fnv1a32` DIRECTLY, not `fnv1a32_combine`, so
     the uint64 `seed_` is folded in ONE round on its low 32 bits and its
-    high half is DISCARDED. That is their bug, not their design -- their
+    high half is DISCARDED. That is a bug in the reference, not its intent -- its
     per-node fold below hashes both halves -- and DEVIATION 400 fixes it:
     the high half gets its round exactly when it is nonzero, so every
     seed below 2^32 (every cuML-reachable seed, every oracle fixture,
-    the default 0) keeps the transcription's bits and high-half seeds
+    the default 0) keeps the reference's bits and high-half seeds
     stop colliding. The fold order low-then-high is `fnv1a32_combine`'s
     own (`random_utils.cuh:33-41`).
     """

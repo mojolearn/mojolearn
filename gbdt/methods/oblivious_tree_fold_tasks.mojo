@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The FOLD side of the oblivious searcher: N tasks, 2N partitions.
 
-FOLLOWS `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}` at
-CatBoost `54a8143a` -- `TOptimizationTask`, `AddTask`/`SetTarget`,
+Reference: `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}`
+(CatBoost `54a8143a`), `TOptimizationTask`, `AddTask`/`SetTarget`,
 `WriteFoldBasedInitialBins` (`:338-364`), `WriteSingleTaskInitialBins`
-(`:366-...`) and `ForeachOptimizationPartTask` (`:15-27`). Followed statement for statement.
+(`:366-...`) and `ForeachOptimizationPartTask` (`:15-27`).
 
 **THIS IS RUNG 2, and rung 2 turned out not to be a second searcher.**
 
@@ -24,9 +24,9 @@ and `CreateSubsets` picks between them with a single ternary (`:30-31`):
 
 Everything after that line -- the depth loop, the histograms, the scorer, the
 `TakeBest` fold, the split -- is the same code for both arms. Combined with
-`archive/reference/PORTING.md` 91 A (the two data layouts build a bit-identical compressed
-index at device count 1) and 91 B (the two searchers share their entire
-stack), what rung 2 actually costs is THIS FILE plus wiring it, not 713
+the facts that the two data layouts build a bit-identical compressed
+index at device count 1 and the two searchers share their entire
+stack, what rung 2 actually costs is THIS FILE plus wiring it, not 713
 lines.
 
 ## THE ENCODING, which is the whole thing
@@ -112,7 +112,7 @@ struct FoldLayout(Copyable, Movable):
     var fold_bits: Int
     """`subsets.FoldBits = IntLog2(subsets.FoldCount)` (`:37`), and
     `IntLog2` is CEIL (`libs/helpers/math_utils.h:14-16`) -- the same
-    ceiling that `archive/reference/PORTING.md` 107 records costing a day when it was read as
+    ceiling that once cost a day when it was read as
     floor."""
 
 
@@ -363,7 +363,7 @@ def create_fold_based_subsets(
     # THE SAME CLAIM SAID WITHOUT `int_log2_ceil`, and it is not
     # redundant: the line above compares the layout against the very
     # function that produced it, so a FLOOR `IntLog2` agrees with itself
-    # and gets through. `archive/reference/PORTING.md` 107 already cost a day to that
+    # and gets through. It already cost a day once to that
     # reading. With FoldBits 3 and FoldCount 12 the fold stripe is 8, the
     # partition ids run past `1 << (FoldBits + maxDepth)`, and the failure
     # is an out-of-range partition write rather than a wrong answer -- the

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Batched ARIMA on the GPU, backed by the implemented cuML batched Kalman filter.
+"""Batched ARIMA on the GPU, backed by a batched Kalman filter.
 
 PRIVATE MODULE. `ARIMA` is re-exported from `mojolearn/__init__.py`.
 
@@ -22,7 +22,7 @@ absence is to end the absence.
 `y` is 2-D, `(batch_size, n_obs)`. Every series in the batch is fitted at
 once, with its OWN parameters, by one set of kernel launches; the batch is
 not a convenience wrapper around a loop and it is not a multivariate model.
-That is cuML's design (`ARIMAOrder`, `ARIMAParams` and every kernel in
+cuML's batched ARIMA is organized the same way (`ARIMAOrder`, `ARIMAParams` and every kernel in
 `cpp/src/arima/` are indexed by a series id) and it is where the speed comes
 from. It is ALSO the first thing that differs from statsmodels, whose
 `ARIMA` takes ONE series, so the constructor and the methods below read like
@@ -35,7 +35,7 @@ A 1-D `y` is accepted and treated as ONE series, because refusing it would
 be pedantry; the returned arrays stay 2-D with a leading 1 either way, so no
 shape here is ever a function of what the input's rank happened to be.
 
-THE DATA GOES TO `fit`, NOT TO THE CONSTRUCTOR. Both upstreams put it in the
+THE DATA GOES TO `fit`, NOT TO THE CONSTRUCTOR. Both references put it in the
 constructor (`ARIMA(endog, order=...)` in cuML, `ARIMA(y, order=...)` in
 statsmodels). This package's other twenty-six estimators take their data in
 `fit`, and an ARIMA that did not would be the only class here you could not
@@ -43,7 +43,7 @@ clone, re-use on a second batch, or hand to anything expecting the house
 shape.
 
 EVERY KNOB IS ON THE CONSTRUCTOR AND `fit` TAKES ONLY DATA, which is the
-other divergence from both upstreams: `method` and `maxiter` are `fit`
+other divergence from both references: `method` and `maxiter` are `fit`
 arguments there and constructor arguments here, for the same reason.
 
 WHAT IS NOT HERE
@@ -176,8 +176,8 @@ def _n_exog(exog):
 
 
 class ARIMA(NumericModeMixin):
-    """Batched ARIMA, backed by the implemented cuML batched Kalman filter and an
-    own-written batched L-BFGS (`arima/`, DEVIATIONS 670 to 687 and 990 to
+    """Batched ARIMA, backed by a batched Kalman filter and a
+    batched L-BFGS (`arima/`, DEVIATIONS 670 to 687 and 990 to
     993; `arima/README.md`), in statsmodels' constructor shape.
 
     `y` IS 2-D, `(batch_size, n_obs)`, AND THAT DIFFERS FROM statsmodels.
@@ -195,13 +195,13 @@ class ARIMA(NumericModeMixin):
 
         order (p, d, q)   honored   `p > 8` and `q > 8` are refused by
                                     `arima/impl/tsa/arima_common.mojo::
-                                    validate_order`, in cuML's own words, as
+                                    validate_order`, with the reference's message, as
                                     is `d + D > 2` and an order with no
                                     parameters at all
         seasonal_order    honored   `(P, D, Q, s)`. A seasonal term with
           (P, D, Q, s)              `s < 2`, and `s <= p` or `s <= q`, are
-                                    refused by `validate_order`, again in
-                                    cuML's words
+                                    refused by `validate_order`, again with
+                                    the reference's message
         rd > 8            refused   `validate_order`. `rd = d + s*D +
                                     max(p + s*P, q + s*Q + 1)` selects
                                     cuML's BLOCK-PER-SERIES Kalman kernel
@@ -243,7 +243,7 @@ class ARIMA(NumericModeMixin):
                                     unimplemented end to end, `ARIMAParams` has
                                     no `beta` field anywhere in the lane
         verbose           refused   `_arima_impl.py`, for anything truthy.
-                                    Upstream it selects LOG LINES; this implementation
+                                    In the reference it selects LOG LINES; this implementation
                                     prints none, so accepting it would be
                                     accepting-and-ignoring
         output_type       refused   `_arima_impl.py`. A cuML-internal
@@ -288,19 +288,19 @@ class ARIMA(NumericModeMixin):
                                     gradient to zero, so this is not a knob
                                     a caller may turn
 
-    THE DEFAULT ORDER IS (1, 0, 0) AND IT IS NEITHER UPSTREAM'S. cuML's is
+    THE DEFAULT ORDER IS (1, 0, 0) AND IT IS NEITHER REFERENCE'S. cuML's is
     (1, 1, 1) and statsmodels' is (0, 0, 0), and the two cannot both be
     honored. (0, 0, 0) is not even reachable here: with `trend=None` it
     resolves to `k = 1` and fits a mean, and with `trend='n'` it is an order
-    with no parameters at all, which `validate_order` refuses in cuML's own
-    words. (1, 1, 1) is a differencing model, and a default that silently
+    with no parameters at all, which `validate_order` refuses with the
+    reference's message. (1, 1, 1) is a differencing model, and a default that silently
     differences a caller's data is a default that changes what the numbers
     mean. (1, 0, 0) is the smallest model that fits something, and the right
     thing to do with it is to pass your own order.
 
     DEVIATION 993: `trend` IS THIS CLASS'S SPELLING OF cuML's
     `fit_intercept`, AND THE DEFAULT IS statsmodels' RULE, NOT cuML's.
-    Upstream has a boolean `fit_intercept` defaulting to True, whatever `d`
+    cuML has a boolean `fit_intercept` defaulting to True, whatever `d`
     is. statsmodels has `trend`, and `trend=None` there resolves to 'c' when
     the series is not differenced and to 'n' when it is. This class takes
     statsmodels' spelling and statsmodels' default rule, so
@@ -327,7 +327,7 @@ class ARIMA(NumericModeMixin):
     ARE NOT A DEVICE ANSWER. cuML's `information_criterion`
     (`batched_arima.cu:592-618`) is NOT IMPLEMENTED, and what it does beyond the
     log-likelihood is one `raft::stats::information_criterion_batched` unary
-    op. That formula is transcribed here,
+    op. This computes the same formula,
 
         aic = 2 * N - 2 * llf
         bic = log(T) * N - 2 * llf
@@ -380,7 +380,7 @@ class ARIMA(NumericModeMixin):
         produced, in the same packing. Neither is on cuML's Python surface.
         They are here because a fit that goes wrong is nearly always a fit
         that started wrong and `estimate_x0` is the half of this lane with
-        no upstream oracle.
+        no reference oracle.
     n_obs_, batch_size_ : int
     k_ : int
         0 or 1, what `trend` resolved to.
@@ -408,8 +408,8 @@ class ARIMA(NumericModeMixin):
         # NOTHING ABOUT THE ORDER IS VALIDATED HERE. `p > 8`, `d + D > 2`,
         # `s < 2` beside a seasonal term, `rd > 8`, `r > 5` and an order
         # with no parameters at all are every one of them refused by
-        # `arima/impl/tsa/arima_common.mojo::validate_order`, in cuML's own
-        # sentences, before any device context exists. A copy of those
+        # `arima/impl/tsa/arima_common.mojo::validate_order`, with the reference's
+        # messages, before any device context exists. A copy of those
         # bounds here would be a second place for them to be wrong.
         self.order = (p, d, q)
         self.seasonal_order = (P, D, Q, s)
@@ -634,7 +634,7 @@ class ARIMA(NumericModeMixin):
     def predict(self, start=0, end=None, exog=None):
         """In-sample and out-of-sample prediction, `(batch_size, end - start)`.
 
-        `end` IS EXCLUDED. That is cuML's convention, stated in their own
+        `end` IS EXCLUDED. That is cuML's convention, stated in the cuML
         docstring ("Index where to end the predictions, excluded"), and it
         is NOT statsmodels', where `end` is the last index RETURNED. This
         sentence is on the class, on this method and in the two Mojo files
@@ -642,7 +642,7 @@ class ARIMA(NumericModeMixin):
         get silently wrong by one. `predict(0, n_obs)` gives every in-sample
         prediction; statsmodels' equivalent is `predict(0, n_obs - 1)`.
 
-        `end=None` means `n_obs`, as upstream. `end > n_obs` extends into a
+        `end=None` means `n_obs`, as in the reference. `end > n_obs` extends into a
         forecast, which is what `forecast` is a name for.
 
         PREDICTIONS BEFORE `d + s * D` ARE NaN, and that is a value rather
@@ -661,8 +661,8 @@ class ARIMA(NumericModeMixin):
         if width <= 0:
             # Raised here only because the OUTPUT BUFFER has to be allocated
             # before the call and a non-positive width has no allocation.
-            # `arima/estimator.mojo` refuses the same thing again in cuML's
-            # own words, and reaches it from any other caller.
+            # `arima/estimator.mojo` refuses the same thing again with the
+            # reference's message, and reaches it from any other caller.
             raise ValueError(
                 f"mojolearn ARIMA: need start < end, got start={start}, "
                 f"end={end}. `end` is EXCLUDED here, as it is in cuML; "
@@ -728,7 +728,7 @@ def _as_order(value, width, name):
     """`(p, d, q)` or `(P, D, Q, s)` as a tuple of non-negative ints.
 
     A CONVERSION, NOT A POLICY. Everything about whether the numbers are a
-    LEGAL order is `validate_order`'s, in Mojo, in cuML's words. What is
+    LEGAL order is `validate_order`'s, in Mojo, with the reference's messages. What is
     refused here is a value that is not an order-shaped tuple of integers at
     all, which cannot reach the Mojo side as anything meaningful.
     """

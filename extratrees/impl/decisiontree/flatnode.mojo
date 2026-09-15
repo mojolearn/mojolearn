@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The flat tree node, the flat tree, and the host predict traversal.
 
-FOLLOWS cuML at `00094f7` (`~/CascadeProjects/upstream/cuml`). Followed statement for statement.
+Reference: cuML `00094f7` (`~/CascadeProjects/upstream/cuml`).
 
 | piece                                | cuML file:lines                                     |
 |--------------------------------------|-----------------------------------------------------|
@@ -80,7 +80,7 @@ comptime NODE_IS_LEAF: Int32 = -1
 # `SparseTreeNode<DataT, LabelT>` (`flatnode.h:62` and `:67`) — dropping
 # `IdxT`, so a caller who instantiated with a non-default `IdxT` gets a
 # node of a DIFFERENT type back from `CreateSplitNode`. Nobody in the tree
-# does, so it never fires upstream.
+# does, so it never fires in the reference.
 #
 # **What ours does.** One parameter, `dtype`, carrying `DataT`. `LabelT` is
 # not modelled at all. `IdxT` is `Int32` everywhere, spelled out rather than
@@ -104,7 +104,7 @@ comptime NODE_IS_LEAF: Int32 = -1
 # left_child_id` (`flatnode.h:42`) and narrows it into the `IdxT` field
 # (`flatnode.h:46`) with no check. Ours does the same: `Int32` field,
 # `Int64` on the way in and on the way out. It is a real asymmetry in their
-# header, it is load-bearing for nothing, and rule 0a says we transcribe it
+# header, it is load-bearing for nothing, and rule 0a says we keep it
 # rather than tidy it.
 # ======================================================================
 
@@ -136,9 +136,9 @@ struct SparseTreeNode[dtype: DType](
     """`IdxT instance_count = 0` (`flatnode.h:40`). Rows that reached here."""
 
     # ---- accessors, `flatnode.h:52-57` and `:69` ----------------------
-    # Their names, not Mojo's naming convention. These are the transcribed
+    # The reference names, not Mojo's naming convention. These are the reference
     # API and the call sites in `decisiontree.cuh` and `randomforest.cuh`
-    # are transcribed against them.
+    # are written against them.
 
     def ColumnId(self) -> Int32:
         """`flatnode.h:52`."""
@@ -383,7 +383,7 @@ def predict_leaf[
     """The traversal from `predict_one` (`decisiontree.cuh:400-409`), with
     the leaf ACCUMULATION at `:410-412` left to the caller.
 
-    Their loop, transcribed:
+    The reference loop:
 
         std::size_t idx = 0;
         auto n          = tree.sparsetree[idx];
@@ -400,7 +400,7 @@ def predict_leaf[
     `tl::Operator::kLE` means in their treelite export
     (`decisiontree.cuh:214-215`) and what scikit-learn `1.9.0`'s
     `partition_samples` does (`sklearn/tree/_partitioner.pyx:236-240`).
-    Both upstreams agree, so a boundary row whose feature value is EXACTLY
+    Both references agree, so a boundary row whose feature value is EXACTLY
     `quesval` goes LEFT.
 
     Splitting the leaf lookup out of the loop is not a deviation: it is the
@@ -557,7 +557,7 @@ def predict_class[
 ) -> Int:
     """Argmax over the leaf vector, `randomforest.cuh:243-253`.
 
-    Their loop, transcribed:
+    The reference loop:
 
         L best_class = 0;
         T best_prob  = 0.0;
@@ -580,7 +580,7 @@ def predict_class[
     all `<= 0` — an all-zero leaf, or any leaf reached in a hypothetical
     signed-score tree — never enters the `if` at all and class 0 is
     returned by default. For cuML that is safe because leaf vectors are
-    non-negative class probabilities; it is transcribed rather than
+    non-negative class probabilities; it is kept rather than
     hardened, and the check covers it with an all-zero leaf.
 
     The per-tree division by `n_trees` (`randomforest.cuh:240-242`) is

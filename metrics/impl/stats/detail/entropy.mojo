@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """RAFT `cpp/include/raft/stats/detail/entropy.cuh` (ebf9268).
 
-THEIRS (:105-143):
+REFERENCE (:105-143):
 
     if (!size) return 1.0;
     numUniqueClasses = upper - lower + 1
@@ -16,18 +16,18 @@ sum(counts); -sum(pi * (log(pi) - log(pi_sum)))` with `pi_sum = sum(counts)`
 -- the same quantity, natural log, with their `return 1.0` for an empty
 label array too. NOTE sklearn's `log(pi) - log(pi_sum)` spelling where
 RAFT divides first; both are `-sum p log p` and differ in the last bits.
-Ours mirrors RAFT's spelling.
+This implementation uses RAFT's spelling.
 
 =========================================================================
 DEVIATION 650 (metrics lane, 2026-08-23): THE LABEL METRICS' FLOAT
 EPILOGUE RUNS ON THE HOST, IN A FIXED SERIAL ORDER, FROM THE INTEGER
 COUNTS THE DEVICE PRODUCED.
 =========================================================================
-THEIRS: the counts are written as `double` by CUB, divided on the device,
+REFERENCE: the counts are written as `double` by CUB, divided on the device,
 and `mapThenSumReduce` folds `-p log p` per block and lands the block
 partials in one double through `atomicAdd` (`raft/linalg/detail/
 map_then_reduce.cuh:33-38`) -- an ARRIVAL order, different run to run.
-OURS: the device produces the INTEGER histogram (`histogram.mojo`, exact
+HERE: the device produces the INTEGER histogram (`histogram.mojo`, exact
 and order-free), the host reads `numUniqueClasses` ints back (instead of
 one double) and performs the float ops serially, ascending over the
 classes. The same split for `mutual_info_score` (its contingency matrix

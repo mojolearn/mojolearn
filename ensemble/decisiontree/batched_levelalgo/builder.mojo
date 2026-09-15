@@ -131,7 +131,7 @@ def n_sampled_cols_for(max_features: Float32, n_cols: Int) -> Int:
     knife-edge worth naming. `max_features` arrives as a float32
     (`decisiontree.hpp:33`), so the product is computed in float32; one ULP
     low anywhere turns 4.0 into 3.9999998 and hands the node THREE columns
-    instead of four. Their `int` cast is transcribed exactly rather than
+    instead of four. The reference's `int` cast is kept exactly rather than
     replaced with a round, because rounding would be a different algorithm
     at every ratio that lands near an integer -- which, for `max_features`
     values like `sqrt(n)/n`, is most of them.
@@ -290,7 +290,7 @@ struct NodeQueue[dtype: DType, sabotage: Int = 0](Copyable, Movable):
     ) raises:
         """`builder.cuh:91-143`. THE TREE'S SHAPE IS DECIDED HERE.
 
-        Transcribed statement for statement, because the order of the six
+        Written in the reference's order, because the order of the six
         mutations is load-bearing:
 
         1. `if (!split.IsValid()) continue;` (`:99`) -- the node stays the
@@ -307,8 +307,8 @@ struct NodeQueue[dtype: DType, sabotage: Int = 0](Copyable, Movable):
            `leaf_counter >= max_leaves` holds it holds for every remaining
            item, and a `continue` would skip each of them in turn to reach
            the same end state. The two spellings are observationally
-           equivalent on every input. Theirs is transcribed anyway -- copy,
-           do not improve -- but a reader should know that nothing depends
+           equivalent on every input. The reference's `break` is kept anyway,
+           but a reader should know that nothing depends
            on it, and `builder_check` records it rather than pretending the
            `break` is checked.
         3. The parent is OVERWRITTEN in place with a split node whose
@@ -531,7 +531,7 @@ def update_workload_info[
     `kernels/builder_kernels.mojo` from the other side.
 
     Returns their `n_blocks_dimx`. WRITES STRAIGHT INTO `h_workload_info`
-    -- RESTORES upstream: theirs fills the pinned `h_workload_info` array
+    -- RESTORES the reference: theirs fills the pinned `h_workload_info` array
     in place (`:401`) and this used to rebuild a `List` (growth reallocs
     on every level) that the upload then copied into the pinned buffer
     element by element. The pointer must hold at least
@@ -607,10 +607,10 @@ struct WorkspaceLayout(Copyable, Movable):
     """Byte offsets of everything `assignWorkspace` carves out of the two
     buffers (`builder.cuh:334-372`), in their order.
 
-    Their code walks a `char*` and reinterpret-casts; ours computes the same
+    The reference walks a `char*` and reinterpret-casts; this implementation computes the same
     offsets and hands them out, because a Mojo buffer is typed. The ORDER and
-    the per-item alignment are transcribed, so the total is byte-for-byte
-    theirs -- which is what `builder_check` compares.
+    the per-item alignment match, so the total is byte-for-byte
+    the reference's -- which is what `builder_check` compares.
     """
 
     var n_nodes: Int
@@ -836,7 +836,7 @@ struct TreeState[O: ObjectiveLike](Movable):
 struct _DevPrefixView(Movable):
     """A cached prefix view of one device workspace buffer.
 
-    RESTORES their carve-once shape: upstream carves every pointer out of
+    RESTORES their carve-once shape: the reference carves every pointer out of
     `d_buff` ONCE (`builder.cuh:334-368`) and then passes COUNTS to
     count-parameterized APIs, so no per-level object is ever created.
     `enqueue_copy`/`enqueue_memset` here are buffer-shaped (the byte
@@ -1073,7 +1073,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     # computing the arena and nobody calling it -- so `builder_check` was
     # verifying that dead code agreed with their sizing. A Builder is
     # constructed once per TREE, so that was ten allocations per tree
-    # instead of two, and it gave up the property their design is for:
+    # instead of two, and it gave up the property the reference layout is for:
     # no allocation inside the tree loop.
     var d_buff: DeviceBuffer[DType.uint8]
     var h_buff: HostBuffer[DType.uint8]
@@ -1164,7 +1164,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     # tree's node count exceeds every earlier tree's. `leaf_capacity` is
     # in NODES, batched the way theirs batches (`min(100000, n_nodes)`).
     var leaf_capacity: Int
-    # The HOST staging is sized in NODES-OF-THE-TREE, not batch: upstream
+    # The HOST staging is sized in NODES-OF-THE-TREE, not batch: the reference
     # stages each batch out of the FULL-SIZE host vectors
     # (`tree->sparsetree`, `tree->vector_leaf`, `builder.cuh:648-651`,
     # `:663-666`), which is what lets its batches enqueue with no sync
@@ -1419,7 +1419,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         handle's memory resource, so their per-tree construction is
         pointer carving, not a driver allocation. On Metal a fresh
         `enqueue_create_buffer` per tree pays the driver every time, a
-        cost their design never has. Pooling the workspace across trees is
+        cost the reference never has. Pooling the workspace across trees is
         their allocator's semantics, implemented; the same ruling as gbdt's
         TTreeWorkspace, pool-of-one.
 
@@ -1670,7 +1670,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         mut self,
     ) -> MutPointer[WorkloadInfo, MutUntrackedOrigin]:
         """The pinned array `update_workload_info` fills in place --
-        upstream's `h_workload_info` member (`builder.cuh:198`).
+        the reference's `h_workload_info` member (`builder.cuh:198`).
         DEVIATION 1908: it lives in the packed phase span, directly after
         this phase's work items; call only after `_stage_work_items` has
         set `cur_wl_rel`."""
@@ -2525,7 +2525,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # memory under an in-flight launch. The DEVICE trio is
         # batch-sized, as their `d_tree`/`d_instance_ranges`/`d_leaves`
         # are (`builder.cuh:638-641`); the HOST trio is tree-sized,
-        # because upstream stages every batch out of the FULL-SIZE host
+        # because the reference stages every batch out of the FULL-SIZE host
         # vectors (`:648-651`, `:663-666`) -- that per-batch-disjoint
         # host staging is what lets the batches below enqueue with no
         # sync between them.
@@ -2652,7 +2652,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             h_views.append(hl^)
             begin = end
 
-        # RESTORES upstream: their `SetLeafPredictions` carries NO sync
+        # RESTORES the reference: their `SetLeafPredictions` carries NO sync
         # inside the batch loop (`builder.cuh:643-667`); this used to
         # drain the whole device -- all K pipelined trees -- once per
         # batch. One drain covers every batch, then the host reads.

@@ -3,10 +3,10 @@
 """The k-NN classifier's vote and the k-NN regressor's mean, over a finished
 neighbour search.
 
-FOLLOWS `cuml/cpp/src_prims/selection/knn.cuh` at cuML `00094f7`
-(branch-25.08): `get_lbls` (`:40`), `class_probs_kernel` (`:52`),
+Reference: `cuml/cpp/src_prims/selection/knn.cuh` (cuML `00094f7`,
+branch-25.08): `get_lbls` (`:40`), `class_probs_kernel` (`:52`),
 `class_vote_kernel` (`:74`), `regress_avg_kernel` (`:112`), `class_probs`
-(`:158`), `knn_classify` (`:233`), `knn_regress` (`:310`). Followed statement for statement
+(`:158`), `knn_classify` (`:233`), `knn_regress` (`:310`). Behavior matches
 except where a DEVIATION BLOCK says so.
 
 This is `MLCommon::Selection`. The `ML::` entry points a caller reaches
@@ -240,7 +240,7 @@ def _clf_tag(stage: StringSlice, i: Int, n_outputs: Int) -> String:
 #   above them (`kneighbors_classifier.pyx:191-193`, `kneighbors_regressor
 #   .pyx:188-190`, "Only uniform weighting strategy is supported
 #   currently"), so no C++ entry, no kernel and no template parameter for
-#   it exists anywhere in cuML or cuVS to follow statement for statement.
+#   it exists anywhere in cuML or cuVS to cite as a reference.
 # OURS: the three functions below take an OPTIONAL per-(query, slot)
 #   weight buffer as trailing defaulted parameters. When `has_weights` is
 #   False -- which is every existing caller, unedited -- the enqueued
@@ -249,14 +249,14 @@ def _clf_tag(stage: StringSlice, i: Int, n_outputs: Int) -> String:
 #   `neighbors/impl/selection/distance_weights.mojo`'s, whose semantics
 #   are scikit-learn's `_get_weights` / `_classification.py:404-410` /
 #   `_regression.py` and whose file says so at length.
-# REASON: "the upstream does not have it" stopped being a reason to refuse
+# REASON: "the reference does not have it" stopped being a reason to refuse
 #   on 2026-09-01. A refusal is now legitimate only when the thing is
 #   genuinely impossible here (a closed vendor library with no portable
 #   path) or when refusing IS the right behaviour for the input. Neither
 #   applies: the definition is four lines of arithmetic and this library
 #   already goes beyond cuML in several directions.
 # WHERE IT LIVES: the KERNELS are in their own file because they have no
-#   upstream to sit beside; the PARAMETER is here because ENGINEERING_RULES
+#   reference to sit beside; the PARAMETER is here because ENGINEERING_RULES
 #   rule 4 wants a departure in the file it departs from, so a reader
 #   diffing this file against `knn.cuh` sees it.
 # ===========================================================================

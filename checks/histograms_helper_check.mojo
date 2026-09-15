@@ -21,7 +21,7 @@ GATES -- each is a distinct TRANSITION, not a distinct assertion:
   F1  a fresh tree, depths 0..5: depth 0 full, every deeper level partial.
       This is the only sequence a healthy fit produces.
   F2  a SECOND tree on the same helper. Depth 0 must be full again. Their
-      helper is constructed per tree upstream, so this is the transition a
+      helper is constructed per tree in the reference, so this is the transition a
       implementation that reuses helpers depends on and theirs never exercises.
   F3  a SKIPPED level, 0 then 2. Must be full: the counter advanced to 1 and
       the subsets say 2, so they disagree.
@@ -42,8 +42,8 @@ A NOTE ON WHAT IS *NOT* GATED, because saying so is part of the result. The
 `BuildFromScratch = true` field initialiser, and this check demonstrates it
 rather than hiding it: `CurrentBit` reaches 0 only by incrementing from its
 initial -1, and at that moment the flag is already true. Deleting the clause
-leaves every gate below green -- measured, not assumed. It is transcribed
-because it is theirs and because it is the clause that still holds if a
+leaves every gate below green -- measured, not assumed. It is kept
+because the reference has it and because it is the clause that still holds if a
 future caller ever resets the counter without resetting the flag.
 """
 

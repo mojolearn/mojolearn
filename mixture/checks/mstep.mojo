@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The M-step: the weighted moments, and the precision Cholesky that can fail.
 
-NO REFERENCE FILE. See `mixture/checks/estep.mojo`'s header for the upstream
+NO REFERENCE FILE. See `mixture/checks/estep.mojo`'s header for the reference
 finding: cuML, cuVS and RAFT have no Gaussian mixture model at their pins, so
 `ENGINEERING_RULES.md` 0b points at nothing here and
 `sklearn/mixture/_gaussian_mixture.py` is the SEMANTICS ORACLE only.
@@ -54,14 +54,14 @@ cell, or scaling it by anything, is a different matrix. DEVIATION 1736.
 
 ============ DEVIATION 1723 (2026-08-25): A COLLAPSED COMPONENT RAISES BY
 ============ NAME, AND THE DECISION TO FAIL IS ITSELF PINNED ==============
-THEIRS (`_compute_precision_cholesky:363-367`): `np.linalg.LinAlgError` from
+REFERENCE (`_compute_precision_cholesky:363-367`): `np.linalg.LinAlgError` from
 `scipy.linalg.cholesky` is caught and re-raised as a `ValueError` reading
 "Fitting the mixture model failed because some components have ill-defined
 empirical covariance (for instance caused by singleton or collapsed samples).
 Try to decrease the number of components, increase reg_covar, or scale the
 input data."
 
-OURS: the same refusal, by name, carrying the ITERATION, the COMPONENT and
+HERE: the same refusal, by name, carrying the ITERATION, the COMPONENT and
 LAPACK's `info`. The component is NOT silently reset, NOT re-seeded, and NOT
 given a fallback covariance. `GMM_SAB_COLLAPSE_RESET` is the arm that does
 reset it, and it exists so the gate can be shown to see the difference.
@@ -80,10 +80,10 @@ vendors and turn it into a VALUE that is not.
 
 ============ DEVIATION 1726 (2026-08-25): log_det_chol COMES FROM
 ============ chol_logdet, NOT FROM THE PRECISION DIAGONAL =================
-THEIRS (`_compute_log_det_cholesky:470-476`): `sum_j log(P[k][j][j])` over
+REFERENCE (`_compute_log_det_cholesky:470-476`): `sum_j log(P[k][j][j])` over
 the precision Cholesky's own diagonal, which for `covariance_type="full"`
 they extract with a stride-`(d + 1)` slice of the flattened matrix.
-OURS: `-0.5 * chol_logdet(L_k)`, where `chol_logdet` is the Cholesky lane's
+HERE: `-0.5 * chol_logdet(L_k)`, where `chol_logdet` is the Cholesky lane's
 pinned single-thread ascending fold through `identical_log`.
 WHY: the two are the same quantity -- `P[j][j] = 1 / L[j][j]`, so
 `sum log(1/L_jj) = -sum log(L_jj) = -0.5 * (2 sum log L_jj)` -- and they are

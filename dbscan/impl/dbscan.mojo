@@ -2,17 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The batch-size policy and the workspace allocation.
 
-FOLLOWS `cuml/cpp/src/dbscan/dbscan.cuh::compute_batch_size` and
-`dbscanFitImpl` at cuML `00094f7`. Partial (single node, no
+Reference: `cuml/cpp/src/dbscan/dbscan.cuh::compute_batch_size` and
+`dbscanFitImpl` (cuML `00094f7`). Partial (single node, no
 `core_sample_indices`).
 
 `sample_weight` is plumbed since 2026-09-01 and `metric` carries an L1 arm
-that has no upstream (DEVIATION 27, `dbscan/impl/neighbors/
+that has no reference counterpart (DEVIATION 27, `dbscan/impl/neighbors/
 epsilon_neighborhood.mojo`). Neither changes the batch-size estimate:
 `compute_batch_size` is `dbscan.cuh:34` and their `est_mem_per_row` and
 `est_mem_fixed` count neither the weight array nor `wght_sum`, which is
-theirs -- `runner.cuh:176-177` sizes `wght_sum` INSIDE the workspace but
-`dbscan.cuh:55-60` does not count it in the per-row estimate. Copying that
+the reference behavior: `runner.cuh:176-177` sizes `wght_sum` INSIDE the workspace but
+`dbscan.cuh:55-60` does not count it in the per-row estimate. Matching that
 gap rather than closing it keeps the batch count a pure function of
 `(n_rows, budget)`, which is what
 `check_dbscan_batch_count_invariance` and `check_dbscan_max_mbytes_moves_
@@ -83,7 +83,7 @@ def compute_batch_size(
     Their `estimated_memory` out-parameter (`:96`) feeds one debug log line
     (`dbscan.cuh:171-173`) and is not returned here.
 
-    DEVIATION 37 (archive/reference/PORTING.md): their `:66` computes
+    DEVIATION 37: their `:66` computes
     `max_mbytes_per_batch * 1000000 - est_mem_fixed` in `size_t`, so a
     nonzero budget smaller than the fixed cost WRAPS, and the `min` at `:69`
     turns the wrap into a full-size batch. Ours raises instead. Their
@@ -231,7 +231,7 @@ def dbscan_fit_impl_weighted(
     which is also theirs.
 
     `phase_timing` prints `PHASE <name> batch <i>/<n> <ms>` per phase; see
-    `dbscan_fit` and archive/reference/PORTING.md 38. Off, nothing prints.
+    `dbscan_fit`. Off, nothing prints.
     """
     if n_rows <= 0:
         raise Error("No rows in the input array. DBSCAN cannot be fitted!")

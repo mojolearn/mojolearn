@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The EXACT host oracle: `node_split_random`, transcribed, on our keyed draws.
+"""The EXACT host oracle: `node_split_random`, restated, on our keyed draws.
 
     Verified by:  extratrees/checks/host_splitter_check.mojo
 
@@ -142,14 +142,14 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
 #   (`builder_kernels.cuh:152`, `:246`, launched at `builder.cuh:427`), and
 #   nothing in their pipeline can ask for more once a column turns out
 #   constant. Re-invoking the sampler under a different key to get more
-#   columns is not in either upstream, so it would be invention, and rule 0b
+#   columns is not in either reference, so it would be invention, and rule 0b
 #   forbids it. DECLINED, with the price below.
 #
 # WHICH UPSTREAM THIS SIDES WITH. cuML's. Their `computeSplitKernel` scores
 #   the sampled `colids` and nothing else; a node whose sampled columns yield
 #   no valid split becomes a leaf via `split_not_valid`
 #   (`builder_kernels.cuh:59-67`). So this is not a third behaviour invented
-#   between two upstreams -- it is one upstream's behaviour where the two
+#   between two references -- it is one reference's behaviour where the two
 #   disagree, chosen because the sampler is already theirs.
 #
 # PRICE, PAID IN TREES NOT IN CYCLES. A node all of whose SAMPLED columns are
@@ -232,8 +232,8 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
 #   from an EXACT integer comparator existing for Gini; it does not, and
 #   cannot while 135 is open, for MSE. The choice here is between two float
 #   quantities with the same argmax and different rounding, and it is settled
-#   the other way: by which upstream is the SPEC for the split rule. This
-#   file transcribes `node_split_random`, so it compares what `:691`
+#   the other way: by which reference is the SPEC for the split rule. This
+#   file restates `node_split_random`, so it compares what `:691`
 #   compares.
 #
 # PRICE. On a near-tie the two forms can disagree, and then our chosen
@@ -464,7 +464,7 @@ def _wins_on_total_order(cand: Split, best: Split, tie_salt: UInt32) -> Bool:
     MSE, DEVIATION 153).
 
     DEVIATION 463: the shipping tie order is the keyed pseudorandom rank of
-    `split.mojo::keyed_tie_wins` -- CALLED, not transcribed, so host and
+    `split.mojo::keyed_tie_wins` -- CALLED, not restated, so host and
     device cannot drift -- with `tie_salt = split_tie_salt_for(tree_id,
     node_id)` computed once per node by the callers above. sklearn's own tie
     semantics are first-in-a-uniformly-random-visit-order, i.e. uniform among

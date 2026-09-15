@@ -3,7 +3,7 @@
 """`SquaredLoss` and `AbsLoss`: the two regression objectives, per row, and
 `nrm1`, the gradient norm the absolute-value losses converge on.
 
-FOLLOWS `cuml/cpp/src/glm/qn/glm_linear.cuh` at cuML `00094f7`. Whole
+Reference: `cuml/cpp/src/glm/qn/glm_linear.cuh` (cuML `00094f7`). Whole
 file: both `Lz`/`Dlz` pairs and both `gradNorm`s. Plus `nrm1` from
 `simple_mat/dense.hpp:313-321`, which `simple_mat/dense.mojo` does not carry
 and which three losses (`AbsLoss`, `SVCL1Loss`, `SVRL1Loss`) return from
@@ -11,7 +11,7 @@ and which three losses (`AbsLoss`, `SVCL1Loss`, `SVRL1Loss`) return from
 belongs beside `nrm_max` in `dense.mojo` (HAND-OFF in `glm/README.md`). Do
 not improve.
 
-THEIR FOUR FUNCTORS, copied (`glm_linear.cuh:21-60`):
+THE REFERENCE'S FOUR FUNCTORS (`glm_linear.cuh:21-60`):
 
     Squared  lz(y, z)  = diff * diff * 0.5,  diff = z - y
              dlz(y, z) = z - y
@@ -32,7 +32,7 @@ writing `loss_terms[i] = lz * normalization` (the map half of
 `:164`), one thread per row; the SUM is `glm_base.mojo::sum_terms_kernel`
 (one pinned block, DEVIATION 547).
 
-`nrm1` upstream is `raft::linalg::rowNorm<L1Norm, rowMajor=true>` over one
+`nrm1` in the reference is `raft::linalg::rowNorm<L1Norm, rowMajor=true>` over one
 row of `len` entries -- `raft::linalg::reduce` with `abs_op`, `add_op`: a
 CUB-shaped fold. Here it is the same ONE-BLOCK pinned shape as `dot` and
 `nrmMax` (DEVIATION 547): `STATS_TPB` strided partials `acc = acc + |u_i|`

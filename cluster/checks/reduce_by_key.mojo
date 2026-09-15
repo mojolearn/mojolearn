@@ -111,7 +111,7 @@ def accumulate_centroid_sums_kernel(
 ):
     """`reduce_rows_by_key`, as a quantized scatter-add.
 
-    This mirrors the arm THEIR dispatch takes at k-means' nkeys: the
+    This is the arm the reference dispatch takes at k-means' nkeys: the
     small-nkeys kernel is gated `nkeys <= 4`, everything else falls to
     `sum_rows_by_key_large_nkeys_rowmajor` (`raft/linalg/detail/
     reduce_rows_by_key.cuh:354-363`). Measured contention-bound at the 4M
@@ -220,13 +220,13 @@ def accumulate_centroid_sums_privatized_kernel[
     order `veclen` cells per thread step.
 
     THE `veclen`-WIDE X READ IS A SECOND DELIBERATE DEVIATION BEYOND
-    UPSTREAM (archive/reference/PORTING.md 46). RAFT's rowmajor kernel reads ONE element per
+    THE REFERENCE. RAFT's rowmajor kernel reads ONE element per
     thread (`SumsT val = d_A[j + lda * i]`, `reduce_rows_by_key.cuh:285`;
     no `TxN_t`/`ldg` anywhere in that file) and loses nothing by it on
     NVIDIA, where a warp's 32 scalar reads coalesce into full
     transactions. On this Apple device the same scalar-to-vector swap was
     MEASURED 3x on the assignment kernel (63 -> 21 ms/iter, re-verdict
-    2026-08-20), so the hardware premise upstream's scalar reads rest on
+    2026-08-20), so the hardware premise the reference's scalar reads rest on
     does not hold here. The instantiation contract is the SAME ladder the
     assignment implementation dispatches on (`fused_veclen_for`, their
     `fused_distance_nn-inl.cuh:107-110` selection, fed x's base address
@@ -320,13 +320,13 @@ def accumulate_weight_per_cluster_privatized_kernel(
     scale_in: Float32,
 ):
     """The weight denominator through the SAME privatization -- and for this
-    one it is not a deviation at all: the upstream call IS
+    one it is not a deviation at all: the reference call IS
     `raft::linalg::reduce_cols_by_key` (`cuvs/src/cluster/detail/
     kmeans.cuh:312-318`, nrows=1, ncols=n_samples, nkeys=n_clusters), whose
     dispatch at this fit's shape (cache 4*k bytes <= 49152, work
     n_samples >= 8192) takes `reduce_cols_by_key_cached_kernel`
     (`reduce_cols_by_key.cuh:125-133`) -- the shared-memory arm. The direct
-    `accumulate_weight_per_cluster_kernel` above mirrored their OTHER arm.
+    `accumulate_weight_per_cluster_kernel` above matches the reference's OTHER arm.
 
     Bit-identical to it anyway: same quantized Int32 addends, associative
     and commutative, re-associated per block. See the sums kernel's comment.
@@ -452,7 +452,7 @@ def launch_accumulate_centroid_sums(
     to amortize the flush, direct scatter-add otherwise. The privatized
     arm's X read width comes from the same selection ladder the assignment
     launcher dispatches on (`fused_veclen_for`, fed x's address for both
-    pointer terms because this kernel reads one matrix; archive/reference/PORTING.md 46).
+    pointer terms because this kernel reads one matrix).
     Both arms -- and every `veclen` instantiation of the privatized one --
     produce bit-identical Int32 totals (see the kernels), so this selector
     is SCHEDULING: it can change the time, never the model.
@@ -503,7 +503,7 @@ def launch_accumulate_weight_per_cluster(
     n_clusters: Int,
     weight_scale: Float32,
 ) raises:
-    """Same dispatch for the denominator; upstream's own is
+    """Same dispatch for the denominator; the reference's own is
     `reduce_cols_by_key` at nrows=1, so the guard terms are `n_clusters`
     cells and `n_samples` work items."""
     if n_clusters <= PRIVATE_ACC_CELLS and n_samples >= PRIVATE_MIN_WORK:

@@ -96,7 +96,7 @@ window update, the state store) are NOT seams; a copy moves bits untouched.
 | S8 | `(delta * B) * u` (ref:167, second pairing) | HF MM:189 | `pinned_mul(S7, u)`. THE CUDA KERNEL ROUNDS THE OTHER WAY, `B * (delta * u)` (cuh:162,222; MAX's kernel too). The reference's order is the profile's; fixture F5 separates the two | PRODUCT |
 | S9 | `h = deltaA * h + deltaB_u` (ref:175) | torch rounds twice (mul, add) | `ftz(fma(deltaA, h, deltaB_u))`, ONE rounding. Pinned fused because only fusion has a portable spelling (gemm contract section 4); the CUDA scan op and MAX's kernel contract here as well. Fixture F2 separates fused from unfused | FUSED |
 | S10 | `y = sum_n h[n] * C[n]` (ref:177-182) | einsum, fold order torch internal; CUDA walks state_idx ascending (cuh:185-266) | serial ascending n from +0.0, `acc = ftz(fma(C[t,n], h[n], acc))` | FUSED |
-| S11 | `out = y + u * D` (ref:189) | both the reference and the CUDA kernel round `u * D` as its own product (cuh:163 seeds out_vals with `D * u`) | `p = ftz(pinned_mul(u, D[d]))`, then `ftz(y + p)`. UNFUSED because both upstreams round the product. The CUDA kernel ADDS the C·h terms onto `D * u` (D first); the reference adds `u * D` to the finished y (D last). The REFERENCE's order is the profile's; fixture F6 separates them | PRODUCT + add |
+| S11 | `out = y + u * D` (ref:189) | both the reference and the CUDA kernel round `u * D` as its own product (cuh:163 seeds out_vals with `D * u`) | `p = ftz(pinned_mul(u, D[d]))`, then `ftz(y + p)`. UNFUSED because both references round the product. The CUDA kernel ADDS the C·h terms onto `D * u` (D first); the reference adds `u * D` to the finished y (D last). The REFERENCE's order is the profile's; fixture F6 separates them | PRODUCT + add |
 | S12 | `out * silu(z)` (ref:190-191) | `F.silu` is `z / (1 + exp(-z))`, ONE division (ATen's spelling, also cuh:298) | `pinned_mul(skip, identical_silu(z))`; identical_silu is the single-quotient spelling (DEVIATION 744), NOT `z * sigmoid(z)` | PRODUCT |
 | S13 | conv tap chain | `F.conv1d(padding=3, groups=d_inner)` + bias | bias-SEEDED accumulator, taps k = 0..3 ascending (oldest first), `acc = ftz(fma(w[d,k], x[l-3+k], acc))`, a pre-sequence position reads the window (zeros on prefill). The shape is MAX `causal_conv1d.mojo:190-205` and the CUDA `causal_conv1d` kernel (both bias-seeded); fixtures F3 (tap order) and F4 (bias seed vs bias last) separate the alternatives | FUSED |
 | S14 | `delta = softplus(dt + bias)` (ref:145-148) | `dt + delta_bias`, then `F.softplus` | `biased = ftz(dt + ftz(bias[d]))`; `identical_softplus(biased)` = `x <= 20 ? log1p(exp(x)) : x` (DEVIATION 745) | add |
@@ -201,6 +201,20 @@ audit of section 6; (f) every clause above falsifiable by a named sabotage
 that fails a gate. `mamba/checks/mamba_check.mojo` is the gate file;
 FAST-mode arms of (a) are RECORDED, not asserted, where they are
 vendor-shaped (the metrics lane's leg-11 lesson).
+
+### Ragged, right-padded batches (2026-09-15)
+
+`forward(x, lengths=...)` on the Python block takes rows real at positions
+`[0, lengths[i])` and padded after. No arithmetic changes: the scan is
+causal, so a real position never reads a later one, and clause (c) makes a
+row's bits independent of its batch, so each real position equals the row
+run alone at its own length. The surface (`python/mojolearn/_ragged.py`)
+replaces the padding inputs with `+0.0` before the ordinary call and the
+padding outputs with `+0.0` after it; the second copy is measured INERT on
+this block, which maps an all-zero token to `+0.0` already. Forward only
+(the weight gradients contract over all `B*L` tokens, which padding
+changes) and refused with a carried state. The gate is the `ragged` part of
+tools/identity_break.py and python/mojolearn/tests/test_ragged_lengths.py.
 
 ## 9. Not claimed
 

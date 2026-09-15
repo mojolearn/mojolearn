@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CTR elementwise kernels.
 
-FOLLOWS `catboost/cuda/ctrs/kernel/ctr_calcers.cu` at CatBoost `54a8143a`.
-Followed statement for statement.
+Reference: `catboost/cuda/ctrs/kernel/ctr_calcers.cu` (CatBoost `54a8143a`).
 
 ## WHY THIS FILE NEEDS NO KERNEL-MATRIX ROW
 

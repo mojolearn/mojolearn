@@ -94,7 +94,7 @@ comptime LABELS_SAMPLED_ORDER = True
 # Optional bootstrap-row sorting preserves the drawn multiset. Stable
 # partitioning then keeps node ranges ascending. Integer/fixed-point
 # histograms, counts, leaves, and the resulting forest remain identical, but
-# `row_ids` order and its diagnostic trace intentionally differ from upstream.
+# `row_ids` order and its diagnostic trace intentionally differ from the reference.
 # `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
 comptime ROWS_SORTED_SAMPLE = is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
 
@@ -255,7 +255,7 @@ struct RF_params(ImplicitlyCopyable, Movable):
         """
         # `n_streams` IS honored since DEVIATION 117 was implemented: the
         # forest loop pipelines that many trees over the one Metal queue,
-        # mirroring their omp/stream pool (`randomforest.cuh:336-367`).
+        # matching their omp/stream pool (`randomforest.cuh:336-367`).
         # The refusal that stood here guarded the serial implementation and is gone
         # with it; no output bit depends on the value, because their
         # per-tree and per-node RNG is a pure hash of (seed, treeid[,
@@ -440,7 +440,7 @@ def compute_max_features(kind: Int, n_cols: Int) raises -> Float64:
 def n_sampled_cols(max_features: Float32, n_cols: Int) -> Int32:
     """`builder.cuh:240` -- `max(1, IdxT(params.max_features * n_cols))`.
 
-    Not in the estimator surface; transcribed HERE because it is the
+    Not in the estimator surface; restated HERE because it is the
     consumer that makes `max_features`'s last bit matter, and a reader
     of the table above needs to see the truncation to understand it. The
     multiply is float32 (`float * int` promotes the int) and the cast
@@ -518,7 +518,7 @@ def check_random_seed(random_state: Int) raises -> UInt64:
     truncation faithfully (`random_utils.mojo:107-120`).
 
     So this is not a bounds check for its own sake -- it is the reason the
-    truncation upstream is harmless, and a caller building `RF_params` by
+    truncation in the reference is harmless, and a caller building `RF_params` by
     hand should run it. `RF_params.seed` stays a full UInt64 because their
     C++ field is a `uint64_t`; the restriction is the Python layer's.
 
@@ -569,7 +569,7 @@ def class_weight_balanced(
     THE NARROWING IS PART OF THIS ARM AND NOT OF THE OTHERS. `.astype`
     rounds these weights to float32 before they are ever applied, while
     the uniform and explicit arms stay float64 until the `take` at `:97`.
-    That asymmetry is theirs; it is transcribed rather than smoothed,
+    That asymmetry is the reference's; it is kept rather than smoothed,
     because a weight is a multiplier on a histogram accumulation and the
     two orders do not round the same.
 
@@ -979,7 +979,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
     ) raises:
         """`RandomForest::predict`, `randomforest.cuh:382-436`.
 
-        Implemented statement for statement. `input` is ROW-MAJOR
+        `input` is ROW-MAJOR
         (`randomforest.cuh:375`, and the indexing at `:407` proves it).
         """
         self.error_checking(n_rows, n_cols)
@@ -1823,8 +1823,8 @@ struct RowSampler(Movable):
     Note `fnv1a32_hash_seed_tree` folds the uint64 seed in ONE round on its
     low 32 bits and DISCARDS the high half -- because this call site uses
     `fnv1a32` directly rather than `fnv1a32_combine`. That asymmetry with
-    the per-node chain (which folds both halves) is theirs and is
-    transcribed, not corrected.
+    the per-node chain (which folds both halves) is the reference's and is
+    kept, not corrected.
     """
 
     var bootstrap: Bool
@@ -2171,7 +2171,7 @@ struct RowSampler(Movable):
             # host-staging arms below DO keep their sync, because each
             # re-writes `h_rows` on the host next tree and the write must
             # not race the in-flight copy -- that wait is the price of
-            # DEVIATION 305's host staging, not of their design.
+            # DEVIATION 305's host staging, not of the reference.
             return
         if self.has_sample_weight:
             # `:144-154` -- `thrust::copy_if` over `NonzeroSampleWeight`,
@@ -2590,7 +2590,7 @@ def fit_forest[
     # DEVIATION 313: ONE Builder for the whole forest, reset per tree.
     # Their per-tree Builder construction allocates from RMM's POOLED
     # resources, so it is pointer carving; a Metal buffer create per tree
-    # is a driver cost their design never pays. See
+    # is a driver cost the reference never pays. See
     # `Builder.reset_for_tree` for the full argument. `builder_rows` is
     # what `sampler.n_selected` will hold in the loop -- constant across
     # one forest in every arm: three arms set it to `n_sampled`, and the

@@ -113,7 +113,7 @@ THE MAPE DEFECT, found by this check and still open.
   rather than riding on `kernel_alpha()`. That is under `gbdt/`, which
   this session does not write.
 
-THE TWEEDIE ROW CLOSES DEVIATION 62. `archive/reference/PORTING.md` 62 records that their GPU
+THE TWEEDIE ROW CLOSES DEVIATION 62. Their GPU
 reads `variance_power` into a member nothing reads again
 (`pointwise_target_impl.h:288-291`), so their GPU trains at
 `variancePower = 0` whatever the user passes, while their CPU uses it
@@ -382,7 +382,7 @@ def load(path: String) raises -> Fixture:
 
 
 # ---------------------------------------------------------------------------
-# Their own Score, transcribed. `cuda/targets/kernel/pointwise_targets.cu`.
+# The reference Score, as a host oracle. `cuda/targets/kernel/pointwise_targets.cu`.
 #
 # This is the OBJECTIVE, not the reported metric, and the two differ:
 # `TMAPETarget::Score` (`:148`) divides by max(1, |target|) while their MAPE
@@ -736,7 +736,7 @@ def main() raises:
         print()
 
     # ---------------------------------------------------------------
-    # DEVIATION 62, measured. `archive/reference/PORTING.md` 62: their GPU drops Tweedie's
+    # DEVIATION 62, measured. Their GPU drops Tweedie's
     # variance_power (`pointwise_target_impl.h:288-291` reads it into a
     # member nothing reads again) and trains at 0; their CPU honours it
     # (`private/libs/algo/tensor_search_helpers.cpp:308`). This implementation

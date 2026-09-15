@@ -196,7 +196,7 @@ change rather than an arithmetic pin, and section 12 prices it.
 
 ## 1. The reference, pinned
 
-| what | upstream | this profile |
+| what | reference | this profile |
 |---|---|---|
 | the module | `torch.nn.Embedding`, and `transformers` `LlamaModel.embed_tokens` | the forward gather and the dense backward only |
 | the forward | `torch.nn.functional.embedding`, an `index_select` | same operation, seams in section 3 |
@@ -798,7 +798,7 @@ clauses buy that seed and are why it is not up for revision: the empty run is
 the reason the fold is a chain at all; and the microbatch CARRY has a value to
 start from. And it agrees with `embedding_dense_backward`, whose buffer is
 `at::zeros` and which adds into it, **so the seed is the reference's behavior
-and the departure is from a sibling profile rather than from upstream.**
+and the departure is from a sibling profile rather than from the reference.**
 
 **(d) What this does NOT fix.** A caller that takes a `min`, `max` or `argmin`
 over `dW` inherits row 13 in full. That is gemm 9.2(e) verbatim and it is the

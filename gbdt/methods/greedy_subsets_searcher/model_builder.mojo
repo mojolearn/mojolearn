@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Fold a list of leaf PATHS into a tree.
 
-FOLLOWS `TFlatTreeBuilder` and `BuildTreeLikeModel<TNonSymmetricTree>` in
-`catboost/cuda/methods/greedy_subsets_searcher/model_builder.cpp` at CatBoost
-`54a8143a`. Followed statement for statement.
+Reference: `TFlatTreeBuilder` and `BuildTreeLikeModel<TNonSymmetricTree>`,
+`catboost/cuda/methods/greedy_subsets_searcher/model_builder.cpp` (CatBoost
+`54a8143a`).
 
 The searcher hands back leaves as a flat `TVector<TLeafPath>` in LEAF-ID
 order, plus a weight and a value vector per leaf. Nothing in that list says
@@ -285,7 +285,7 @@ def _to_ui16(value: Int, what: String) raises -> UInt16:
     `ui32`. A dataset with more than 65,535 features, or a tree wider than
     65,535 leaves on one side, would wrap and produce a model that applies
     cleanly and answers wrong. This raises instead, which is a DEVIATION
-    (archive/reference/PORTING.md 350) and the only kind that is free: it cannot change any
+    and the only kind that is free: it cannot change any
     model their code would have built correctly.
     """
     if value < 0 or value > 65535:

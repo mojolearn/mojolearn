@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which histograms to BUILD and which to DERIVE, once per level.
 
-FOLLOWS `TSplitPropertiesHelper::BuildNecessaryHistograms` in
+Reference: `TSplitPropertiesHelper::BuildNecessaryHistograms`,
 `catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp`
-at CatBoost `54a8143a`. Followed statement for statement.
+(CatBoost `54a8143a`).
 
 This is the decision that halves a level's histogram work, and it is pure
 host-side bookkeeping: no kernel, no device memory, just which leaf ids go
@@ -31,8 +31,7 @@ one built. Equal sibling sizes are the common case on a binary feature -- 632
 of 744 planned pairs on the balanced fixture in
 `checks/sibling_tiebreak_check.mojo` -- and the choice is NOT inert: the
 subtraction runs in float32 on cells that have already been rounded out of
-float32's exact-integer range, so swapping it moves histogram bits. archive/reference/PORTING.md
-136.
+float32's exact-integer range, so swapping it moves histogram bits.
 
 **THIS HOST COPY IS ON THE SHIPPED DEPTHWISE AND LOSSGUIDE PATH**
 (`greedy_search_helper_depthwise.mojo`, `fit_non_symmetric_tree`, once per
@@ -185,8 +184,7 @@ def build_necessary_histograms(leaves: List[LeafRecord]) raises -> LevelPlan:
         # `ids` is pushed in ASCENDING leaf index (`:1300`), so `ids[0]` is
         # `i` and `ids[1]` is `sibling`, the strict `<` is on `i`, and ON AN
         # EXACT TIE THE `else` BRANCH FIRES AND `sibling` IS COMPUTED. This
-        # implementation had it inverted from `409a16c` until 2026-08-21; archive/reference/PORTING.md
-        # 136 has what that cost.
+        # implementation had it inverted from `409a16c` until 2026-08-21.
         var small = sibling
         var big = i
         if leaves[i].size < leaves[sibling].size:

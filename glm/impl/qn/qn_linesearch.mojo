@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ls_success` and `ls_backtrack`: the backtracking line search.
 
-FOLLOWS `cuml/cpp/src/glm/qn/qn_linesearch.cuh` at cuML `00094f7`. WHOLE
+Reference: `cuml/cpp/src/glm/qn/qn_linesearch.cuh` (cuML `00094f7`). WHOLE
 FILE since 2026-09-01: `LSProjectedStep` and `ls_backtrack_projected`,
 OWL-QN's projected line search, are at the bottom (DEVIATION 552). Do not
 improve.
@@ -146,7 +146,7 @@ def ls_backtrack(
 #      value that includes the penalty against a slope that does not is the
 #      obvious way to get this wrong.
 #
-# `ls_success` is reused unchanged: upstream calls the SAME function and
+# `ls_success` is reused unchanged: the reference calls the SAME function and
 # passes `pseudo_grad` in its `grad` parameter (`qn_linesearch.cuh:186-187`).
 
 
@@ -166,7 +166,7 @@ def owlqn_objective(
         return tmp + l1_penalty * nrm1(mask, dev_scalar, stream);
 
     **The value carries the l1 term and `grad` does not.** That asymmetry is
-    deliberate upstream and is commented there ("fx is loss+regularizer,
+    deliberate in the reference and is commented there ("fx is loss+regularizer,
     grad is grad of loss only", `:322-323`); the pseudo-gradient is what
     stands in for the missing piece.
 

@@ -2,16 +2,16 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Initialization and the Lloyd iteration.
 
-FOLLOWS `cuvs/src/cluster/detail/kmeans.cuh` at cuVS `94c2819`. Partial.
+Reference: `cuvs/src/cluster/detail/kmeans.cuh` (cuVS `94c2819`). Partial.
 
-Their file is 1242 lines and most of it is host bookkeeping for cases this
+The reference file is 1242 lines and most of it is host bookkeeping for cases this
 tree does not have: multi-GPU partitioned fits, `kmeans_transform`, and the
 `kmeans_auto_find_k` driver. What is implemented is the algorithm: the three
 initializations (random, classic k-means++, scalable k-means||) and the
 iteration.
 
-THE ITERATION, THEIR ORDER, WHICH IS NOT THE TEXTBOOK ORDER
------------------------------------------------------------
+THE ITERATION, THE REFERENCE ORDER, WHICH IS NOT THE TEXTBOOK ORDER
+-------------------------------------------------------------------
 The textbook writes assign, update, test. `kmeans_fit_main`
 (`detail/kmeans.cuh:407-497`) is
 
@@ -113,7 +113,7 @@ from cluster.impl.kmeans_params import (
 struct HostRng(Copyable, Movable):
     """A documented LCG, because cuVS's `std::mt19937` is not reproducible here.
 
-    DEVIATION (archive/reference/PORTING.md 17). Their host RNG picks the first k-means++
+    DEVIATION. Their host RNG picks the first k-means++
     centroid (`detail/kmeans.cuh:152-157`) and the per-restart seeds
     (`:885`, `:890`), and
     their device RNG (`raft::random::discrete`) draws the k-means||
@@ -579,14 +579,14 @@ def init_scalable_kmeans_plus_plus(
     `choose_scale` over an O(candidates) readback of the candidate matrix
     and weights, which is host traffic the rule permits.
 
-    DEVIATIONS: archive/reference/PORTING.md 47 (counter-hash uniforms, f32 probability),
-    48 (selection as flags + f32 scan + scatter, exact below 2^24 rows,
+    DEVIATIONS: counter-hash uniforms with an f32 probability, and
+    selection (as flags + f32 scan + scatter, exact below 2^24 rows,
     guarded here; float-histogram counts share the bound).
     """
     if n_samples >= (1 << 24):
         raise Error(
             "scalable k-means++ selection scan counts in Float32 and is"
-            " exact only below 2^24 rows (archive/reference/PORTING.md 48); got "
+            " exact only below 2^24 rows; got "
             + String(n_samples)
         )
 
@@ -606,7 +606,7 @@ def init_scalable_kmeans_plus_plus(
     var chunk_offsets = ctx.enqueue_create_buffer[DType.float32](n_chunks)
     var csum = ctx.enqueue_create_buffer[DType.float32](n_samples)
     # A distinct one-element buffer for `sum_partials_kernel`'s unused arm
-    # (archive/reference/PORTING.md 24), as in `kmeans_fit_main`.
+    # as in `kmeans_fit_main`.
     var ones = ctx.enqueue_create_buffer[DType.float32](1)
     var d_psi = ctx.enqueue_create_buffer[DType.float32](1)
     var h_psi = ctx.enqueue_create_host_buffer[DType.float32](1)
@@ -680,7 +680,7 @@ def init_scalable_kmeans_plus_plus(
         # <<< Step-4 >>> (`:689-707`): one 64-bit round seed from the host
         # (O(1), where theirs advances a device Philox state), hashed per
         # sample on device; then `DeviceSelect::If` as flags + the existing
-        # three-stage scan + a rank scatter. archive/reference/PORTING.md 47/48.
+        # three-stage scan + a rank scatter.
         var round_seed = rng.next_u64()
         var seed_lo = round_seed.cast[DType.uint32]().cast[DType.int32]()
         var seed_hi = (round_seed >> 32).cast[
@@ -1014,7 +1014,7 @@ def kmeans_fit_main_traced(
     var new_centroids = ctx.enqueue_create_buffer[DType.float32](cd)
     var partials = ctx.enqueue_create_buffer[DType.float32](256)
     # A distinct one-element buffer so `sum_partials_kernel` never receives the
-    # same buffer as both of its mutable arguments (archive/reference/PORTING.md 24). Its
+    # same buffer as both of its mutable arguments. Its
     # contents are never read on the modes that pass it.
     var ones = ctx.enqueue_create_buffer[DType.float32](1)
     var d_cost = ctx.enqueue_create_buffer[DType.float32](1)

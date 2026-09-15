@@ -18,7 +18,7 @@ sklearn (`mutual_info_score`): `contingency_nm * (log(contingency_nm) -
 log(pi.take(nzx)) - log(pj.take(nzy))) + contingency_nm * log(total)`
 summed, all over `total`; i.e. sum c/n * (log n + log c - log a - log b).
 The same quantity; the spelling differs in how the logs are grouped.
-Ours mirrors RAFT's grouping: `log(size * c) - log(a * b)`.
+This implementation uses RAFT's grouping: `log(size * c) - log(a * b)`.
 
 THE FLOAT EPILOGUE is DEVIATIONS 650 and 651 (entropy.mojo carries the
 banners): the integer contingency matrix is the device product and is

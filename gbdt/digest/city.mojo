@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CityHash64, CatBoost's OWN variant. FOLLOWS `util/digest/city.cpp` at
-CatBoost `54a8143a`, the 64-bit unseeded entry point only -- the one
+"""CityHash64, CatBoost's OWN variant. Reference: `util/digest/city.cpp`
+(CatBoost `54a8143a`), the 64-bit unseeded entry point only -- the one
 function `VecCityHash` stands on (`libs/helpers/hash.h:6-9`, implemented as
 `vec_city_hash_u32` in `gbdt/methods/batch_feature_tensor_builder.mojo`,
 which is what keys a feature tensor here).
@@ -11,9 +11,9 @@ THE TRAP THIS FILE EXISTS TO NOT FALL INTO: their `city.h` says it plainly
 *different* from the mainline version of CityHash." An implementation written from
 Google's published CityHash (1.1+, which changed `HashLen0to16` and the
 mixing constants) or checked against any public CityHash test vector would
-be a DIFFERENT hash agreeing on nothing. Every function below is
-transcribed from THEIR `city.cpp`, cited by line, and gated cell for cell
-against their own file compiled by `tools/cityhash_oracle/`
+be a DIFFERENT hash agreeing on nothing. Every function below
+implements the reference `city.cpp`, cited by line, and is gated cell for cell
+against that file compiled by `tools/cityhash_oracle/`
 (`pixi run check-cityhash`).
 
 Why the hash matters at all: every category CatBoost ever stores or looks

@@ -3,7 +3,7 @@
 """The apply-time CTR table: what a trained categorical model needs to
 score a row it has never seen.
 
-MIRRORS `catboost/libs/model/ctr_value_table.h` (`TCtrValueTable`), the
+Reference: `catboost/libs/model/ctr_value_table.h` (`TCtrValueTable`), the
 `TModelCtr` half of `catboost/libs/model/online_ctr.h:260-292`, and the
 lookup loop of `TStaticCtrProvider::CalcCtrs`
 (`libs/model/static_ctr_provider.cpp:63-71`) at CatBoost `54a8143a`.
@@ -250,7 +250,7 @@ struct TCtrValueTable(Copyable, Movable):
     def calc(self, count_in_class: Float32, total_count: Float32) -> Float32:
         """`TModelCtr::Calc` (`online_ctr.h:289-292`), verbatim.
 
-        **`@no_inline` is not decoration.** Deviation 54 in `archive/reference/PORTING.md`
+        **`@no_inline` is not decoration.** Deviation 54
         measured Mojo contracting a multiply-then-add across an inlined
         numeric helper where clang at `-ffp-contract=on` contracts only
         within one source expression, which re-decided a tie on a
@@ -309,8 +309,8 @@ struct TCtrValueTable(Copyable, Movable):
         return len(self.counts)
 
     def value_for(self, code: Int) raises -> Float32:
-        """One row's CTR value, their `TStaticCtrProvider::CalcCtrs` inner
-        loop (`static_ctr_provider.cpp:63-122`) transcribed arm for arm.
+        """One row's CTR value, the reference `TStaticCtrProvider::CalcCtrs` inner
+        loop (`static_ctr_provider.cpp:63-122`), arm for arm.
 
         Their bucket lookup is a hash walk guarded by `NotFoundIndex`; ours
         is a range test, because the key is the dense code (deviation 56).
@@ -415,8 +415,7 @@ def build_ctr_tables(
     `TCtrValueTable`. The histogram below is therefore computed ONCE per
     categorical feature and handed to every Borders config; only the priors
     differ, and only at `Calc`. What each table then STORES is a copy,
-    because this format keys a table by the model COLUMN it feeds -- see
-    `archive/reference/PORTING.md` 58.
+    because this format keys a table by the model COLUMN it feeds.
     """
     if unique_values <= 0:
         raise Error("a categorical feature with no categories has no table")

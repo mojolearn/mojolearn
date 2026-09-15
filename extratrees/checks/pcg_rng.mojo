@@ -7,7 +7,7 @@ pure function of `(seed, tree_id, node_id, feature_id)` rather than of the order
 in which a parallel builder happened to visit candidates — the reason recorded
 in DEVIATION 130 of `archive/research/extratrees/DEVIATIONS.md`.
 
-Every arithmetic line below is a transcription of an upstream, pinned:
+Every arithmetic line below is a transcription of a pinned reference:
 
 * RAFT `661a3b840c3300f95f053812a560c952c9d049a4`
   * `cpp/include/raft/random/detail/rng_device.cuh:546` `struct PCGenerator`
@@ -35,7 +35,7 @@ Every arithmetic line below is a transcription of an upstream, pinned:
 `key_for`, `SplitKey` and `uniform_threshold` at the bottom of the file are
 OURS, not an implementation. They are marked as such.
 
-Checked cell-for-cell against the upstreams' own arithmetic by
+Checked cell-for-cell against the references' own arithmetic by
 `extratrees/checks/pcg_rng_check.mojo` against
 `extratrees/tools/rng_oracle/pcg_reference.txt`.
 """
@@ -104,9 +104,9 @@ def row_sample_seed(seed: UInt64, tree_id: Int32) -> UInt32:
     Their `fnv1a32` takes `uint32_t`, so the `uint64_t seed` is folded in
     ONE round on its low 32 bits and the high half is discarded. The RF lane
     (`ensemble/decisiontree/batched_levelalgo/random_utils.mojo::
-    fnv1a32_hash_seed_tree`, its DEVIATION 400) rules that their bug, not
-    their design, and gives the high half its round exactly when it is
-    nonzero -- every seed below 2^32 keeps the transcription's bits. This
+    fnv1a32_hash_seed_tree`, its DEVIATION 400) rules that a bug in the reference, not
+    its intent, and gives the high half its round exactly when it is
+    nonzero -- every seed below 2^32 keeps the reference's bits. This
     lane REUSES that seed contract rather than inventing a second one, so a
     bootstrap forest here and one in `ensemble/` draw the same rows from the
     same `(seed, tree_id)`; `forest_check` pins the values. Widened to
@@ -219,7 +219,7 @@ def wmul_64bit(a: UInt64, b: UInt64) -> Tuple[UInt64, UInt64]:
     """Wide 64x64 -> 128 multiply. Returns `(hi, lo)`.
 
     raft/util/integer_utils.hpp:207-237. See DEVIATION 140: their `__CUDA_ARCH__`
-    branch is `mul.hi.u64` / `mul.lo.u64` PTX; this transcribes their portable
+    branch is `mul.hi.u64` / `mul.lo.u64` PTX; this implements their portable
     `#else` branch, which is the same product.
     """
     var a_hi = (a >> 32) & 0xFFFFFFFF
@@ -316,7 +316,7 @@ def uniform_float(mut gen: PCGenerator, start: Float32, end: Float32) -> Float32
     unfused on host, or fused on both". An explicit `fma` is ONE IEEE
     operation, fixed by the source on every backend — strictly more determined
     than either — and it is also what RAFT's own expression becomes under
-    nvcc's default `--fmad=true`, i.e. what the upstream actually computes on
+    nvcc's default `--fmad=true`, i.e. what the reference actually computes on
     the hardware they ship for.
     """
     var res = gen.next_float()
@@ -398,7 +398,7 @@ def key_for(
 
     We chain FOUR, with the SAME `fnv1a32` and the same basis:
     `THRESHOLD_KEY_SALT, feature_id, tree_id, node_id` -- the last three
-    deliberately mirroring their `threadIdx, treeid, nodeid`, with
+    deliberately matching their `threadIdx, treeid, nodeid`, with
     `feature_id` in the per-candidate slot their `threadIdx.x` occupies (the
     extension ExtraTrees needs because it draws a threshold per
     `(node, feature)` where their sampler draws per `(node, thread)`).
@@ -462,7 +462,7 @@ def uniform_threshold(key: SplitKey, min_value: Float32, max_value: Float32) -> 
 #   (`mul.hi.u64`, `mul.lo.u64`) on device, and a four-partial-product
 #   schoolbook expansion with an explicit carry on host.
 #
-#   Ours. Only the schoolbook expansion, transcribed line for line. Mojo has
+#   Ours. Only the schoolbook expansion, line for line. Mojo has
 #   no inline PTX and, per the repository's ALWAYS-GPU-AGNOSTIC rule, an
 #   `if nvidia:` arm would be forbidden even if it did.
 #

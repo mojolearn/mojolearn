@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Coordinate descent on the GPU: Lasso and ElasticNet, mirroring cuML's
+"""Coordinate descent on the GPU: Lasso and ElasticNet. Reference: cuML's
 `solver='cd'` arm (`cuml/cpp/src/solver/cd.cuh::cdFit`).
 
 The implementation is `solver/` (DEVIATIONS 610-613 and 880); `solver/README.md`,
 `solver/NOT_IMPLEMENTED.tsv` are the record. The
-upstream is cuML pinned at `v26.08.00` = `265b9da`, and every line number
+reference is cuML pinned at `v26.08.00` = `265b9da`, and every line number
 cited in this file was read in that checkout.
 
 These classes are not re-exported from `mojolearn/__init__.py` by this file;
@@ -52,7 +52,7 @@ _SELECTION_SHUFFLE = {"cyclic": 0, "random": 1}
 class ElasticNet:
     """Elastic-net regression by coordinate descent on the GPU.
 
-    Mirrors `cuml.linear_model.ElasticNet(solver='cd')` on top of
+    Reference: `cuml.linear_model.ElasticNet(solver='cd')` and
     `cuml/cpp/src/solver/cd.cuh::cdFit`; the Mojo implementation is
     `solver/impl/cd.mojo` and the host surface is
     `solver/estimator.mojo`.
@@ -81,7 +81,7 @@ class ElasticNet:
     `cuml.linear_model.ElasticNet` and here.** Their docstring is off by the
     factor `n`; the code is what was implemented.
 
-    WHERE THE THREE STILL DIFFER, all of it carried from cuML on purpose:
+    WHERE THE THREE STILL DIFFER, all of it matching cuML on purpose:
 
         stopping rule   after each epoch, `coefMax < tol` OR
                         `diffMax / coefMax < tol` (`cd.cuh:271`) -- a

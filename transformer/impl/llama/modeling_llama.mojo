@@ -4,14 +4,14 @@
 block, on the device, under profile
 `mojolearn.identical.transformer.fp32.v1`.
 
-FOLLOWS huggingface/transformers at `d56c55b`,
-`src/transformers/models/llama/modeling_llama.py`, read on disk at
+Reference: `src/transformers/models/llama/modeling_llama.py`
+(huggingface/transformers `d56c55b`), read on disk at
 `/Users/andrewhendel/CascadeProjects/upstream/transformers/` on 2026-08-24.
-Partial, inference only, eager attention only. What is MIRRORED here, symbol
+Partial, inference only, eager attention only. What is implemented here, symbol
 by symbol (line numbers verified against that checkout, not quoted from the
 contract):
 
-| theirs | lines | here |
+| reference | lines | here |
 |---|---|---|
 | `LlamaRMSNorm.forward` | :62-67 | `llama_rms_norm_kernel`, `llama_rms_norm` |
 | `LlamaRotaryEmbedding.compute_default_rope_parameters` | :93-109 | `llama_rope_inv_freq_host` |
@@ -28,7 +28,7 @@ FROZEN. Section 4's seam table decides every rounding below; section 9's
 stage list decides every tag and their order; section 5 decides the softmax.
 This file CONSUMES that document and never amends it. The host oracle
 `transformer/checks/transformer_oracle.mojo` is the ANSWER, bit for bit;
-this file is an independent transcription of the same order into kernels and
+this file is an independent spelling of the same order into kernels and
 the two share only the seam functions themselves (`ftz`,
 `identical_mul_add`, `identical_exp`, `identical_div`, `identical_rsqrt`,
 `identical_sin`, `identical_cos`, `identical_fmax`, `identical_silu`,
@@ -55,7 +55,7 @@ than assumed.
   power is spelled here.
 * **The residual add (S22, S23)** is IMPORTED from the mamba lane's device
   spelling, `residual_add_kernel`. Contract section 0 marks it REUSED and it
-  is reused literally, not transcribed.
+  is reused literally, not restated.
 * **`pinned_mul` (DEVIATION 720)** is IMPORTED from the same file rather
   than copied a fourth time. Contract section 12.3's DEVIATION 816 permits
   either; the import is the one that does not add a place to drift.
@@ -143,8 +143,8 @@ are the CONTRACT's, cited here and never renumbered. The decisions this
 file's construction forced, which the contract does not decide, are numbered
 in the fresh range **1020-1029**, this file's alone.
 
-**DEVIATION 1020 -- the execution plan.** Upstream is torch ops over whole
-tensors; there is no upstream kernel decomposition to mirror for the
+**DEVIATION 1020 -- the execution plan.** The reference is torch ops over whole
+tensors; there is no reference kernel decomposition for the
 elementwise seams, and the two reference SHAPES the contract cites
 (`mha_gpu_naive`, `softmax_kernel`) are shapes this profile deliberately
 does not take, because both fold across threads. The plan here is one thread
@@ -176,7 +176,7 @@ where `S` is the length AFTER the append, so the recorded stage is the packed
 used region and the row stride is `S`, which grows every call. The append
 kernel therefore writes a NEW packed cache from the OLD packed cache and
 `k_rope.out`, into a second buffer, and the result is copied into the cache
-afterwards. Upstream is out of place too: `past_key_values.update`
+afterwards. The reference is out of place too: `past_key_values.update`
 (modeling_llama.py:261-262) is `torch.cat`, which allocates. The in-place
 roll is the tempting spelling and at `L >= 1` with a growing stride it reads
 its own writes; this is the mamba lane's DEVIATION 726 in a different shape.
@@ -210,7 +210,7 @@ That kernel reads `RMS_EPS`, a module constant `1e-5` at
 values give different bits, so the mamba kernel CANNOT be called from here
 until eps is an ARGUMENT -- which is contract DEVIATION 801, a cross-lane
 edit in the mamba tree that this lane is forbidden to make. The kernel below
-is `mamba_rms_norm_kernel` transcribed with `RMS_EPS` replaced by `eps_in`
+is `mamba_rms_norm_kernel` restated with `RMS_EPS` replaced by `eps_in`
 and NOTHING else changed, so that the block can be built and gated now. **It
 is duplicated arithmetic and that is a defect, not a design.** When 801
 lands, delete `llama_rms_norm_kernel` and make `llama_rms_norm`'s body a
@@ -703,7 +703,7 @@ def llama_key_span(pos0: Int, l: Int, window: Int) -> Int:
 # ===========================================================================
 # DEVICE I/O PLUMBING. Not seams, not arithmetic -- these three are
 # `modeling_mamba.mojo`'s `mamba_upload`, `mamba_download` and `mamba_zeros`
-# transcribed under lane-neutral names, because a llama file calling
+# restated under lane-neutral names, because a llama file calling
 # `mamba_upload` reads as a mistake. If a shared `core/` home for them ever
 # appears, both lanes should move.
 # ===========================================================================
@@ -938,7 +938,7 @@ def _expect_len(name: String, got: Int, want: Int) raises:
 
 
 struct LlamaDeviceWeights(Movable):
-    """One block's parameters on the device, in the upstream shapes. Every
+    """One block's parameters on the device, in the reference shapes. Every
     `nn.Linear` weight is `[out_features, in_features]`, which is torch's
     layout, and every one is read by the GEMM as an `OP_NT` right operand.
     Row-major, contiguous, no padding.
@@ -1014,7 +1014,7 @@ struct LlamaDeviceWeights(Movable):
         #
         # THE WEIGHTS DO NOT CHANGE BETWEEN CALLS, and here they are still on
         # the HOST, so this check costs no device traffic at all. It also
-        # fires EARLIER than the old one and under the SAME upstream names,
+        # fires EARLIER than the old one and under the SAME reference names,
         # which is what the oracle comparison needs.
         #
         # WHAT THIS DOES NOT COVER, said plainly: a caller that writes into a
@@ -1554,7 +1554,7 @@ def llama_rope_table_kernel(
 ):
     """S7 and S8. One thread per `(position, frequency)` cell.
 
-    S7, PRODUCT: `pinned_mul(Float32(abs_pos), inv_freq[i])`. Upstream this
+    S7, PRODUCT: `pinned_mul(Float32(abs_pos), inv_freq[i])`. In the reference this
     is a `k = 1` matmul in FP32 with autocast explicitly disabled
     (:118-122). At `k = 1` the gemm leaf is `ftz(fma(a, b, +0.0))`, which is
     bit-equal to this product because both operands are NON-NEGATIVE (the
@@ -1670,7 +1670,7 @@ struct LlamaRopeTable(Movable):
 #     return torch.cat((-x2, x1), dim=-1)                             :134
 #     q_embed = (q * cos) + (rotate_half(q) * sin)                    :158
 #
-# ONE kernel serves q and k, because upstream applies the same function to
+# ONE kernel serves q and k, because the reference applies the same function to
 # both (:158-159) and a second spelling would be a second place to drift.
 # ===========================================================================
 
@@ -2621,7 +2621,7 @@ def llama_refuse_bad_call(
     table, and the carried key and value caches.
 
     The names and their ORDER are the same as the corresponding entries in
-    `llama_refuse_bad_inputs`, because the point of using the upstream names
+    `llama_refuse_bad_inputs`, because the point of using the reference names
     at all is that this side and the oracle's side fail identically.
 
     The KV entries are the reason this cannot be hoisted with the weights.
@@ -2660,7 +2660,7 @@ def llama_refuse_bad_inputs(
     l: Int,
 ) raises:
     """Every named input and parameter of one block call, refused if it
-    holds a NaN or an infinity. The names are the upstream parameter names
+    holds a NaN or an infinity. The names are the reference parameter names
     so that this side and the oracle's side fail IDENTICALLY, which is the
     only way the two refusals can be compared at all.
 

@@ -125,7 +125,7 @@ and synchronizes before returning, so this workspace is not concurrently shared.
 
 Source basis: nvForest `cef3a50d`, `forest_model.hpp:284–308`, borrows device I/O
 from its caller. Our NumPy interface requires owned device staging; retaining
-that staging is declared `FOREST-IO-REUSE-1`, not a literal copy of upstream's
+that staging is declared `FOREST-IO-REUSE-1`, not a literal copy of the reference's
 allocation policy. RF/ET share ownership, copying, validation and GPU dispatch.
 
 The [large-data follow-up](../bench/results/forest_io_reuse_2026-09-10/README.md)

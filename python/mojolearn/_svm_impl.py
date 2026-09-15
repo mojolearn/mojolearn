@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Support vector classification and regression on the GPU, mirroring
+"""Support vector classification and regression on the GPU. Reference:
 cuML's SVC and SVR.
 
 PRIVATE MODULE. `SVC` and `SVR` are named exactly as scikit-learn names
@@ -191,8 +191,8 @@ def _dual_times_sv(dual_coef, support_vectors):
 
 
 class SVC(NumericModeMixin):
-    """Binary C-support vector classification, backed by the implemented cuML
-    SMO solver and cuVS kernel matrices (`svm/`, DEVIATIONS 630-637;
+    """Binary C-support vector classification, backed by an SMO
+    solver and GPU kernel matrices (`svm/`, DEVIATIONS 630-637;
     `svm/README.md`), the scikit-learn surface.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
@@ -217,16 +217,16 @@ class SVC(NumericModeMixin):
                                   positive (DEVIATION 636)
         cache_size      honored   ONLY as the prediction buffer, see
                                   DEVIATION 871 below
-        class_weight    refused   upstream it becomes `sample_weight`, and
+        class_weight    refused   in the reference it becomes `sample_weight`, and
                                   `sample_weight` is not implemented: the
                                   weighted `InitPenalty` arm (C_vec = C * w)
                                   has no implementation (svm/NOT_IMPLEMENTED.tsv)
         max_iter        honored   cuML's total inner-iteration cap; -1 (the
                                   default) is no limit
-        nochange_steps  honored   cuML's convergence rule, transcribed with
+        nochange_steps  honored   cuML's convergence rule, with
                                   its n_small_diff counter
         verbose         refused   anything truthy. It selects LOG LINES
-                                  upstream (CUML_LOG_DEBUG); this implementation
+                                  in the reference (CUML_LOG_DEBUG); this implementation
                                   prints none, so accepting it would be
                                   accepting-and-ignoring
         random_state    refused   anything but None. The binary C-SVC solver
@@ -265,7 +265,7 @@ class SVC(NumericModeMixin):
     'auto' is kept because `1 / n_features` is an integer reciprocal in
     float64 and is the same bits on every host.
 
-    DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT. Upstream it is
+    DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT. In the reference it is
     two things under one name: the training-time `raft::cache` LRU kernel
     cache, and the ceiling on the prediction kernel-tile buffer
     (`svm_base.pyx:554`, passed as `buffer_size` to `svcPredict`). The
@@ -274,8 +274,8 @@ class SVC(NumericModeMixin):
     holds the answer fixed over it from 0.001 MiB to 200 MiB. The training
     half is NOT implemented -- the solver always runs cuML's own
     `n_cache_sets == 0` path -- so `cache_size` does not affect training
-    time here the way it does upstream. It cannot affect training RESULTS
-    upstream either (`svm/NOT_IMPLEMENTED.tsv` carries that determinism
+    time here the way it does in the reference. It cannot affect training RESULTS
+    in the reference either (`svm/NOT_IMPLEMENTED.tsv` carries that determinism
     statement), so nothing numeric hangs on it.
 
     DEVIATION 873: the fitted model crosses back to the host and is
@@ -747,8 +747,8 @@ def _as_targets(y, n_rows):
 
 
 class SVR(NumericModeMixin):
-    """Epsilon-support vector regression, backed by the implemented cuML SMO
-    solver and cuVS kernel matrices (`svm/`, DEVIATIONS 630-637;
+    """Epsilon-support vector regression, backed by an SMO
+    solver and GPU kernel matrices (`svm/`, DEVIATIONS 630-637;
     `svm/README.md`), the scikit-learn surface.
 
     THE TUBE IS THE ALGORITHM. Rows whose prediction lands inside a band of
@@ -795,7 +795,7 @@ class SVR(NumericModeMixin):
                                   and `svm/impl/svm_parameter.mojo`
         cache_size      honored   ONLY as the prediction buffer, see
                                   DEVIATION 871 below. The TRAINING LRU it
-                                  also names upstream is unimplemented and
+                                  also names in the reference is unimplemented and
                                   `svm/impl/svm_parameter.mojo` refuses
                                   a non-zero one; `svm/estimator.mojo` pins
                                   the training value at 0 so that refusal
@@ -803,12 +803,12 @@ class SVR(NumericModeMixin):
         max_iter        honored   cuML's total inner-iteration cap; -1 (the
                                   default) is no limit. `_svm_impl.py`
                                   refuses 0 and anything below -1
-        nochange_steps  honored   cuML's convergence rule, transcribed with
+        nochange_steps  honored   cuML's convergence rule, with
                                   its n_small_diff counter. NOT a
                                   scikit-learn parameter; it is cuML's, and
                                   it is here because the solver reads it
         verbose         refused   `_svm_impl.py`, for anything truthy. It
-                                  selects LOG LINES upstream
+                                  selects LOG LINES in the reference
                                   (CUML_LOG_DEBUG); this implementation prints none,
                                   so accepting it would be
                                   accepting-and-ignoring
@@ -821,7 +821,7 @@ class SVR(NumericModeMixin):
                                   heuristic and cuML has no such thing:
                                   there is no row for it in
                                   `svm/NOT_IMPLEMENTED.tsv` because there is
-                                  nothing upstream of this implementation to leave
+                                  nothing in the reference to leave
                                   unimplemented. `SVC` omits it for the same
                                   reason
         sample_weight   refused   `_svm_impl.py`, in fit(). The weighted

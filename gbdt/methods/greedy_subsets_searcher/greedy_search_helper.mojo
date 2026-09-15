@@ -247,7 +247,7 @@ def compute_target_std_dev(
     row count instead (`random_score_helper.h:14-15`). CatBoost's two arms
     therefore produce DIFFERENT noise magnitudes from the same target
     whenever the weights are not all 1 -- which under Newton, their default
-    leaf estimation, is always. Both are followed statement for statement; see the file
+    leaf estimation, is always. Both behaviors are kept; see the file
     docstring of `gbdt/methods/random_score_helper.mojo`.
 
     Lane 0 is their `sum`, computed by the kernel and commented out by
@@ -336,7 +336,7 @@ comptime IDENTICAL_DRAIN_SCHEDULE = HIST_BUILD_MODE == NUMERIC_IDENTICAL
 # lifetime ends at its last `enqueue_copy` again -- the PRE-FIX ctor,
 # recreated verbatim: thirteen intervening host allocations between the
 # first stager's death and the drain, two exact size-and-type matches
-# among the followers (archive/reference/PORTING.md 134d's ranked greedy candidate for the
+# among the followers (the ranked greedy candidate for the
 # 2/12 first-div-t2 sighting). A comptime define, not an env var, for
 # the same reason `GLOBAL_NUMERIC_MODE` is one: destruction points are
 # decided at compile time and no runtime branch can move them -- a
@@ -350,7 +350,7 @@ comptime IDENTICAL_DRAIN_SCHEDULE = HIST_BUILD_MODE == NUMERIC_IDENTICAL
 # pass -- it is a finding: the 134b load window (20-30 concurrent GPU
 # processes), not the lifetime alone, was the missing ingredient, and
 # 134 STAYS OPEN. Run it quiet-box first, then under the synthetic load
-# recipe in archive/reference/PORTING.md 134f. This define must never reach a shipped
+# recipe. This define must never reach a shipped
 # build; nothing but the soak invocation passes it.
 comptime SOAK_134_CONTROL = is_defined["MOJOLEARN_134_CONTROL"]()
 
@@ -972,7 +972,7 @@ def run_tree(
 ) raises -> List[Int]:
     """`FitImpl`'s loop: grow a whole oblivious tree, level by level.
 
-    FOLLOWS `structure_searcher_template.h:50-66` driving
+    Reference: `structure_searcher_template.h:50-66` driving
     `greedy_search_helper.cpp`'s two steps. Under `SymmetricTree` one
     iteration is one LEVEL and every leaf of the level takes the SAME split
     (`greedy_search_helper.cpp:422-425`, `numScoreBlocks = 1`).
@@ -2550,7 +2550,7 @@ def replication_for(
 ) -> Int:
     """`numBlocks.x *= CeilDivide(maxActiveBlocks, x * y * z)`.
 
-    FOLLOWS the grid sizing shared by all three histogram kernels
+    Reference: the grid sizing shared by all three histogram kernels
     (`hist_binary.cu:95`, `hist_half_byte.cu:81`, `hist_one_byte.cu:291`):
 
         blocksPerSm     = TArchProps::GetMajorVersion() > 3 ? 2 : 1;

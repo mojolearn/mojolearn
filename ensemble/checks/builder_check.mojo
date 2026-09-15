@@ -339,7 +339,7 @@ def arm_d_workspace_and_smem() raises -> Int:
         fails += 1
         print("  arm D: depth 12 is the last DENSE case and must be 2^13-1")
 
-    # -- workspaceSize (`:299-332`), transcribed here a SECOND time and
+    # -- workspaceSize (`:299-332`), written here a SECOND time and
     #    spelled differently, because a check that imports the formula it is
     #    checking moves with its own sabotage. (That happened to another lane
     #    this round and ran green.)
@@ -511,7 +511,7 @@ def arm_e_workload() raises -> Int:
         items.append(NodeWorkItem(i, Int32(2), InstanceRange(0, counts[i])))
 
     # `update_workload_info` now writes INTO an array in place, as
-    # upstream fills its pinned `h_workload_info` (`builder.cuh:401`).
+    # the reference fills its pinned `h_workload_info` (`builder.cuh:401`).
     # The array is poisoned first, so "wrote exactly n entries" is
     # checked as "entry n is still poison" -- stronger than the old
     # `len(wl)` test, which could not see an over-write.

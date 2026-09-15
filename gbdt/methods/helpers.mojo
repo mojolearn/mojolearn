@@ -3,8 +3,7 @@
 """The pointwise family's odds and ends: pick the better split, name it, and
 four bit-interleave helpers.
 
-FOLLOWS `catboost/cuda/methods/helpers.{h,cpp}` at CatBoost `54a8143a`.
-Followed statement for statement.
+Reference: `catboost/cuda/methods/helpers.{h,cpp}` (CatBoost `54a8143a`).
 
 `helpers.h` is 104 lines and `helpers.cpp` is 173, and between them they hold
 five unrelated jobs. Sorted by what they need to run:
@@ -37,7 +36,7 @@ estimator (`feature_parallel_pointwise_oblivious_tree.h:43`,
 `leaves_estimation/oblivious_tree_leaves_estimator.h:143`) -- none of which
 this repository has. Implementing them now would be writing a cache for a caller
 that does not exist, which is the defect `ENGINEERING_RULES.md` rule 3 names.
-They belong with rung 2 of `archive/reference/PORTING.md` 91 E.
+They belong with rung 2.
 
 WHAT "TAKES THE MANAGER'S ANSWERS AS ARGUMENTS" MEANS, and why it is not a
 redesign. `TBinarizedFeaturesManager` is unimplemented. Every function above that
@@ -60,7 +59,7 @@ THREE DEPARTURES, ALL IN THIS FILE, NONE ARITHMETIC.
 2. **The manager is a parameter list.** `ToSplit`, both
    `SplitConditionToString` overloads, `PrintBestScore` and
    `HasPermutationDependentSplit` take `const TBinarizedFeaturesManager&`
-   upstream. There is no such type here, so each takes the values it would
+   in the reference. There is no such type here, so each takes the values it would
    have read. One consequence is real and is NOT hidden: their `ToSplit`
    opens with
 
@@ -235,10 +234,10 @@ def to_split(
     The categorical arm clamps to `GetBinCount(featureId)` and the float arm
     clamps to `GetBorders(featureId).size() - 1`. So a cat feature of `k`
     bins admits `BinIdx == k`, one past its own bin ids, while a float
-    feature of `b` borders stops at `b - 1`. Their comment says why the clamp
+    feature of `b` borders stops at `b - 1`. The reference comment says why the clamp
     exists at all -- "Float arithmetic could generate empty bin splits for
     ctrs" -- and says nothing about why the two arms differ. It is
-    transcribed rather than reconciled; `border_count` is `GetBorders().size()`
+    kept rather than reconciled; `border_count` is `GetBorders().size()`
     here and the `- 1` is applied below, so a reviewer can diff the line.
 
     `is_feature_bundle` raises rather than translating, per DEVIATION 99.
@@ -503,7 +502,7 @@ def has_permutation_dependent_split(
 #
 # So all four are implemented for completeness of the assigned file and NONE has a
 # caller here or there. `ENGINEERING_RULES.md` rule 3 says an unimplemented file is
-# visible and a mis-implemented one is not -- these are transcribed and gated
+# visible and a mis-implemented one is not -- these are implemented and gated
 # against an independent host oracle for exactly that reason, and their lack
 # of a caller is stated here rather than discovered later.
 #

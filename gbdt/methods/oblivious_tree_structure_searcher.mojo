@@ -2,15 +2,15 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The FEATURE-PARALLEL oblivious searcher, `SetTarget` arm, one device.
 
-FOLLOWS `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}` at
-CatBoost `54a8143a` -- `TFeatureParallelObliviousTreeSearcher::Fit`
+Reference: `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}`
+(CatBoost `54a8143a`), `TFeatureParallelObliviousTreeSearcher::Fit`
 (`:46-306`), `::CreateSubsets` (`:29-44`) and
 `TSubsetsHelper<NCudaLib::TMirrorMapping>::Split`
-(`pointwise_optimization_subsets.h:74-93`). Followed statement for statement.
+(`pointwise_optimization_subsets.h:74-93`).
 
-RUNG 2. `archive/plans/NEXT_TWO.md` and `archive/reference/PORTING.md` 119 both priced this as "the fold
-layout plus wiring, not a second searcher", on the strength of `archive/reference/PORTING.md`
-91 B. **THAT PRICING IS WRONG AND THIS FILE IS WHY.** The correction is
+RUNG 2. `archive/plans/NEXT_TWO.md` priced this as "the fold
+layout plus wiring, not a second searcher", on the strength of the claim
+that the two searchers share their entire stack. **THAT PRICING IS WRONG AND THIS FILE IS WHY.** The correction is
 below and it is the main result of this rung; the identity gate is the
 second.
 
@@ -92,9 +92,9 @@ model's leaf assignment and the identity gate checks it per document.
 
 WHAT IS AND IS NOT HERE
 -----------------------
-DEVIATION 120 covers the four things their `Fit` does that this function
+DEVIATION 120 covers the four things the reference `Fit` does that this function
 does not: `ComputeWeakTarget`, the bootstrap, the tree-CTR block, and the
-per-level rebuild of `docIndices`. The first two mirror the doc-parallel
+per-level rebuild of `docIndices`. The first two match the doc-parallel
 implementation's DEVIATION 104 exactly and for the same reason -- the boosting loop
 owns the gradient path, and forking it is the one thing that must not differ
 between two learners being compared.
@@ -306,7 +306,7 @@ def fit_feature_parallel_oblivious_tree_structure(
     defect, and a permanently wired defect selector is one. The reach
     evidence for this file is five defects planted by EDITING it and re-run,
     tabulated in `checks/feature_parallel_identity_check.mojo`'s
-    docstring and in `archive/reference/PORTING.md` 120.
+    docstring.
     """
     # `CB_ENSURE(FoldBasedTasks.size() || SingleTaskTarget);` (`:47`)
     if n_rows <= 0:

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`svrFit` / `svrPredict`, the epsilon-SVR entry points, dense FP32.
 
-FOLLOWS `cuml/cpp/src/svm/svr_impl.cuh` + `svr.cu` at cuML v26.08.00,
+Reference: `cuml/cpp/src/svm/svr_impl.cuh` + `svr.cu` (cuML v26.08.00):
 `svrFitX` (dense) and the `SVR` class's `fit`. NOT implemented: `svrFitSparse`
 and the CSR arms, which this surface has no shape for at all, and the
 PRECOMPUTED kernel and the weighted `InitPenalty` arm behind
@@ -10,7 +10,7 @@ PRECOMPUTED kernel and the weighted `InitPenalty` arm behind
 
 WHAT `svrFit` IS, AND WHAT IT IS NOT
 ------------------------------------
-It is SHORTER than `svcFit`, and that is upstream's shape rather than a
+It is SHORTER than `svcFit`, and that is the reference shape rather than a
 gap here. `svr_impl.cuh:68` hands `y` straight to `SmoSolver::Solve`, so
 there is no `getUniquelabels`, no `getOvrlabels` and no `ovr_labels_kernel`
 on this path. The targets ARE the solver's `y`, continuous, and every
@@ -35,7 +35,7 @@ worst case is `n_rows`, `n_rows` and `n_rows * n_cols`. A caller sizing
 output buffers at `2 * n_rows` would be allocating a second copy of nothing.
 
 PREDICTION IS `svcPredict` WITH THE CLASS EPILOGUE OFF, and that is
-upstream's arrangement too: `SVR` inherits `SVMBase::predict`, which calls
+the reference's arrangement too: `SVR` inherits `SVMBase::predict`, which calls
 `svcPredict(..., predict_class = false)`. There is no second decision
 kernel to implement. `svr_predict` below is a named wrapper so a reader of the
 regression path does not have to know that, and so the `predict_class =
@@ -87,7 +87,7 @@ def svr_fit(
     iteration record, empty unless `record_iterations`.
 
     `targets_host` holds CONTINUOUS TARGETS, one per row. Nothing validates
-    them as a label pair and nothing sorts them, because upstream does
+    them as a label pair and nothing sorts them, because the reference does
     neither. What IS checked is DEVIATION 636's family, every cell finite,
     for the same reason the classifier checks its labels: a NaN target
     lands in `svm.init.f` on the first recorded stage with a
@@ -161,7 +161,7 @@ def svr_predict(
     buffer_size_mib: Float64,
     mut card: IdentityTrace,
 ) raises -> List[Float32]:
-    """`SVR::predict`, which upstream reaches through `SVMBase::predict` and
+    """`SVR::predict`, which the reference reaches through `SVMBase::predict` and
     therefore through `svcPredict(..., predict_class = false)`. One value
     per row, `sum_j K(x, sv_j) dual_j + b`, the regression estimate.
 

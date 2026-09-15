@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """cuVS's per-pair distance ops, in ONE place, for every lane that needs one.
 
-FOLLOWS cuVS `cpp/src/distance/detail/distance_ops/{cosine,lp_unexp,l2_unexp,
-l1,l_inf}.cuh` at cuVS `94c2819`, plus the `DistanceType` enumerators from
+Reference: cuVS `cpp/src/distance/detail/distance_ops/{cosine,lp_unexp,l2_unexp,
+l1,l_inf}.cuh` (cuVS `94c2819`), plus the `DistanceType` enumerators from
 `cpp/include/cuvs/distance/distance.h:22-69`. Partial.
 
 WHY THIS FILE EXISTS AND WHY IT IS HERE
@@ -109,15 +109,15 @@ and it is the same trade `portable_powf`'s existing consumer (the Bayesian
 bootstrap temperature) already accepted.
 
 DEVIATION 552 (2026-09-01): p IS RESTRICTED TO THE FINITE POSITIVE NORMALS.
-THEIRS: `lp_unexp_distance_op` takes any `DataT p`. At `p = 0` their
+REFERENCE: `lp_unexp_distance_op` takes any `DataT p`. At `p = 0` their
 `one_over_p` is `1/0 = +inf` and `pow(acc, inf)` is 0, 1 or inf by
 magnitude; at `p < 0` the op is not a metric at all; at `p = inf` the
 mathematical limit is Chebyshev but `pow` gives inf or NaN. cuVS never
 checks, and `cuvs::neighbors::brute_force::index`'s DEFAULT `metric_arg_`
 is `0` (`brute_force.cu:35`), so their own default-constructed index
 computes `pow(diff, 0) == 1` for every feature and returns `k^(1/0)` =
-garbage. OURS refuses `p <= 0`, non-finite p and subnormal p BY NAME at
-the host entry, before any launch. That is input validation, which is the
+garbage. HERE, `p <= 0`, non-finite p and subnormal p are refused BY NAME
+at the host entry, before any launch. That is input validation, which is the
 one place a refusal is the correct answer, and it is the same class as
 kde's DEVIATION 604. `p = 1` and `p = 2` are NOT special-cased into L1 and
 L2: the Lp op is what the caller asked for and running a different op
@@ -125,7 +125,7 @@ would make `metric='minkowski', p=2` and `metric='euclidean'` two spellings
 of one code path, which is exactly the aliasing that hides a bug.
 
 DEVIATION 553 (2026-09-01): A ZERO-NORM ROW UNDER COSINE IS REFUSED.
-THEIRS: `cosine.cuh:86` is a bare `1.0 - acc/(regxn[i]*regyn[j])` with no
+REFERENCE: `cosine.cuh:86` is a bare `1.0 - acc/(regxn[i]*regyn[j])` with no
 guard, and `knn_brute_force.cuh:221` duplicates it by hand with no guard
 either. A row of all zeros has `||x|| = 0`, so the divide is `0/0 = NaN`
 (or `+-inf` if the dot product is a signed zero of the other sign), and
@@ -134,7 +134,7 @@ that NaN then enters a top-k selection. In RAFT's radix selector a NaN's
 loses a real neighbour to a garbage one; in the FAISS warp queue the
 comparison is `<` and a NaN is never less than anything, so it sorts to the
 other end. Two selectors, two different wrong answers, no error either way.
-OURS refuses a zero-norm row by name at the host entry (`cosine_zero_norm_
+HERE, a zero-norm row is refused by name at the host entry (`cosine_zero_norm_
 row` below finds it), because cosine distance to the origin is undefined
 and returning a vendor-shaped NaN for it is worse than saying so. This is
 NOT implementing their bug and it is NOT improving their algorithm: the
@@ -470,7 +470,7 @@ def lp_unexp_epilog(acc: Float32, one_over_p: Float32) -> Float32:
 @always_inline
 def cosine_epilog(acc: Float32, xn: Float32, yn: Float32) -> Float32:
     """`cosine.cuh:86` / `knn_brute_force.cuh:221`, which are the same
-    expression written twice upstream: `1.0 - acc / (xn * yn)`.
+    expression written twice in the reference: `1.0 - acc / (xn * yn)`.
 
     THE GROUPING IS THEIRS AND IS NOT NEGOTIABLE. `acc / (xn * yn)` is one
     product then one divide; `(acc / xn) / yn` is two divides and a
@@ -478,7 +478,7 @@ def cosine_epilog(acc: Float32, xn: Float32, yn: Float32) -> Float32:
     not the squared ones.
 
     No clamp. See the module docstring: `l2_exp` has two and cosine has
-    none, upstream, and adding one here would be a different answer from
+    none in the reference, and adding one here would be a different answer from
     theirs on exactly the self-neighbour fixtures a user would notice.
     """
     var denom = ftz(identical_mul(xn, yn))

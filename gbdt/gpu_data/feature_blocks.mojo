@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Per-policy feature descriptor arrays, ready for a histogram launch.
 
-MIRRORS the `TFeatureInBlock` assembly in
+Reference: the `TFeatureInBlock` assembly in
 `catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp`,
 which walks the compressed index's feature blocks and hands each policy's
 slice to its own kernel. Their `B` in the `3B + 12` launch census IS the

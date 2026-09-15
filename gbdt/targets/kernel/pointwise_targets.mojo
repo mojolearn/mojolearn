@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Pointwise objectives: value, first derivative, second derivative.
 
-FOLLOWS `catboost/cuda/targets/kernel/pointwise_targets.cu` at CatBoost
-`54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/targets/kernel/pointwise_targets.cu` (CatBoost
+`54a8143a`).
 
 ## The two kernels, and their fork
 
@@ -225,7 +225,7 @@ def objective_from_name(name: String) raises -> Int:
     The spellings are theirs exactly (`enums.h`, `ELossFunction`), because
     a user who reads CatBoost's documentation must be able to paste the
     name across. Anything not listed raises rather than falling back to a
-    default, mirroring their `Init` (`pointwise_target_impl.h:295-297`).
+    default, following their `Init` (`pointwise_target_impl.h:295-297`).
     """
     if name == "RMSE":
         return OBJECTIVE_RMSE
@@ -311,7 +311,7 @@ def objective_is_cross_entropy(objective: Int) -> Bool:
 # =========================================================================
 # THE OBJECTIVES: `Score`, `Der`, `Der2`, one comptime arm each.
 #
-# FOLLOWS the nine objective structs of `pointwise_targets.cu:11-240`.
+# Reference: the nine objective structs of `pointwise_targets.cu:11-240`.
 # Theirs are C++ structs with three `__device__ __forceinline__` methods,
 # instantiated by `PointwiseTargetKernel`'s switch (`:447-519`) and passed
 # BY VALUE into the one generic kernel. Mojo has no zero-cost struct-by-
@@ -1064,7 +1064,7 @@ def cross_entropy_kernel[
 # (`pointwise_target_impl.h:307-358`) is the fork above it that decides
 # whether the launch is that kernel or `CrossEntropyImpl` instead.
 #
-# Both are transcribed here rather than open-coded at each call site,
+# Both are implemented here rather than open-coded at each call site,
 # because their two call sites -- the boosting loop's search pass and the
 # leaves oracle -- differ only in `estimation`, exactly as their
 # `StochasticDer` and `ApproximateAt` differ only in which buffers they

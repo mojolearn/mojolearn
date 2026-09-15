@@ -144,7 +144,7 @@ def sign_flip_kernel(
     v: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
-    """FOLLOWS `signFlipKernel`, `raft/matrix/detail/math.cuh:367`. `decomposition/checks/pca_check.mojo` holds it to that: the device answer must equal a fold-free host scan BITWISE, and the tie, the zero cases and the NaN case are each planted rather than hoped for."""
+    """Reference: `signFlipKernel`, `raft/matrix/detail/math.cuh:367`. `decomposition/checks/pca_check.mojo` holds it to that: the device answer must equal a fold-free host scan BITWISE, and the tie, the zero cases and the NaN case are each planted rather than hoped for."""
     var n = Int(n_in)
     var col = Int(block_idx.x)
     var tid = Int(thread_idx.x)
@@ -364,7 +364,7 @@ comptime WHITEN_SKIP_ZERO = 1.0e-10
 
 
 def whiten_scalar(n_fit_rows: Int, inverse: Bool) -> Float32:
-    """`sqrt(n_fit_rows - 1)` forward, `1 / sqrt(n_fit_rows - 1)` inverse. `pca_validate` already refuses `n_rows <= 1` so the guard cannot fire on a fitted model; it is kept because dropping a guard that upstream wrote is a silent change of behavior on the one input it was written for."""
+    """`sqrt(n_fit_rows - 1)` forward, `1 / sqrt(n_fit_rows - 1)` inverse. `pca_validate` already refuses `n_rows <= 1` so the guard cannot fire on a fitted model; it is kept because dropping a guard that the reference wrote is a silent change of behavior on the one input it was written for."""
     var d = Float64(n_fit_rows - 1)
     if d <= 0.0:
         return Float32(0.0)

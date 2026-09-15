@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The split criteria: Gini, Entropy, MSE, Poisson, Gamma, InverseGaussian.
 
-MIRRORS `cpp/src/decisiontree/batched-levelalgo/objectives.cuh` at
+Reference: `cpp/src/decisiontree/batched-levelalgo/objectives.cuh` at
 rapidsai/cuml `v26.08.00` (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`),
 checked out read-only at `~/CascadeProjects/upstream/cuml-v26.08.00`.
 
@@ -34,7 +34,7 @@ which of two near-tied splits `split.cuh`'s total order selects.
 `EntropyGain` recomputes `raft::log(DataT(2))` on every one of its three
 terms in every class (`:99`, `:107`, `:113`); it is NOT hoisted here
 either. This repository has been bitten by exactly this class of defect
-twice, most recently archive/reference/PORTING.md 54.
+twice.
 
 ================= DEVIATION BLOCK (whole file) =================
 NUMBERING NOTE FOR THE MERGE. This lane was assigned 101/105/106/107.
@@ -94,14 +94,14 @@ instantiations, so the constraint is exactly their domain written down.
 
 DEVIATION 113. `raft::log` BECOMES `std.math.log`, ON THE DEVICE, WHERE
 THE RECORDED FIX IS UNAVAILABLE.
-THEIRS: `raft::log` in `EntropyGain` (`:99`, `:107`, `:113`),
+REFERENCE: `raft::log` in `EntropyGain` (`:99`, `:107`, `:113`),
 `PoissonGain` (`:255-257`) and `GammaGain` (`:283-285`).
-OURS: `std.math.log`.
+HERE: `std.math.log`.
 This repository has a recorded defect for exactly this substitution:
 `std.math.log` carries ~5e-8 ABSOLUTE error against libm, measured at
 w = 840 as 5656.057589200282 against libm's 5656.057589153382, and that
 noise silently re-decided dynamic-programming plateau ties in CatBoost's
-border selection (archive/reference/PORTING.md 54 and the docstring of
+border selection (the docstring of
 `gbdt/grid_creator/binarization.mojo::_penalty_min_entropy`). **The
 recorded fix is `external_call["log", Float64]` -- libm through FFI --
 and that fix is HOST-ONLY.** The same docstring says so in as many words:
@@ -134,7 +134,7 @@ PRICE, and it is a real one:
     divergence is not merely a last-bit one on the gain: on a plateau of
     equally-good splits the total order in `split.cuh:142-191` fires on
     the noise instead of on the tie-break, and a DIFFERENT split is
-    chosen. Same class of failure as archive/reference/PORTING.md 54, different tree.
+    chosen. Same class of failure as the `_penalty_min_entropy` defect, different tree.
   * Across OUR OWN vendors the choice is still deterministic -- one
     source, one `log` -- so the identity column survives; it is
     comparability with cuML that is lost, not reproducibility.
@@ -144,7 +144,7 @@ because that is where they compute it.
 ON FMA: `gain += lval * invLeft * lval * invLen` is a multiply-add inside
 ONE source expression, which is exactly the case nvcc contracts by
 default (`-fmad=true`) and clang contracts at `-ffp-contract=on`. Mojo
-contracting it too is agreement, not divergence. The archive/reference/PORTING.md 54 defect
+contracting it too is agreement, not divergence. The `_penalty_min_entropy` defect
 was the other case -- contraction ACROSS an inlined call boundary, which
 clang does not do. Since DEVIATION 405 the transcendental-free gains
 route their seams through `_ftz_seam` / `_mul_add_seam` (both
@@ -216,9 +216,9 @@ row 12's closure.
 
 DEVIATION 406 (2026-08-23). ROW 12 CLOSED, SO THE 405 REFUSE IS UPGRADED
 TO A REAL RUN.
-THEIRS: `raft::log` in `EntropyGain`, `PoissonGain` and `GammaGain`, as
+REFERENCE: `raft::log` in `EntropyGain`, `PoissonGain` and `GammaGain`, as
 recorded in DEVIATION 113.
-OURS: `_log_seam` (defined below the imports with 405's two seams),
+HERE: `_log_seam` (defined below the imports with 405's two seams),
 which is `numerics.identical_log`. Under NUMERIC_FAST the wrapper IS
 `std.math.log` verbatim, so the default build's bits are DEVIATION
 113's, unchanged and re-gated (`objectives_check`, `criteria_check`,

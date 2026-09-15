@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The 6-bit pointwise accumulator: `TPointHist<0, 1, BlockSize>`.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_6bit.cu` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_6bit.cu`
+(CatBoost `54a8143a`).
 
 Up to 64 bins per feature, 64 as the absent marker. Everything structural
 about it follows from ONE fact: twice the bins in the same 1024-slot warp
@@ -36,7 +36,7 @@ Same two family conventions as the 5-bit file, and they are the ones that
 change no total: WEIGHT in the even slot, TARGET in the odd one, and a
 stat-MINOR reduce. See that file's docstring.
 
-DEVIATION (archive/reference/PORTING.md 11 and 92): their `thread_block_tile<16>::sync()`
+DEVIATION: their `thread_block_tile<16>::sync()`
 becomes a threadgroup `barrier()`, the only sync Mojo exposes. This
 accumulator takes FOUR per iteration of its four-iteration loop, so sixteen
 threadgroup barriers per point against the 5-bit file's eight. Priced, not

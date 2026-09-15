@@ -2,19 +2,19 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Warp-sort top-k, the bitonic WarpSelect family.
 
-FOLLOWS `raft/matrix/detail/select_warpsort.cuh` at RAFT `9aa17e5`, together
+Reference: `raft/matrix/detail/select_warpsort.cuh` (RAFT `9aa17e5`), together
 with the whole of `raft/util/bitonic_sort.cuh` which it is built on. Partial:
 ONE of the four warp queues is implemented, `warp_sort_immediate`.
 
-Same rule as its sibling `select_radix.mojo`: this is a RAFT file we READ AND
-FOLLOW STATEMENT FOR STATEMENT, not a RAFT call we stand in for, so it lives in `gbdt/` with
-raft as its upstream and carries the attribution duty that follows.
+Same rule as its sibling `select_radix.mojo`: this file is CHECKED LINE BY
+LINE AGAINST A RAFT FILE, not a RAFT call we stand in for, so it lives in `gbdt/` with
+raft as its reference.
 
 WHY THIS FILE EXISTS AT ALL, AND WHY IT DID NOT UNTIL NOW
 ---------------------------------------------------------
 `NOT_IMPLEMENTED.tsv` carried this file as `UNPORTABLE`, on the ground that it has
 14 warp intrinsics (`__shfl_xor_sync`, `laneId`) and Mojo 1.0 had none.
-**That ground was false and has been retracted** (`archive/reference/PORTING.md 2`,
+**That ground was false and has been retracted** (see
 `archive/reference/VENDOR_LIBRARIES.md`). The primitives are under `std.gpu.primitives.warp`
 and `max.gpu.sync`; the earlier searches looked one namespace level too high
 in four places and missed all four.
@@ -31,7 +31,7 @@ entire practical range for a reason that turned out to be wrong.
 
 WHAT IS IMPLEMENTED AND WHAT IS NOT
 -------------------------------
-IMPLEMENTED, followed statement for statement:
+IMPLEMENTED, matching the reference:
   * `raft/util/bitonic_sort.cuh` in full: `bitonic<Size>::merge_impl` and
     `::sort_impl`, as `bitonic_merge` / `bitonic_sort`.
   * `warp_sort` (the base queue): the constructor, `load_sorted`, `store`,
@@ -139,7 +139,7 @@ DEVIATIONS, each one deliberate
 1. **Register arrays are `SIMD` values, not arrays.** RAFT holds
    `T val_arr_[kMaxArrLen]` and nvcc keeps it in registers. The obvious Mojo
    statement-for-statement match, `stack_allocation` with no address space, is thread-local
-   MEMORY and would spill every element of the queue (`archive/reference/PORTING.md 26`, which
+   MEMORY and would spill every element of the queue (a mistake that once
    cost this tree a whole slower-than-naive GEMM). `kMaxArrLen` is a power of
    two by construction, so `SIMD[DType.uint32, arr_len]` is exact.
 
@@ -167,7 +167,7 @@ DEVIATIONS, each one deliberate
    `ceildiv(block_warps, 2) * capacity`, which is `>= ceildiv(nwarps, 2) * k`
    for every legal call. At the maximum instantiation (capacity 256,
    block_warps 8) that is 4 KB per half, 8 KB total, against Metal's 32 KB
-   threadgroup budget (`archive/reference/PORTING.md 1`). A consequence: the `store` and
+   threadgroup budget. A consequence: the `store` and
    `load_sorted` overloads that face shared memory are typed
    `UnsafePointer[..., address_space = AddressSpace.SHARED,
    origin=MutUntrackedOrigin]` rather than `MutPointer`, because theirs is
@@ -190,7 +190,7 @@ DEVIATIONS, each one deliberate
 
 7. **`in_idx == nullptr` becomes an explicit `has_in_idx` flag.** RAFT
    branches on a null pointer (`:798`). A Mojo kernel argument cannot be
-   usefully null, and `archive/reference/PORTING.md 19` forbids selecting a pointer with a
+   usefully null, and a standing rule forbids selecting a pointer with a
    conditional expression in this tree, so the caller passes a flag and, when
    it is 0, any distinct valid buffer that is never read. When the flag is 0
    the payload is `i`, the column index within the row, which is what k-NN
@@ -735,7 +735,7 @@ def block_sort_done[
     #
     # The trigger is exactly that: the while-condition variable's last write in
     # the body is a bare copy of another local. Any arithmetic on top of the
-    # copy (`a = b - 1`, `a = b; a = a - 1`) compiles. See `archive/reference/PORTING.md`.
+    # copy (`a = b - 1`, `a = b; a = a - 1`) compiles.
     #
     # `split` is a pure function of `nwarps` -- `split == (nwarps + 1) >> 1`
     # holds on entry to every iteration, by induction from their initializer

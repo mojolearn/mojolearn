@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`launchConfigGenerator`: the grid shape is COMPUTED, never a constant.
 
-FOLLOWS `cuvs/cpp/src/distance/detail/pairwise_distance_base.cuh:295-322`
-at cuVS `94c2819`. Partial (the `PairwiseDistances` struct itself is inlined
+Reference: `cuvs/cpp/src/distance/detail/pairwise_distance_base.cuh:295-322`
+(cuVS `94c2819`). Partial (the `PairwiseDistances` struct itself is inlined
 into `fused_l2_knn.mojo`; this file is its launch computation). Do not
 improve.
 
-Their computation, transcribed branch for branch below:
+The reference computation, implemented branch for branch below:
 
     numSMs        = cudaDevAttrMultiProcessorCount          (:300-301)
     numBlocksPerSm= cudaOccupancyMaxActiveBlocksPerMultiprocessor(
@@ -91,7 +91,7 @@ def launch_config_generator(
     # `grid.y = yChunks > minGridSize ? minGridSize : yChunks;` `:311`
     var grid_y = min_grid_size if y_chunks > min_grid_size else y_chunks
     # `grid.x = (minGridSize - grid.y) <= 0 ? 1 : xChunks;` `:312`
-    # (unsigned upstream; `grid.y <= minGridSize` always, so `<= 0` is `== 0`)
+    # (unsigned in the reference; `grid.y <= minGridSize` always, so `<= 0` is `== 0`)
     var grid_x = 1 if (min_grid_size - grid_y) <= 0 else x_chunks
     # `:313-319`
     if grid_x != 1:

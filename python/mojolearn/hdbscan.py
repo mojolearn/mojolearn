@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`HDBSCAN` on the GPU, mirroring cuML (workstream D, 2026-09-14).
+"""`HDBSCAN` on the GPU. Reference: cuML (workstream D, 2026-09-14).
 
 The Python door of `hdbscan/estimator.mojo::hdbscan_fit_host` through
-`bindings/_mojolearn_hdbscan.mojo`. The implemented path is cuML's
+`bindings/_mojolearn_hdbscan.mojo`. The path follows the steps of cuML's
 `runner.h:152-234` (brute-force k-NN, Boruvka MST, single linkage, the
 condensed tree, excess-of-mass or leaf selection); the lane README lists
 what is mirrored and what is refused.
@@ -18,11 +18,22 @@ WHAT IS REFUSED, AND WHERE (the estimator's header):
     a NaN or infinite anywhere           Mojo host (DEVIATION 1607)
     probabilities_                       here, by name (DEVIATION 1610)
 
-Transductive: there is no `predict`, exactly as `DBSCAN` here has none,
-and there is no model to save.
+HELD-OUT POINTS (2026-09-15). `HDBSCAN(prediction_data=True)` keeps the
+condensed tree and builds cuML's prediction data at fit time
+(`prediction_data.cu:92-239`, `hdbscan/impl/prediction_data.mojo`), and the
+module function `approximate_predict(clusterer, points_to_predict)`
+(`hdbscan.pyx:1264`, `predict.cuh:220-262`) returns the label and the
+probability of new points under the fitted clustering. Without
+`prediction_data=True` it refuses by name, as cuML's `_check_clusterer`
+does (`hdbscan.pyx:1104-1108`). There is still no `predict` method and no
+model to save. `membership_vector` and `all_points_membership_vectors`
+(`hdbscan.pyx:1180`, `:1114`) are NOT IMPLEMENTED and refuse by name
+(`hdbscan/NOT_IMPLEMENTED.tsv`).
 
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
+import warnings
+
 from . import _backend
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
@@ -58,6 +69,10 @@ class HDBSCAN(NumericModeMixin):
     alpha : float, default 1.0
     cluster_selection_method : {'eom', 'leaf'}, default 'eom'
     allow_single_cluster : bool, default False
+    prediction_data : bool, default False
+        Keep the condensed tree and build the prediction data at fit time,
+        so `approximate_predict` can be called (cuML's parameter,
+        `hdbscan.pyx:568`). The fit itself is the same call either way.
 
     Attributes
     ----------
@@ -87,6 +102,7 @@ class HDBSCAN(NumericModeMixin):
         alpha=1.0,
         cluster_selection_method="eom",
         allow_single_cluster=False,
+        prediction_data=False,
     ):
         self.min_cluster_size = min_cluster_size
         self.min_samples = min_samples
@@ -96,6 +112,7 @@ class HDBSCAN(NumericModeMixin):
         self.alpha = alpha
         self.cluster_selection_method = cluster_selection_method
         self.allow_single_cluster = allow_single_cluster
+        self.prediction_data = prediction_data
 
     def _extension(self):
         mod = self._bind()
@@ -122,7 +139,7 @@ class HDBSCAN(NumericModeMixin):
 
     def fit(self, X, y=None):
         """Cluster row-major `X`. Returns `self`."""
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, copied = as_f32_c(X, ndim=2, name="X")
         n, d = x.shape
         for name in ("min_cluster_size", "max_cluster_size"):
             v = getattr(self, name)
@@ -156,13 +173,29 @@ class HDBSCAN(NumericModeMixin):
             v = getattr(self, name)
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 raise TypeError(f"mojolearn HDBSCAN: {name} must be a real number")
+        if not isinstance(self.prediction_data, bool):
+            raise TypeError("mojolearn HDBSCAN: prediction_data must be a bool")
+        want_pd = self.prediction_data
         labels = empty((n,), "<i4")
         core = empty((n,), "<f4")
-        info = empty((4,), "<i4")
-        n_clusters = self._extension().hdbscan_fit(
-            # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_fit_binding.
-            # x, labels_out, core_dists_out, info_out
-            [addr_ro(x, name="X"), addr(labels, name="labels_"), addr(core, name="core_distances_"), addr(info, name="info")],
+        info = empty((5 if want_pd else 4,), "<i4")
+        # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_fit_binding.
+        # x, labels_out, core_dists_out, info_out
+        addrs = [addr_ro(x, name="X"), addr(labels, name="labels_"), addr(core, name="core_distances_"), addr(info, name="info")]
+        if want_pd:
+            # tree_parents_out, tree_children_out, tree_lambdas_out,
+            # tree_sizes_out (2 * n each), inverse_label_map_out (n)
+            t_par = empty((2 * n,), "<i4")
+            t_ch = empty((2 * n,), "<i4")
+            t_lam = empty((2 * n,), "<f4")
+            t_sz = empty((2 * n,), "<i4")
+            t_inv = empty((n,), "<i4")
+            addrs += [addr(t_par, name="tree parents"), addr(t_ch, name="tree children"),
+                      addr(t_lam, name="tree lambdas"), addr(t_sz, name="tree sizes"),
+                      addr(t_inv, name="inverse_label_map")]
+        ext = self._extension()
+        n_clusters = ext.hdbscan_fit(
+            addrs,
             # n, d, min_samples, min_cluster_size, max_cluster_size, alpha,
             # allow_single_cluster, cluster_selection_method, cluster_selection_epsilon, metric
             [n, d, min_samples, int(self.min_cluster_size), int(self.max_cluster_size), float(self.alpha),
@@ -175,10 +208,145 @@ class HDBSCAN(NumericModeMixin):
         self.n_outliers_ = int(info[1])
         self.n_boruvka_rounds_ = int(info[2])
         self.n_condensed_clusters_ = int(info[3])
+        self._prediction_data = None
+        self._raw_data = None
+        if want_pd:
+            self._prediction_data = self._generate_prediction_data(
+                ext, n, int(info[4]), t_par, t_ch, t_lam, t_sz, t_inv)
+            # cuML keeps the training matrix as `_raw_data` (hdbscan.pyx:1323);
+            # a borrowed input is copied so a caller's later write cannot move it.
+            self._raw_data = x if copied else x.copy()
         return self
+
+    def _generate_prediction_data(self, ext, n, n_edges, t_par, t_ch, t_lam, t_sz, t_inv):
+        """cuML `generate_prediction_data` (`hdbscan.pyx:394-427`,
+        `prediction_data.cu:92-239`) through the binding's host function."""
+        n_cond = self.n_condensed_clusters_
+        n_sel = self.n_clusters_
+        pd = dict(
+            n_edges=n_edges,
+            n_condensed=n_cond,
+            parents=t_par[:n_edges],
+            children=t_ch[:n_edges],
+            lambdas=t_lam[:n_edges],
+            sizes=t_sz[:n_edges],
+            inverse_label_map=t_inv[:max(n_sel, 1)],
+            deaths=empty((n_cond,), "<f4"),
+            selected_clusters=empty((max(n_sel, 1),), "<i4"),
+            exemplar_idx=empty((n,), "<i4"),
+            exemplar_label_offsets=empty((n_sel + 1,), "<i4"),
+            index_into_children=empty((n_edges + 1,), "<i4"),
+        )
+        n_ex = ext.hdbscan_generate_prediction_data(
+            # labels, parents, children, lambdas, sizes, inverse_label_map,
+            # deaths_out, selected_clusters_out, exemplar_idx_out,
+            # exemplar_label_offsets_out, index_into_children_out
+            [addr_ro(self.labels_, name="labels_"), addr_ro(pd["parents"], name="tree parents"),
+             addr_ro(pd["children"], name="tree children"), addr_ro(pd["lambdas"], name="tree lambdas"),
+             addr_ro(pd["sizes"], name="tree sizes"), addr_ro(pd["inverse_label_map"], name="inverse_label_map"),
+             addr(pd["deaths"], name="deaths"), addr(pd["selected_clusters"], name="selected_clusters"),
+             addr(pd["exemplar_idx"], name="exemplar_idx"),
+             addr(pd["exemplar_label_offsets"], name="exemplar_label_offsets"),
+             addr(pd["index_into_children"], name="index_into_children")],
+            # n_leaves, n_edges, n_clusters, n_selected
+            [n, n_edges, n_cond, n_sel],
+        )
+        pd["n_exemplars"] = int(n_ex)
+        pd["exemplar_idx"] = pd["exemplar_idx"][:max(int(n_ex), 1)]
+        return pd
 
     def fit_predict(self, X, y=None):
         return self.fit(X).labels_
 
 
-__all__ = ["HDBSCAN"]
+def _check_clusterer(clusterer, where):
+    """cuML `_check_clusterer` (`hdbscan.pyx:1098-1110`): a fitted HDBSCAN
+    with prediction data, else a refusal by name."""
+    if not isinstance(clusterer, HDBSCAN):
+        raise TypeError(
+            f"mojolearn {where}: clusterer must be a mojolearn HDBSCAN, got {type(clusterer).__name__}"
+        )
+    if not hasattr(clusterer, "labels_"):
+        raise ValueError(f"mojolearn {where}: this HDBSCAN instance is not fitted yet; call fit first")
+    pd = getattr(clusterer, "_prediction_data", None)
+    if pd is None:
+        raise ValueError(
+            f"mojolearn {where}: Prediction data not yet generated. Fit with "
+            "HDBSCAN(prediction_data=True); cuML refuses the same call the same way "
+            "(hdbscan.pyx:1104-1108)"
+        )
+    return pd
+
+
+def approximate_predict(clusterer, points_to_predict):
+    """Predict the cluster label of new points under the fitted clustering,
+    cuML's `approximate_predict` (`hdbscan.pyx:1264`, `predict.cuh:220-262`).
+
+    The labels are those of the original clustering, not the labels a
+    re-clustering with the new points would find (hence 'approximate').
+
+    Returns
+    -------
+    labels : Array (n_samples,) int32
+        `-1` where the nearest mutual reachability neighbor is noise or the
+        point falls outside its cluster's lambda range.
+    probabilities : Array (n_samples,) float32
+    """
+    pd = _check_clusterer(clusterer, "approximate_predict")
+    if clusterer.n_clusters_ == 0:
+        warnings.warn(
+            "Clusterer does not have any defined clusters, new data will be "
+            "automatically predicted as outliers."
+        )
+    q, _ = as_f32_c(points_to_predict, ndim=2, name="points_to_predict")
+    nq, d = q.shape
+    if d != clusterer.n_features_in_:
+        raise ValueError(
+            f"mojolearn approximate_predict: points_to_predict has {d} features, "
+            f"the clusterer was fit on {clusterer.n_features_in_}"
+        )
+    # cuML: `clusterer.min_samples or clusterer.min_cluster_size` (hdbscan.pyx:1322)
+    min_samples = clusterer.min_samples or clusterer.min_cluster_size
+    labels = empty((nq,), "<i4")
+    probs = empty((nq,), "<f4")
+    clusterer._extension().hdbscan_approximate_predict(
+        # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_approximate_predict_binding.
+        [addr_ro(clusterer._raw_data, name="training data"),
+         addr_ro(clusterer.core_distances_, name="core_distances_"),
+         addr_ro(clusterer.labels_, name="labels_"),
+         addr_ro(pd["lambdas"], name="tree lambdas"),
+         addr_ro(pd["deaths"], name="deaths"),
+         addr_ro(pd["selected_clusters"], name="selected_clusters"),
+         addr_ro(pd["index_into_children"], name="index_into_children"),
+         addr_ro(q, name="points_to_predict"),
+         addr(labels, name="labels"), addr(probs, name="probabilities")],
+        # m, d, n_edges, n_clusters (condensed), n_selected, nq, min_samples
+        [int(clusterer._raw_data.shape[0]), d, pd["n_edges"], pd["n_condensed"],
+         clusterer.n_clusters_, nq, int(min_samples)],
+    )
+    return labels, probs
+
+
+def membership_vector(clusterer, points_to_predict, batch_size=4096):
+    """cuML `membership_vector` (`hdbscan.pyx:1180`). NOT IMPLEMENTED."""
+    _check_clusterer(clusterer, "membership_vector")
+    raise NotImplementedError(
+        "mojolearn membership_vector: NOT IMPLEMENTED. cuML's "
+        "Predict::membership_vector (soft_clustering.cuh:501-627) computes in "
+        "float64 at four seams (1.0 / val, exp(-(v + 1e-8) / m), pow(m, 2) * "
+        "pow(d, 0.5), max(l, death) + 1e-8), which an Apple GPU cannot run, and "
+        "needs the device exp seam; hdbscan/NOT_IMPLEMENTED.tsv names the rung"
+    )
+
+
+def all_points_membership_vectors(clusterer, batch_size=4096):
+    """cuML `all_points_membership_vectors` (`hdbscan.pyx:1114`). NOT IMPLEMENTED."""
+    _check_clusterer(clusterer, "all_points_membership_vectors")
+    raise NotImplementedError(
+        "mojolearn all_points_membership_vectors: NOT IMPLEMENTED, for "
+        "membership_vector's reasons (soft_clustering.cuh:385-482); "
+        "hdbscan/NOT_IMPLEMENTED.tsv names the rung"
+    )
+
+
+__all__ = ["HDBSCAN", "approximate_predict", "membership_vector", "all_points_membership_vectors"]

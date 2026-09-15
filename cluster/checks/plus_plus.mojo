@@ -14,7 +14,7 @@ an `n_trials x n_samples` matrix; fusing them removes that buffer entirely,
 and cannot change the answer because the reduction consumes each element
 exactly once immediately after it is formed.
 
-**That fusion is a DEVIATION and it is recorded as one** (archive/reference/PORTING.md 16),
+**That fusion is a DEVIATION and it is recorded as one**,
 even though it is arithmetically identical, because it changes the summation
 ORDER over samples and therefore the last bits of `costPerCandidate`. When
 two candidates tie to the last bit, a different order picks a different
@@ -270,13 +270,13 @@ def binary_search_kernel(
     n_in: Int32,
     n_trials_in: Int32,
 ):
-    """`sample_with_replacement_kernel`, followed statement for statement.
+    """`sample_with_replacement_kernel`.
 
-    FOLLOWS `raft/random/detail/rng_device.cuh:697-727`, which is what
+    Reference: `raft/random/detail/rng_device.cuh:697-727`, which is what
     `raft::random::discrete` reaches at `cuvs/.../kmeans.cuh:189`.
 
     **This replaces a DIFFERENT DECOMPOSITION of the same draw**, and the
-    difference was the point. Theirs ranks per ELEMENT with a real prefix sum
+    difference was the point. The reference ranks per ELEMENT with a real prefix sum
     and then binary-searches it:
 
         IdxT idx_start = 0; IdxT idx_end = len;

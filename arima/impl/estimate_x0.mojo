@@ -3,10 +3,10 @@
 """`estimate_x0`, `start_params`, `arma_least_squares`, `test_invparams`:
 the starting point a `fit` needs before the optimizer can run.
 
-FOLLOWS `cuml/cpp/src/arima/batched_arima.cu` at cuML 265b9da6 (v26.08.00):
+Reference: `cuml/cpp/src/arima/batched_arima.cu` (cuML 265b9da6, v26.08.00):
 `test_invparams` (:628-657), `_arma_least_squares` (:664-839), `_start_params`
-(:845-946), `estimate_x0` (:948-1008). Followed closely, except at the
-one closed call, which is `b_gels` and is DEVIATION 678 in
+(:845-946), `estimate_x0` (:948-1008). The one closed call is `b_gels`,
+which is DEVIATION 678 in
 `arima/impl/linalg/batched/least_squares.mojo`.
 
 NOT IMPLEMENTED FROM THIS CHAIN, refused by name: the `order.n_exog > 0` block of
@@ -261,7 +261,7 @@ def arma_least_squares_kernel(
     is one thread per series doing the same nine steps in the same order.
     That is a REIMPLEMENTATION of the decomposition, not of the algorithm:
     the values written are theirs step for step, and every step is named
-    with the upstream line it comes from."""
+    with the reference line it comes from."""
     var bid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if bid >= Int(batch_size_in):
         return

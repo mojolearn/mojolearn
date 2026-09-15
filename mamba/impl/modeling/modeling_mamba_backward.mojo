@@ -40,7 +40,7 @@ derivative under this repository's pins, and it writes
     r3 = ftz(1.0 + r2);         r4 = pinned_mul(sg, r3)
 
 which is `sig * (1 + x*(1 - sig))`, left to right, FOUR roundings after the
-sigmoid. `_silu_prime` below is that function, transcribed from that file
+sigmoid. `_silu_prime` below is that function, taken from that file
 rather than re-derived, and both of this file's SiLU-derivative sites (B7 at
 `z`, B30 at `conv.out`) call it. **The plan's section 3.2 row B7 says "3
 roundings" and that is an undercount**: the subtraction `1 - sig` is a
@@ -171,7 +171,7 @@ def _grid(n: Int) -> Int:
 # predicted cell count, not merely that the arm ran.
 
 #: B4 recomputes `silu(z)` as `z * sigmoid(z)` instead of calling
-#: `identical_silu`. **THIS IS UPSTREAM'S ACTUAL BUG, NOT A HYPOTHETICAL**:
+#: `identical_silu`. **THIS IS THE REFERENCE'S ACTUAL BUG, NOT A HYPOTHETICAL**:
 #: their forward computes the gate as `out_vals[r][i] *= z_val / (1 +
 #: expf(-z_val))` (`selective_scan_fwd_kernel.cuh:298`) and their backward
 #: recomputes the same quantity as `z_sigmoid_val = 1.0f/(1.0f+expf(-z_val));
@@ -199,7 +199,7 @@ comptime SAB_BWD_S12B_ASSOC = is_defined[
     "MOJOLEARN_MAMBA_SABOTAGE_BWD_S12B_ASSOC"
 ]()
 
-#: B22 spelled upstream's way, ONE division `ddelta / (1 + expf(-biased))`
+#: B22 spelled the reference's way, ONE division `ddelta / (1 + expf(-biased))`
 #: (`selective_scan_bwd_kernel.cuh:454-457`), instead of a MULTIPLY by
 #: `identical_sigmoid`. Two roundings against one. DEVIATION 1078.
 #: **THE DISTINGUISHING BAND IS `biased` IN ROUGHLY [8, 14]**, and a fixture
@@ -332,9 +332,9 @@ def _silu_prime(x: Float32) -> Float32:
     checkout in `/Users/andrewhendel/CascadeProjects/upstream/`, so ATen's
     `silu_backward` is unread; and `selective_scan_bwd_kernel.cuh` was read
     by `archive/plans/mamba/IDENTICAL_BACKWARD_PLAN.md` section 6 and not by this file, so
-    every upstream claim here is that document's reading repeated, never a
+    every reference claim here is that document's reading repeated, never a
     line quoted from a file this author opened. **What section 6 records
-    about upstream's SiLU is one thing only**: their backward recomputes
+    about the reference's SiLU is one thing only**: their backward recomputes
     `silu(z)` as a reciprocal-then-product at `:193-194` where their forward
     wrote a single quotient at `fwd_kernel.cuh:298`. It records nothing about
     how they associate the derivative's own chain, so nothing is claimed
@@ -360,14 +360,14 @@ def _silu_recomputed(z: Float32) -> Float32:
     (`modeling_mamba.mojo:999`). **A recomputed forward quantity must be
     spelled with the same function the forward used, not with an
     algebraically equal one**, and that rule is the general form of the one
-    thing upstream gets wrong in its own backward.
+    thing the reference gets wrong in its own backward.
 
     Two different arms take the other branch and they mean different things.
     `SAB_S12_MUL_SIGMOID` is the FORWARD's arm: when it is armed the forward
     genuinely computed `z * sigmoid(z)`, so following it here keeps the
     backward consistent with the function that ran. `SAB_BWD_S12_MUL_SIGMOID`
     is THIS lane's arm: it makes the backward inconsistent with an unmodified
-    forward, which is exactly upstream's defect, on purpose. The body is
+    forward, which is exactly the reference's defect, on purpose. The body is
     `modeling_mamba.mojo:991-998` verbatim.
     """
     comptime if SILU_RECOMPUTE_IS_MUL_SIGMOID:
@@ -412,7 +412,7 @@ def mamba_bwd_gate_kernel(
     backward takes `dsk` as its `dy`.
 
     **B8's FOUR FACTORS ARE ASSOCIATED `((dg * sk) * silu')`, AND THE PLAN
-    CALLS THE ALTERNATIVE "upstream's four factor chain".** Pinned this way
+    CALLS THE ALTERNATIVE "the reference's four factor chain".** Pinned this way
     so that `silu'` is ONE function with ONE spelling shared with B30 and
     with the transformer lane, and so that the two incoming factors are
     multiplied together first -- which is the order S12's forward data flow
@@ -538,7 +538,7 @@ def mamba_bwd_ddtp_kernel(
     spelling (`modeling_mamba.mojo:951`), read off the recorded `dt_proj.out`
     stage and the bias. Recovering it from `softplus.out` by inverting the
     softplus would be a second transcendental and a different number, and
-    upstream does not do it either: it reloads and re-biases (`bwd_kernel.
+    the reference does not do it either: it reloads and re-biases (`bwd_kernel.
     cuh:454-457`).
 
     **THE GUARD TRAVELS WITH THE FORWARD.** `SAB_S14_THRESHOLD_10` is the
@@ -547,7 +547,7 @@ def mamba_bwd_ddtp_kernel(
     derivative of a function nobody computed.
 
     DEVIATION 1078: the PINNED spelling is a MULTIPLY by `identical_sigmoid`,
-    which is `portable_divf(1, 1+e)` then a product, two roundings. Upstream
+    which is `portable_divf(1, 1+e)` then a product, two roundings. The reference
     spells ONE DIVISION, `ddelta / (1 + expf(-biased))`.
     `SAB_BWD_S14_DIVISION` is theirs, and **the distinguishing band is
     `biased` in roughly [8, 14]**.
@@ -570,7 +570,7 @@ def mamba_bwd_ddtp_kernel(
 
     if biased <= thr:
         comptime if SAB_BWD_S14_DIVISION:
-            # SABOTAGE: upstream's single division, bwd_kernel.cuh:454-457.
+            # SABOTAGE: the reference's single division, bwd_kernel.cuh:454-457.
             ddtp_ptr.unsafe_store(
                 i,
                 ftz(

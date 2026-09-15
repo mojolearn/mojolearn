@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""L2 k-NN with the distance matrix NEVER written. Their DISPATCHED DEFAULT.
+"""L2 k-NN with the distance matrix NEVER written. The reference's DISPATCHED DEFAULT.
 
-FOLLOWS `cuvs/src/neighbors/detail/fused_l2_knn.cuh::fusedL2kNN` at cuVS
-`94c2819`, built on `raft/linalg/contractions.cuh::Policy2x8` and
-`raft/linalg/detail/contractions.cuh::Contractions_NT`, with their
+Reference: `cuvs/src/neighbors/detail/fused_l2_knn.cuh::fusedL2kNN` (cuVS
+`94c2819`), built on `raft/linalg/contractions.cuh::Policy2x8` and
+`raft/linalg/detail/contractions.cuh::Contractions_NT`, with
 `neighbors/impl/topk/warp_topk.mojo`'s `WarpSelect` as the selector.
 That selector was written clean-room from Batcher (1968) on 2026-08-31 and
-replaced a statement-for-statement match; the queue's SHAPE is what this file depends on,
+replaced an earlier selector; the queue's SHAPE is what this file depends on,
 not its provenance.
 Partial.
 
@@ -88,7 +88,7 @@ tile takes the `:367-453` arm instead, which counts the candidates below
 `warpKTop`, warp-prefix-sums them into `allWarpTopKs` (`:396`, `:427-429`),
 and merges them with `updateSortedWarpQ` (`:147-185`).
 
-OURS: `heap0`/`heap1` are constructed once, before the column loop, and
+HERE: `heap0`/`heap1` are constructed once, before the column loop, and
 every column tile runs their `else` arm. `shDumpKV`, `allWarpTopKs`,
 `loadWarpQShmem`, `storeWarpQShmem` and `updateSortedWarpQ` are all
 unreached and unimplemented.
@@ -158,7 +158,7 @@ deviation and can now cite this block instead of a wall.
 **DEVIATION BLOCK 3 - single-buffered shared pages.** Their
 `Policy::SmemSize` is `2 * SmemPage` because `Contractions_NT` is DOUBLE
 BUFFERED. Two pages at Policy2x8 is 36,992 bytes against Metal's 32 KB
-threadgroup limit (`archive/reference/PORTING.md 1`), so this implementation is single-buffered exactly
+threadgroup limit, so this implementation is single-buffered exactly
 as `core/gemm.mojo` is. With the selector now in registers the kernel's
 shared footprint is one page, 18,496 bytes, and nothing else -- so the
 ceiling that forces this is Apple's alone and the double buffer would fit on
@@ -839,7 +839,7 @@ def fused_l2_knn(
     `fusedL2ExpKnnImpl:776-800` only computes them when they were not passed
     and every caller in this tree already has them from `compute_norms`.
 
-    `L2Unexpanded` / `L2SqrtUnexpanded` route to `fusedL2UnexpKnn` upstream
+    `L2Unexpanded` / `L2SqrtUnexpanded` route to `fusedL2UnexpKnn` in the reference
     and are NOT implemented; see `neighbors/NOT_IMPLEMENTED.tsv` in the lane file.
     """
     # `ASSERT(k > 0)`, `ASSERT(D > 0)`, `ASSERT(n_index_rows > 0)`,

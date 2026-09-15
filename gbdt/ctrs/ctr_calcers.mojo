@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The two CTR calcers.
 
-MIRRORS `catboost/cuda/ctrs/ctr_calcers.h` at CatBoost `54a8143a`:
+Reference: `catboost/cuda/ctrs/ctr_calcers.h` (CatBoost `54a8143a`):
 `TWeightedBinFreqCalcer` (`:285-379`) and `THistoryBasedCtrCalcer`
 (`:32-283`), which are the two halves of their GPU `simple_ctr` default.
 
@@ -35,7 +35,7 @@ column with.
 device answer is gated against in `checks/ctr_device_check.mojo`, and it
 is what `checks/ctr_check.mojo` gates against an independent O(n^2)
 tally. `TWeightedBinFreqCalcer` is still host side and that is what remains
-of `archive/reference/PORTING.md` deviation 52.
+of deviation 52.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -87,7 +87,7 @@ def compute_simple_ctrs(
 ) raises -> List[List[Float32]]:
     """One categorical feature in, one float column per config out.
 
-    MIRRORS `TBatchedBinarizedCtrsCalcer::ComputeBinarizedCtrs`
+    Reference: `TBatchedBinarizedCtrsCalcer::ComputeBinarizedCtrs`
     (`cuda/gpu_data/batch_binarized_ctr_calcer.cpp:30-116`), the part that
     is not dataset plumbing:
 
@@ -808,9 +808,9 @@ def compute_simple_ctrs_gpu(
 ) raises -> List[List[Float32]]:
     """The PERMUTATION-DEPENDENT half of their two `writeCtrs` calls.
 
-    MIRRORS the same `TBatchedBinarizedCtrsCalcer::ComputeBinarizedCtrs`
-    driver `compute_simple_ctrs` above mirrors, with two differences that
-    are theirs and not ours:
+    Reference: the same `TBatchedBinarizedCtrsCalcer::ComputeBinarizedCtrs`
+    driver `compute_simple_ctrs` above uses, with two differences that
+    come from the reference, not from this implementation:
 
     * `order` is `ctrEstimationOrder` after
       `ctrsEstimationPermutation.WriteOrder(ctrEstimationOrder)`
@@ -893,7 +893,7 @@ def compute_simple_ctrs_gpu(
 
 struct TWeightedBinFreqCalcerGpu(Movable):
     """`TWeightedBinFreqCalcer<TMapping>` ON THE DEVICE, which is the implementation
-    that retires the last line of `archive/reference/PORTING.md` deviation 52.
+    that retires the last line of deviation 52.
 
     Their class (`ctr_calcers.h:285-379`), their buffers, their launch
     order. The `Gpu` suffix is ours for the same reason

@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`nan_mode`, and what it means for a feature that has no NaNs.
 
-FOLLOWS the `NanMode` corner of
-`catboost/private/libs/options/data_processing_options.{h,cpp}` at CatBoost
-`54a8143a`, plus `ENanMode` (`enums.h:107-111`). Followed statement for statement. Do not
+Reference: the `NanMode` corner of
+`catboost/private/libs/options/data_processing_options.{h,cpp}` (CatBoost
+`54a8143a`), plus `ENanMode` (`enums.h:107-111`). Do not
 improve.
 
 ## The option is a REQUEST, not a fact

@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Least squares through the normal equations and an eigendecomposition.
 
-FOLLOWS `raft/linalg/detail/lstsq.cuh::lstsqEig` at RAFT `661a3b8`.
-Followed statement for statement.
+Reference: `lstsqEig`, `raft/linalg/detail/lstsq.cuh` (RAFT `661a3b8`).
 
-This is cuML's OLS solver `algo = 1` (`cuml/cpp/src/glm/ols.cuh:120`). Their
-six steps, copied:
+This is cuML's OLS solver `algo = 1` (`cuml/cpp/src/glm/ols.cuh:120`). The
+reference's six steps:
 
     covA = A^T A                 O(rows * cols^2)
     Ab   = A^T b                 O(rows * cols)
@@ -57,7 +56,7 @@ comparison against scikit-learn, whose `LinearRegression` uses LAPACK
 
 STEP 6 IS ON THE VENDOR GEMV, AND THE SYMBOL IS `gemv_gpu` NOT `gemv`
 ---------------------------------------------------------------------
-Step 6 is `raft::linalg::gemv` upstream and now calls MAX's gemv here too,
+Step 6 is `raft::linalg::gemv` in the reference and now calls MAX's gemv here too,
 through `core/gemm.mojo::gemv_n`. Which symbol is not a detail. The obvious
 one is wrong: `linalg.gemv.gemv` takes no `DeviceContext` and no `target` and
 its own docstring opens "Computes a CPU matrix-vector product", so handing it

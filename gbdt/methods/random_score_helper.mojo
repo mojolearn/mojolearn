@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`random_strength`'s magnitude: how big the score noise is.
 
-FOLLOWS `catboost/cuda/methods/random_score_helper.h` at CatBoost
-`54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/random_score_helper.h` (CatBoost
+`54a8143a`).
 
 Three functions, and between them they decide the ONE scalar every noisy
 score kernel multiplies its normal draw by:
@@ -48,11 +48,11 @@ DIFFERENT: the standard deviation itself, in TWO ways.
      with a non-zero gradient contributes an inf and poisons the whole
      reduction to NaN.
 
-Neither is corrected here. Both are followed statement for statement where their file puts
+Neither is corrected here. Both are kept where the reference puts
 them: this one here, `compute_target_std_dev` in `greedy_search_helper`.
 =========================================================================
 
-DEVIATION 137 (also stated in archive/reference/PORTING.md): their `ComputeStdDev` is built
+DEVIATION 137: their `ComputeStdDev` is built
 out of two generic device ops, `DivideVector` then
 `DotProduct(tmp, tmp, &weights)` (`cuda_util/transform.h`,
 `cuda_util/dot_product.h`), NEITHER OF WHICH IS IMPLEMENTED here. This file
@@ -80,7 +80,7 @@ from gbdt.targets.kernel.pointwise_targets import (
 
 
 #: `ComputeTargetVariance`'s block (`compute_scores.cu:290`). `ComputeStdDev`
-#: has no kernel of its own upstream -- it is two library calls -- so the one
+#: has no kernel of its own in the reference -- it is two library calls -- so the one
 #: written here borrows the sibling's geometry rather than inventing one.
 comptime STD_DEV_BLOCK = 512
 

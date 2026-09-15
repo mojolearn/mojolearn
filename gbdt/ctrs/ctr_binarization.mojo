@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Two grids a CTR needs, and NEITHER is the numeric feature grid.
 
-MIRRORS three of theirs, at CatBoost `54a8143a`:
+Reference: three CatBoost sources (CatBoost `54a8143a`):
 
 * `library/cpp/grid_creator/binarization.cpp:1262-1310`
   (`TUniformBinarizer::BestSplit`), the border rule a **Borders** CTR
@@ -17,7 +17,7 @@ MIRRORS three of theirs, at CatBoost `54a8143a`:
 
 ## WHY THIS FILE IS NOT `grid_creator/binarization.mojo`
 
-It should be. `TUniformBinarizer` lives in the same upstream file as
+It should be. `TUniformBinarizer` lives in the same reference file as
 `GreedyLogSum` and `MinEntropy`, so `gbdt/grid_creator/binarization.mojo`
 is its mirror address. It is here because that file is owned by another
 lane in this round and a two-lane edit of one file is a merge conflict, not

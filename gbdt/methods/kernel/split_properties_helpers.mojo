@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The offset arithmetic every POINTWISE histogram kernel shares.
 
-FOLLOWS `catboost/cuda/methods/kernel/split_properties_helpers.cuh` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/split_properties_helpers.cuh`
+(CatBoost `54a8143a`).
 
-This file belongs to CatBoost's OTHER histogram family. `archive/reference/PORTING.md` 91 B
-lays out which is which; the short version is that CatBoost has three GPU
+This file belongs to CatBoost's OTHER histogram family. In short,
+CatBoost has three GPU
 tree searchers and two histogram families:
 
     greedy_subsets_searcher/kernel/   ->  implemented, drives our symmetric trees,
@@ -119,7 +119,7 @@ struct PointwisePartOffsetsHelper(Copyable, ImplicitlyCopyable, Movable):
         GetDataPartitionOffset(partId, foldId) = partId * foldStripe + foldId
 
     The stripe exists because the fold id is packed into the LOW BITS of a
-    document's bin (`archive/reference/PORTING.md` 91 B), so partitions have to be addressable
+    document's bin, so partitions have to be addressable
     by masking rather than by dividing. Histograms carry no such constraint
     and are packed tight. Reading either function for the other is a
     silent, data-dependent corruption whenever `FoldCount` is not already a
@@ -128,7 +128,7 @@ struct PointwisePartOffsetsHelper(Copyable, ImplicitlyCopyable, Movable):
 
     At `FoldCount == 1` -- Plain boosting, which is every fit this
     repository does today -- both reduce to `partId` and the distinction
-    costs nothing. It is transcribed anyway because rung 3 turns it on.
+    costs nothing. It is implemented anyway because rung 3 turns it on.
     """
 
     var fold_count: UInt32
@@ -328,13 +328,13 @@ def scan_pointwise_histograms_kernel(
     fold_count_in: Int32,
     histogram: MutPointer[Float32, MutAnyOrigin],
 ):
-    """`ScanHistogramsImpl` (`:110-181`), with archive/reference/PORTING.md 8's substitution.
+    """`ScanHistogramsImpl` (`:110-181`), with a serial-scan substitution.
 
     Their kernel gives each feature a 32-lane warp, scans 32 bins at a time
     with `InclusiveScanInWarp` (`inplace_scan.cuh:166`) over a shared
     buffer, and carries lane 31's total into the next chunk.
 
-    DEVIATION (archive/reference/PORTING.md 8, and 61 measured it): one thread per (feature,
+    DEVIATION (deviation 61 measured it): one thread per (feature,
     part, stat) scanning serially, no shared memory and no barrier. Two
     reasons, and the second is the binding one.
 
@@ -350,7 +350,7 @@ def scan_pointwise_histograms_kernel(
     threadIdx.x / 32`, so within one block different warps carry different
     feature ids and the tail block has warps that fail the test. A block
     barrier reached by only some warps is undefined in CUDA and hangs on
-    Metal. Following it statement for statement would be implementing a bug onto a target that
+    Metal. Reproducing it exactly would carry a bug onto a target that
     punishes it.
 
     ONE-HOT FEATURES ARE SKIPPED and that is theirs (`:126`): a one-hot

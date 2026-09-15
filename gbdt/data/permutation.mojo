@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TDataPermutation`: the learn permutations, and the CTR estimation order.
 
-FOLLOWS `catboost/cuda/data/permutation.{h,cpp}` at CatBoost `54a8143a`,
+Reference: `catboost/cuda/data/permutation.{h,cpp}` (CatBoost `54a8143a`),
 together with the two things it stands on: `NCatboostCuda::Shuffle`
 (`cuda/data/data_utils.h:21-47`) and the generator that drives it,
 `TRandom` (`libs/helpers/cpu_random.h:6-99`) over `TMersenne<ui64>`
@@ -39,9 +39,9 @@ so this implementation does not have it, and a caller here can hand us rows in a
 order at all -- including sorted by target.
 
 `train()` therefore takes its CTR estimation order from a NON-IDENTITY
-permutation id; see the deviation block below and `archive/reference/PORTING.md` 55.
+permutation id; see the deviation block below.
 
-## The seed, and why it is worth transcribing exactly
+## The seed, and why it must match exactly
 
     ui64 GetSeed() const {
         return 1664525 * GetPermutationId() + 1013904223 + BlockSize;
@@ -200,7 +200,7 @@ struct TRandom(Movable):
 
         `cpu_random.h:31-33` -> `TCommonRNG::Uniform`
         (`common_ops.h:84-86`) -> `NPrivate::GenUniform`
-        (`common_ops.h:48-60`), transcribed:
+        (`common_ops.h:48-60`), in the reference:
 
             const T randmax = gen.RandMax() - gen.RandMax() % max;
             while ((rand = gen.GenRand()) >= randmax) { }
@@ -383,6 +383,6 @@ def ctrs_estimation_permutation(
     Their loop runs this for every `permutationId` in
     `[0, permutation_count)` and writes a SEPARATE set of CTR columns per
     permutation into that permutation's own compressed dataset
-    (`:251-262`). See `archive/reference/PORTING.md` 55 for which one this implementation keeps.
+    (`:251-262`).
     """
     return get_permutation(doc_count, permutation_id, 1)

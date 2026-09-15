@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TPointHistHalfByte<BlockSize>`: ONE accumulator, TWO kernels.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_half_byte_template.cuh`
-at CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_hist2_half_byte_template.cuh`
+(CatBoost `54a8143a`).
 
 This is the pointwise family's small-bin accumulator, and the thing to know
 before reading either kernel that uses it is that **there is only one of it**.
@@ -36,10 +36,10 @@ packed nibbles to match, and `f = (shift + (i << 1)) & 14` walks each thread
 through all 8 in a different order. On any iteration the 8 threads of a
 parity pair sit on 8 distinct features.
 
-DEVIATION (archive/reference/PORTING.md 11 and 92): their `thread_block_tile<32>::sync()`
+DEVIATION: their `thread_block_tile<32>::sync()`
 becomes a threadgroup `barrier()`, 16 per point (8 iterations x 2).
 
-DEVIATION (archive/reference/PORTING.md 1): CatBoost launches both kernels at `blockSize = 768`
+DEVIATION: CatBoost launches both kernels at `blockSize = 768`
 (`pointwise_hist2_binary.cu:142`, `pointwise_hist2_half_byte.cu:142`), which
 at 16 floats per thread is 49,152 bytes against Apple's 32,768. The matrix
 row resolves it to 512 -- exactly 32,768. **Unlike every other block in this
@@ -137,9 +137,9 @@ struct PointHistHalfByte[origin: MutOrigin](PointHist2):
     ):
         """Their constructor (`:26-34`).
 
-        NOTE THE ORDER: theirs zeroes, then `__syncthreads()`, then sets
+        NOTE THE ORDER: the reference zeroes, then `__syncthreads()`, then sets
         `Buffer`. The one-byte accumulators set `Buffer` before the sync.
-        Same effect, transcribed as written.
+        Same effect, kept in the reference order.
         """
         comptime assert PW_HB_BLOCK >= 512, (
             "TPointHistHalfByte::Reduce folds the warp slices under"
