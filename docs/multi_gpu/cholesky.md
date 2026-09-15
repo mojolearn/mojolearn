@@ -26,7 +26,11 @@ and the gemm fp32.v1 fold of a cell is a function of `k = w` only (at
 rows share a launch or which plan the dispatcher picks for the launch shape.
 So contiguous output-row ranges of `G` run on owners that hold their rows of
 `L21` (left operand) and all of `L21` (right operand), and the rows are
-copied back as bytes into `G`. The subtraction, the panel factor, the panel
+copied back as bytes into `G`. Those copies go through
+`core/multi_gpu.mojo::transfer_bytes`, which stages them through host memory
+on AMD: with device copies, a two-MI300X factor at n=4500 (output rows of
+about 40 MiB per owner) differed from one device while two H100s were exact
+(`bench/results/multi_gpu/2026-09-15/transport-audit/`). The subtraction, the panel factor, the panel
 solve and the `info` decision stay on the root.
 
 ## The solve
@@ -41,7 +45,12 @@ positions after each stage. The factor, the columns and the results move
 through host memory and each owner's own context, not device to device: the
 device-to-device form diverged on two MI300X for every factor above 1 MiB, in
 the columns owned by device 1 (`bench/results/multi_gpu/2026-09-14/
-cholesky-mi300x-diag/`); the cause is not identified. The `chol.solve.forward` and `chol.solve.back`
+cholesky-mi300x-diag/`). The cause is a platform behavior, not this code: on
+those SR-IOV MI300X a kernel on the target device, launched after the copy and
+`synchronize()` on both contexts, can read the previous contents of the
+target memory (`bench/results/multi_gpu/2026-09-15/peer-copy-mi300x/`; the
+repro is `training/checks/peer_copy_check.mojo`, PEERSOLVE `l_first` at
+n=513). Two H100s never show it. The `chol.solve.forward` and `chol.solve.back`
 card stages are recorded on the root after each gather, so a traced
 multi-device solve writes the same card.
 

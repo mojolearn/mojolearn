@@ -35,6 +35,18 @@ labels and scales agree): Apple and AMD hash 52ea06cbbcc24144, the H100
 1a7e4ac5b8c0caaf. The H100 column stands alone; no earlier record carries the
 lane. Brief: `docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md`.
 
+**CLOSED at 9fde8f5f7, and this record's `kmeans-sqrt` cells are superseded.**
+The two hashes are float64(62807200.0) and float64(62807196.0), one float32 ulp
+apart; an RTX 4090 (sm_89) carries the H100's value, so the column that stood
+alone was NVIDIA, whose stdlib `sqrt` in the two min-reduce kernels is
+approximate (DEVIATION 2715). The same lane's `labels` hash is IDENTICAL x3
+here and WRONG on every column: the final assignment took rooted row norms, so
+9675 of 20000 `wide` labels were not the argmin to the returned centers
+(DEVIATION 2716). The kmeans lanes after both fixes, and the unfixed builds
+that reproduce this record's cells, are
+`bench/results/identity_break/2026-09-14_kmeans-sqrt-fix`. The JSONs here are
+left as they were recorded at 1eea14f80.
+
 `diff.batch.txt` is the batch rows of that diff: 1188 batch cells IDENTICAL x3
 (the whole-batch hash equal on every vendor, and on every vendor every row alone,
 the split and the prefixes the same bytes as the whole batch), 306 N/A with the

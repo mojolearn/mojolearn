@@ -21,6 +21,7 @@ from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
 from training.byte_lm_config import ByteConfig
 from training.checks.optimizer_oracle import OptimizerConfig
 from training.checks.train_loop import _copy_into
+from core.multi_gpu import transfer_bytes
 
 
 def _ordered_add_kernel(
@@ -151,8 +152,7 @@ struct ByteParallelTrainer(Movable, Writable):
                 if target == source:
                     continue
                 var dest = self.trainers[target].buffers.param.create_sub_buffer[DType.float32](first,n)
-                part.enqueue_copy_to(dest)
-                self.contexts[source].synchronize()
+                transfer_bytes(self.contexts[source], self.contexts[target], part, dest, n, True)
         for rank in range(len(self.trainers)):
             self.contexts[rank].synchronize()
 
@@ -241,8 +241,8 @@ struct ByteParallelTrainer(Movable, Writable):
                             var first = self.trainers[owner].buffers.optimizer_first
                             var owned = self.trainers[owner].buffers.optimizer_count
                             var part = self.trainers[rank].buffers.grad.create_sub_buffer[DType.float32](first,owned)
-                            part.enqueue_copy_to(self.pool_incoming[owner])
-                            self.contexts[rank].synchronize()
+                            transfer_bytes(self.contexts[rank], self.contexts[owner], part,
+                                self.pool_incoming[owner], owned, rank != owner)
                             if start + rank == 0:
                                 _copy_into(self.contexts[owner],self.pool_totals[owner],self.pool_incoming[owner],0,0,owned)
                             else:
@@ -251,8 +251,8 @@ struct ByteParallelTrainer(Movable, Writable):
                                     grid_dim=((owned+127)//128,1,1),block_dim=(128,1,1))
                             self.contexts[owner].synchronize()
                     else:
-                        self.trainers[rank].buffers.grad.enqueue_copy_to(self.incoming.value())
-                        self.contexts[rank].synchronize()
+                        transfer_bytes(self.contexts[rank], self.contexts[0], self.trainers[rank].buffers.grad,
+                            self.incoming.value(), n, rank != 0)
                         if start + rank == 0:
                             _copy_into(self.contexts[0], self.total.value(), self.incoming.value(), 0, 0, n)
                         else:
@@ -269,12 +269,12 @@ struct ByteParallelTrainer(Movable, Writable):
                         var first = self.trainers[owner].buffers.optimizer_first
                         var owned = self.trainers[owner].buffers.optimizer_count
                         var target = self.trainers[i].buffers.grad.create_sub_buffer[DType.float32](first,owned)
-                        self.pool_totals[owner].enqueue_copy_to(target)
-                        self.contexts[owner].synchronize()
+                        transfer_bytes(self.contexts[owner], self.contexts[i], self.pool_totals[owner], target,
+                            owned, owner != i)
                     self.contexts[i].synchronize()
                 else:
-                    self.total.value().enqueue_copy_to(self.trainers[i].buffers.grad)
-                    self.contexts[0].synchronize()
+                    transfer_bytes(self.contexts[0], self.contexts[i], self.total.value(),
+                        self.trainers[i].buffers.grad, n, i != 0)
                 if self.pool_optimizer:
                     pool_maybe_fault(self.contexts[i], self.trainers[i].buffers.grad, "grad_nonfinite", 0, _FAULT_NAN, self.trainers[i].buffers.optimizer_first)
                 _require_device_finite(self.contexts[i], self.trainers[i].scan,

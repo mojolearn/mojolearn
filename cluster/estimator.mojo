@@ -97,9 +97,13 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
   2026-08-23 by `tools/e2u_matrix_fit.py` (`kmeans_k8_ninit3`,
   `kmeans_k8_array`: both move the answer against the baseline, and the
   restart card tags `restart01.*` appear). No Mojo check covers them.
-- Metrics other than `METRIC_L2_EXPANDED`. `METRIC_L2_SQRT_EXPANDED` and
-  `METRIC_COSINE_EXPANDED` pass through untested from here, and the Python
-  surface does not expose `metric` at all.
+- Metrics other than `METRIC_L2_EXPANDED`. No Mojo check covers them. The
+  Python surface routes `metric` since 2026-09-14 (workstream D):
+  `METRIC_L2_SQRT_EXPANDED` is the `kmeans-sqrt` identity lane and
+  `python/mojolearn/tests/test_kmeans_metric_surface.py` (labels against the
+  argmin to the returned centers, DEVIATION 2716); `METRIC_COSINE_EXPANDED`
+  is refused by name in `kmeans_params.mojo::validate`. This sentence used to
+  say the surface did not expose `metric` at all.
 - The CPython extension EXISTS (`bindings/_mojolearn.mojo::kmeans_fit_binding`,
   `python/mojolearn/cluster.py`); this sentence used to say it did not.
 """
@@ -107,7 +111,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 from max.algorithm import sync_parallelize
 from max.gpu.host import DeviceContext
 
-from cluster.impl.detail.kmeans_common import metric_is_sqrt
+from cluster.impl.detail.kmeans_common import centroid_norms_take_sqrt
 from cluster.impl.kmeans import fit_predict
 from core.device_zero import enqueue_fill
 from core.row_norms import NORM_TPB, row_norm_kernel
@@ -329,11 +333,26 @@ def kmeans_fit(
     # path rather than merely harmless.
     if init == INIT_ARRAY:
         ctx.enqueue_copy(dst_buf=centroids, src_ptr=out_centroids_ptr)
-    # One block per row, matching every other launch of this kernel. The
-    # sqrt flag follows the metric, exactly as the fit path's own norm does:
-    # a squared-distance metric wants squared norms.
+    # One block per row, matching every other launch of this kernel.
+    #
+    # DEVIATION 2716 (2026-09-14, kmeans-sqrt): THE NORMS ARE SQUARED FOR
+    # BOTH L2 METRICS. This flag used to follow `metric_is_sqrt`, so under
+    # L2SqrtExpanded the final assignment in `fit_predict` computed
+    # `||x|| + ||c||^2 - 2 x.c`: the row constant was wrong, the value went
+    # negative wherever `||x||^2` exceeded `||x||`, the clamp made it 0, and
+    # the tie went to the lowest key. Measured on the M4 at 1eea14f80:
+    # 9,675 of 20,000 `labels_` on the `wide` fixture and 4 on `base` were
+    # not the argmin to the returned centers (0 under L2Expanded), on every
+    # column alike, so the record read IDENTICAL on a wrong answer. cuVS
+    # takes `raft::linalg::norm<L2Norm>` (squared) for L2Expanded AND
+    # L2SqrtExpanded (`detail/kmeans.cuh:141-144`, `:1082-1085`), and so
+    # does the fit's own norm (`detail/kmeans.mojo`, `Int32(0)`); the root
+    # belongs to the reduction's output alone (`metric_is_sqrt`). Only
+    # cosine divides by the norms and wants them rooted, the same rule the
+    # centroid side uses. `inertia_` never read this buffer (it is the
+    # fit's own final pass), so only `labels_` moves.
     var take_sqrt = Int32(0)
-    if metric_is_sqrt(metric):
+    if centroid_norms_take_sqrt(metric):
         take_sqrt = Int32(1)
     ctx.enqueue_function[row_norm_kernel](
         x_norm.unsafe_ptr(),

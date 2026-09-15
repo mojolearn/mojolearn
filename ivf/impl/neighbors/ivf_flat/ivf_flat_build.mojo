@@ -66,7 +66,6 @@ from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from cluster.impl.detail.kmeans import kmeans_fit_main_traced
-from cluster.impl.detail.kmeans_common import metric_is_sqrt
 from cluster.impl.kmeans import predict
 from cluster.impl.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
@@ -139,9 +138,8 @@ def compute_row_norms(
     mut a_norm: DeviceBuffer[DType.float32],
     n_rows: Int,
     n_features: Int,
-    take_sqrt: Bool,
 ) raises:
-    """`core/row_norms.mojo::row_norm_kernel`, one block per row.
+    """`core/row_norms.mojo::row_norm_kernel`, one block per row, SQUARED.
 
     THE SAME LAUNCH `neighbors/.../knn_brute_force.mojo::compute_norms`
     MAKES, spelled here only because importing across two implemented trees for
@@ -149,16 +147,31 @@ def compute_row_norms(
     k-NN lane's and is not re-implemented; `NORM_TPB` is read from the
     kernel matrix, which is where every block size in this tree lives.
 
-    `take_sqrt` follows the metric, which is their comment at
-    `knn_brute_force.cuh:117-118` and the same flag `cluster/` carries: an
-    expanded L2 wants the SQUARED norm on both sides and takes the root at
-    the very end.
+    ALWAYS THE SQUARED NORM, AND THERE IS NO FLAG TO ASK FOR ANYTHING ELSE.
+    Both metrics this lane carries are expanded L2, and the expanded form
+    `||q||^2 + ||y||^2 - 2 q.y` wants the square on both sides whether or
+    not the root is taken later: their build takes the centre norms with
+    `raft::linalg::norm<L2Norm>` and no `sqrt_op` for every metric except
+    CosineExpanded (`ivf_flat_build.cuh:351-357`), and their search takes
+    the query norms the same way under `L2Expanded` and `L2SqrtExpanded`
+    alike (`ivf_flat_search.cuh:110-118`).
+
+    FIXED 2026-09-14. This launch used to take a `take_sqrt` flag that
+    every caller filled from `metric_is_sqrt(metric)`. `metric_is_sqrt` is
+    k-means's REDUCTION flag (`kmeans_common.cuh:444`, whether the min
+    distance is rooted), not a norm flag, and it is true for
+    L2SqrtExpanded. Under that metric every norm was rooted, the expanded
+    distance became `||q|| + ||y|| - 2 q.y`, which is negative for most
+    pairs and clamped to 0, and the search returned all-zero distances and
+    ids that are not the nearest rows (seen on the Apple M4 through the
+    Python door). The flag is gone rather than defaulted so nothing can
+    pass it again.
     """
     ctx.enqueue_function[row_norm_kernel](
         a_norm.unsafe_ptr(),
         a.unsafe_ptr(),
         Int32(n_features),
-        Int32(1 if take_sqrt else 0),
+        Int32(0),
         grid_dim=(n_rows, 1, 1),
         block_dim=(NORM_TPB, 1, 1),
     )
@@ -229,7 +242,6 @@ def ivf_flat_build(
     ivf_validate_data(x, n_rows, dim, "dataset")
 
     var n_lists = params.n_lists
-    var take_sqrt = metric_is_sqrt(params.metric)
 
     if trace.enabled:
         trace.header(
@@ -269,7 +281,7 @@ def ivf_flat_build(
     # it -- `cluster/estimator.mojo` records that passing it uninitialized
     # MERGES CLUSTERS, measured on the first run of
     # `check_kmeans_fit_recovers_planted`.
-    compute_row_norms(ctx, dx, x_norm, n_rows, dim, take_sqrt)
+    compute_row_norms(ctx, dx, x_norm, n_rows, dim)
     ctx.synchronize()
 
     # `kmeans_n_iters` IS THEIR `max_iter`, `ivf_flat_build.cuh:433`, and
@@ -304,7 +316,7 @@ def ivf_flat_build(
     if trace.enabled:
         trace.record_device(ctx, "ivf.centers", centroids, n_lists * dim)
 
-    compute_row_norms(ctx, centroids, center_norm, n_lists, dim, take_sqrt)
+    compute_row_norms(ctx, centroids, center_norm, n_lists, dim)
     ctx.synchronize()
     if trace.enabled:
         trace.record_device(ctx, "ivf.center_norms", center_norm, n_lists)

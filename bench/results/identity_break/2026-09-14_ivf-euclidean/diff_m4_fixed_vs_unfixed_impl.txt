@@ -1,0 +1,82 @@
+| lane/fixture                 | verdict    | arm64            | arm64            |
+|------------------------------|------------|------------------|------------------|
+| ivf-euclidean/base           | DIVERGENT  | parts differ: dist,idx,cand; agree: - | bea8eb47aeaadabb |
+| ivf-euclidean/denormal       | DIVERGENT  | parts differ: dist,idx,cand; agree: - | 54e9bab0967441c7 |
+| ivf-euclidean/denormal_ftz   | DIVERGENT  | parts differ: dist,idx,cand; agree: - | 54e9bab0967441c7 |
+| ivf-euclidean/dupes          | DIVERGENT  | parts differ: dist,idx,cand; agree: - | 64a936089e358b93 |
+| ivf-euclidean/hashed         | DIVERGENT  | parts differ: dist,idx,cand; agree: - | 2a4cd31f03b9d355 |
+| ivf-euclidean/negative       | DIVERGENT  | parts differ: dist,idx,cand; agree: - | abf676b076a49766 |
+| ivf-euclidean/odd            | DIVERGENT  | parts differ: dist,idx,cand; agree: - | c839887323000ebc |
+| ivf-euclidean/ties           | DIVERGENT  | parts differ: dist,idx,cand; agree: - | 45f2532d7d70de64 |
+| ivf-euclidean/wide           | DIVERGENT  | parts differ: dist,idx,cand; agree: - | 8d42eb46e8ee119f |
+| ivf/base                     | IDENTICAL x2 | e14f27972422d4e0 | e14f27972422d4e0 |
+| ivf/denormal                 | IDENTICAL x2 | dc905d6cb32046d8 | dc905d6cb32046d8 |
+| ivf/denormal_ftz             | IDENTICAL x2 | dc905d6cb32046d8 | dc905d6cb32046d8 |
+| ivf/dupes                    | IDENTICAL x2 | c9eaf39f6e83e625 | c9eaf39f6e83e625 |
+| ivf/hashed                   | IDENTICAL x2 | 6c061012dc979df5 | 6c061012dc979df5 |
+| ivf/negative                 | IDENTICAL x2 | 9a7f19689600453e | 9a7f19689600453e |
+| ivf/odd                      | IDENTICAL x2 | 26b26d7e4be5c50a | 26b26d7e4be5c50a |
+| ivf/ties                     | IDENTICAL x2 | b9d8790b40b5a6ac | b9d8790b40b5a6ac |
+| ivf/wide                     | IDENTICAL x2 | 8ee39ab9ae510966 | 8ee39ab9ae510966 |
+
+summary: DIVERGENT=9, IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | arm64            | arm64            |
+|------------------------------|--------|--------------|------------------|------------------|
+| ivf-euclidean/base           | infer  | DIVERGENT    | f6f71f391727d74a | 22e5da4b501c6a65 |
+| ivf-euclidean/base           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf-euclidean/base           | batch  | DIVERGENT    | 0d3b322b4f251d85 | 174e7f9e7027edaf |
+| ivf-euclidean/denormal       | infer  | DIVERGENT    | ab8f3fc0fb8f010c | 08e522c21844f98a |
+| ivf-euclidean/denormal       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf-euclidean/denormal       | batch  | DIVERGENT    | e395801cb8474d82 | 6e182b0e0f0c27da |
+| ivf-euclidean/denormal_ftz   | infer  | DIVERGENT    | ab8f3fc0fb8f010c | 08e522c21844f98a |
+| ivf-euclidean/denormal_ftz   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf-euclidean/denormal_ftz   | batch  | DIVERGENT    | e395801cb8474d82 | 6e182b0e0f0c27da |
+| ivf-euclidean/dupes          | infer  | DIVERGENT    | 5fb3dd756fa6a835 | 2f1a1126fc1a50d4 |
+| ivf-euclidean/dupes          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf-euclidean/dupes          | batch  | DIVERGENT    | 5fef40b00c474a24 | a52bcbbef8834044 |
+| ivf-euclidean/hashed         | infer  | DIVERGENT    | 7d8a8506eeb9a78e | a9c750875cf053f4 |
+| ivf-euclidean/hashed         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf-euclidean/hashed         | batch  | DIVERGENT    | a69643bf03ceccb2 | c436ffcc842ea6e4 |
+| ivf-euclidean/negative       | infer  | DIVERGENT    | eacf2587f37d56cb | 29bfa6b8dbc0ee6a |
+| ivf-euclidean/negative       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf-euclidean/negative       | batch  | DIVERGENT    | 1a302ceb75994c6f | 2b1987de2350dc2c |
+| ivf-euclidean/odd            | infer  | DIVERGENT    | 247b6a2b733e9ff2 | 8abb728ed0fdba48 |
+| ivf-euclidean/odd            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf-euclidean/odd            | batch  | DIVERGENT    | 4960b29bcd792dc0 | f2c0c377d5038226 |
+| ivf-euclidean/ties           | infer  | DIVERGENT    | 6ce659c7ea10311d | 45858c0234e3247a |
+| ivf-euclidean/ties           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf-euclidean/ties           | batch  | DIVERGENT    | a22713485f1d9568 | 7f36ea3d224a1abe |
+| ivf-euclidean/wide           | infer  | DIVERGENT    | ee34cd995ead59ba | 7cafae2063a8baed |
+| ivf-euclidean/wide           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf-euclidean/wide           | batch  | DIVERGENT    | 36fcc86c5ffc7e96 | 090d37156374e680 |
+| ivf/base                     | infer  | IDENTICAL x2 | fd6eed35b1338d17 | fd6eed35b1338d17 |
+| ivf/base                     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf/base                     | batch  | IDENTICAL x2 | 6baf3cfbde509312 | 6baf3cfbde509312 |
+| ivf/denormal                 | infer  | IDENTICAL x2 | 3ff4c07c575048cf | 3ff4c07c575048cf |
+| ivf/denormal                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf/denormal                 | batch  | IDENTICAL x2 | 45f49934c58d1518 | 45f49934c58d1518 |
+| ivf/denormal_ftz             | infer  | IDENTICAL x2 | 3ff4c07c575048cf | 3ff4c07c575048cf |
+| ivf/denormal_ftz             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf/denormal_ftz             | batch  | IDENTICAL x2 | 45f49934c58d1518 | 45f49934c58d1518 |
+| ivf/dupes                    | infer  | IDENTICAL x2 | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 |
+| ivf/dupes                    | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf/dupes                    | batch  | IDENTICAL x2 | 99ec531fb8ae409f | 99ec531fb8ae409f |
+| ivf/hashed                   | infer  | IDENTICAL x2 | 49c22df302ee0334 | 49c22df302ee0334 |
+| ivf/hashed                   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf/hashed                   | batch  | IDENTICAL x2 | 648bf9fc3764372d | 648bf9fc3764372d |
+| ivf/negative                 | infer  | IDENTICAL x2 | 71333eccc89915b1 | 71333eccc89915b1 |
+| ivf/negative                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf/negative                 | batch  | IDENTICAL x2 | 9786387eb7123b42 | 9786387eb7123b42 |
+| ivf/odd                      | infer  | IDENTICAL x2 | 1e0c2401db49a53d | 1e0c2401db49a53d |
+| ivf/odd                      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf/odd                      | batch  | IDENTICAL x2 | 8149b10d16c8ebaa | 8149b10d16c8ebaa |
+| ivf/ties                     | infer  | IDENTICAL x2 | c62b1be91d40fc43 | c62b1be91d40fc43 |
+| ivf/ties                     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf/ties                     | batch  | IDENTICAL x2 | 166f61a6e1f346b8 | 166f61a6e1f346b8 |
+| ivf/wide                     | infer  | IDENTICAL x2 | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 |
+| ivf/wide                     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ivf/wide                     | batch  | IDENTICAL x2 | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 |
+
+summary (infer/model): DIVERGENT=9, IDENTICAL=9, N/A=18
+summary (batch): DIVERGENT=9, IDENTICAL=9

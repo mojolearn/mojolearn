@@ -40,11 +40,18 @@ THE POLICY CHOICES
 4. **THE METRIC IS L2, THE DEFAULT IS `L2Expanded`, AND THE ROOT IS THE
    CALLER'S CHOICE.** `METRIC_L2_EXPANDED` returns SQUARED distances (what
    the benchmark and the checks compare) and `METRIC_L2_SQRT_EXPANDED`
-   returns Euclidean ones (what scikit-learn's `kneighbors` returns). The
-   two differ by one `identical_sqrt` per returned element and `sqrt` is
-   monotone, so the SET and the ORDER are the same either way -- which is
-   worth writing down, because it means a recall REPORT taken under one is
-   a statement about the other.
+   returns Euclidean ones (what scikit-learn's `kneighbors` returns). ON
+   ONE INDEX the two differ by one `identical_sqrt` per returned element:
+   both score and select on the squared distance and the root is taken
+   over the `k` kept (`ivf_common.mojo::postprocess_distances`), so the
+   ids and their order are the same and
+   `check_l2_sqrt_is_the_root_of_l2` asserts it. A BUILD under each metric
+   is not one index: the quantizer is `cluster/`'s k-means with the
+   metric passed through (cuVS does the same, `ivf_flat_build.cuh:434`),
+   whose reduction roots the min distance under L2SqrtExpanded, so its
+   inertia, its stopping iteration and the centroids can differ, and at
+   `n_probes < n_lists` so can the answer (corrected 2026-09-14; this
+   paragraph used to say the set and the order are the same either way).
 
 5. **NO WORKSPACE CAP AND NO QUERY BATCHING.**
    `neighbors/estimator.mojo` caps its distance tile because that tile is
