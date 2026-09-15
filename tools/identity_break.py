@@ -126,14 +126,14 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whole-batch answer (one ulp) and stamps `batch_sabotage: true`
             in the JSON.
 
-THE LANES, 168 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
+THE LANES, 172 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
 tokenizer the same day when those two got their doors, 16 `par-*` lanes that
 evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed, then `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -183,6 +183,8 @@ sampler, a solver, a metric, a reduction).
                par-graph-umap par-ordered-rmse par-feature-freq
                par-boosting-pointwise par-holtwinters par-byte-lm-model-pool
                par-byte-lm-offload par-samba-clip
+    2026-09-14 night (drivers added by the multigpu lane; devices=_par_devices())
+      par-forest-pool par-gmm par-resample par-hdbscan
     2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
       ivf embedding
 
@@ -2886,6 +2888,101 @@ def _(ml, X, yc, yr, Xh=None):
                 par, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
 
 
+# ---------------------------------------------------------------- lanes (2026-09-14 night, drivers added by the multigpu lane)
+# ParallelForestPredictor (resident RF/ET groves, 32 fixed logical groves) and
+# fit_gaussian_mixture / predict_gaussian_mixture (row-sharded E-steps). Same
+# rules as the par-* lanes above: devices=_par_devices() and `_same_bytes`
+# against the one-device public path the driver promises to equal.
+
+@lane("par-forest-pool")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelForestPredictor over a 40-tree RandomForestClassifier with
+    inference_engine='parallel_groves' (40 trees put two trees in groves 0..7,
+    so the within-grove order is reached), held to the estimator's own
+    parallel_groves predictions."""
+    from mojolearn.parallel_ensemble import ParallelForestPredictor
+    m = ml.RandomForestClassifier(n_estimators=40, max_depth=8, random_state=7,
+                                  inference_engine="parallel_groves").fit(X, yc)
+
+    def pooled(e, R):
+        # A reloaded model is asked the same way; its engine is set, not assumed.
+        e.inference_engine = "parallel_groves"
+        with ParallelForestPredictor(e, devices=_par_devices()) as pool:
+            return pool.predict(R), pool.predict_proba(R)
+
+    pred, proba = pooled(m, X)
+    _same_bytes("ParallelForestPredictor predict_proba", proba, "parallel_groves predict_proba", m.predict_proba(X))
+    return _fit(dict(predict=_h(pred), proba=_h(proba)), m, lambda e: pooled(e, Xh))
+
+
+@lane("par-gmm")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_gaussian_mixture and predict_gaussian_mixture on the gmm lane's
+    configuration, held to the plain fit's covariances and labels."""
+    from mojolearn.parallel_classical import fit_gaussian_mixture, predict_gaussian_mixture
+    kw = dict(n_components=4, max_iter=30, random_state=3)
+    par = fit_gaussian_mixture(ml.GaussianMixture(**kw), X[:6000, :4], devices=_par_devices())
+    plain = ml.GaussianMixture(**kw).fit(X[:6000, :4])
+    _same_bytes("fit_gaussian_mixture covariances_", par.covariances_, "plain covariances_", plain.covariances_)
+    labels = predict_gaussian_mixture(par, X[:6000, :4], devices=_par_devices(), method="predict")
+    _same_bytes("predict_gaussian_mixture", labels, "plain predict", plain.predict(X[:6000, :4]))
+    return _fit(dict(weights=_h(par.weights_), means=_h(par.means_), covariances=_h(par.covariances_),
+                     precisions=_h(par.precisions_cholesky_), n_iter=_h(np.int64(par.n_iter_)),
+                     lower_bound=_h(np.float32(par.lower_bound_)), labels=_h(labels)),
+                par, lambda e: (predict_gaussian_mixture(e, Xh[:64, :4], devices=_par_devices(), method="score_samples"),
+                                predict_gaussian_mixture(e, Xh[:64, :4], devices=_par_devices(), method="predict")))
+
+
+@lane("par-resample")
+def _(ml, X, yc, yr, Xh=None):
+    """parallel_classical.bootstrap, permutation_test and
+    monte_carlo_integrate (global replicate, permutation and 256-sample
+    chunk ranges on _par_devices()) on the bootstrap, permutation-test and
+    monte-carlo lanes' inputs, each held to the one-device public function."""
+    from mojolearn import parallel_classical as pc
+    rs = ml.resample
+    dev = _par_devices()
+    x = np.ascontiguousarray(yr[:4096])
+    parts = {}
+    for name, kw in (("mean", dict(statistic="mean", n_resamples=2048)),
+                     ("quantile", dict(statistic="quantile", q_or_prop=0.25, n_resamples=1024, alternative="less"))):
+        b = pc.bootstrap(x, devices=dev, random_state=3, **kw)
+        plain = rs.bootstrap(x, random_state=3, **kw)
+        _same_bytes("parallel bootstrap distribution", b.distribution, "bootstrap distribution", plain.distribution)
+        parts["bootstrap-" + name] = _h(b.distribution, b.sorted_distribution,
+                                        np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0],
+                                                    b.confidence_interval[1]], dtype=np.float64))
+    a = np.ascontiguousarray(yr[:512])
+    c = np.ascontiguousarray(yr[512:1024])
+    p = pc.permutation_test(a, c, devices=dev, statistic="diff_means", n_resamples=2048, random_state=3)
+    plain = rs.permutation_test(a, c, statistic="diff_means", n_resamples=2048, random_state=3)
+    _same_bytes("parallel permutation null", p.null_distribution, "permutation null", plain.null_distribution)
+    parts["permutation"] = _h(p.null_distribution, np.asarray([p.statistic, p.pvalue], dtype=np.float64),
+                              np.asarray([p.count_less, p.count_greater], dtype=np.int64))
+    lo, hi = [0.0, 0.0], [1.0, 2.0]
+    r = pc.monte_carlo_integrate("product", lo, hi, 65536 + 300, devices=dev, random_state=1)
+    plain = rs.monte_carlo_integrate("product", lo, hi, 65536 + 300, random_state=1)
+    _same_bytes("parallel monte carlo", np.asarray([r.integral, r.mean]), "monte carlo", np.asarray([plain.integral, plain.mean]))
+    parts["monte-carlo"] = _h(np.asarray([r.integral, r.mean, r.volume, r.closed_form], dtype=np.float64))
+    return _fit(parts)
+
+
+@lane("par-hdbscan")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_hdbscan on the hdbscan lane's configuration (the neighbors and
+    hierarchy row drivers under _par_devices()), held to the plain fit's
+    labels and core distances."""
+    from mojolearn.parallel_classical import fit_hdbscan
+    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5), X[:6000, :4], devices=_par_devices())
+    plain = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
+    _same_bytes("fit_hdbscan labels_", par.labels_, "plain labels_", plain.labels_)
+    _same_bytes("fit_hdbscan core_distances_", par.core_distances_, "plain core_distances_", plain.core_distances_)
+    return _fit(dict(labels=_h(par.labels_), core=_h(par.core_distances_),
+                     counts=_h(np.asarray([par.n_clusters_, par.n_outliers_, par.n_boruvka_rounds_,
+                                           par.n_condensed_clusters_], dtype=np.int64))),
+                par, "n/a:transductive")
+
+
 # ---------------------------------------------------------------- the batch part (2026-09-14)
 # See the `batch` part in the module docstring. A declaration per lane, kept
 # OUT of the lane bodies so no train, infer or model hash can move because
@@ -3471,6 +3568,10 @@ _batch_decl(_rows_calls("predict", "predict_proba"), "par-boosting-pointwise")
 _batch_decl(lambda ml, e, Xh: [_BatchPrefix("forecast", FORECAST_HORIZON, lambda h: (e.forecast(h),), axis=0)],
             "par-holtwinters")
 _batch_decl("n/a:no-model", "par-byte-lm-model-pool", "par-byte-lm-offload")
+_batch_decl(_rows_calls("predict", "predict_proba"), "par-forest-pool")
+_batch_decl(_rows_calls("score_samples", "predict", sl=(slice(0, 64), slice(0, 4))), "par-gmm")
+_batch_decl("n/a:function", "par-resample")
+_batch_decl("n/a:transductive", "par-hdbscan")
 
 
 # ---------------------------------------------------------------- run / diff
