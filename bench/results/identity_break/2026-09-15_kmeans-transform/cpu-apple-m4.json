@@ -1,0 +1,1226 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4",
+ "commit": "bb937d57b15ab745d6db2d27a410b6bad2fb82f6",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  }
+ },
+ "cells": {
+  "kmeans/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5aa44cc11034dec9",
+    "5aa44cc11034dec9"
+   ],
+   "parts": [
+    {
+     "centers": "aba63b1367499b63",
+     "labels": "c62648b3c0e6f056"
+    },
+    {
+     "centers": "aba63b1367499b63",
+     "labels": "c62648b3c0e6f056"
+    }
+   ],
+   "infer": [
+    "3d50c4c50bf078b2",
+    "3d50c4c50bf078b2"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ce34789a012168b5",
+    "ce34789a012168b5"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3de3e103006de69c",
+    "3de3e103006de69c"
+   ],
+   "parts": [
+    {
+     "centers": "c2086044189f0be9",
+     "labels": "685d2620eef85d95"
+    },
+    {
+     "centers": "c2086044189f0be9",
+     "labels": "685d2620eef85d95"
+    }
+   ],
+   "infer": [
+    "0e9dcaedec0fcadc",
+    "0e9dcaedec0fcadc"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ff636ffbdf6153fe",
+    "ff636ffbdf6153fe"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "993fe5caff144b0c",
+    "993fe5caff144b0c"
+   ],
+   "parts": [
+    {
+     "centers": "90d988bd1de33607",
+     "labels": "9ab8dfb99430c319"
+    },
+    {
+     "centers": "90d988bd1de33607",
+     "labels": "9ab8dfb99430c319"
+    }
+   ],
+   "infer": [
+    "9b15ee1cac8ce636",
+    "9b15ee1cac8ce636"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "cd11da38d7d996eb",
+    "cd11da38d7d996eb"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "43d8a3d3859f4143",
+    "43d8a3d3859f4143"
+   ],
+   "parts": [
+    {
+     "centers": "a12f222214253637",
+     "labels": "93c7da25ed5b748d"
+    },
+    {
+     "centers": "a12f222214253637",
+     "labels": "93c7da25ed5b748d"
+    }
+   ],
+   "infer": [
+    "191287260610940c",
+    "191287260610940c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "06c7a23bc000d13d",
+    "06c7a23bc000d13d"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-random/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2bab0cda9f319dbb",
+    "2bab0cda9f319dbb"
+   ],
+   "parts": [
+    {
+     "centers": "8408603d1ba725bd",
+     "labels": "3ffb8627fdd2dc6e"
+    },
+    {
+     "centers": "8408603d1ba725bd",
+     "labels": "3ffb8627fdd2dc6e"
+    }
+   ],
+   "infer": [
+    "45d941e241fdba4f",
+    "45d941e241fdba4f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "41f3015cf8e0680a",
+    "41f3015cf8e0680a"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-random/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9f90e48e2d5a4ce4",
+    "9f90e48e2d5a4ce4"
+   ],
+   "parts": [
+    {
+     "centers": "7fa7244626f6795c",
+     "labels": "8715b3ebd13c1027"
+    },
+    {
+     "centers": "7fa7244626f6795c",
+     "labels": "8715b3ebd13c1027"
+    }
+   ],
+   "infer": [
+    "6698384517f202cd",
+    "6698384517f202cd"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "9dba3245a60df276",
+    "9dba3245a60df276"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-random/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ddb08cf02222e6a3",
+    "ddb08cf02222e6a3"
+   ],
+   "parts": [
+    {
+     "centers": "216d76231e6a2b64",
+     "labels": "377b1428c5ab1dba"
+    },
+    {
+     "centers": "216d76231e6a2b64",
+     "labels": "377b1428c5ab1dba"
+    }
+   ],
+   "infer": [
+    "f1b6a290aca7f88d",
+    "f1b6a290aca7f88d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "88799e781dfe5a5b",
+    "88799e781dfe5a5b"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-random/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f22e6751eeedc598",
+    "f22e6751eeedc598"
+   ],
+   "parts": [
+    {
+     "centers": "ff031d3c2d8f646e",
+     "labels": "0d639db81dd7bfc7"
+    },
+    {
+     "centers": "ff031d3c2d8f646e",
+     "labels": "0d639db81dd7bfc7"
+    }
+   ],
+   "infer": [
+    "df29a616a051e530",
+    "df29a616a051e530"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "53b58fa53fc8a4c3",
+    "53b58fa53fc8a4c3"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-array/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "37ab2f0355ef716a",
+    "37ab2f0355ef716a"
+   ],
+   "parts": [
+    {
+     "centers": "0c9d5a003f4d8d3a",
+     "labels": "6c4903efac9a24e6"
+    },
+    {
+     "centers": "0c9d5a003f4d8d3a",
+     "labels": "6c4903efac9a24e6"
+    }
+   ],
+   "infer": [
+    "ae9509c50c75d2bc",
+    "ae9509c50c75d2bc"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "4b1022a4b98908d1",
+    "4b1022a4b98908d1"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-array/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f7e7677d5ae7597f",
+    "f7e7677d5ae7597f"
+   ],
+   "parts": [
+    {
+     "centers": "4088b720bf61858a",
+     "labels": "665b32b117552ddb"
+    },
+    {
+     "centers": "4088b720bf61858a",
+     "labels": "665b32b117552ddb"
+    }
+   ],
+   "infer": [
+    "5f64992d5da78b8f",
+    "5f64992d5da78b8f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "3d1ce5fa3f9e09c4",
+    "3d1ce5fa3f9e09c4"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-array/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "92a2b78d865ad9b0",
+    "92a2b78d865ad9b0"
+   ],
+   "parts": [
+    {
+     "centers": "eaf588b87fe95394",
+     "labels": "ec24e8cd49510678"
+    },
+    {
+     "centers": "eaf588b87fe95394",
+     "labels": "ec24e8cd49510678"
+    }
+   ],
+   "infer": [
+    "c7e58f1805e93798",
+    "c7e58f1805e93798"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "8aaa92c6db31897f",
+    "8aaa92c6db31897f"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-array/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5b347e0f29ddb844",
+    "5b347e0f29ddb844"
+   ],
+   "parts": [
+    {
+     "centers": "dc3f6cade1bb2bc0",
+     "labels": "eb00d77639756902"
+    },
+    {
+     "centers": "dc3f6cade1bb2bc0",
+     "labels": "eb00d77639756902"
+    }
+   ],
+   "infer": [
+    "cb0a1ae7215c27aa",
+    "cb0a1ae7215c27aa"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "21e79ca2282ddc5f",
+    "21e79ca2282ddc5f"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-weighted/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5080fbf55610f54e",
+    "5080fbf55610f54e"
+   ],
+   "parts": [
+    {
+     "centers": "9c93b0f0b88a4c40",
+     "labels": "c93daf6f81a5724b"
+    },
+    {
+     "centers": "9c93b0f0b88a4c40",
+     "labels": "c93daf6f81a5724b"
+    }
+   ],
+   "infer": [
+    "33403bafb4259ce4",
+    "33403bafb4259ce4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "bd21da2a20bcf33f",
+    "bd21da2a20bcf33f"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-weighted/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a7070391c3cc52fb",
+    "a7070391c3cc52fb"
+   ],
+   "parts": [
+    {
+     "centers": "0d992b46ff2b3123",
+     "labels": "16f16532414f56de"
+    },
+    {
+     "centers": "0d992b46ff2b3123",
+     "labels": "16f16532414f56de"
+    }
+   ],
+   "infer": [
+    "f1a40d6c9595a677",
+    "f1a40d6c9595a677"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "797f19f2820413c0",
+    "797f19f2820413c0"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-weighted/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c3613adfb9158691",
+    "c3613adfb9158691"
+   ],
+   "parts": [
+    {
+     "centers": "b1ce45058e330607",
+     "labels": "816c59af82bdcdcf"
+    },
+    {
+     "centers": "b1ce45058e330607",
+     "labels": "816c59af82bdcdcf"
+    }
+   ],
+   "infer": [
+    "03780e8f5ba1bb21",
+    "03780e8f5ba1bb21"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "d4c912e6b87b383e",
+    "d4c912e6b87b383e"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-weighted/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fc6107e901e7d7be",
+    "fc6107e901e7d7be"
+   ],
+   "parts": [
+    {
+     "centers": "7929e2b6f2f83011",
+     "labels": "a38ef40a77d8727c"
+    },
+    {
+     "centers": "7929e2b6f2f83011",
+     "labels": "a38ef40a77d8727c"
+    }
+   ],
+   "infer": [
+    "86bea24bd326b655",
+    "86bea24bd326b655"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2ac9fe78151082ea",
+    "2ac9fe78151082ea"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-sqrt/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8864be3c295d6c4a",
+    "8864be3c295d6c4a"
+   ],
+   "parts": [
+    {
+     "centers": "bc1b96498842c52a",
+     "labels": "48c68cf28593fe75",
+     "inertia": "92564a0100fcaaf1",
+     "scales": "1d55e98854fd7740"
+    },
+    {
+     "centers": "bc1b96498842c52a",
+     "labels": "48c68cf28593fe75",
+     "inertia": "92564a0100fcaaf1",
+     "scales": "1d55e98854fd7740"
+    }
+   ],
+   "infer": [
+    "58a73ee6f884f892",
+    "58a73ee6f884f892"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "50d831d9342c295e",
+    "50d831d9342c295e"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-sqrt/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "07a5cce02a00bdae",
+    "07a5cce02a00bdae"
+   ],
+   "parts": [
+    {
+     "centers": "56b23b36a3e9c8a0",
+     "labels": "18bd71683841f055",
+     "inertia": "e7cda92c03b8e3ba",
+     "scales": "ccbbeb21461e235a"
+    },
+    {
+     "centers": "56b23b36a3e9c8a0",
+     "labels": "18bd71683841f055",
+     "inertia": "e7cda92c03b8e3ba",
+     "scales": "ccbbeb21461e235a"
+    }
+   ],
+   "infer": [
+    "11403f38e806a8a7",
+    "11403f38e806a8a7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "59f927df98783136",
+    "59f927df98783136"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-sqrt/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c2486d60db950886",
+    "c2486d60db950886"
+   ],
+   "parts": [
+    {
+     "centers": "2177b19c6b4abc6d",
+     "labels": "20025f2777dcfc34",
+     "inertia": "7343e095c5a45bc9",
+     "scales": "1d55e98854fd7740"
+    },
+    {
+     "centers": "2177b19c6b4abc6d",
+     "labels": "20025f2777dcfc34",
+     "inertia": "7343e095c5a45bc9",
+     "scales": "1d55e98854fd7740"
+    }
+   ],
+   "infer": [
+    "5613aee8380a3878",
+    "5613aee8380a3878"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "79378a3a1acbc98e",
+    "79378a3a1acbc98e"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-sqrt/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cd50fd82b95de87a",
+    "cd50fd82b95de87a"
+   ],
+   "parts": [
+    {
+     "centers": "ab50372c64bc4946",
+     "labels": "fe16a667ef5c6a06",
+     "inertia": "f486b3c11f756a4d",
+     "scales": "84c61ffe0bee1ead"
+    },
+    {
+     "centers": "ab50372c64bc4946",
+     "labels": "fe16a667ef5c6a06",
+     "inertia": "f486b3c11f756a4d",
+     "scales": "84c61ffe0bee1ead"
+    }
+   ],
+   "infer": [
+    "d57783b77ce4e554",
+    "d57783b77ce4e554"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "308b44148cf1b4d5",
+    "308b44148cf1b4d5"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-classic-pp/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e6648c8209c562ac",
+    "e6648c8209c562ac"
+   ],
+   "parts": [
+    {
+     "centers": "af9d8b55ee52f38c",
+     "labels": "4289044e26f0e8e4",
+     "inertia": "a5895b24a105a0b7"
+    },
+    {
+     "centers": "af9d8b55ee52f38c",
+     "labels": "4289044e26f0e8e4",
+     "inertia": "a5895b24a105a0b7"
+    }
+   ],
+   "infer": [
+    "e44226a81eebb7a8",
+    "e44226a81eebb7a8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a710fad38f112c1c",
+    "a710fad38f112c1c"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-classic-pp/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b0f1aa9e9e7adf6f",
+    "b0f1aa9e9e7adf6f"
+   ],
+   "parts": [
+    {
+     "centers": "9355d60a8054255a",
+     "labels": "51fdbe41aedca8be",
+     "inertia": "becc1f43a7ab2c2c"
+    },
+    {
+     "centers": "9355d60a8054255a",
+     "labels": "51fdbe41aedca8be",
+     "inertia": "becc1f43a7ab2c2c"
+    }
+   ],
+   "infer": [
+    "83ac9df1fe7b737d",
+    "83ac9df1fe7b737d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ff31663995ac52c6",
+    "ff31663995ac52c6"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-classic-pp/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d3ba0ebbb0af1b3e",
+    "d3ba0ebbb0af1b3e"
+   ],
+   "parts": [
+    {
+     "centers": "00cdfc0985dbb2ef",
+     "labels": "03c6e787a68c423f",
+     "inertia": "17d48dab6dd19975"
+    },
+    {
+     "centers": "00cdfc0985dbb2ef",
+     "labels": "03c6e787a68c423f",
+     "inertia": "17d48dab6dd19975"
+    }
+   ],
+   "infer": [
+    "f86f206425b73e29",
+    "f86f206425b73e29"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "15dec882e28b9589",
+    "15dec882e28b9589"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-classic-pp/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a47bec6025e076d8",
+    "a47bec6025e076d8"
+   ],
+   "parts": [
+    {
+     "centers": "a1ac994706bae0e7",
+     "labels": "adcf3fb5bc5205d1",
+     "inertia": "fb7a327dbd34a8a6"
+    },
+    {
+     "centers": "a1ac994706bae0e7",
+     "labels": "adcf3fb5bc5205d1",
+     "inertia": "fb7a327dbd34a8a6"
+    }
+   ],
+   "infer": [
+    "3b0d31ba504ffc5b",
+    "3b0d31ba504ffc5b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "192831cf947aa32b",
+    "192831cf947aa32b"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "kmeans-cosine/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fit-refused",
+    "n/a:fit-refused"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fit-refused",
+    "n/a:fit-refused"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fit-refused",
+    "n/a:fit-refused"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "kmeans-cosine/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c9f16ec2e84f967d",
+    "c9f16ec2e84f967d"
+   ],
+   "parts": [
+    {
+     "refusal": "0364990609549c43"
+    },
+    {
+     "refusal": "0364990609549c43"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fit-refused",
+    "n/a:fit-refused"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "par-kmeans/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver kmeans_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-kmeans/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver kmeans_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-kmeans/denormal": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver kmeans_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-kmeans/odd": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver kmeans_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.6",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp"
+  ],
+  "families": {
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "004e6aa046e2489bc6583d07d628f5db00bbd2f134c11e9cdf68ea52dda7f9a2",
+    "size": 584536,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nm/cpuview/mojolearn",
+  "numpy": "2.4.4",
+  "python": "3.14.6",
+  "par_devices": "0",
+  "bindings": []
+ }
+}

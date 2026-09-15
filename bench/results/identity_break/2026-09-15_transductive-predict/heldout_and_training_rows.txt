@@ -1,0 +1,16 @@
+dbscan/base: fit clusters=1 n_core=5802 held-out distinct labels=[-1, 0] noise=4/256; core rows agree=True noise rows agree=True all rows agree=1.0000
+dbscan-brute-l1/base: fit clusters=10 n_core=4666 held-out distinct labels=[-1, 0] noise=43/256; core rows agree=True noise rows agree=True all rows agree=0.9993
+dbscan-weighted/base: fit clusters=1 n_core=5769 held-out distinct labels=[-1, 0] noise=5/256; core rows agree=True noise rows agree=True all rows agree=1.0000
+agglomerative/base: fit clusters=4 n_core=-1 held-out distinct labels=[0] noise=0/256; all training rows agree=1.0000
+dbscan/ties: fit clusters=642 n_core=4076 held-out distinct labels=[-1, 7, 15, 16, 18, 27, 31, 39] noise=131/256; core rows agree=True noise rows agree=True all rows agree=1.0000
+dbscan-brute-l1/ties: fit clusters=642 n_core=4076 held-out distinct labels=[-1, 7, 15, 16, 18, 27, 31, 39] noise=131/256; core rows agree=True noise rows agree=True all rows agree=1.0000
+dbscan-weighted/ties: fit clusters=545 n_core=3563 held-out distinct labels=[-1, 8, 16, 18, 26, 35, 38, 40] noise=143/256; core rows agree=True noise rows agree=True all rows agree=1.0000
+agglomerative/ties: fit clusters=4 n_core=-1 held-out distinct labels=[0, 2] noise=0/256; all training rows agree=1.0000
+dbscan/dupes: fit clusters=1 n_core=5802 held-out distinct labels=[-1, 0] noise=4/256; core rows agree=True noise rows agree=True all rows agree=1.0000
+dbscan-brute-l1/dupes: fit clusters=10 n_core=4666 held-out distinct labels=[-1, 0] noise=43/256; core rows agree=True noise rows agree=True all rows agree=0.9993
+dbscan-weighted/dupes: fit clusters=1 n_core=5769 held-out distinct labels=[-1, 0] noise=5/256; core rows agree=True noise rows agree=True all rows agree=1.0000
+agglomerative/dupes: fit clusters=4 n_core=-1 held-out distinct labels=[0] noise=0/256; all training rows agree=1.0000
+dbscan/denormal: fit clusters=1 n_core=5832 held-out distinct labels=[0] noise=0/256; core rows agree=True noise rows agree=True all rows agree=1.0000
+dbscan-brute-l1/denormal: fit clusters=12 n_core=5330 held-out distinct labels=[0] noise=0/256; core rows agree=True noise rows agree=True all rows agree=0.9995
+dbscan-weighted/denormal: fit clusters=1 n_core=5818 held-out distinct labels=[0] noise=0/256; core rows agree=True noise rows agree=True all rows agree=1.0000
+agglomerative/denormal: fit clusters=4 n_core=-1 held-out distinct labels=[1, 2] noise=0/256; all training rows agree=1.0000
