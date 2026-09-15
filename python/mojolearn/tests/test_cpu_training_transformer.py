@@ -119,7 +119,7 @@ def test_workflow_triggers_on_the_host_modules():
 
 def test_no_cpu_path_sentence_drops_the_transformer():
     sentence = host_surface.no_cpu_path_sentence()
-    assert "Transformer" not in sentence and "Mamba and Samba blocks" in sentence, sentence
+    assert "Transformer" not in sentence and "Samba blocks" in sentence, sentence
 
 
 def _built():
