@@ -87,6 +87,7 @@ on:
       - "python/mojolearn/_classical_host.py"
       - "core/classical_host_predict.mojo"
       - "decomposition/host/pca_oracle.mojo"
+      - "decomposition/host/pca_full_oracle.mojo"
       - "glm/host/glm_oracle.mojo"
       - "dbscan/host/dbscan_oracle.mojo"
       - "cluster/host/kmeans_oracle.mojo"
@@ -491,6 +492,8 @@ jobs:
       # distance chains descending (Chebyshev: the next float above the
       # maximum), in dbscan_oracle by one more neighbor or unit of weight
       # to be core, in
+      # pca_full_oracle by folding every QR trailing-column dot product's
+      # lanes serially descending, in
       # rf_oracle by drawing every bootstrap row from the next Philox
       # subsequence, in gpr_oracle by walking the scaled distance's
       # feature axis descending, in gbdt_oracle by adding 1.0 to the

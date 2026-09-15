@@ -264,6 +264,15 @@ TRAINING_LANE_NAMES = {
     "kpss": "the KPSS stationarity test",
     "svr": "SVR",
     "svr-linear": "the linear SVR",
+    # The pca-full-whiten lane (lane/cpu-training-pca-whiten, 2026-09-14):
+    # PCA with svd_solver='full' trains through
+    # decomposition/host/pca_full_oracle.mojo, the tall TSQR Householder QR
+    # and the one-sided Jacobi of svd_full.mojo restated on the host,
+    # exported as pca_fit_full from the estimators host binding (a wide
+    # matrix refuses by name). IDENTICAL x4 on all 27 train, infer and model
+    # cells on the M4's CPU column (one core) before the gate ran, and the
+    # sabotage build DIVERGENT on all 27.
+    "pca-full-whiten": "whitened PCA through the full SVD",
     # Workstream E batch 3 (2026-09-14): gradient boosting on its default
     # symmetric tree with the Logloss loss trains through
     # gbdt/host/gbdt_oracle.mojo, the device trainer restated on the host,
@@ -465,7 +474,7 @@ FAMILIES = (
             "kde-exponential-chebyshev", "kde-linear-cosine", "kde-cosine-minkowski",
             "kde-weighted", "ols-no-intercept", "ols-weighted", "ridge-no-intercept",
             "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
-            "logistic-elasticnet", "logistic-multiclass",
+            "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
         ),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
@@ -478,12 +487,13 @@ FAMILIES = (
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
             "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
+            "decomposition/host/pca_full_oracle.mojo",
         ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
-            "pca_fit", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
+            "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",

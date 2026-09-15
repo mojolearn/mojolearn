@@ -933,8 +933,10 @@ def host_families_built():
 #:     dbscan/host/dbscan_oracle.mojo and (batch 2) qn_fit over
 #:     glm/host/qn_oracle.mojo (the L-BFGS arm; batch 3, 2026-09-14, adds
 #:     the OWL-QN arm, the softmax loss and DBSCAN's sample_weight;
-#:     qn's sample_weight refuses by name); pca_fit_full and
-#:     inverse_transform are absent.
+#:     qn's sample_weight refuses by name), pca_fit_full over
+#:     decomposition/host/pca_full_oracle.mojo (the pca-full-whiten lane,
+#:     2026-09-14; the tall route only, a wide matrix refuses by name);
+#:     inverse_transform is absent.
 #:   _mojolearn_metrics -> _mojolearn_metrics_host (workstream E batch 2,
 #:     2026-09-14): accuracy_score, adjusted_rand_score, entropy,
 #:     mutual_info_score, homogeneity_score, completeness_score,
