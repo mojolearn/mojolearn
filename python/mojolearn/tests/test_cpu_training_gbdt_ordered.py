@@ -168,7 +168,13 @@ def test_sabotage_reaches_both_oracles():
 
 
 def test_workflow_triggers_on_both_oracles():
+    # 0affb7c75 removed the gate's push trigger (it runs by hand, weekly or
+    # from the release workflow), and its path list with it; the oracles
+    # must be listed only while a push trigger exists.
     text = _read(".github/workflows/cpu-identity-gate.yml")
+    if not re.search(r"^  push:", text, re.M):
+        assert "workflow_dispatch:" in text and "workflow_call:" in text
+        return
     for rel in (ORDERED, FEATURE_FREQ, POINTWISE, ONEHOT):
         assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 

@@ -364,6 +364,88 @@ this section one Apple M4 smoke on `base` for each of standard-scaler and
 transformer read STABLE and the sabotage read `BATCH_MOVED`; the first
 three-column record is owed.
 
+## The sampler's log-probabilities equal the trainer's (2026-09-15)
+
+Reinforcement learning on a language model samples tokens with one program
+and computes the policy gradient with another, and the arithmetic assumes the
+log-probability the sampler recorded for a token is the one the trainer
+recomputes for it. When the two differ, "on-policy" training is quietly off
+policy (the true on-policy RL section of Thinking Machines, "Defeating
+Nondeterminism in LLM Inference", September 2025). Batch invariance is
+necessary for this and not sufficient: the sampler runs a prefill and then
+one-token decode steps through a carried state, the trainer runs one
+teacher-forced forward over the whole sequence, and those can be different
+kernels (the transformer's and Mamba-3's stateless IDENTICAL forward is a
+different native entry from their stateful one).
+
+`tools/identity_break.py` carries an `rlpair` part (JSON keys `rlpair`,
+`rlpair_verdict`, `rlpair_error`, `rlpair_sides`; `summary (rlpair):` in
+`--diff`) on twelve lanes: byte-lm, byte-lm-resident, byte-lm-host-infer,
+byte-lm-host-infer-threaded, mamba1, mamba2, mamba3, mamba2-dtlimit,
+transformer, transformer-window, samba and samba-untied-dropout-accum. Per
+fixture and repeat it decodes 12 tokens greedily (argmax, no RNG) after a
+4-token held-out prompt for 5 sequences, recording each chosen id, its
+logits row and its negative log-probability, and then runs the realized
+sequences teacher-forced through the training forward. The negative
+log-probability is `mojolearn.training.cross_entropy(reduction="none")`, the
+library's own loss kernel (profile `mojolearn.identical.loss.ce.fp32.v1`,
+label smoothing 0.0), never numpy; the log-probability is its exact
+negation. Under IDENTICAL it asserts, bytewise on ids, NLL and logits:
+
+1. the sampler at batch 5 equals the trainer at batch 5;
+2. the trainer at batch 1 per row and at the microbatch split 2, 3 equals it,
+   the sampler at batch 1 per row equals it, and any second sampler equals it;
+3. continuous batching: row 4 decodes alone for 3 tokens and its state then
+   joins the running batch of four at row 2, and row 1 leaves after token 8;
+   every row's tokens still equal the trainer's.
+
+The sides are, per lane. Mamba 1/2/3 and the transformer blocks have no
+vocabulary, so the harness closes each into the smallest language model the
+Samba stack is made of (a hashed embedding table, the block, a final RMSNorm
+and an untied head, all training primitives); the sampler is
+`allocate_state`, `forward(x, state)` and `step`, the trainer the stateless
+`forward(x)` that the block's zero-state backward recomputes. SambaStack
+gained `allocate_state`, `forward(ids, state)` and `step` for this part (a
+composition of the blocks' own decode entries and the training primitives,
+no arithmetic of its own); its trainer is `forward(ids)`, the `_forward` its
+loss and gradients run. The byte LM has no decode state API, so its sampler
+recomputes the prefix through `SmallByteLanguageModelTrainer.logits`, and a
+second sampler is `LanguageModelInference` on the CPU on the trainer's
+parameters where the host binding is built (sample on the CPU, train on the
+GPU, in one process); the trainer is `trainer.logits`, the device forward its
+loss uses. On byte-lm-host-infer the CPU training step exposes no logits, so
+the trainer side is the reference forward `logits(threaded=False)` and the
+samplers are both host arms. Join and leave go through the caller-owned
+state layouts the state classes document, and the Mamba-2 and Mamba-3 states
+and the KV cache hold one cursor per batch, so a row can join only at the
+batch's position.
+
+The hash is the same bytes wherever the three assertions hold, so an
+`IDENTICAL xN` rlpair cell in `--diff` says the sampler on any of those
+columns hands the trainer on any other the same log-probabilities, for
+example sampling on an M4 CPU and training on an H100.
+
+What it does NOT prove: sampling with an RNG, temperature, top-k or top-p;
+rows at different positions in one batch (not expressible, one cursor per
+batch); prompts of different lengths or padding; a KV cache for the byte LM
+(none exists); the backward pass, the optimizer step or anything after the
+log-probabilities; serving-scale batch sizes, long sequences (12 tokens do
+not cross the Mamba-2 chunk of 256 or the Mamba-3 chunk of 64; the window-8
+transformer does wrap its ring); lanes other than the twelve; and any column
+no record carries. `MOJOLEARN_IDENTITY_RLPAIR_SABOTAGE=1` flips the lowest
+bit of the first sampler NLL and must turn every hashed rlpair cell
+`RLPAIR_MOVED`.
+
+As of this section (`bench/results/identity_break/2026-09-15_rlpair/` and its
+README), at 8d4fa23af, nine fixtures and two fits per cell: `summary (rlpair):
+IDENTICAL=108` over the Apple M4 Metal column, an H100 column and an M4 CPU
+column, 90 cells IDENTICAL x3 and the 18 byte-lm cells x2 (no CPU trainer);
+the sabotage read RLPAIR_MOVED on every hashed cell of all three, and 21
+negative controls, one per other assertion input, each failed as they must.
+The CPU column is a probe through the unmerged Mamba, Transformer and Samba
+host bindings and is owed again from main; the AMD column is owed with the next
+release record.
+
 ### The neural-block primitives section (2026-08-23)
 
 Written by the numerics-NN lane for the Mamba-1 identity block
