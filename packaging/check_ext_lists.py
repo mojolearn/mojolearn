@@ -227,6 +227,24 @@ def main():
             bad += 1
         else:
             print(f"  OK        {path} {var} ({len(got)}) == _backend._TIERED")
+    # The admission side's identical set, BINDINGS (without the byte LM, which
+    # expected_bindings adds). A short BINDINGS refused every complete 0.8.6
+    # release build as "Incomplete build outputs" (2026-09-15, six bindings
+    # added since 0.8.5 were missing), so it is held to _MODULES here too.
+    vspec = importlib.util.spec_from_file_location(
+        "check_ext_lists_admission", ROOT / "tools" / "verify_linux_surface_qualification.py")
+    vmod = importlib.util.module_from_spec(vspec)
+    vspec.loader.exec_module(vmod)
+    admitted = set(vmod.BINDINGS)
+    if admitted != want:
+        bad += 1
+        print(f"  MISMATCH  tools/verify_linux_surface_qualification.py BINDINGS ({len(admitted)})")
+        if want - admitted:
+            print(f"              MISSING (a complete build is refused): {', '.join(sorted(want - admitted))}")
+        if admitted - want:
+            print(f"              EXTRA (named but not a module): {', '.join(sorted(admitted - want))}")
+    else:
+        print(f"  OK        tools/verify_linux_surface_qualification.py BINDINGS ({len(admitted)})")
     for path, how, var, ident_var in SOURCES:
         got = how(path, var)
         if got is None:
