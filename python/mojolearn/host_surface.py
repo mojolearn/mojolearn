@@ -303,7 +303,7 @@ TRAINING_LANE_NAMES = {
     # symmetric tree with the Logloss loss trains through
     # gbdt/host/gbdt_oracle.mojo, the device trainer restated on the host,
     # exported under the GPU binding's names from the gbdt family's own host
-    # binding. The other GBDT lanes refuse by name. Gate run 34900811380 at
+    # binding. The other GBDT lanes refused by name until 2026-09-15. Gate run 34900811380 at
     # e767b829b read the four GBDT lanes' 108 train, infer and model cells
     # IDENTICAL x4 and the sabotage build DIVERGENT on all 108.
     "gbdt-symmetric": "gradient boosting on symmetric trees with the Logloss loss",
