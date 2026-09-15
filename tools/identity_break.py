@@ -339,6 +339,8 @@ sampler, a solver, a metric, a reduction).
       ivf-euclidean
     2026-09-15 (lane/embedding-owed, PLAN_SORT through Embedding(plan="sort"))
       embedding-sort
+    2026-09-15 (lane/cpu-training-small-gaps)
+      metrics-fowlkes-mallows
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -2144,6 +2146,30 @@ def _(ml, X, yc, yr, Xh=None):
     parts["kl"] = _h(np.float64(mt.kl_divergence(_exact_prob(64, "kl:P"), _exact_prob(64, "kl:Q"))))
     parts["trustworthiness"] = _h(np.float64(mt.trustworthiness(X[:512, :4], X[:512, :2], n_neighbors=5)))
     parts["silhouette_samples"] = _h(np.asarray(mt.silhouette_samples(X[:n, :4], labels)))
+    return _fit(parts)
+
+
+@lane("metrics-fowlkes-mallows")
+def _(ml, X, yc, yr, Xh=None):
+    """fowlkes_mallows_score (lane/cpu-training-small-gaps, 2026-09-15),
+    scikit-learn's definition over the integer contingency matrix. A lane
+    of its own so metrics-classification's committed train hashes do not
+    move. The clusterings are fixed host comparisons of fixture columns,
+    no fit: an eight-way split on the signs of columns 3, 4 and 5 against
+    the class labels, a relabeled copy (score 1.0), the all-singletons
+    split (tk == 0, score 0.0), and a two-row call."""
+    mt = ml.metrics
+    n = 3000
+    yt = np.ascontiguousarray(yc[:n]).astype(np.int32)
+    split = ((X[:n, 3] > 0).astype(np.int32) + 2 * (X[:n, 4] > 0).astype(np.int32)
+             + 4 * (X[:n, 5] > 0).astype(np.int32)).astype(np.int32)
+    parts = dict(
+        split=_h(np.float64(mt.fowlkes_mallows_score(yt, split))),
+        reversed=_h(np.float64(mt.fowlkes_mallows_score(split, yt))),
+        relabeled=_h(np.float64(mt.fowlkes_mallows_score(split, (np.int32(7) - split) * np.int32(3)))),
+        singletons=_h(np.float64(mt.fowlkes_mallows_score(yt, np.arange(n, dtype=np.int32)))),
+        two_rows=_h(np.float64(mt.fowlkes_mallows_score(yt[:2], split[:2]))),
+    )
     return _fit(parts)
 
 
@@ -4034,6 +4060,8 @@ PAR_BYTE_LM_BATCH_NA = ("n/a:driver-step (ParallelByteLanguageModelTrainer and i
                         "and one update from the shard-mean gradient, so no output belongs to one sequence, and "
                         "the shard split is held to the replica trainer by the train column)")
 _batch_decl(PAR_BYTE_LM_BATCH_NA, "par-byte-lm")
+# metrics.fowlkes_mallows_score (lane/cpu-training-small-gaps) keeps the reason main gave it
+_batch_decl("n/a:function", "metrics-fowlkes-mallows")
 
 
 def _batch_cross_entropy(ml, e, Xh):
