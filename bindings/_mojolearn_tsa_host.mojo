@@ -223,11 +223,11 @@ def holtwinters_fit_binding(
             # the split SSE multiply-add leaves the fitted bytes unchanged on
             # some fixtures (denormal, denormal_ftz, wide), so a saved model's
             # file could not move under the negative control. Every finite
-            # component and per-series float also has its lowest bit flipped,
-            # a value perturbation, so every saved file moves.
-            for i in range(3 * components_len):
-                if isfinite(cp[i]):
-                    cp[i] = bitcast[DType.float32](bitcast[DType.uint32](cp[i]) ^ UInt32(1))
+            # per-series float (sse, alpha, beta, gamma) also has its lowest
+            # bit flipped, a value perturbation, so every saved file moves.
+            # The components are left alone: a flip there, followed by the
+            # forecast binding's own output flip, restored the forecast's
+            # bytes on two fixtures (the third x86 pod, DIVERGENT=16).
             for i in range(4 * batch_size):
                 if isfinite(sp[i]):
                     sp[i] = bitcast[DType.float32](bitcast[DType.uint32](sp[i]) ^ UInt32(1))
