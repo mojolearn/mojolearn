@@ -357,3 +357,53 @@ def scale_rows_f32_binding(
                 var p = Float64(xp.unsafe_load(r * nc + c)) * w
                 op.unsafe_store(r * nc + c, Float32(p))
     return PythonObject(0)
+
+
+def probability_rows_f32_binding(
+    src_addr: PythonObject, dst_addr: PythonObject, rows: PythonObject,
+    cols: PythonObject, binary: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn.mojo::probability_rows_f32_binding`, restated for
+    the core host binding (the metrics-classification lane, 2026-09-14): the
+    log loss's probability check. Returns 1 for a non-finite value, 2 for a
+    value outside [0, 1], 3 for a multiclass row whose Float64 sum is more
+    than sqrt(Float32 epsilon) from one, else 0; a binary column is packed
+    into `dst` as `[1 - p, p]` rows."""
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    var bin = Int(py=binary)
+    if nr < 0 or nc <= 0 or (bin != 0 and bin != 1):
+        raise Error("probability_rows_f32: invalid dimensions or binary flag")
+    if bin == 1 and nc != 1:
+        raise Error("probability_rows_f32: binary input must have one column")
+    if nr == 0:
+        return PythonObject(0)
+    var src = f32_ptr(Int(py=src_addr))
+    # Multiclass validation never reads or writes dst.
+    var dst = src
+    if bin == 1:
+        dst = f32_ptr(Int(py=dst_addr))
+    var nonfinite = False
+    var outside = False
+    var bad_sum = False
+    with GILReleased(Python()):
+        for r in range(nr):
+            var total = Float64(0)
+            for c in range(nc):
+                var p = src.unsafe_load(r * nc + c)
+                nonfinite = nonfinite or not isfinite(p)
+                outside = outside or p < 0 or p > 1
+                total += Float64(p)
+                if bin == 1:
+                    dst.unsafe_store(2 * r, Float32(1) - p)
+                    dst.unsafe_store(2 * r + 1, p)
+            if bin == 0:
+                var error = total - Float64(1)
+                bad_sum = bad_sum or abs(error) > Float64(0.00034526697709225118)
+    if nonfinite:
+        return PythonObject(1)
+    if outside:
+        return PythonObject(2)
+    if bad_sum:
+        return PythonObject(3)
+    return PythonObject(0)
