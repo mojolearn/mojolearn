@@ -44,7 +44,7 @@ OWED, filled as each step lands. Every claim below is a file in this directory.
 | `metal/metal.new-base.json` | the two new lanes on the base fixture, Metal, at 20e786447: `cells=2 stable=2 moved=0 refused=0`, and infer, model and batch stable on both. `reload` equals `infer`, so a saved model reloads and predicts the same bytes |
 | `metal/diff.old-base.txt` | THE EXISTING LANES ARE UNCHANGED: arima, arima-011 and arima-seasonal-c on the base fixture against the three GPU columns of the 166-lane record read `IDENTICAL x4` on train, infer and batch (`summary: IDENTICAL=27`, `(batch): IDENTICAL=27`). The three `model` rows read ONE-COLUMN because the record's columns predate `ARIMA.save` (`n/a:no-save` there, a hash here), which is the saved-model lane's shape and not this lane's doing |
 | `metal/diff.new-base.txt` | the new lanes against the same three columns: ONE-COLUMN on every cell, because the record predates the lanes and the GPU columns read `(not run)`. `--require-columns 4` FAILS here by design and the tool says why: OWED needs a CPU column to hash the cell ("not OWED: no CPU column hashes it"). The OWED verdict is taken on the pod, where the CPU column exists |
-| `../../classical_host/2026-09-15-apple-m4-arima-exog/` | `classical_host_gate.py record` on the M4's Metal set. PARTIAL AND SAID TO BE: `arima-exog` is nine of nine fixtures, `arima-exog-seasonal` is what finished before the run was stopped for a Mac restart (the GPU was degraded by a command-queue leak, which is why it crawled). Every committed fixture has an `expected.json` that parses; the rest is OWED and `docs/lanes/LANE_STATUS_lane-arima-exog.md` carries the exact command |
+| `../../classical_host/2026-09-15-apple-m4-arima-exog/` | `classical_host_gate.py record` on the M4's Metal set, BOTH lanes, nine fixtures each (18 fixture directories, every `expected.json` parses), 9m07s. These are the saved `mojolearn-arima-2` models the CPU pod's gate checks, and the directory is listed in `FORECAST_RECORDED` |
 | `x86-runpod/` | the CPU column, the sabotage column, the exog-only sabotage column, the owed check, the saved-model gate, the installed test wheel |
 | `statsmodels_agreement.{txt,json}` | agreement with statsmodels `SARIMAX` on the coefficients and the forecasts, REPORTED, not tuned to (`statsmodels_agreement.py`) |
 | `nvidia/` | the H100 column of the two new lanes |
@@ -64,6 +64,5 @@ OWED, filled as each step lands. Every claim below is a file in this directory.
 
 ## Owed
 
-- The rest of the `arima-exog-seasonal` recording (see the table above).
 - The AMD column of the two new lanes (no AMD box this lane).
 - The NVIDIA and AMD `model` cells of `mojolearn-arima-2`.

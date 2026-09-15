@@ -190,6 +190,10 @@ FORECAST_RECORDED = (
     # lane/inference-holtwinters (2026-09-15): holtwinters and
     # holtwinters-multiplicative, recorded on the M4's Metal set.
     "bench/results/classical_host/2026-09-15-apple-m4-holtwinters",
+    # lane/arima-exog (2026-09-15): arima-exog and arima-exog-seasonal, the
+    # saved mojolearn-arima-2 models (the fit's regressors travel in the
+    # file), recorded on the M4's Metal set, nine fixtures each.
+    "bench/results/classical_host/2026-09-15-apple-m4-arima-exog",
 )
 
 #: The iforest, GMM and HDBSCAN saved-model recordings (the neighbors and
