@@ -141,6 +141,7 @@ CLASSICAL_RECORDED = (
     "bench/results/classical_host/2026-09-14-nvidia-h100-b",
     "bench/results/classical_host/2026-09-14-amd-mi300x-b",
     "bench/results/classical_host/2026-09-14-apple-m4-multiclass",
+    "bench/results/classical_host/2026-09-15-apple-m4-neighbors-density",
 )
 
 #: The forest inference recordings: every directory under this root whose
@@ -672,13 +673,19 @@ FAMILIES = (
             "par-queries-knn", "par-queries-radius", "par-reference-knn",
             "par-reference-knn-reg",
         ),
-        inference_lanes=("knn", "knn-clf", "knn-reg"),
+        # The neighbors and density inference lane (2026-09-15) adds every
+        # k-NN metric, the ball cover, the distance-weighted vote and mean
+        # and RadiusNeighbors on its four metrics, all from a saved model.
+        inference_lanes=("knn", "knn-clf", "knn-reg", "knn-sqeuclidean", "knn-manhattan",
+                         "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
+                         "knn-clf-distance", "knn-reg-distance", "radius", "radius-manhattan",
+                         "radius-chebyshev", "radius-minkowski-p3"),
         forest_kinds=(),
         classes=(
             "NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans",
             "RadiusNeighbors",
         ),
-        display="nearest neighbors, k-NN classification and k-NN regression",
+        display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting and radius neighbors",
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
             "cluster/host/kmeans_oracle.mojo",
@@ -732,13 +739,15 @@ FAMILIES = (
             "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
             "par-queries-kde",
         ),
-        inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
+        inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde",
+                         "kde-tophat-sqeuclidean", "kde-epanechnikov-l1", "kde-exponential-chebyshev",
+                         "kde-linear-cosine", "kde-cosine-minkowski", "kde-weighted"),
         forest_kinds=(),
         classes=(
             "LinearRegression", "Ridge", "TruncatedSVD", "LogisticRegression",
             "PCA", "KernelDensity", "DBSCAN",
         ),
-        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening and kernel density",
+        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening and kernel density on every kernel, metric and weighting",
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
@@ -895,10 +904,13 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear"),
-        inference_lanes=("svc",),
+        # The neighbors and density inference lane (2026-09-15): a saved
+        # IsolationForest scores through iforest_run, the same forest rebuild
+        # every GPU scoring call runs (DEVIATION 874).
+        inference_lanes=("svc", "iforest", "iforest-tuned"),
         forest_kinds=(),
         classes=("SVC", "IsolationForest", "SVR"),
-        display="SVC",
+        display="SVC and the isolation forest",
         host_modules=(
             "svm/host/smo_oracle.mojo", "gemm/host/gemm_oracle.mojo",
             "isolation_forest/checks/if_oracle.mojo",
@@ -1086,6 +1098,41 @@ FAMILIES = (
         ships_in_wheel=False,
     ),
     dict(
+        # The neighbors and density inference lane (2026-09-15): the
+        # INFERENCE-ONLY mixture binding a wheel ships. It registers the four
+        # scoring entries (bindings/mixture_host_scoring.mojo, the same
+        # functions the reference binding above registers) and no fit, so
+        # gmmh_fit and the starts are not compiled in. `routes` stays None so
+        # the reference gate builds and routes the reference binding;
+        # `serves` is the GPU binding `_backend` routes here when the
+        # reference binding is not built (inference_routes()).
+        family="mixture_infer",
+        binding="_mojolearn_mixture_infer_host",
+        routes=None,
+        serves="_mojolearn_mixture",
+        loaded_by="_backend._HOST_INFERENCE_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("gmm", "gmm-random-init"),
+        forest_kinds=(),
+        classes=("GaussianMixture",),
+        display="the Gaussian mixture's scores, probabilities and labels",
+        host_modules=(
+            "bindings/mixture_host_scoring.mojo",
+            "mixture/host/gmm_host_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "mixture_infer_host_numeric_mode", "mixture_infer_host_vendor",
+            "mixture_infer_host_column", "mixture_infer_host_sabotage",
+            "mixture_vendor", "mixture_numeric_mode",
+            "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
+            "gmm_score_bic_aic",
+        ),
+        gate="tools/classical_host_gate.py",
+        ships_in_wheel=True,
+    ),
+    dict(
         # CPU training for the workstream D estimators
         # (lane/cpu-training-d-estimators, 2026-09-15): the HDBSCAN family's
         # host binding. It routes `_mojolearn_hdbscan` on a CPU-only install
@@ -1119,6 +1166,35 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
+    ),
+    dict(
+        # The neighbors and density inference lane (2026-09-15): the
+        # INFERENCE-ONLY hdbscan binding a wheel ships, approximate_predict
+        # from a saved model (bindings/hdbscan_host_predict.mojo, the same
+        # function the reference binding registers) and no fit, prediction
+        # data generation or tree code. Routed like mixture_infer.
+        family="hdbscan_infer",
+        binding="_mojolearn_hdbscan_infer_host",
+        routes=None,
+        serves="_mojolearn_hdbscan",
+        loaded_by="_backend._HOST_INFERENCE_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("hdbscan", "hdbscan-leaf"),
+        forest_kinds=(),
+        classes=("hdbscan.approximate_predict",),
+        display="HDBSCAN's approximate_predict",
+        host_modules=(
+            "bindings/hdbscan_host_predict.mojo",
+            "hdbscan/host/hdbscan_host_oracle.mojo",
+        ),
+        exports=(
+            "hdbscan_infer_host_numeric_mode", "hdbscan_infer_host_vendor",
+            "hdbscan_infer_host_column", "hdbscan_infer_host_sabotage",
+            "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_approximate_predict",
+        ),
+        gate="tools/classical_host_gate.py",
+        ships_in_wheel=True,
     ),
     dict(
         # Workstream E batch 3 (2026-09-14): the GradientBoosting family's
@@ -1365,6 +1441,14 @@ def routed_modules():
     return {f["routes"]: f["binding"] for f in FAMILIES if f["routes"]}
 
 
+def inference_routes():
+    """GPU binding -> INFERENCE-ONLY host binding basename: what `_backend`
+    routes a CPU-only install through when the family's reference binding
+    (`routed_modules()`) is not built, as in a wheel. A family declares it
+    with `serves`."""
+    return {f["serves"]: f["binding"] for f in FAMILIES if f.get("serves")}
+
+
 def routed_families():
     """The families with a route, the phase 1 set the gate builds in a loop."""
     return [f["family"] for f in FAMILIES if f["routes"]]
@@ -1449,6 +1533,14 @@ def _join(items):
     return ", ".join(items[:-1]) + " and " + items[-1]
 
 
+def _route_cell(f):
+    if f["routes"]:
+        return "`" + f["routes"] + "`"
+    if f.get("serves"):
+        return "`" + f["serves"] + "` when its reference binding is not built"
+    return "loaded by path"
+
+
 def markdown_table():
     """The CPU surface as one table, for the marked spans in
     SUPPORT_MATRIX.md and docs/BYTE_LM_CPU_TRAINING.md."""
@@ -1470,7 +1562,7 @@ def markdown_table():
         else:
             predicts = "no"
         rows.append(
-            f"| {f['family']} | `{f['binding']}.so` | {('`' + f['routes'] + '`') if f['routes'] else 'loaded by path'} "
+            f"| {f['family']} | `{f['binding']}.so` | {_route_cell(f)} "
             f"| {trains} | {predicts} | {f['gate']} | {'yes' if f['ships_in_wheel'] else 'no, `' + build_shim(f['family']) + '`'} |"
         )
     return "\n".join(rows)
@@ -1482,6 +1574,7 @@ def as_dict():
         builder=BUILDER,
         families=[dict(f) for f in FAMILIES],
         routed=routed_modules(),
+        inference_routes=inference_routes(),
         covered_lanes=covered_lanes(),
         record_covered_lanes=record_covered_lanes(),
         fix_covered_lanes=fix_covered_lanes(),

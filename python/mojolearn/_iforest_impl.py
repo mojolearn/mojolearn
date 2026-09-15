@@ -38,6 +38,8 @@ NumPy. Nothing in this module imports NumPy.
 
 import numbers
 
+from . import _serialize
+from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._labels import is_bool
 from ._mode import NumericModeMixin
@@ -53,6 +55,19 @@ from ._svm_impl import _extension
 _WANT_SCORE_SAMPLES = 0
 _WANT_DECISION_FUNCTION = 1
 _WANT_PREDICT = 2
+
+#: The model file (the neighbors and density inference lane, 2026-09-15).
+#: DEVIATION 874 makes the fitted state the training matrix plus the
+#: constructor's resolved knobs, so that is what `save` writes: `x` `<f4` as
+#: fitted, `ints` `<i8` [n_estimators, max_samples_mode, max_samples_int,
+#: max_depth, max_features_mode, max_features_int, bootstrap, seed,
+#: contamination_auto, n_features_in_, max_samples_], `reals` `<f8`
+#: [max_samples_frac, max_features_frac, contamination, offset_].
+#: `mojolearn.host_model(path)` scores it on a CPU through the svm host
+#: binding's iforest_run, the same rebuild every GPU scoring call runs.
+_IFOREST_FORMAT = "mojolearn-iforest-1"
+_IFOREST_INTS = 11
+_IFOREST_REALS = 4
 
 
 class IsolationForest(NumericModeMixin):
@@ -146,6 +161,11 @@ class IsolationForest(NumericModeMixin):
         `threshold = -offset_` and then negated, not re-derived from
         `decision_function`.
     """
+
+    #: The binding `_run` asks through `NumericModeMixin._bind`, which is
+    #: `_svm_impl._extension`'s own `_backend.binding` call; a host subclass
+    #: answers the svm host binding here.
+    _BINDING = "_mojolearn_svm"
 
     def __init__(
         self,
@@ -353,7 +373,7 @@ class IsolationForest(NumericModeMixin):
         values = empty((n_query,), "<f4")
         labels = empty((n_query,), "<i4")
         info = empty((3,), "<f8")
-        _extension(getattr(self, 'numeric_mode', None)).iforest_run(
+        self._bind("_mojolearn_svm").iforest_run(
             addr_ro(train, name="X (training)"),
             addr_ro(q, name="X"),
             addr(values, name="scores"),
@@ -393,3 +413,65 @@ class IsolationForest(NumericModeMixin):
 
     def fit_predict(self, X, y=None, sample_weight=None):
         return self.fit(X, y=y, sample_weight=sample_weight).predict(X)
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz (`_IFOREST_FORMAT`):
+        the training matrix and the resolved knobs every scoring call
+        rebuilds the forest from."""
+        if not hasattr(self, "_x"):
+            raise RuntimeError("this estimator is not fitted yet")
+        from .linear_model import _saved_mode
+        return _serialize.write_npz(path, {
+            "format": _IFOREST_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "x": self._x,
+            "ints": Array.from_list([
+                int(self.n_estimators), self._max_samples_mode, self._max_samples_int,
+                self._max_depth, self._max_features_mode, self._max_features_int,
+                1 if self.bootstrap else 0, self._seed, 1 if self._contamination_auto else 0,
+                int(self.n_features_in_), int(self.max_samples_),
+            ], "<i8"),
+            "reals": Array.from_list([
+                float(self._max_samples_frac), float(self._max_features_frac),
+                float(self._contamination), float(self.offset_),
+            ], "<f8"),
+        })
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The constructor sees the knobs the
+        fit saw, so its refusals hold on the loaded file too."""
+        from .linear_model import _check_saved_by, _restore_mode
+        arrays = _serialize.read_npz(path, _IFOREST_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        ints = _serialize.exact(arrays, "ints", "<i8")
+        reals = _serialize.exact(arrays, "reals", "<f8")
+        if ints.size != _IFOREST_INTS or reals.size != _IFOREST_REALS:
+            raise ValueError(
+                f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, "
+                f"{_IFOREST_INTS} and {_IFOREST_REALS} are needed"
+            )
+        (n_est, ms_mode, ms_int, depth, mf_mode, mf_int, boot, seed, c_auto, nf,
+         ms_resolved) = (int(ints[i]) for i in range(_IFOREST_INTS))
+        ms_frac, mf_frac, contamination, offset = (float(reals[i]) for i in range(_IFOREST_REALS))
+        if ms_mode not in (0, 1, 2) or mf_mode not in (0, 1) or c_auto not in (0, 1) or boot not in (0, 1):
+            raise ValueError(f"mojolearn: {path!r} carries an unknown knob mode")
+        obj = cls(
+            n_estimators=n_est,
+            max_samples="auto" if ms_mode == 0 else (ms_int if ms_mode == 1 else ms_frac),
+            max_depth=None if depth == -1 else depth,
+            max_features=mf_int if mf_mode == 1 else mf_frac,
+            bootstrap=bool(boot),
+            contamination="auto" if c_auto else contamination,
+            random_state=seed,
+        )
+        _restore_mode(obj, arrays)
+        x = _serialize.exact(arrays, "x", "<f4")
+        if x.ndim != 2 or x.shape[1] != nf or x.shape[0] < 1:
+            raise ValueError(f"mojolearn: {path!r} x has shape {tuple(x.shape)}, meta says {nf} features")
+        obj._x = x
+        obj.n_features_in_ = nf
+        obj.offset_ = offset
+        obj.max_samples_ = ms_resolved
+        return obj

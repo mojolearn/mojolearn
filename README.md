@@ -244,7 +244,7 @@ and the library refuses rather than running a fit elsewhere. Beside that, a
 CPU-only binding exists for some lanes, and each is held to the same
 bit-identity gate against the Apple, NVIDIA and AMD columns as the GPU builds,
 with a sabotage build required to fail it. Inference on a CPU from a saved
-model: <!--fact:host_inference_surfaces-->random forests, Extra Trees and the four gradient boosting variants; nearest neighbors, k-NN classification and k-NN regression; linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening and kernel density; SVC<!--/fact-->
+model: <!--fact:host_inference_surfaces-->random forests, Extra Trees and the four gradient boosting variants; nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting and radius neighbors; linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening and kernel density on every kernel, metric and weighting; SVC and the isolation forest; the Gaussian mixture's scores, probabilities and labels; HDBSCAN's approximate_predict<!--/fact-->
 (the forests: 24 three-GPU recordings reproduced on seven CPUs, workflow run
 34782452584, [fixtures](bench/results/forest_host/README.md); the classical
 estimators: Apple M4, NVIDIA H100 and AMD MI300X recordings of the first

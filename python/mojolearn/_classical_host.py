@@ -4,7 +4,10 @@ LogisticRegression and PCA models (the classical host inference lane,
 2026-09-13; brief docs/lanes/BRIEF_forest_host_inference_2026-09-13.md,
 "Classical lanes"), since the kde svc host lane (2026-09-14) saved
 KernelDensity and SVC models, and since the knn host inference lane
-(2026-09-14) NearestNeighbors, KNeighborsClassifier and KNeighborsRegressor.
+(2026-09-14) NearestNeighbors, KNeighborsClassifier and KNeighborsRegressor,
+and since the neighbors and density inference lane (2026-09-15)
+RadiusNeighbors and every k-NN metric, the ball cover and the KDE kernel and
+metric pairs the CPU reference lanes cover.
 
 `host_model(path)` loads a file written by one of those classes' `save` and
 returns an instance of a HOST SUBCLASS of the same class: the same Python
@@ -39,15 +42,19 @@ measured; the brief records on which CPUs that has passed.
 import hashlib
 
 from . import _backend, _serialize
+from ._iforest_impl import IsolationForest, _IFOREST_FORMAT
 from ._svm_impl import SVC, _SVC_FORMAT
 from .decomposition import PCA, TruncatedSVD, _PCA_FORMAT, _TSVD_FORMAT
 from .density import KernelDensity, _KDE_FORMAT
+from .hdbscan import HDBSCAN, _HDBSCAN_FORMAT
+from .mixture import GaussianMixture, _GMM_FORMAT
 from .linear_model import (
     LinearRegression, LogisticRegression, Ridge, _LINEAR_FORMAT,
     _LOGISTIC_FORMAT,
 )
 from .neighbors import (
-    KNeighborsClassifier, KNeighborsRegressor, NearestNeighbors, _KNN_FORMAT,
+    KNeighborsClassifier, KNeighborsRegressor, NearestNeighbors, RadiusNeighbors,
+    _KNN_FORMAT, _RADIUS_FORMAT,
 )
 
 _HOST_BASENAME = "_mojolearn_estimators_host"
@@ -56,6 +63,10 @@ _HOST_BASENAMES = {
     "_mojolearn_estimators": _HOST_BASENAME,
     "_mojolearn_svm": "_mojolearn_svm_host",
     "_mojolearn": "_mojolearn_core_host",
+    # The inference-only binding a wheel ships, never the reference one, so
+    # a GPU box checks the binary a CPU-only install runs.
+    "_mojolearn_mixture": "_mojolearn_mixture_infer_host",
+    "_mojolearn_hdbscan": "_mojolearn_hdbscan_infer_host",
 }
 
 
@@ -172,19 +183,33 @@ class HostSVC(_HostBound, SVC):
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
 
 
-class _HostKNN(_HostBound):
-    """The three k-NN host classes' shared refusal: the random ball cover
-    arm has no host entry (`rbc_knn_search` is absent from the core host
-    binding and would refuse by name at the first query; this names it at
-    load instead)."""
+class HostIsolationForest(_HostBound, IsolationForest):
+    """`score_samples`, `decision_function` and `predict` of a saved
+    IsolationForest through the svm host binding's iforest_run: the forest
+    rebuilt from the saved training matrix and knobs (DEVIATION 874), as
+    every GPU scoring call rebuilds it, then scored."""
+    _HOST_ARRAYS = ("_x",)
 
-    def _host_refusals(self):
-        if self.algorithm == "rbc":
-            raise ImportError(
-                "mojolearn: no CPU implementation of _mojolearn.rbc_knn_search "
-                f"yet; the host {type(self).__name__} runs the brute arm only "
-                "(docs/lanes/BRIEF_forest_host_inference_2026-09-13.md)"
-            )
+
+class HostGaussianMixture(_HostBound, GaussianMixture):
+    """score_samples, predict_proba, predict, score, bic and aic of a saved
+    GaussianMixture through the inference-only mixture binding."""
+    _HOST_ARRAYS = ("weights_", "means_", "covariances_", "precisions_cholesky_", "log_det_chol_")
+
+
+class HostHDBSCAN(_HostBound, HDBSCAN):
+    """A saved HDBSCAN that `mojolearn.hdbscan.approximate_predict` accepts,
+    predicting through the inference-only hdbscan binding."""
+    _HOST_ARRAYS = ("_raw_data", "core_distances_", "labels_")
+
+
+class _HostKNN(_HostBound):
+    """The three k-NN host classes. The random ball cover arm is served
+    since the neighbors and density inference lane (2026-09-15): the core
+    host binding exports `rbc_knn_search` (the knn-rbc training lane's
+    exhaustive restatement, which the cover prunes exactly), so a saved
+    `NearestNeighbors(algorithm='rbc')` answers `kneighbors` on a CPU. The
+    classifier and the regressor refuse 'rbc' in their own `load`."""
 
 
 class HostNearestNeighbors(_HostKNN, NearestNeighbors):
@@ -199,6 +224,13 @@ class HostKNeighborsRegressor(_HostKNN, KNeighborsRegressor):
     _HOST_ARRAYS = ("_index", "_y_cols")
 
 
+class HostRadiusNeighbors(_HostBound, RadiusNeighbors):
+    """`radius_neighbors` of a saved RadiusNeighbors through the core host
+    binding's radius_neighbors_count and radius_neighbors_fill (the radius
+    training lanes' ball cover restated as an exhaustive scan)."""
+    _HOST_ARRAYS = ("_index",)
+
+
 #: format tag -> (estimator name, host class). A file whose `estimator`
 #: member names another class is refused by that class's own `load`.
 _FORMATS = {
@@ -208,11 +240,15 @@ _FORMATS = {
     _PCA_FORMAT: {"PCA": HostPCA},
     _KDE_FORMAT: {"KernelDensity": HostKernelDensity},
     _SVC_FORMAT: {"SVC": HostSVC},
+    _IFOREST_FORMAT: {"IsolationForest": HostIsolationForest},
+    _GMM_FORMAT: {"GaussianMixture": HostGaussianMixture},
+    _HDBSCAN_FORMAT: {"HDBSCAN": HostHDBSCAN},
     _KNN_FORMAT: {
         "NearestNeighbors": HostNearestNeighbors,
         "KNeighborsClassifier": HostKNeighborsClassifier,
         "KNeighborsRegressor": HostKNeighborsRegressor,
     },
+    _RADIUS_FORMAT: {"RadiusNeighbors": HostRadiusNeighbors},
 }
 CLASSICAL_FORMATS = tuple(_FORMATS)
 

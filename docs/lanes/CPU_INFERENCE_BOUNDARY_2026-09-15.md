@@ -45,6 +45,24 @@ On Apple M4, one numerical process/thread at a time:
 - Workflow YAML/shell syntax, six orchestration tests, docs facts, wheel pins,
   package inventory and manifest readers passed.
 
+## Follow-up: inference-only bindings (lane/inference-neighbors-density)
+
+The eight-family count above is the state this document recorded. Since the
+neighbors and density inference lane, wheels ship ten: the eight plus
+`mixture_infer` and `hdbscan_infer`, two INFERENCE-ONLY host bindings. A
+family whose reference binding carries a fit (mixture, hdbscan) stays a source
+build; its scoring or prediction entries move into a shared module
+(`bindings/mixture_host_scoring.mojo`, `bindings/hdbscan_host_predict.mojo`)
+that both the reference binding and the inference binding register, so the two
+binaries answer through one source. The manifest declares the inference family
+with `routes=None` and `serves=<GPU binding>`; `_backend._select_cpu_only`
+routes that GPU binding to it when the reference binding is not built. On the
+M4 the inference files are 232,112 and 227,696 bytes against 406,456 and
+359,688 for the reference ones, and `nm` finds no fit symbol in them
+(bench/results/identity_break/2026-09-15_inference-iforest-gmm-hdbscan/fit_symbols.txt).
+The routine CPU identity gate builds routed families only, so it does not
+build these two yet; that workflow change is owed.
+
 The test wheel reused existing local host binaries whose Mojo sources,
 build scripts and lockfile are unchanged. No fresh numerical compilation or
 GPU qualification was needed for this Python/package-policy change. This

@@ -7,7 +7,10 @@ whitened PCA (`pca-whiten`, an identity_break lane of its own), and since the
 knn host inference lane (2026-09-14) NearestNeighbors (`kneighbors`: distances
 and indices), KNeighborsClassifier (`predict`, `predict_proba`) and
 KNeighborsRegressor (`predict`), lanes knn, knn-clf and knn-reg, through
-`mojolearn/host/_mojolearn_core_host.so`.
+`mojolearn/host/_mojolearn_core_host.so`; since the neighbors and density
+inference lane (2026-09-15) also the k-NN metric, ball cover and weighted
+lanes, RadiusNeighbors (lanes radius, radius-manhattan, radius-chebyshev,
+radius-minkowski-p3) and the KDE kernel, metric and weight lanes.
 
 Two halves over tools/identity_break.py's own nine fixtures, so the
 held-out rows here ARE the rows behind the `infer` column of the committed
@@ -93,6 +96,51 @@ LANES = {
                             lambda e, X: (e.predict_proba(X), e.predict(X)),
                             {'predict': lambda e, X: e.predict(X),
                              'decision_function': lambda e, X: e.decision_function(X)}),
+    # The neighbors and density inference lane (2026-09-15): every k-NN
+    # metric and the ball cover arm, the distance-weighted vote and mean, the
+    # radius query on its four metrics and the KDE kernel and metric pairs,
+    # each probed exactly as its identity_break lane probes the held-out
+    # rows (the radius probe is identity_break's `_ragged` over the sorted
+    # query; the cosine KDE pair shifts its rows by 8, as the lane does).
+    **{f'knn-{name}': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                       {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]})
+       for name in ('sqeuclidean', 'manhattan', 'chebyshev', 'cosine', 'minkowski-p3', 'rbc')},
+    'knn-clf-distance': ('KNeighborsClassifier',
+                         lambda e, X: (e.predict(X[:64]), e.predict_proba(X[:64])),
+                         {'predict_proba': lambda e, X: e.predict_proba(X[:64])}),
+    'knn-reg-distance': ('KNeighborsRegressor', lambda e, X: (e.predict(X[:64]),), {}),
+    **{lane: ('RadiusNeighbors',
+              lambda e, X: identity_tool()._ragged(e.radius_neighbors(X[:64], sort_results=True)), {})
+       for lane in ('radius', 'radius-manhattan', 'radius-chebyshev', 'radius-minkowski-p3')},
+    **{f'kde-{kernel}-{metric}': ('KernelDensity',
+                                  (lambda shift: lambda e, X: (e.score_samples(X[:, :4] + shift),))(
+                                      8.0 if metric == 'cosine' else 0.0), {})
+       for kernel, metric in (('tophat', 'sqeuclidean'), ('epanechnikov', 'l1'), ('exponential', 'chebyshev'),
+                              ('linear', 'cosine'), ('cosine', 'minkowski'))},
+    'kde-weighted': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    # IsolationForest (same lane): identity_break scores every held-out row
+    # and predicts the first 512, so these two lanes probe the whole
+    # held-out draw (LANE_PROBE_ROWS) rather than its first PROBE_ROWS.
+    **{lane: ('IsolationForest', lambda e, X: (e.score_samples(X), e.predict(X[:512])),
+              {'predict': lambda e, X: e.predict(X[:512]),
+               'decision_function': lambda e, X: e.decision_function(X)})
+       for lane in ('iforest', 'iforest-tuned')},
+    # GaussianMixture (same lane), through the inference-only mixture
+    # binding: 64 held-out rows of the first four columns, as the lanes ask.
+    'gmm': ('GaussianMixture',
+            lambda e, X: (e.score_samples(X[:64, :4]), e.predict(X[:64, :4]), e.predict_proba(X[:64, :4])),
+            {'predict': lambda e, X: e.predict(X[:64, :4]),
+             'predict_proba': lambda e, X: e.predict_proba(X[:64, :4])}),
+    'gmm-random-init': ('GaussianMixture', lambda e, X: (e.score_samples(X[:64, :4]),),
+                        {'predict': lambda e, X: e.predict(X[:64, :4])}),
+    # HDBSCAN (same lane): approximate_predict's labels and probabilities on
+    # the first 256 held-out rows of four columns, as both lanes ask.
+    **{lane: ('HDBSCAN',
+              lambda e, X: tuple(__import__('mojolearn.hdbscan', fromlist=['approximate_predict'])
+                                 .approximate_predict(e, X[:, :4])),
+              {'probabilities': lambda e, X: __import__('mojolearn.hdbscan', fromlist=['approximate_predict'])
+                                 .approximate_predict(e, X[:, :4])[1]})
+       for lane in ('hdbscan', 'hdbscan-leaf')},
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'logistic': 'predict_proba', 'pca': 'transform',
@@ -100,6 +148,11 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'pca-whiten': 'transform',
                'knn': 'kneighbors_distances', 'knn-clf': 'predict',
                'knn-reg': 'predict', 'logistic-multiclass': 'predict_proba'}
+PROBE_NAMES.update({lane: {'NearestNeighbors': 'kneighbors_distances', 'KNeighborsClassifier': 'predict',
+                           'KNeighborsRegressor': 'predict', 'RadiusNeighbors': 'radius_neighbors_counts',
+                           'KernelDensity': 'score_samples', 'IsolationForest': 'score_samples',
+                           'GaussianMixture': 'score_samples', 'HDBSCAN': 'approximate_predict_labels'}[spec[0]]
+                    for lane, spec in LANES.items() if lane not in PROBE_NAMES})
 
 
 def _fit_logistic_multiclass(ml, X, yc, yr, Xh=None):
@@ -133,10 +186,21 @@ def package_root(args):
         sys.path.insert(0, os.path.abspath(args.package_root))
 
 
-def held_out(ib, kind):
+#: Lanes whose identity_break probe reads the whole held-out draw; every
+#: other lane reads its first PROBE_ROWS rows.
+LANE_PROBE_ROWS = {'iforest': None, 'iforest-tuned': None}
+
+
+def probe_rows(ib, lane, kind):
+    """The held-out row count `lane` probes on fixture `kind`."""
+    rows = LANE_PROBE_ROWS.get(lane, PROBE_ROWS)
+    return int(ib.heldout(kind).shape[0]) if rows is None else rows
+
+
+def held_out(ib, kind, lane=None):
     """The identity_break held-out slice the lane probes, as a numpy
     array, and its bytes' SHA-256."""
-    Xh = ib.heldout(kind)[:PROBE_ROWS]
+    Xh = ib.heldout(kind)[:probe_rows(ib, lane, kind)]
     return Xh, sha256_bytes(Xh.tobytes())
 
 
@@ -191,7 +255,7 @@ def do_record(args):
             if type(model).__name__ != estimator:
                 print(f'gate: lane {lane} fitted {type(model).__name__}, not {estimator}', file=sys.stderr)
                 return 2
-            Xh, x_sha = held_out(ib, kind)
+            Xh, x_sha = held_out(ib, kind, lane)
             gpu = digests_for(lane, model, Xh, ib)
             # The identity_break probe on the fitted model must agree with
             # the tool's own infer cell for this fit, or the probe here is
@@ -213,7 +277,7 @@ def do_record(args):
                           f'reload on the GPU path: {gpu[key]} vs {reload[key]}', file=sys.stderr)
                     return 1
             spec = dict(lane=lane, kind=kind, estimator=estimator, heldout_seed=ib.HELDOUT_SEED,
-                        probe_rows=PROBE_ROWS, x_sha256=x_sha)
+                        probe_rows=probe_rows(ib, lane, kind), x_sha256=x_sha)
             (directory / 'fixture.json').write_text(json.dumps(spec, indent=2, sort_keys=True) + '\n')
             report = dict(
                 status='RECORDED', lane=lane, kind=kind, estimator=estimator, vendor=vendor,
@@ -267,11 +331,11 @@ def do_check(args):
             return 2
         spec = json.loads((directory / 'fixture.json').read_text())
         lane, kind = spec['lane'], spec['kind']
-        if lane not in LANES or kind not in ib.FIXTURES or int(spec.get('probe_rows', 0)) != PROBE_ROWS:
+        if lane not in LANES or kind not in ib.FIXTURES or int(spec.get('probe_rows', 0)) != probe_rows(ib, lane, kind):
             print(f'gate: {directory} fixture.json names a lane, fixture or probe size this gate '
                   'does not know', file=sys.stderr)
             return 2
-        Xh, x_sha = held_out(ib, kind)
+        Xh, x_sha = held_out(ib, kind, lane)
         if x_sha != spec.get('x_sha256') or x_sha != expected.get('x_sha256'):
             print(f'gate: {directory} regenerated held-out rows hash {x_sha}, the fixture records '
                   f'{spec.get("x_sha256")}', file=sys.stderr)

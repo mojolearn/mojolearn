@@ -10,6 +10,29 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- Public CPU inference from a model saved on a GPU for more neighbor and density lanes
+  (lane/inference-neighbors-density). `NearestNeighbors` on the sqeuclidean, manhattan,
+  chebyshev, cosine and minkowski metrics and over the random ball cover, the
+  distance-weighted `KNeighborsClassifier` and `KNeighborsRegressor`, and `KernelDensity`
+  on the five kernel and metric pairs and with sample weights, all through host bindings
+  that already shipped. `RadiusNeighbors` gains `save` and `load` (`mojolearn-radius-1`) and
+  answers `radius_neighbors` on a CPU on its four metrics. `IsolationForest` gains `save`
+  and `load` (`mojolearn-iforest-1`; the file holds the training matrix and the knobs, since
+  every scoring call rebuilds the forest, DEVIATION 874). `GaussianMixture` gains `save` and
+  `load` (`mojolearn-gmm-1`) and `HDBSCAN(prediction_data=True)` gains `save` and `load`
+  (`mojolearn-hdbscan-1`) for `mojolearn.hdbscan.approximate_predict`; their CPU entries ship
+  in two new INFERENCE-ONLY host bindings, `_mojolearn_mixture_infer_host` (232,112 bytes
+  on the M4, against 406,456 for the reference binding with the fit) and
+  `_mojolearn_hdbscan_infer_host` (227,696 against 359,688), which register the scoring or
+  prediction entries and no fit: `nm` finds no EM step, Boruvka MST or prediction data
+  generation in either file. `_backend` routes the GPU binding to them when the reference
+  binding is not built (`host_surface.inference_routes()`); CPU fits still refuse. On the
+  M4, one core: the 54 neighbor and KDE models saved by the Metal classes predict IDENTICAL
+  on the CPU against their recordings and the 166-lane record's Apple, NVIDIA and AMD infer
+  cells, and the host sabotage build reads DIVERGENT on 50 of 54
+  (bench/results/identity_break/2026-09-15_inference-neighbors-density). The NVIDIA and AMD
+  recordings, and a CPU identity gate workflow that builds the inference-only families, are
+  owed.
 - New `mojolearn.metrics.fowlkes_mallows_score`, mirroring scikit-learn's definition (cuML
   has none): the device integer contingency matrix, exact Int64 pair counts, then
   `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, 0.0 when `tk == 0` (no samples, one sample,
