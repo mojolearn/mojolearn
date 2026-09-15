@@ -231,6 +231,18 @@ def main() raises:
     for s in range(0, len(shapes), 3):
         estep_case(ctx, shapes[s], shapes[s + 1], shapes[s + 2], count)
     ctx.synchronize()
+    if String(getenv("MOJOLEARN_GMM_CHECK_LARGE", "0")) == "1":
+        # Buffers above 1 MiB on every transport: X, the n x K outputs and the
+        # per-owner shards (the Cholesky column solve diverged on two MI300X
+        # once its factor passed 1 MiB).
+        var large: List[Int] = [70001, 4, 3, 262145, 2, 2, 131072, 8, 4]
+        for s in range(0, len(large), 3):
+            estep_case(ctx, large[s], large[s + 1], large[s + 2], count)
+        ctx.synchronize()
+        var big = blobs(90001, 4, 3, 41)
+        fit_case(String("BLOBS_90001x4_k3"), big, 90001, 4, 3, 0, count, root)
+        print("PASS gmm parallel large")
+        return
     for which in range(GMM_FIXTURE_COUNT):
         var x = gmm_fixture(which)
         for init in range(2):
