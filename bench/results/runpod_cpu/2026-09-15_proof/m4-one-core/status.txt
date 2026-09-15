@@ -1,0 +1,8 @@
+commit=cb575ab51d0384e4a90414089ce52561de2222ac
+build_core rc=0 s=19
+build_estimators rc=0 s=19
+identity rc=1 s=1
+2a0ff4c98066d7acde42482aa4a7598816f0ebef3bb65d21a4ad605e72b8797f  python/mojolearn/host/_mojolearn_core_host.so
+f716f9f351b9a9ad5b9e0fa40fed02e7c95b6ce4b1a0eb4cba428d08dcee5159  python/mojolearn/host/_mojolearn_estimators_host.so
+DONE
+identity rc=0 s=9

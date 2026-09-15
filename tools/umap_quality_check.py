@@ -2,7 +2,7 @@
 """Independent neighborhood-quality gate for two fixed UMAP input profiles.
 
 Run in the main lane against an installed wheel. Requires numpy and
-scikit-learn. Scores are not bitwise certificates or upstream layout parity.
+scikit-learn. Scores are not bitwise certificates or reference layout parity.
 Thresholds are fixed before the initial run: trustworthiness >= .90 and
 at least .20 above a deterministic row-permutation sabotage control.
 """

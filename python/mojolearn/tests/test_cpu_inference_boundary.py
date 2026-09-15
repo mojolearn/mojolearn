@@ -50,6 +50,26 @@ def test_passive_cpu_fits_are_not_a_backdoor(monkeypatch):
             estimator.fit([[0.0], [1.0]])
 
 
+def test_exponential_smoothing_fit_is_not_a_backdoor(monkeypatch):
+    """ExponentialSmoothing is not a NumericModeMixin, so the mixin's guard
+    never wrapped its fit; it refuses by name itself (2026-09-15)."""
+    from mojolearn import ExponentialSmoothing
+    monkeypatch.setattr(_backend, '_CPU_ONLY', 'test CPU')
+    series = [1.0 + (i % 12) + 0.1 * i for i in range(48)]
+    with pytest.raises(NotImplementedError, match='internal bitwise verifier'):
+        ExponentialSmoothing(series, seasonal_periods=12).fit()
+
+
+def test_saved_model_inference_classes_are_host_bound():
+    """The saved ARIMA and UMAP host classes are inference-only: their fits
+    refuse on any machine outside the reference context."""
+    from mojolearn._classical_host import HostARIMA, HostUMAP
+    with pytest.raises(NotImplementedError):
+        HostARIMA().fit([[0.0, 1.0, 2.0, 3.0]])
+    with pytest.raises(NotImplementedError):
+        HostUMAP().fit([[0.0], [1.0]])
+
+
 def test_byte_lm_published_trainer_remains_exported():
     import mojolearn
     assert hasattr(mojolearn.LanguageModelHostTrainer, 'train_step')

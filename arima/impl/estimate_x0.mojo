@@ -261,7 +261,7 @@ def arma_least_squares_kernel(
     is one thread per series doing the same nine steps in the same order.
     That is a REIMPLEMENTATION of the decomposition, not of the algorithm:
     the values written are theirs step for step, and every step is named
-    with the upstream line it comes from."""
+    with the reference line it comes from."""
     var bid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if bid >= Int(batch_size_in):
         return

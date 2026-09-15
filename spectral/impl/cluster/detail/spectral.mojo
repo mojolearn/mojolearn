@@ -187,7 +187,7 @@ def fit_predict_dataset(
     fully-initialized struct through `default_with`. Recorded because a
     reader diffing the two will see a difference that is not one, and
     because a later edit that made `create_connectivity_graph` read one of
-    those fields would be a live bug upstream and not here."""
+    those fields would be a live bug in the reference and not here."""
     var embed_params = SpectralEmbeddingParams.default_with(
         config.n_components, config.n_neighbors
     )

@@ -51,6 +51,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MULTICLASS_OVA,
     OBJECTIVE_POISSON,
     OBJECTIVE_QUANTILE,
+    OBJECTIVE_QUERY_RMSE,
     OBJECTIVE_RMSE,
     OBJECTIVE_TWEEDIE,
 )
@@ -494,7 +495,7 @@ struct CatBoostOptions(Copyable, Movable):
     var boost_from_average: Bool
     """`boost_from_average`. Default false (`boosting_options.cpp:17`);
     their data-dependent auto-true (`AdjustBoostFromAverageDefaultValue`)
-    is resolved by `train`, not here, mirroring their layering. IMPLEMENTED
+    is resolved by `train`, not here, following their layering. IMPLEMENTED
     2026-08-22 for RMSE, Logloss and CrossEntropy: `fit_with_test` seeds
     every cursor with `CalcOptimumConstApprox`
     (`gbdt/metrics/optimal_const_for_loss.mojo`) and the model records the
@@ -1026,7 +1027,7 @@ struct TCatFeatureParams(Copyable, Movable):
         ordered statistic would have to run in ROW order -- a different and
         much worse estimator rather than a slower one.
         `gbdt/data/permutation.mojo` implemented `TDataPermutation` on
-        2026-08-21 (`archive/reference/PORTING.md` 55). The second said a `Borders` model
+        2026-08-21. The second said a `Borders` model
         could not carry its apply-time CTR tables, so the fallback stayed
         here to avoid shipping a default that trains and cannot score;
         `build_ctr_tables` grew the target-class histogram arm and that is
@@ -1319,6 +1320,11 @@ def get_estimation_method_defaults(
         method = LEAF_ESTIMATION_NEWTON
         newton = 1
         gradient = 10
+    elif f == OBJECTIVE_QUERY_RMSE:
+        # `:94-98`
+        method = LEAF_ESTIMATION_NEWTON
+        newton = 1
+        gradient = 1
     elif f == OBJECTIVE_TWEEDIE:
         # `:221-231`. THE GPU ARM: twenty iterations, where their CPU
         # takes one. We are a GPU, so twenty.

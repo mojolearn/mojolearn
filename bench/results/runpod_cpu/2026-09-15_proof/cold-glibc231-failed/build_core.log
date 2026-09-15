@@ -1,0 +1,10 @@
+/root/mojolearn/.pixi/envs/default/bin/mojo: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.32' not found (required by /root/mojolearn/.pixi/envs/default/bin/mojo)
+/root/mojolearn/.pixi/envs/default/bin/mojo: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.33' not found (required by /root/mojolearn/.pixi/envs/default/bin/mojo)
+/root/mojolearn/.pixi/envs/default/bin/mojo: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.34' not found (required by /root/mojolearn/.pixi/envs/default/bin/mojo)
+/root/mojolearn/.pixi/envs/default/bin/mojo: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.33' not found (required by /root/mojolearn/.pixi/envs/default/bin/../lib/libMSupportGlobals.so)
+/root/mojolearn/.pixi/envs/default/bin/mojo: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.34' not found (required by /root/mojolearn/.pixi/envs/default/bin/../lib/libMSupportGlobals.so)
+/root/mojolearn/.pixi/envs/default/bin/mojo: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.32' not found (required by /root/mojolearn/.pixi/envs/default/bin/../lib/libAsyncRTRuntimeGlobals.so)
+/root/mojolearn/.pixi/envs/default/bin/mojo: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.33' not found (required by /root/mojolearn/.pixi/envs/default/bin/../lib/libAsyncRTRuntimeGlobals.so)
+/root/mojolearn/.pixi/envs/default/bin/mojo: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.34' not found (required by /root/mojolearn/.pixi/envs/default/bin/../lib/libAsyncRTRuntimeGlobals.so)
+/root/mojolearn/.pixi/envs/default/bin/mojo: /lib64/ld-linux-x86-64.so.2: version `GLIBC_2.35' not found (required by /root/mojolearn/.pixi/envs/default/bin/../lib/libAsyncRTRuntimeGlobals.so)
+BINCACHE miss+build-failed bindings/build_core_host.sh key=d3de354cf8437c7d seconds=0.3

@@ -3,8 +3,8 @@
 """Launch the brute-force k-NN, and sabotage it.
 
 NO CUVS COUNTERPART. Same discipline as `cluster/checks/kmeans_check.mojo`
-and for the same reason: a kernel is not implemented until it has been enqueued
-(`archive/reference/PORTING.md 9`), and a correct answer is not by itself evidence that a
+and for the same reason: a kernel is not implemented until it has been enqueued,
+and a correct answer is not by itself evidence that a
 kernel ran.
 
 THE FIXTURE IS RANDOM, AND THE FIRST ONE WAS NOT, AND THAT COST A RUN

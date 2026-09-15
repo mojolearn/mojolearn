@@ -777,7 +777,7 @@ def host_init_scalable(
     if n >= SCALABLE_ROW_LIMIT:
         raise Error(
             "scalable k-means++ selection scan counts in Float32 and is"
-            " exact only below 2^24 rows (archive/reference/PORTING.md 48); got "
+            " exact only below 2^24 rows; got "
             + String(n)
         )
     var is_sqrt = host_metric_is_sqrt(metric)

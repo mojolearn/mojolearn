@@ -210,6 +210,14 @@ comptime OBJECTIVE_MULTICLASS = 12
 #: `one_vs_all_val_and_first_der_kernel`, not either kernel in this file.
 comptime OBJECTIVE_MULTICLASS_OVA = 13
 
+#: `QueryRMSE`, the first QUERYWISE target: the CatBoost reference trains it
+#: through `TQuerywiseTargetsImpl` (`targets/querywise_targets_impl.h`), not
+#: `TPointwiseTargetsImpl`, so it reaches neither kernel in this file. Its
+#: derivatives need the pool's grouping and live in
+#: `gbdt/targets/kernel/query_rmse.mojo`; `launch_pointwise_target_kernel`
+#: refuses it by name.
+comptime OBJECTIVE_QUERY_RMSE = 14
+
 #: `NumErrors` is in their kernel switch (`pointwise_targets.cu:497-501`)
 #: and is deliberately NOT here: `TPointwiseTargetsImpl::Init`
 #: (`pointwise_target_impl.h:259-299`) has no `NumErrors` case, so its
@@ -225,7 +233,7 @@ def objective_from_name(name: String) raises -> Int:
     The spellings are theirs exactly (`enums.h`, `ELossFunction`), because
     a user who reads CatBoost's documentation must be able to paste the
     name across. Anything not listed raises rather than falling back to a
-    default, mirroring their `Init` (`pointwise_target_impl.h:295-297`).
+    default, following their `Init` (`pointwise_target_impl.h:295-297`).
     """
     if name == "RMSE":
         return OBJECTIVE_RMSE
@@ -255,10 +263,13 @@ def objective_from_name(name: String) raises -> Int:
         return OBJECTIVE_MULTICLASS
     if name == "MultiClassOneVsAll":
         return OBJECTIVE_MULTICLASS_OVA
+    if name == "QueryRMSE":
+        return OBJECTIVE_QUERY_RMSE
     raise Error(
         "unknown loss '" + name + "': this implementation trains RMSE, Logloss,"
         " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
-        " Expectile, Tweedie, Huber, MultiClass and MultiClassOneVsAll"
+        " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll and"
+        " QueryRMSE"
     )
 
 
@@ -292,6 +303,8 @@ def objective_name(objective: Int) -> String:
         return String("MultiClass")
     if objective == OBJECTIVE_MULTICLASS_OVA:
         return String("MultiClassOneVsAll")
+    if objective == OBJECTIVE_QUERY_RMSE:
+        return String("QueryRMSE")
     return String("<unknown>")
 
 

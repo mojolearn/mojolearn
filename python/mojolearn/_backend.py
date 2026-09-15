@@ -1009,9 +1009,12 @@ def host_families_built():
 #:     with NewtonL2); every other option value refuses by name inside
 #:     gbdt_fit,
 #:     gbdt_predict and gbdt_model_dim over the model text and
-#:     core/gbdt_host_predict.mojo, and gbdt_sigmoid; gbdt_predict_multi,
-#:     the ordered and FeatureFreq fits and the adapters' binary transforms
-#:     are absent. Its own family for the reason the rf family is: the
+#:     core/gbdt_host_predict.mojo, and gbdt_sigmoid; gbdt_fit_ordered_rmse
+#:     over gbdt/host/gbdt_oracle_ordered.mojo and
+#:     gbdt_fit_two_level_feature_freq over
+#:     gbdt/host/gbdt_oracle_feature_freq.mojo (gbdt-ordered-rmse,
+#:     gbdt-feature-freq; lane/cpu-training-gbdt-ordered, 2026-09-15);
+#:     gbdt_predict_multi and the adapters' binary transforms are absent. Its own family for the reason the rf family is: the
 #:     forest host binding exports other names under another contract.
 #:   _mojolearn_training -> _mojolearn_training_host (the mlp lane,
 #:     2026-09-14): optimizer_step and ce_loss over
@@ -1037,9 +1040,21 @@ def host_families_built():
 #:     (estimate_x0, the Jones transform, the batched L-BFGS over the
 #:     finite-difference Kalman likelihood, the undifferenced forecast), the
 #:     GPU binding's whole surface; p, q or P above 1, any Q, d + D of 2,
-#:     p + q + k of 0 and an in-sample prediction (start < n_obs) refuse by
-#:     name.
+#:     p + q + k of 0 refuse by name; an in-sample prediction (start < n_obs)
+#:     runs since 2026-09-15. When this reference binding is not built (an
+#:     installed wheel), `_HOST_INFERENCE_MODULES` below routes the family to
+#:     `_mojolearn_forecast_host`, which carries predict and forecast only.
 _HOST_MODULES = host_surface.routed_modules()
+
+#: `_MODULES` name -> an INFERENCE-ONLY host binding that serves the route
+#: when the reference binding above is not built (lane/inference-forecast-
+#: umap-pca, 2026-09-15). The inference wheels ship
+#: `_mojolearn_forecast_host` (ARIMA's `arima_predict` and `arima_forecast`,
+#: no `arima_fit`) and not the reference `_mojolearn_arima_host`, so on an
+#: installed CPU-only wheel `_mojolearn_arima` resolves here; a source build
+#: that has the reference binding keeps it. An absent name still refuses by
+#: name through `_HostBinding`.
+_HOST_INFERENCE_MODULES = host_surface.inference_routes()
 
 #: The env switch the CPU identity gate sets to load a host binding built
 #: with `-D MOJOLEARN_HOST_SABOTAGE=1`; refused otherwise.
@@ -1133,7 +1148,8 @@ def _no_cpu_implementation(name, item, reason, basename=None):
         "training step on the CPU: forward, backward and the AdamW update), "
         "HostForest and HostGBDT (predict and predict_proba of a saved forest "
         "or GradientBoosting model on the CPU), and the saved-model inference "
-        "of LinearRegression, Ridge, TruncatedSVD, LogisticRegression and PCA "
+        "of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, "
+        "ARIMA (predict and forecast) and UMAP (transform) "
         "(mojolearn.host_model, or the classes themselves on a CPU-only "
         "install), each only when its own host binding under mojolearn/host/ "
         "is built. "
@@ -1190,7 +1206,10 @@ def _select_cpu_only(pkg, mode, reason):
     for name in _MODULES:
         full = f"{pkg.__name__}.{name}"
         basename = _HOST_MODULES.get(name)
-        if basename and os.path.exists(host_module_path(basename)):
+        if not (basename and os.path.exists(host_module_path(basename))):
+            fallback = _HOST_INFERENCE_MODULES.get(name)
+            basename = fallback if fallback and os.path.exists(host_module_path(fallback)) else None
+        if basename:
             module = _HostBinding(full, name, basename, reason)
         else:
             module = _NoGpuBinding(full, reason)
@@ -1216,6 +1235,14 @@ def _cpu_only_binding(name, requested):
             "numeric_mode='identical'."
         )
     pkg = __name__.rsplit(".", 1)[0]
+    # A family served by a Python adapter over a host binding loaded by path
+    # (host_surface.ADAPTED_MODULES; the byte LM trainer's single-device
+    # entries over _mojolearn_byte_lm_host, lane/cpu-training-embedding-ivf,
+    # 2026-09-15). Served only when that host binding is built; otherwise the
+    # installed stub refuses by name as before.
+    adapted = host_surface.ADAPTED_MODULES.get(name)
+    if adapted is not None and os.path.exists(host_module_path(host_surface.family(adapted["family"])["binding"])):
+        return importlib.import_module(f"{pkg}.{adapted['module']}").binding()
     module = sys.modules.get(f"{pkg}.{name}")
     if module is None:
         raise ImportError(

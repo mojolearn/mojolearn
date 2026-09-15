@@ -95,7 +95,7 @@ WHAT IS NOT HERE, AND WHERE IT IS
 # cuVS's `kernel_matrices.cu` has four kernel types -- linear, polynomial,
 # tanh and RBF -- and no laplacian. cuML has one
 # (`pairwise_kernels.py:51-56`) and it is `exp(-gamma * manhattan)` in Python
-# over `pairwise_distances`. So the ALGORITHM is upstream and the KERNEL is
+# over `pairwise_distances`. So the ALGORITHM is the reference's and the KERNEL is
 # not, and the honest form of the implementation is: call the implemented Manhattan distance
 # (`kde/impl/distance/distance.mojo`, RAFT's `l1.cuh`) and write the
 # four-token epilogue here.

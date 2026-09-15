@@ -39,7 +39,7 @@ APPLE M4 and no other vendor -- its NVIDIA and AMD columns are OWED.
                                                 # (any buffer-protocol
                                                 # object: array.array,
                                                 # memoryview, an ndarray),
-                                                # upstream parameter names
+                                                # reference parameter names
     y = blk.forward(x)                          # (B, L, d_model) -> same
     st = blk.allocate_state(batch_size=1, max_tokens=64)
     y = blk.forward(x, st)                      # prefill, cache carried

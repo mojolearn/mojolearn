@@ -80,7 +80,7 @@ carries `k - 1`. Therefore:
 returns `(n, n_classes)` raw scores and `predict_proba` applies CatBoost's
 `MultiProbability` elementwise sigmoid, without renormalizing the columns.
 Both multiclass losses use the symmetric GPU trainer registered in
-`cuda/train_lib/multiclass.cpp:5-7` at the pinned upstream `54a8143a`.
+`cuda/train_lib/multiclass.cpp:5-7` at the pinned reference `54a8143a`.
 
 Dropping MultiClass's last probability column and renormalising the rest
 gives a different and wrong answer: the pinned class is a real class whose
@@ -101,7 +101,7 @@ import struct
 #
 # It was COMMISSIONED for a different reason -- a supposed per-module cap on
 # ahead-of-time Metal compilation, keyed on the entry file's basename -- and
-# that reason turned out not to exist. See archive/reference/PORTING.md 70: the kernels were
+# that reason turned out not to exist: the kernels were
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
 from . import _backend, _mojolearn_gbdt, _serialize
@@ -135,6 +135,7 @@ LOSSES = (
     "Expectile",
     "Tweedie",
     "Huber",
+    "QueryRMSE",
 )
 
 def _group_id_key(value, index):
@@ -201,7 +202,7 @@ def _group_sizes(group_id, n_rows):
 #: numClasses for OneVsAll (`multiclass_targets.h:129-134`, 54a8143a).
 MULTI_OUTPUT_LOSSES = ("MultiClass", "MultiClassOneVsAll")
 
-#: `gbdt_predict_multi`'s transform, mirroring their `EPredictionType`
+#: `gbdt_predict_multi`'s transform, following their `EPredictionType`
 #: (`libs/model/eval_processing.h:186-226`).
 _PREDICT_RAW = 0
 _PREDICT_SOFTMAX = 1   # their `Probability`,      MultiClass
@@ -777,7 +778,7 @@ class GradientBoosting(NumericModeMixin):
                 )
 
         # ---- the grow policy, and what CatBoost refuses beside it ----
-        # (DEVIATION 259; every refusal cites the line of theirs it mirrors)
+        # (DEVIATION 259; every refusal cites the line of theirs it follows)
         if grow_policy == "Region":
             raise NotImplementedError(
                 "mojolearn: grow_policy='Region' is EGrowPolicy::Region, "
@@ -1194,11 +1195,17 @@ class GradientBoosting(NumericModeMixin):
         `get_id_object_bytes_string_representation` makes them, so 7 and
         "7" are one group; floats are refused as theirs are). The rows of a
         group must be CONSECUTIVE, their `group Ids are not consecutive`
-        refusal (`libs/data/objects.cpp:60-87`). The grouping is checked
-        here and in the binding, and every loss this implementation trains
-        today refuses it BY NAME: no querywise loss is implemented yet.
-        `subgroup_id` and `pairs` are their Pool arguments of the same
-        names and are refused by name for the same reason.
+        refusal (`libs/data/objects.cpp:60-87`). It is read by
+        `loss="QueryRMSE"`, which fits on the SymmetricTree greedy searcher
+        with no bootstrap, categorical features or eval set; every other
+        loss refuses a grouping BY NAME. A QueryRMSE fit given no
+        `group_id`, or one with as many groups as rows, trains on queries
+        of one row, as the CatBoost reference's `TWithoutQueriesGrouping`
+        does (`gpu_data/doc_parallel_dataset.h:26-38`): every query mean is
+        its row's own residual, every derivative is zero and the model
+        predicts zero. `subgroup_id` and `pairs` are their Pool arguments of
+        the same names; no loss here reads them and they are refused by
+        name.
 
         `sample_weight` is a per-row weight, `None` meaning all ones. It
         MULTIPLIES with `class_weights` where both are given, which is
@@ -1249,7 +1256,7 @@ class GradientBoosting(NumericModeMixin):
         #
         # CatBoost raises on this pair. Filtering the NaNs during border
         # search would otherwise silently route them into an ordinary bin.
-        # The native quantizer enforces the same upstream CB_ENSURE for
+        # The native quantizer enforces the reference's CB_ENSURE for
         # direct Mojo callers; this guard avoids entering the GPU binding.
         # An inf is not a NaN and passes, as it did (`_has_nan`).
         if self.nan_mode == "Forbidden" and not all_finite(Xa):

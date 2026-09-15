@@ -58,7 +58,7 @@ GATES:
       broken and the fixed version. `checks/pointwise_hist2_check.mojo`
       caught it on its first run -- 115 wrong cells for `uint2`, 73 for
       `uint4` -- because eight of its threads share an inner histogram copy
-      and the barrier is what holds their writes apart. `archive/reference/PORTING.md` 92.
+      and the barrier is what holds their writes apart.
 
       **So: coverage is gated here, contention is gated there, and neither
       file substitutes for the other.** A private-slot tally is the
@@ -611,8 +611,7 @@ def main() raises:
             print(
                 "FAIL: L6", bnames[vi], "--", bad,
                 "wrong bins with a barrier inside add_point. The body loop"
-                " is not converging the block, so the barrier is divergent"
-                " (archive/reference/PORTING.md 11).",
+                " is not converging the block, so the barrier is divergent.",
             )
             failures += 1
         else:

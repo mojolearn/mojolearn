@@ -51,7 +51,7 @@ comptime GATHER_NO_MASK = UInt32(0xFFFFFFFF)
 
 
 struct TL2Target(Movable):
-    """`TL2Target<TStripeMapping>` (`methods/weak_target_helpers.h:11-14`), as TWO buffers, which is what it is upstream."""
+    """`TL2Target<TStripeMapping>` (`methods/weak_target_helpers.h:11-14`), as TWO buffers, which is what it is in the reference."""
 
     var weights: DeviceBuffer[DType.float32]
     """`Weights`. `TPartitionStatistics::Weight` is summed from this."""

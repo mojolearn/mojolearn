@@ -470,7 +470,7 @@ def lp_unexp_epilog(acc: Float32, one_over_p: Float32) -> Float32:
 @always_inline
 def cosine_epilog(acc: Float32, xn: Float32, yn: Float32) -> Float32:
     """`cosine.cuh:86` / `knn_brute_force.cuh:221`, which are the same
-    expression written twice upstream: `1.0 - acc / (xn * yn)`.
+    expression written twice in the reference: `1.0 - acc / (xn * yn)`.
 
     THE GROUPING IS THEIRS AND IS NOT NEGOTIABLE. `acc / (xn * yn)` is one
     product then one divide; `(acc / xn) / yn` is two divides and a
@@ -478,7 +478,7 @@ def cosine_epilog(acc: Float32, xn: Float32, yn: Float32) -> Float32:
     not the squared ones.
 
     No clamp. See the module docstring: `l2_exp` has two and cosine has
-    none, upstream, and adding one here would be a different answer from
+    none in the reference, and adding one here would be a different answer from
     theirs on exactly the self-neighbour fixtures a user would notice.
     """
     var denom = ftz(identical_mul(xn, yn))

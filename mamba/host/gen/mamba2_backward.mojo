@@ -10,7 +10,7 @@ This module deliberately claims only the residual/output-projection seam:
 Given ``d_residual``, it computes the output-projection derivatives, then the
 gated RMSNorm derivatives ``d_gate`` and ``d_norm_weight``. The residual
 contribution to ``d_x`` is exactly ``d_residual`` and remains caller-owned;
-the incomplete upstream path is not silently added here. The SiLU gate is
+the incomplete reference path is not silently added here. The SiLU gate is
 also differentiated, producing the SSD-input and z-slice gradients. The
 D-skip seam produces `d_scan`, the partial x contribution, and `dD`. No SSD
 recurrence, convolution, input projection, or block-norm derivative is claimed.

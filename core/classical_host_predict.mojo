@@ -304,7 +304,7 @@ comptime HOST_WHITEN_SKIP_ZERO = 1.0e-10
 def host_whiten_scalar(n_fit_rows: Int, inverse: Bool) -> Float32:
     """`whiten_scalar` (`pca.mojo:366-375`): `sqrt(n_fit_rows - 1)` forward,
     `1 / sqrt(n_fit_rows - 1)` inverse, both in Float64 and rounded once to
-    Float32; 0.0 when the guard upstream wrote fires."""
+    Float32; 0.0 when the guard the reference wrote fires."""
     var d = Float64(n_fit_rows - 1)
     if d <= 0.0:
         return Float32(0.0)

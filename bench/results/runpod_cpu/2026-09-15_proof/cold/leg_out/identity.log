@@ -1,0 +1,23 @@
+# vendor=cpu-amd-epyc-7702p-64-core-processor commit=dc3852e5be173c5ccdbb97f987db1740b40864ce (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7702P 64-Core Processor' host.column=cpu host.families=['_mojolearn_core_host', '_mojolearn_estimators_host']
+# identity_break  mode=identical  2026-09-15 16:47:01  Linux-6.8.0-84-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             |
+|------------------------|------------------|
+| kmeans                 | 5aa44cc11034dec9 |
+| kmeans infer           | b9a7dd27a045bc21 |
+| kmeans batch           | 2dc7903bd0a181f5 |
+| ols                    | 3d1d7c30b12d9872 |
+| ols infer              | 2546a13c03838433 |
+| ols model              | a84289377ea9180f |
+| ols batch              | b578bef320871443 |
+| ridge                  | a91478be750dc756 |
+| ridge infer            | a5a404bb201b0eeb |
+| ridge model            | efada80fdc2d4259 |
+| ridge batch            | 5817cf4d9fb9bd91 |
+
+cells=3 stable=3 moved=0 refused=0
+infer: stable=3
+model: stable=2 n/a=1
+batch: stable=3
+n/a: kmeans model n/a:no-save
+wrote /root/leg_out/cpu-x86.json

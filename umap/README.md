@@ -96,7 +96,7 @@ least 0.20 over a fixed row-permutation control. On the installed macOS
 0.5.0 wheel, all six fixture/mode cases passed (0.993–0.998); the scrambled
 controls scored 0.425–0.458. See the
 [quality record](../bench/results/umap/2026-09-05-quality/summary.json).
-This is a small synthetic quality check, not upstream coordinate parity,
+This is a small synthetic quality check, not reference coordinate parity,
 a general quality benchmark, or a performance result.
 
 Run in an environment with the wheel, NumPy and scikit-learn installed:

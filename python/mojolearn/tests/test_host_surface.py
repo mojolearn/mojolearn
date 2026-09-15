@@ -201,7 +201,7 @@ def test_forest_kinds_are_the_forest_gate_kinds():
 
 
 def test_recordings_and_columns_exist():
-    for rel in (host_surface.CLASSICAL_RECORDED + host_surface.CLASSICAL_GPU_COLUMNS
+    for rel in (host_surface.CLASSICAL_RECORDED + host_surface.FORECAST_RECORDED + host_surface.CLASSICAL_GPU_COLUMNS
                 + (host_surface.FOREST_RECORDED_ROOT,)):
         assert (ROOT / rel).exists(), f"the manifest names {rel}, which is not in the tree"
 
@@ -219,6 +219,30 @@ def test_backend_routes_the_manifest():
     assert _backend._HOST_MODULES == host_surface.routed_modules()
     for gpu_family in host_surface.routed_modules():
         assert gpu_family in _backend._MODULES, f"{gpu_family} is routed but is not a _MODULES family"
+
+
+def test_inference_routes_ship_and_carry_no_fit():
+    """lane/inference-forecast-umap-pca (2026-09-15): an inference-only
+    binding that serves a route on a CPU-only install ships, serves a real
+    `_MODULES` family whose reference binding does not ship, registers the
+    reference binding's prediction names and no `*_fit` name, and
+    `_backend` reads the table from the manifest."""
+    from mojolearn import _backend
+    routes = host_surface.inference_routes()
+    assert routes == {"_mojolearn_arima": "_mojolearn_forecast_host"}
+    assert _backend._HOST_INFERENCE_MODULES == routes
+    shipped = set(host_surface.wheel_bindings())
+    for route, binding in routes.items():
+        assert route in _backend._MODULES
+        assert binding in shipped
+        reference = host_surface.routed_modules().get(route)
+        assert reference and reference not in shipped, f"{route}: the reference binding ships; no fallback is needed"
+        name = binding[len("_mojolearn_"):-len("_host")]
+        exported = _exports_in_source(name)
+        assert not [e for e in exported if e.endswith("_fit")], f"{binding} registers a fit: {exported}"
+        ref_exports = set(host_surface.family(reference[len("_mojolearn_"):-len("_host")])["exports"])
+        served = [e for e in exported if not e.startswith(name + "_host_")]
+        assert set(served) <= ref_exports, f"{binding} registers names its reference binding does not"
 
 
 def test_workflow_reads_the_manifest_not_literals():
@@ -246,9 +270,10 @@ def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
     from mojolearn import _backend
     shipped = set(host_surface.wheel_bindings())
     assert set(_backend._HOST_MODULES.values()) <= set(host_surface.bindings())
-    assert {"_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host"} <= shipped
+    assert {"_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host",
+            "_mojolearn_neural_host"} <= shipped
     assert set(host_surface.wheel_families()) == {
-        "byte_lm", "forest", "tokenizer", "core", "linalg", "estimators", "metrics", "svm",
+        "byte_lm", "forest", "tokenizer", "neural", "core", "linalg", "estimators", "metrics", "svm", "forecast",
     }
     assert len(host_surface.families()) > len(host_surface.wheel_families())
     assert host_surface.training_gpu_column_record() == host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 2)[1]

@@ -511,7 +511,7 @@ def arm_e_workload() raises -> Int:
         items.append(NodeWorkItem(i, Int32(2), InstanceRange(0, counts[i])))
 
     # `update_workload_info` now writes INTO an array in place, as
-    # upstream fills its pinned `h_workload_info` (`builder.cuh:401`).
+    # the reference fills its pinned `h_workload_info` (`builder.cuh:401`).
     # The array is poisoned first, so "wrote exactly n entries" is
     # checked as "entry n is still poison" -- stronger than the old
     # `len(wl)` test, which could not see an over-write.
