@@ -1,0 +1,402 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-5.15.0-94-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-9754-128-core-processor",
+ "commit": "6beb3d394baf21dad5381f2ca11cc043c774dbcf",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  }
+ },
+ "cells": {
+  "gbdt-ordered-rmse/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a6e77b5224108785"
+   ],
+   "parts": [
+    {
+     "predict": "36cc868b84bc489d"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer (host_model): RuntimeError: the forest binding in this process is /root/mojolearn/python/mojolearn/host/_mojolearn_forest_host.so, not MOJOLEARN_FOREST_HOST_BINARY /root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_forest_host.so",
+   "batch": [
+    "5cd33ee932513206"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-feature-freq/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7d9c56b51213cb42"
+   ],
+   "parts": [
+    {
+     "predict": "1b921d15d43a233a"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer (host_model): RuntimeError: the forest binding in this process is /root/mojolearn/python/mojolearn/host/_mojolearn_forest_host.so, not MOJOLEARN_FOREST_HOST_BINARY /root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_forest_host.so",
+   "batch": [
+    "272537bbe18b712b"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-pointwise-l2-bayesian-eval/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2ac238ddce22e2ef"
+   ],
+   "parts": [
+    {
+     "predict": "0f20336cd0a3d8e5",
+     "proba": "f6d24467da551246"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer (host_model): RuntimeError: the forest binding in this process is /root/mojolearn/python/mojolearn/host/_mojolearn_forest_host.so, not MOJOLEARN_FOREST_HOST_BINARY /root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_forest_host.so",
+   "batch": [
+    "3fd0fe4443273a54"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-categorical-ctr/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3c492b90c998f095"
+   ],
+   "parts": [
+    {
+     "predict": "7f15e34e477a4eae"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer (host_model): RuntimeError: the forest binding in this process is /root/mojolearn/python/mojolearn/host/_mojolearn_forest_host.so, not MOJOLEARN_FOREST_HOST_BINARY /root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_forest_host.so",
+   "batch": [
+    "8c08c90af3b9bafd"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "host_infer": [
+  "gbdt-categorical-ctr",
+  "gbdt-feature-freq",
+  "gbdt-ordered-rmse",
+  "gbdt-pointwise-l2-bayesian-eval"
+ ],
+ "host": {
+  "cpu_model": "AMD EPYC 9754 128-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "byte-lm",
+   "byte-lm-resident"
+  ],
+  "families": {
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "502d5fbc9a560c5fca90d955d51447dfa85c345af7365fa4ae661b54ee26f21d",
+    "size": 594488,
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "d5e079b861febf529cb9d72081f7a0b6b27767ac91958c1189db2b05ad8a5b5e",
+    "size": 301768,
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "5c53cc94da4ff3c1bb4c3e4189d1eaa7d607aa00dc628aa127efd9dcbaa43753",
+    "size": 1324632,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ }
+}

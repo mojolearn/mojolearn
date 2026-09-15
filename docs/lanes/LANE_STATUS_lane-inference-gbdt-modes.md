@@ -94,9 +94,11 @@ import it.
   removed as inert: host_record had loaded the production forest binding from
   `MOJOLEARN_HOST_DIR` under the module name `_forest_host` reuses.
   `_probe_fit_host` now refuses a host model bound to any file other than
-  `MOJOLEARN_FOREST_HOST_BINARY`. A third pod reruns the sabotage column
-  with the sabotage forest as the only forest binary in the process, plus the
-  old mixed layout, which must now read REFUSED.
+  `MOJOLEARN_FOREST_HOST_BINARY`.
+- Negative control rerun, pod fczd81d7avpbf9 (verified deleted, $0.031),
+  commit 6beb3d394: production control IDENTICAL (36, 72, 36); forest sabotage
+  as the only forest binary, infer/model DIVERGENT=36 and RELOAD-MOVED=36,
+  diff exit 1; the pod 2 layout now REFUSED by the guard on every infer cell.
 - `wheel_ci pins`, `wheel_ci inventory` and `docs_facts --check` exit 0 at
   6beb3d394.
 

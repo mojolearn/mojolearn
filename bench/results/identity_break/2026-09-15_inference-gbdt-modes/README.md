@@ -64,4 +64,22 @@ evidence: identity_break's host_record had already loaded the production forest
 binding from `MOJOLEARN_HOST_DIR` under the module name `_forest_host` reuses,
 so the sabotage binary never predicted. The column was removed, and
 `_probe_fit_host` now refuses a host model whose bound module is not
-`MOJOLEARN_FOREST_HOST_BINARY`. The rerun is below when present.
+`MOJOLEARN_FOREST_HOST_BINARY`.
+
+## Negative control, rerun (commit 6beb3d394, pod fczd81d7avpbf9)
+
+Verified deleted, $0.031. Three columns, one repeat, diffed on the Mac with
+`--require-columns 4`:
+
+- Control, production forest: train IDENTICAL=36, infer/model IDENTICAL=72,
+  batch IDENTICAL=36, exit 0 (`cpu-x86-pod3-control-host-infer.json`).
+- Forest sabotage (`-D MOJOLEARN_FOREST_HOST_SABOTAGE=1`, sha256 3a05b7ff...,
+  the only forest binary in the process): infer/model DIVERGENT=36 and
+  RELOAD-MOVED=36, train and batch IDENTICAL=36 (the fit does not touch the
+  forest binding), exit 1. Seen to fail
+  (`cpu-x86-forest-sabotage-host-infer.json`, `diff-x86-forest-sabotage-host-infer.txt`).
+- The pod 2 layout (production forest in `MOJOLEARN_HOST_DIR`, sabotage
+  binary named): every infer cell REFUSED by the guard ("the forest binding in
+  this process is .../host/_mojolearn_forest_host.so, not
+  MOJOLEARN_FOREST_HOST_BINARY ..."), base fixture
+  (`cpu-x86-mixed-layout-refused.json`).
