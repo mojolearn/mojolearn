@@ -67,24 +67,22 @@ account (6.3 case 3: an integer atomic's COUNT is order free and its SLOT is
 not), so a witness that silently goes inert is the worst one to lose.
 `f_multiblock` is `T = 600`.
 
-**(3) DEVIATION 1506: NONFINITE INPUT REFUSAL REMAINS OPEN.** Production
-entry points validate ID bounds. They still omit the host oracle's NaN/inf
-refusal for W and dY. Clause (f) plants a NaN, measures device reach and
-reports whether the forward refuses it. It raises for this existing gap
-unless MOJOLEARN_EMB_DEVICE_REFUSAL_GAP_ACK=1 is supplied; it runs last so
-this independent audit does not mask the other clause results.
+**(3) DEVIATION 1506: CLOSED FOR THE REFUSING ENTRY POINTS (2026-09-15).**
+`identical_embedding_forward_refusing_into` and
+`identical_embedding_backward_refusing_into` scan W, dY and the carried dW
+on the device by bits and refuse a NaN or an infinity by name, with its flat
+index, before any launch. `clause_f_device` plants each and requires the
+raise, the index and an untouched output. The `_into` forms stay
+caller-refused (contract 9.1). Until this change the clause raised on this
+gap on every run.
 
 TWO MORE, SMALLER
 ------------------
-**DEVIATION 1505.** Contract 11.1's table has eighteen rows and
-`embedding_identical.mojo` has SIXTEEN switches. The contract names
-`EMB_SORT_KEY_ID_ONLY_UNSTABLE` as unbuildable (it is a `PLAN_SORT` arm and
-the id-only sabotage switch is not implemented) and it does NOT say the same of
-`EMB_FOLD_VIA_GEMM_ONEHOT` -- which nonetheless has no switch anywhere in
-the lane. So the table promises an arm that does not exist, and contract
-5.2(d)'s claim that the one-hot routing "survives as a SABOTAGE whose job is
-to PRINT the difference between routing and pinning" is, today, false. Named
-here; not fixed here.
+**DEVIATION 1505, CLOSED 2026-09-15.** Contract 11.1 has eighteen rows and
+`embedding_identical.mojo` now has eighteen switches:
+`EMB_FOLD_VIA_GEMM_ONEHOT` (evaluated by `clause_g_onehot` against the host
+GEMM oracle, cell by cell) and `EMB_SORT_KEY_ID_ONLY_UNSTABLE` (read in
+`embedding_sort.mojo`; clause (a) runs PLAN_SORT on that build).
 
 **DEVIATION 1517.** At `d == 0` and at `T == 0` the device backward returns
 BEFORE R1, R2 and R3, so `counts`, `run_begin` and `perm` are never written
@@ -125,7 +123,7 @@ WHAT WOULD MAKE EACH CLAUSE PASS WHILE GATING NOTHING
 
 THE SABOTAGE LEDGER, **NOT MEASURED**
 ---------------------------------------
-Sixteen buildable arms. The `first stage moved`, `cells` and `stages moved`
+Eighteen buildable arms since 2026-09-15 (sixteen until then). The `first stage moved`, `cells` and `stages moved`
 columns are what a measured ledger reports and what this one CANNOT report,
 because nothing here has run.
 
@@ -146,9 +144,13 @@ because nothing here has run.
     GATHER_CLAMP_OOR       emb.fwd                f_oor_high    f_nodup
     ACCUM_BY_ADD           emb.dw, clause (e)     f_tree4 t0=2  f_split t0=3
     ACCUM_REFILLS          emb.dw_seed            f_accum       f_nodup
+    FOLD_VIA_GEMM_ONEHOT   emb.dw                 f_hot, T=300  every fresh T <= 128 case, except
+                                                                a -0.0 chain end (f_subacc); the
+                                                                host GEMM oracle predicts every cell
+    SORT_KEY_ID_ONLY_UNSTABLE emb.perm (PLAN_SORT) f_tree4      f_nodup
 
-**TWO OF THE SIXTEEN ARE NOT REACH PROOFS ON EVERY COLUMN AND ARE REPORTED
-BY NAME**, which is the count a reader should carry rather than "sixteen
+**TWO OF THE EIGHTEEN ARE NOT REACH PROOFS ON EVERY COLUMN AND ARE REPORTED
+BY NAME**, which is the count a reader should carry rather than "eighteen
 arms exist".
 
   * `NO_FLUSH_ACC` is **INERT ON APPLE ENTIRELY** (contract 9.3): `ftz` is
@@ -187,16 +189,15 @@ ENVIRONMENT
 ------------
     MOJOLEARN_IDENTITY_TRACE               where the card goes (DEV 1501)
     MOJOLEARN_EMB_EXPECT_SABOTAGE          guard against a misspelled -D
-    MOJOLEARN_EMB_CHECK_CLAUSE_B           run clause (b)
-    MOJOLEARN_EMB_CHECK_CLAUSE_C           run clause (c), both halves
-    MOJOLEARN_EMB_CHECK_CLAUSE_D           run clause (d)'s host shadow
+    MOJOLEARN_EMB_CHECK_CLAUSE_D           run clause (d), both plans, three geometries
     MOJOLEARN_EMB_CHECK_CLAUSE_E           run clause (e), the carry
-    MOJOLEARN_EMB_CHECK_CLAUSE_F           run clause (f), the row-39 audit
-    MOJOLEARN_EMB_DEVICE_REFUSAL_GAP_ACK   acknowledge DEVIATION 1506
 
-Clauses (b) through (f) are OFF by default and each is one line to turn on.
-That is a COST decision and not a confidence one, and a leg that reports
-only clause (a) has closed only clause (a) -- the printed SCOPE line says so.
+Clauses (b), (c) and (f) RUN ON EVERY CLEAN BUILD since 2026-09-15 (they cost
+about a second together); (d) and (e) are one line each to turn on, and
+`tools/embedding_sabotage_arm.sh` turns both on for its clean run. Clause
+(f) no longer needs an acknowledgment: DEVIATION 1506 is closed for the
+refusing device entry points (`identical_embedding_*_refusing_into`), and the
+`_into` forms stay the caller-refused spellings the training loops use.
 
 OWED, AND THIS FILE COVERS NONE OF IT
 ---------------------------------------
@@ -286,11 +287,16 @@ from embedding.checks.embedding_fixture import (
 from embedding.checks.embedding_identical import (
     ANY_EMB_SABOTAGE,
     EMB_TPB,
+    SAB_FOLD_VIA_GEMM_ONEHOT,
+    SAB_SORT_KEY_ID_ONLY_UNSTABLE,
     emb_run_scratch_ints,
     emb_sabotage_name,
     identical_embedding_backward_into,
+    identical_embedding_backward_refusing_into,
     identical_embedding_forward_into,
+    identical_embedding_forward_refusing_into,
 )
+from gemm.checks.gemm_oracle import OP_TN, gemm_oracle
 from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
 from embedding.checks.embedding_oracle import (
     EMB_MAX_POSITIONS,
@@ -1407,13 +1413,20 @@ struct CaseVerdict(Copyable, Movable):
     var moved_fwd: Int
 
 
+#: The plan clause (a)'s device side runs. PLAN_SCAN on every build except
+#: SORT_KEY_ID_ONLY_UNSTABLE, whose switch lives in PLAN_SORT's compare pass
+#: and is unreachable from PLAN_SCAN; that build runs clause (a) through
+#: PLAN_SORT so the arm's own stage, emb.perm, is what the card compares.
+comptime CLAUSE_A_PLAN = PLAN_SORT if SAB_SORT_KEY_ID_ONLY_UNSTABLE else PLAN_SCAN
+
+
 def clause_a_case(
     ctx: DeviceContext, k: Int, mut trace: IdentityTrace, prefix: String
 ) raises -> CaseVerdict:
     """Contract 11(a) at ONE fixture case, all nine stages, BITWISE."""
     var c = emb_case(k)
     var host = host_dump(c)
-    var dev = device_dump(ctx, c)
+    var dev = device_dump(ctx, c, CLAUSE_A_PLAN)
     write_card(trace, prefix, dev)
     var diffs = compare_dumps(c, host, dev, False)
     var moved = count_moved(diffs)
@@ -2561,75 +2574,277 @@ def clause_f(ctx: DeviceContext) raises:
         + " refusals, each fired, each NAMING its input"
     )
 
-    # ---- DEVIATION 1506: THE DEVICE HALF --------------------------------
-    var w2 = emb_case_weight(c)
-    w2[len(w2) // 2] = f32_from_bits(BITS_QNAN)
-    var dw_w = _upload_f32(ctx, w2)
-    var dw_ids = _upload_i32(ctx, clean_ids)
-    var back = _download_f32(ctx, dw_w, len(w2))
-    var reached = nonfinite_cells(back)
-    if reached != 1:
-        raise Error(
-            String("embedding_check: the DEVIATION 1506 audit is VACUOUS:")
-            + " the planted NaN did not arrive on the device ("
-            + String(reached)
-            + " non-finite cells read back, expected exactly 1). Whatever"
-            + " happens below happens for another reason"
-            + " ([[reached-but-inert]])."
-        )
+    # ---- DEVIATION 1506: THE DEVICE HALF, CLOSED 2026-09-15 --------------
+    clause_f_device(ctx)
+
+
+@fieldwise_init
+struct RefusalOutcome(Movable):
+    """One refusing device call: whether it raised, its message, the output
+    read back afterwards, and the nonfinite cells read back off the device
+    inputs before the call (the plant's measured reach)."""
+
+    var raised: Bool
+    var msg: String
+    var out: List[Float32]
+    var reach: Int
+
+
+def _refusing_forward_outcome(
+    ctx: DeviceContext, w: List[Float32], ids: List[Int32], c: EmbCase, cfg: EmbConfig
+) raises -> RefusalOutcome:
+    """One call of the refusing device forward on a POISONED output."""
+    var d_w = _upload_f32(ctx, w)
+    var d_ids = _upload_i32(ctx, ids)
+    var reach = nonfinite_cells(_download_f32(ctx, d_w, len(w)))
     var y_cells = c.n_positions * cfg.width
-    var y = _upload_f32(ctx, emb_poison(y_cells))
-    var device_raised = False
+    var d_y = _upload_f32(ctx, emb_poison(y_cells))
+    var raised = False
+    var msg = String("")
     try:
-        identical_embedding_forward_into(
-            ctx, y, dw_w, dw_ids, c.n_positions, cfg
+        identical_embedding_forward_refusing_into(ctx, d_y, d_w, d_ids, c.n_positions, cfg)
+        ctx.synchronize()
+    except e:
+        raised = True
+        msg = String(e)
+    var out = _download_f32(ctx, d_y, y_cells)
+    _ = d_y^
+    _ = d_w^
+    _ = d_ids^
+    return RefusalOutcome(raised, msg^, out^, reach)
+
+
+def _refusing_backward_outcome(
+    ctx: DeviceContext,
+    dy: List[Float32],
+    ids: List[Int32],
+    start: List[Float32],
+    c: EmbCase,
+    cfg: EmbConfig,
+) raises -> RefusalOutcome:
+    """One call of the refusing device backward; `out` is dW read back."""
+    var cells = cfg.vocab * cfg.width
+    var t = c.n_positions
+    var ddw = _upload_f32(ctx, start)
+    var ddy = _upload_f32(ctx, dy)
+    var dids = _upload_i32(ctx, ids)
+    var reach = nonfinite_cells(_download_f32(ctx, ddy, len(dy))) + nonfinite_cells(
+        _download_f32(ctx, ddw, cells)
+    )
+    var counts = _upload_i32(ctx, _zeros_i32_list(cfg.vocab))
+    var run_begin = _upload_i32(ctx, _zeros_i32_list(cfg.vocab + 1))
+    var perm = _upload_i32(ctx, _zeros_i32_list(t if t > 0 else 1))
+    var raised = False
+    var msg = String("")
+    try:
+        identical_embedding_backward_refusing_into(
+            ctx, ddw, ddy, dids, counts, run_begin, perm, t, cfg
         )
         ctx.synchronize()
     except e:
-        device_raised = True
-    var out = _download_f32(ctx, y, y_cells)
-    var leaked = nonfinite_cells(out)
-    _ = y^
-    _ = dw_w^
-    _ = dw_ids^
+        raised = True
+        msg = String(e)
+    var out = _download_f32(ctx, ddw, cells)
+    _ = ddw^
+    _ = ddy^
+    _ = dids^
+    _ = counts^
+    _ = run_begin^
+    _ = perm^
+    return RefusalOutcome(raised, msg^, out^, reach)
+
+
+def clause_f_device(ctx: DeviceContext) raises:
+    """Contract 9.1 on the DEVICE entry points, DEVIATION 1506's closure.
+
+    Until 2026-09-15 this block planted a NaN in W, watched it pass straight
+    through `identical_embedding_forward_into` into the gathered output, and
+    raised "DEVIATION 1506 nonfinite refusal remains open" on every column
+    (the Apple M4 at e2d770ba8 printed exactly that, 1 nonfinite cell out).
+    That was the verification failing before the fix. The refusing entry
+    points now scan the buffer on the device, by bits, and raise by name.
+
+    Held here, per plant (a NaN and an infinity) and per buffer (W through
+    the forward, dY through the backward, the carried dW through an
+    accumulating backward):
+      * the plant REACHED the device (read back off the device buffer);
+      * the call RAISED, and the message names the buffer and the plant's
+        exact flat index (`len / 2`, never 0);
+      * the output buffer is UNTOUCHED (every cell still the poison, or the
+        carried dW's own bits), so the refusal ran before any launch;
+    and the CONTROL: the refusing entry points on clean inputs raise nothing
+    and give the same bits as the host oracle, so the refusal is neither
+    unconditional nor a different computation. The `_into` forms are measured
+    too and REPORTED, not asserted: they are the caller-refused spellings the
+    training loops call, and contract 9.1 now says so."""
+    var c = emb_case(emb_case_by_name(String("f_split")))
+    var cfg = emb_case_config(c)
+    var w = emb_case_weight(c)
+    var ids = emb_case_ids(c)
+    var dy = emb_case_dy(c)
+    var cells = cfg.vocab * cfg.width
+
+    # ---- THE CONTROL ----------------------------------------------------
+    var fwd = _refusing_forward_outcome(ctx, w, ids, c, cfg)
+    if fwd.raised:
+        raise Error(
+            String("embedding_check: CLAUSE (f) DEVICE HALF IS VACUOUS. The")
+            + " refusing forward raised on CLEAN inputs: "
+            + fwd.msg
+        )
+    var fdiff = compare_f32(String("refusing forward emb.fwd"), emb_forward_oracle(w, ids, cfg), fwd.out, True)
+    if fdiff.n_diff != 0:
+        raise Error(
+            "embedding_check: CLAUSE (f) FAILED. The refusing forward's output"
+            " differs from the oracle on clean inputs."
+        )
+    var host_dw = emb_backward_oracle(dy, ids, cfg, List[Float32]())
+    var bwd = _refusing_backward_outcome(ctx, dy, ids, emb_poison(cells), c, cfg)
+    if bwd.raised:
+        raise Error(
+            String("embedding_check: CLAUSE (f) DEVICE HALF IS VACUOUS. The")
+            + " refusing backward raised on CLEAN inputs: "
+            + bwd.msg
+        )
+    var diff = compare_f32(String("refusing backward dW"), host_dw, bwd.out, True)
+    if diff.n_diff != 0:
+        raise Error(
+            "embedding_check: CLAUSE (f) FAILED. The refusing backward's dW"
+            " differs from the oracle on clean inputs, so it is not the same"
+            " computation as the entry point clause (a) certifies."
+        )
     print(
-        "DEVIATION 1506 AUDIT: a NaN planted in W at cell "
-        + String(len(w2) // 2)
-        + " was READ BACK OFF THE DEVICE ("
-        + String(reached)
-        + " non-finite cell, so reach is MEASURED). The device forward"
-        " raised: "
-        + String(device_raised)
-        + ". Non-finite cells in the device output: "
-        + String(leaked)
-        + "."
+        "clause (f) device control: the refusing forward and backward accept"
+        " clean f_split and the backward's dW equals the oracle on all "
+        + String(cells)
+        + " cells, and the forward's output equals the oracle"
     )
-    if device_raised and leaked == 0:
-        print(
-            "DEVIATION 1506: CLOSED. The device entry point refused. If this"
-            " line ever prints, `identical_embedding_forward_into` has grown"
-            " a refusal since 2026-08-25 and this whole block should be"
-            " deleted along with the deviation."
+
+    var patterns: List[UInt32] = [BITS_QNAN, BITS_POS_INF]
+    var pat_names: List[String] = [String("NaN"), String("infinity")]
+    var refused = 0
+    for pk in range(len(patterns)):
+        var v = f32_from_bits(patterns[pk])
+
+        # W through the refusing forward.
+        var wp = emb_case_weight(c)
+        var wi = len(wp) // 2
+        wp[wi] = v
+        var r = _refusing_forward_outcome(ctx, wp, ids, c, cfg)
+        var want = pat_names[pk] + " in W at flat index " + String(wi)
+        if r.reach != 1:
+            raise Error(
+                String("embedding_check: CLAUSE (f) device plant in W did not")
+                + " reach the device ("
+                + String(r.reach)
+                + " nonfinite cells read back, expected 1)"
+            )
+        if not r.raised or r.msg.find(want) < 0 or count_poison(r.out) != c.n_positions * cfg.width:
+            raise Error(
+                String("embedding_check: CLAUSE (f) FAILED on the device. A ")
+                + want
+                + ": raised="
+                + String(r.raised)
+                + " message='"
+                + r.msg
+                + "' poisoned output cells "
+                + String(count_poison(r.out))
+                + " of "
+                + String(c.n_positions * cfg.width)
+                + ". Contract 9.1: refused by name before any launch."
+            )
+        refused += 1
+        print("clause (f) device: " + want + " REFUSED by name, output untouched")
+
+        # dY through the refusing backward.
+        var dyp = emb_case_dy(c)
+        var di = len(dyp) // 2
+        dyp[di] = v
+        var rb = _refusing_backward_outcome(ctx, dyp, ids, emb_poison(cells), c, cfg)
+        var want_b = pat_names[pk] + " in dY at flat index " + String(di)
+        if rb.reach != 1:
+            raise Error(
+                String("embedding_check: CLAUSE (f) device plant in dY did not")
+                + " reach the device ("
+                + String(rb.reach)
+                + " nonfinite cells read back, expected 1)"
+            )
+        if not rb.raised or rb.msg.find(want_b) < 0 or count_poison(rb.out) != cells:
+            raise Error(
+                String("embedding_check: CLAUSE (f) FAILED on the device. A ")
+                + want_b
+                + ": raised="
+                + String(rb.raised)
+                + " message='"
+                + rb.msg
+                + "' poisoned dW cells "
+                + String(count_poison(rb.out))
+                + " of "
+                + String(cells)
+            )
+        refused += 1
+        print("clause (f) device: " + want_b + " REFUSED by name, dW untouched")
+
+    # The carried dW through an accumulating refusing backward.
+    var ca = emb_case(emb_case_by_name(String("f_accum")))
+    var acfg = emb_case_config(ca)
+    var acells = acfg.vocab * acfg.width
+    var prev = emb_case_dw_prev(ca)
+    var pi = len(prev) // 2
+    prev[pi] = f32_from_bits(BITS_QNAN)
+    var prev_bits = prev.copy()
+    var ra = _refusing_backward_outcome(ctx, emb_case_dy(ca), emb_case_ids(ca), prev, ca, acfg)
+    var want_a = String("NaN in the carried dW at flat index ") + String(pi)
+    var untouched = 0
+    for q in range(acells):
+        if bits_of(ra.out[q]) == bits_of(prev_bits[q]):
+            untouched += 1
+    if ra.reach != 1 or not ra.raised or ra.msg.find(want_a) < 0 or untouched != acells:
+        raise Error(
+            String("embedding_check: CLAUSE (f) FAILED on the device. A ")
+            + want_a
+            + ": reach "
+            + String(ra.reach)
+            + " raised="
+            + String(ra.raised)
+            + " message='"
+            + ra.msg
+            + "' untouched cells "
+            + String(untouched)
+            + " of "
+            + String(acells)
         )
-        return
-    var complaint = (
-        String("embedding_check: DEVIATION 1506 nonfinite refusal remains open. ")
-        + "Production entry points check ID bounds, but do not refuse NaN/inf in W or dY. "
-        + "The planted NaN reached device W (measured), and "
+    refused += 1
+    print("clause (f) device: " + want_a + " REFUSED by name, the carried dW untouched")
+
+    # The hot-path `_into` forward, measured and reported.
+    var wh = emb_case_weight(c)
+    wh[len(wh) // 2] = f32_from_bits(BITS_QNAN)
+    var dh_w = _upload_f32(ctx, wh)
+    var dh_ids = _upload_i32(ctx, ids)
+    var y_cells = c.n_positions * cfg.width
+    var dh_y = _upload_f32(ctx, emb_poison(y_cells))
+    var into_raised = False
+    try:
+        identical_embedding_forward_into(ctx, dh_y, dh_w, dh_ids, c.n_positions, cfg)
+        ctx.synchronize()
+    except e:
+        into_raised = True
+    var leaked = nonfinite_cells(_download_f32(ctx, dh_y, y_cells))
+    _ = dh_y^
+    _ = dh_w^
+    _ = dh_ids^
+    print(
+        "clause (f) device: PASS, "
+        + String(refused)
+        + " device refusals, each fired before any launch and each NAMING its"
+        " buffer and flat index. REPORTED, not asserted: the caller-refused"
+        " identical_embedding_forward_into raised="
+        + String(into_raised)
+        + " and returned "
         + String(leaked)
-        + " nonfinite cells returned from gather. This is an existing input-refusal gap, "
-        + "independent of PLAN_SCAN/PLAN_SORT integer run construction."
+        + " nonfinite cells, which is its documented contract (9.1)."
     )
-    if env_on("MOJOLEARN_EMB_DEVICE_REFUSAL_GAP_ACK"):
-        print(complaint)
-        print(
-            "DEVIATION 1506: ACKNOWLEDGED by"
-            " MOJOLEARN_EMB_DEVICE_REFUSAL_GAP_ACK, **NOT FIXED**. The gap"
-            " is open and this line is the record that somebody chose to"
-            " proceed past it."
-        )
-        return
-    raise Error(complaint)
 
 
 # ===========================================================================
@@ -2870,16 +3085,39 @@ def arm_expectation(arm: String) raises -> ArmExpectation:
                 " which is what a lane that never wrote clause (e) has"
             ),
         )
+    if arm == "FOLD_VIA_GEMM_ONEHOT":
+        return ArmExpectation(
+            arm, String("emb.dw"), String("f_hot"), String("f_nodup"),
+            False, False,
+            String(
+                "contract 5.2(d), DEVIATION 1315: the backward routed through"
+                " identical_gemm over a one-hot [T, V] matrix. GEMM v1 folds"
+                " its k = T axis as leaves of contract_leaf_size(T) under a"
+                " balanced tree, so the arithmetic reads T and moves past"
+                " T = 128. Evaluated against the HOST GEMM oracle on every"
+                " case, which PRINTS the difference cell by cell"
+            ),
+        )
+    if arm == "SORT_KEY_ID_ONLY_UNSTABLE":
+        return ArmExpectation(
+            arm, String("emb.perm"), String("f_tree4"), String("f_nodup"),
+            False, False,
+            String(
+                "contract 6.2, DEVIATION 1303/1304: PLAN_SORT's bitonic"
+                " network compares the id half of the key only, which is an"
+                " UNSTABLE id-keyed sort (thrust::sort_by_key's defect,"
+                " DEVIATION 621). Clause (a) runs PLAN_SORT on this build."
+                " Inert where no id repeats, since then the id half IS a total"
+                " order"
+            ),
+        )
     raise Error(
         String("embedding_check: '")
         + arm
-        + "' is not one of the SIXTEEN sabotage names"
-        + " embedding_identical.mojo carries. Contract 11.1's table has"
-        + " EIGHTEEN rows: EMB_SORT_KEY_ID_ONLY_UNSTABLE is a PLAN_SORT arm"
-        + " whose dedicated switch is not implemented, and EMB_FOLD_VIA_GEMM_ONEHOT has"
-        + " no switch anywhere in the lane (DEVIATION 1505). If a"
-        + " seventeenth switch was added, this table and the contract both"
-        + " owe it a row."
+        + "' is not one of the EIGHTEEN sabotage names"
+        + " embedding_identical.mojo carries, one per row of contract 11.1."
+        + " If a nineteenth switch was added, this table and the contract"
+        + " both owe it a row."
     )
 
 
@@ -3290,6 +3528,172 @@ def clause_g(
 # ===========================================================================
 
 
+def clause_g_onehot(
+    ctx: DeviceContext, cases: List[Int], verdicts: List[CaseVerdict]
+) raises:
+    """`EMB_FOLD_VIA_GEMM_ONEHOT`, the arm whose job contract 5.2(d) says is to
+    PRINT the difference between routing and pinning.
+
+    The prediction is EXACT, not a mask read off one case: for every clause
+    (a) case the HOST GEMM oracle (`gemm_oracle`, the normative answer of
+    `mojolearn.identical.gemm.fp32.v1`) is evaluated on the one-hot `[T, V]`
+    matrix and `dY` with `op = OP_TN`, the padding positions dropped, the
+    carried `dW` ADDED under `accumulate`, and row `padding_idx` stored
+    `+0.0`. The armed device `emb.dw` must equal that prediction on every
+    cell of every case, which is the reach proof: the device went through the
+    GEMM and nowhere else. Then:
+      * the witness: a case with `T >= 129` must move (f_hot, `T = 300`,
+        three leaves under the balanced tree);
+      * every FRESH case with `T <= 128` is one leaf, which is the serial
+        ascending chain plus the zero products of the non-contributing
+        positions, and a zero product is inert except at a `-0.0` accumulator
+        (contract 7.1's hole). So every cell that moves there must be a chain
+        end of `0x80000000` that the GEMM left `0x00000000`; any other moved
+        cell raises.
+      * no stage other than emb.dw may move anywhere."""
+    print(
+        "clause (g): FOLD_VIA_GEMM_ONEHOT against the host GEMM oracle on all "
+        + String(len(cases))
+        + " clause (a) cases"
+    )
+    var witness_moved = 0
+    var hole_cells = 0
+    var carried_cells = 0
+    for ci in range(len(cases)):
+        var c = emb_case(cases[ci])
+        var v = find_verdict(verdicts, String(c.name))
+        if v.n_moved > 1 or (v.n_moved == 1 and v.first != "emb.dw"):
+            raise Error(
+                String("embedding_check: SABOTAGE FOLD_VIA_GEMM_ONEHOT moved ")
+                + String(v.n_moved)
+                + " stages on "
+                + v.name
+                + ", first at "
+                + v.first
+                + "; the arm only reroutes the fold, so emb.dw is the only"
+                + " stage it may move."
+            )
+        var cfg = emb_case_config(c)
+        var cells = cfg.vocab * cfg.width
+        var t = c.n_positions
+        if cells == 0 or t == 0:
+            continue
+        var ids = emb_case_ids(c)
+        var dy = emb_case_dy(c)
+        var onehot = List[Float32](length=t * cfg.vocab, fill=Float32(0.0))
+        for tt in range(t):
+            var id = Int(ids[tt])
+            if id != cfg.padding_idx:
+                onehot[tt * cfg.vocab + id] = Float32(1.0)
+        var product = gemm_oracle(onehot, dy, OP_TN, cfg.vocab, cfg.width, t)
+        var predicted = List[Float32](capacity=cells)
+        var prev = emb_case_dw_prev(c)
+        for q in range(cells):
+            if cfg.accumulate:
+                predicted.append(ftz(ftz(prev[q]) + ftz(product[q])))
+            else:
+                predicted.append(ftz(product[q]))
+        if cfg.has_padding():
+            for j in range(cfg.width):
+                predicted[cfg.padding_idx * cfg.width + j] = Float32(0.0)
+        var oracle = emb_backward_oracle(dy, ids, cfg, prev)
+        var dev = device_dump(ctx, c)
+        var off = compare_f32(
+            String(c.name) + " armed dW vs host GEMM prediction", predicted, dev.f[STAGE_DW], True
+        )
+        if off.n_diff != 0:
+            raise Error(
+                String("embedding_check: SABOTAGE FOLD_VIA_GEMM_ONEHOT on ")
+                + String(c.name)
+                + ": the device dW differs from the host GEMM oracle's"
+                + " prediction on "
+                + String(off.n_diff)
+                + " cells, so the arm is not the one-hot GEMM it claims to be."
+            )
+        var moved = 0
+        var first = String("")
+        for q in range(cells):
+            var ob = bits_of(oracle[q])
+            var pb = bits_of(predicted[q])
+            if ob != pb:
+                moved += 1
+                if first == "":
+                    first = (
+                        String("cell ")
+                        + String(q)
+                        + " "
+                        + bits32_hex(oracle[q])
+                        + " -> "
+                        + bits32_hex(predicted[q])
+                    )
+                if t <= 128 and not cfg.accumulate:
+                    if ob != BITS_NEG_ZERO or pb != BITS_POS_ZERO:
+                        raise Error(
+                            String("embedding_check: SABOTAGE FOLD_VIA_GEMM_ONEHOT")
+                            + " moved "
+                            + first
+                            + " on "
+                            + String(c.name)
+                            + " at T = "
+                            + String(t)
+                            + " <= 128, where the GEMM is one leaf and may"
+                            + " only differ at a -0.0 chain end."
+                        )
+                    hole_cells += 1
+                elif cfg.accumulate:
+                    carried_cells += 1
+        if moved != v.moved_dw:
+            raise Error(
+                String("embedding_check: SABOTAGE FOLD_VIA_GEMM_ONEHOT on ")
+                + String(c.name)
+                + ": clause (a) counted "
+                + String(v.moved_dw)
+                + " moved emb.dw cells and the prediction says "
+                + String(moved)
+            )
+        if t >= 129 and moved > 0:
+            witness_moved += 1
+        var first_note = String("")
+        if first != "":
+            first_note = String(", first ") + first
+        print(
+            "clause (g):   "
+            + String(c.name)
+            + " T="
+            + String(t)
+            + " P="
+            + String((t + 127) // 128 if t > 128 else 1)
+            + " acc="
+            + String(cfg.accumulate)
+            + ": device == host GEMM prediction on all "
+            + String(cells)
+            + " cells; "
+            + String(moved)
+            + " cells differ from the chain"
+            + first_note
+        )
+    var hot = find_verdict(verdicts, String("f_hot"))
+    if witness_moved == 0 or hot.moved_dw == 0:
+        raise Error(
+            "embedding_check: SABOTAGE FOLD_VIA_GEMM_ONEHOT IS ARMED AND MOVED"
+            " NO BIT at T >= 129 (f_hot moved "
+            + String(hot.moved_dw)
+            + " cells). Its predicted witness is a multi-leaf T and it is inert"
+            " there ([[reached-but-inert]])."
+        )
+    print(
+        "clause (g): FOLD_VIA_GEMM_ONEHOT BIT on f_hot at T = 300 (and "
+        + String(witness_moved)
+        + " T >= 129 cases in all), FIRST at emb.dw; the device equals the host"
+        " GEMM oracle on every cell of every case; at fresh T <= 128 it moved "
+        + String(hole_cells)
+        + " cells, every one a -0.0 chain end laundered to +0.0 (contract 7.1's"
+        " hole, f_subacc); under accumulate it is the ADD spelling and moved "
+        + String(carried_cells)
+        + " cells, as the host predicts."
+    )
+
+
 def main() raises:
     var armed = emb_sabotage_name()
     var independent_dump=env_str("MOJOLEARN_INDEPENDENT_GRADIENT_DUMP")
@@ -3404,8 +3808,10 @@ def main() raises:
 
     comptime if ANY_EMB_SABOTAGE:
         clause_g(armed, verdicts, flush_can_fire, oor_accepted_cells)
+        comptime if SAB_FOLD_VIA_GEMM_ONEHOT:
+            clause_g_onehot(ctx, cases, verdicts)
         print(
-            "clauses (b), (c) and (d) are NOT run under a sabotage build:"
+            "clauses (b), (c), (d) and (f) are NOT run under a sabotage build:"
             " they are INVARIANCE claims and a deterministic sabotage"
             " satisfies them. Clause (f) is not run either: the refusals are"
             " upstream of every sabotaged seam."
@@ -3467,21 +3873,9 @@ def main() raises:
             " of nine stages on two legal shapes."
         )
 
-        if env_on("MOJOLEARN_EMB_CHECK_CLAUSE_B"):
-            clause_b(ctx, emb_case_by_name(String("f_split")))
-        else:
-            print("clause (b): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_B=1)")
-
-        if env_on("MOJOLEARN_EMB_CHECK_CLAUSE_C"):
-            clause_c(ctx)
-        else:
-            print(
-                "clause (c): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_C=1)."
-                " BOTH HALVES ARE SKIPPED TOGETHER and that is deliberate:"
-                " padding and sequence length are two different fixtures and"
-                " a lane that ran one would have half a clause with a whole"
-                " clause's name."
-            )
+        # Clauses (b) and (c) run on every clean build since 2026-09-15.
+        clause_b(ctx, emb_case_by_name(String("f_split")))
+        clause_c(ctx)
 
         if env_on("MOJOLEARN_EMB_CHECK_CLAUSE_D"):
             clause_d(ctx)
@@ -3508,36 +3902,36 @@ def main() raises:
             " Still owed: **the shipped shape** V=128256 d=4096 T=4096,"
             " which contract 11.2 calls mandatory and which is 2.10 GB of dW"
             " and belongs on a rented GPU rather than this laptop; **the"
-            " device-side refusal**, DEVIATION 1506, which is a real defect"
-            " in a file this gate may not edit; **EMB_FOLD_VIA_GEMM_ONEHOT**"
-            " and **EMB_SORT_KEY_ID_ONLY_UNSTABLE**, two of contract 11.1's"
-            " eighteen arms that have no switch anywhere (DEVIATION 1505);"
+            " nonfinite refusal on the `_into` hot-path entry points**, which"
+            " stay caller-refused (the refusing entry points close DEVIATION"
+            " 1506 and clause (f) holds them to it);"
             " **EMB_NO_FLUSH_ACC on any FTZ column**, where it is inert by"
             " construction; **an INDEPENDENT reference** -- there is"
             " no embedding table in cuML, cuVS or RAFT and no PyTorch"
             " checkout, so every clause here is our device against our"
             " oracle and both are ours; **FAST mode**; **the fifteen"
-            " sabotage builds this binary is not**; and **every column that"
+            " sabotage builds this binary is not** (seventeen of the eighteen); and **every column that"
             " is not this one** -- Apple and AMD agreed bit for bit through"
             " 302 GEMM stages while NVIDIA diverged at"
             " tree001.winners.scores, so two backends agreeing closes"
             " nothing."
         )
 
-        # CLAUSE (f) RUNS LAST, ON PURPOSE. DEVIATION 1506 makes it raise on
-        # a defect this gate cannot fix, and a clause that raises should not
-        # be the reason the six clauses above went unmeasured.
-        if env_on("MOJOLEARN_EMB_CHECK_CLAUSE_F"):
-            clause_f(ctx)
-        else:
-            print(
-                "clause (f): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_F=1)."
-                " NOTE: it runs LAST when it runs, because DEVIATION 1506"
-                " makes it RAISE on a defect in a file this gate may not"
-                " edit -- the device entry points still omit nonfinite input refusal"
-                " -- and a raise there must not cost the other clauses their"
-                " measurements."
-            )
+        # CLAUSE (f) runs last on every clean build. It used to raise on
+        # DEVIATION 1506; the refusing entry points close that, and it stays
+        # last so a regression there cannot cost the other clauses their
+        # measurements.
+        clause_f(ctx)
+        var also = String("")
+        if env_on("MOJOLEARN_EMB_CHECK_CLAUSE_D"):
+            also += ", (d)"
+        if env_on("MOJOLEARN_EMB_CHECK_CLAUSE_E"):
+            also += ", (e)"
+        print(
+            "embedding_check: GREEN, clauses (a), (b), (c), (f)"
+            + also
+            + " PASS on this column"
+        )
 
 
 # ===========================================================================
@@ -3549,7 +3943,8 @@ def main() raises:
 # finding instead of rediscovering it. **None of it has been verified by
 # running anything.**
 #
-# 1. **A REFUSING ENTRY POINT, DEVIATION 1506.** The one-line shape:
+# 1. **DONE 2026-09-15 (identical_embedding_*_refusing_into, device scan by
+#    bits).** Kept as written below. A REFUSING ENTRY POINT, DEVIATION 1506. The one-line shape:
 #
 #        def identical_embedding_forward(ctx, out_y, weight, ids, w_host,
 #                                        ids_host, n_positions, cfg) raises:
@@ -3577,8 +3972,8 @@ def main() raises:
 #    ascending order for every `T <= 2 * EMB_TPB`. The row should say
 #    `T <= 2 * EMB_TPB`.
 #
-# 4. **CONTRACT 11.1's TABLE HAS EIGHTEEN ROWS AND THE LANE HAS SIXTEEN
-#    SWITCHES, DEVIATION 1505.** `EMB_FOLD_VIA_GEMM_ONEHOT` has no switch
+# 4. **DONE 2026-09-15, both arms built.** CONTRACT 11.1's TABLE HAD EIGHTEEN ROWS AND THE LANE SIXTEEN
+#    SWITCHES, DEVIATION 1505. `EMB_FOLD_VIA_GEMM_ONEHOT` has no switch
 #    anywhere, and contract 5.2(d)'s claim that the one-hot routing
 #    "survives as a SABOTAGE whose job is to PRINT the difference between
 #    routing and pinning" is therefore false today. Either write the arm or
@@ -3592,7 +3987,7 @@ def main() raises:
 #    `V` threads over zero positions) or `emb_backward_stages` should record
 #    them empty. This gate compares neither and says so.
 #
-# 6. **A RUNNER FOR THE SIXTEEN SABOTAGE BUILDS.** `is_defined` is a
+# 6. **DONE (tools/embedding_sabotage_arm.sh, eighteen arms since 2026-09-15).** A RUNNER FOR THE SIXTEEN SABOTAGE BUILDS. `is_defined` is a
 #    compile-time query, so exercising the set is sixteen compiles.
 #    `tools/gemm_ladder.sh` is the pattern and its line 71 is the scar
 #    DEVIATION 1510 answers. What is owed is a script that, per arm, builds

@@ -4,7 +4,8 @@
 
 The door of `embedding/checks/embedding_identical.mojo`: the forward gather
 (`identical_embedding_forward_into`, seams G1 and G2) and the backward fold
-(`identical_embedding_backward_into`, seams E0 to E4, PLAN_SCAN) with the
+(`identical_embedding_backward_into`, seams E0 to E4, PLAN_SCAN or PLAN_SORT,
+contract 6.1 and 6.2, which clause (d) holds bit-identical) with the
 two knobs the training binding's `embedding_forward` and
 `embedding_backward` (`training/samba_ops.mojo`) do not carry:
 `padding_idx` (contract section 8, DEVIATION 1311) and `accumulate`, the
@@ -38,6 +39,7 @@ from embedding.checks.embedding_identical import (
     identical_embedding_backward_into,
     identical_embedding_forward_into,
 )
+from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
 from embedding.checks.embedding_oracle import (
     EMB_NO_PADDING_IDX,
     EmbConfig,
@@ -163,6 +165,7 @@ def _backward_run(
     n_positions: Int,
     cfg: EmbConfig,
     dwp: MutPointer[Float32, MutUntrackedOrigin],
+    plan: Int,
 ) raises:
     var cells = cfg.vocab * cfg.width
     if cells <= 0:
@@ -175,7 +178,7 @@ def _backward_run(
     var run_begin = _upload_i32(ctx, _zeros_i32(cfg.vocab + 1))
     var perm = _upload_i32(ctx, _zeros_i32(n_positions))
     identical_embedding_backward_into(
-        ctx, d_dw, d_dy, d_ids, counts, run_begin, perm, n_positions, cfg
+        ctx, d_dw, d_dy, d_ids, counts, run_begin, perm, n_positions, cfg, plan
     )
     ctx.synchronize()
     _download_into(ctx, d_dw, dwp, cells)
@@ -249,22 +252,35 @@ def embedding_backward_binding(
         2  T
         3  padding_idx   -1 for none; its row is +0.0 STORED (contract 8)
         4  accumulate    0 fresh (+0.0 fill), 1 carry the dw buffer's bits
+        5  plan          optional; 0 PLAN_SCAN (the default), 1 PLAN_SORT.
+                         The run structure's execution plan (contract 6);
+                         both give the same counts, perm and dW bits
     """
     if len(addrs) != 3:
         raise Error(
             "embedding_backward: addrs must contain 3 addresses (dy, ids, dw),"
             " got " + String(len(addrs))
         )
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
-            "embedding_backward: params must contain 5 values (V, d, T,"
-            " padding_idx, accumulate), got " + String(len(params))
+            "embedding_backward: params must contain 5 or 6 values (V, d, T,"
+            " padding_idx, accumulate[, plan]), got " + String(len(params))
         )
     var vocab = Int(py=params[0])
     var width = Int(py=params[1])
     var n_positions = Int(py=params[2])
     var padding_idx = Int(py=params[3])
     var acc_code = Int(py=params[4])
+    var plan = PLAN_SCAN
+    if len(params) == 6:
+        var plan_code = Int(py=params[5])
+        if plan_code != PLAN_SCAN and plan_code != PLAN_SORT:
+            raise Error(
+                String("embedding_backward: plan must be 0 (PLAN_SCAN) or 1")
+                + " (PLAN_SORT), got "
+                + String(plan_code)
+            )
+        plan = plan_code
     if acc_code != 0 and acc_code != 1:
         raise Error(
             String("embedding_backward: accumulate must be 0 or 1, got ")
@@ -286,7 +302,7 @@ def embedding_backward_binding(
         # every cell (contract 5.5), which the check's poisoned buffer gates.
         dw_start = List[Float32](length=vocab * width, fill=Float32(0.0))
     with GILReleased(Python()):
-        _backward_run(dy, ids, dw_start, n_positions, cfg, dwp)
+        _backward_run(dy, ids, dw_start, n_positions, cfg, dwp, plan)
     return PythonObject(vocab * width)
 
 

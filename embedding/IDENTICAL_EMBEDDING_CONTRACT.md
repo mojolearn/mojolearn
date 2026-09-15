@@ -2,6 +2,42 @@
 
 # PROFILE `mojolearn.identical.embedding.fp32.v1`
 
+## Eighteen arms, clauses (b), (c) and (f) on every clean build, and PLAN_SORT through the door (2026-09-15)
+
+Lane `lane/embedding-owed` closed OWED items 1 to 3 as they stood on 2026-09-14.
+Per-column evidence is in `bench/results/embedding_owed_2026-09-15/README.md`.
+
+- **The two unbuilt rows of 11.1 are built.** `EMB_FOLD_VIA_GEMM_ONEHOT` routes
+  the backward through `identical_gemm` (`op = OP_TN`, `m = V`, `n = d`, `k = T`)
+  over a one-hot `[T, V]` matrix. The check predicts every cell of every case with
+  the host GEMM oracle and requires the device to equal that prediction. On the
+  Apple M4 it moves `emb.dw` on f_hot (`T = 300`, three leaves, 2 of 8 cells) and
+  on f_multiblock (`T = 600`, 3 of 3 cells). It also moves one cell of f_subacc at
+  `T = 5`, which corrects the row's old inert set (see the row).
+  `EMB_SORT_KEY_ID_ONLY_UNSTABLE` makes PLAN_SORT's bitonic compare pass read only
+  the id half of the key. That build runs clause (a) through PLAN_SORT. The arm
+  moves `emb.perm` first on f_tree4 and is inert on f_nodup.
+- **Clauses (b), (c) and (f) run on every clean build.** They are no longer behind
+  environment switches, and `tools/embedding_sabotage_arm.sh` also turns on (d)
+  and (e) for its clean run. Its `clean: PASS` now requires the line
+  `embedding_check: GREEN, clauses (a), (b), (c), (f), (d), (e) PASS`.
+- **DEVIATION 1506 is closed for the refusing device entry points.**
+  `identical_embedding_forward_refusing_into` and
+  `identical_embedding_backward_refusing_into` refuse NaN and infinity in `W`,
+  `dY` and the carried `dW` by name, before any launch. The scan is a device
+  kernel that tests bits, and the error gives the exact flat index. Clause (f)
+  holds these entry points to that on every column. Before the fix, the same
+  clause raised "DEVIATION 1506 nonfinite refusal remains open" on the M4 at
+  e2d770ba8. The `_into` forms still refuse only ids and leave nonfinite values to
+  the caller, for the training loops that call them (section 9.1).
+- **PLAN_SORT is reachable from Python** as `Embedding(..., plan="sort")`. The
+  default stays `"scan"`, since no dispatch crossover has been measured.
+  `test_embedding_surface` holds `plan="sort"` bit-identical to `plan="scan"`
+  (plain, padded, carried and one-id runs), and the identity_break lane
+  `embedding-sort` does the same. A binding built with
+  `EMB_SORT_KEY_ID_ONLY_UNSTABLE` turns five of those checks and 8 of 9 lane
+  fixtures red.
+
 ## Sabotage arms run, findings resolved, and a Python door (2026-09-14)
 
 The Apple M4, an NVIDIA H100 and an AMD MI300X produced the clause (a) card at
@@ -714,6 +750,17 @@ either sign and any payload and `== 0x7F800000` is an infinity. Integer
 operations do not flush anywhere. **This is a knowing departure from torch**,
 which propagates.
 
+**Where the refusal lives on the device (2026-09-15).** Section 9.1 applies to
+the profile's refusing device entry points,
+`identical_embedding_forward_refusing_into` and
+`identical_embedding_backward_refusing_into`. They scan `W`, `dY` and, when
+`accumulate` is set, the carried `dW` on the device by bits, and they raise
+`NaN in <buffer> at flat index <i>` or `infinity in ...` before any kernel is
+launched. The `_into` forms are the caller-refused spellings: they refuse ids
+(section 8) and not nonfinite values. The training loops call them, and so does
+the Python binding, which refuses nonfinite values on its host copy before
+upload. A caller of `_into` owns 9.1.
+
 **There is no nonfinite INTERMEDIATE gap in this profile, DEVIATION 1313**, a
 real difference from transformer section 8's stated gap. A sum of finite terms
 can overflow to an infinity, which is the only route, takes about
@@ -823,14 +870,14 @@ defect and not a numerics one.
 |---|---|---|---|
 | `EMB_FOLD_DESCENDING` | `emb.dw` | every run with `R <= 1`; every run whose contributors are bitwise equal; every exactly-representable fixture | 4.1 clause 1 |
 | `EMB_FOLD_BALANCED_TREE` | `emb.dw` at `R >= 4` | **every `R <= 3`, PROVABLY**, 4.2.1 | 4.1 clause 2 |
-| `EMB_FOLD_VIA_GEMM_ONEHOT` | `emb.dw` at `T >= 129` | every `T <= 128`, where the GEMM's `P == 1` | 4.2(d), routing against pinning |
+| `EMB_FOLD_VIA_GEMM_ONEHOT` | `emb.dw` at `T >= 129` | every FRESH call with `T <= 128`, where the GEMM's `P == 1`, **except a cell whose chain ends `-0.0`** (7.1's hole): the leaf also adds the zero products of non-contributing positions, and a later `+0.0` product launders that `-0.0` to `+0.0` (f_subacc, `T = 5`, measured). A carried call is 7.4's ADD spelling, because a GEMM cannot be seeded. The check predicts every cell with the host GEMM oracle | 4.2(d), routing against pinning |
 | `EMB_FOLD_READS_LAUNCH` | `emb.dw` | nothing | 4.1's last paragraph |
 | `EMB_SINGLE_RUN_BYPASS` | `emb.dw` | **every cell except one whose sole contributor is `-0.0`** | 4.3 |
 | `EMB_EMPTY_ROW_SKIPPED` | `emb.dw_seed`, then `emb.dw` | **any gate that does not POISON the output buffer** | 4.3, the store is required |
 | `EMB_EMPTY_ROW_NEG_ZERO` | `emb.dw_seed` | **`emb.dw`** on any fixture where every row has a contributor (F-NODUP), while `emb.dw_seed` moves on every fixture | 4.3, `+0.0` and not `-0.0` |
 | `EMB_SEED_SEEDLESS` | `emb.dw` | **the same mask as the bypass**, which is why both are needed | 7.2(c) |
 | `EMB_SORT_TIE_REVERSED` | `emb.perm`, then `emb.dw` | every stage on a fixture with no duplicate ids; **`emb.dw` only** on one whose duplicates carry bitwise equal `dY` rows (F-DUPSAME moves `emb.perm`) | 5.5(a) |
-| `EMB_SORT_KEY_ID_ONLY_UNSTABLE` | `emb.perm` | a fixture with no duplicate ids | 5.5(b) |
+| `EMB_SORT_KEY_ID_ONLY_UNSTABLE` | `emb.perm` (PLAN_SORT; clause (a) runs PLAN_SORT on that build) | a fixture with no duplicate ids (f_nodup, asserted). Measured on the M4: the bitonic network also leaves ties in place on f_order3, f_split and f_pad, and moves `emb.perm` but not `emb.dw` on f_dupsame and f_tree4 | 5.5(b) |
 | `EMB_RANK_BY_ARRIVAL` | `emb.perm` | no duplicates; a single-block launch, where arrival order IS position order | 5.5's third trap |
 | `EMB_PAD_ROW_CONTRIBUTES` | `emb.counts`, then `emb.run_begin` and `emb.perm` | **`emb.dw`, which it must NOT move**, plus any fixture with no `padding_idx` | section 6, and the proof the two spellings are bit-equal in `dW` |
 | `EMB_PAD_ROW_NEG_ZERO` | `emb.dw_seed` at row `padding_idx` (the `T = 0` store), then `emb.dw` | a fixture with no `padding_idx` | section 6 |
@@ -842,14 +889,13 @@ defect and not a numerics one.
 
 Each must move the stage its OWN clause writes and no earlier one.
 
-**Remaining sabotage debt (updated 2026-09-10).** The dedicated
-`EMB_SORT_KEY_ID_ONLY_UNSTABLE` switch remains unimplemented.
-`EMB_SORT_TIE_REVERSED` retains its original PLAN_SCAN spelling. The new
-`MOJOLEARN_EMB_SORT_NEGATIVE_CONTROL` instead reverses ties in the actual
-PLAN_SORT key stream and decodes original positions, providing a separate
-negative control for the real sort permutation gate. `EMB_FOLD_VIA_GEMM_ONEHOT`
-still has no switch (DEVIATION 1505); `EMB_ACCUM_BY_ADD` remains falsifiable
-only through clause (e). This update does not claim those other arms ran.
+**Sabotage debt (updated 2026-09-15).** All eighteen rows have a switch.
+`EMB_SORT_KEY_ID_ONLY_UNSTABLE` lives in `embedding_sort.mojo`'s compare pass.
+`EMB_SORT_TIE_REVERSED` keeps its original PLAN_SCAN spelling.
+`MOJOLEARN_EMB_SORT_NEGATIVE_CONTROL` still reverses ties in the PLAN_SORT key
+stream as a separate control with its own script. `EMB_FOLD_VIA_GEMM_ONEHOT`
+closes DEVIATION 1505. `EMB_ACCUM_BY_ADD` is still falsifiable only through
+clause (e).
 
 **Five pass by construction on the obvious fixture and are the ones most
 likely to be deleted as broken arms.** `EMB_FOLD_BALANCED_TREE` needs a run of
