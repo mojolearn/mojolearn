@@ -72,14 +72,14 @@ class ReleaseInventory(unittest.TestCase):
             self.assertEqual(result['version'], version)
             self.assertEqual(result['assembly_profile'], packer.RELEASE_PROFILE)
             # Three tree lanes in each of fast and deterministic, and all
-            # twenty-one identical-tier names (the three trees, the seventeen
-            # identical-only bindings, and the byte LM), so 27 per architecture
+            # twenty-three identical-tier names (the three trees, the nineteen
+            # identical-only bindings, and the byte LM), so 29 per architecture
             # across three architectures. Counted from tier_names rather than
             # written out, so the number cannot drift from the packer again.
             # 23 until workstream D (2026-09-14) added kernel_methods, mixture,
-            # hdbscan and resample.
+            # hdbscan and resample; 27 until ivf and embedding the same day.
             per_arch = sum(len(packer.tier_names(mode, True)) for mode in packer.TIERS)
-            self.assertEqual(per_arch, 27)
+            self.assertEqual(per_arch, 29)
             self.assertEqual(len(result['extensions']), per_arch * 3)
             self.assertTrue(result['optional_native']['_mojolearn_byte_lm']['included'])
             self.assertEqual(result['optional_native']['_mojolearn_byte_lm']['unsupported_modes'],

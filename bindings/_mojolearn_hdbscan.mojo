@@ -52,6 +52,14 @@ def hdbscan_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def hdbscan_rows_parallel_available() raises -> PythonObject:
+    """1: the core-distance k-NN reads MOJOLEARN_NEIGHBORS_DEVICE_COUNT
+    (neighbors/impl/multi_gpu.mojo) and the dense pairwise distance matrix
+    reads MOJOLEARN_HIERARCHY_DEVICE_COUNT (hierarchy/impl/cluster/detail/
+    multi_gpu.mojo); parallel_classical.fit_hdbscan sets both in its worker."""
+    return PythonObject(1)
+
+
 def hdbscan_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
@@ -179,6 +187,7 @@ def PyInit__mojolearn_hdbscan() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_hdbscan")
         m.def_function[hdbscan_parallel_available]("hdbscan_parallel_available")
+        m.def_function[hdbscan_rows_parallel_available]("hdbscan_rows_parallel_available")
         m.def_function[hdbscan_vendor_binding]("hdbscan_vendor")
         m.def_function[hdbscan_numeric_mode_binding]("hdbscan_numeric_mode")
         m.def_function[hdbscan_fit_binding]("hdbscan_fit")

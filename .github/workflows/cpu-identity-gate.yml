@@ -97,6 +97,10 @@ on:
       - "ensemble/host/rf_oracle.mojo"
       - "gaussian_process/host/gpr_oracle.mojo"
       - "cholesky/host/chol_oracle.mojo"
+      - "gbdt/host/gbdt_oracle.mojo"
+      - "gbdt/host/gbdt_oracle_rmse.mojo"
+      - "gbdt/host/gbdt_oracle_depthwise.mojo"
+      - "gbdt/host/gbdt_oracle_lossguide.mojo"
       - "arima/host/arima_oracle.mojo"
       - "arima/impl/tsa/arima_common.mojo"
       - "spectral/checks/symmetric_eig_host.mojo"
@@ -480,8 +484,10 @@ jobs:
       # in qn_oracle by walking the solver's dot chains descending, in
       # rf_oracle by drawing every bootstrap row from the next Philox
       # subsequence, in gpr_oracle by walking the scaled distance's
-      # feature axis descending, and in arima_oracle by doubling the
-      # finite-difference step);
+      # feature axis descending, in gbdt_oracle by adding 1.0 to the
+      # Newton leaf walker's Hessian regularizer, in gbdt_oracle_rmse by
+      # adding 1.0 to the searcher's leaf regularizer, and in arima_oracle by
+      # doubling the finite-difference step);
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the

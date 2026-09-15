@@ -14,6 +14,7 @@ from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.forest_inference import validate_flat_forest, require_finite, launch_forest_inference
+from core.forest_inference_pool import PooledForest, forest_device_count
 
 
 def require_finite_pointer(values: MutPointer[Float32, MutAnyOrigin], count: Int) raises:
@@ -23,6 +24,7 @@ def require_finite_pointer(values: MutPointer[Float32, MutAnyOrigin], count: Int
 
 
 struct ResidentForest(Movable):
+    var pool: Optional[PooledForest]
     var ctx: Optional[DeviceContext]
     var offsets: Optional[DeviceBuffer[DType.int32]]
     var columns: Optional[DeviceBuffer[DType.int32]]
@@ -41,6 +43,7 @@ struct ResidentForest(Movable):
         features: Int, outputs: Int) raises:
         var empty = List[Float32]()
         validate_flat_forest(offsets, columns, thresholds, left, leaves, empty, 0, features, outputs)
+        self.pool = Optional[PooledForest]()
         self.input_workspace = Optional[DeviceBuffer[DType.float32]]()
         self.output_workspace = Optional[DeviceBuffer[DType.float32]]()
         self.workspace_rows = 0
@@ -53,6 +56,14 @@ struct ResidentForest(Movable):
         self.thresholds = Optional[DeviceBuffer[DType.float32]]()
         self.left = Optional[DeviceBuffer[DType.int32]]()
         self.leaves = Optional[DeviceBuffer[DType.float32]]()
+        var device_count = forest_device_count()
+        comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+            if len(columns) > 2147483647 // 4:
+                raise Error("packed forest node word count exceeds Int32")
+        if device_count > 1:
+            self.pool = PooledForest(offsets, columns, thresholds, left, leaves,
+                features, outputs, device_count)
+            return
         # DEVIATION BLOCK FOREST-PACKED-1 (experimental, no speed claim):
         # nvForest cef3a50d detail/node.hpp:81-175 packs node fields; builder
         # detail/decision_forest_builder.hpp:135-149 stores only leaf vectors.
@@ -110,6 +121,7 @@ struct ResidentForest(Movable):
     def __deinit__(deinit self):
         # Predict/prepare are synchronous; destroy GPU operands before context
         # even when an upload/allocation exception bypasses explicit release.
+        _ = self.pool^
         _ = self.output_workspace^
         _ = self.input_workspace^
         _ = self.leaves^
@@ -120,6 +132,7 @@ struct ResidentForest(Movable):
         _ = self.ctx^
 
     def close(mut self) raises:
+        self.pool = None
         if self.ctx:
             self.ctx.value().synchronize()
         self.output_workspace = None
@@ -143,6 +156,13 @@ struct ResidentForest(Movable):
         require_finite(x)
         if rows == 0:
             return List[Float32]()
+        if self.pool:
+            var result = List[Float32](length=rows * outputs, fill=Float32(0.0))
+            self.pool.value().predict_into[RF_INPUT](
+                rebind[MutPointer[Float32, MutAnyOrigin]](x.unsafe_ptr()),
+                result.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows)
+            _ = len(x)
+            return result^
         var dx = self.ctx.value().enqueue_create_buffer[DType.float32](len(x))
         var dout = self.ctx.value().enqueue_create_buffer[DType.float32](rows * outputs)
         var hout = self.ctx.value().enqueue_create_host_buffer[DType.float32](rows * outputs)
@@ -185,6 +205,9 @@ struct ResidentForest(Movable):
             raise Error("resident forest prediction dimensions exceed Int32")
         require_finite_pointer(x, rows * features)
         if rows == 0:
+            return
+        if self.pool:
+            self.pool.value().predict_into[RF_INPUT](x, output, rows)
             return
         if reuse_io:
             self.prepare_workspace(rows)

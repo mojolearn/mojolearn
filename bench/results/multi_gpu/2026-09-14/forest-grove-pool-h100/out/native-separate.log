@@ -1,0 +1,126 @@
+24254 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a9f80000000, nodemask=2)
+/root/mojolearn/training/checks/forest_pool_check.mojo:31:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        total = forest_add(total, leaves[node * Int(outputs) + item % Int(outputs)])
+                                  ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/training/checks/forest_pool_check.mojo:32:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    destination[index] = total
+    ~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:10:
+Imported from /root/mojolearn/core/forest_inference_model.mojo:17:
+/root/mojolearn/core/forest_inference_pool.mojo:321:54: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                staged[first + i] = host.unsafe_ptr()[i]
+                                    ~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:10:
+Imported from /root/mojolearn/core/forest_inference_model.mojo:17:
+/root/mojolearn/core/forest_inference_pool.mojo:327:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            output[i] = staged[i]
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:10:
+Imported from /root/mojolearn/core/forest_inference_model.mojo:17:
+/root/mojolearn/core/forest_inference_pool.mojo:204:44: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            result.append(host.unsafe_ptr()[i])
+                          ~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:9:
+/root/mojolearn/core/forest_inference.mojo:171:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:9:
+/root/mojolearn/core/forest_inference.mojo:178:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:9:
+/root/mojolearn/core/forest_inference.mojo:184:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:9:
+/root/mojolearn/core/forest_inference.mojo:191:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/training/checks/forest_pool_check.mojo:9:
+/root/mojolearn/core/forest_inference.mojo:197:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+PASS forest pool True 1 1
+PASS forest pool False 1 1
+PASS forest pool True 1 2
+PASS forest pool False 1 2
+PASS forest pool True 1 3
+PASS forest pool False 1 3
+PASS forest pool True 1 8
+PASS forest pool False 1 8
+PASS forest pool True 1 9
+PASS forest pool False 1 9
+PASS forest pool True 3 1
+PASS forest pool False 3 1
+PASS forest pool True 3 2
+PASS forest pool False 3 2
+PASS forest pool True 3 3
+PASS forest pool False 3 3
+PASS forest pool True 3 8
+PASS forest pool False 3 8
+PASS forest pool True 3 9
+PASS forest pool False 3 9
+PASS forest pool True 31 1
+PASS forest pool False 31 1
+PASS forest pool True 31 2
+PASS forest pool False 31 2
+PASS forest pool True 31 3
+PASS forest pool False 31 3
+PASS forest pool True 31 8
+PASS forest pool False 31 8
+PASS forest pool True 31 9
+PASS forest pool False 31 9
+PASS forest pool True 32 1
+PASS forest pool False 32 1
+PASS forest pool True 32 2
+PASS forest pool False 32 2
+PASS forest pool True 32 3
+PASS forest pool False 32 3
+PASS forest pool True 32 8
+PASS forest pool False 32 8
+PASS forest pool True 32 9
+PASS forest pool False 32 9
+PASS forest pool True 33 1
+PASS forest pool False 33 1
+PASS forest pool True 33 2
+PASS forest pool False 33 2
+PASS forest pool True 33 3
+PASS forest pool False 33 3
+PASS forest pool True 33 8
+PASS forest pool False 33 8
+PASS forest pool True 33 9
+PASS forest pool False 33 9
+PASS forest pool True 65 1
+PASS forest pool False 65 1
+PASS forest pool True 65 2
+PASS forest pool False 65 2
+PASS forest pool True 65 3
+PASS forest pool False 65 3
+PASS forest pool True 65 8
+PASS forest pool False 65 8
+PASS forest pool True 65 9
+PASS forest pool False 65 9
+PASS forest pool True 97 1
+PASS forest pool False 97 1
+PASS forest pool True 97 2
+PASS forest pool False 97 2
+PASS forest pool True 97 3
+PASS forest pool False 97 3
+PASS forest pool True 97 8
+PASS forest pool False 97 8
+PASS forest pool True 97 9
+PASS forest pool False 97 9
+PASS forest pool True 3 129
+PASS forest pool False 3 129
+PASS forest pool True 3 4097
+PASS forest pool False 3 4097

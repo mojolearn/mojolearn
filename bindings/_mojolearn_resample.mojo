@@ -66,6 +66,13 @@ def resample_parallel_available() raises -> PythonObject:
 # ===========================================================================
 
 
+def resample_ranges_parallel_available() raises -> PythonObject:
+    """1: bootstrap_host, permutation_test_host and monte_carlo_integrate_host
+    read MOJOLEARN_RESAMPLE_DEVICE_COUNT and move whole global replicate,
+    permutation and PINNED_SUM_W sample-chunk ranges to owners."""
+    return PythonObject(1)
+
+
 def _bootstrap_run(
     x: List[Float32],
     n: Int,
@@ -376,6 +383,7 @@ def PyInit__mojolearn_resample() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_resample")
         m.def_function[resample_parallel_available]("resample_parallel_available")
+        m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")
         m.def_function[resample_vendor_binding]("resample_vendor")
         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")
         m.def_function[bootstrap_binding]("bootstrap")

@@ -1,0 +1,18 @@
+started=2026-09-14T22:34:13Z commit=4b78e57fde83a1324ebf01fcd2534be0628e2d16
+vendor=amd arch=gfx942 gpus=2 nproc=192
+pixi-warm exit=0 seconds=0
+build-resample exit=0 seconds=12
+build-base exit=0 seconds=36
+native exit=0 seconds=13
+native-sabotage-boot exit=1 seconds=13
+native-sabotage-perm exit=1 seconds=4
+native-sabotage-mc exit=1 seconds=4
+public exit=0 seconds=61
+check-resample exit=0 seconds=16
+native: 67 PASS lines; last: PASS resample parallel gate
+native-sabotage-boot (must FAIL): 0 PASS lines; Unhandled exception caught during execution: trace differs boot-n53-d2-s0-m0-a0-r2-f0: 2	resample.theta	f32	2	82fecf6e6cf037c4   VS   2	resample.theta	f32	2	23e6ff649c2b542b
+native-sabotage-perm (must FAIL): 0 PASS lines; Unhandled exception caught during execution: trace differs perm-40-33-s4-a0-r2-f0: 1	resample.null	f32	2	80f203e112c5f400   VS   1	resample.null	f32	2	471ddac3ce81f873
+native-sabotage-mc (must FAIL): 10 PASS lines; Unhandled exception caught during execution: trace differs mc-f1-n257-i0: 2	resample.mc.partials	f32	2	9d9d798f9fe62795   VS   2	resample.mc.partials	f32	2	0026544b9d62cafb
+public: PASS 36 resample configurations and 5 refusals
+check-resample: 16 pass-like lines; tail: check_resample_sabotages RECORDED [IDENTICAL]: RSAB_BATCH_DEPENDENT moved 32/32 indices (check_batch_invariance and check_prefix_stability both FAIL as required); RSAB_MAP_IGNORES_POSITION collapsed all 32 positions to one index (check_index_map_is_positional's separation clause FAILS as required); RSAB_LOW_HALF_SUBSEQUENCE moved 256/256 on n=200; RSAB_REVERSED_POSITIONS RECORDED at 0/256 under IDENTICAL, EXPECTED: the pinned halving fold is reversal-invariant because reversal maps its pair set to itself and float addition is commutative. The arm IS reached -- under FAST the same call moves 179/256. RSAB_REVERSED_POSITIONS moved 0/256 on n=200; RSAB_FOLD_DESCENDING moved 0/256 on n=200; RSAB_FOLD_DESCENDING on n=600 (3 chunks) moved 56/256 -- at n=200 it is one chunk and EXPECTED INERT; RSAB_SKIP_REJECTION RECORDED, not asserted: moved 0/256 at n=200 and 0/256 at n=8. BOTH ZEROS ARE EXPECTED. n=8 is a power of two so 2^32 mod n == 0 and Lemire never rejects; n=200 gives 2^32 mod n == 96, a rejection rate of 2.2e-08, and this driver takes 51200 draws for 0.0011 expected rejections. One expected rejection needs 44.7 million draws, and since 2^32 mod n < n the rate is under n/2^32 for EVERY n, so no sample size reaches this branch by sampling. A direct probe of the rejection zone is owed; RSAB_STD_SQRT moved 0/256 (Apple: 0 expected, its sqrt is correctly rounded; NVIDIA: expected to bite, 176,577 of 2^20 normals are 1 ulp off, IDENTITY_PATHS row 10); RSAB_NO_CANON_NAN: the uncanonicalised degenerate pearson is none reached (Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD 0xffc00000 -- three payloads for one IEEE answer, DEVIATION 1696); RSAB_PERM_KEY_ONLY broke the bijection in 64/64 replicates (check_permutation_separable FAILS as required)|resample_check mode=IDENTICAL ALL OK|
+finished=2026-09-14T22:36:40Z

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the IVF-FLAT CPython extension (PREPARED, NOT EXPOSED until the NVIDIA and AMD legs run) into
+# Build the IVF-FLAT CPython extension (mojolearn.IVFIndex) into
 # python/mojolearn/_mojolearn_ivf.so. Run from anywhere; requires pixi.
 # Mirrors bindings/build_gp.sh line for line except where this family is named.
 #
@@ -10,8 +10,8 @@
 # release build leaves it unset.
 #
 # THIS EXTENSION IS ivf/ AND NOTHING ELSE (workstream D, 2026-09-14),
-# PREPARED AND NOT IN _MODULES OR ANY PACKAGING LIST: the lane has Apple
-# evidence only. It reaches cluster/'s k-means (the quantizer) and
+# in _MODULES and every packaging list since lane/expose-ivf-embedding. It
+# reaches cluster/'s k-means (the quantizer) and
 # neighbors/'s pinned distance tile through their own entry points.
 #
 # THE FLAGS BELOW ARE NOT ORNAMENTAL. Every one of them is a bug somebody
@@ -264,16 +264,12 @@ shutil.copyfile(os.environ["MOJOLEARN_SMOKE_SO"],
 sys.path.insert(0, tmp)
 import numpy as np
 
-from mojolearn import _backend
-if "_mojolearn_ivf" not in _backend._MODULES:
-    print("  smoke: _mojolearn_ivf is prepared and not in _MODULES; the launch gate runs once it is exposed")
-else:
-    from mojolearn import _ivf_impl
-    rng = np.random.default_rng(0)
-    x = rng.random((256, 4), dtype=np.float32)
-    d, i = _ivf_impl.IVFFlat(n_lists=4, n_probes=2, n_neighbors=4).fit(x).search(x[:8])
-    assert d.shape == (8, 4) and i.shape == (8, 4)
-    print("  smoke: IVFFlat build and search on 256 rows")
+from mojolearn import IVFIndex
+rng = np.random.default_rng(0)
+x = rng.random((256, 4), dtype=np.float32)
+d, i = IVFIndex(n_lists=4, n_probes=2, n_neighbors=4).fit(x).search(x[:8])
+assert d.shape == (8, 4) and i.shape == (8, 4)
+print("  smoke: IVFIndex build and search on 256 rows")
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 
