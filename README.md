@@ -534,3 +534,19 @@ project's distinguishing result has no counterpart anywhere.
 
 To cite mojolearn, use [CITATION.cff](CITATION.cff). The concept DOI is
 [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632).
+
+### CPU inference and verification cadence
+
+The public CPU surface is saved-model inference: byte-LM, forests, and the
+classical models listed in [the support matrix](SUPPORT_MATRIX.md). Ordinary
+CPU estimator `fit` calls refuse; GPU training remains available. The
+`LanguageModelHostTrainer` already published in 0.8.5 remains supported.
+The broader CPU training implementations are internal numerical references,
+available from source rather than added to the public CPU training API.
+
+Routine pushes run inference checks and small reference probes. Full CPU
+reference verification runs weekly, manually, and before a PyPI publication.
+Release GPU certification uses one Apple, one AMD and one NVIDIA device.
+`python -m mojolearn identity` on CPU defaults to seven small reference lanes;
+the full source verifier retains every covered lane and fixture. An identity
+result certifies only the lanes, fixtures and numerical profile it reports.

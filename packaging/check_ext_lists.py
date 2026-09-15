@@ -98,7 +98,10 @@ def host_problems(read, routed):
     out = []
     print(f"host manifest: {len(shipped)} of {len(declared)} declared host bindings ship "
           f"({', '.join(hs.wheel_families())})")
-    for name in sorted(set(routed) | set(HOST_BY_PATH)):
+    for name in sorted(set(routed) - set(declared)):
+        out.append(f"  UNDECLARED reference route {name}")
+    public_routes = {f["binding"] for f in hs.FAMILIES if f["routes"] and f["ships_in_wheel"]}
+    for name in sorted(public_routes | set(HOST_BY_PATH)):
         if name not in shipped:
             out.append(f"  MISSING host binding {name} is {'routed by _backend._HOST_MODULES' if name in routed else 'loaded by path'} but ships_in_wheel is False in the manifest")
         else:
