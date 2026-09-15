@@ -73,6 +73,7 @@ catalog() {
 gbm-bench/taxi/taxi_speed.npz	HOME/datasets/gbm-bench/taxi/taxi_speed.npz
 gbm-bench/istella/istella_speed.npz	HOME/datasets/gbm-bench/istella/istella_speed.npz
 gbm-bench/istella/istella-s-letor.tar.gz	HOME/datasets/gbm-bench/istella/istella-s-letor.tar.gz
+gbm-bench/istella/istella_rank.npz	HOME/datasets/gbm-bench/istella/istella_rank.npz
 corpus/enwik8/input.txt	ROOT/training/corpus/enwik8/input.txt
 corpus/pile_github/input.txt	ROOT/training/corpus/pile_github/input.txt
 EOF
