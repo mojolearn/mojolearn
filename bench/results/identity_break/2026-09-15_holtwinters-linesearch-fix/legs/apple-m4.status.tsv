@@ -1,0 +1,6 @@
+commit fbd52cc6ec4a1594bc98df3789ee60f2ac355111 dirty 0
+check-deterministic	0	1360s	17:15:01
+check-fast	0	47s	17:15:48
+sabotage-ls-last	1	32s	17:16:20
+CHECKS_DONE
+build-tsa	0	18s	17:16:38

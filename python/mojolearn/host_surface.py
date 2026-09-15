@@ -181,8 +181,10 @@ CLASSICAL_RECORDED = (
 #: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
 #: checked with `tools/classical_host_gate.py check` like CLASSICAL_RECORDED
 #: but kept apart from it: they bind `_mojolearn_forecast_host`, a family
-#: with no route, which the CPU identity gate workflow does not build today.
-#: The workflow reading this list is owed to its owner.
+#: with no route. The CPU identity gate workflow builds every family the
+#: manifest declares and checks this list, with SEARCH_LOOKUP_RECORDED and
+#: INFERENCE_ONLY_RECORDED, as `saved_model_recorded()` (production must
+#: match, the sabotage host set must differ on every lane).
 FORECAST_RECORDED = (
     "bench/results/classical_host/2026-09-15-apple-m4-arima",
 )
@@ -191,9 +193,9 @@ FORECAST_RECORDED = (
 #: density inference lane, 2026-09-15), checked with
 #: `tools/classical_host_gate.py check` like CLASSICAL_RECORDED but kept apart
 #: from it, as FORECAST_RECORDED is: the GMM and HDBSCAN models bind the
-#: unrouted mixture_infer and hdbscan_infer families, which the CPU identity
-#: gate workflow does not build today. The workflow reading this list is owed
-#: to its owner.
+#: unrouted mixture_infer and hdbscan_infer families (the gp recordings bind
+#: gp_infer). The CPU identity gate workflow checks it through
+#: `saved_model_recorded()`.
 INFERENCE_ONLY_RECORDED = (
     "bench/results/classical_host/2026-09-15-apple-m4-iforest-gmm-hdbscan",
     "bench/results/classical_host/2026-09-15-apple-m4-gp-gmm-sample",
@@ -204,11 +206,19 @@ INFERENCE_ONLY_RECORDED = (
 #: `tools/classical_host_gate.py check` like FORECAST_RECORDED and kept apart
 #: from CLASSICAL_RECORDED for the same reason: they bind
 #: `_mojolearn_ivf_search_host` and `_mojolearn_embedding_infer_host`,
-#: families with no route, which the CPU identity gate workflow does not build
-#: today. The workflow reading this list is owed to its owner.
+#: families with no route. The CPU identity gate workflow checks it through
+#: `saved_model_recorded()`.
 SEARCH_LOOKUP_RECORDED = (
     "bench/results/classical_host/2026-09-15-apple-m4-ivf-embedding",
 )
+
+def saved_model_recorded():
+    """The saved-model recordings that bind the unrouted inference-only
+    families (forecast, mixture_infer, gp_infer, hdbscan_infer, ivf_search,
+    embedding_infer), checked by the CPU identity gate apart from
+    CLASSICAL_RECORDED."""
+    return list(FORECAST_RECORDED + INFERENCE_ONLY_RECORDED + SEARCH_LOOKUP_RECORDED)
+
 
 #: The forest inference recordings: every directory under this root whose
 #: expected.json says RECORDED (the workflows sort them at run time).
@@ -513,6 +523,11 @@ TRAINING_LANE_NAMES = {
     # gbdt/host/gbdt_oracle_pair.mojo and the pairs of gbdt/data/pairs.mojo,
     # from the same binding.
     "gbdt-pair-logit": "gradient boosting with the PairLogit ranking loss on generated and explicit pairs",
+    # lane/gbdt-learning-to-rank stage 4 (2026-09-15): the YetiRank ranking
+    # loss trains through gbdt/host/gbdt_oracle_losses.mojo with the sampled
+    # permutations restated in gbdt/host/gbdt_oracle_yeti.mojo over the task
+    # table of gbdt/data/yeti_rank_tasks.mojo, from the same binding.
+    "gbdt-yeti-rank": "gradient boosting with the YetiRank ranking loss on query groups",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -819,12 +834,17 @@ FAMILIES = (
             "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
         display="random forests, Extra Trees and eight gradient boosting variants",
-        host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo"),
+        # lane/inference-gbdt-ctr-tables (2026-09-15): the CTR and tensor CTR
+        # step of a saved GBDT model, reusing expand_raw_columns and the
+        # tensor apply module the GPU predict calls
+        host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo",
+                      "core/gbdt_host_ctr.mojo", "gbdt/models/tensor_ctr_apply.mojo"),
         exports=(
             "forest_host_numeric_mode", "forest_host_vendor", "forest_host_column",
             "forest_host_sabotage", "forest_host_rf_predict_proba",
             "forest_host_rf_predict_reg", "forest_host_et_predict",
             "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid",
+            "forest_host_gbdt_expand_ctr", "forest_host_gbdt_ctr_sabotage",
             "all_finite_f32", "all_finite_f64", "cast_f64_to_f32",
             "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
         ),
@@ -856,6 +876,10 @@ FAMILIES = (
         # define reverses gpt2_encode's ids). Covering it needs the gate to
         # build the tokenizer binding with its own define into the sabotage
         # set; until then test_tokenizer_surface.py is its gate.
+        # mojolearn ships no vocabulary (2026-09-15): the lane loads the
+        # synthetic one (python/mojolearn/_tokenizer_synthetic.py) at
+        # identity_break's LANE_REVISIONS["tokenizer"], so the records above
+        # hashed older input and its cells are owed to the next record.
         # gpt2_encode_batch (lane/inference-tokenizer-neural, 2026-09-15)
         # has its own negative control, -D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1,
         # which the lane's batch part reads BATCH_MOVED.
@@ -863,7 +887,7 @@ FAMILIES = (
         inference_lanes=(),
         forest_kinds=(),
         classes=("GPT2Tokenizer",),
-        display="the GPT-2 byte-level BPE tokenizer",
+        display="the byte-level BPE tokenizer (GPT-2 format, user-supplied vocabulary)",
         host_modules=(
             "tokenizer/encoding.mojo", "tokenizer/impl/bpe.mojo",
             "tokenizer/impl/pretokenize.mojo", "tokenizer/impl/ranks.mojo",
@@ -1585,7 +1609,7 @@ FAMILIES = (
             "gbdt-ordered-rmse", "gbdt-feature-freq",
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
-            "gbdt-query-rmse", "gbdt-pair-logit",
+            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1593,7 +1617,7 @@ FAMILIES = (
             "GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor",
             "model_selection.cross_val_score", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="gradient boosting on symmetric trees with the pointwise, multiclass, QueryRMSE and PairLogit losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
+        display="gradient boosting on symmetric trees with the pointwise, multiclass, QueryRMSE, PairLogit and YetiRank losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
@@ -1602,6 +1626,7 @@ FAMILIES = (
             "gbdt/host/gbdt_oracle_pointwise.mojo", "gbdt/host/gbdt_oracle_onehot.mojo",
             "gbdt/host/gbdt_oracle_query.mojo", "gbdt/host/gbdt_oracle_pair.mojo",
             "gbdt/data/pairs.mojo",
+            "gbdt/host/gbdt_oracle_yeti.mojo", "gbdt/data/yeti_rank_tasks.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(
@@ -1993,7 +2018,14 @@ def public_reference_lanes():
     Full CPU training verification uses source bindings and covered_lanes().
     These probes need only public inference dependencies, including linalg.
     """
-    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky"]
+    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky"] + list(PUBLIC_HOST_ONLY_LANES)
+
+
+#: Public reference lanes that are not CPU training lanes, {lane: family}: a
+#: shipped host family with no GPU path to cover (2026-09-15). The tokenizer
+#: lane loads the synthetic vocabulary the harness trains itself, so it needs
+#: no vocabulary file on the install.
+PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
 
 
 def training_gpu_column_record():
@@ -2203,6 +2235,7 @@ def main(argv=None):
     g.add_argument("--wheel-bindings", action="store_true", help="the wheel families' basenames")
     g.add_argument("--training-gpu-column-record", action="store_true", help="the record directory name of the training GPU columns")
     g.add_argument("--classical-recorded", action="store_true", help="classical gate recording directories")
+    g.add_argument("--saved-model-recorded", action="store_true", help="the forecast, inference-only and search/lookup recording directories")
     g.add_argument("--classical-gpu-columns", action="store_true", help="the GPU columns the classical gate compares against")
     g.add_argument("--training-gpu-columns", action="store_true", help="the GPU columns the training gate diffs against")
     g.add_argument("--training-fix-columns", action="store_true", help="the GPU columns the training gate diffs --fix-covered-lanes against")
@@ -2247,6 +2280,8 @@ def main(argv=None):
         items = forest_kinds()
     elif args.classical_recorded:
         items = list(CLASSICAL_RECORDED)
+    elif args.saved_model_recorded:
+        items = saved_model_recorded()
     elif args.classical_gpu_columns:
         items = list(CLASSICAL_GPU_COLUMNS)
     else:

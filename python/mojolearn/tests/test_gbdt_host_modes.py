@@ -86,10 +86,14 @@ def test_archive_names_and_losses_refuse_before_any_binding_loads():
         _raises(lambda: HostGBDT.from_file(path2), "saves RMSE only")
 
 
-def test_ctr_and_tensor_ctr_records_refuse_by_name():
-    for record in ("ctr_columns 1", "tensor_ctr_registry 1 1", "feature_freq_tensor 2 hash_hi 0"):
+def test_ctr_and_tensor_ctr_records_without_tables_refuse():
+    # lane/inference-gbdt-ctr-tables (2026-09-15) reads the CTR records;
+    # a record whose tables are missing still refuses, as predict_floats does
+    for record, needle in (("ctr_columns 1", "1 CTR columns and 0 CTR tables"),
+                           ("tensor_ctr_registry 1 1", "declares 1 tables and carries 0"),
+                           ("feature_freq_tensor 2 hash_hi 0", "before its registry")):
         text = TEXT.replace("losses 0\n", "losses 0\n" + record + "\n")
-        _raises(lambda: parse_model_text(text), record.split()[0])
+        _raises(lambda: parse_model_text(text), needle)
     assert parse_model_text(TEXT)["n_features"] == 1
 
 

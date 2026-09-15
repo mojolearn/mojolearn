@@ -1,0 +1,64 @@
+== ctr sabotage build Tue Sep 15 21:47:42 UTC 2026
+ctr sabotage build exit 0
+998abd57d49a5481feaa8d1d872d1e17543b9b10556bc4f94fffa9456141cd13  python/mojolearn/host-ctr-sabotage/_mojolearn_forest_host.so
+ec93b5b3e8e18d6cdf1188a7dbbe4973f40c807f1683ee1e0e10c8578df7ce86  python/mojolearn/host-sabotage/_mojolearn_forest_host.so
+d7091b30123d265611c51f4a3f0306798595728bf2ec2ed9bed918668483ba6b  python/mojolearn/host/_mojolearn_forest_host.so
+== cpu column (production forest) Tue Sep 15 21:47:47 UTC 2026
+cpu exit 0
+== forest sabotage column Tue Sep 15 21:47:50 UTC 2026
+forest sabotage exit 0
+== ctr sabotage column Tue Sep 15 21:47:51 UTC 2026
+ctr sabotage exit 0
+---- cpu
+cells=6 stable=6 moved=0 refused=0
+infer: stable=6
+batch: stable=6
+---- cpu-forest-sabotage
+cells=6 stable=6 moved=0 refused=0
+infer: refused=6
+batch: stable=6
+---- cpu-ctr-sabotage
+cells=6 stable=6 moved=0 refused=0
+infer: refused=6
+batch: stable=6
+== diffs Tue Sep 15 21:47:52 UTC 2026
+diff metal vs cpu (require 4, owed) exit 1
+summary: IDENTICAL=6
+summary (infer/model): IDENTICAL=12
+summary (batch): IDENTICAL=6
+summary (rlpair): 
+require-columns 4 over ['gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables']: 24 short (0 OWED)
+summary (owed): OWED=0; the next release record owes exactly these cell parts; wrote /root/leg_out/owed.json
+diff metal vs cpu-forest-sabotage exit 0 (must be 1)
+summary: IDENTICAL=6
+summary (infer/model): ONE-COLUMN=12
+summary (batch): IDENTICAL=6
+summary (rlpair): 
+diff metal vs cpu-ctr-sabotage exit 0 (must be 1)
+summary: IDENTICAL=6
+summary (infer/model): ONE-COLUMN=12
+summary (batch): IDENTICAL=6
+summary (rlpair): 
+== tests Tue Sep 15 21:47:52 UTC 2026
+test_gbdt_host_ctr exit 0
+ok test_what_predict_floats_refuses_is_refused_at_load
+5 passed
+ctr sabotage without the switch exit 1 (must be 1, refused)
+        f"mojolearn: {path} is the gate's SABOTAGE build and computes "
+test under ctr sabotage exit 1 (must be 1)
+AssertionError: [1.0, 0.5, 1.0, 0.25, 0.25]
+test_gbdt_host_modes exit 0
+7 passed
+== installed test wheel Tue Sep 15 21:47:52 UTC 2026
+_mojolearn_forest_host.so
+wheel build exit 0
+wheel python/dist/mojolearn-0.8.5-py3-none-linux_x86_64.whl
+mojolearn/_gbdt_host.py                        2026-09-15 20:34:52        38190
+mojolearn/host/_mojolearn_forest_host.so       2026-09-15 21:47:40       396736
+wheel check exit 0
+gbdt-tensor-ctr-tables/ties           IDENTICAL host=1659c6bbc45fd69d gpu=1659c6bbc45fd69d
+summary: IDENTICAL=6 DIFFER=0
+mojolearn from /root/wheel-target/mojolearn/__init__.py
+forest binary /root/wheel-target/mojolearn/host/_mojolearn_forest_host.so
+wheel check under ctr sabotage exit 1 (must be 1)
+summary: IDENTICAL=0 DIFFER=6

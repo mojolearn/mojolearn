@@ -739,6 +739,26 @@ FIXTURES = ["base", "ties", "hashed", "wide", "denormal", "denormal_ftz", "dupes
 
 LANES = {}
 
+#: LANES WHOSE INPUT CHANGED AFTER RECORDS WERE TAKEN (2026-09-15). A column
+#: records these as `lane_revisions`; `diff` and the verify reference table
+#: (python/mojolearn/_verify_reference.py) treat a column whose revision of a
+#: lane is not this one as carrying NO cell for that lane, so its cells read
+#: OWED to the next record rather than DIVERGENT against hashes of different
+#: input. Bump a lane's revision when its fixture or vocabulary changes.
+#:   tokenizer  synthetic-vocab-1: the GPT-2 table left the tree; the lane
+#:              loads the synthetic vocabulary (python/mojolearn/
+#:              _tokenizer_synthetic.py). Host integer code, so one hash per
+#:              cell on every device class; the GPU columns are owed at the
+#:              next release record.
+LANE_REVISIONS = {"tokenizer": "synthetic-vocab-1"}
+
+
+def stale_revision_lanes(record):
+    """The LANE_REVISIONS lanes whose revision in `record` (a column JSON) is
+    not this harness's, sorted."""
+    have = record.get("lane_revisions") or {}
+    return sorted(name for name, rev in LANE_REVISIONS.items() if have.get(name) != rev)
+
 
 def lane(name):
     def deco(fn):
@@ -1707,6 +1727,147 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(_coded(X)))), m, lambda e: (e.predict(_coded(Xh)),))
 
 
+#: lane/inference-gbdt-ctr-tables (2026-09-15). The saved-model directory
+#: of the two CTR table lanes: a GPU column FITS and writes
+#: `<dir>/<lane>.<fixture>.npz` (repeat 0); a CPU column, whose training
+#: path refuses CTR tables by name, LOADS that file through
+#: `mojolearn.host_model` instead of fitting, so its train, infer and batch
+#: cells are HostGBDT's predictions from the GPU's own saved model and its
+#: model cell is that file's hash.
+GBDT_CTR_MODELS_ENV = "MOJOLEARN_IDENTITY_GBDT_CTR_MODELS"
+
+
+def _rank_codes(col, cuts):
+    """Dense codes from the RANK of a column (a stable argsort, ties by row
+    order), cut at the fractions `cuts`: host arithmetic only, the same
+    bytes on every box, every code present, uneven group sizes."""
+    n = col.shape[0]
+    ranks = np.empty(n, dtype=np.int64)
+    ranks[np.argsort(col, kind="stable")] = np.arange(n, dtype=np.int64)
+    return np.searchsorted(np.asarray(cuts, dtype=np.float64), ranks.astype(np.float64) / n,
+                           side="right").astype(np.int64)
+
+
+def _ctr_tables_x(X, heldout=False):
+    """gbdt-categorical-ctr-tables' input: column 0 has eight categories
+    (seven rank groups of column 3 and an eighth held by ONE training row),
+    column 1 five (rank groups of column 4), both above the GPU
+    one_hot_max_size of 2, so each becomes four CTR columns (Borders at three
+    priors and FeatureFreq); column 2 is a two-category one-hot column; then
+    the first eight numeric columns. On the held-out rows every 97th row
+    carries category 8 and every 101st category 12 in column 0 (never seen
+    in training), every 89th category 7 (seen once), every 103rd category 9
+    in column 1 (never seen)."""
+    c0 = _rank_codes(X[:, 3], (0.30, 0.50, 0.65, 0.77, 0.86, 0.93))
+    c1 = _rank_codes(X[:, 4], (0.20, 0.45, 0.70, 0.90))
+    c2 = (X[:, 5] > np.median(X[:, 5])).astype(np.int64)
+    rows = np.arange(X.shape[0])
+    if heldout:
+        c0[rows % 89 == 0] = 7
+        c0[rows % 97 == 0] = 8
+        c0[rows % 101 == 0] = 12
+        c1[rows % 103 == 0] = 9
+    else:
+        c0[int(np.argsort(X[:, 6], kind="stable")[-1])] = 7
+    return np.ascontiguousarray(np.column_stack(
+        [c0.astype(np.float32), c1.astype(np.float32), c2.astype(np.float32), X[:, :8]]).astype(np.float32))
+
+
+def _ctr_tables_xh(Xh):
+    return _ctr_tables_x(Xh, heldout=True)
+
+
+def _tensor_ctr_x(X, heldout=False):
+    """gbdt-tensor-ctr-tables' input: two categorical source columns (four
+    rank groups of column 3 plus a fifth category held by ONE training row,
+    four rank groups of column 4), then the first four numeric columns. On
+    the held-out rows every 89th row carries source 0 category 4 (the
+    combinations seen once, or never), every 97th category 6 (past its
+    cardinality, the empty-value key)."""
+    c0 = _rank_codes(X[:, 3], (0.40, 0.70, 0.90))
+    c1 = _rank_codes(X[:, 4], (0.25, 0.55, 0.80))
+    rows = np.arange(X.shape[0])
+    if heldout:
+        c0[rows % 89 == 0] = 4
+        c0[rows % 97 == 0] = 6
+    else:
+        c0[int(np.argsort(X[:, 6], kind="stable")[-1])] = 4
+    return np.ascontiguousarray(np.column_stack(
+        [c0.astype(np.float32), c1.astype(np.float32), X[:, :4]]).astype(np.float32))
+
+
+def _tensor_ctr_xh(Xh):
+    return _tensor_ctr_x(Xh, heldout=True)
+
+
+def _tensor_ctr_y(Xt):
+    """The combination's learn frequency, float32, plus a small numeric
+    term: a target the tensor FeatureFreq column predicts and neither source
+    alone does."""
+    key = Xt[:, 0].astype(np.int64) * 16 + Xt[:, 1].astype(np.int64)
+    _, inverse, counts = np.unique(key, return_inverse=True, return_counts=True)
+    freq = counts[inverse].astype(np.float64) / Xt.shape[0]
+    return (freq * 10.0 + 0.01 * Xt[:, 2].astype(np.float64)).astype(np.float32)
+
+
+def _ctr_saved_or_fit(ml, fit):
+    """The estimator a CTR table lane answers with: fitted (and saved,
+    under GBDT_CTR_MODELS_ENV, on repeat 0) on a GPU column; on a CPU
+    column the HostGBDT of the saved file, tagged with its path."""
+    lane_name, fx, repeat = (_DUMP_TAG.split("/") + ["", "", ""])[:3]
+    d = os.environ.get(GBDT_CTR_MODELS_ENV, "").strip()
+    path = os.path.join(d, f"{lane_name}.{fx}.npz") if d and lane_name else None
+    if ml.vendor() == "cpu":
+        if not path or not os.path.isfile(path):
+            raise RuntimeError(f"CPU training refuses CTR tables by name; set {GBDT_CTR_MODELS_ENV} to the "
+                               f"directory of this lane's GPU-saved models (no {path})")
+        from mojolearn._forest_host import binary_path, host_model
+        est = host_model(path)
+        # the train and batch cells predict through this object, so it takes
+        # _probe_fit_host's guard: a forest binding loaded earlier under the
+        # shared module name (host_record reads MOJOLEARN_HOST_DIR) is not the
+        # MOJOLEARN_FOREST_HOST_BINARY asked for
+        bound = getattr(getattr(est, "_binding", None), "__file__", None)
+        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
+            raise RuntimeError(f"the forest binding in this process is {bound}, "
+                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+        est.identity_saved_path = path
+        return est
+    est = fit()
+    if path and repeat == "0":
+        os.makedirs(d, exist_ok=True)
+        est.save(path)
+    return est
+
+
+@lane("gbdt-categorical-ctr-tables")
+def _(ml, X, yc, yr, Xh=None):
+    """Gradient boosting whose categorical columns are above
+    one_hot_max_size, so the saved model carries real CTR tables (Borders at
+    three priors and FeatureFreq per column, ctr_table and ctr_entry records)
+    beside a one-hot column: 20 depth-6 Logloss trees. The held-out rows
+    carry unseen and seen-once categories."""
+    Xc = _ctr_tables_x(X)
+    m = _ctr_saved_or_fit(ml, lambda: ml.GradientBoosting(
+        n_estimators=20, max_depth=6, loss="Logloss", cat_features=[0, 1, 2]).fit(Xc, yc))
+    return _fit(dict(predict=_h(m.predict(Xc)), proba=_h(m.predict_proba(Xc))),
+                m, lambda e: (e.predict(_ctr_tables_xh(Xh)), e.predict_proba(_ctr_tables_xh(Xh))))
+
+
+@lane("gbdt-tensor-ctr-tables")
+def _(ml, X, yc, yr, Xh=None):
+    """ExperimentalTwoLevelFeatureFreq on two categorical sources with a
+    target the combination's frequency predicts, so the tree splits on the
+    tensor FeatureFreq column and the saved model carries a
+    tensor_ctr_registry with feature_freq_tensor records. The held-out rows
+    carry combinations seen once, never seen, and a code past the source's
+    cardinality."""
+    Xt = _tensor_ctr_x(X)
+    m = _ctr_saved_or_fit(ml, lambda: ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(
+        Xt, _tensor_ctr_y(Xt)))
+    return _fit(dict(predict=_h(m.predict(Xt))), m, lambda e: (e.predict(_tensor_ctr_xh(Xh)),))
+
+
 @lane("gbdt-nan-modes")
 def _(ml, X, yc, yr, Xh=None):
     """nan_mode Min and Max on a fixture that actually carries NaN
@@ -1804,6 +1965,25 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
                      explicit_predict=_h(e.predict(X)),
                      explicit_loss_curve=_h(np.asarray(e.loss_curve_, dtype=np.float64))),
+                m, lambda est: (est.predict(Xh),))
+
+
+@lane("gbdt-yeti-rank")
+def _(ml, X, yc, yr, Xh=None):
+    """YetiRank (learning to rank, sampled permutations on query groups): 20
+    depth-6 symmetric trees on the gbdt-query-rmse queries and grades, and a
+    second fit of 8 depth-4 trees at random_state=7, so the hash covers the
+    derivative draws' stream as well as the task tables. Unweighted: the host
+    column refuses sample_weight on every loss. YetiRank has no loss value
+    (the target writes 0), so `loss_curve_` is hashed only to pin that.
+    Predict is row-wise, so the held-out probe and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
+    e = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="YetiRank", random_state=7).fit(
+        X, rel, group_id=g)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     seeded_predict=_h(e.predict(X))),
                 m, lambda est: (est.predict(Xh),))
 
 
@@ -2458,17 +2638,24 @@ def _(ml, X, yc, yr, Xh=None):
     """GPT2Tokenizer (python/mojolearn/tokenizer.py), host integers and
     tables through _mojolearn_tokenizer_host; no float arithmetic, so
     cross-vendor identity is by construction and what this measures is
-    that the SAME binary bytes were built on every box. The fixture bytes
-    are the first 4,096 bytes of X viewed as bytes (the byte-lm lane's
-    derivation without _ids' modulus), encoded with <|endoftext|> allowed,
-    then decoded back; the held-out probe encodes Xh's first 4,096 bytes
+    that the SAME binary bytes were built on every box. mojolearn ships no
+    vocabulary, so the lane loads the synthetic one mojolearn trains itself
+    (python/mojolearn/_tokenizer_synthetic.py, 512 ranks) at revision
+    LANE_REVISIONS["tokenizer"]. The fixture bytes are the first 4,096 bytes
+    of X viewed as bytes (the byte-lm lane's derivation without _ids'
+    modulus), encoded with <|endoftext|> allowed, then decoded back; the
+    held-out probe encodes Xh's first 4,096 bytes
     (docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md section 3)."""
-    tok = ml.GPT2Tokenizer()
+    tok = ml.tokenizer.GPT2Tokenizer._synthetic()
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     ids = np.asarray(tok.encode_bytes(raw, allow_endoftext=True), dtype=np.int32)
     back = np.frombuffer(tok.decode_bytes(ids.tolist()), dtype=np.uint8)
-    assert back.tobytes() == raw, "tokenizer lane: decode(encode(x)) != x"
-    return _fit(dict(ids=_h(ids), decoded=_h(back), n_vocab=_h(np.int64(tok.n_vocab))),
+    # The round trip is a hashed part, not an assertion (2026-09-15): a
+    # sabotaged binary must read DIVERGENT, and a raise would read REFUSED,
+    # which the owed check (tools/cpu_identity_gate_check.py owed) does not
+    # count as a catch. A production column hashes roundtrip=1 everywhere.
+    roundtrip = np.int64(1 if back.tobytes() == raw else 0)
+    return _fit(dict(ids=_h(ids), decoded=_h(back), roundtrip=_h(roundtrip), n_vocab=_h(np.int64(tok.n_vocab))),
                 tok, lambda e: (np.asarray(e.encode_bytes(np.ascontiguousarray(Xh).tobytes()[:4096],
                                                           allow_endoftext=True), dtype=np.int32),))
 
@@ -4036,9 +4223,11 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
-            "gbdt-query-rmse", "gbdt-pair-logit")
+            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
+_batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
+_batch_decl(_rows_calls("predict", prep=_tensor_ctr_xh), "gbdt-tensor-ctr-tables")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):
@@ -5925,6 +6114,31 @@ def _probe_fit_host(fit, name):
     return infer, model, reload, None
 
 
+def _probe_saved_host(fit, name):
+    """The infer, model and reload columns of a CPU fit that LOADED a GPU
+    column's saved file (GBDT_CTR_MODELS_ENV): the held-out probe of a fresh
+    `host_model(<file>)`, the file's hash, and the probe of a second fresh
+    load (a load that predicts differently reads RELOAD-MOVED). The same
+    binary guard as `_probe_fit_host`."""
+    from mojolearn._forest_host import binary_path, host_model
+    path = fit.est.identity_saved_path
+    try:
+        model = _hfile(path)
+        host = host_model(path)
+        bound = getattr(getattr(host, "_binding", None), "__file__", None)
+        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
+            raise RuntimeError(f"the forest binding in this process is {bound}, "
+                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+        infer = _h(*fit.probe(host))
+    except Exception as exc:
+        return None, None, None, f"infer (saved model): {type(exc).__name__}: {exc}"
+    try:
+        reload = _h(*fit.probe(host_model(path)))
+    except Exception as exc:
+        return infer, None, None, f"model (saved model): {type(exc).__name__}: {exc}"
+    return infer, model, reload, None
+
+
 def _probe_fit(fit, name):
     """The infer and model columns of ONE fit. Returns (infer, model, reload,
     error) where infer and model are a hash or an `n/a:<reason>` string,
@@ -5933,6 +6147,8 @@ def _probe_fit(fit, name):
     stage that raised leaves its column None, which reads REFUSED."""
     if not callable(fit.probe):
         return fit.probe, "n/a:no-save", None, None
+    if getattr(fit.est, "identity_saved_path", None):
+        return _probe_saved_host(fit, name)
     if _host_infer_on(name):
         return _probe_fit_host(fit, name)
     try:
@@ -6076,7 +6292,7 @@ def _run_reference(args):
                       heldout=heldout_hashes, cells=cells, complete=complete,
                       skipped=sorted(skip), batch_protocol=batch_protocol,
                       batch_sabotage=batch_sabotage, rlpair_protocol=rlpair_protocol,
-                      rlpair_sabotage=rlpair_sabotage)
+                      rlpair_sabotage=rlpair_sabotage, lane_revisions=dict(LANE_REVISIONS))
         host_infer = _host_infer_lanes()
         if host_infer is not None:
             record["host_infer"] = "all" if host_infer is True else sorted(host_infer)
@@ -6442,6 +6658,14 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
         with open(p) as fh:
             j = json.load(fh)
         cols.append((j.get("vendor") or os.path.basename(p), j))
+    for name, j in cols:
+        stale = stale_revision_lanes(j)
+        dropped = [k for k in j["cells"] if k.split("/")[0] in stale]
+        if dropped:
+            for k in dropped:
+                del j["cells"][k]
+            print(f"NOTE: column {name} hashed {', '.join(stale)} at an older lane revision "
+                  f"(LANE_REVISIONS); its {len(dropped)} cell(s) there are not compared and read as absent")
     keys = sorted(set(k for _, j in cols for k in j["cells"]))
     if require_lanes:
         # --lanes SCOPES the diff (2026-09-14 night): the verdicts, the
@@ -6657,7 +6881,7 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
 
 #: the keys every part of one column must agree on before --merge joins them
 MERGE_SAME = ("vendor", "commit", "mode", "repeats", "heldout_seed", "fixtures", "heldout",
-              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage") + tuple(
+              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage", "lane_revisions") + tuple(
     f"{part}_{k}" for part in EXTRA_PARTS for k in ("protocol", "sabotage"))
 
 

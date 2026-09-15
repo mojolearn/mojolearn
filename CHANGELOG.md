@@ -25,6 +25,19 @@ Linux legs are OWED before this heading reads published.
     `mojolearn.host_model(path)` predicts on a CPU-only install.
   - **Not promised.** `predict(X_train) == labels_`; the evidence measures the rate
     (bench/results/identity_break/2026-09-15_spectral-predict).
+- Public CPU inference from a saved gradient boosting model whose categorical columns are above
+  `one_hot_max_size` (real CTR tables: Borders at three priors and FeatureFreq) or whose
+  `ExperimentalTwoLevelFeatureFreq` tree splits on a combination (tensor CTRs with split history),
+  fitted on a GPU (lane/inference-gbdt-ctr-tables). `mojolearn.host_model(path)` parses the
+  `ctr_table`, `ctr_entry`, `tensor_ctr_registry` and `feature_freq_tensor` records and the shipped
+  forest host binding applies them with the same `expand_raw_columns` and tensor apply body the GPU
+  predict calls (the tensor apply moved to `gbdt/models/tensor_ctr_apply.mojo`, which has no device
+  import). Unseen and seen-once categories take the tables' empty and learned values; a NaN, negative
+  or non-integer categorical value and a CTR type with no apply-time arithmetic are refused by name.
+  No saved-model record changed. On two new identity lanes the x86 CPU predictions from the Metal
+  column's saved models equal the Metal cells (train, infer, model and batch, base, ties and odd), and
+  both the forest and a new CTR sabotage build move every train, infer and batch cell; the NVIDIA and
+  AMD cells are owed (bench/results/identity_break/2026-09-15_gbdt-ctr-tables).
 - Public CPU inference from a saved model for `GaussianProcessRegressor` (every kernel the fit
   accepts, `normalize_y` included), `GaussianProcessClassifier` (binary and one-vs-rest) and
   `GaussianMixture.sample` (lane/inference-neighbors-density). `GaussianProcessRegressor` gains
@@ -81,7 +94,7 @@ Linux legs are OWED before this heading reads published.
   reference lanes and the portable models. The card verifier's list-every-stage flag is now
   `--all-stages`. Maintainers regenerate the table with `verify --all --emit-reference` and
   the models with `verify --emit-models` (docs/VERIFY.md).
-- New `GaussianProcessClassifier`, scikit-learn's Laplace approximation (`_gpc.py`) with
+- New `GaussianProcessClassifier`, the Laplace approximation with
   `optimizer=None`: binary fits by the posterior-mode Newton loop, one-vs-rest past two classes,
   `predict`, `predict_proba`, `latent_mean_and_variance`, `log_marginal_likelihood_value_`, `save` and
   `load`. The loop stops by the reference's rule read on an identical float32 likelihood, so its
@@ -135,7 +148,7 @@ Linux legs are OWED before this heading reads published.
 - New `GaussianMixture.sample(n_samples)`, with scikit-learn's `BaseMixture.sample` as the
   reference: `(X, y)` with the component counts a multinomial draw over `weights_` and the
   rows grouped by component ascending. Every draw is position-mapped Philox keyed by
-  `random_state` (DEVIATION 2791), the normals are RAFT's Box-Muller with the pinned seams,
+  `random_state` (DEVIATION 2791), the normals are a Box-Muller transform with the pinned seams,
   and each row is the forward substitution through the fitted `precisions_cholesky_`
   (DEVIATION 2792), so one model and one `random_state` give the same bits on every vendor;
   they are not scikit-learn's bits. `X` is float32 and `y` int32. On the GPU mixture binding
@@ -198,6 +211,17 @@ Linux legs are OWED before this heading reads published.
   M4 CPU column: train, infer and batch IDENTICAL x4 against the 166-lane record, the new
   saved-factor model cells OWED to the release record, the sabotage build DIVERGENT on every
   train and owed cell.
+- mojolearn ships no third-party vocabulary or data file. The GPT-2 rank table and the GPT-2
+  reference fixture are removed from the tree; `GPT2Tokenizer` is the GPT-2 format's byte-level
+  BPE algorithm over a vocabulary the user supplies: `GPT2Tokenizer.from_files(encoder_json,
+  vocab_bpe)`, `from_ranks_file(path)` or `from_token_bytes(tokens)`, and `GPT2Tokenizer()` refuses
+  by name. `<|endoftext|>` is the id after the last rank (`eot_token`, `n_vocab - 1`); the
+  `data_directory` argument, `MOJOLEARN_TOKENIZER_DATA` and `mojolearn.tokenizer.data_dir` are
+  gone. The Unicode class table is generated at build time from Python's `unicodedata` (Unicode
+  16.0.0, sha256 pinned) and compiled into the tokenizer binding. The gates and the `tokenizer`
+  identity lane use a synthetic vocabulary mojolearn trains itself, so the lane's hashes changed;
+  its record cells read OWED until the next release record (`LANE_REVISIONS`). NOTICE carries
+  only the copyright, the license and the trademark sentence.
 - New `GPT2Tokenizer.encode_batch(documents, allow_endoftext=False)`, `decode_batch` and
   `decode_bytes_batch`. `encode_batch` is one call into the tokenizer host binding
   (`gpt2_encode_batch`) that encodes each document alone, so every document's ids equal
@@ -271,9 +295,8 @@ Linux legs are OWED before this heading reads published.
   the metrics host sabotage build required to read DIVERGENT. Apple M4 Metal and CPU columns
   only; the NVIDIA and AMD columns are owed to the release record.
 - New `HDBSCAN(prediction_data=True)` and `mojolearn.hdbscan.approximate_predict(clusterer,
-  points_to_predict)`, mirroring cuML's prediction data and `approximate_predict`: the label
-  and probability of new points under the fitted clustering, on the GPU binding and the CPU host
-  binding. Without `prediction_data=True` it refuses by name, as cuML does. A tie in mutual
+  points_to_predict)`: the label and probability of new points under the fitted clustering, on
+  the GPU binding and the CPU host binding. Without `prediction_data=True` it refuses by name. A tie in mutual
   reachability distance resolves in (distance, index) order (DEVIATION 1615). The fit is
   unchanged: the committed Apple, NVIDIA and AMD train hashes of the `hdbscan` and
   `hdbscan-leaf` lanes still match. Those lanes and `par-hdbscan` now carry infer and batch
@@ -281,42 +304,54 @@ Linux legs are OWED before this heading reads published.
   move them. Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the
   release record.
 - New `mojolearn.hdbscan.membership_vector(clusterer, points_to_predict, batch_size=4096)` and
-  `all_points_membership_vectors(clusterer, batch_size=4096)`, cuML's soft clustering: for each
+  `all_points_membership_vectors(clusterer, batch_size=4096)`, soft clustering: for each
   point and each selected cluster, the probability of membership. They need
   `HDBSCAN(prediction_data=True)` and refuse by name without it. cuML computes four of the steps in
   float64, which an Apple GPU cannot run; here every step is float32 with pinned seams on the GPU
   binding and the CPU host binding, and rows where cuML overflows to NaN (duplicated points) are
   finite (DEVIATION 1616). The `hdbscan` and `hdbscan-leaf` identity lanes hash both calls in their
   infer cells, and their batch part asks `membership_vector` alone and split.
-- `GradientBoosting.fit` takes `group_id`, CatBoost's Pool argument: one string or integer id per
-  row (an integer compares by its decimal spelling, as their Pool hashes it), each group's rows
+- `GradientBoosting.fit` takes `group_id`: one string or integer id per
+  row (an integer compares by its decimal spelling), each group's rows
   consecutive or the fit raises "group Ids are not consecutive". The grouping crosses into the GPU
   binding and the GBDT host binding as run lengths. `loss="QueryRMSE"` reads it; every other loss
   refuses it BY NAME. `subgroup_id` and `pairs` are refused by name in Python. A fit without them
   sends the same parameter layout as before.
-- New `loss="QueryRMSE"` for `GradientBoosting`, the first learning-to-rank loss, with the CatBoost
-  reference's querywise target (`query_rmse.cu`, the group means and ids of `query_helper.cu`, the
-  querywise der calcer's inverse bin order in leaf estimation) on the GPU and restated in the GBDT
-  host binding for the CPU reference column. SymmetricTree with the greedy searcher, Newton leaves at
+- New `loss="QueryRMSE"` for `GradientBoosting`, the first learning-to-rank loss: a querywise
+  target (group means per query, leaf estimation in inverse bin order) on the GPU and restated in
+  the GBDT host binding for the CPU reference column. SymmetricTree with the greedy searcher, Newton leaves at
   one iteration by default; a bootstrap, categorical features, an eval set, the pointwise searcher
   and the non-symmetric policies are refused by name. Without `group_id` every row is its own
-  query, as in the reference, so the fit learns nothing. Prediction is the ordinary row-wise raw
+  query, so the fit learns nothing. Prediction is the ordinary row-wise raw
   score, so saved-model CPU inference covers it. New identity lane `gbdt-query-rmse` with a batch
   part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed to the release record.
-- New `loss="PairLogit"` for `GradientBoosting`, the pairwise ranking loss of the CatBoost reference
-  (`pair_logit.cu` through the querywise target), on the same arm as QueryRMSE. Without `pairs` the
+- New `loss="PairLogit"` for `GradientBoosting`, a pairwise ranking loss through the querywise
+  target, on the same arm as QueryRMSE. Without `pairs` the
   pairs are generated from `group_id` and the grades as the reference's default does (every two rows
   of a query with different grades, the higher grade the winner); `fit(pairs=..., pairs_weight=...)`
   takes explicit `[winner, loser]` row pairs inside groups. Two named DEVIATIONs: each row's pair
   derivatives are summed in one fixed order where the reference sums them in thread arrival order,
-  and the search weight plane follows `secondDerAsWeights` as the pointwise target does, where the
-  reference's querywise branch has the two arms reversed (so at the default Cosine score the trees
+  and the search weight plane uses second derivatives as weights as the pointwise target does, where
+  the reference's querywise branch has the two arms reversed (so at the default Cosine score the trees
   can differ from the reference's GPU and follow its CPU weighting). Each tree's leaf values are
-  shifted to average zero after estimation, as the reference's `MakeZeroAverage` does for this loss
+  shifted to average zero after estimation, as the reference does for this loss
   (a shift no pairwise loss or ranking metric can see, but raw predictions do). `pairs` without
-  `group_id`, the `max_pairs` subsample and PairLogitPairwise are not implemented. New identity lane
+  `group_id`, the `max_pairs` subsample and the pairwise-scored variant are not implemented. New identity lane
   `gbdt-pair-logit` with a batch part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed
   to the release record.
+- New `loss="YetiRank"` for `GradientBoosting`, the sampled-permutation ranking loss of the CatBoost
+  reference (`yeti_rank_pointwise.cu` and its two radix-sort passes, through the querywise target), on
+  the same arm as QueryRMSE, at the reference's defaults: 10 permutations, decay 0.85, Newton leaves at
+  one iteration (changing the method is refused in the reference's words) and an L2 of 0. A query over
+  1023 rows is refused as the reference refuses it. Two named DEVIATIONs: each task of at most 1024
+  rows runs sequentially on one device thread in the reference's per-document order (draws, the stable
+  sort, then each lane's two phases), and the derivative seeds come from a YetiRank stream of
+  `random_state` kept apart from the searcher's, so the trees cannot match the reference's GPU bit
+  for bit. Leaves are shifted to average zero as for PairLogit; `loss_curve_` is zero because the
+  reference's target writes no value. `GradientBoosting(l2_leaf_reg=...)` now defaults to `None`,
+  which takes the loss's default (0 for YetiRank, 3.0 for every other loss, the value it was); an
+  explicit value is used as given. New identity lane `gbdt-yeti-rank` with a batch part. Apple M4
+  Metal and CPU columns only; NVIDIA and AMD are owed to the release record.
 - The host (CPU) bindings `python/mojolearn/host_surface.py` marks `ships_in_wheel` ship in
   both wheels under `mojolearn/host/`: ten families, byte_lm, forest, tokenizer, neural, core,
   linalg, estimators, metrics, svm and forecast. The other seventeen families the manifest

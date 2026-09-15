@@ -102,6 +102,9 @@ from gbdt.host.gbdt_oracle_query import (
     query_rmse_search_pass,
     query_rmse_value,
 )
+from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
+from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
+from gbdt.data.permutation import TRandom
 from gbdt.host.gbdt_oracle import (
     GBDT_FLOAT32_MAX,
     GBDT_MSE_BLOCK,
@@ -144,6 +147,9 @@ comptime GBDT_OBJ_QUERY_RMSE = 14
 #: `OBJECTIVE_PAIR_LOGIT` (`pointwise_targets.mojo`), the pairwise-derivative
 #: querywise target of `gbdt/host/gbdt_oracle_pair.mojo`
 comptime GBDT_OBJ_PAIR_LOGIT = 15
+#: `OBJECTIVE_YETI_RANK` (`pointwise_targets.mojo`), the sampled-permutation
+#: querywise target of `gbdt/host/gbdt_oracle_yeti.mojo`
+comptime GBDT_OBJ_YETI_RANK = 16
 
 #: `LEAF_ESTIMATION_*` (`gbdt/options/catboost_options.mojo:269-271`).
 comptime GBDT_LEAF_GRADIENT = 0
@@ -543,6 +549,8 @@ def _walker_estimate(
     row_index: List[Int] = List[Int](),
     group_sizes: List[Int] = List[Int](),
     pairs: Optional[HostPairs] = None,
+    yeti_tasks: Optional[YetiRankTasks] = None,
+    yeti_seed: UInt64 = UInt64(0),
 ) raises -> List[Float32]:
     """`newton_like_walker_estimate` with AnyImprovement
     (`descent_helpers.mojo:198-285`, `step_estimator.mojo:50-72`), the TWIN
@@ -558,8 +566,18 @@ def _walker_estimate(
     var cur_value = Float64(0.0)
     var cur_grad = List[Float64]()
     var cached_der2 = List[Float64]()
+    # this tree's YetiRank evaluation stream (`pointwise_oracle.mojo`'s
+    # `yeti_rng`): one draw per evaluation
+    var yeti_rng = TRandom(yeti_seed)
     _oracle_move_to(cur_point, current_point, bins, g_cursor, n_rows)
-    if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+    if loss.objective == GBDT_OBJ_YETI_RANK:
+        yeti_rank_eval(
+            targets_rows, List[Float32](), False, g_cursor, row_index,
+            group_sizes, yeti_tasks.value(), yeti_rng.next_uniform_l(), 10,
+            Float32(0.85), offsets, sizes, n_rows, lambda_reg, cur_value,
+            cur_grad, cached_der2,
+        )
+    elif loss.objective == GBDT_OBJ_PAIR_LOGIT:
         pair_logit_eval(
             pairs.value(), g_cursor, row_index, offsets, sizes, n_rows,
             lambda_reg, cur_value, cur_grad, cached_der2,
@@ -594,7 +612,14 @@ def _walker_estimate(
             var next_point = _walker_move(cur_point, direction, step)
             _regularize(weights_cpu, next_point)
             _oracle_move_to(next_point, current_point, bins, g_cursor, n_rows)
-            if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+            if loss.objective == GBDT_OBJ_YETI_RANK:
+                yeti_rank_eval(
+                    targets_rows, List[Float32](), False, g_cursor, row_index,
+                    group_sizes, yeti_tasks.value(), yeti_rng.next_uniform_l(),
+                    10, Float32(0.85), offsets, sizes, n_rows, lambda_reg,
+                    next_value, next_grad, cached_der2,
+                )
+            elif loss.objective == GBDT_OBJ_PAIR_LOGIT:
                 pair_logit_eval(
                     pairs.value(), g_cursor, row_index, offsets, sizes, n_rows,
                     lambda_reg, next_value, next_grad, cached_der2,
@@ -782,6 +807,8 @@ def _estimate_leaves_for_loss(
     l2_leaf_reg: Float32,
     group_sizes: List[Int] = List[Int](),
     pairs: Optional[HostPairs] = None,
+    yeti_tasks: Optional[YetiRankTasks] = None,
+    yeti_seed: UInt64 = UInt64(0),
 ) raises -> List[Float32]:
     """`_estimate_and_apply`'s estimate (`doc_parallel_boosting.mojo:
     698-797`): the gathers by the row index, then Exact or the walker."""
@@ -804,7 +831,8 @@ def _estimate_leaves_for_loss(
         )
     return _walker_estimate(
         loss, g_target, g_cursor, bins, offsets, sizes, weights_cpu, n_rows,
-        l2_leaf_reg, targets, row_index, group_sizes, pairs,
+        l2_leaf_reg, targets, row_index, group_sizes, pairs, yeti_tasks,
+        yeti_seed,
     )
 
 
@@ -828,8 +856,21 @@ def gbdt_losses_host_fit(
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
     resolved to their `TWithoutQueriesGrouping` rule by the binding."""
-    if (loss.objective == GBDT_OBJ_QUERY_RMSE or loss.objective == GBDT_OBJ_PAIR_LOGIT) and len(group_sizes) < 1:
+    if (
+        loss.objective == GBDT_OBJ_QUERY_RMSE
+        or loss.objective == GBDT_OBJ_PAIR_LOGIT
+        or loss.objective == GBDT_OBJ_YETI_RANK
+    ) and len(group_sizes) < 1:
         raise Error("the querywise host fit needs the query sizes")
+    # the YetiRank task table (`InitYetiRank`'s query size refusal inside) and
+    # draw stream, as `doc_parallel_boosting.mojo::fit_with_test` builds them
+    var yeti_tasks = Optional[YetiRankTasks]()
+    var yeti_rand = TRandom(params.random_seed ^ UInt64(0x5945544952414E4B))
+    if loss.objective == GBDT_OBJ_YETI_RANK:
+        var yeti_sizes = List[UInt32](capacity=len(group_sizes))
+        for g in range(len(group_sizes)):
+            yeti_sizes.append(UInt32(group_sizes[g]))
+        yeti_tasks = Optional(yeti_rank_tasks(yeti_sizes, n_rows))
     # the PairLogit pairs, generated or given, in the device order
     # (`gbdt/train.mojo::train` does the same with the same functions)
     var pairs = Optional[HostPairs]()
@@ -916,7 +957,14 @@ def gbdt_losses_host_fit(
 
     for iteration in range(params.n_estimators):
         # ---- the gradients, the learn loss and the magnitudes ----
-        if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+        if loss.objective == GBDT_OBJ_YETI_RANK:
+            # the tree's first YetiRank draw, as the device's search pass
+            yeti_rank_search_pass(
+                y, List[Float32](), False, cursor, group_sizes,
+                yeti_tasks.value(), yeti_rand.next_uniform_l(), 10,
+                Float32(0.85), n_rows, stats, fv_part, mag_part,
+            )
+        elif loss.objective == GBDT_OBJ_PAIR_LOGIT:
             pair_logit_search_pass(
                 pairs.value(), cursor, n_rows, stats, fv_part, mag_part
             )
@@ -1147,11 +1195,15 @@ def gbdt_losses_host_fit(
             )
 
         # ---- the estimation task and `AppendModels` ----
+        var yeti_tree_seed = UInt64(0)
+        if loss.objective == GBDT_OBJ_YETI_RANK:
+            # the tree's second YetiRank draw: the estimation stream's seed
+            yeti_tree_seed = yeti_rand.next_uniform_l()
         var estimated = _estimate_leaves_for_loss(
             loss, y, cursor, row_index, offsets, sizes, n_rows,
-            params.l2_leaf_reg, group_sizes, pairs,
+            params.l2_leaf_reg, group_sizes, pairs, yeti_tasks, yeti_tree_seed,
         )
-        if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+        if loss.objective == GBDT_OBJ_PAIR_LOGIT or loss.objective == GBDT_OBJ_YETI_RANK:
             # `MakeZeroAverage` (`doc_parallel_leaves_estimator.cpp:25-37`),
             # restated from `_estimate_and_apply`: minus the unweighted mean
             # over all `n_live` leaves, summed in double in leaf order.
@@ -1182,7 +1234,10 @@ def gbdt_losses_host_fit(
             if iteration + 1 > 1:
                 losses.append(-v / loss_norm)
 
-    if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+    if loss.objective == GBDT_OBJ_YETI_RANK:
+        # the device's final pass writes 0.0 partials and takes no draw
+        losses.append(-Float64(Float32(0.0)) / Float64(n_rows))
+    elif loss.objective == GBDT_OBJ_PAIR_LOGIT:
         var p_fv = pair_logit_value(pairs.value(), cursor)
         losses.append(
             -Float64(_deterministic_sum_lanes(p_fv, 1, len(p_fv))[0]) / loss_norm

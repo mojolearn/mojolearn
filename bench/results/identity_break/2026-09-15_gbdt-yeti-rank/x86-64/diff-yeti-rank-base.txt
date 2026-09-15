@@ -1,0 +1,41 @@
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=b58caf9fb1724ee0a334ad8491d4ecad5e09f691
+NOTE: column cpu-x86-64-runpod is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=b58caf9fb1724ee0a334ad8491d4ecad5e09f691
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-x86-64-runpod: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-x86-64-runpod: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    cpu-apple-m4: {'X': '32ea0bbed60b8e6c'}
+    cpu-x86-64-runpod: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd1ba686494256660'}
+    cpu-apple-m4: {'X': 'd1ba686494256660'}
+    cpu-x86-64-runpod: None
+| lane/fixture                 | verdict    | apple-m4         | cpu-apple-m4     | cpu-x86-64-runpod |
+|------------------------------|------------|------------------|------------------|------------------|
+| gbdt-yeti-rank/base          | IDENTICAL x3 | c6915a79b84d2f69 | c6915a79b84d2f69 | c6915a79b84d2f69 |
+| gbdt-yeti-rank/odd           | IDENTICAL x2 | 7a0387ee1d5122e2 | 7a0387ee1d5122e2 | (not run)        |
+| gbdt-yeti-rank/ties          | IDENTICAL x2 | 2806db8fa590f37a | 2806db8fa590f37a | (not run)        |
+
+summary: IDENTICAL=3
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-apple-m4     | cpu-x86-64-runpod |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| gbdt-yeti-rank/base          | infer  | IDENTICAL x3 | 09302e69a820d4d2 | 09302e69a820d4d2 | 09302e69a820d4d2 |
+| gbdt-yeti-rank/base          | model  | IDENTICAL x3 | 61b246f4d443ada8 | 61b246f4d443ada8 | 61b246f4d443ada8 |
+| gbdt-yeti-rank/base          | batch  | IDENTICAL x3 | 1d4efc6c8dd79d17 | 1d4efc6c8dd79d17 | 1d4efc6c8dd79d17 |
+| gbdt-yeti-rank/odd           | infer  | IDENTICAL x2 | 4f27a4e93e0b10ae | 4f27a4e93e0b10ae | (not run)        |
+| gbdt-yeti-rank/odd           | model  | IDENTICAL x2 | 6b0f6c184a2f7a1c | 6b0f6c184a2f7a1c | (not run)        |
+| gbdt-yeti-rank/odd           | batch  | IDENTICAL x2 | 4b907129f7e6a11d | 4b907129f7e6a11d | (not run)        |
+| gbdt-yeti-rank/ties          | infer  | IDENTICAL x2 | b9ffe828b9fbd29b | b9ffe828b9fbd29b | (not run)        |
+| gbdt-yeti-rank/ties          | model  | IDENTICAL x2 | 829d963be374fd19 | 829d963be374fd19 | (not run)        |
+| gbdt-yeti-rank/ties          | batch  | IDENTICAL x2 | eacc647f6bcc57aa | eacc647f6bcc57aa | (not run)        |
+
+summary (infer/model): IDENTICAL=6
+summary (batch): IDENTICAL=3
+summary (rlpair): 

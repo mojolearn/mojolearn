@@ -1,0 +1,15 @@
+# vendor=cpu-amd-epyc-9754-128-core-processor commit=bc47909fdfcce60e0d27fdacae521788c5015c22 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9754 128-Core Processor' host.column=cpu host.families=['_mojolearn_tokenizer_host']
+# identity_break  mode=identical  2026-09-15 21:06:24  Linux-5.15.0-94-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| tokenizer              | 74458a3ecb971805 | 0f4aff7c9f453e85 | 898febe78a80327a | d8f676c80c02e0ac | d322d18fab348b21 | 4f403b1e5e237dea | 6b30a6941eef4198 | 74458a3ecb971805 | 5262bf205be38975 |
+| tokenizer infer        | 4bec413bce4c1597 | b4997614d6879154 | 26a404942548a5ff | 2f27a19f8fea5b93 | b667c4cb1f0b2319 | 68693a34296e6a1d | 7c980118bc464c5c | 4bec413bce4c1597 | 82628ed3422d8ad5 |
+| tokenizer batch        | 54dbcc73f9b214e0 | 4e17f982ec8a49e1 | a6171c088a42aba2 | 3fba878431b331fa | d2aeb5e86d087908 | a8effeeb8268bdc3 | 225efd6e83196894 | 4da32467a812901e | 12d5dea685216316 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: n/a=9
+batch: stable=9
+n/a: tokenizer model n/a:no-save
+wrote /root/leg_out/cpu-x86.host-sabotage.json

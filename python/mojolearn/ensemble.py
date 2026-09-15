@@ -137,6 +137,7 @@ LOSSES = (
     "Huber",
     "QueryRMSE",
     "PairLogit",
+    "YetiRank",
 )
 
 def _group_id_key(value, index):
@@ -581,7 +582,10 @@ class GradientBoosting(NumericModeMixin):
     learning_rate : float, default 0.03
         CatBoost's default (`boosting_options.cpp:10`), not scikit-learn's
         0.1.
-    l2_leaf_reg : float, default 3.0
+    l2_leaf_reg : float or None, default None
+        None takes the loss's CatBoost default: 3.0, and 0 for YetiRank
+        (`catboost_options.cpp:34-37`, `:166-172`). An explicit value is used
+        as given.
     border_count : int, default 128
         Quantization bins per numeric feature.
     random_state : int, default 0
@@ -741,7 +745,7 @@ class GradientBoosting(NumericModeMixin):
         n_estimators=100,
         max_depth=6,
         learning_rate=0.03,
-        l2_leaf_reg=3.0,
+        l2_leaf_reg=None,
         border_count=128,
         random_state=0,
         loss_alpha=None,
@@ -1120,7 +1124,9 @@ class GradientBoosting(NumericModeMixin):
             int(self.n_estimators),                     # 5
             int(self.max_depth),                        # 6
             float(self.learning_rate),                  # 7
-            float(self.l2_leaf_reg),                    # 8
+            float((0.0 if self.loss == "YetiRank" else 3.0)
+                  if self.l2_leaf_reg is None
+                  else self.l2_leaf_reg),               # 8, None -> the loss's default
             int(self.random_state),                     # 9
             _SCORE_FUNCTION_NAMES[self.score_function],  # 10
             f(self.loss_alpha),                         # 11
@@ -1259,8 +1265,15 @@ class GradientBoosting(NumericModeMixin):
         of `[winner, loser]` integer row indices, each pair inside one group,
         with `pairs_weight` one weight per pair (default 1.0). `pairs` is
         refused without `group_id`, where the reference would regroup and
-        reorder the pool, and with any loss but PairLogit. `subgroup_id` is
-        read by no loss here and is refused by name.
+        reorder the pool, and with any loss but PairLogit. `loss="YetiRank"`
+        reads the groups on the same arm, with the reference's defaults
+        (10 permutations, decay 0.85, `l2_leaf_reg` 0 unless given, Newton
+        leaves at one iteration, which it refuses to change); a query over
+        1023 rows is refused in the reference's words. Its derivative draws
+        come from a stream of `random_state` kept apart from the searcher's,
+        so its trees cannot match the reference's GPU bit for bit, and
+        `loss_curve_` is zero, as the reference's YetiRank target writes no
+        value. `subgroup_id` is read by no loss here and is refused by name.
 
         `sample_weight` is a per-row weight, `None` meaning all ones. It
         MULTIPLIES with `class_weights` where both are given, which is

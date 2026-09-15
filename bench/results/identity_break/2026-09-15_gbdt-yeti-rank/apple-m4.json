@@ -1,0 +1,278 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "b58caf9fb1724ee0a334ad8491d4ecad5e09f691",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  }
+ },
+ "cells": {
+  "gbdt-yeti-rank/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c6915a79b84d2f69",
+    "c6915a79b84d2f69"
+   ],
+   "parts": [
+    {
+     "predict": "e747eb262199d31f",
+     "loss_curve": "ca9456bb4853a6ff",
+     "seeded_predict": "5330cea439cdd2ce"
+    },
+    {
+     "predict": "e747eb262199d31f",
+     "loss_curve": "ca9456bb4853a6ff",
+     "seeded_predict": "5330cea439cdd2ce"
+    }
+   ],
+   "infer": [
+    "09302e69a820d4d2",
+    "09302e69a820d4d2"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "61b246f4d443ada8",
+    "61b246f4d443ada8"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "09302e69a820d4d2",
+    "09302e69a820d4d2"
+   ],
+   "batch": [
+    "1d4efc6c8dd79d17",
+    "1d4efc6c8dd79d17"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-yeti-rank/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2806db8fa590f37a",
+    "2806db8fa590f37a"
+   ],
+   "parts": [
+    {
+     "predict": "b4aa6ac05c2d7469",
+     "loss_curve": "ca9456bb4853a6ff",
+     "seeded_predict": "adee49a5015497df"
+    },
+    {
+     "predict": "b4aa6ac05c2d7469",
+     "loss_curve": "ca9456bb4853a6ff",
+     "seeded_predict": "adee49a5015497df"
+    }
+   ],
+   "infer": [
+    "b9ffe828b9fbd29b",
+    "b9ffe828b9fbd29b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "829d963be374fd19",
+    "829d963be374fd19"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b9ffe828b9fbd29b",
+    "b9ffe828b9fbd29b"
+   ],
+   "batch": [
+    "eacc647f6bcc57aa",
+    "eacc647f6bcc57aa"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gbdt-yeti-rank/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7a0387ee1d5122e2",
+    "7a0387ee1d5122e2"
+   ],
+   "parts": [
+    {
+     "predict": "5db1d6c758c6bf19",
+     "loss_curve": "ca9456bb4853a6ff",
+     "seeded_predict": "def8dc70338854a4"
+    },
+    {
+     "predict": "5db1d6c758c6bf19",
+     "loss_curve": "ca9456bb4853a6ff",
+     "seeded_predict": "def8dc70338854a4"
+    }
+   ],
+   "infer": [
+    "4f27a4e93e0b10ae",
+    "4f27a4e93e0b10ae"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6b0f6c184a2f7a1c",
+    "6b0f6c184a2f7a1c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "4f27a4e93e0b10ae",
+    "4f27a4e93e0b10ae"
+   ],
+   "batch": [
+    "4b907129f7e6a11d",
+    "4b907129f7e6a11d"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-gbdt-rank/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "bfbe0ba1b8322e60ff1864514e2f58863b079d752154ed6536117256c96b1b98",
+    "size": 2597104
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "e68ff79b8edc9bab741a382180988e6b7a48e9b5e3f547968cfcdc248cf78045",
+    "size": 670336
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "14b1890cbab7552859b61a84341ec3f645260155e7fe17be96a8394ea3e98ce0",
+    "size": 3405872
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "5521958e132fbda7fb6332777ac6ae1f59711bf40f81f379023b0a8c58095daa",
+    "size": 3104664
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "5cbca71bbfd72ebdc936139b0f3925afe1431eaaa9e6321873fd07aed627291d",
+    "size": 7091424
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "af43e12a437231938cc59f92a7671e36a01be7c39e10c62fe6c7b11453b25d4f",
+    "size": 1456496
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "5f19efdc05c660746075fc7a7e53a116a3c544dd895bde9d443f4d65cc2b61c1",
+    "size": 955760
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "41962f89bb0c3356cda3e1e8e684324865bdd340cc7f72ac8361539cc3d0de00",
+    "size": 2708880
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "05dcf0dc4a26c54bb0f10f5ef3d4c8aaed89c4b42f883097906961d0a180b6cb",
+    "size": 3743968
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "7c0dee75f367fa13f8af907658d7d2980fa5a75021b43d671fc8ebe03a019341",
+    "size": 362112
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "6efe32d07694423a268c8dc0b57940d920916fd4ba08faf482ae35ff12c4b116",
+    "size": 1647504
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "2fc77e78f9d1ca8193a95cea2e0caccbaa45be3330817798790cf3fb638add4c",
+    "size": 1478400
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "c3d069d53935d9ef0456ddb3e7360f64eff4f21a108eaaaa74c274e3e11e656e",
+    "size": 1789696
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "ca27230430cf3f4a83b5f15093f41d84a3a8ea726b92a523a2b800208d71730a",
+    "size": 1555280
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "38880d102e03bb4ffdb8d1ed413d8f00fd592e57dda131077b51767aac40f249",
+    "size": 2708304
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "69f55a968e3dc50c45a9658a79efd4c6e45d9add5b3ac6e375f9c8e1574632c0",
+    "size": 1322048
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "e457ffb7d4a4bfb6c0f8a82ddf0d5703b34fdf9ceeb4760fd7106d61e7d6ede6",
+    "size": 607104
+   }
+  ]
+ }
+}

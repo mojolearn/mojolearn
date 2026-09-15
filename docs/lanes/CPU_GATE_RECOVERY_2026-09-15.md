@@ -95,6 +95,43 @@ branch selection needs a complete dependency map and fail-closed fallback.
 Neither is required to land this reduction in repeated work. The separate R2
 binding-cache lane remains responsible for portable remote GPU build caching.
 
+## Every declared binding is built (September 15 follow-up)
+
+Until this follow-up the workflow built byte_lm, forest and tokenizer by
+hand and the routed families in a loop, so seven bindings the wheel ships
+were never built or checked: `_mojolearn_neural_host`,
+`_mojolearn_mixture_infer_host`, `_mojolearn_gp_infer_host`,
+`_mojolearn_hdbscan_infer_host`, `_mojolearn_embedding_infer_host`,
+`_mojolearn_ivf_search_host` and `_mojolearn_forecast_host`. The release
+certification that `release-provenance.yml` calls would not have verified
+them. The full read-back step, which names every declared binding, would
+also have failed on the first runner.
+
+- The manifest step now writes `BUILD_FAMILIES` and `SABOTAGE_FAMILIES`
+  (`--families` for the full verification, `--wheel-families` for the
+  routine scope) and `ALL_HOST_BINDINGS`. One build loop and the sabotage
+  build loop read them. No family is named by hand.
+- `tools/cpu_identity_gate_check.py build-list` runs in the manifest step. It
+  fails when the production list, the sabotage list or the read-back list
+  leaves out a declared binding, or when a family has no build shim.
+  `BuildListTests` in `tools/test_cpu_identity_gate.py` holds its negative
+  control: the pre-follow-up hand list fails, naming the seven bindings.
+- Two new steps check `host_surface.saved_model_recorded()`, which is
+  `FORECAST_RECORDED`, `INFERENCE_ONLY_RECORDED` and
+  `SEARCH_LOOKUP_RECORDED`, with `tools/classical_host_gate.py check`. The
+  production host set must match every recording. The sabotage host set
+  must differ on at least one fixture of every lane (`--expect-mismatch
+  --every-lane`), so a family that moved cannot hide one that did not. On an
+  x86 RunPod pod the sabotage set moved 95 of the 97 fixtures; `ivf/ties` and
+  `ivf-euclidean/ties` stayed EQUAL, so the requirement is per lane, not per
+  fixture.
+- The neural binding has no saved-model recording. Its check is the covered
+  lanes' four-column diff and sabotage arm: on a CPU column, the mlp,
+  transformer, mamba and samba lanes ask their infer, batch, batchscale and
+  ragged cells through the public inference classes over
+  `_mojolearn_neural_host`, which is now in both host sets.
+- The job timeout is 90 minutes, up from 60, for the added builds.
+
 ## Hosted evidence
 
 CPU identity run [34978769155](https://github.com/mojolearn/mojolearn/actions/runs/34978769155)
@@ -110,8 +147,9 @@ for both. The merge from 590c11c86 changes documentation only.
 The inference boundary is implemented in `lane/cpu-training-inference-boundary`.
 Public CPU estimator fitting refuses; the source identity harness and its
 runtime tests explicitly enter a private reference-training context. The
-full 117-lane reference surface remains available. Future wheels and routine
-CI build eight inference/helper families, while full CI builds all 21.
+full 117-lane reference surface remains available. The wheels and the
+routine scope build the families `host_surface.py --wheel-families` names,
+and the full verification builds every family `--families` names.
 Training-only families cannot enter a wheel through stale build outputs.
 Mixed inference bindings retain private native helpers used by the verifier;
 the numeric implementation and GPU training API are unchanged.

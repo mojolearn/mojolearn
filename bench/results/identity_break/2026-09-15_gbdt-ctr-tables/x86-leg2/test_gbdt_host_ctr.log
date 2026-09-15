@@ -1,0 +1,6 @@
+ok test_ctr_lookup_unseen_seen_once_and_nan_when_built
+ok test_ctr_records_parse_with_the_column_plan
+ok test_tensor_combination_and_past_cardinality_when_built
+ok test_unsupported_ctr_type_refuses_by_name
+ok test_what_predict_floats_refuses_is_refused_at_load
+5 passed

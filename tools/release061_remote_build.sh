@@ -114,8 +114,16 @@ if (root / '.git').exists():
 else:
     if (root / 'commit.txt').read_text().strip() != commit:
         raise SystemExit('Archive commit witness differs from root pin')
-spec = importlib.util.spec_from_file_location('release_backend_probe', root / 'python/mojolearn/_backend.py')
+# _backend.py imports host_surface relatively (f74fdfc22), so it is loaded as a
+# submodule of a stand-in package over python/mojolearn. Importing the real
+# package would run __init__.py, which loads bindings this build has not made.
+import types
+probe_pkg = types.ModuleType('release_backend_probe')
+probe_pkg.__path__ = [str(root / 'python/mojolearn')]
+sys.modules['release_backend_probe'] = probe_pkg
+spec = importlib.util.spec_from_file_location('release_backend_probe._backend', root / 'python/mojolearn/_backend.py')
 backend = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = backend
 spec.loader.exec_module(backend)
 actual_arch, how = backend._device_arch(vendor)
 # DEVIATION 2293: the device reports sm_90; an sm_90a build targets exactly

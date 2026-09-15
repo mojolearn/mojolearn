@@ -284,7 +284,8 @@ def test_inference_routes_ship_and_carry_no_fit():
 
 def test_workflow_reads_the_manifest_not_literals():
     text = _read(".github/workflows/cpu-identity-gate.yml")
-    for var in ("COVERED_LANES", "HOST_FAMILIES", "HOST_BINDINGS", "CLASSICAL_RECORDED"):
+    for var in ("COVERED_LANES", "BUILD_FAMILIES", "SABOTAGE_FAMILIES", "ALL_HOST_BINDINGS",
+                "CLASSICAL_RECORDED", "SAVED_MODEL_RECORDED"):
         assert not re.search(rf'^\s+{var}: "', text, re.M), (
             f"the workflow carries a literal {var}; it must read the manifest"
         )
@@ -292,12 +293,24 @@ def test_workflow_reads_the_manifest_not_literals():
         "the workflow carries a literal GPU_COLUMNS block; it must read the manifest"
     )
     assert "python/mojolearn/host_surface.py" in text
-    for flag in ("--covered-lanes", "--routed-families", "--routed-bindings",
-                 "--classical-recorded", "--classical-gpu-columns", "--training-gpu-columns"):
+    for flag in ("--covered-lanes", "--families", "--wheel-families", "--bindings", "--wheel-bindings",
+                 "--classical-recorded", "--saved-model-recorded", "--classical-gpu-columns",
+                 "--training-gpu-columns", "cpu_identity_gate_check.py build-list"):
         assert flag in text, f"the workflow does not read {flag} from the manifest"
     for rel in host_surface.TRAINING_GPU_COLUMNS + host_surface.CLASSICAL_GPU_COLUMNS:
         directory = "/" + rel.rsplit("/", 1)[0] + "/"
         assert directory in text, f"the sparse checkout does not bring down {directory}"
+    # Every build loop reads the manifest's list; no binding is built by hand
+    # (until 2026-09-15 byte_lm, forest and tokenizer were, and seven shipped
+    # bindings were never built).
+    # The one hand build left is the forest sabotage binding, which reads its
+    # own define (MOJOLEARN_FOREST_HOST_SABOTAGE) into its own directory.
+    assert re.findall(r"sh bindings/build_([a-z_]+)_host\.sh", text) == ["forest"], "the workflow builds a family by hand"
+    assert text.count('for family in $BUILD_FAMILIES; do') == 1
+    assert text.count('for family in $SABOTAGE_FAMILIES; do') == 1
+    for rel in host_surface.saved_model_recorded():
+        assert rel.startswith("bench/results/classical_host/"), rel
+    assert "/bench/results/classical_host/" in text
 
 
 def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():

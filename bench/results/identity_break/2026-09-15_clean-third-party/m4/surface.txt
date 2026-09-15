@@ -1,0 +1,4 @@
+test_tokenizer_surface: GREEN. 23 of 23 checks on this host (0 skipped): 22 exact id sequences and round trips against the synthetic vocabulary's
+Python encoder through the Python door, merges, byte fallback, Unicode classes, both
+readings of <|endoftext|>, batch encoding, the rank-file and spelled-file loaders, and
+every refusal by name. It says nothing about another box.
