@@ -7,7 +7,7 @@ the kmeans lane of docs/lanes/BRIEF_cpu_training_2026-09-13.md section 1.1
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. Every kernel of the fit is spelled a
-SECOND time here from the device source, statement for statement, in the
+SECOND time here from the device source, with the same arithmetic order, in the
 order `cluster/estimator.mojo::kmeans_fit` then
 `cluster/impl/kmeans.mojo::fit_predict` reach them at the shipped default
 (k-means|| init, L2 expanded, `n_init` 1, `inertia_check` off). The
@@ -411,7 +411,7 @@ def host_assign(
         if is_sqrt:
             # DEVIATION 2715: the kernel's root is `identical_sqrt` now. The
             # host libm root is correctly rounded too, so this moves no bit;
-            # it keeps the mirror statement for statement.
+            # it keeps the host spelling the same as the kernel's.
             val = identical_sqrt(val)
         min_dist[row] = val
         labels[row] = key
@@ -1214,3 +1214,38 @@ def host_kmeans_fit(
         labels, min_dist,
     )
     return KMeansHostResult(result.inertia, result.n_iter, sum_scale, weight_scale)
+
+
+def host_kmeans_predict(
+    x: List[Float32],
+    n: Int,
+    d: Int,
+    centroids: List[Float32],
+    k: Int,
+    metric: Int,
+    mut labels: List[UInt32],
+) raises:
+    """`kmeans_predict`, `cluster/estimator.mojo`: the metric refused by
+    name as the fit refuses it, then `host_kmeans_fit`'s own final
+    assignment, statement for statement (the same row norms, the same
+    `host_assign`), so on the training rows and the returned centroids it
+    is `labels_` by construction. cuML's `KMeans.predict` is
+    `_predict_labels_inertia` keeping the labels (`kmeans.pyx:1071-1082`),
+    one cuVS assignment pass."""
+    if n < 1 or d < 1 or k < 1:
+        raise Error(
+            "kmeans_predict needs n_samples, n_features and n_clusters >= 1: got "
+            + String(n)
+            + ", "
+            + String(d)
+            + ", "
+            + String(k)
+        )
+    host_validate_params(metric, k, 1e-4, DEFAULT_OVERSAMPLING)
+    var x_norm = host_row_norms(x, n, d, metric == METRIC_COSINE_EXPANDED)
+    var c_norm = host_row_norms(centroids, k, d, metric == METRIC_COSINE_EXPANDED)
+    var min_dist = List[Float32](length=n, fill=Float32(0.0))
+    host_assign(
+        x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
+        labels, min_dist,
+    )

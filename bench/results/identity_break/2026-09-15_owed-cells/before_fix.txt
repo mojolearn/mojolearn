@@ -1,0 +1,26 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 7 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host'] commit=115eb51ece64e6e18cebd4885b0a00cf03789e99
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| kmeans-sqrt/base             | IDENTICAL x4 | 8864be3c295d6c4a | 8864be3c295d6c4a | 8864be3c295d6c4a | 8864be3c295d6c4a |
+| kmeans-sqrt/odd              | IDENTICAL x4 | cd50fd82b95de87a | cd50fd82b95de87a | cd50fd82b95de87a | cd50fd82b95de87a |
+
+summary: IDENTICAL=2
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| kmeans-sqrt/base             | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 3b648e50c114da3c |
+| kmeans-sqrt/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/base             | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | a44ce4484c90c89d |
+| kmeans-sqrt/odd              | infer  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | db19ea8a99baebc2 |
+| kmeans-sqrt/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/odd              | batch  | ONE-COLUMN   | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 5d46fd602108b99c |
+
+summary (infer/model): N/A=2, ONE-COLUMN=2
+summary (batch): ONE-COLUMN=2
+summary (rlpair): 
+REQUIRE FAIL kmeans-sqrt/base infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans-sqrt/base batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans-sqrt/odd infer: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL kmeans-sqrt/odd batch: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 4 over ['kmeans-sqrt']: 4 short

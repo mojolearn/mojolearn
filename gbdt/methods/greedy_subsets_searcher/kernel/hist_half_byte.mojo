@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The half-byte histogram kernel: 8 features per 4-byte load.
 
-FOLLOWS `hist_half_byte.cu` plus the loop it instantiates,
+Reference: `hist_half_byte.cu` plus the loop it instantiates,
 `compute_hist_loop_one_stat.cuh` (`ALIGN_MEMORY`,
 `TComputeHistogramImpl<FourElements>::Compute`,
-`ComputeSplitPropertiesDirectLoadsImpl`), at CatBoost `54a8143a`.
-Followed statement for statement.
+`ComputeSplitPropertiesDirectLoadsImpl`) (CatBoost `54a8143a`).
 
 The features that need 2 to 15 folds land here: one `UInt32` of the
 compressed index holds EIGHT of them at 4 bits each, so one load feeds eight

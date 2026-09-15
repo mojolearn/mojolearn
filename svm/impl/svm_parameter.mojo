@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`SvmParameter`, `SvmModel`, `KernelParams`: the parameter and model records.
 
-FOLLOWS `cuml/cpp/include/cuml/svm/svm_parameter.h`, `svm_model.h` and
-`cuml/cpp/include/cuml/matrix/kernel_params.hpp` at cuML v26.08.00.
-Every field of theirs is here; every field we do not honor RAISES BY NAME
+Reference: `cuml/cpp/include/cuml/svm/svm_parameter.h`, `svm_model.h` and
+`cuml/cpp/include/cuml/matrix/kernel_params.hpp` (cuML v26.08.00).
+Every reference field is here; every field this implementation does not honor RAISES BY NAME
 in `check_rung1_scope` (called by `svcFit`), never silently ignored.
 
 What the record carries that the brief's rung 1 does not use, and what
@@ -19,7 +19,7 @@ happens to it:
                            silently ignored parameter is the failure mode;
                            under EPSILON_SVR it must be finite and >= 0
     cache_size != 0        raised by name (the LRU cache; README "cache decision")
-    verbosity              accepted and ignored: it selects LOG LINES in theirs
+    verbosity              accepted and ignored: it selects LOG LINES in the reference
                            (`CUML_LOG_DEBUG`), we print none
     kernel POLYNOMIAL,     raised by name (TANH has no identical_tanh;
       TANH, PRECOMPUTED    POLYNOMIAL is one identical_pow away and is left

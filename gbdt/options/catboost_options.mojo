@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Training options, under CatBoost's own names.
 
-MIRRORS `catboost/private/libs/options/`, principally
+Reference: `catboost/private/libs/options/`, principally
 `catboost_options.cpp`, `boosting_options.cpp`, `oblivious_tree_options.cpp`,
 `bootstrap_options.h` and `data_processing_options.cpp`. Their spellings are
 kept exactly, including the ones this implementation does not honor yet, because a name
@@ -794,7 +794,7 @@ struct CatBoostOptions(Copyable, Movable):
 # CATEGORICAL FEATURES AND CTRs
 # ==========================================================================
 #
-# MIRRORS `private/libs/options/cat_feature_options.{h,cpp}` and the two
+# Reference: `private/libs/options/cat_feature_options.{h,cpp}` and the two
 # functions of `catboost_options.cpp` that resolve their defaults:
 # `CreateDefaultCounter` (`:392-415`) and `SetCtrDefaults` (`:429-478`).
 #
@@ -1221,7 +1221,7 @@ struct TCatFeatureParams(Copyable, Movable):
 # =========================================================================
 # THE LEAF-ESTIMATION DEFAULTS.
 #
-# FOLLOWS `GetEstimationMethodDefaults` (`catboost_options.cpp:30-271`) and
+# Reference: `GetEstimationMethodDefaults` (`catboost_options.cpp:30-271`) and
 # `TCatBoostOptions::SetLeavesEstimationDefault` (`:273-360`).
 #
 # THEY LIVE HERE BECAUSE THEY LIVE THERE. Both were written into

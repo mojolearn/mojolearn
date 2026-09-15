@@ -10,6 +10,13 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- New `mojolearn.metrics.fowlkes_mallows_score`, mirroring scikit-learn's definition (cuML
+  has none): the device integer contingency matrix, exact Int64 pair counts, then
+  `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, 0.0 when `tk == 0` (no samples, one sample,
+  all singletons). It was a named absence. The metrics GPU binding and the metrics host
+  binding both export it; the new `metrics-fowlkes-mallows` identity lane covers it, with
+  the metrics host sabotage build required to read DIVERGENT. Apple M4 Metal and CPU columns
+  only; the NVIDIA and AMD columns are owed to the release record.
 - `GradientBoosting.fit` takes `group_id`, CatBoost's Pool argument: one string or integer id per
   row (an integer compares by its decimal spelling, as their Pool hashes it), each group's rows
   consecutive or the fit raises "group Ids are not consecutive". The grouping crosses into the GPU

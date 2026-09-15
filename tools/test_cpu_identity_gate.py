@@ -118,5 +118,169 @@ class GateTests(unittest.TestCase):
                 identity.merge([str(left), str(right)], str(out))
 
 
+def load_identity():
+    spec = importlib.util.spec_from_file_location('identity_owed_test', Path(__file__).with_name('identity_break.py'))
+    identity = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(identity)
+    return identity
+
+
+def cell(train='t', infer=None, batch=None, repeats=2):
+    """A STABLE train cell; infer and batch are a hash, 'n/a' or None (key absent)."""
+    c = dict(verdict='STABLE', hashes=[train] * repeats, parts=[dict(p=train)] * repeats)
+    for part, value in (('infer', infer), ('batch', batch)):
+        if value is None:
+            continue
+        if value == 'n/a':
+            c[part], c[f'{part}_verdict'] = ['n/a:no-predict'] * repeats, 'N/A'
+        else:
+            c[part], c[f'{part}_verdict'] = [value] * repeats, 'STABLE'
+    return c
+
+
+def column(vendor, cells, cpu=False):
+    j = dict(vendor=vendor, commit='test', mode='identical', repeats=2, complete=True,
+             fixtures={'base': 'b', 'odd': 'o'}, package={}, cells=cells)
+    if cpu:
+        j['host'] = dict(column='cpu', cpu_model='test', families={})
+    return j
+
+
+class OwedTests(unittest.TestCase):
+    """The OWED rule of identity_break --diff --owed-json and its sabotage
+    arm, cpu_identity_gate_check.py owed (lane/cpu-gate-owed-cells)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.output = io.StringIO()
+        self.redirect = contextlib.redirect_stdout(self.output)
+        self.redirect.__enter__()
+        self.addCleanup(self.redirect.__exit__, None, None, None)
+        self.identity = load_identity()
+
+    def columns(self):
+        """Three GPU records with train hashes and n/a predict cells, plus a
+        CPU column that hashes infer and batch: the k-means predict shape."""
+        gpu = {f'km/{fx}': cell('t' + fx, 'n/a', 'n/a') for fx in ('base', 'odd')}
+        cpu = {f'km/{fx}': cell('t' + fx, 'i' + fx, 'b' + fx) for fx in ('base', 'odd')}
+        return dict(apple=column('apple', copy.deepcopy(gpu)), nvidia=column('nvidia', copy.deepcopy(gpu)),
+                    amd=column('amd', copy.deepcopy(gpu)), cpu=column('cpu', cpu, cpu=True))
+
+    def diff(self, cols, owed=True, lanes=('km',)):
+        paths = []
+        for name, j in cols.items():
+            p = self.root / f'{name}.json'
+            p.write_text(json.dumps(j))
+            paths.append(str(p))
+        self.owed_path = self.root / 'owed_cells.json'
+        if self.owed_path.exists():
+            self.owed_path.unlink()
+        return self.identity.diff(paths, 4, list(lanes), str(self.owed_path) if owed else None)
+
+    def owed_keys(self):
+        return sorted((o['lane'], o['fixture'], o['part'], tuple(o['missing']))
+                      for o in json.loads(self.owed_path.read_text())['owed'])
+
+    def test_without_owed_the_four_column_check_fails(self):
+        self.assertEqual(self.diff(self.columns(), owed=False), 1)
+        self.assertIn('REQUIRE FAIL km/base infer', self.output.getvalue())
+
+    def test_owed_passes_and_lists_exactly_the_missing_cells(self):
+        cols = self.columns()
+        del cols['amd']['cells']['km/odd']            # a lane cell not in that record
+        del cols['nvidia']['cells']['km/base']['batch']      # a part key absent
+        del cols['nvidia']['cells']['km/base']['batch_verdict']
+        apple = cols['apple']['cells']['km/base']            # Apple has the batch hash, and agrees
+        apple['batch'], apple['batch_verdict'] = ['bbase'] * 2, 'STABLE'
+        self.assertEqual(self.diff(cols), 0, self.output.getvalue())
+        out = self.output.getvalue()
+        self.assertIn('summary: IDENTICAL=1, OWED=1', out)   # km/odd train rests on 3
+        self.assertIn('| km/base                      | IDENTICAL x4', out)
+        want = [('km', 'base', 'batch', ('nvidia', 'amd')),
+                ('km', 'base', 'infer', ('apple', 'nvidia', 'amd')),
+                ('km', 'odd', 'batch', ('apple', 'nvidia', 'amd')),
+                ('km', 'odd', 'infer', ('apple', 'nvidia', 'amd')),
+                ('km', 'odd', 'train', ('amd',))]
+        self.assertEqual(self.owed_keys(), sorted(want))
+
+    def test_recorded_cell_that_differs_is_still_divergent(self):
+        for part in ('train', 'infer'):
+            cols = self.columns()
+            c = cols['apple']['cells']['km/base']
+            if part == 'train':
+                c['hashes'] = ['other'] * 2
+            else:
+                c['infer'], c['infer_verdict'] = ['other'] * 2, 'STABLE'
+            self.assertEqual(self.diff(cols), 1, part)
+            self.assertRegex(self.output.getvalue(), r'\| km/base +\| (infer +\| )?DIVERGENT')
+            self.assertNotIn(('km', 'base', part), [k[:3] for k in self.owed_keys()])
+
+    def test_apple_column_that_agrees_keeps_owed(self):
+        cols = self.columns()
+        c = cols['apple']['cells']['km/base']
+        c['infer'], c['infer_verdict'] = ['ibase'] * 2, 'STABLE'
+        self.assertEqual(self.diff(cols), 0)
+        self.assertIn(('km', 'base', 'infer', ('nvidia', 'amd')), self.owed_keys())
+
+    def test_cell_missing_from_every_gpu_column_but_unstable_on_cpu_fails(self):
+        for mutation in ('moved', 'one-repeat'):
+            cols = self.columns()
+            c = cols['cpu']['cells']['km/base']
+            if mutation == 'moved':
+                c['infer'], c['infer_verdict'] = ['ibase', 'other'], 'MOVED'
+            else:
+                c['infer'] = ['ibase']
+            self.assertEqual(self.diff(cols), 1, mutation)
+            self.assertNotIn(('km', 'base', 'infer'), [k[:3] for k in self.owed_keys()])
+
+    def test_column_recording_refused_for_a_cpu_hashed_cell_fails(self):
+        for where in ('cell', 'part'):
+            cols = self.columns()
+            c = cols['nvidia']['cells']['km/base']
+            if where == 'cell':
+                c['verdict'] = 'REFUSED'
+            else:
+                c['infer'], c['infer_verdict'] = [None, None], 'REFUSED'
+            self.assertEqual(self.diff(cols), 1, where)
+            self.assertIn('not OWED: column nvidia REFUSED' if where == 'cell' else 'not OWED: column nvidia reads REFUSED',
+                          self.output.getvalue())
+
+    def test_owed_needs_require_columns(self):
+        with self.assertRaisesRegex(SystemExit, 'needs --require-columns'):
+            self.identity.diff([], 0, None, str(self.root / 'x.json'))
+
+    def sabotage_check(self, mutate):
+        cols = self.columns()
+        self.assertEqual(self.diff(cols), 0)
+        prod = self.root / 'cpu.json'
+        sab_cells = {k: cell('s' + k, 's-infer' + k, 'BATCH_MOVED:x' + k, repeats=1) for k in cols['cpu']['cells']}
+        mutate(sab_cells)
+        sab = self.root / 'cpu-sab.json'
+        sab.write_text(json.dumps(column('cpu', sab_cells, cpu=True)))
+        return gate.do_owed(SimpleNamespace(owed_json=str(self.owed_path), production=str(prod), sabotage=str(sab)))
+
+    def test_owed_cells_that_move_under_sabotage_pass(self):
+        self.assertEqual(self.sabotage_check(lambda cells: None), 0)
+        self.assertIn('owed verdict OK (4 of 4', self.output.getvalue())
+
+    def test_owed_cell_that_does_not_move_under_sabotage_fails(self):
+        def unmoved(cells):
+            cells['km/odd']['batch'] = ['bodd']
+        self.assertEqual(self.sabotage_check(unmoved), 1)
+        self.assertIn('km/odd batch: DID NOT MOVE', self.output.getvalue())
+
+    def test_owed_cell_refused_or_absent_under_sabotage_fails(self):
+        for mutation in ('refused', 'absent'):
+            def mutate(cells):
+                if mutation == 'refused':
+                    cells['km/base']['verdict'] = 'REFUSED'
+                else:
+                    del cells['km/base']
+            self.assertEqual(self.sabotage_check(mutate), 1, mutation)
+            self.assertIn('km/base infer: the sabotage column has no value', self.output.getvalue())
+
+
 if __name__ == '__main__':
     unittest.main()

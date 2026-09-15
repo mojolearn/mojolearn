@@ -160,7 +160,7 @@ def main() raises:
     )
 
     # ------------------------------------------------------------------
-    # split_points.cpp:37-162. Their whole split is six calls on ONE stream
+    # split_points.cpp:37-162. The reference split is six calls on ONE stream
     # with nothing between them. On the default stream the guard at
     # gpu_single_worker.cpp:80-87 runs SyncActiveStreams(true), which SKIPS
     # stream 0, so back-to-back default-stream launches cost nothing.
@@ -208,7 +208,7 @@ def main() raises:
     # ------------------------------------------------------------------
     # gpu_single_worker.cpp:120-123. The RequestStream case writes the id
     # into the command. It is readable only through a direct run(), because
-    # the queue hands the worker a copy and the promise half of their design
+    # the queue hands the worker a copy and the promise half of the reference design
     # (`future/local_promise_future.h`) is not implemented.
     # ------------------------------------------------------------------
     print("RequestStream writes its answer (gpu_single_worker.cpp:120-123)")

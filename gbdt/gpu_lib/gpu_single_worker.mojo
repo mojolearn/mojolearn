@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device worker: one queue, one dispatch switch, one place that drains.
 
-FOLLOWS `catboost/cuda/cuda_lib/gpu_single_worker.h` and `.cpp` at CatBoost
-`54a8143a`. Followed statement for statement where it follow statement for statements. See the DEVIATION BLOCK.
+Reference: `catboost/cuda/cuda_lib/gpu_single_worker.h` and `.cpp` (CatBoost
+`54a8143a`). Differences from the reference are listed in the DEVIATION BLOCK.
 
 Their `TGpuOneDeviceWorker` is a thread that pulls commands off a queue and
 runs `switch (task->GetCommandType())` (`gpu_single_worker.cpp:69-141`), one
@@ -43,7 +43,7 @@ whole split (`split_points.cpp:41`, `:56`, `:115`, `:135`, `:143`, `:151`)
 without the host ever appearing between them.
 
 ================================ DEVIATION BLOCK ======================
-Five departures, four of them forced, plus one thing of ours.
+Five departures, four of them forced, plus one addition.
 
 **1. No thread.** Theirs runs on its own OS thread so `cudaLaunchKernel`
 stays off the host critical path. `DeviceContext.enqueue_function` is already
@@ -67,7 +67,7 @@ task object exists here, only `try_proceed_task` changes.
 **4. `ObjectsToFree` is always empty.** Their lazy-delete list
 (`gpu_single_worker.h:161`) is fed by the MemoryDeallocation case, which this
 implementation raises on because buffers belong to `DeviceContext`. The list and the
-branches that read it (`gpu_single_worker.cpp:83-86`) are transcribed anyway,
+branches that read it (`gpu_single_worker.cpp:83-86`) are kept anyway,
 because deleting a branch is how a state machine silently inverts.
 
 Its feeder `TempMemoryAllocatedObjects` (`gpu_single_worker.h:162`), which
@@ -429,7 +429,7 @@ struct TGpuOneDeviceWorker(Movable):
         (`gpu_single_worker.cpp:77-93`). Records the launch. Does NOT wait,
         UNLESS the stream is the default one.
 
-        Their guard, transcribed: a kernel on stream 0 first waits for every
+        The reference guard: a kernel on stream 0 first waits for every
         other stream to submit, drains every OTHER active stream, and, if
         anything is pending deletion, deletes it and drains stream 0 too
         (`gpu_single_worker.cpp:80-87`). That is what makes the default stream

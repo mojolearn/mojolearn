@@ -46,7 +46,7 @@ from max.algorithm import sync_parallelize
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_mul_add
 from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle, refuse_nonfinite
-from gemm.host.gemm_oracle import OP_NT, gemm_oracle
+from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, gemm_oracle
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_kernels import (
     all_finite_span,
@@ -288,7 +288,14 @@ def _threaded_rows(params: List[Float32], inputs: List[Int32], batch: Int, lengt
     var vocab = config.vocab_size
     var layers = config.n_layers
     var head_index = 1 + 9 * layers
-    var reverse = byte_host_sabotage_compiled()
+    # The CPU identity gate's sabotage set is built with
+    # `-D MOJOLEARN_HOST_SABOTAGE=1` alone. The reference path reaches it
+    # through gemm_oracle's descending leaf, but these kernels restate the
+    # fold, so without this the byte-lm-host-infer-threaded lane read
+    # IDENTICAL x4 on all nine fixtures under that set (M4, 2026-09-15,
+    # lane/cpu-training-host-only-lanes). The head's one-leaf reversal is
+    # the same arm DEVIATION 2612 already admits.
+    var reverse = byte_host_sabotage_compiled() or GEMM_ORACLE_HOST_SABOTAGE
     var held = List[List[List[Float32]]]()
     held.append(byte_host_fast_tensors(params, config))
     var ropes = List[RopeTable]()

@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The E-step: the log Gaussian probability, and the responsibilities.
 
-NO REFERENCE FILE, AND THERE IS NOTHING TO IMPLEMENTATION. cuML has no Gaussian mixture model
+NO REFERENCE FILE. cuML has no Gaussian mixture model
 at `upstream/cuml-v26.08.00` (`265b9da`): no `gmm` directory, no `mixture`
 module, no `GaussianMixture` symbol outside a scikit-learn test xfail list.
 cuVS (`6ba2ce2`) and RAFT (`ebf9268`) have none either. `ENGINEERING_RULES.md`
 0b therefore **points at nothing for this lane**, and every design question
-here was ours to answer. What applies instead is
+here was answered in this lane. What applies instead is
 `mixture/README.md`'s rule: `sklearn/mixture/_gaussian_mixture.py` and
 `_base.py` define the SEMANTICS and are the ORACLE, and they are never the
 design source.
@@ -22,7 +22,7 @@ WHAT IS TAKEN FROM SCIKIT-LEARN, AND WHY IT IS TAKEN
     return -0.5 * (d * log(2 pi) + log_prob) + log_det_chol   # `:548`
 
 That IS the arithmetic this file computes, and it is followed because it is
-the ORACLE'S ARITHMETIC, not because it is their design. Two consequences are
+the ORACLE'S ARITHMETIC, not because scikit-learn's layout is adopted. Two consequences are
 worth stating rather than discovering:
 
 1. **`(X @ P) - (mu @ P)` is kept, not rewritten to `(X - mu) @ P`.** The

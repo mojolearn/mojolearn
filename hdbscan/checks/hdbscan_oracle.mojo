@@ -658,9 +658,9 @@ def _naive_find(parent: List[Int], x: Int) -> Int:
 
 
 def _naive_union(mut parent: List[Int], mut rank: List[Int], a: Int, b: Int):
-    """Union by rank, their three branches (`extract.cuh:59-72`). The RANK
+    """Union by rank, the reference's three branches (`extract.cuh:59-72`). The RANK
     rule is part of the answer -- it decides which id becomes the root and
-    therefore which label a point gets -- so it is transcribed rather than
+    therefore which label a point gets -- so it is matched rather than
     replaced by a simpler rule."""
     if a == b:
         return

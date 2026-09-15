@@ -2,16 +2,16 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Initialization and the Lloyd iteration.
 
-FOLLOWS `cuvs/src/cluster/detail/kmeans.cuh` at cuVS `94c2819`. Partial.
+Reference: `cuvs/src/cluster/detail/kmeans.cuh` (cuVS `94c2819`). Partial.
 
-Their file is 1242 lines and most of it is host bookkeeping for cases this
+The reference file is 1242 lines and most of it is host bookkeeping for cases this
 tree does not have: multi-GPU partitioned fits, `kmeans_transform`, and the
 `kmeans_auto_find_k` driver. What is implemented is the algorithm: the three
 initializations (random, classic k-means++, scalable k-means||) and the
 iteration.
 
-THE ITERATION, THEIR ORDER, WHICH IS NOT THE TEXTBOOK ORDER
------------------------------------------------------------
+THE ITERATION, THE REFERENCE ORDER, WHICH IS NOT THE TEXTBOOK ORDER
+-------------------------------------------------------------------
 The textbook writes assign, update, test. `kmeans_fit_main`
 (`detail/kmeans.cuh:407-497`) is
 

@@ -367,7 +367,7 @@ struct GiniObjectiveFunction[dtype: DType](Copyable, Movable):
         nclasses: Int32,
         out_ptr: Pointer[Scalar[Self.dtype], oo],
     ):
-        """`objectives.cuh:97-107`, transcribed."""
+        """`objectives.cuh:97-107`."""
         var total: Int32 = 0
         for i in range(Int(nclasses)):
             total += shist[unsafe_offset=i].x
@@ -572,7 +572,7 @@ struct EntropyObjectiveFunction[dtype: DType](
         nclasses: Int32,
         out_ptr: Pointer[Scalar[Self.dtype], oo],
     ):
-        """`objectives.cuh:181-191` -- byte for byte Gini's `:97-107`, so it CALLS Gini's rather than transcribing the same ten lines twice."""
+        """`objectives.cuh:181-191` -- byte for byte Gini's `:97-107`, so it CALLS Gini's rather than writing the same ten lines twice."""
         GiniObjectiveFunction[Self.dtype].SetLeafVector(shist, nclasses, out_ptr)
 
 
@@ -701,7 +701,7 @@ struct MSEObjectiveFunction[dtype: DType](Copyable, Movable):
         nclasses: Int32,
         out_ptr: Pointer[Scalar[Self.dtype], oo],
     ):
-        """`objectives.cuh:259-264`, transcribed."""
+        """`objectives.cuh:259-264`."""
         for i in range(Int(nclasses)):
             out_ptr[unsafe_offset=i] = shist[
                 unsafe_offset=i

@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The offset arithmetic every POINTWISE histogram kernel shares.
 
-FOLLOWS `catboost/cuda/methods/kernel/split_properties_helpers.cuh` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/split_properties_helpers.cuh`
+(CatBoost `54a8143a`).
 
 This file belongs to CatBoost's OTHER histogram family. `archive/reference/PORTING.md` 91 B
 lays out which is which; the short version is that CatBoost has three GPU
@@ -128,7 +128,7 @@ struct PointwisePartOffsetsHelper(Copyable, ImplicitlyCopyable, Movable):
 
     At `FoldCount == 1` -- Plain boosting, which is every fit this
     repository does today -- both reduce to `partId` and the distinction
-    costs nothing. It is transcribed anyway because rung 3 turns it on.
+    costs nothing. It is implemented anyway because rung 3 turns it on.
     """
 
     var fold_count: UInt32
@@ -350,7 +350,7 @@ def scan_pointwise_histograms_kernel(
     threadIdx.x / 32`, so within one block different warps carry different
     feature ids and the tail block has warps that fail the test. A block
     barrier reached by only some warps is undefined in CUDA and hangs on
-    Metal. Following it statement for statement would be implementing a bug onto a target that
+    Metal. Reproducing it exactly would carry a bug onto a target that
     punishes it.
 
     ONE-HOT FEATURES ARE SKIPPED and that is theirs (`:126`): a one-hot

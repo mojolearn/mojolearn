@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CSR adapters preserving the existing serial and FAST Jacobi trajectories.
 
-Serial update expressions are transcribed from optimizer.mojo; FAST calls
+Serial update expressions are restated from optimizer.mojo; FAST calls
 its existing kernel. The only representation changes are CSR validation,
 row iteration, and positive-edge compaction. No n*n storage is created.
 """

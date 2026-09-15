@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The one-byte histogram kernel: 4 features per 4-byte load, 32 to 256 bins.
 
-FOLLOWS `hist_one_byte.cu` and the base it derives from,
-`hist_2_one_byte_base.cuh`, at CatBoost `54a8143a`. Followed statement for statement. Do not
+Reference: `hist_one_byte.cu` and the base it derives from,
+`hist_2_one_byte_base.cuh` (CatBoost `54a8143a`). Do not
 improve.
 
 This is the odd one of the three and it does not derive from the other two.
@@ -168,7 +168,7 @@ def one_byte_smem_slots[smem_mode: Int]() -> Int:
 
 
 def one_byte_acc_dtype[smem_mode: Int]() -> DType:
-    """Float32 shared memory in their design; the 2-warp-shared slice
+    """Float32 shared memory in the reference; the 2-warp-shared slice
     variant is Int32 fixed point (`hist2_smem_add`)."""
     if smem_mode == HIST_SMEM_SHARED2_I32:
         return DType.int32

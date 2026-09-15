@@ -2,26 +2,26 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`coo_sort_by_weight`, from RAFT, with the order made total.
 
-FOLLOWS `raft/cpp/include/raft/sparse/op/detail/sort.h:94-102`
-(`coo_sort_by_weight`), RAFT `661a3b8`. The call site is
+Reference: `coo_sort_by_weight`, `raft/cpp/include/raft/sparse/op/detail/sort.h:94-102`
+(RAFT `661a3b8`). The call site is
 `cuvs/cpp/src/cluster/detail/mst.cuh:337-338`, right before the edges are
 copied to the host for `build_dendrogram_host`.
 
-WHERE IT RUNS. Theirs is `thrust::sort_by_key` on the device; ours sorts
+WHERE IT RUNS. The reference runs `thrust::sort_by_key` on the device; this implementation sorts
 on the HOST, because the next consumer of the sorted list is
 `build_dendrogram_host`'s `raft::update_host` (`agglomerative.cuh:122-124`)
 and the list is `m - 1` edges long. The device list is rewritten in the
 sorted order afterwards so the device-side artifact is the same sorted
-list theirs leaves behind. This moves WHERE the sort happens, not what is
+list the reference leaves behind. This moves WHERE the sort happens, not what is
 sorted or how the result is ordered -- except for the order among ties,
 which is the deviation below.
 
 ======================================================================
 DEVIATION BLOCK -- DEVIATION 621. THE MST SORT IS BY (weight, min(u,v),
-max(u,v)), A TOTAL ORDER; THEIRS IS BY WEIGHT ALONE AND UNSTABLE.
+max(u,v)), A TOTAL ORDER; THE REFERENCE SORTS BY WEIGHT ALONE AND UNSTABLE.
 ======================================================================
 
-WHAT THEIRS DOES. `thrust::sort_by_key(t_data, t_data + nnz, zip(rows,
+WHAT THE REFERENCE DOES. `thrust::sort_by_key(t_data, t_data + nnz, zip(rows,
 cols))` (`sort.h:101`): keys are the weights, the payload is the (row,
 col) pair. `thrust::sort_by_key` is NOT stable (Thrust documents
 `stable_sort_by_key` separately), so two MST edges of EQUAL weight come
@@ -38,7 +38,7 @@ the sort keys on the original, so equal original weights are ties again
 here even on their side. With duplicate points (weight 0) or grid data
 this is the common case, not the corner.
 
-WHAT OURS DOES. The sort key is `pack_edge_key(weight_order_key(w),
+WHAT THIS IMPLEMENTATION DOES. The sort key is `pack_edge_key(weight_order_key(w),
 min(u,v), max(u,v))`, the same total order the MST itself used, so the
 sorted list is a pure function of the edge SET. Two distinct MST edges
 never compare equal, so stability is moot, and the sort is a merge sort

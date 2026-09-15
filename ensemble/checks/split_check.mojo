@@ -23,7 +23,7 @@ The four arms:
 
   A. THE ORDER, on the host. Hand-written candidate pairs, each exercising
      one branch of `update` (`split.cuh:142-191`) with an expected outcome
-     written as a literal. If the branch order is transcribed wrong, the
+     written as a literal. If the branch order is implemented wrong, the
      branch that changed is named.
 
   B. NON-ASSOCIATIVITY, on the host. DEVIATION 105 claims their operator

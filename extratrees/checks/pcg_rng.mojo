@@ -104,9 +104,9 @@ def row_sample_seed(seed: UInt64, tree_id: Int32) -> UInt32:
     Their `fnv1a32` takes `uint32_t`, so the `uint64_t seed` is folded in
     ONE round on its low 32 bits and the high half is discarded. The RF lane
     (`ensemble/decisiontree/batched_levelalgo/random_utils.mojo::
-    fnv1a32_hash_seed_tree`, its DEVIATION 400) rules that their bug, not
-    their design, and gives the high half its round exactly when it is
-    nonzero -- every seed below 2^32 keeps the transcription's bits. This
+    fnv1a32_hash_seed_tree`, its DEVIATION 400) rules that a bug in the reference, not
+    its intent, and gives the high half its round exactly when it is
+    nonzero -- every seed below 2^32 keeps the reference's bits. This
     lane REUSES that seed contract rather than inventing a second one, so a
     bootstrap forest here and one in `ensemble/` draw the same rows from the
     same `(seed, tree_id)`; `forest_check` pins the values. Widened to
@@ -219,7 +219,7 @@ def wmul_64bit(a: UInt64, b: UInt64) -> Tuple[UInt64, UInt64]:
     """Wide 64x64 -> 128 multiply. Returns `(hi, lo)`.
 
     raft/util/integer_utils.hpp:207-237. See DEVIATION 140: their `__CUDA_ARCH__`
-    branch is `mul.hi.u64` / `mul.lo.u64` PTX; this transcribes their portable
+    branch is `mul.hi.u64` / `mul.lo.u64` PTX; this implements their portable
     `#else` branch, which is the same product.
     """
     var a_hi = (a >> 32) & 0xFFFFFFFF
@@ -462,7 +462,7 @@ def uniform_threshold(key: SplitKey, min_value: Float32, max_value: Float32) -> 
 #   (`mul.hi.u64`, `mul.lo.u64`) on device, and a four-partial-product
 #   schoolbook expansion with an explicit carry on host.
 #
-#   Ours. Only the schoolbook expansion, transcribed line for line. Mojo has
+#   Ours. Only the schoolbook expansion, line for line. Mojo has
 #   no inline PTX and, per the repository's ALWAYS-GPU-AGNOSTIC rule, an
 #   `if nvidia:` arm would be forbidden even if it did.
 #

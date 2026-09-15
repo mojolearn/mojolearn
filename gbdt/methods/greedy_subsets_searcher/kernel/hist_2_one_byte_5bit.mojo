@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The 5-bit specialization of the fused two-stat one-byte accumulator.
 
-FOLLOWS `hist_2_one_byte_5bit.cu` at CatBoost `54a8143a`,
-`TPointHist2OneByte<5, BlockSize>`. Followed statement for statement.
+Reference: `hist_2_one_byte_5bit.cu`, `TPointHist2OneByte<5, BlockSize>`
+(CatBoost `54a8143a`).
 
 This is the family CatBoost's own one-byte dispatch takes at
 `maxBins <= 32` (`hist_one_byte.cu:315-316`), NOT the `TPointHistOneByte`

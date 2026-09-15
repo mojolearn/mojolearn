@@ -29,6 +29,7 @@ from pathlib import Path
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, frombytes, zeros
 from ._bufcheck import flat_view, le_bytes
 from ._byte_lm_config import ByteLanguageModelConfig
+from . import _ragged
 
 _EXTENSION = '_mojolearn_byte_lm_host'
 _MODULE_NAME = 'mojolearn._host.' + _EXTENSION
@@ -206,9 +207,20 @@ class LanguageModelInference:
     def parameters_sha256(self):
         return hashlib.sha256(le_bytes(self._parameters, 'f')).hexdigest()
 
-    def logits(self, ids, *, threaded=None, threads=None):
+    def logits(self, ids, *, lengths=None, threaded=None, threads=None):
         """Float32 logits `[batch, length, vocab]` for int32 ids
-        `[batch, length]`, positions from 0, length at most `shape.length`."""
+        `[batch, length]`, positions from 0, length at most `shape.length`.
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `batch` integers in
+        `[1, length]`, row `i` real at positions `[0, lengths[i])` and
+        padding after, whatever int32 values the padding holds. Real
+        positions' logits are byte for byte the row alone at its own length
+        and padding positions' logits are exactly `+0.0` (`_ragged.py`)."""
+        if lengths is not None:
+            raw, _ = as_i32_c(ids, ndim=2, name='ids')
+            return _ragged.ragged_forward(
+                lambda padded: self.logits(padded, threaded=threaded, threads=threads),
+                raw, None, lengths, '<i4', 'LanguageModelInference.logits')[0]
         flag = self._threads_flag(threaded)
         count = self._threads_arg(threads)
         tokens, _ = _logits_ids(ids, self._shape)
@@ -242,9 +254,16 @@ class LanguageModelInference:
         bits = self.loss_bits(ids, threaded=threaded, threads=threads)
         return struct.unpack('<f', struct.pack('<I', bits))[0]
 
-    def next_bytes(self, ids, *, threaded=None, threads=None):
+    def next_bytes(self, ids, *, lengths=None, threaded=None, threads=None):
         """Greedy next byte after each row of ids `[batch, length]`; ties go
-        to the lowest byte value."""
+        to the lowest byte value. With `lengths` (a ragged batch, see
+        `logits`) the byte after each row's LAST REAL position."""
+        if lengths is not None:
+            raw, _ = as_i32_c(ids, ndim=2, name='ids')
+            logits, lens = _ragged.ragged_forward(
+                lambda padded: self.logits(padded, threaded=threaded, threads=threads),
+                raw, None, lengths, '<i4', 'LanguageModelInference.next_bytes')
+            return _greedy_next_bytes(_ragged.last_real_rows(logits, lens, 'LanguageModelInference.next_bytes'))
         return _greedy_next_bytes(self.logits(ids, threaded=threaded, threads=threads))
 
 

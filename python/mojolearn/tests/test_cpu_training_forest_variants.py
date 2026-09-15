@@ -18,7 +18,7 @@ storage-width subtraction and `eps_` guards, the weighted bootstrap's CDF
 and `upper_bound`, the refusal of weights without a bootstrap, and a
 sabotage arm that also moves a forest without a bootstrap; the ExtraTrees
 builder dispatches best-first growth to `train_tree_exact_bestfirst` instead
-of refusing it; the CPU identity gate workflow triggers on the new files.
+of refusing it; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
 The runtime check (skipped, and SAID to be skipped, when the bindings are
 absent or a GPU set loaded): each variant fits twice through the host
@@ -125,11 +125,6 @@ def test_extratrees_best_first_is_restated_not_refused():
         assert step in body, step
     assert body.index("partition_samples(") < body.index("queue.bestfirst_expand("), "partition before the children"
 
-
-def test_workflow_triggers_on_the_new_files():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in (GROVES, GROVES_BINDING, RF_ORACLE, ET_BUILDER):
-        assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 
 
 @reference_training()

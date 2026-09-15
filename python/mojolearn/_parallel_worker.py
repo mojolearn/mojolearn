@@ -11,6 +11,17 @@ _forest_snapshot = None
 def execute(request):
     global _forest_snapshot
     operation, state, args = request
+    if operation == 'cpu_reference':
+        # The pool wraps a request this way only on a CPU-only install and
+        # only while its caller is inside reference_training() (the internal
+        # verifier), so the shard's host fit runs in that scope here too.
+        from . import _backend
+        from ._cpu_reference import reference_training
+        from ._parallel_pool import CPU_OPERATIONS
+        if _backend._CPU_ONLY is None or args[0] not in CPU_OPERATIONS:
+            raise ValueError('cpu_reference wraps only a CPU route operation on a CPU-only install')
+        with reference_training():
+            return execute(args)
     if operation == 'forest_prepare':
         from .parallel_ensemble import _admit_forest_predictor
         _admit_forest_predictor(state)

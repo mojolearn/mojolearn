@@ -40,12 +40,21 @@
 name: CPU identity gate
 
 on:
-  # No push trigger (Andrew, Sep 15 2026): CI is a light touch. This heavy check runs only by hand,
-  # on its schedule if it has one, or from the release workflow.
+  # LIGHT TOUCH (Andrew, Sep 15 2026): this workflow never starts by itself. Every job
+  # is skipped unless the dispatch input confirm is RUN-HEAVY, so a wrong trigger costs nothing.
   workflow_call:
-  schedule:
-    - cron: "17 5 * * 0"
+    inputs:
+      confirm:
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Heavy run on paid or queued runners. Type RUN-HEAVY to really run it; anything else skips every job"
+        required: true
+        default: ""
+        type: string
 
 # Superseded branch runs only. Each main run has its own group.
 concurrency:
@@ -101,6 +110,7 @@ env:
 
 jobs:
   gate:
+    if: inputs.confirm == 'RUN-HEAVY'
     name: ${{ matrix.label }}
     strategy:
       fail-fast: false
@@ -511,11 +521,23 @@ jobs:
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
             --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" \
             --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_column_check.log"
+          # OWED (lane/cpu-gate-owed-cells, 2026-09-15): GPU records are taken
+          # only at PyPI releases, so a cell part no committed GPU record
+          # hashes yet (absent, n/a, a lane not in the record) reads OWED xK
+          # instead of failing --require-columns 4, derived by --owed-json and
+          # never listed by hand. It must be STABLE on this CPU, agree with
+          # every column that has it (a recorded hash that differs is still
+          # DIVERGENT, a REFUSED column still fails) and move under the
+          # sabotage host set (the owed check in the sabotage step).
           python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
-            --require-columns 4 --lanes "$RECORD_COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
+            --require-columns 4 --lanes "$RECORD_COVERED_LANES" --owed-json "$GATE_OUT/owed_cells.json" \
+            2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
+          grep -E '^summary' "$GATE_OUT/diff_four_columns.txt" | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$FIX_COVERED_LANES" ]; then
             python3 tools/identity_break.py --diff $FIX_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
-              --require-columns 4 --lanes "$FIX_COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns_fix.txt"
+              --require-columns 4 --lanes "$FIX_COVERED_LANES" --owed-json "$GATE_OUT/owed_cells_fix.json" \
+              2>&1 | tee "$GATE_OUT/diff_four_columns_fix.txt"
+            grep -E '^summary' "$GATE_OUT/diff_four_columns_fix.txt" | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # The covered lanes' negative control (brief section 3.4). A gate that
@@ -633,6 +655,14 @@ jobs:
             fi
             grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_fix_sab.txt"
           fi
+          # Every OWED cell part the production diffs listed must MOVE between
+          # the production and sabotage CPU columns: no GPU hash stands behind
+          # it, so the sabotage arm is its only negative control.
+          for owed in "$GATE_OUT/owed_cells.json" $([ -n "$FIX_COVERED_LANES" ] && echo "$GATE_OUT/owed_cells_fix.json"); do
+            python3 tools/cpu_identity_gate_check.py owed "$owed" \
+              --production "$GATE_OUT/cpu-${{ matrix.slot }}.json" --sabotage "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
+              2>&1 | tee -a "$GATE_OUT/owed_sabotage_check.log"
+          done
           echo "sabotage caught on the covered lanes"
 
       # The same sabotage host set (built by the step above into host-sab)

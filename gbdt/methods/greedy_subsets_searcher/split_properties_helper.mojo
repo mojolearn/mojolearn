@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which histograms to BUILD and which to DERIVE, once per level.
 
-FOLLOWS `TSplitPropertiesHelper::BuildNecessaryHistograms` in
+Reference: `TSplitPropertiesHelper::BuildNecessaryHistograms`,
 `catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.cpp`
-at CatBoost `54a8143a`. Followed statement for statement.
+(CatBoost `54a8143a`).
 
 This is the decision that halves a level's histogram work, and it is pure
 host-side bookkeeping: no kernel, no device memory, just which leaf ids go

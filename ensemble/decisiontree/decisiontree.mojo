@@ -3,7 +3,7 @@
 """One decision tree: its parameters, its flat storage, and the walk that
 turns a row into a prediction.
 
-MIRRORS, at rapidsai/cuml `v26.08.00`
+Reference, at rapidsai/cuml `v26.08.00`
 (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`), read-only at
 `~/CascadeProjects/upstream/cuml-v26.08.00`:
 
@@ -248,7 +248,7 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
     def validity_check(self) raises:
         """`ML::DT::validity_check`, `decisiontree.cu:17-35`.
 
-        Their asserts, transcribed in their order and with their
+        The reference asserts, in the reference order and with the reference
         messages. Note `params.split_criterion != 3` at `:28` -- they
         compare the literal, and the literal is MAE.
         """

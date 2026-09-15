@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ls_success` and `ls_backtrack`: the backtracking line search.
 
-FOLLOWS `cuml/cpp/src/glm/qn/qn_linesearch.cuh` at cuML `00094f7`. WHOLE
+Reference: `cuml/cpp/src/glm/qn/qn_linesearch.cuh` (cuML `00094f7`). WHOLE
 FILE since 2026-09-01: `LSProjectedStep` and `ls_backtrack_projected`,
 OWL-QN's projected line search, are at the bottom (DEVIATION 552). Do not
 improve.
