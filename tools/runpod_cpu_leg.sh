@@ -32,7 +32,9 @@
 #   --image IMG          default runpod/base:1.3.1-ubuntu2204 (keyed)
 #   --disk GB            container disk (default 40)
 #   --out DIR            results (default <worktree>/bench/results/runpod_cpu/<stamp>-<lane>)
-#   --no-bincache        build from source         --no-envcache  plain pixi install
+#   --no-bincache        build from source
+#   --envcache           restore and upload .pixi/envs from R2 (default OFF: measured
+#                        slower than a locked install on RunPod, 37 s against 12 s)
 #   --max-pods N         refuse when N mojolearn-cpu pods are live (default 2)
 #   --rent               actually create the pod. Without it: a dry run that
 #                        creates nothing and costs nothing.
@@ -70,7 +72,7 @@ SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLeve
 
 LANE=""; CMD=""; CMD_FILE=""; WORKTREE=""; INCLUDES=""; BUILD=""; SAB_BUILD=""
 SAB_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1"; ENVS="default"; VCPU=8; FLAVORS="cpu3c,cpu5c"
-LEASE=60; JOBS=8; IMAGE="runpod/base:1.3.1-ubuntu2204"; DISK=40; OUT=""; BINCACHE=1; ENVCACHE=1
+LEASE=60; JOBS=8; IMAGE="runpod/base:1.3.1-ubuntu2204"; DISK=40; OUT=""; BINCACHE=1; ENVCACHE=0
 MAX_PODS=2; RENT=0
 
 say() { printf '[%s cpu-leg] %s\n' "$(date +%T)" "$*"; }
@@ -222,6 +224,7 @@ ${1:-}" ;;
         --disk) shift; DISK="${1:-}" ;;
         --out) shift; OUT="${1:-}" ;;
         --no-bincache) BINCACHE=0 ;;
+        --envcache) ENVCACHE=1 ;;
         --no-envcache) ENVCACHE=0 ;;
         --max-pods) shift; MAX_PODS="${1:-}" ;;
         --rent) RENT=1 ;;
@@ -340,7 +343,7 @@ export PIXI_HOME=/root/.pixi PIXI_NO_PATH_UPDATE=1
 mkdir -p /root/.pixi/bin
 PIXI=/root/.pixi/bin/pixi
 pixi_state=miss
-if [ "@ENVCACHE@" = 1 ] && fetch_verified pixi pixi "$C/pixi.bin"; then
+if fetch_verified pixi pixi "$C/pixi.bin"; then
     install -m 755 "$C/pixi.bin" "$PIXI" && pixi_state=restored
 fi
 if [ ! -x "$PIXI" ]; then
@@ -367,7 +370,7 @@ for E in $(echo "@ENVS@" | tr , ' '); do
     rc=$?
     t2=$(date +%s)
     note "env:$E	$st	install_rc=$rc	restore_s=$((t1 - t0))	pixi_install_s=$((t2 - t1))"
-    if [ "$st" = miss ] && [ "$rc" = 0 ] && [ "$pv" = "$PIXIVER" ]; then echo "$E" >> "$C/envs_to_upload"; fi
+    if [ "@ENVCACHE@" = 1 ] && [ "$st" = miss ] && [ "$rc" = 0 ] && [ "$pv" = "$PIXIVER" ]; then echo "$E" >> "$C/envs_to_upload"; fi
 done
 "$R/.pixi/envs/default/bin/python3" -c 'import numpy, sys; print(sys.version.split()[0], numpy.__version__)' >> "$OUT/box.txt" 2>&1
 # AN ENV THAT INSTALLS IS NOT AN ENV THAT RUNS. On 2026-09-15 `pixi install
@@ -375,7 +378,7 @@ done
 # (GLIBC_2.35 not found), and both envs were uploaded. Nothing uploads unless
 # the toolchain answers here.
 if "$R/.pixi/envs/default/bin/mojo" --version >> "$OUT/box.txt" 2>&1; then
-    note "toolchain	ok	$("$R/.pixi/envs/default/bin/mojo" --version 2>&1 | head -1)"
+    note "toolchain	ok	$("$R/.pixi/envs/default/bin/mojo" --version 2>&1 | grep -m1 Mojo)"
 else
     note "toolchain	BROKEN	mojo --version failed; no env is uploaded"
     : > "$C/envs_to_upload"

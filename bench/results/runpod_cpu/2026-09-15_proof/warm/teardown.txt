@@ -1,0 +1,5 @@
+pod=byg7nqtw65c4j6
+name=mojolearn-cpu-leg-proof-20260915-165055
+terminated_verified=1
+exit=0
+at=2026-09-15T16:55:11Z

@@ -50,7 +50,7 @@ create the pod.
    `bench/oracle_*` stay home unless `--include` names them.
 6. Presigned R2 URLs reach the box inside a script on ssh stdin. They never
    appear in argv, and no credential leaves the Mac.
-7. On the box, detached: restore or install pixi and the envs, build through
+7. On the box, detached: restore or install pixi (and the envs with `--envcache`), build through
    the binding cache, run the command, then upload whatever missed.
 8. Fetch `$LEG_OUT`, promote binding uploads to their content address, DELETE
    the pod and ask the API until the pod is gone. The dead-man is cancelled
@@ -66,7 +66,7 @@ using `tools/stage_from_r2.sh`.
 | object | key | restore check |
 |---|---|---|
 | `runpod-cpu/v1/pixi-bin/<version>/linux-64/pixi.tar` | the pinned pixi version (0.77.0) | sha256 sidecar `.sha` |
-| `runpod-cpu/v1/pixi-env/linux-64/<env>/<key>.tar` | sha256 of the env name, platform, `pixi.lock` sha256, `pixi.toml` without task tables, the box prefix `/root/mojolearn`, pixi version and image (`tools/runpod_cpu_cache.py keys`) | sha256 sidecar, then `pixi install --locked` must accept it |
+| `runpod-cpu/v1/pixi-env/linux-64/<env>/<key>.tar` (only with `--envcache`) | sha256 of the env name, platform, `pixi.lock` sha256, `pixi.toml` without task tables, the box prefix `/root/mojolearn`, pixi version and image (`tools/runpod_cpu_cache.py keys`) | sha256 sidecar, then `pixi install --locked` must accept it |
 | `bincache/v1/none/runpod-cpu-runpod-base-1.3.1-ubuntu2204/<key>.tar.gz` | `tools/bincache.py` fields: the binding's import closure and scripts, the toolchain in `pixi.lock`, numeric mode, every build `MOJOLEARN_*` variable (so `MOJOLEARN_LINUX_CPU=x86-64-v3`, `MOJOLEARN_BUILD_JOBS` and the defines), device arch `none`, image, OS and glibc, repo path | archive manifest must hash to the key the box computed |
 | `bincache/sabotage-v1/none/.../<key>.tar.gz` | the same fields plus `variant=sabotage` | as above |
 
@@ -86,9 +86,29 @@ disagrees with its fields or its destination
 **The Mac stays off.** Nothing on the Mac stages a URL map, so
 `tools/bincache.py build` is a plain `sh <script>` there.
 
+The env cache is OPT-IN (`--envcache`). Measured on 2026-09-15, restoring the
+562 MB default env took 37 s, while a cold `pixi install --locked` of default
+and test took 12 s, because RunPod reaches the conda channels fast. The pixi
+binary (79 MB) is always cached, because it replaces the GitHub fetch that
+failed three legs between Sep 8 and 12.
+
 Not cached: git history, secrets, the identity records the repo carries, and
-the Mojo compiler cache (the env restore already skips the download).
+the Mojo compiler cache.
 
-## Measured
+## Measured (2026-09-15, 8 vCPU, $0.24/hr)
 
-See the proof record `bench/results/runpod_cpu/2026-09-15_proof/README.md`.
+| create to first result | cold | warm |
+|---|---|---|
+| create (POST to ssh up) | 88 s | 67 s |
+| stage | 14 s | 42 s |
+| env | 16 s | 46 s |
+| build (core + estimators, production and sabotage) | 152 s | 3 s |
+| run | 25 s | 10 s |
+| total | 302 s | 180 s |
+
+The warm pod's bindings were four cache hits with the same sha256 as the cold
+build, and its identity column matched the one-core M4 column and the three
+committed GPU columns. Record: `bench/results/runpod_cpu/2026-09-15_proof/README.md`.
+
+The image must ship glibc 2.35 or newer. On `runpod/base:0.6.3-cpu` (glibc
+2.31) the envs install and mojo does not load.
