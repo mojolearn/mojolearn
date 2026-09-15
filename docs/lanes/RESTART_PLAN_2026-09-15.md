@@ -6,6 +6,15 @@ old one. It is on `main`; branch names below are on `origin`.
 
 **Andrew's instruction at the time of writing: do NOT start new lanes; let each lane below finish.**
 
+
+
+## 00. OVERRIDES EVERYTHING BELOW: GPU records only for PyPI releases (Andrew, Sep 15 ~10:30 ET)
+- Between releases, rent NO GPU boxes: no RunPod, DigitalOcean or Hot Aisle legs for any lane.
+- Prove on the Apple M4 locally (Metal vs host CPU, one core) and against GPU columns already in the repo.
+- Write anything that needs NVIDIA or AMD bits as OWED to the next release record.
+- At a PyPI release, take ONE record: 1 AMD, 1 NVIDIA, 1 Apple column. No second AMD model, no extra NVIDIA architecture, no two-device columns, no full re-record unless Andrew asks.
+- The box and leg rules in section 3 apply only to that release record.
+
 ## 0. First ten minutes for the new orchestrator session
 
 1. Read this whole file. Then read `docs/lanes/FANOUT_RULES_2026-09-15.md`. Every lane agent must also
@@ -16,7 +25,7 @@ old one. It is on `main`; branch names below are on `origin`.
    git log --oneline -30 origin/main
    for b in lane/identity-record-next lane/cpu-training-gate-budget lane/cpu-training-gbdt-ordered \
             lane/cpu-training-transformer lane/cpu-training-mamba lane/cpu-training-samba \
-            lane/cpu-training-embedding-ivf lane/rl-logprob-parity lane/batch-invariance-2; do
+            lane/cpu-training-embedding-ivf lane/rl-logprob-parity lane/batch-invariance-2 lane/r2-binding-cache; do
      echo "$b ahead=$(git rev-list --count origin/main..origin/$b 2>/dev/null || echo no-remote)"
      git show origin/$b:docs/lanes/LANE_STATUS_$(echo $b | tr / -).md 2>/dev/null | head -40
      gh run list --branch $b --workflow "CPU identity gate" -L 2
@@ -94,7 +103,7 @@ Status is as of 2026-09-15 09:20 ET. Each lane was told to push WIP with `[skip 
 `docs/lanes/LANE_STATUS_<branch with dashes>.md` on its branch. **Read that file first if it exists; it
 supersedes the status line here.**
 
-### L1. record2: the next full identity record
+### L1. record2: the next full identity record (STOPPED Sep 15 ~10:30 ET by Andrew's release-only rule: finish in-flight legs, commit partial, do not switch the gate; do NOT restart)
 - **Branch:** `lane/identity-record-next`. No commits yet at writing. Legs were running from worktrees
   `wt-legs-R` and `wt-apple-R`; leg dirs `bench/results/e1g/2026-09-15_*-rec2-*` there are untracked. The
   lane was told to copy them to `~/mojolearn-evidence/record2/`.
@@ -124,6 +133,12 @@ supersedes the status line here.**
   - (b) Keep every CPU gate step under its limit with 40% margin without weakening checks.
   - Reconcile with `lane/cpu-training-gbdt-ordered`, which raised the job timeout to 120 minutes. The two
     branches merge cleanly; the lane is to pick 60 or 120 from measured job timings.
+- **Extension (Andrew approved, Sep 15 ~10:00 ET):** after the time-budget merge, speed up CI:
+  1. actions/cache for the pixi envs and Mojo toolchain, keyed on pixi.lock.
+  2. Cached host bindings keyed on the source tree hash, mode and runner image. Never cache sabotage builds under the prod key.
+  3. A same-branch concurrency group that cancels superseded runs. Never cancel main's runs.
+  4. If cheap, family-scoped gates on non-main branches, keeping the full gate on main.
+  Report before and after wall time. Measured before: 1.5 to 4 hours from push to result.
 - **Restart brief:** "Resume gatehyg: read the branch commits and LANE_STATUS; wait for or read gate
   34971932337 (or the latest on the branch); tabulate per-step minutes; reconcile the timeout with
   gbdt-ordered; show the gate still fails on a sabotaged tree; merge each task separately."
@@ -226,6 +241,18 @@ supersedes the status line here.**
 - **Evidence:** M4 one core, one H100 leg, one AMD leg, `bench/results/identity_break/<date>_batch2/`.
   Update the harness docstring's "does NOT test" list.
 - **Restart brief:** the goal above, from origin/main, reading LANE_STATUS first if the branch exists.
+
+### L10. bincache: prebuilt Mojo binding cache in R2 (Andrew approved, Sep 15 ~10:00 ET)
+- **Branch:** `lane/r2-binding-cache`.
+- **Why:** every GPU leg compiles about 22 bindings (about 10 min) before working, while dataset staging from R2 already takes seconds on RunPod, DigitalOcean and Hot Aisle.
+- **Goal:** a content-addressed cache in the `mojolearn-data` R2 bucket, used by gemm_remote_leg.sh, do_extra_leg.sh and hotaisle_leg.sh.
+  - Key: source tree hash, mode, GPU arch or cpu, target column, toolchain from pixi.lock, container image and OS, and defines.
+  - Sabotage builds are never served to prod.
+  - Every file is sha256-verified. Leg outputs record which bindings came from the cache.
+  - `MOJOLEARN_BINCACHE=0` opts out, and the default stays off until evidence exists.
+  - The release pipeline is out of scope.
+- **Evidence:** a fresh then cached leg pair on an RTX 4090 and on AMD, with identical binding digests and lane hashes, and the compile minutes saved.
+- **Restart brief:** "Resume bincache from LANE_STATUS on origin/lane/r2-binding-cache if present, else implement the goal above from origin/main."
 
 ## 4. Orchestrator protocol while lanes run
 
