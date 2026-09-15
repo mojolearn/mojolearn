@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Newton walker: iterate leaf values against an estimation oracle.
 
-FOLLOWS `catboost/cuda/methods/leaves_estimation/descent_helpers.{h,cpp}` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/leaves_estimation/descent_helpers.{h,cpp}`
+(CatBoost `54a8143a`).
 
 BOTH ARMS. Their `TDirectionEstimator::UpdateMoveDirection` switches on
 `HessianBlockSize` (`descent_helpers.cpp:75-81`):

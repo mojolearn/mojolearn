@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A leaf is a contiguous range of the index array.
 
-FOLLOWS `catboost/cuda/cuda_util/gpu_data/partitions.h` at CatBoost
-`54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/cuda_util/gpu_data/partitions.h` (CatBoost
+`54a8143a`).
 
     struct TDataPartition {
         ui32 Offset;

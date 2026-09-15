@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """LSD radix sort WITHIN each of a partition's contiguous segments.
 
-FOLLOWS `catboost/cuda/cuda_util/kernel/segmented_sort.{cu,cuh}` at CatBoost
-`54a8143a` -- their `NKernel::SegmentedRadixSort<K, V>` and the
-`TSegmentedRadixSortContext` that carries its bit range. THIS FILE IS THE
-MIRROR ADDRESS FOR THAT ONE, which is why it is named for their file rather
+Reference: `catboost/cuda/cuda_util/kernel/segmented_sort.{cu,cuh}` (CatBoost
+`54a8143a`), `NKernel::SegmentedRadixSort<K, V>` and the
+`TSegmentedRadixSortContext` that carries its bit range. This file is named
+for the reference file rather
 than for what it does.
 
 The API above it is `cuda_util/segmented_sort.{h,cpp}`; the caller in this

@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The per-feature split candidates the whole forest is built from.
 
-MIRRORS `cpp/src/decisiontree/batched-levelalgo/quantiles.cuh` and
+Reference: `cpp/src/decisiontree/batched-levelalgo/quantiles.cuh` and
 `quantiles.h` at rapidsai/cuml `v26.08.00`
 (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`), checked out read-only at
 `~/CascadeProjects/upstream/cuml-v26.08.00`. The one construct that is
-NOT theirs -- RAFT's `PCGenerator` -- mirrors
+NOT in those files -- RAFT's `PCGenerator` -- references
 `cpp/include/raft/random/detail/rng_device.cuh` at rapidsai/raft
 `661a3b840c3300f95f053812a560c952c9d049a4` (branch-25.08), which is what
 cuML 26.08 pins.
@@ -157,8 +157,8 @@ resolutions and why this one:
     of a half-integer. Constructible: `sample_count = 2`,
     `max_n_bins = 12` puts `(bin+1) * fl(1/6)` at
     0.4999999999999999722 where the exact value is 0.5.
-  * HOST Float64 (this one): bit-identical to theirs, because the host
-    HAS float64 and the expression is transcribed into it character for
+  * HOST Float64 (this one): bit-identical to the reference, because the host
+    HAS float64 and the expression is written in it character for
     character.
 
 WHAT IT COSTS: the index table depends on `(bin, sample_count,
@@ -187,7 +187,7 @@ repository's already-checked implementation of CatBoost's own
 `cub::DeviceSegmentedRadixSort::SortPairs` wrapper, with the value
 payload dropped because their call is `SortKeys`. Sorted ORDER is
 identical to CUB's for every input including `-0.0`/`+0.0` and NaN,
-because CUB's float-to-unsigned twiddle is transcribed and all 32 bits
+because CUB's float-to-unsigned twiddle is reproduced and all 32 bits
 are used, exactly as their `0, 8 * sizeof(T)` asks. A radix reorder
 moves values and never sums them, so there is no arithmetic here to
 differ across vendors.
@@ -324,7 +324,7 @@ def wmul_64bit(a: UInt64, b: UInt64) -> Tuple[UInt64, UInt64]:
     i.e. the exact 128-bit product. The `#else` arm (`:213-233`) is a
     32x32 decomposition with explicit carry counting, compiled only for
     the host. `sampleOwnedColumnsKernel` is device code, so THE PATH
-    THEIR DISPATCH TAKES IS THE ASM ONE, and what is transcribed here is
+    THEIR DISPATCH TAKES IS THE ASM ONE, and what is implemented here is
     that: the exact 128-bit product, by the standard decomposition
     (Mojo has no 128-bit integer and no PTX on Metal). The `#else` arm
     computes the same function, so this agrees with both.
@@ -498,7 +498,7 @@ def custom_next_uniform_int_u64(
     worth writing down rather than discovering later: `s` is
     `global_rows`, so `t = 2^64 mod s`, which for any row count that
     fits in memory is under `s` and the loop is entered with probability
-    `t / 2^64 < 3e-17`. It is transcribed anyway, and the check reaches
+    `t / 2^64 < 3e-17`. It is implemented anyway, and the check reaches
     it directly with `diff = 2^63 + 1` where the rejection rate is about
     one half -- an unreached branch is an unchecked branch even when the
     reason it is unreached is arithmetic.

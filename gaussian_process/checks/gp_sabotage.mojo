@@ -433,7 +433,7 @@ def sabotage_variance_kernel(
     var acc = Float32(0.0)
     if sab == GP_SAB_VDOTV_PAIRWISE:
         # A register stack merged whenever a level is occupied: the shape
-        # `gemm_identical.mojo::_fold_push` uses, transcribed with a
+        # `gemm_identical.mojo::_fold_push` uses, restated with a
         # `comptime for` over static levels so the slot index is never a
         # runtime value. A different bracketing of the same multiset.
         var stack = SIMD[DType.float32, 32](0.0)

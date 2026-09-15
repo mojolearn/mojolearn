@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Write one feature's bins into the packed compressed index.
 
-FOLLOWS `WriteCompressedIndexImpl` in
-`catboost/cuda/gpu_data/kernel/binarize.cu` at CatBoost `54a8143a`.
-Followed statement for statement.
+Reference: `WriteCompressedIndexImpl`,
+`catboost/cuda/gpu_data/kernel/binarize.cu` (CatBoost `54a8143a`).
 
 **This is the kernel that creates the read-density advantage.** Everything
 downstream reads `cindex[feature.Offset + row]` and extracts its feature by
@@ -12,7 +11,7 @@ shift and mask, so one 4-byte load serves 32 binary features, 8 half-byte
 features or 4 one-byte features. Without this the packing is arithmetic in
 `grid_policy` that nothing acts on.
 
-Their whole kernel:
+The reference kernel:
 
     cindex += feature.Offset;
     ui32 i = blockIdx.x * blockDim.x + threadIdx.x;

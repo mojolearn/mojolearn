@@ -17,7 +17,7 @@ THE ARITHMETIC IS THE DEVICE'S, NOT A SECOND OPINION ABOUT IT:
   from the gemm lane, so the fold tree is the device's by construction;
 - the axpys are `ftz(identical_mul_add(ftz(a), ftz(x), ftz(y)))`, character
   for character `axpy_device_alpha_kernel`;
-- the update is `cdUpdateCoefKernel` transcribed once more (the device
+- the update is `cdUpdateCoefKernel` written once more (the device
   file has the citations), with the flushed quotient, diff and |r|;
 - the stopping test is the host's own Float32 `coefMax < tol ||
   diffMax / coefMax < tol`, as in both.

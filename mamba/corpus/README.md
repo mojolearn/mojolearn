@@ -1,8 +1,8 @@
 # Mamba reference corpus
 
 This directory contains independently generated tolerance references for
-Mamba 1, Mamba 2 (SSD), and Mamba 3 (SISO). `gen_corpus.py` transcribes cited
-upstream PyTorch references and emits deterministic inputs plus per-stage
+Mamba 1, Mamba 2 (SSD), and Mamba 3 (SISO). `gen_corpus.py` implements cited
+PyTorch references and emits deterministic inputs plus per-stage
 float64 and float32 results.
 
 `ref64` is the correctness reference. `ref32` is informative calibration.

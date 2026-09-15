@@ -255,7 +255,7 @@ DEVIATION 831 splits "resumable" into two claims the references conflate:
    s < t the scale `γ_s + β'_{s+1}` using only tokens <= t, so per-token
    outputs are prefix-stable and the resumption replay reproduces them.
 2. **The upstream `Input_States` continuation** (four tensors in, S22's
-   correction) is SUPPORTED, followed statement for statement, corpus-checked — and NOT
+   correction) is SUPPORTED, corpus-checked — and NOT
    claimed bit-equal to an unbroken prefill, not even at a chunk
    boundary. The argument: in an unbroken run the boundary token's K-row
    is folded ONCE at `pinned_mul(k, ftz(γ+β'))`; across the seam it is

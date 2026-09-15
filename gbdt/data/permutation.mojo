@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TDataPermutation`: the learn permutations, and the CTR estimation order.
 
-FOLLOWS `catboost/cuda/data/permutation.{h,cpp}` at CatBoost `54a8143a`,
+Reference: `catboost/cuda/data/permutation.{h,cpp}` (CatBoost `54a8143a`),
 together with the two things it stands on: `NCatboostCuda::Shuffle`
 (`cuda/data/data_utils.h:21-47`) and the generator that drives it,
 `TRandom` (`libs/helpers/cpu_random.h:6-99`) over `TMersenne<ui64>`
@@ -41,7 +41,7 @@ order at all -- including sorted by target.
 `train()` therefore takes its CTR estimation order from a NON-IDENTITY
 permutation id; see the deviation block below and `archive/reference/PORTING.md` 55.
 
-## The seed, and why it is worth transcribing exactly
+## The seed, and why it must match exactly
 
     ui64 GetSeed() const {
         return 1664525 * GetPermutationId() + 1013904223 + BlockSize;
@@ -200,7 +200,7 @@ struct TRandom(Movable):
 
         `cpu_random.h:31-33` -> `TCommonRNG::Uniform`
         (`common_ops.h:84-86`) -> `NPrivate::GenUniform`
-        (`common_ops.h:48-60`), transcribed:
+        (`common_ops.h:48-60`), in the reference:
 
             const T randmax = gen.RandMax() - gen.RandMax() % max;
             while ((rand = gen.GenRand()) >= randmax) { }

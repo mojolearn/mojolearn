@@ -343,7 +343,7 @@ def host_umap_vertex[C: Int](
     seed: UInt64,
 ):
     """`umap_identical_epoch_kernel[C]` at thread `v`,
-    `optimizer_identical_device.mojo:116-237`, statement for statement."""
+    `optimizer_identical_device.mojo:116-237`, in the same statement order."""
     var epoch_f = Float32(epoch)
     var next_f = Float32(epoch + 1)
     var draw_epoch = epoch

@@ -639,7 +639,7 @@ def check_homogeneity_completeness_v(ctx: DeviceContext) raises:
     # COMPLETENESS IS homogeneity(pred, truth): RAFT recomputes MI over the
     # TRANSPOSED matrix (completeness_score.cu swaps the arrays), and a
     # transposed fold is a different Float32 sum in the last bit. sklearn
-    # computes one MI and uses it for both. The oracle mirrors RAFT.
+    # computes one MI and uses it for both. The oracle matches RAFT.
     var mi_t = Float64(_oracle_mi_f32(_transpose(c, 6), 6, N, False))
     var ht = Float64(_oracle_entropy_f32(_counts_from(c, 6, True), N))
     var hp = Float64(_oracle_entropy_f32(_counts_from(c, 6, False), N))

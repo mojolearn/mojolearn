@@ -21,7 +21,7 @@ which expands the frontier node with the largest impurity improvement until
 exactly k leaves exist. cuML's `max_leaves` is a CAP on a LEVEL-ORDER
 grower that reorders nothing: `NodeQueue::Pop` takes from the FRONT of a
 FIFO and `Push` appends to the BACK (`builder.cuh:70-78`, `:117`,
-transcribed in `ensemble/decisiontree/batched_levelalgo/builder.mojo`), and
+matched in `ensemble/decisiontree/batched_levelalgo/builder.mojo`), and
 the budget is spent by whichever nodes that order reaches first
 (`IsExpandable` at `:82-88`, and the `break` inside `Push` at `:101`). Same
 k, different tree, no error and no warning: a caller who asked for a leaf

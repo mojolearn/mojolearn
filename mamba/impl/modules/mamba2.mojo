@@ -5,8 +5,8 @@
 (:345-355), state-spaces/mamba `e9594ce`; block order
 `Mamba2Block.forward` (transformers d56c55b modeling_mamba2.py:617-631) --
 ON THE DEVICE, under profile `mojolearn.identical.mamba2.fp32.v1`
-(`mamba/IDENTICAL_MAMBA2_CONTRACT.md`, commit e3b46e95). **COPY, DO NOT
-IMPROVE.** Seams S1-S9 and S20-S22, composed around the SSD core
+(`mamba/IDENTICAL_MAMBA2_CONTRACT.md`, commit e3b46e95). Arithmetic order is fixed
+by that contract; a change needs a DEVIATION. Seams S1-S9 and S20-S22, composed around the SSD core
 (`mamba/impl/modules/ssd_minimal.mojo`, S10-S19 + h_last).
 
 THE ENTRY POINT is `mamba2_block_forward`. Prefill is a fresh zero

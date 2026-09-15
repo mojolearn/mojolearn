@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TIndexWrapper`: one `ui32` carrying an index AND a segment-start flag.
 
-MIRRORS `catboost/cuda/cuda_util/kernel/index_wrapper.cuh` at CatBoost
-`54a8143a`, the whole file (30 lines).
+Reference: `catboost/cuda/cuda_util/kernel/index_wrapper.cuh` (CatBoost
+`54a8143a`), the whole file (30 lines).
 
 It lives with the CTR machinery that consumes the packed segment flag.
 Although CatBoost places the primitive under `cuda_util`, keeping the sole

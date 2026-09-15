@@ -87,7 +87,7 @@ def _config(
     and `n - k > 0`).
 
     **DEVIATION 890: a non-positive `eigen_tol` is REFUSED BY NAME.** The
-    field itself is cuVS's plumbed `tolerance`, verbatim theirs and not a
+    field itself is cuVS's plumbed `tolerance`, exactly the reference's and not a
     choice of ours (contract section 4, C3 STRUCK). The refusal is ours, and
     it is here because cuML 26.08's Python maps `eigen_tol='auto'` to
     `0.0` (`spectral_clustering.pyx:346-347`) and nothing downstream turns

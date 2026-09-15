@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The POINTWISE host launch layer: grids, the multiplier ladder, the fan-out.
 
-FOLLOWS, in one file because they are one call chain:
+Reference, in one file because they are one call chain:
 
     `catboost/cuda/methods/pointwise_kernels.{h,cpp}`   the wrapper objects
     `catboost/cuda/methods/kernel/pointwise_hist2.cu`   `UpdateFoldBins`,
@@ -13,7 +13,7 @@ FOLLOWS, in one file because they are one call chain:
     `pointwise_hist2_half_byte.cu:130-180`              `ComputeHist2HalfByte`
     `gpu_data/folds_histogram.h`                        `TFoldsHistogram`
 
-at CatBoost `54a8143a`. Followed statement for statement.
+(CatBoost `54a8143a`).
 
 WHAT THIS FILE IS. The three drivers in `gbdt/methods/kernel/` know how to
 turn a block into a histogram. Nothing yet decided HOW MANY BLOCKS, which
@@ -83,16 +83,16 @@ decision -- see `scan_pointwise_histograms`.
 
 DEVIATION 100: THE BLOCK SIZES ARE THE KERNEL MATRIX'S, NOT THEIR LITERALS
 --------------------------------------------------------------------------
-THEIRS: `const int blockSize = 384;` for the one-byte family
-        (`pointwise_hist2_one_byte_templ.cuh:238`) and
-        `const int blockSize = 768;` for both small-bin families
-        (`pointwise_hist2_binary.cu:141`, `pointwise_hist2_half_byte.cu:145`).
+REFERENCE: `const int blockSize = 384;` for the one-byte family
+           (`pointwise_hist2_one_byte_templ.cuh:238`) and
+           `const int blockSize = 768;` for both small-bin families
+           (`pointwise_hist2_binary.cu:141`, `pointwise_hist2_half_byte.cu:145`).
 
-OURS:   `PW_HIST2_BLOCK` (256 on Apple, via `pw_hist2_block_size_for` --
-        which also records the measured-negative doubled-block experiment)
-        and `PW_HB_BLOCK` (512), READ FROM THE KERNEL FILES rather than
-        restated here, so a launcher cannot drift from the kernel it
-        launches.
+HERE:      `PW_HIST2_BLOCK` (256 on Apple, via `pw_hist2_block_size_for` --
+           which also records the measured-negative doubled-block experiment)
+           and `PW_HB_BLOCK` (512), READ FROM THE KERNEL FILES rather than
+           restated here, so a launcher cannot drift from the kernel it
+           launches.
 
 MEASURED REASON: the accumulators are sized per thread -- 32 floats each for
 the one-byte family, 16 for the small-bin one. At CatBoost's 768 the
@@ -115,20 +115,20 @@ already recorded where the accumulators are.
 
 DEVIATION 101: `exit(1)` AND `CB_ENSURE_INTERNAL` BECOME RAISED ERRORS
 ----------------------------------------------------------------------
-THEIRS: the multiplier ladder ends `} else { exit(1); }`
-        (`pointwise_hist2_one_byte_templ.cuh:266`, `_binary.cu:174`,
-        `_half_byte.cu:175`) -- a bare process abort with no message. The
-        `histCount` guards end `CB_ENSURE_INTERNAL(false, ...)`
-        (`pointwise_hist2.cu:99`, `:129`), which throws.
+REFERENCE: the multiplier ladder ends `} else { exit(1); }`
+           (`pointwise_hist2_one_byte_templ.cuh:266`, `_binary.cu:174`,
+           `_half_byte.cu:175`) -- a bare process abort with no message. The
+           `histCount` guards end `CB_ENSURE_INTERNAL(false, ...)`
+           (`pointwise_hist2.cu:99`, `:129`), which throws.
 
-OURS:   both raise, and the multiplier one names the offending value.
+HERE:      both raise, and the multiplier one names the offending value.
 
 REASON: not a choice about behavior -- Mojo has no `exit` in a `def` that
 already `raises`, and a library that kills the process instead of returning
 an error cannot be gated. Both are UNREACHABLE by construction from inside
 this file (`EstimateBlockPerFeatureMultiplier` only ever doubles from 1 and
 is capped at 64, so it is always a power of two in [1, 64]; `histCount` is
-passed as 2 by the only caller). They are transcribed because a guard that
+passed as 2 by the only caller). They are kept because a guard that
 is unreachable today is the one that catches tomorrow's caller, and
 because `min(..., 64)` is what makes the seven enough:
 `checks/pointwise_dispatch_check.mojo` gate F7 sweeps 245
@@ -137,14 +137,14 @@ every clamped value is one of the seven.
 
 DEVIATION 102: THE WRAPPER OBJECT BECOMES A FUNCTION
 -----------------------------------------------------
-THEIRS: `TComputeHist2Kernel : TStatelessKernel` holds thirteen members,
-        declares `Y_SAVELOAD_DEFINE` over all of them, is registered in a
-        global table as `REGISTER_KERNEL(0x420000, ...)`, and is dispatched
-        to N devices by `LaunchKernels<TKernel>(targets.NonEmptyDevices(),
-        ...)`.
+REFERENCE: `TComputeHist2Kernel : TStatelessKernel` holds thirteen members,
+           declares `Y_SAVELOAD_DEFINE` over all of them, is registered in a
+           global table as `REGISTER_KERNEL(0x420000, ...)`, and is dispatched
+           to N devices by `LaunchKernels<TKernel>(targets.NonEmptyDevices(),
+           ...)`.
 
-OURS:   `compute_hist2(...)`, a function taking the same thirteen values as
-        arguments, on one device.
+HERE:      `compute_hist2(...)`, a function taking the same thirteen values as
+           arguments, on one device.
 
 REASON: three of theirs do not exist here and one is deliberate.
 `Y_SAVELOAD_DEFINE` and `REGISTER_KERNEL` serialize a kernel invocation so
@@ -606,9 +606,9 @@ def update_pointwise_histograms_kernel[
             + bin_feature
         )
 
-        # theirs reads BOTH planes before writing EITHER (`:60-64` then
+        # the reference reads BOTH planes before writing EITHER (`:60-64` then
         # `:67-71`), which matters because `left` and `right` alias when a
-        # caller mis-sizes the grid; transcribed in the same two passes.
+        # caller mis-sizes the grid; kept in the same two passes.
         var calc_val = InlineArray[Float32, hist_count](fill=Float32(0.0))
         var complement_val = InlineArray[Float32, hist_count](
             fill=Float32(0.0)

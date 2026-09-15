@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """cuRAND's XORWOW generator, the one cuML's Isolation Forest instantiates.
 
-MIRRORS the XORWOW section of `nvidia/curand/include/curand_kernel.h`
+Reference: the XORWOW section of `nvidia/curand/include/curand_kernel.h`
 (cuRAND 10.x headers at `upstream/curand-headers`, the `curandState`
 typedef at `:301-302`), `curand_uniform.h:69-71` (`_curand_uniform`) and
 `curand_globals.h:56` (`CURAND_2POW32_INV`). Constant for constant, shift
@@ -55,9 +55,9 @@ What is implemented and how it was verified (all integer arithmetic):
 
 ================= DEVIATION BLOCK =================
 DEVIATION 683. THE PRECALC TABLES ARE REBUILT ON THE HOST, NOT EMBEDDED,
-AND LIVE IN GLOBAL MEMORY, NOT `__constant__`. Theirs: 51,200 literal
+AND LIVE IN GLOBAL MEMORY, NOT `__constant__`. Reference: 51,200 literal
 `unsigned int`s in `__constant__` (device) and static (host) arrays.
-Ours: `build_xorwow_tables()` computes the same two tables from the step
+Here: `build_xorwow_tables()` computes the same two tables from the step
 matrix (integer GF(2) arithmetic, ~130 matrix squarings, host, once per
 process) and the kernel receives them as two `UInt32` pointers. WHAT is
 said is unchanged: the Python reference shows the rebuilt tables equal

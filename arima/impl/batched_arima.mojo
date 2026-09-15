@@ -3,7 +3,7 @@
 """`batched_loglike`, `predict`, `batched_loglike_grad`, `batched_diff`: the
 C++ entry points the Python `ARIMA` class calls.
 
-FOLLOWS `cuml/cpp/src/arima/batched_arima.cu` at cuML 265b9da6 (v26.08.00):
+Reference: `cuml/cpp/src/arima/batched_arima.cu` (cuML 265b9da6, v26.08.00):
 `batched_diff` (:60-70), `predict` (:86-267), `batched_loglike` (the
 `ARIMAParams` overload :393-469 and the packed-vector overload :471-513),
 `batched_loglike_grad` (:515-591).

@@ -219,7 +219,7 @@ struct FeatureSamplerPlan(ImplicitlyCopyable, Movable):
 
 
 def n_parallel_samples_for(n: Int, k: Int) -> Int:
-    """`builder.cuh:419-421`, transcribed with their comment intact."""
+    """`builder.cuh:419-421`, with the reference comment intact."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         return n_parallel_samples_portable(n, k)
     return n_parallel_samples_libm(n, k)

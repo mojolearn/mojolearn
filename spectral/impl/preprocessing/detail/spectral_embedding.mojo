@@ -240,7 +240,7 @@ def compute_eigenpairs(
     var k = params.n_components
     # `max_iterations = 10 * n_samples` (:64), the RAFT_EXPECTS (:65-66),
     # `ncv = min(n - n_components, max(2k + 1, 20))` (:67) and
-    # `tolerance = config.tolerance` (:68) are ALL VERBATIM THEIRS, checked
+    # `tolerance = config.tolerance` (:68) ALL MATCH THE REFERENCE EXACTLY, checked
     # against cuvs-v26.08.00. They were briefly recorded as DEVIATION 780
     # while no 26.08 checkout existed; that claim is STRUCK. Nothing in this
     # block is a choice of ours.

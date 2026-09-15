@@ -48,7 +48,7 @@ esac
 api() { printf 'header = "Authorization: Bearer %s"\n' "$TOK" | curl -s --config - "$@"; }
 log() { echo "[$(date +%T) $VENDOR] $*"; }
 
-# WHICH SIDE OF THE WIRE DIED (DEVIATION 2292, ported from
+# WHICH SIDE OF THE WIRE DIED (DEVIATION 2292, carried over from
 # tools/do_release061_leg.sh). This leg has NO dry run: it creates a GPU
 # droplet on invocation. On 2026-09-08 three legs launched from this desk
 # lost the Mac's uplink about ninety seconds after their boxes came up, and
