@@ -3,14 +3,14 @@
 # 8 kernels, 8 launches restated as serial loops over the launch grid.
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`transformers/models/mamba/modeling_mamba.py`: ONE Mamba-1 block, on the
-device, under profile `mojolearn.identical.mamba1.fp32.v1`. **COPY, DO NOT
-IMPROVE.**
+device, under profile `mojolearn.identical.mamba1.fp32.v1`. Arithmetic order
+is fixed by that profile; a change needs a DEVIATION.
 
-FOLLOWS huggingface/transformers at `d56c55b`,
-`src/transformers/models/mamba/modeling_mamba.py`. Partial, inference only.
-What is mirrored here, symbol by symbol:
+Reference: `src/transformers/models/mamba/modeling_mamba.py`
+(huggingface/transformers `d56c55b`). Partial, inference only.
+What is implemented here, symbol by symbol:
 
-| theirs | lines | here |
+| reference | lines | here |
 |---|---|---|
 | `MambaRMSNorm.forward` | :495-499 | `mamba_rms_norm_kernel`, `mamba_rms_norm` |
 | `causal_conv1d_fn` (the torch fallback) | :81-100 | `causal_conv1d_fn_kernel`, `causal_conv1d_fn` |
@@ -18,7 +18,7 @@ What is mirrored here, symbol by symbol:
 | `MambaMixer.forward` | :359-483 | `mamba_mixer_forward` |
 | `MambaBlock.forward` | :505-530 | `mamba_block_forward` |
 
-The recurrence itself is NOT here. `mamba_selective_scan` is upstream's
+The recurrence itself is NOT here. `mamba_selective_scan` is the reference's
 FALLBACK for `selective_scan_fn`, and this file keeps that split: the
 recurrent core lives in
 `mamba/impl/ops/selective_scan_interface.mojo` (state-spaces/mamba
