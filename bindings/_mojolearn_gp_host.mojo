@@ -51,7 +51,13 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
+from gaussian_process.host.gp_theta import (
+    gp_log64,
+    gp_restart_uniform,
+    gp_theta_param,
+)
+from gaussian_process.host.gpr_grad_oracle import gpr_host_lml_grad
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -353,6 +359,95 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
 
 
 # ===========================================================================
+# KERNEL HYPERPARAMETER OPTIMIZATION, on the host
+# (bindings/_mojolearn_gp.mojo's four entries, their contracts word for word;
+# lane/gp-optimizer, 2026-09-15).
+# ===========================================================================
+
+
+def gpr_lml_grad_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`gaussian_process/host/gpr_grad_oracle.mojo::gpr_host_lml_grad`.
+    `addrs`: 0 x, 1 y, 2 kinds, 3 kparams, 4 ls_len, 5 ls, 6 free (int32 per
+    node), 7 grad_out (float64), 8 scalars_out (info, lml). `params`:
+    0 n_train, 1 n_features, 2 n_nodes, 3 n_ls, 4 alpha. Returns info."""
+    if len(addrs) != 9:
+        raise Error(
+            "gpr_lml_grad: addrs must contain 9 addresses (x, y, kinds,"
+            " kparams, ls_len, ls, free, grad_out, scalars_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 5:
+        raise Error(
+            "gpr_lml_grad: params must contain 5 values (n_train, n_features,"
+            " n_nodes, n_ls, alpha), got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_nodes = Int(py=params[2])
+    var n_ls = Int(py=params[3])
+    var alpha = Float32(Float64(py=params[4]))
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4]), Int(py=addrs[5]),
+        n_nodes, n_ls, String("gpr_lml_grad"),
+    )
+    var free = read_i32(Int(py=addrs[6]), max(0, n_nodes))
+    var gp = f64_ptr(Int(py=addrs[7]))
+    var sp = f64_ptr(Int(py=addrs[8]))
+    var x = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    var info = 0
+    with GILReleased(Python()):
+        var r = gpr_host_lml_grad(x, n_train, n_features, y, spec, free, alpha)
+        for i in range(len(r.grad)):
+            gp.unsafe_store(i, Float64(r.grad[i]))
+        sp.unsafe_store(0, Float64(r.info))
+        sp.unsafe_store(1, Float64(r.lml))
+        info = r.info
+        _ = r^
+    _ = x^
+    _ = y^
+    _ = free^
+    _ = spec^
+    return PythonObject(info)
+
+
+def gp_log64_binding(values: PythonObject) raises -> PythonObject:
+    """The GPU binding's `gp_log64`."""
+    var out = Python.list()
+    for i in range(len(values)):
+        out.append(PythonObject(gp_log64(Float64(py=values[i]))))
+    return out
+
+
+def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
+    """The GPU binding's `gp_theta_params`."""
+    var out = Python.list()
+    for i in range(len(values)):
+        out.append(PythonObject(Float64(gp_theta_param(Float64(py=values[i])))))
+    return out
+
+
+def gp_restart_uniforms_binding(params: PythonObject) raises -> PythonObject:
+    """The GPU binding's `gp_restart_uniforms`."""
+    if len(params) != 4:
+        raise Error(
+            "gp_restart_uniforms: params must contain 4 values (n_restarts,"
+            " n_dims, seed_lo, seed_hi), got " + String(len(params))
+        )
+    var nr = Int(py=params[0])
+    var nd = Int(py=params[1])
+    var seed = (UInt64(Int(py=params[3])) << 32) | UInt64(Int(py=params[2]))
+    var out = Python.list()
+    for r in range(nr):
+        for j in range(nd):
+            out.append(PythonObject(gp_restart_uniform(seed, r, j)))
+    return out
+
+
+# ===========================================================================
 # THE CHOLESKY DOOR, on the host (the GPU binding's workstream D entries).
 # ===========================================================================
 
@@ -463,6 +558,10 @@ def PyInit__mojolearn_gp_host() abi("C") -> PythonObject:
         module.def_function[gpr_fit_binding]("gpr_fit")
         module.def_function[gpr_predict_binding]("gpr_predict")
         module.def_function[gpr_sample_y_binding]("gpr_sample_y")
+        module.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
+        module.def_function[gp_log64_binding]("gp_log64")
+        module.def_function[gp_theta_params_binding]("gp_theta_params")
+        module.def_function[gp_restart_uniforms_binding]("gp_restart_uniforms")
         module.def_function[gpc_fit_binding]("gpc_fit")
         module.def_function[gpc_predict_binding]("gpc_predict")
         module.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")

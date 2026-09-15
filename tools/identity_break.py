@@ -2550,6 +2550,41 @@ lane("gp-sample-y")(_gp_sample_y_lane(False))
 lane("gp-sample-y-normalize")(_gp_sample_y_lane(True))
 
 
+def _gp_optimize_lane(restarts):
+    def body(ml, X, yc, yr, Xh=None):
+        if restarts:
+            k = ml.ConstantKernel(1.0) * ml.Matern([1.0, 1.0, 1.0, 1.0], nu=2.5) + ml.WhiteKernel(0.1)
+            m = ml.GaussianProcessRegressor(kernel=k, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=2,
+                                            random_state=7)
+        else:
+            k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+            m = ml.GaussianProcessRegressor(kernel=k, optimizer="fmin_l_bfgs_b")
+        m.fit(X[:64, :4], yr[:64])
+        mean, std = m.predict(X[64:128, :4], return_std=True)
+        runs = m._optimizer_runs
+        return _fit(dict(theta=_h(np.array(m.kernel_.theta, dtype=np.float64)),
+                         params=_h(np.array(m.kernel_._free_values(), dtype=np.float64)),
+                         runs=_h(np.array([[r[0], r[1]] for r in runs], dtype=np.int64),
+                                 np.array([r[3] for r in runs], dtype=np.float64)),
+                         lml=_h(np.float64(m.log_marginal_likelihood_value_)),
+                         alpha=_h(m.alpha_), L=_h(m.L_), mean=_h(mean), std=_h(std)),
+                    m, lambda e: e.predict(Xh[:64, :4], return_std=True))
+    body.__doc__ = ("GaussianProcessRegressor(optimizer='fmin_l_bfgs_b') (lane/gp-optimizer, 2026-09-15): the kernel "
+                    "hyperparameters maximize the log marginal likelihood through the identical gradient "
+                    "(DEVIATION 2880) and the projected L-BFGS (DEVIATION 2881)"
+                    + (", from the kernel's theta and two Philox restarts keyed by random_state=7, over an ARD Matern "
+                       "nu=2.5 scaled by a constant plus white noise" if restarts else
+                       ", over the gp lane's kernel") +
+                    ". 64 training rows of four columns; train hashes the optimized theta, the float32 "
+                    "hyperparameters, every run's iteration and evaluation counts and likelihood, the fit and the "
+                    "prediction at 64 rows. Separate lanes so the recorded gp cells do not move.")
+    return body
+
+
+lane("gp-optimize")(_gp_optimize_lane(False))
+lane("gp-optimize-restarts")(_gp_optimize_lane(True))
+
+
 for _name, _nu, _ls in (("matern12", 0.5, 1.0), ("matern32", 1.5, 1.0), ("matern52-ard", 2.5, [1.0, 2.0, 0.5, 4.0])):
     lane(f"gp-{_name}")(_gp_lane(_nu, _ls))
 
@@ -4338,7 +4373,8 @@ def _batch_gp(ml, e, Xh):
     return [_BatchRows("predict(return_std=True)", Xh[:64, :4], lambda r: tuple(e.predict(r, return_std=True)))]
 
 
-_batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp", "gp-normalize-y")
+_batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp", "gp-normalize-y",
+            "gp-optimize", "gp-optimize-restarts")
 # GaussianProcessRegressor.sample_y factors the posterior covariance over ALL
 # the rows of one call, so a row's draw depends on every other row asked with
 # it: splitting the rows changes the covariance, by the reference's contract
