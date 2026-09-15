@@ -58,7 +58,7 @@ row in the ledger at all. Under `MOJOLEARN_NUMERIC_MODE=identical` these
 run the pinned spelling that is DESIGNED to be vendor-independent, which
 is a claim about the source and not a measurement of three GPUs.
 
-UPSTREAM IS RETIRING WHAT ExponentialSmoothing MIRRORS. The pinned tree's
+THE REFERENCE LIBRARY IS RETIRING ExponentialSmoothing. The pinned tree's
 `holtwinters.pyx` carries a `.. deprecated:: 26.08` and says
 `cuml.tsa.ExponentialSmoothing` will be removed in cuML 26.12. The implementation is
 checked against v26.08.00 and stays valid; what expires is the ability to
@@ -141,7 +141,7 @@ def _series_major(y, name):
 
 
 def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
-    """The KPSS stationarity test, mirroring
+    """The KPSS stationarity test, with the reference
     `cuml.tsa.stationarity.kpss_test` (`tsa/`, DEVIATIONS 671-672).
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
@@ -278,7 +278,7 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
 
 
 class ExponentialSmoothing:
-    """Holt-Winters exponential smoothing, mirroring
+    """Holt-Winters exponential smoothing, with the reference
     `cuml.tsa.ExponentialSmoothing` (`holtwinters/`, DEVIATIONS 660-665 and
     697-699).
 
@@ -306,7 +306,7 @@ class ExponentialSmoothing:
         start_periods    honored   must be >= 2 and <= seasonal_periods.
         ts_num           honored   the number of series; must match
                                    `endog`'s first dimension, and cuML's
-                                   mismatch message is mirrored.
+                                   mismatch message is the same.
         eps              honored   default 2.24e-3, cuML's. Must be > 0.
         verbose          REFUSED   cuML's logging plumbing; there is no
                                    logger here.
