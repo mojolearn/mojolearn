@@ -216,6 +216,8 @@ def holtwinters_fit_binding(
             sp[batch_size + b] = fitted.alpha[b]
             sp[2 * batch_size + b] = fitted.beta[b]
             sp[3 * batch_size + b] = fitted.gamma[b]
+            fp[b] = Int32(fitted.niter[b])
+            fp[batch_size + b] = Int32(fitted.criterion[b])
         comptime if HW_ORACLE_HOST_SABOTAGE:
             # THE FITTED-STATE ARM (lane/inference-holtwinters, 2026-09-15):
             # the split SSE multiply-add leaves the fitted bytes unchanged on
@@ -229,8 +231,6 @@ def holtwinters_fit_binding(
             for i in range(4 * batch_size):
                 if isfinite(sp[i]):
                     sp[i] = bitcast[DType.float32](bitcast[DType.uint32](sp[i]) ^ UInt32(1))
-            fp[b] = Int32(fitted.niter[b])
-            fp[batch_size + b] = Int32(fitted.criterion[b])
     return PythonObject(components_len)
 
 
