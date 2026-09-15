@@ -114,10 +114,9 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             declarations sit outside the lane bodies (`BATCH`), so no train,
             infer or model hash moves. IT TESTS the host call path's batch
             splitting through the bindings, on ONE box. IT DOES NOT TEST
-            serving-scale B (checks/batch_invariance_check.mojo, B in
-            {1, 17, 64}) or padding or ragged batches; the backward pass
-            is, since 2026-09-15, the opt-in part `batchgrad` below. No
-            part here makes a
+            padding or ragged batches; serving-scale B and the backward
+            pass are, since 2026-09-15, the opt-in parts `batchscale` and
+            `batchgrad` below. No part here makes a
             cross-vendor statement; that comes from `--diff` over records.
             THE SABOTAGE turns every hashed batch cell BATCH_MOVED,
             and a run where it does not is a broken part
@@ -128,7 +127,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whole-batch answer (one ulp) and stamps `batch_sabotage: true`
             in the JSON.
 
-AN OPT-IN PART (2026-09-15), with its own JSON keys (`<part>`,
+TWO OPT-IN PARTS (2026-09-15), each its own JSON keys (`<part>`,
 `<part>_verdict`, `<part>_error`, `<part>_notes`, `<part>_protocol`,
 `<part>_sabotage`) and its own `summary (<part>):` line of `--diff`,
 printed only where a column carries it. A run that does not pass the flag
@@ -180,6 +179,18 @@ BATCH_MOVED (a failure under IDENTICAL only), N/A, REFUSED.
             BATCH_MOVED); `=serial` replaces condition 5's tree with a running
             pair sum, which the contract says is inert at A <= 2, so a cell
             that moves at A = 4 is condition 5 seen biting (recorded).
+    batchscale  `--batch-scale`. SERVING-SCALE B. A whole call of 1024 rows
+            and sub-batches of B in {1, 17, 64, 256} at its start, middle and
+            end, every sub-batch row equal to its row of the whole; for the
+            causal sequence models also B = 2 at L = 1024 against every
+            prefix in {1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511,
+            512, 513, 1023} (the Mamba-3 chunk 64, the GEMM leaf 128, the
+            Mamba-2 chunk 256). Lanes: the sequence blocks, the byte LM lanes
+            (the long length loads the lane's parameters into the default
+            shape with `length=1024`), Samba, and the classical serving set
+            knn, rf-clf, rf-reg, gbdt-symmetric, gbdt-rmse, ols, ridge,
+            logistic, pca. Inputs past a fixture's size wrap around it. The
+            batch part's sabotage switch sabotages this part too.
 
 THE LANES, 178 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
@@ -3414,7 +3425,7 @@ def _eval_batch_prefix(call, sabotage, digest):
                 flipped[0] ^= 1
                 full[hit] = np.frombuffer(bytes(flipped), dtype=o.dtype).reshape(o.shape)
                 break
-    for p in _prefix_lengths(call.full):
+    for p in (getattr(call, "lengths", None) or _prefix_lengths(call.full)):
         part = [np.asarray(o) for o in call.fn(p)]
         for k, (F, P) in enumerate(zip(full, part)):
             want = np.ascontiguousarray(np.take(F, np.arange(p), axis=call.axis))
@@ -4155,11 +4166,159 @@ _batchgrad_decl("n/a:driver-lane (a multi-GPU driver held to its single-device t
 BATCHGRAD_DEFAULT = "n/a:no-backward"
 
 
+# ---------------------------------------------------------------- the batchscale part (2026-09-15)
+# See `batchscale` in the module docstring. Opt-in (`--batch-scale`). The
+# batch part asks at most 16 rows alone and a split of 1, 7 and the rest;
+# checks/batch_invariance_check.mojo asks the blocks at B in {1, 17, 64}.
+# This part asks the PUBLIC surface at serving sizes: a whole call of
+# SCALE_WHOLE rows, and sub-batches of SCALE_BATCHES rows at the start, the
+# middle and the end of it, every row of every sub-batch equal to its row
+# of the whole call; and the causal sequence models at a long length,
+# every prefix in SCALE_PREFIXES equal to the first positions of the whole.
+
+SCALE_BATCHES = (1, 17, 64, 256)
+SCALE_WHOLE = 1024
+SCALE_LONG_L = 1024
+#: 64 is the Mamba-3 chunk, 128 the v1 GEMM leaf, 256 the Mamba-2 chunk
+SCALE_PREFIXES = (1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511, 512, 513, 1023)
+
+BATCHSCALE = {}
+
+
+def _batchscale_decl(spec, *names):
+    for n in names:
+        if n in BATCHSCALE:
+            raise RuntimeError(f"identity_break: lane {n!r} has two batchscale declarations")
+        BATCHSCALE[n] = spec
+
+
+class _ScaleRows:
+    """One row-wise call asked at serving sizes. `fn(R[a:b])` returns a
+    tuple of outputs whose axis 0 is the rows, as for _BatchRows."""
+
+    def __init__(self, label, R, fn):
+        self.label, self.R, self.fn = label, np.ascontiguousarray(R), fn
+
+
+def _eval_scale_rows(call, sabotage, digest):
+    n = call.R.shape[0]
+    whole = _as_rows(call.fn(call.R), n, f"{call.label} whole B={n}")
+    if sabotage:
+        _sabotage_rows(whole)
+    for b in SCALE_BATCHES:
+        if b > n:
+            continue
+        for a in sorted({0, (n - b) // 2, n - b}):
+            got = _as_rows(call.fn(np.ascontiguousarray(call.R[a:a + b])), b, f"{call.label} B={b} at {a}")
+            for i in range(b):
+                m = _row_mismatch(whole[a + i], got[i], f"B={b} starting at row {a}")
+                if m:
+                    return f"BATCH_MOVED:{call.label}:row {a + i} of {n} in B={b} starting at row {a}:{m}"
+    digest.update(f"scale:{call.label}:{n}:{','.join(map(str, SCALE_BATCHES))}".encode())
+    for r in whole:
+        for dt, shape, raw in r:
+            digest.update(f"{dt}{shape}".encode())
+            digest.update(raw)
+    return None
+
+
+def _tiled(X, shape):
+    """`shape` float32 values from the fixture, row-major and wrapped (the
+    serving sizes ask for more values than some fixtures hold; the fixture
+    lengths do not divide the row sizes, so wrapped rows are not copies)."""
+    return np.ascontiguousarray(np.resize(np.ascontiguousarray(X).reshape(-1), int(np.prod(shape))).reshape(shape))
+
+
+def _tiled_ids(X, b, l, vocab=256):
+    raw = np.frombuffer(np.ascontiguousarray(X).tobytes(), dtype=np.uint8)
+    return np.ascontiguousarray((np.resize(raw, b * l).astype(np.int32) % vocab).reshape(b, l))
+
+
+def _scale_prefix(label, full, fn):
+    call = _BatchPrefix(label, full, fn, axis=1)
+    call.lengths = [p for p in SCALE_PREFIXES if p < full]
+    return call
+
+
+def _batchscale_block(ml, blk, Xh):
+    dm = blk.d_model
+    x = _tiled(Xh, (SCALE_WHOLE, SEQ_LEN, dm))
+    xl = _tiled(Xh[::-1], (2, SCALE_LONG_L, dm))
+    return [_ScaleRows(f"forward L={SEQ_LEN}", x, lambda r: (np.asarray(blk.forward(r)),)),
+            _scale_prefix(f"forward B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
+                          lambda p: (np.asarray(blk.forward(np.ascontiguousarray(xl[:, :p, :]))),))]
+
+
+_batchscale_decl(_batchscale_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "transformer",
+                 "transformer-window")
+
+
+def _long_byte_lm(ml, e):
+    """The lane's model at length SCALE_LONG_L. Every byte LM lane runs the
+    default shape, and its registry does not depend on the length (RoPE, no
+    position table), so the same flat parameters load into the default
+    config with only `length` changed."""
+    shape = ml.ByteLanguageModelConfig(length=SCALE_LONG_L)
+    if isinstance(e, ml.LanguageModelInference):
+        return ml.LanguageModelInference(e._parameters, shape=shape, threaded=e._threaded, threads=e._threads)
+    return ml.SmallByteLanguageModelTrainer(np.asarray(e.parameters_),
+                                            data_schedule={"dataset": "identity_break", "order": "sequential"},
+                                            shape=shape)
+
+
+def _batchscale_byte_lm(ml, e, Xh):
+    shape = ml.ByteLanguageModelConfig()
+    ids = _tiled_ids(Xh, SCALE_WHOLE, shape.length)
+    long_m = _long_byte_lm(ml, e)
+    idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L)
+    return [_ScaleRows(f"logits L={shape.length}", ids, lambda r: (np.asarray(e.logits(r)),)),
+            _scale_prefix(f"logits B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
+                          lambda p: (np.asarray(long_m.logits(np.ascontiguousarray(idl[:, :p]))),))]
+
+
+_batchscale_decl(_batchscale_byte_lm, "byte-lm", "byte-lm-resident", "byte-lm-host-infer",
+                 "byte-lm-host-infer-threaded")
+
+
+def _batchscale_samba(ml, st, Xh):
+    ids = _tiled_ids(Xh, SCALE_WHOLE, SEQ_LEN, st.config.vocab)
+    idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L, st.config.vocab)
+    return [_ScaleRows(f"forward L={SEQ_LEN}", ids, lambda r: (np.asarray(st.forward(r)),)),
+            _scale_prefix(f"forward B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
+                          lambda p: (np.asarray(st.forward(np.ascontiguousarray(idl[:, :p]))),))]
+
+
+_batchscale_decl(_batchscale_samba, "samba", "samba-untied-dropout-accum")
+
+
+def _scale_calls(*methods, sl=slice(None), prep=None):
+    def spec(ml, e, Xh):
+        R = (Xh if prep is None else prep(Xh))[sl][:SCALE_WHOLE]
+        return [_ScaleRows(m, R, (lambda m: lambda r: (getattr(e, m)(r),))(m)) for m in methods]
+    return spec
+
+
+def _batchscale_kneighbors(ml, e, Xh):
+    return [_ScaleRows("kneighbors", Xh[:SCALE_WHOLE], lambda r: tuple(e.kneighbors(r)))]
+
+
+# The representative classical set the gap named: neighbors, forests, GBDT
+# predict, linear models and a decomposition.
+_batchscale_decl(_batchscale_kneighbors, "knn")
+_batchscale_decl(_scale_calls("predict", "predict_proba"), "rf-clf", "gbdt-symmetric")
+_batchscale_decl(_scale_calls("predict"), "rf-reg", "gbdt-rmse", "ols", "ridge")
+_batchscale_decl(_scale_calls("predict_proba"), "logistic")
+_batchscale_decl(_scale_calls("transform"), "pca")
+
+BATCHSCALE_DEFAULT = "n/a:not-in-the-serving-set"
+
+
 # ---------------------------------------------------------------- the opt-in parts, one runner
 
 #: part name -> (declarations, default, CLI flag, sabotage env)
 EXTRA_PARTS = {
     "batchgrad": (BATCHGRAD, BATCHGRAD_DEFAULT, "batch_grad", BATCHGRAD_SABOTAGE_ENV),
+    "batchscale": (BATCHSCALE, BATCHSCALE_DEFAULT, "batch_scale", BATCH_SABOTAGE_ENV),
 }
 
 
@@ -4168,6 +4327,9 @@ def _part_protocol(part, alone):
         return dict(rows=dict(alone=alone, split=list(BATCH_SPLIT) + ["n"]), accum_splits=list(GRAD_ACCUM_SPLITS),
                     uneven_split=GRAD_UNEVEN_SPLIT_NA, carry_splits=[list(BATCH_SPLIT) + ["n"], f"every {alone}"],
                     seq=[GRAD_SEQ_BATCH, GRAD_SEQ_LEN])
+    if part == "batchscale":
+        return dict(batches=list(SCALE_BATCHES), whole=SCALE_WHOLE, long_l=SCALE_LONG_L,
+                    prefixes=list(SCALE_PREFIXES))
 
 
 def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
@@ -4191,6 +4353,8 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
                 moved = _eval_grad_accum(ml, call, sabotage, digest, notes)
             elif isinstance(call, _GradCarry):
                 moved = _eval_grad_carry(ml, call, sabotage, digest, notes)
+            elif isinstance(call, _ScaleRows):
+                moved = _eval_scale_rows(call, flip, digest)
             else:
                 raise TypeError(f"{part}: unknown call type {type(call).__name__}")
             if moved:
@@ -4884,6 +5048,8 @@ def main():
                     help="skip the batch part; its cells record n/a:skipped (--no-batch)")
     ap.add_argument("--batch-grad", action="store_true",
                     help="add the batchgrad part: per-row gradients and clause 9.2 aligned accumulation")
+    ap.add_argument("--batch-scale", action="store_true",
+                    help="add the batchscale part: B in {1, 17, 64, 256} inside B = 1024, and long-L prefixes")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--diff", nargs="+", default=None, metavar="JSON",
                     help="compare JSONs cell by cell: the train column, then infer and model where carried")
