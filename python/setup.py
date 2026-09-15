@@ -35,6 +35,9 @@ facts PEP 621 has no field for.
 
 import os
 import platform
+import runpy
+import zipfile
+from pathlib import Path
 import sys
 
 from setuptools import setup
@@ -88,6 +91,29 @@ class bdist_wheel(_bdist_wheel):
     only place the decision is actually made. The platform half is left as the
     base class computed it so `plat_name` below keeps working.
     """
+
+    def run(self):
+        # Package-data globs must never smuggle internal reference bindings
+        # from an earlier source build into an inference wheel.
+        root = Path(__file__).resolve().parent
+        manifest = runpy.run_path(str(root / "mojolearn" / "host_surface.py"))
+        allowed = {name + ".so" for name in manifest["wheel_bindings"]()}
+        extra = {p.name for p in (root / "mojolearn" / "host").glob("*.so")} - allowed
+        if extra:
+            raise SystemExit("reference-only host bindings cannot ship: " + ", ".join(sorted(extra)))
+        super().run()
+        # Also catch files left in setuptools' build directory from an older
+        # build, even when the source staging directory is now clean.
+        for command, _, filename in self.distribution.dist_files:
+            if command != "bdist_wheel":
+                continue
+            with zipfile.ZipFile(filename) as wheel:
+                shipped = {Path(n).name for n in wheel.namelist()
+                           if n.startswith("mojolearn/host/") and n.endswith(".so")}
+            if shipped - allowed:
+                Path(filename).unlink()
+                raise SystemExit("wheel contained reference-only host bindings: "
+                                 + ", ".join(sorted(shipped - allowed)))
 
     def get_tag(self):
         _, _, plat = _bdist_wheel.get_tag(self)

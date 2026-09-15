@@ -43,6 +43,15 @@ import functools
 from . import _backend
 
 
+def _guard_cpu_training(method):
+    @functools.wraps(method)
+    def guarded(self, *args, **kwargs):
+        from ._cpu_reference import require_training
+        require_training(self)
+        return method(self, *args, **kwargs)
+    return guarded
+
+
 class NumericModeMixin:
     """Gives an estimator `self._bind(name)`.
 
@@ -72,6 +81,13 @@ class NumericModeMixin:
         `None` over the subclass's real answer.
         """
         super().__init_subclass__(**kw)
+        # Guard even passive fits (e.g. k-NN/KDE storing samples). Inherited
+        # fit methods retain their guard, including explicit host subclasses
+        # used on a machine that also has a GPU.
+        for method_name in ("fit", "partial_fit", "fit_predict", "fit_transform"):
+            method = cls.__dict__.get(method_name)
+            if method is not None:
+                setattr(cls, method_name, _guard_cpu_training(method))
         orig = cls.__dict__.get("__init__")
         if orig is None:
             return

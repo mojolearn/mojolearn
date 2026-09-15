@@ -30,6 +30,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -129,6 +130,7 @@ def test_readme_no_longer_says_knn_training_has_no_cpu_path():
         assert "k-NN" not in m.group(1), f"{rel} still says k-NN training has no CPU path"
 
 
+@reference_training()
 def test_host_fits_run_and_repeat_on_a_cpu_only_install():
     """Runtime, only where it can run. Skipping is stated, never silent."""
     if _backend._CPU_ONLY is None:
