@@ -373,6 +373,15 @@ def two_device_forward(lh: List[Float32], bh: List[Float32], n: Int, nrhs: Int, 
                     bad += 1
             print("PEERSOLVE readback rank", rank, "n", n, "cells differing before the kernel", bad)
         shards.append(Shard(device^, sl^, sb^, first, width))
+    for rank in range(active):
+        ref s = shards[rank]
+        var la = Int(s.l.unsafe_ptr())
+        var lb = la + len(s.l) * 4
+        var ba = Int(s.b.unsafe_ptr())
+        var bb = ba + len(s.b) * 4
+        var overlap = ba < lb and la < bb
+        print("PEERALIAS n", n, "variant", variant_name(v), "rank", rank, "factor", la, "bytes", len(s.l) * 4,
+              "columns", ba, "bytes", len(s.b) * 4, "columns minus factor", ba - la, "overlap", overlap)
     if v == V_SLEEP:
         wait_host(2)
     if v == V_COPYK or v == V_DIRTY_COPYK or v == V_HISTORY_COPYK:
