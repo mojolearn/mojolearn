@@ -380,6 +380,42 @@ TRAINING_LANE_NAMES = {
     "gbdt-lossguide-newtoncosine": "gradient boosting on lossguide trees with the NewtonCosine score and the searcher options",
     "gbdt-multiclass": "multiclass gradient boosting",
     "gbdt-onevsall": "one-vs-all gradient boosting",
+    # lane/cpu-training-gbdt-ordered (2026-09-15): OrderedRMSE trains
+    # through gbdt/host/gbdt_oracle_ordered.mojo (the pointwise searcher's
+    # fold arm, its 8-bit fixed-point and half-byte float histograms, the
+    # dynamic cosine scorer and the ordered Newton leaves restated on the
+    # host) and ExperimentalTwoLevelFeatureFreq through
+    # gbdt/host/gbdt_oracle_feature_freq.mojo (the synchronized two-level
+    # tensor search over the symmetric oracle's histograms), exported as
+    # gbdt_fit_ordered_rmse and gbdt_fit_two_level_feature_freq from the
+    # gbdt host binding; sample_weight refuses by name on both. On the M4's
+    # CPU column (one core) both lanes read all 18 train, 36 infer and model
+    # and 18 batch cells IDENTICAL x4 against the 166-lane columns before
+    # the gate ran, and the sabotage build DIVERGENT on every cell.
+    "gbdt-ordered-rmse": "ordered boosting with the RMSE loss (OrderedRMSE)",
+    "gbdt-feature-freq": "the two-level FeatureFreq estimator",
+    # The same lane branch: the pointwise searcher with L2 scores, the
+    # Bayesian bootstrap, boost from average on Logloss, row weights and an
+    # eval set with the Iter detector and best-model truncation trains
+    # through gbdt/host/gbdt_oracle_pointwise.mojo (the ordered oracle's
+    # single-task structure search with the plain L2 scorer, the weighted
+    # Newton walker, the bootstrap draws and the test arm restated on the
+    # host) inside gbdt_fit's use_pointwise_searcher arm, which refuses every
+    # other value of those options by name. IDENTICAL x4 on all 9 train, 18
+    # infer and model and 9 batch cells on the M4's CPU column (one core)
+    # before the gate ran, and the sabotage build DIVERGENT on every cell.
+    "gbdt-pointwise-l2-bayesian-eval": "gradient boosting with the pointwise searcher, L2 scores, the Bayesian bootstrap and an eval set",
+    # The same lane branch: gradient boosting with categorical and one-hot
+    # columns trains through gbdt/host/gbdt_oracle_onehot.mojo (the flags,
+    # train's categorical validation, the one-hot grid inside
+    # gbdt_oracle.mojo's fit, the cat model records). The lane's categorical
+    # column has two categories, so train makes it one-hot and no CTR column
+    # is built on any fixture (the model texts carry no ctr record); a
+    # categorical column above one_hot_max_size refuses by name. IDENTICAL
+    # x4 on all 9 train, 18 infer and model and 9 batch cells on the M4's
+    # CPU column (one core) before the gate ran, the sabotage build
+    # DIVERGENT on every cell.
+    "gbdt-categorical-ctr": "gradient boosting with one-hot categorical columns",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -477,6 +513,19 @@ TRAINING_LANE_NAMES = {
     "rf-reg-gamma-ig": "the random forest regressor with the gamma and inverse Gaussian criteria",
     "et-clf-entropy-bestfirst": "the best-first Extra Trees classifier with entropy splits",
     "et-reg-bootstrap-parallel": "the bootstrapped Extra Trees regressor with the parallel groves engine",
+    # The Mamba block lanes (lane/cpu-training-mamba, 2026-09-15): the three
+    # blocks' forward, carried-state prefill and decode step over their host
+    # oracles, and the zero-state prefill backward over mamba/host/gen/, the
+    # device VJP written out for the host by tools/mamba_host_gen.py (the
+    # Mamba-1 host backward oracle differs from the device in low bits, so
+    # it is not the one used). On the M4, one core, shared machine: all 36
+    # train (forward, prefill, step and backward parts), 36 infer and 36
+    # batch cells IDENTICAL x4 against the 166-lane record before the gate
+    # ran, and the MOJOLEARN_HOST_SABOTAGE build DIVERGENT.
+    "mamba2": "the Mamba-2 block",
+    "mamba2-dtlimit": "the Mamba-2 block with an active dt clamp",
+    "mamba1": "the Mamba-1 block",
+    "mamba3": "the Mamba-3 block",
     # The Transformer block lanes (lane/cpu-training-transformer,
     # 2026-09-15). TransformerBlock's forward (the stateless prefill, the
     # carried-state prefill and the decode step) and its zero-state prefill
@@ -529,15 +578,22 @@ TRAINING_LANE_NAMES = {
     # trees concatenate in ID order.
     "par-forest": "the tree-range-sharded random forest classifier",
     "par-forest-et": "the tree-range-sharded Extra Trees regressor",
+    # Wave 2, par-mlp: ParallelNeuralTrainer sends one mlp_gradient request
+    # per logical shard (three of 64 rows) and one mlp_update that folds
+    # them in shard order in Python and steps the optimizer, on the
+    # training host binding. The update pool is cooperative and is admitted
+    # on CPU only at one device, where the GPU binding's range split is the
+    # plain path; two devices refuse by name.
+    "par-mlp": "the small MLP trained over ordered logical gradient shards",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "the Mamba and Samba blocks",
+    "the Samba blocks",
     "the Embedding layer",
-    "gradient boosting training outside its declared lanes (the ordered RMSE and feature-frequency fits, categorical features, sample weights, eval sets and the pointwise searcher among them)",
+    "gradient boosting training outside its declared lanes (CTR categorical features, and sample weights, eval sets and the pointwise searcher outside the gbdt-pointwise-l2-bayesian-eval configuration, among them)",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -1128,11 +1184,15 @@ FAMILIES = (
         # Workstream E batch 3 (2026-09-14): the GradientBoosting family's
         # host binding. It routes `_mojolearn_gbdt` on a CPU-only install
         # with the GPU binding's fit, predict, model-dim and sigmoid names;
-        # gbdt_fit refuses by name every value outside the twelve declared
-        # GBDT configurations; the ordered and FeatureFreq fits stay absent.
-        # The classifier adapter's binary probability and class transforms
-        # and the multi-dimensional predict are exported since 2026-09-15
-        # (lane/cpu-training-gbdt-losses).
+        # gbdt_fit refuses by name every value outside the declared GBDT
+        # configurations. The classifier adapter's binary probability and
+        # class transforms and the multi-dimensional predict are exported
+        # since 2026-09-15 (lane/cpu-training-gbdt-losses);
+        # gbdt_fit_ordered_rmse and gbdt_fit_two_level_feature_freq train the
+        # gbdt-ordered-rmse and gbdt-feature-freq lanes, gbdt_fit's
+        # use_pointwise_searcher arm the gbdt-pointwise-l2-bayesian-eval lane
+        # and its one-hot categorical columns the gbdt-categorical-ctr lane
+        # (lane/cpu-training-gbdt-ordered, 2026-09-15).
         # Not the forest host binding: that one is loaded by path under its
         # own names and takes the model as flat arrays.
         family="gbdt",
@@ -1145,18 +1205,22 @@ FAMILIES = (
             "gbdt-nan-modes", "gbdt-adapter-clf", "gbdt-adapter-reg",
             "gbdt-parametric-losses", "gbdt-exact-mae",
             "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall",
+            "gbdt-ordered-rmse", "gbdt-feature-freq",
+            "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
         ),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
             "GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor",
-            "model_selection.cross_val_score",
+            "model_selection.cross_val_score", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="gradient boosting on symmetric trees with the pointwise and multiclass losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss",
+        display="gradient boosting on symmetric trees with the pointwise and multiclass losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
             "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
+            "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
+            "gbdt/host/gbdt_oracle_pointwise.mojo", "gbdt/host/gbdt_oracle_onehot.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(
@@ -1164,6 +1228,7 @@ FAMILIES = (
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_fit", "gbdt_predict", "gbdt_predict_multi", "gbdt_model_dim",
             "gbdt_sigmoid", "gbdt_binary_probabilities", "gbdt_binary_classes",
+            "gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
@@ -1183,7 +1248,7 @@ FAMILIES = (
         routes="_mojolearn_training",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives"),
+        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "par-mlp"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -1238,6 +1303,50 @@ FAMILIES = (
             "bootstrap", "permutation_test", "monte_carlo_integrate",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # lane/cpu-training-mamba (2026-09-15): the Mamba blocks' host
+        # binding. It routes `_mojolearn_mamba` on a CPU-only install with
+        # the GPU binding's whole surface: the forwards and decode steps
+        # over the three block oracles (mamba/checks/mamba{,2,3}_oracle.mojo),
+        # and the three zero-state prefill VJPs over mamba/host/gen/, the
+        # device passes (forward stages included) written out for the host
+        # by tools/mamba_host_gen.py: each kernel a serial loop over its
+        # launch grid, the device GEMM through gemm_oracle
+        # (mamba/host/device_shim.mojo). The gate's manifest step fails when
+        # the generated files lag the device source.
+        family="mamba",
+        binding="_mojolearn_mamba_host",
+        routes="_mojolearn_mamba",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("mamba2", "mamba2-dtlimit", "mamba1", "mamba3"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("Mamba1Block", "Mamba2Block", "Mamba3Block"),
+        display="the Mamba-1, Mamba-2 and Mamba-3 blocks' forward, decode step and prefill backward",
+        host_modules=(
+            "mamba/checks/mamba_oracle.mojo",
+            "mamba/checks/mamba2_oracle.mojo",
+            "mamba/checks/mamba3_oracle.mojo",
+            "mamba/host/device_shim.mojo",
+            "mamba/host/gen/modeling_mamba_prefill_backward.mojo",
+            "mamba/host/gen/mamba2_prefill_backward.mojo",
+            "mamba/host/gen/mamba3_prefill_backward.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "mamba_host_numeric_mode", "mamba_host_vendor", "mamba_host_column",
+            "mamba_host_sabotage", "mamba_vendor", "mamba_numeric_mode",
+            "mamba1_forward", "mamba1_backward", "mamba1_decode_step",
+            "mamba2_forward", "mamba2_decode_step", "mamba2_backward",
+            "mamba3_forward", "mamba3_forward_fresh", "mamba3_decode_step",
+            "mamba3_backward",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        # Training-only reference family: source builds for internal bitwise
+        # verification, not shipped (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
         ships_in_wheel=False,
     ),
     dict(

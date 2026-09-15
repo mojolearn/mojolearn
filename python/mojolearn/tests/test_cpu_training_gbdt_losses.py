@@ -134,7 +134,7 @@ def test_binding_dispatches_and_refuses_by_name():
     assert '("gbdt_predict_multi")' in src
     assert "var lg_boot = lossguide_knobs and bootstrap_type == String(\"Bernoulli\")" in src
     assert "_refuse(\"bootstrap_type='\" + bootstrap_type + \"' under loss='\" + loss + \"'\")" in src
-    assert "if is_rmse or grow_code != 0 or is_pointwise or is_multi:" in src
+    assert "if is_rmse or grow_code != 0 or is_pointwise or is_multi or len(flags) != 0:" in src
 
 
 

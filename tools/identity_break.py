@@ -1595,9 +1595,15 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-categorical-ctr")
 def _(ml, X, yc, yr, Xh=None):
-    """A CTR feature and a one-hot feature (disjoint: cat_features makes
-    its own one-hot decision) with two CTR permutations, on the coded
-    columns of _coded."""
+    """A categorical feature and a one-hot feature (disjoint: cat_features
+    makes its own one-hot decision) with permutation_count=2, on the coded
+    columns of _coded. NO CTR IS BUILT HERE: _coded's column 0 holds two
+    categories, at or below the GPU one_hot_max_size of 2, so train makes it
+    a one-hot column, no permutation-dependent feature exists and the fit
+    runs one permutation (the Apple column's model texts on all nine
+    fixtures carry no ctr record, dumped on the M4 2026-09-15). This lane
+    measures the one-hot categorical arm; a CTR column needs a source with
+    more than two categories."""
     m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", cat_features=[0],
                             one_hot_features=[1], permutation_count=2,
                             ctr_estimation_permutation_id=0).fit(_coded(X), yc)
