@@ -277,6 +277,83 @@ def require(condition, message):
         raise ValueError(message)
 
 
+# THE POST-RECORD ALLOWLIST (0.8.6). A release is built, installed and
+# recorded, and only then does the record land in the tree: the manifest's
+# record lists in python/mojolearn/host_surface.py and the verify reference
+# table. The shipped binaries must be the recorded ones, so the final wheel is
+# packed from the recorded build proofs, and exactly this one inventoried file
+# may differ from them, and only in the named top-level assignments. The table
+# (python/mojolearn/verify_reference/table.json) is package data the native
+# inventory never lists, so it needs no entry here. Every other inventoried
+# path, every .so and every other byte of host_surface.py must match the build.
+POST_RECORD_FILES = ('python/mojolearn/host_surface.py',)
+POST_RECORD_NAMES = frozenset({'TRAINING_GPU_COLUMNS', 'TRAINING_FIX_COLUMNS', 'TRAINING_FIX_LANES'})
+
+
+def _assigned_names(node):
+    import ast
+    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+    names = set()
+    for target in targets:
+        if not isinstance(target, ast.Name):
+            return None
+        names.add(target.id)
+    return names
+
+
+def post_record_equivalent(build_text, current_text):
+    """True when the two sources parse to the same module once every top-level
+    assignment to a POST_RECORD_NAMES name is removed (comments are not in the
+    AST; a docstring, an import or any other statement still must match)."""
+    import ast
+
+    def stripped(text):
+        tree = ast.parse(text)
+        kept = []
+        for node in tree.body:
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                names = _assigned_names(node)
+                if names and names <= POST_RECORD_NAMES:
+                    continue
+            kept.append(node)
+        tree.body = kept
+        return ast.dump(tree, include_attributes=False)
+
+    return stripped(build_text) == stripped(current_text)
+
+
+def _git_show(source_root, commit, rel):
+    import subprocess
+    return subprocess.run(['git', '-C', str(source_root), 'show', f'{commit}:{rel}'],
+                          capture_output=True, check=True, timeout=30).stdout
+
+
+def post_record_differences(build_inventory, current_digests, source_root, source_commit, read_build=None):
+    """The inventoried paths whose current digest differs from the build, all of
+    them allowlisted post-record edits; raises ValueError on anything else.
+    `current_digests` maps every build-inventory path to its digest in the
+    checkout now. `read_build(source_root, commit, rel)` returns the built copy's
+    bytes (default `git show`), which must hash to the build's recorded digest."""
+    build = {rel: digest for rel, digest in build_inventory}
+    require(set(current_digests) == set(build),
+            'Current source adds or removes inventoried files: '
+            + ', '.join(sorted(set(current_digests) ^ set(build))))
+    differ = sorted(rel for rel in build if current_digests[rel] != build[rel])
+    for rel in differ:
+        require(rel in POST_RECORD_FILES, 'Current source differs from build: ' + rel)
+        try:
+            built = (read_build or _git_show)(source_root, source_commit, rel)
+        except Exception as exc:
+            raise ValueError(f'Cannot read the built copy of {rel} at {source_commit}: {exc}')
+        require(hashlib.sha256(built).hexdigest() == build[rel],
+                'The built copy of ' + rel + ' does not match the build proof digest')
+        current = (Path(source_root) / rel).read_bytes()
+        require(post_record_equivalent(built.decode(), current.decode()),
+                rel + ' differs from the build outside the post-record lists '
+                + ', '.join(sorted(POST_RECORD_NAMES)))
+    return differ
+
+
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
