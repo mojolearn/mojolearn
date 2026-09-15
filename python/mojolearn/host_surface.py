@@ -819,12 +819,17 @@ FAMILIES = (
             "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
         display="random forests, Extra Trees and eight gradient boosting variants",
-        host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo"),
+        # lane/inference-gbdt-ctr-tables (2026-09-15): the CTR and tensor CTR
+        # step of a saved GBDT model, reusing expand_raw_columns and the
+        # tensor apply module the GPU predict calls
+        host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo",
+                      "core/gbdt_host_ctr.mojo", "gbdt/models/tensor_ctr_apply.mojo"),
         exports=(
             "forest_host_numeric_mode", "forest_host_vendor", "forest_host_column",
             "forest_host_sabotage", "forest_host_rf_predict_proba",
             "forest_host_rf_predict_reg", "forest_host_et_predict",
             "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid",
+            "forest_host_gbdt_expand_ctr", "forest_host_gbdt_ctr_sabotage",
             "all_finite_f32", "all_finite_f64", "cast_f64_to_f32",
             "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
         ),

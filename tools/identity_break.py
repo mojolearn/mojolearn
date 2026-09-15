@@ -1687,6 +1687,139 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(_coded(X)))), m, lambda e: (e.predict(_coded(Xh)),))
 
 
+#: lane/inference-gbdt-ctr-tables (2026-09-15). The saved-model directory
+#: of the two CTR table lanes: a GPU column FITS and writes
+#: `<dir>/<lane>.<fixture>.npz` (repeat 0); a CPU column, whose training
+#: path refuses CTR tables by name, LOADS that file through
+#: `mojolearn.host_model` instead of fitting, so its train, infer and batch
+#: cells are HostGBDT's predictions from the GPU's own saved model and its
+#: model cell is that file's hash.
+GBDT_CTR_MODELS_ENV = "MOJOLEARN_IDENTITY_GBDT_CTR_MODELS"
+
+
+def _rank_codes(col, cuts):
+    """Dense codes from the RANK of a column (a stable argsort, ties by row
+    order), cut at the fractions `cuts`: host arithmetic only, the same
+    bytes on every box, every code present, uneven group sizes."""
+    n = col.shape[0]
+    ranks = np.empty(n, dtype=np.int64)
+    ranks[np.argsort(col, kind="stable")] = np.arange(n, dtype=np.int64)
+    return np.searchsorted(np.asarray(cuts, dtype=np.float64), ranks.astype(np.float64) / n,
+                           side="right").astype(np.int64)
+
+
+def _ctr_tables_x(X, heldout=False):
+    """gbdt-categorical-ctr-tables' input: column 0 has eight categories
+    (seven rank groups of column 3 and an eighth held by ONE training row),
+    column 1 five (rank groups of column 4), both above the GPU
+    one_hot_max_size of 2, so each becomes four CTR columns (Borders at three
+    priors and FeatureFreq); column 2 is a two-category one-hot column; then
+    the first eight numeric columns. On the held-out rows every 97th row
+    carries category 8 and every 101st category 12 in column 0 (never seen
+    in training), every 89th category 7 (seen once), every 103rd category 9
+    in column 1 (never seen)."""
+    c0 = _rank_codes(X[:, 3], (0.30, 0.50, 0.65, 0.77, 0.86, 0.93))
+    c1 = _rank_codes(X[:, 4], (0.20, 0.45, 0.70, 0.90))
+    c2 = (X[:, 5] > np.median(X[:, 5])).astype(np.int64)
+    rows = np.arange(X.shape[0])
+    if heldout:
+        c0[rows % 89 == 0] = 7
+        c0[rows % 97 == 0] = 8
+        c0[rows % 101 == 0] = 12
+        c1[rows % 103 == 0] = 9
+    else:
+        c0[int(np.argsort(X[:, 6], kind="stable")[-1])] = 7
+    return np.ascontiguousarray(np.column_stack(
+        [c0.astype(np.float32), c1.astype(np.float32), c2.astype(np.float32), X[:, :8]]).astype(np.float32))
+
+
+def _ctr_tables_xh(Xh):
+    return _ctr_tables_x(Xh, heldout=True)
+
+
+def _tensor_ctr_x(X, heldout=False):
+    """gbdt-tensor-ctr-tables' input: two categorical source columns (four
+    rank groups of column 3 plus a fifth category held by ONE training row,
+    four rank groups of column 4), then the first four numeric columns. On
+    the held-out rows every 89th row carries source 0 category 4 (the
+    combinations seen once, or never), every 97th category 6 (past its
+    cardinality, the empty-value key)."""
+    c0 = _rank_codes(X[:, 3], (0.40, 0.70, 0.90))
+    c1 = _rank_codes(X[:, 4], (0.25, 0.55, 0.80))
+    rows = np.arange(X.shape[0])
+    if heldout:
+        c0[rows % 89 == 0] = 4
+        c0[rows % 97 == 0] = 6
+    else:
+        c0[int(np.argsort(X[:, 6], kind="stable")[-1])] = 4
+    return np.ascontiguousarray(np.column_stack(
+        [c0.astype(np.float32), c1.astype(np.float32), X[:, :4]]).astype(np.float32))
+
+
+def _tensor_ctr_xh(Xh):
+    return _tensor_ctr_x(Xh, heldout=True)
+
+
+def _tensor_ctr_y(Xt):
+    """The combination's learn frequency, float32, plus a small numeric
+    term: a target the tensor FeatureFreq column predicts and neither source
+    alone does."""
+    key = Xt[:, 0].astype(np.int64) * 16 + Xt[:, 1].astype(np.int64)
+    _, inverse, counts = np.unique(key, return_inverse=True, return_counts=True)
+    freq = counts[inverse].astype(np.float64) / Xt.shape[0]
+    return (freq * 10.0 + 0.01 * Xt[:, 2].astype(np.float64)).astype(np.float32)
+
+
+def _ctr_saved_or_fit(ml, fit):
+    """The estimator a CTR table lane answers with: fitted (and saved,
+    under GBDT_CTR_MODELS_ENV, on repeat 0) on a GPU column; on a CPU
+    column the HostGBDT of the saved file, tagged with its path."""
+    lane_name, fx, repeat = (_DUMP_TAG.split("/") + ["", "", ""])[:3]
+    d = os.environ.get(GBDT_CTR_MODELS_ENV, "").strip()
+    path = os.path.join(d, f"{lane_name}.{fx}.npz") if d and lane_name else None
+    if ml.vendor() == "cpu":
+        if not path or not os.path.isfile(path):
+            raise RuntimeError(f"CPU training refuses CTR tables by name; set {GBDT_CTR_MODELS_ENV} to the "
+                               f"directory of this lane's GPU-saved models (no {path})")
+        from mojolearn._forest_host import host_model
+        est = host_model(path)
+        est.identity_saved_path = path
+        return est
+    est = fit()
+    if path and repeat == "0":
+        os.makedirs(d, exist_ok=True)
+        est.save(path)
+    return est
+
+
+@lane("gbdt-categorical-ctr-tables")
+def _(ml, X, yc, yr, Xh=None):
+    """Gradient boosting whose categorical columns are above
+    one_hot_max_size, so the saved model carries real CTR tables (Borders at
+    three priors and FeatureFreq per column, ctr_table and ctr_entry records)
+    beside a one-hot column: 20 depth-6 Logloss trees. The held-out rows
+    carry unseen and seen-once categories."""
+    Xc = _ctr_tables_x(X)
+    m = _ctr_saved_or_fit(ml, lambda: ml.GradientBoosting(
+        n_estimators=20, max_depth=6, loss="Logloss", cat_features=[0, 1, 2]).fit(Xc, yc))
+    return _fit(dict(predict=_h(m.predict(Xc)), proba=_h(m.predict_proba(Xc))),
+                m, lambda e: (e.predict(_ctr_tables_xh(Xh)), e.predict_proba(_ctr_tables_xh(Xh))))
+
+
+@lane("gbdt-tensor-ctr-tables")
+def _(ml, X, yc, yr, Xh=None):
+    """ExperimentalTwoLevelFeatureFreq on two categorical sources with a
+    target the combination's frequency predicts, so the tree splits on the
+    tensor FeatureFreq column and the saved model carries a
+    tensor_ctr_registry with feature_freq_tensor records. The held-out rows
+    carry combinations seen once, never seen, and a code past the source's
+    cardinality."""
+    Xt = _tensor_ctr_x(X)
+    m = _ctr_saved_or_fit(ml, lambda: ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(
+        Xt, _tensor_ctr_y(Xt)))
+    return _fit(dict(predict=_h(m.predict(Xt))), m, lambda e: (e.predict(_tensor_ctr_xh(Xh)),))
+
+
 @lane("gbdt-nan-modes")
 def _(ml, X, yc, yr, Xh=None):
     """nan_mode Min and Max on a fixture that actually carries NaN
@@ -4012,6 +4145,8 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-query-rmse", "gbdt-pair-logit")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
+_batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
+_batch_decl(_rows_calls("predict", prep=_tensor_ctr_xh), "gbdt-tensor-ctr-tables")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):
@@ -5893,6 +6028,31 @@ def _probe_fit_host(fit, name):
     return infer, model, reload, None
 
 
+def _probe_saved_host(fit, name):
+    """The infer, model and reload columns of a CPU fit that LOADED a GPU
+    column's saved file (GBDT_CTR_MODELS_ENV): the held-out probe of a fresh
+    `host_model(<file>)`, the file's hash, and the probe of a second fresh
+    load (a load that predicts differently reads RELOAD-MOVED). The same
+    binary guard as `_probe_fit_host`."""
+    from mojolearn._forest_host import binary_path, host_model
+    path = fit.est.identity_saved_path
+    try:
+        model = _hfile(path)
+        host = host_model(path)
+        bound = getattr(getattr(host, "_binding", None), "__file__", None)
+        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
+            raise RuntimeError(f"the forest binding in this process is {bound}, "
+                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+        infer = _h(*fit.probe(host))
+    except Exception as exc:
+        return None, None, None, f"infer (saved model): {type(exc).__name__}: {exc}"
+    try:
+        reload = _h(*fit.probe(host_model(path)))
+    except Exception as exc:
+        return infer, None, None, f"model (saved model): {type(exc).__name__}: {exc}"
+    return infer, model, reload, None
+
+
 def _probe_fit(fit, name):
     """The infer and model columns of ONE fit. Returns (infer, model, reload,
     error) where infer and model are a hash or an `n/a:<reason>` string,
@@ -5901,6 +6061,8 @@ def _probe_fit(fit, name):
     stage that raised leaves its column None, which reads REFUSED."""
     if not callable(fit.probe):
         return fit.probe, "n/a:no-save", None, None
+    if getattr(fit.est, "identity_saved_path", None):
+        return _probe_saved_host(fit, name)
     if _host_infer_on(name):
         return _probe_fit_host(fit, name)
     try:

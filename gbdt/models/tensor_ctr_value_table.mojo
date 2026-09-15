@@ -15,6 +15,15 @@ its refusal remains until the structure searcher can mint those tensors.
 
 from gbdt.methods.batch_feature_tensor_builder import TFeatureTensor
 from gbdt.models.ctr_value_table import dense_category_code
+from gbdt.models.tensor_ctr_apply import (
+    TENSOR_SPLIT_TAKE_BIN,
+    TENSOR_SPLIT_TAKE_GREATER,
+    TTensorCtrApplyTable,
+    expand_tensor_ctr_columns,
+    tensor_key_for_row,
+    tensor_split_bit,
+    tensor_value_for_key,
+)
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
     BIN_SPLIT_TAKE_GREATER,
@@ -92,14 +101,11 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
     def key_for_row(
         self, x_colmajor: List[Float32], n_rows: Int, row: Int
     ) raises -> Int:
-        var key = 0
-        for i in range(len(self.source_features)):
-            var f = self.source_features[i]
-            var code = dense_category_code(x_colmajor[f * n_rows + row], f, row)
-            if code >= self.cardinalities[i]:
-                return -1  # their NotFoundIndex / empty-value arm
-            key = key * self.cardinalities[i] + code
-        return key
+        # the body is gbdt/models/tensor_ctr_apply.mojo's, shared with the
+        # forest host binding (lane/inference-gbdt-ctr-tables)
+        return tensor_key_for_row(
+            self.source_features, self.cardinalities, x_colmajor, n_rows, row
+        )
 
     def value_for_row(
         self, x_colmajor: List[Float32], n_rows: Int, row: Int
@@ -110,31 +116,26 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
         return self.value_for_key(key)
 
     def value_for_key(self, key: Int) raises -> Float32:
-        if self.target_classes_count == 0:
-            var count = 0
-            if key >= 0 and key < len(self.counts):
-                count = self.counts[key]
-            return (Float32(count) + self.prior_num) / (
-                Float32(self.denominator) + self.prior_denom
-            )
-        if self.target_classes_count < 2 or self.target_border_idx < 0 or (
-            self.target_border_idx >= self.target_classes_count - 1
-        ):
-            raise Error("invalid Borders tensor target-class metadata")
-        if key < 0:
-            return self.prior_num / self.prior_denom
-        var off = key * self.target_classes_count
-        if off + self.target_classes_count > len(self.counts):
-            return self.prior_num / self.prior_denom
-        var total = 0
-        var good = 0
-        for cls in range(self.target_classes_count):
-            var count = self.counts[off + cls]
-            total += count
-            if cls > self.target_border_idx:
-                good += count
-        return (Float32(good) + self.prior_num) / (
-            Float32(total) + self.prior_denom
+        # shared with the forest host binding; see tensor_ctr_apply.mojo
+        return tensor_value_for_key(
+            self.counts, self.target_classes_count, self.target_border_idx,
+            self.prior_num, self.prior_denom, self.denominator, key,
+        )
+
+    def apply_table(self) -> TTensorCtrApplyTable:
+        """The apply half of this table, as `tensor_ctr_apply.mojo` reads it."""
+        var features = List[Int]()
+        var bins = List[Int]()
+        var types = List[Int]()
+        for i in range(len(self.splits)):
+            features.append(Int(self.splits[i].feature_id))
+            bins.append(Int(self.splits[i].bin_idx))
+            types.append(Int(self.splits[i].split_type))
+        return TTensorCtrApplyTable(
+            self.source_features.copy(), self.cardinalities.copy(),
+            features^, bins^, types^, self.target_classes_count,
+            self.target_border_idx, self.prior_num, self.prior_denom,
+            self.denominator, self.counts.copy(),
         )
 
     def to_text(self) -> String:
@@ -235,16 +236,12 @@ def build_feature_freq_tensor_table(
 def _split_bit(
     split: TBinarySplit, cindex: List[UInt32], n_rows: Int, row: Int
 ) raises -> Int:
-    var feature = Int(split.feature_id)
-    var bin = Int(split.bin_idx)
-    if feature < 0 or bin < 0 or feature * n_rows + row >= len(cindex):
-        raise Error("split-history tensor references an invalid quantized column")
-    var value = Int(cindex[feature * n_rows + row])
-    if Int(split.split_type) == BIN_SPLIT_TAKE_BIN:
-        return 1 if value == bin else 0
-    if Int(split.split_type) == BIN_SPLIT_TAKE_GREATER:
-        return 1 if value > bin else 0
-    raise Error("split-history tensor has an unknown split type")
+    comptime assert TENSOR_SPLIT_TAKE_BIN == BIN_SPLIT_TAKE_BIN, "split type codes"
+    comptime assert TENSOR_SPLIT_TAKE_GREATER == BIN_SPLIT_TAKE_GREATER, "split type codes"
+    return tensor_split_bit(
+        Int(split.feature_id), Int(split.bin_idx), Int(split.split_type),
+        cindex, n_rows, row,
+    )
 
 
 def build_split_feature_freq_tensor_table(
@@ -901,44 +898,16 @@ struct TTensorCtrRegistry(Copyable, Movable):
         if len(x_raw) != n_rows * n_raw_features:
             raise Error("tensor CTR model apply raw shape mismatch")
 
-        var expanded = x_raw.copy()
-        var bins = List[UInt32]()
-        bins.resize(n_rows * n_model_features, UInt32(0))
-        for f in range(n_raw_features):
-            var categorical = len(one_hot) != 0 and one_hot[f]
-            for r in range(n_rows):
-                var value = x_raw[f * n_rows + r]
-                if value != value:
-                    raise Error("tensor CTR split history cannot quantize NaN")
-                var bin = 0
-                if categorical:
-                    bin = dense_category_code(value, f, r)
-                else:
-                    for b in range(len(model_borders[f])):
-                        if value > model_borders[f][b]:
-                            bin += 1
-                bins[f * n_rows + r] = UInt32(bin)
-
+        # the body is gbdt/models/tensor_ctr_apply.mojo's, which the forest
+        # host binding compiles too (lane/inference-gbdt-ctr-tables)
+        var tables = List[TTensorCtrApplyTable]()
         for i in range(len(self.features)):
-            ref feature = self.features[i]
-            var column = n_raw_features + i
-            if feature.model_column != column:
+            if self.features[i].model_column != n_raw_features + i:
                 raise Error("tensor CTR registry model columns are not contiguous")
-            for r in range(n_rows):
-                var value: Float32
-                if len(feature.table.splits) == 0:
-                    value = feature.table.value_for_row(x_raw, n_rows, r)
-                else:
-                    value = value_for_split_tensor_row(
-                        feature.table, x_raw, bins, n_rows, r
-                    )
-                expanded.append(value)
-                var bin = 0
-                for b in range(len(model_borders[column])):
-                    if value > model_borders[column][b]:
-                        bin += 1
-                bins[column * n_rows + r] = UInt32(bin)
-        return expanded^
+            tables.append(self.features[i].table.apply_table())
+        return expand_tensor_ctr_columns(
+            tables, x_raw, n_rows, model_borders, one_hot
+        )
 
 
 def persist_winning_tensor_candidate(
