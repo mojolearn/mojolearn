@@ -1,0 +1,77 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_mixture_host'] commit=0c65514b938bce4098adfe6dd13c8b20d1dbd0bc
+| lane/fixture                 | verdict    | apple-m4         | cpu-x86-x86_64   |
+|------------------------------|------------|------------------|------------------|
+| gmm-random-init-sample/base  | DIVERGENT  | parts differ: sample_X; agree: sample_y | c1ce7e8f19e5e22a |
+| gmm-random-init-sample/denormal | DIVERGENT  | parts differ: sample_X; agree: sample_y | 552a14ebd19a3e7e |
+| gmm-random-init-sample/odd   | DIVERGENT  | parts differ: sample_X; agree: sample_y | f4d466dfa50d93b2 |
+| gmm-random-init-sample/ties  | DIVERGENT  | parts differ: sample_X; agree: sample_y | d7453a9ffab7ec1a |
+| gmm-random-init/base         | DIVERGENT  | parts differ: weights,means,covariances; agree: n_iter,lower_bound,labels | 68334433c8205781 |
+| gmm-random-init/denormal     | DIVERGENT  | parts differ: weights,means,covariances; agree: n_iter,lower_bound,labels | 95cdefe664ceb6ca |
+| gmm-random-init/odd          | DIVERGENT  | parts differ: weights,means,covariances; agree: n_iter,lower_bound,labels | dca04570e7ca2452 |
+| gmm-random-init/ties         | DIVERGENT  | parts differ: weights,means,covariances; agree: n_iter,lower_bound,labels | f7b45881dd8f4ce9 |
+| gmm-sample/base              | DIVERGENT  | parts differ: sample_X; agree: sample_y | bd2a83f493428139 |
+| gmm-sample/denormal          | DIVERGENT  | parts differ: sample_X,sample_y; agree: - | 11837346a5521847 |
+| gmm-sample/odd               | DIVERGENT  | parts differ: sample_X; agree: sample_y | ddcf4c25526ffd00 |
+| gmm-sample/ties              | DIVERGENT  | parts differ: sample_X; agree: sample_y | c575d8cb60ed3ab6 |
+| gmm/base                     | DIVERGENT  | parts differ: weights,means,covariances,precisions,logdet,proba; agree: n_iter,converged,lower_bound,labels | 089fbece950aec0f |
+| gmm/denormal                 | DIVERGENT  | parts differ: weights,means,covariances,precisions,logdet,lower_bound,labels,proba; agree: n_iter,converged | b0f52b01e839d1fd |
+| gmm/odd                      | DIVERGENT  | parts differ: weights,means,covariances,precisions,logdet,proba; agree: n_iter,converged,lower_bound,labels | ae6e7bfdc29f2a47 |
+| gmm/ties                     | DIVERGENT  | parts differ: weights,means,covariances,precisions,logdet,proba; agree: n_iter,converged,lower_bound,labels | 38806b3df1b23ad1 |
+
+summary: DIVERGENT=16
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-x86-x86_64   |
+|------------------------------|--------|--------------|------------------|------------------|
+| gmm-random-init-sample/base  | infer  | DIVERGENT    | a460febf045cb5ed | a514391a7d3c69d4 |
+| gmm-random-init-sample/base  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init-sample/base  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/denormal | infer  | DIVERGENT    | aaa5ba26b5120d24 | b88f0d4ed12f917d |
+| gmm-random-init-sample/denormal | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init-sample/denormal | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/odd   | infer  | DIVERGENT    | 0360f4cd3fa1dc5a | 75b67b02b490478b |
+| gmm-random-init-sample/odd   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init-sample/odd   | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/ties  | infer  | DIVERGENT    | c9f89c3987186292 | 29194e29be800dc4 |
+| gmm-random-init-sample/ties  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init-sample/ties  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init/base         | infer  | DIVERGENT    | 87226624dfab0f10 | b6696615983525bb |
+| gmm-random-init/base         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init/base         | batch  | DIVERGENT    | 15233a5b0b86b9b2 | d2df689aa35c6b41 |
+| gmm-random-init/denormal     | infer  | IDENTICAL x2 | c9bd6b5bcb2c805a | c9bd6b5bcb2c805a |
+| gmm-random-init/denormal     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init/denormal     | batch  | IDENTICAL x2 | 81f3e8a1665f0f1e | 81f3e8a1665f0f1e |
+| gmm-random-init/odd          | infer  | DIVERGENT    | 057c020ccbbda789 | 031603cd630ab4ca |
+| gmm-random-init/odd          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init/odd          | batch  | DIVERGENT    | f20bd8076248b527 | 183f676d2c353c06 |
+| gmm-random-init/ties         | infer  | DIVERGENT    | 5c4f620623f43daf | ace0093486976803 |
+| gmm-random-init/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-random-init/ties         | batch  | DIVERGENT    | 6f7b606277388c47 | bc7eec535efb66bb |
+| gmm-sample/base              | infer  | DIVERGENT    | e3cad76ce9a060d0 | 57b3a758e1e3a9a9 |
+| gmm-sample/base              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-sample/base              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/denormal          | infer  | DIVERGENT    | e50606c37c34da5a | 4fdf0f6ca7c1d107 |
+| gmm-sample/denormal          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-sample/denormal          | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/odd               | infer  | DIVERGENT    | e0258bef7ebd4e21 | 59ae2f4fa69aaac3 |
+| gmm-sample/odd               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-sample/odd               | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/ties              | infer  | DIVERGENT    | aa785d8205811e0f | 624784fe8ead6fe3 |
+| gmm-sample/ties              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm-sample/ties              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm/base                     | infer  | DIVERGENT    | 140095763edf6c53 | 021ff0b9b181c731 |
+| gmm/base                     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm/base                     | batch  | DIVERGENT    | 599d547e666f29b2 | df987357c10d7161 |
+| gmm/denormal                 | infer  | DIVERGENT    | 153bd7fcdaf1dc92 | f14118356eaea7c1 |
+| gmm/denormal                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm/denormal                 | batch  | DIVERGENT    | 366cc287f0ec48ae | f1891c33ab5933c1 |
+| gmm/odd                      | infer  | DIVERGENT    | fc5c09b04e8fb4aa | 81bf02a6be47a617 |
+| gmm/odd                      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm/odd                      | batch  | DIVERGENT    | ae74761cf87024a2 | 18f8e8ad74276da7 |
+| gmm/ties                     | infer  | DIVERGENT    | dbb412e155fd4fb2 | ad043d1df90df3e6 |
+| gmm/ties                     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gmm/ties                     | batch  | DIVERGENT    | 60796a07f79e71e9 | 288c19f5f54c0d23 |
+
+summary (infer/model): DIVERGENT=15, IDENTICAL=1, N/A=16
+summary (batch): DIVERGENT=7, IDENTICAL=1, N/A=8
+summary (rlpair): 

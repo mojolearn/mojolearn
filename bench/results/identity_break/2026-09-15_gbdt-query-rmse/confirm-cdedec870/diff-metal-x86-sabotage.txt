@@ -1,0 +1,25 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-x86-64-runpod is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_gbdt_host'] commit=cdedec8709ab1b1a1aa96371e9601ab9faa1c86b
+| lane/fixture                 | verdict    | apple-m4         | cpu-x86-64-runpod |
+|------------------------------|------------|------------------|------------------|
+| gbdt-query-rmse/base         | ONE-COLUMN | b3f448427d6e764f | REFUSED          |
+| gbdt-query-rmse/odd          | ONE-COLUMN | 13b70161e523142f | REFUSED          |
+| gbdt-query-rmse/ties         | ONE-COLUMN | 40a5b5333f0a32ef | REFUSED          |
+
+summary: ONE-COLUMN=3
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-x86-64-runpod |
+|------------------------------|--------|--------------|------------------|------------------|
+| gbdt-query-rmse/base         | infer  | ONE-COLUMN   | c5dd11cce5027431 | REFUSED          |
+| gbdt-query-rmse/base         | model  | ONE-COLUMN   | 773082ee900f4629 | REFUSED          |
+| gbdt-query-rmse/base         | batch  | ONE-COLUMN   | 2f9ae940636f0782 | REFUSED          |
+| gbdt-query-rmse/odd          | infer  | ONE-COLUMN   | 66a562a9f1518dd7 | REFUSED          |
+| gbdt-query-rmse/odd          | model  | ONE-COLUMN   | 850fcd0f8a7c5a1a | REFUSED          |
+| gbdt-query-rmse/odd          | batch  | ONE-COLUMN   | 8990d2af358d0692 | REFUSED          |
+| gbdt-query-rmse/ties         | infer  | ONE-COLUMN   | 82656b1f96479524 | REFUSED          |
+| gbdt-query-rmse/ties         | model  | ONE-COLUMN   | a00477457a3f0913 | REFUSED          |
+| gbdt-query-rmse/ties         | batch  | ONE-COLUMN   | 348dc9138ec69402 | REFUSED          |
+
+summary (infer/model): ONE-COLUMN=6
+summary (batch): ONE-COLUMN=3
+summary (rlpair): 

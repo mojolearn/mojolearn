@@ -1,0 +1,50 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 2 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_ivf_host', '_mojolearn_ivf_search_host'] commit=2ce48b333b8442d8994909f71d0d12d2d6418ecb
+NOTE: column cpu-amd-epyc-9655p-96-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+| lane/fixture                 | verdict    | arm64            | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-gfx942       | arm64            | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|------------------|
+| ivf-extend/base              | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | ba53c112142a07c4 | ba53c112142a07c4 |
+| ivf-extend/denormal          | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 60a84eeca95632ba | 60a84eeca95632ba |
+| ivf-extend/denormal_ftz      | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 5aadb50ae8c47074 | 5aadb50ae8c47074 |
+| ivf-extend/dupes             | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 1585900d93cb8c88 | 1585900d93cb8c88 |
+| ivf-extend/hashed            | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | f669e9076c62ef24 | f669e9076c62ef24 |
+| ivf-extend/negative          | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 38f0489facb80eaa | 38f0489facb80eaa |
+| ivf-extend/odd               | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 940ef92d230837ed | 940ef92d230837ed |
+| ivf-extend/ties              | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 0da4a663917d249c | 0da4a663917d249c |
+| ivf-extend/wide              | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | b215fd8f707cd94c | b215fd8f707cd94c |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | arm64            | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-gfx942       | arm64            | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|------------------|
+| ivf-extend/base              | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 21a84397fed9cb7b | 21a84397fed9cb7b |
+| ivf-extend/base              | model  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 6814e84fcb72ca37 | 6814e84fcb72ca37 |
+| ivf-extend/base              | batch  | BATCH_MOVED  | (not run)        | (not run)        | (not run)        | f8873bb27104a23d | BATCH_MOVED      |
+| ivf-extend/denormal          | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 3da4f22de1f06f6e | 3da4f22de1f06f6e |
+| ivf-extend/denormal          | model  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 7a4a7782b32da3a0 | 7a4a7782b32da3a0 |
+| ivf-extend/denormal          | batch  | BATCH_MOVED  | (not run)        | (not run)        | (not run)        | 42bb0c222dffe2b7 | BATCH_MOVED      |
+| ivf-extend/denormal_ftz      | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 3da4f22de1f06f6e | 3da4f22de1f06f6e |
+| ivf-extend/denormal_ftz      | model  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 4defe96aca4c8e11 | 4defe96aca4c8e11 |
+| ivf-extend/denormal_ftz      | batch  | BATCH_MOVED  | (not run)        | (not run)        | (not run)        | 42bb0c222dffe2b7 | BATCH_MOVED      |
+| ivf-extend/dupes             | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 802c8f83c4e8dddd | 802c8f83c4e8dddd |
+| ivf-extend/dupes             | model  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 667918778ad720e3 | 667918778ad720e3 |
+| ivf-extend/dupes             | batch  | BATCH_MOVED  | (not run)        | (not run)        | (not run)        | 08c451b2a76060be | BATCH_MOVED      |
+| ivf-extend/hashed            | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 9d0f275ae985056d | 9d0f275ae985056d |
+| ivf-extend/hashed            | model  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | e96813401e1670f0 | e96813401e1670f0 |
+| ivf-extend/hashed            | batch  | BATCH_MOVED  | (not run)        | (not run)        | (not run)        | a190e25ce473d410 | BATCH_MOVED      |
+| ivf-extend/negative          | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | d5badddd236f4f6f | d5badddd236f4f6f |
+| ivf-extend/negative          | model  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | fd1e311bb478d024 | fd1e311bb478d024 |
+| ivf-extend/negative          | batch  | BATCH_MOVED  | (not run)        | (not run)        | (not run)        | 39b741e505d5bbed | BATCH_MOVED      |
+| ivf-extend/odd               | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | a8b712ff1a5e3ef1 | a8b712ff1a5e3ef1 |
+| ivf-extend/odd               | model  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 26b97c27cd22d526 | 26b97c27cd22d526 |
+| ivf-extend/odd               | batch  | BATCH_MOVED  | (not run)        | (not run)        | (not run)        | ec78ed4aa6252665 | BATCH_MOVED      |
+| ivf-extend/ties              | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | ee7fa6ee3ed98541 | ee7fa6ee3ed98541 |
+| ivf-extend/ties              | model  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 0d954140e0a9c674 | 0d954140e0a9c674 |
+| ivf-extend/ties              | batch  | BATCH_MOVED  | (not run)        | (not run)        | (not run)        | bf5209af86975a47 | BATCH_MOVED      |
+| ivf-extend/wide              | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | c6fd06dc0c84cdd5 | c6fd06dc0c84cdd5 |
+| ivf-extend/wide              | model  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | c9793933012960e5 | c9793933012960e5 |
+| ivf-extend/wide              | batch  | BATCH_MOVED  | (not run)        | (not run)        | (not run)        | 15d08301b9a4107b | BATCH_MOVED      |
+
+summary (infer/model): IDENTICAL=18
+summary (batch): BATCH_MOVED=9
+summary (rlpair): 

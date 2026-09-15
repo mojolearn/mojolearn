@@ -1,0 +1,5 @@
+pod=dt4k0ax8ot8j7m
+name=mojolearn-cpu-inference-new-methods-s2-20260915-171517
+terminated_verified=1
+exit=0
+at=2026-09-15T17:18:50Z

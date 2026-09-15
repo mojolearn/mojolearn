@@ -1,0 +1,4 @@
+_mojolearn_ivf_search_host {'host_fit_main': False, 'host_ivf_build': False, 'host_embedding_backward': False, 'host_assign': False, 'host_ivf_search': True, 'host_embedding_forward': False}
+_mojolearn_embedding_infer_host {'host_fit_main': False, 'host_ivf_build': False, 'host_embedding_backward': False, 'host_assign': False, 'host_ivf_search': False, 'host_embedding_forward': True}
+_mojolearn_ivf_host {'host_fit_main': True, 'host_ivf_build': True, 'host_embedding_backward': False, 'host_assign': True, 'host_ivf_search': True, 'host_embedding_forward': False}
+_mojolearn_embedding_host {'host_fit_main': False, 'host_ivf_build': False, 'host_embedding_backward': True, 'host_assign': False, 'host_ivf_search': False, 'host_embedding_forward': True}

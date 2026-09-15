@@ -1,0 +1,950 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "607d797940e9318f5f8f2072a4c373102f452c46",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "gp/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ea70c56b99a74791",
+    "ea70c56b99a74791"
+   ],
+   "parts": [
+    {
+     "alpha": "b2bd856db191067c",
+     "L": "02bd406c9f990a9e",
+     "lml": "f8fab1e0c3692fb8",
+     "mean": "0f15f665974cce89",
+     "std": "e010094572c05e33"
+    },
+    {
+     "alpha": "b2bd856db191067c",
+     "L": "02bd406c9f990a9e",
+     "lml": "f8fab1e0c3692fb8",
+     "mean": "0f15f665974cce89",
+     "std": "e010094572c05e33"
+    }
+   ],
+   "infer": [
+    "1e032c58b3e9cd14",
+    "1e032c58b3e9cd14"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "305bfd4eaf79a5fa",
+    "305bfd4eaf79a5fa"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c92496318cb78403",
+    "c92496318cb78403"
+   ],
+   "parts": [
+    {
+     "alpha": "0df98fc93d8f97a7",
+     "L": "ad07c62b4f7b82e9",
+     "lml": "614a94c171f7b583",
+     "mean": "8f51d102fbd0cce1",
+     "std": "2933f5e7cf56b4d0"
+    },
+    {
+     "alpha": "0df98fc93d8f97a7",
+     "L": "ad07c62b4f7b82e9",
+     "lml": "614a94c171f7b583",
+     "mean": "8f51d102fbd0cce1",
+     "std": "2933f5e7cf56b4d0"
+    }
+   ],
+   "infer": [
+    "22b0b528124de8d0",
+    "22b0b528124de8d0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "42c01186900b0c68",
+    "42c01186900b0c68"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f01c58a79fb1af27",
+    "f01c58a79fb1af27"
+   ],
+   "parts": [
+    {
+     "alpha": "d87b04f0a9151f17",
+     "L": "946d09425efb81ba",
+     "lml": "11861e9ddbe7980f",
+     "mean": "f2b55651bfe65413",
+     "std": "acff867f03b33ebb"
+    },
+    {
+     "alpha": "d87b04f0a9151f17",
+     "L": "946d09425efb81ba",
+     "lml": "11861e9ddbe7980f",
+     "mean": "f2b55651bfe65413",
+     "std": "acff867f03b33ebb"
+    }
+   ],
+   "infer": [
+    "6eec04108625b28e",
+    "6eec04108625b28e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "f18ced6112fb55e8",
+    "f18ced6112fb55e8"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ca779c84b786d493",
+    "ca779c84b786d493"
+   ],
+   "parts": [
+    {
+     "alpha": "72684c7a23e5875d",
+     "L": "59b7041f1a10bfbd",
+     "lml": "e234bef85e489b95",
+     "mean": "18486a5fe1a45257",
+     "std": "dd2185273a59f2c3"
+    },
+    {
+     "alpha": "72684c7a23e5875d",
+     "L": "59b7041f1a10bfbd",
+     "lml": "e234bef85e489b95",
+     "mean": "18486a5fe1a45257",
+     "std": "dd2185273a59f2c3"
+    }
+   ],
+   "infer": [
+    "890cda1ff831faab",
+    "890cda1ff831faab"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "d3e6783a8a000e56",
+    "d3e6783a8a000e56"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f0986dd9686ae3c2",
+    "f0986dd9686ae3c2"
+   ],
+   "parts": [
+    {
+     "alpha": "d285afe97c9ab650",
+     "L": "375621676b406cb8",
+     "lml": "24b8d985f4df0ef1",
+     "mean": "1dee448ebb413624",
+     "std": "3974fca499c63ae7"
+    },
+    {
+     "alpha": "d285afe97c9ab650",
+     "L": "375621676b406cb8",
+     "lml": "24b8d985f4df0ef1",
+     "mean": "1dee448ebb413624",
+     "std": "3974fca499c63ae7"
+    }
+   ],
+   "infer": [
+    "353cd97119d0e754",
+    "353cd97119d0e754"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "9305dbeb22908e4a",
+    "BATCH_MOVED:predict(return_std=True):row 12 of 64 alone:output 0 element 0: whole 0x3fe9a730 vs alone 0x00000000"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "gp/denormal_ftz": {
+   "verdict": "MOVED",
+   "hashes": [
+    "664fff57bdbe381a",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "e4c48ef30ced9444",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp/dupes": {
+   "verdict": "MOVED",
+   "hashes": [
+    "664fff57bdbe381a",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "e4c48ef30ced9444",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "96ec7127b1bf9354",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "96ec7127b1bf9354",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "standard-scaler/base": {
+   "verdict": "REFUSED",
+   "error": "Exception: StandardScaler: invalid variance or scale",
+   "hashes": [],
+   "parts": []
+  },
+  "standard-scaler/ties": {
+   "verdict": "REFUSED",
+   "error": "Exception: StandardScaler: invalid variance or scale",
+   "hashes": [],
+   "parts": []
+  },
+  "standard-scaler/hashed": {
+   "verdict": "REFUSED",
+   "error": "Exception: StandardScaler: invalid variance or scale",
+   "hashes": [],
+   "parts": []
+  },
+  "standard-scaler/wide": {
+   "verdict": "REFUSED",
+   "error": "Exception: StandardScaler: invalid variance or scale",
+   "hashes": [],
+   "parts": []
+  },
+  "standard-scaler/denormal": {
+   "verdict": "REFUSED",
+   "error": "Exception: StandardScaler: invalid variance or scale",
+   "hashes": [],
+   "parts": []
+  },
+  "standard-scaler/denormal_ftz": {
+   "verdict": "REFUSED",
+   "error": "Exception: StandardScaler: invalid variance or scale",
+   "hashes": [],
+   "parts": []
+  },
+  "standard-scaler/dupes": {
+   "verdict": "REFUSED",
+   "error": "Exception: StandardScaler: invalid variance or scale",
+   "hashes": [],
+   "parts": []
+  },
+  "standard-scaler/odd": {
+   "verdict": "REFUSED",
+   "error": "Exception: StandardScaler: invalid variance or scale",
+   "hashes": [],
+   "parts": []
+  },
+  "standard-scaler/negative": {
+   "verdict": "REFUSED",
+   "error": "Exception: StandardScaler: invalid variance or scale",
+   "hashes": [],
+   "parts": []
+  },
+  "gp-matern52-ard/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "96ec7127b1bf9354",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp-matern52-ard/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "96ec7127b1bf9354",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp-matern52-ard/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "96ec7127b1bf9354",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp-matern52-ard/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "96ec7127b1bf9354",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp-matern52-ard/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "96ec7127b1bf9354",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp-matern52-ard/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "96ec7127b1bf9354",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp-matern52-ard/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "96ec7127b1bf9354",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp-matern52-ard/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "96ec7127b1bf9354",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gp-matern52-ard/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "96ec7127b1bf9354",
+    "96ec7127b1bf9354"
+   ],
+   "parts": [
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    },
+    {
+     "alpha": "a93e7175d10f7a9f",
+     "L": "abd33b078f5ddc19",
+     "lml": "7cfa778437a6c89d",
+     "mean": "72d0a8956da6e19a",
+     "std": "72d0a8956da6e19a"
+    }
+   ],
+   "infer": [
+    "2b3b47d75d0729c6",
+    "2b3b47d75d0729c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "47a898f48b4390fc",
+    "47a898f48b4390fc"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-gp-sample-y/python/mojolearn",
+  "numpy": "2.4.4",
+  "python": "3.14.6",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "bfbe0ba1b8322e60ff1864514e2f58863b079d752154ed6536117256c96b1b98",
+    "size": 2597104
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "e68ff79b8edc9bab741a382180988e6b7a48e9b5e3f547968cfcdc248cf78045",
+    "size": 670336
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "14b1890cbab7552859b61a84341ec3f645260155e7fe17be96a8394ea3e98ce0",
+    "size": 3405872
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "5521958e132fbda7fb6332777ac6ae1f59711bf40f81f379023b0a8c58095daa",
+    "size": 3104664
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "a1d35f3e6ad6e5b5b9a4803b9a1f68d89ce23d7b956afbdd0b50de903acd9f6a",
+    "size": 6136544
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "7b5a02b343be76658c0b0352754ee4f44a9e8f3c141ab19af919dfa34dbf3449",
+    "size": 1592880
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "5f19efdc05c660746075fc7a7e53a116a3c544dd895bde9d443f4d65cc2b61c1",
+    "size": 955760
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "41962f89bb0c3356cda3e1e8e684324865bdd340cc7f72ac8361539cc3d0de00",
+    "size": 2708880
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "05dcf0dc4a26c54bb0f10f5ef3d4c8aaed89c4b42f883097906961d0a180b6cb",
+    "size": 3743968
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "7c0dee75f367fa13f8af907658d7d2980fa5a75021b43d671fc8ebe03a019341",
+    "size": 362112
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "6efe32d07694423a268c8dc0b57940d920916fd4ba08faf482ae35ff12c4b116",
+    "size": 1647504
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "2fc77e78f9d1ca8193a95cea2e0caccbaa45be3330817798790cf3fb638add4c",
+    "size": 1478400
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "c3d069d53935d9ef0456ddb3e7360f64eff4f21a108eaaaa74c274e3e11e656e",
+    "size": 1789696
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "ca27230430cf3f4a83b5f15093f41d84a3a8ea726b92a523a2b800208d71730a",
+    "size": 1555280
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "38880d102e03bb4ffdb8d1ed413d8f00fd592e57dda131077b51767aac40f249",
+    "size": 2708304
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "69f55a968e3dc50c45a9658a79efd4c6e45d9add5b3ac6e375f9c8e1574632c0",
+    "size": 1322048
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "e457ffb7d4a4bfb6c0f8a82ddf0d5703b34fdf9ceeb4760fd7106d61e7d6ede6",
+    "size": 607104
+   }
+  ]
+ }
+}

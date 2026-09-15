@@ -136,6 +136,7 @@ LOSSES = (
     "Tweedie",
     "Huber",
     "QueryRMSE",
+    "PairLogit",
 )
 
 def _group_id_key(value, index):
@@ -196,6 +197,53 @@ def _group_sizes(group_id, n_rows):
         sizes.append(1)
         last = key
     return sizes
+
+
+def _pairs_arrays(pairs, pairs_weight, n_rows):
+    """`pairs` flattened winner then loser, and one float weight per pair.
+
+    Their Pool reads each pair as `pair[0]`, `pair[1]` and requires integer
+    indices (`core.py:946-955`, `_catboost.pyx:4157-4175`), a weight per pair
+    when `pairs_weight` is given, 1.0 otherwise. Rows outside the pool, a row
+    paired with itself, a non-finite or negative weight and an empty pair list
+    are refused here; that both rows share a group is checked in the binding."""
+    rows = pairs.tolist() if hasattr(pairs, "tolist") else list(pairs)
+    if len(rows) == 0:
+        raise ValueError("mojolearn: pairs is empty")
+    flat = []
+    for i, pair in enumerate(rows):
+        if len(pair) != 2:
+            raise ValueError(f"mojolearn: Length of pairs[{i}] isn't equal to 2.")
+        for j, index in enumerate(pair):
+            if not isinstance(index, numbers.Integral) or isinstance(index, bool):
+                raise ValueError(
+                    f"mojolearn: Invalid pairs[{i}][{j}] = '{index}' value "
+                    f"type={type(index)}: must be an integer."
+                )
+            if not 0 <= int(index) < n_rows:
+                raise ValueError(
+                    f"mojolearn: pairs[{i}][{j}] = {int(index)} is outside the "
+                    f"{n_rows} rows"
+                )
+        if int(pair[0]) == int(pair[1]):
+            raise ValueError(f"mojolearn: pairs[{i}] pairs row {int(pair[0])} with itself")
+        flat.extend((int(pair[0]), int(pair[1])))
+    if pairs_weight is None:
+        weights = [1.0] * len(rows)
+    else:
+        weights = pairs_weight.tolist() if hasattr(pairs_weight, "tolist") else list(pairs_weight)
+        if len(weights) != len(rows):
+            raise ValueError(
+                f"mojolearn: len(pairs_weight) = {len(weights)} is not equal to "
+                f"len(pairs) = {len(rows)} "
+            )
+        for i, w in enumerate(weights):
+            if not isinstance(w, numbers.Real) or not math.isfinite(float(w)) or float(w) < 0:
+                raise ValueError(
+                    f"mojolearn: pairs_weight[{i}] must be a finite nonnegative number"
+                )
+        weights = [float(w) for w in weights]
+    return flat, weights
 
 
 #: Their GPU target keeps numClasses - 1 planes for MultiClass and
@@ -1187,7 +1235,7 @@ class GradientBoosting(NumericModeMixin):
         return Xea, yea, n_eval_rows
 
     def fit(self, X, y, sample_weight=None, eval_set=None, group_id=None,
-            subgroup_id=None, pairs=None):
+            subgroup_id=None, pairs=None, pairs_weight=None):
         """Fit the ensemble. `X` is (n_samples, n_features), `y` is 1-D.
 
         `group_id` is CatBoost's Pool `group_id`: one id per row, a string
@@ -1203,9 +1251,16 @@ class GradientBoosting(NumericModeMixin):
         of one row, as the CatBoost reference's `TWithoutQueriesGrouping`
         does (`gpu_data/doc_parallel_dataset.h:26-38`): every query mean is
         its row's own residual, every derivative is zero and the model
-        predicts zero. `subgroup_id` and `pairs` are their Pool arguments of
-        the same names; no loss here reads them and they are refused by
-        name.
+        predicts zero. `loss="PairLogit"` reads it too, on the same arm:
+        without `pairs` its pairs are generated from the groups and `y` as the
+        reference's default `max_pairs` does (every two rows of a query with
+        different grades, the higher grade the winner, weighted by the
+        query's first row weight). `pairs` is their Pool argument: a sequence
+        of `[winner, loser]` integer row indices, each pair inside one group,
+        with `pairs_weight` one weight per pair (default 1.0). `pairs` is
+        refused without `group_id`, where the reference would regroup and
+        reorder the pool, and with any loss but PairLogit. `subgroup_id` is
+        read by no loss here and is refused by name.
 
         `sample_weight` is a per-row weight, `None` meaning all ones. It
         MULTIPLIES with `class_weights` where both are given, which is
@@ -1346,12 +1401,24 @@ class GradientBoosting(NumericModeMixin):
                 "trains; the ranking losses that read CatBoost's subgroup ids "
                 "are not implemented"
             )
+        if pairs_weight is not None and pairs is None:
+            raise ValueError("mojolearn: pairs_weight needs pairs")
         if pairs is not None:
-            raise NotImplementedError(
-                "mojolearn: pairs are read by no loss this implementation "
-                "trains; CatBoost's pairwise losses are not implemented"
-            )
+            if self.loss != "PairLogit":
+                raise NotImplementedError(
+                    "mojolearn: pairs are read by loss='PairLogit' only; "
+                    f"loss={self.loss!r} does not use them"
+                )
+            if group_id is None:
+                raise NotImplementedError(
+                    "mojolearn: pairs without group_id are not implemented: "
+                    "the CatBoost reference then regroups and reorders the "
+                    "whole pool by the pairs' connected components; pass "
+                    "group_id"
+                )
         group_holder = None
+        pairs_holder = None
+        pairs_weight_holder = None
         if group_id is not None:
             sizes = _group_sizes(group_id, n_rows)
             group_holder = Array.from_list(sizes, "<u4")
@@ -1361,6 +1428,18 @@ class GradientBoosting(NumericModeMixin):
             params = params[:fixed] + tail + [
                 addr_ro(group_holder, name="group_id"), len(sizes),
             ]
+            if self.loss == "PairLogit":
+                # THE PAIRS TAIL: -1 generates the pairs inside the binding
+                # and leaves both addresses unread; the group buffer stands in
+                if pairs is None:
+                    params += [addr_ro(group_holder, name="group_id"), -1,
+                               addr_ro(group_holder, name="group_id")]
+                else:
+                    flat, weights = _pairs_arrays(pairs, pairs_weight, n_rows)
+                    pairs_holder = Array.from_list(flat, "<u4")
+                    pairs_weight_holder = Array.from_list(weights, "<f4")
+                    params += [addr_ro(pairs_holder, name="pairs"), len(weights),
+                               addr_ro(pairs_weight_holder, name="pairs_weight")]
         if self.od_type is not None and self.od_type not in OD_TYPES:
             raise ValueError(
                 f"mojolearn: od_type must be one of {OD_TYPES}, got "

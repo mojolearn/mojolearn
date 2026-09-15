@@ -1,0 +1,122 @@
+NOTE: --lanes scopes this diff to 3 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_ivf_host', '_mojolearn_ivf_search_host'] commit=2ce48b333b8442d8994909f71d0d12d2d6418ecb
+| lane/fixture                 | verdict    | arm64            | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-gfx942       | arm64            | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|------------------|
+| ivf-euclidean/base           | DIVERGENT  | parts differ: dist; agree: idx,cand | c96b7d6a7ed08e9b | c96b7d6a7ed08e9b | c96b7d6a7ed08e9b | e447fc42764d2cc4 |
+| ivf-euclidean/denormal       | DIVERGENT  | parts differ: dist; agree: idx,cand | bc555903de75c40e | bc555903de75c40e | bc555903de75c40e | 2c388e1bc8b64c36 |
+| ivf-euclidean/denormal_ftz   | DIVERGENT  | parts differ: dist; agree: idx,cand | bc555903de75c40e | bc555903de75c40e | bc555903de75c40e | 2c388e1bc8b64c36 |
+| ivf-euclidean/dupes          | DIVERGENT  | parts differ: dist,idx,cand; agree: - | eb269ad65df502ed | eb269ad65df502ed | eb269ad65df502ed | 4fe9e00e94d661db |
+| ivf-euclidean/hashed         | DIVERGENT  | parts differ: dist,idx,cand; agree: - | cdff352d363caa07 | cdff352d363caa07 | cdff352d363caa07 | 7af453a0877f5e5b |
+| ivf-euclidean/negative       | DIVERGENT  | parts differ: dist,idx,cand; agree: - | db3db68bcb7ef398 | db3db68bcb7ef398 | db3db68bcb7ef398 | 83593805c863d463 |
+| ivf-euclidean/odd            | DIVERGENT  | parts differ: dist; agree: idx,cand | ec9020ff5b2a6c07 | ec9020ff5b2a6c07 | ec9020ff5b2a6c07 | eb928f5daf9ca5fb |
+| ivf-euclidean/ties           | DIVERGENT  | parts differ: dist,idx,cand; agree: - | 2167394d0c80cc41 | 2167394d0c80cc41 | 2167394d0c80cc41 | 42cde0cafc645283 |
+| ivf-euclidean/wide           | DIVERGENT  | parts differ: dist; agree: idx,cand | d62c258ac8282595 | d62c258ac8282595 | d62c258ac8282595 | f54e5a64f442b317 |
+| ivf-extend/base              | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | (not run)        | (not run)        | ba53c112142a07c4 | d7847df35a73bb4e |
+| ivf-extend/denormal          | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | (not run)        | (not run)        | 60a84eeca95632ba | eac32eb1abefe8d0 |
+| ivf-extend/denormal_ftz      | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | (not run)        | (not run)        | 5aadb50ae8c47074 | ccb2f2e355120f9b |
+| ivf-extend/dupes             | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | (not run)        | (not run)        | 1585900d93cb8c88 | fd24be79706ebc11 |
+| ivf-extend/hashed            | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | (not run)        | (not run)        | f669e9076c62ef24 | 5dac74678e10acf8 |
+| ivf-extend/negative          | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | (not run)        | (not run)        | 38f0489facb80eaa | c4dcf2c544545365 |
+| ivf-extend/odd               | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | (not run)        | (not run)        | 940ef92d230837ed | c9d937bb956aa864 |
+| ivf-extend/ties              | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | (not run)        | (not run)        | 0da4a663917d249c | 37e099c536a0cb46 |
+| ivf-extend/wide              | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | (not run)        | (not run)        | b215fd8f707cd94c | 85210fbe5ab66614 |
+| ivf/base                     | DIVERGENT  | parts differ: dist; agree: idx,cand | e14f27972422d4e0 | e14f27972422d4e0 | e14f27972422d4e0 | 6ffc290c06dec9f9 |
+| ivf/denormal                 | DIVERGENT  | parts differ: dist; agree: idx,cand | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 | ee43c83f6429ff1d |
+| ivf/denormal_ftz             | DIVERGENT  | parts differ: dist; agree: idx,cand | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 | ee43c83f6429ff1d |
+| ivf/dupes                    | DIVERGENT  | parts differ: dist,idx,cand; agree: - | c9eaf39f6e83e625 | c9eaf39f6e83e625 | c9eaf39f6e83e625 | 003d5b066c5d3ac1 |
+| ivf/hashed                   | DIVERGENT  | parts differ: dist,idx,cand; agree: - | 6c061012dc979df5 | 6c061012dc979df5 | 6c061012dc979df5 | a5fecbec485fa6c2 |
+| ivf/negative                 | DIVERGENT  | parts differ: dist,idx,cand; agree: - | 9a7f19689600453e | 9a7f19689600453e | 9a7f19689600453e | 95afdb49c7afce5e |
+| ivf/odd                      | DIVERGENT  | parts differ: dist,cand; agree: idx | 26b26d7e4be5c50a | 26b26d7e4be5c50a | 26b26d7e4be5c50a | e4c4ae2a4258076e |
+| ivf/ties                     | IDENTICAL x5 | b9d8790b40b5a6ac | b9d8790b40b5a6ac | b9d8790b40b5a6ac | b9d8790b40b5a6ac | b9d8790b40b5a6ac |
+| ivf/wide                     | DIVERGENT  | parts differ: dist; agree: idx,cand | 8ee39ab9ae510966 | 8ee39ab9ae510966 | 8ee39ab9ae510966 | d2dc1f2caa9205d0 |
+
+summary: DIVERGENT=26, IDENTICAL=1
+
+| lane/fixture                 | column | verdict      | arm64            | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-gfx942       | arm64            | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|------------------|
+| ivf-euclidean/base           | infer  | DIVERGENT    | f6f71f391727d74a | f6f71f391727d74a | f6f71f391727d74a | f6f71f391727d74a | 4f7b030ff5e6cf9c |
+| ivf-euclidean/base           | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2c7ef8ed2b7dc541 | 65ff5553a259242f |
+| ivf-euclidean/base           | batch  | DIVERGENT    | 0d3b322b4f251d85 | 0d3b322b4f251d85 | 0d3b322b4f251d85 | 0d3b322b4f251d85 | 95559eb2332f8255 |
+| ivf-euclidean/denormal       | infer  | DIVERGENT    | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | 2b450b0f80d4e8f5 |
+| ivf-euclidean/denormal       | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 095ed72f60fec6ce | f0cdbf5c755333fd |
+| ivf-euclidean/denormal       | batch  | DIVERGENT    | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 | e39e478383c43b2f |
+| ivf-euclidean/denormal_ftz   | infer  | DIVERGENT    | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | 2b450b0f80d4e8f5 |
+| ivf-euclidean/denormal_ftz   | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 5c190ab95e7501cd | 807ac7d4fdf2c213 |
+| ivf-euclidean/denormal_ftz   | batch  | DIVERGENT    | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 | e395801cb8474d82 | e39e478383c43b2f |
+| ivf-euclidean/dupes          | infer  | DIVERGENT    | 5fb3dd756fa6a835 | 5fb3dd756fa6a835 | 5fb3dd756fa6a835 | 5fb3dd756fa6a835 | 2962924a87dc9c1a |
+| ivf-euclidean/dupes          | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1d65036f19dde9e9 | 3a9cc8201f02572b |
+| ivf-euclidean/dupes          | batch  | DIVERGENT    | 5fef40b00c474a24 | 5fef40b00c474a24 | 5fef40b00c474a24 | 5fef40b00c474a24 | 9cde3d7dec9ec425 |
+| ivf-euclidean/hashed         | infer  | DIVERGENT    | 7d8a8506eeb9a78e | 7d8a8506eeb9a78e | 7d8a8506eeb9a78e | 7d8a8506eeb9a78e | d24c467743c0bad9 |
+| ivf-euclidean/hashed         | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1c67c6b91b2e570b | 9b00d87139953e1d |
+| ivf-euclidean/hashed         | batch  | DIVERGENT    | a69643bf03ceccb2 | a69643bf03ceccb2 | a69643bf03ceccb2 | a69643bf03ceccb2 | da363ff2cb8670ac |
+| ivf-euclidean/negative       | infer  | DIVERGENT    | eacf2587f37d56cb | eacf2587f37d56cb | eacf2587f37d56cb | eacf2587f37d56cb | d74315742ce45a44 |
+| ivf-euclidean/negative       | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 65dfdf6d49abc120 | 653c166eb3bf3158 |
+| ivf-euclidean/negative       | batch  | DIVERGENT    | 1a302ceb75994c6f | 1a302ceb75994c6f | 1a302ceb75994c6f | 1a302ceb75994c6f | 25668a450cacca93 |
+| ivf-euclidean/odd            | infer  | DIVERGENT    | 247b6a2b733e9ff2 | 247b6a2b733e9ff2 | 247b6a2b733e9ff2 | 247b6a2b733e9ff2 | c360b57ee3cf4766 |
+| ivf-euclidean/odd            | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 997e755024716b18 | 0a905ad9348bed32 |
+| ivf-euclidean/odd            | batch  | DIVERGENT    | 4960b29bcd792dc0 | 4960b29bcd792dc0 | 4960b29bcd792dc0 | 4960b29bcd792dc0 | c464fade016f63e8 |
+| ivf-euclidean/ties           | infer  | DIVERGENT    | 6ce659c7ea10311d | 6ce659c7ea10311d | 6ce659c7ea10311d | 6ce659c7ea10311d | 4c657ccc1977986a |
+| ivf-euclidean/ties           | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 3632c01ae6112aca | 441fd888195979d9 |
+| ivf-euclidean/ties           | batch  | DIVERGENT    | a22713485f1d9568 | a22713485f1d9568 | a22713485f1d9568 | a22713485f1d9568 | b037192c8742f571 |
+| ivf-euclidean/wide           | infer  | DIVERGENT    | ee34cd995ead59ba | ee34cd995ead59ba | ee34cd995ead59ba | ee34cd995ead59ba | 0d8a53b207503e02 |
+| ivf-euclidean/wide           | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 74da9b4decbbf211 | e7e6840323ba6218 |
+| ivf-euclidean/wide           | batch  | DIVERGENT    | 36fcc86c5ffc7e96 | 36fcc86c5ffc7e96 | 36fcc86c5ffc7e96 | 36fcc86c5ffc7e96 | d082d459afbf8333 |
+| ivf-extend/base              | infer  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 21a84397fed9cb7b | 0147f8a5dc0b1d7a |
+| ivf-extend/base              | model  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 6814e84fcb72ca37 | e1a65a1ba2ab198a |
+| ivf-extend/base              | batch  | DIVERGENT    | (not run)        | (not run)        | (not run)        | f8873bb27104a23d | 9b5165dfa3615a41 |
+| ivf-extend/denormal          | infer  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 3da4f22de1f06f6e | a086d5c62013424e |
+| ivf-extend/denormal          | model  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 7a4a7782b32da3a0 | 4bb703a9e1b65070 |
+| ivf-extend/denormal          | batch  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 42bb0c222dffe2b7 | 75160a6a73c48e7d |
+| ivf-extend/denormal_ftz      | infer  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 3da4f22de1f06f6e | a086d5c62013424e |
+| ivf-extend/denormal_ftz      | model  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 4defe96aca4c8e11 | 8bb12750db9e280b |
+| ivf-extend/denormal_ftz      | batch  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 42bb0c222dffe2b7 | 75160a6a73c48e7d |
+| ivf-extend/dupes             | infer  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 802c8f83c4e8dddd | 1843960a9e5cc08f |
+| ivf-extend/dupes             | model  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 667918778ad720e3 | 5a7f2ed4cd374971 |
+| ivf-extend/dupes             | batch  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 08c451b2a76060be | c497248888bfc84e |
+| ivf-extend/hashed            | infer  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 9d0f275ae985056d | e9759b600f02e586 |
+| ivf-extend/hashed            | model  | DIVERGENT    | (not run)        | (not run)        | (not run)        | e96813401e1670f0 | 3d22cd2863e80797 |
+| ivf-extend/hashed            | batch  | DIVERGENT    | (not run)        | (not run)        | (not run)        | a190e25ce473d410 | 27ebba6ac862d1a5 |
+| ivf-extend/negative          | infer  | DIVERGENT    | (not run)        | (not run)        | (not run)        | d5badddd236f4f6f | 43af151f2d5711cc |
+| ivf-extend/negative          | model  | DIVERGENT    | (not run)        | (not run)        | (not run)        | fd1e311bb478d024 | 1bd7614dfb1395e8 |
+| ivf-extend/negative          | batch  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 39b741e505d5bbed | ec131acf103e4f92 |
+| ivf-extend/odd               | infer  | DIVERGENT    | (not run)        | (not run)        | (not run)        | a8b712ff1a5e3ef1 | 02eb5f2f8fbc577c |
+| ivf-extend/odd               | model  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 26b97c27cd22d526 | e50b43979fd7c730 |
+| ivf-extend/odd               | batch  | DIVERGENT    | (not run)        | (not run)        | (not run)        | ec78ed4aa6252665 | f05e0ecd6be43436 |
+| ivf-extend/ties              | infer  | DIVERGENT    | (not run)        | (not run)        | (not run)        | ee7fa6ee3ed98541 | 260c2c7c89d6308d |
+| ivf-extend/ties              | model  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 0d954140e0a9c674 | ce8ea474c8a1f0ea |
+| ivf-extend/ties              | batch  | DIVERGENT    | (not run)        | (not run)        | (not run)        | bf5209af86975a47 | 96cc4fcef00dc048 |
+| ivf-extend/wide              | infer  | DIVERGENT    | (not run)        | (not run)        | (not run)        | c6fd06dc0c84cdd5 | 625167048479cdc8 |
+| ivf-extend/wide              | model  | DIVERGENT    | (not run)        | (not run)        | (not run)        | c9793933012960e5 | b728929d9e4ffbdf |
+| ivf-extend/wide              | batch  | DIVERGENT    | (not run)        | (not run)        | (not run)        | 15d08301b9a4107b | ad35c2b24be336fc |
+| ivf/base                     | infer  | DIVERGENT    | fd6eed35b1338d17 | fd6eed35b1338d17 | fd6eed35b1338d17 | fd6eed35b1338d17 | c5a7211e59623bc4 |
+| ivf/base                     | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | dcfefe31adc21c6c | 8be9721baf4bc593 |
+| ivf/base                     | batch  | DIVERGENT    | 6baf3cfbde509312 | 6baf3cfbde509312 | 6baf3cfbde509312 | 6baf3cfbde509312 | a83b891edd2a4f5e |
+| ivf/denormal                 | infer  | DIVERGENT    | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf | d284171e5a4de109 |
+| ivf/denormal                 | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | c3a1727313e23983 | 3bf5c4035097e768 |
+| ivf/denormal                 | batch  | DIVERGENT    | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 | 31f8ac45bb02788c |
+| ivf/denormal_ftz             | infer  | DIVERGENT    | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf | d284171e5a4de109 |
+| ivf/denormal_ftz             | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1f2b8dd1cf726bc0 | 6edc73f973d5ad4d |
+| ivf/denormal_ftz             | batch  | DIVERGENT    | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 | 31f8ac45bb02788c |
+| ivf/dupes                    | infer  | DIVERGENT    | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 | 654123dbd19d191c |
+| ivf/dupes                    | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 3163ed44a2b28c07 | a9eb68460d90a4d4 |
+| ivf/dupes                    | batch  | DIVERGENT    | 99ec531fb8ae409f | 99ec531fb8ae409f | 99ec531fb8ae409f | 99ec531fb8ae409f | 69604023c2b5a3f3 |
+| ivf/hashed                   | infer  | DIVERGENT    | 49c22df302ee0334 | 49c22df302ee0334 | 49c22df302ee0334 | 49c22df302ee0334 | 43352701244f99e3 |
+| ivf/hashed                   | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 9d809fde4ffc96cc | 693757dd240b6558 |
+| ivf/hashed                   | batch  | DIVERGENT    | 648bf9fc3764372d | 648bf9fc3764372d | 648bf9fc3764372d | 648bf9fc3764372d | f839ef3186507d71 |
+| ivf/negative                 | infer  | DIVERGENT    | 71333eccc89915b1 | 71333eccc89915b1 | 71333eccc89915b1 | 71333eccc89915b1 | 65d14b6aff69d03d |
+| ivf/negative                 | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | ec79d31b3169a984 | cbd2f25ceda56d98 |
+| ivf/negative                 | batch  | DIVERGENT    | 9786387eb7123b42 | 9786387eb7123b42 | 9786387eb7123b42 | 9786387eb7123b42 | 2b282de50729322b |
+| ivf/odd                      | infer  | DIVERGENT    | 1e0c2401db49a53d | 1e0c2401db49a53d | 1e0c2401db49a53d | 1e0c2401db49a53d | 7a703db652d9d880 |
+| ivf/odd                      | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2ab1fd5fac4563e2 | 3552a7183a2dfbfd |
+| ivf/odd                      | batch  | DIVERGENT    | 8149b10d16c8ebaa | 8149b10d16c8ebaa | 8149b10d16c8ebaa | 8149b10d16c8ebaa | 6ca96aaa0fa6b3be |
+| ivf/ties                     | infer  | IDENTICAL x5 | c62b1be91d40fc43 | c62b1be91d40fc43 | c62b1be91d40fc43 | c62b1be91d40fc43 | c62b1be91d40fc43 |
+| ivf/ties                     | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2254dcdb3f209c1d | 7424044bcde7c82c |
+| ivf/ties                     | batch  | IDENTICAL x5 | 166f61a6e1f346b8 | 166f61a6e1f346b8 | 166f61a6e1f346b8 | 166f61a6e1f346b8 | 166f61a6e1f346b8 |
+| ivf/wide                     | infer  | DIVERGENT    | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 | b0699db536ad83be |
+| ivf/wide                     | model  | DIVERGENT    | n/a:no-save      | n/a:no-save      | n/a:no-save      | 809bc63c73b2c093 | 9e17286190ae60a2 |
+| ivf/wide                     | batch  | DIVERGENT    | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 | d21044cc8595b236 |
+
+summary (infer/model): DIVERGENT=53, IDENTICAL=1
+summary (batch): DIVERGENT=26, IDENTICAL=1
+summary (rlpair): 
+require-columns 4 over ['ivf', 'ivf-euclidean', 'ivf-extend']: OK

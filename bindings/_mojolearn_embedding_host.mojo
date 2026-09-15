@@ -35,6 +35,7 @@ from embedding.checks.embedding_oracle import (
     emb_refuse_shape,
     refuse_nonfinite,
 )
+from bindings.embedding_host_forward import embedding_forward_binding, embedding_host_config
 from embedding.host.embedding_host import (
     EMBEDDING_HOST_SABOTAGE,
     HOST_PLAN_SCAN,
@@ -87,51 +88,6 @@ def embedding_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
 
-def _config(vocab: Int, width: Int, padding_idx: Int, accumulate: Bool) raises -> EmbConfig:
-    """The GPU binding's `_config`, in its words."""
-    if padding_idx != EMB_NO_PADDING_IDX and (padding_idx < 0 or padding_idx >= vocab):
-        raise Error(
-            String("embedding: padding_idx = ")
-            + String(padding_idx)
-            + " is outside [0, "
-            + String(vocab)
-            + ") REFUSED (contract 8; -1 means no padding row)"
-        )
-    return EmbConfig(vocab, width, padding_idx, accumulate)
-
-
-def embedding_forward_binding(
-    addrs: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    """`Y[t, j] = W[ids[t], j]`, the device gather restated. Returns `T * d`.
-
-    `addrs` = [weight (V * d f32, read), ids (T i32, read), y_out (T * d
-    f32, WRITTEN)]; `params` = [V, d, T]. The GPU binding's order."""
-    if len(addrs) != 3:
-        raise Error(
-            "embedding_forward: addrs must contain 3 addresses (weight, ids,"
-            " y_out), got " + String(len(addrs))
-        )
-    if len(params) != 3:
-        raise Error(
-            "embedding_forward: params must contain 3 values (V, d, T), got "
-            + String(len(params))
-        )
-    var vocab = Int(py=params[0])
-    var width = Int(py=params[1])
-    var n_positions = Int(py=params[2])
-    var cfg = _config(vocab, width, EMB_NO_PADDING_IDX, False)
-    emb_refuse_shape(cfg, n_positions)
-    var weight = read_f32(Int(py=addrs[0]), vocab * width)
-    var ids = read_i32(Int(py=addrs[1]), n_positions)
-    emb_refuse_ids(ids, cfg)
-    refuse_nonfinite(String("W"), weight)
-    var yp = f32_ptr(Int(py=addrs[2]))
-    with GILReleased(Python()):
-        host_embedding_forward(weight, ids, n_positions, cfg, yp)
-    return PythonObject(n_positions * width)
-
-
 def embedding_backward_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -171,7 +127,7 @@ def embedding_backward_binding(
             String("embedding_backward: accumulate must be 0 or 1, got ")
             + String(acc_code)
         )
-    var cfg = _config(vocab, width, padding_idx, acc_code == 1)
+    var cfg = embedding_host_config(vocab, width, padding_idx, acc_code == 1)
     emb_refuse_shape(cfg, n_positions)
     var dy = read_f32(Int(py=addrs[0]), n_positions * width)
     var ids = read_i32(Int(py=addrs[1]), n_positions)

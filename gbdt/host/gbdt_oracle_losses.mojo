@@ -89,6 +89,14 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.gpu_util.kernel.random_gen import next_poisson_f, next_uniform_f
+from gbdt.data.pairs import PairList, generate_pairs, order_pairs_by_winner
+from gbdt.host.gbdt_oracle_pair import (
+    HostPairs,
+    host_pairs,
+    pair_logit_eval,
+    pair_logit_search_pass,
+    pair_logit_value,
+)
 from gbdt.host.gbdt_oracle_query import (
     query_rmse_eval,
     query_rmse_search_pass,
@@ -133,6 +141,9 @@ comptime GBDT_OBJ_HUBER = 11
 #: `OBJECTIVE_QUERY_RMSE` (`pointwise_targets.mojo`), the querywise target of
 #: `gbdt/host/gbdt_oracle_query.mojo`
 comptime GBDT_OBJ_QUERY_RMSE = 14
+#: `OBJECTIVE_PAIR_LOGIT` (`pointwise_targets.mojo`), the pairwise-derivative
+#: querywise target of `gbdt/host/gbdt_oracle_pair.mojo`
+comptime GBDT_OBJ_PAIR_LOGIT = 15
 
 #: `LEAF_ESTIMATION_*` (`gbdt/options/catboost_options.mojo:269-271`).
 comptime GBDT_LEAF_GRADIENT = 0
@@ -531,6 +542,7 @@ def _walker_estimate(
     targets_rows: List[Float32] = List[Float32](),
     row_index: List[Int] = List[Int](),
     group_sizes: List[Int] = List[Int](),
+    pairs: Optional[HostPairs] = None,
 ) raises -> List[Float32]:
     """`newton_like_walker_estimate` with AnyImprovement
     (`descent_helpers.mojo:198-285`, `step_estimator.mojo:50-72`), the TWIN
@@ -547,7 +559,12 @@ def _walker_estimate(
     var cur_grad = List[Float64]()
     var cached_der2 = List[Float64]()
     _oracle_move_to(cur_point, current_point, bins, g_cursor, n_rows)
-    if loss.objective == GBDT_OBJ_QUERY_RMSE:
+    if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+        pair_logit_eval(
+            pairs.value(), g_cursor, row_index, offsets, sizes, n_rows,
+            lambda_reg, cur_value, cur_grad, cached_der2,
+        )
+    elif loss.objective == GBDT_OBJ_QUERY_RMSE:
         query_rmse_eval(
             targets_rows, g_cursor, row_index, group_sizes, offsets, sizes,
             n_rows, lambda_reg, cur_value, cur_grad, cached_der2,
@@ -577,7 +594,12 @@ def _walker_estimate(
             var next_point = _walker_move(cur_point, direction, step)
             _regularize(weights_cpu, next_point)
             _oracle_move_to(next_point, current_point, bins, g_cursor, n_rows)
-            if loss.objective == GBDT_OBJ_QUERY_RMSE:
+            if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+                pair_logit_eval(
+                    pairs.value(), g_cursor, row_index, offsets, sizes, n_rows,
+                    lambda_reg, next_value, next_grad, cached_der2,
+                )
+            elif loss.objective == GBDT_OBJ_QUERY_RMSE:
                 query_rmse_eval(
                     targets_rows, g_cursor, row_index, group_sizes, offsets,
                     sizes, n_rows, lambda_reg, next_value, next_grad,
@@ -759,6 +781,7 @@ def _estimate_leaves_for_loss(
     n_rows: Int,
     l2_leaf_reg: Float32,
     group_sizes: List[Int] = List[Int](),
+    pairs: Optional[HostPairs] = None,
 ) raises -> List[Float32]:
     """`_estimate_and_apply`'s estimate (`doc_parallel_boosting.mojo:
     698-797`): the gathers by the row index, then Exact or the walker."""
@@ -781,7 +804,7 @@ def _estimate_leaves_for_loss(
         )
     return _walker_estimate(
         loss, g_target, g_cursor, bins, offsets, sizes, weights_cpu, n_rows,
-        l2_leaf_reg, targets, row_index, group_sizes,
+        l2_leaf_reg, targets, row_index, group_sizes, pairs,
     )
 
 
@@ -798,12 +821,36 @@ def gbdt_losses_host_fit(
     params: GbdtHostParams,
     loss: GbdtHostLoss,
     group_sizes: List[Int] = List[Int](),
+    pair_winners: List[UInt32] = List[UInt32](),
+    pair_losers: List[UInt32] = List[UInt32](),
+    pair_weights: List[Float32] = List[Float32](),
 ) raises -> GbdtHostModel:
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
     resolved to their `TWithoutQueriesGrouping` rule by the binding."""
-    if loss.objective == GBDT_OBJ_QUERY_RMSE and len(group_sizes) < 1:
-        raise Error("the QueryRMSE host fit needs the query sizes")
+    if (loss.objective == GBDT_OBJ_QUERY_RMSE or loss.objective == GBDT_OBJ_PAIR_LOGIT) and len(group_sizes) < 1:
+        raise Error("the querywise host fit needs the query sizes")
+    # the PairLogit pairs, generated or given, in the device order
+    # (`gbdt/train.mojo::train` does the same with the same functions)
+    var pairs = Optional[HostPairs]()
+    var loss_norm = Float64(n_rows)
+    if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+        var sizes_u32 = List[UInt32](capacity=len(group_sizes))
+        for g in range(len(group_sizes)):
+            sizes_u32.append(UInt32(group_sizes[g]))
+        var ordered: PairList
+        if len(pair_winners) > 0:
+            ordered = order_pairs_by_winner(
+                PairList(pair_winners.copy(), pair_losers.copy(), pair_weights.copy()),
+                sizes_u32, n_rows,
+            )
+        else:
+            ordered = order_pairs_by_winner(
+                generate_pairs(sizes_u32, y, List[Float32]()), sizes_u32, n_rows
+            )
+        var hp = host_pairs(ordered.winners, ordered.losers, ordered.weights, n_rows)
+        loss_norm = hp.prep.total
+        pairs = Optional(hp^)
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
@@ -848,7 +895,10 @@ def gbdt_losses_host_fit(
     var cursor = List[Float32](length=n_rows, fill=Float32(0.0))
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var mse_blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
-    var fv_part = List[Float32](length=mse_blocks, fill=Float32(0.0))
+    var fv_blocks = mse_blocks
+    if pairs.__bool__():
+        fv_blocks = pairs.value().blocks()
+    var fv_part = List[Float32](length=fv_blocks, fill=Float32(0.0))
     var mag_part = List[Float32](length=2 * mse_blocks, fill=Float32(0.0))
     var bootstrap_on = loss.bootstrap_kind >= 0
     var seeds = List[UInt64]()
@@ -866,13 +916,17 @@ def gbdt_losses_host_fit(
 
     for iteration in range(params.n_estimators):
         # ---- the gradients, the learn loss and the magnitudes ----
-        if loss.objective == GBDT_OBJ_QUERY_RMSE:
+        if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+            pair_logit_search_pass(
+                pairs.value(), cursor, n_rows, stats, fv_part, mag_part
+            )
+        elif loss.objective == GBDT_OBJ_QUERY_RMSE:
             query_rmse_search_pass(
                 y, cursor, group_sizes, n_rows, stats, fv_part, mag_part
             )
         else:
             _loss_search_pass(loss, y, cursor, n_rows, stats, fv_part, mag_part)
-        var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
+        var fv = _deterministic_sum_lanes(fv_part, 1, fv_blocks)[0]
         var fixed_scale: Float32
         if bootstrap_on:
             var bm = _bootstrap_pass(
@@ -1095,8 +1149,22 @@ def gbdt_losses_host_fit(
         # ---- the estimation task and `AppendModels` ----
         var estimated = _estimate_leaves_for_loss(
             loss, y, cursor, row_index, offsets, sizes, n_rows,
-            params.l2_leaf_reg, group_sizes,
+            params.l2_leaf_reg, group_sizes, pairs,
         )
+        if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+            # `MakeZeroAverage` (`doc_parallel_leaves_estimator.cpp:25-37`),
+            # restated from `_estimate_and_apply`: minus the unweighted mean
+            # over all `n_live` leaves, summed in double in leaf order.
+            var zero_sum = Float64(0.0)
+            var zero_weight = Float64(0.0)
+            for i in range(len(estimated)):
+                zero_sum += Float64(estimated[i])
+                zero_weight += Float64(1.0)
+            var zero_bias = Float64(0.0)
+            if zero_weight > Float64(0.0):
+                zero_bias = -zero_sum / zero_weight
+            for i in range(len(estimated)):
+                estimated[i] = Float32(Float64(estimated[i]) + zero_bias)
         for leaf in range(n_live):
             for k in range(sizes[leaf]):
                 var row = row_index[offsets[leaf] + k]
@@ -1112,9 +1180,14 @@ def gbdt_losses_host_fit(
         if len(losses) < params.n_estimators:
             var v = Float64(fv)
             if iteration + 1 > 1:
-                losses.append(-v / Float64(n_rows))
+                losses.append(-v / loss_norm)
 
-    if loss.objective == GBDT_OBJ_QUERY_RMSE:
+    if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+        var p_fv = pair_logit_value(pairs.value(), cursor)
+        losses.append(
+            -Float64(_deterministic_sum_lanes(p_fv, 1, len(p_fv))[0]) / loss_norm
+        )
+    elif loss.objective == GBDT_OBJ_QUERY_RMSE:
         var q_fv = query_rmse_value(y, cursor, group_sizes, n_rows)
         losses.append(
             -Float64(_deterministic_sum_lanes(q_fv, 1, len(q_fv))[0]) / Float64(n_rows)

@@ -1,0 +1,36 @@
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+# vendor=apple-m4 commit=607d797940e9318f5f8f2072a4c373102f452c46 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 13:48:57  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gp-matern32            | 03066455003d7df7 | f4c49d5c4fd7edda | 2a98418556cb39e1 | 710809cd4f31ce7e | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 5346a4ac3a9fb082 | 0e42009aae37b1a3 | 415c32e64ea7e125 |
+| gp-matern32 infer      | a89afc94af5f084c | d4ebe9e3a969d687 | 9b2c58c951e46aa6 | e01432f62e53b456 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e0a8a2dff9f3e703 | cebcbbd1a0cf26a5 | 59c1f19475065932 |
+| gp-matern32 batch      | 4d0c75f26ce30a17 | e0f8d36884ec439b | a696dd8895d78928 | 0e1eaf22f908fce3 | 9dc26cf63aee002d | 9dc26cf63aee002d | 314fbd59f78d11be | 6245f5a144c11e87 | 07269e71c177f0e5 |
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+| gp-matern52-ard        | 68f9bac4021de057 | e7965892a63545e5 | 5a0369e0406e8d1a | fd640b7c289a6327 | 1991a044f55d7f40 | 1991a044f55d7f40 | c2a1b1e411a6de85 | f05b1867f7b7d159 | 51fb6cf765695237 |
+| gp-matern52-ard infer  | 7ed07da2d9a2b815 | d9e5f730b649eff6 | d616a8cbf56f719b | 74c9cc4f5bcd42f7 | 15773a44eee1c9ad | 15773a44eee1c9ad | 4cb708614a14be4f | de417da177231058 | 5ddd0786ba58e285 |
+| gp-matern52-ard batch  | b67e8be0fee4333d | 8d902360cd06f9c6 | de23d37649d275cd | 25546aa3974473f3 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 | 2d242b760df0c661 | 331b54fb97101ccd | 7f3871eaa8cd8b17 |
+
+cells=18 stable=18 moved=0 refused=0
+infer: stable=18
+model: n/a=18
+batch: stable=18
+n/a: gp-matern32 model n/a:no-save, gp-matern52-ard model n/a:no-save
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/gpsy_ev2/rerun_matern.json

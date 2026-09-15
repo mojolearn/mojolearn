@@ -181,9 +181,16 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_LOGLOSS,
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
+    OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUERY_RMSE,
     OBJECTIVE_RMSE,
     objective_from_name,
+)
+from gbdt.data.pairs import (
+    PairList,
+    generate_pairs,
+    order_pairs_by_winner,
+    prepare_pairs,
 )
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_IS,
@@ -775,6 +782,12 @@ def train(
     # Python wrapper applies that rule before the sizes cross). Empty means
     # no grouping, which is every existing caller.
     group_sizes: List[UInt32] = List[UInt32](),
+    # the caller's PairLogit pairs (the Pool's `pairs` and `pairs_weight`):
+    # winner row, loser row and weight per pair, all empty to generate them
+    # from `group_sizes` and `y` (`gbdt/data/pairs.mojo::generate_pairs`)
+    pair_winners: List[UInt32] = List[UInt32](),
+    pair_losers: List[UInt32] = List[UInt32](),
+    pair_weights: List[Float32] = List[Float32](),
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -1021,7 +1034,9 @@ def train(
     # not implemented, so a grouping arriving with any other loss is refused
     # rather than carried and ignored. Everything here is decided before a
     # border is computed.
-    var is_querywise = objective_from_name(loss) == OBJECTIVE_QUERY_RMSE
+    var objective_code = objective_from_name(loss)
+    var is_pair_logit = objective_code == OBJECTIVE_PAIR_LOGIT
+    var is_querywise = objective_code == OBJECTIVE_QUERY_RMSE or is_pair_logit
     if len(group_sizes) > 0:
         var covered = 0
         for g in range(len(group_sizes)):
@@ -1038,7 +1053,7 @@ def train(
         if not is_querywise:
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
-                " (QueryRMSE is trained here; PairLogit, YetiRank,"
+                " (QueryRMSE and PairLogit are trained here; YetiRank,"
                 " QuerySoftMax and QueryCrossEntropy are not implemented);"
                 " loss='" + loss + "' does not use it, so it is refused by"
                 " name rather than carried and ignored"
@@ -1060,19 +1075,19 @@ def train(
         # refused by name
         if policy != GROW_SYMMETRIC:
             raise Error(
-                "loss='QueryRMSE' is implemented on SymmetricTree only here;"
+                "loss='" + loss + "' is implemented on SymmetricTree only here;"
                 " grow_policy=" + grow_policy_name(policy) + " is refused"
                 " (the reference registers it, querywise_non_symmetric.cpp:5-14)"
             )
         if use_pointwise_searcher:
             raise Error(
-                "loss='QueryRMSE' with use_pointwise_searcher is not"
+                "loss='" + loss + "' with use_pointwise_searcher is not"
                 " implemented here; the greedy subsets searcher only"
             )
         for f in range(len(cat_features)):
             if cat_features[f]:
                 raise Error(
-                    "loss='QueryRMSE' with cat_features is not implemented"
+                    "loss='" + loss + "' with cat_features is not implemented"
                     " here: the reference shuffles whole queries for its CTR"
                     " permutations (permutation.cpp:9-11,"
                     " GenerateQueryDocsOrder), which this implementation does"
@@ -1081,24 +1096,55 @@ def train(
         for f in range(len(one_hot)):
             if one_hot[f]:
                 raise Error(
-                    "loss='QueryRMSE' with one_hot_features is not implemented"
+                    "loss='" + loss + "' with one_hot_features is not implemented"
                     " here"
                 )
         if len(eval_y) > 0 or len(eval_x_colmajor) > 0:
             raise Error(
-                "loss='QueryRMSE' with eval_set is not implemented here: the"
+                "loss='" + loss + "' with eval_set is not implemented here: the"
                 " held-out loss needs the eval pool's own grouping"
             )
         if len(class_weights) > 0:
-            raise Error("class_weights do not apply to loss='QueryRMSE'")
+            raise Error("class_weights do not apply to loss='" + loss + "'")
         if bootstrap_bayesian or (
             bootstrap_type != String("") and bootstrap_type != String("No")
         ):
             raise Error(
-                "loss='QueryRMSE' with a bootstrap is not implemented here:"
+                "loss='" + loss + "' with a bootstrap is not implemented here:"
                 " the reference samples whole queries for querywise targets,"
                 " which this implementation does not restate; use"
                 " bootstrap_type='No'"
+            )
+    # ---- the PairLogit pairs (`gbdt/data/pairs.mojo`) ----
+    # Generated from the groups and grades unless the caller passed them;
+    # either way put in the order the reference's device grouping flattens
+    # them, winner row by winner row, and checked to stay inside one query.
+    var pair_list = PairList(List[UInt32](), List[UInt32](), List[Float32]())
+    if len(pair_winners) > 0 and not is_pair_logit:
+        raise Error(
+            "pairs are read only by loss='PairLogit' here; loss='" + loss
+            + "' does not use them"
+        )
+    if is_pair_logit:
+        if len(group_sizes) == 0:
+            if len(pair_winners) > 0:
+                raise Error(
+                    "pairs without group_id are not implemented here: the"
+                    " reference regroups and reorders the whole pool by the"
+                    " pairs' connected components (data_providers.cpp:857-872,"
+                    " 922-942)"
+                )
+            raise Error("Cannot generate pairs for data without groups")
+        if len(pair_winners) > 0:
+            if len(pair_losers) != len(pair_winners) or len(pair_weights) != len(pair_winners):
+                raise Error("pairs: winners, losers and weights disagree in length")
+            pair_list = order_pairs_by_winner(
+                PairList(pair_winners.copy(), pair_losers.copy(), pair_weights.copy()),
+                group_sizes, n_rows,
+            )
+        else:
+            pair_list = order_pairs_by_winner(
+                generate_pairs(group_sizes, y, sample_weight), group_sizes, n_rows
             )
     # Validate dense class codes before class-weight indexing or allocating
     # prediction planes. The later objective check was too late to protect
@@ -1643,6 +1689,15 @@ def train(
                 cls = 1 if y[r] > Float32(0.5) else 0
             w = w * class_weights[cls]
         hw.unsafe_ptr().unsafe_store(r, w)
+    if is_pair_logit:
+        # `InitPairLogit` (`targets/querywise_targets_impl.h:326-346`): the
+        # target weights become the per-row sums of the pair weights, folded
+        # in the pinned endpoint order (`gbdt/data/pairs.mojo::prepare_pairs`)
+        var pair_prep = prepare_pairs(
+            pair_list.winners, pair_list.losers, pair_list.weights, n_rows
+        )
+        for r in range(n_rows):
+            hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
     ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
@@ -1895,7 +1950,7 @@ def train(
     var model = TAdditiveModel()
     var fit_result = fit_with_test(
         model, ctx, n_rows, fold_counts, max_depth, cindex, targets,
-        weights, use_class_weights or use_sample_weight,
+        weights, use_class_weights or use_sample_weight or is_pair_logit,
         # `trace` rides POSITIONALLY (delta from the granted spec's
         # `trace=trace`: the later arguments here are positional, and a
         # positional argument may not follow a keyword one)
@@ -1941,6 +1996,9 @@ def train(
         min_child_hessian=min_child_hessian,
         feature_fraction=feature_fraction,
         group_sizes=query_sizes,
+        pair_winners=pair_list.winners.copy(),
+        pair_losers=pair_list.losers.copy(),
+        pair_weights=pair_list.weights.copy(),
     )
     host_times.stop_host("train_fit_with_test", t_phase)
     t_phase = host_times.start()

@@ -1,0 +1,78 @@
+{
+  "commit": "c6c6f79b075f2c00544977a1e94d47fdcf89f711",
+  "estimator": "IVFIndex",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "odd",
+  "lane": "ivf-extend",
+  "model_sha256": "26b97c27cd22d5266122e3acbf37627c3bc56c038e01ee303c9c952357a0490a",
+  "numeric_mode": "identical",
+  "predictions": {
+    "extend_list_indices": {
+      "dtype": "<i4",
+      "sha256": "86e332d37e635613f2adf4333a175250a043f7a181374ee9138cfac055e1228c",
+      "shape": [
+        4160
+      ]
+    },
+    "extend_lists": {
+      "dtype": "<i4",
+      "sha256": "865ee5bd8969a8dc96a89ac318b497aaf5884484bf65ced1bd53d46d4a92df46",
+      "shape": [
+        64
+      ]
+    },
+    "identity_hash": "a8b712ff1a5e3ef1",
+    "list_data": {
+      "dtype": "<f4",
+      "sha256": "48de35e6184c8b67f604f70e7c00c6558b51ccceed374a029938984186a779d6",
+      "shape": [
+        4096,
+        17
+      ]
+    },
+    "list_indices": {
+      "dtype": "<i4",
+      "sha256": "b899c7d61665025144e2209a178d7bb2889ebb0ab70cecb28353d90e76713df5",
+      "shape": [
+        4096
+      ]
+    },
+    "search_after_extend_ids": {
+      "dtype": "<i4",
+      "sha256": "819abfe6aec4a2aa195d1fee9c1e2a06d91a3110c961fd7b4687f67b94291b97",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_distances": {
+      "dtype": "<f4",
+      "sha256": "3f2459bfcfd54a27043416e204d0cd7b3a19afc891bc15840e491c92065e1bd4",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_second_batch_ids": {
+      "dtype": "<i4",
+      "sha256": "9b1790cfc2def673f030fd1c88d6808694037528272aa5dfa1cea1ee76832969",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "seconds": 3.012888
+  },
+  "recorded_at": "2026-09-15T13:58:38-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "a000619abf2e78b511b82f4a2ba73ce0a68c0d919f5f66f0f49f3c1b00e9ad0a"
+}

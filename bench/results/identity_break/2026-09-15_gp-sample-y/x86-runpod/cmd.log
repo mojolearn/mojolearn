@@ -1,0 +1,27 @@
+== cpu Tue Sep 15 17:47:57 UTC 2026
+cpu exit 0
+== cpu_hsab Tue Sep 15 17:48:06 UTC 2026
+cpu_hsab exit 0
+== tests Tue Sep 15 17:48:10 UTC 2026
+test_gp_sample_y exit 0
+test_cpu_training_gp exit 0
+test_gp_normalize_y exit 0
+---- cpu
+cells=63 stable=63 moved=0 refused=0
+infer: stable=63
+batch: stable=45 n/a=18
+---- cpu_hsab
+cells=63 stable=63 moved=0 refused=0
+infer: stable=63
+batch: stable=45 n/a=18
+---- test_gp_sample_y
+  ok    REFUSE     the NOT_IMPLEMENTED row for sample_y is gone
+
+test_gp_sample_y: GREEN under numeric_mode=identical, 18 checks. One box, one vendor; no bit is claimed for any other.
+---- test_cpu_training_gp
+ok test_oracles_spell_the_bit_carrying_constructs
+ok test_sabotage_define_moves_the_distance
+6 passed
+---- test_gp_normalize_y
+..s.                                                                     [100%]
+3 passed, 1 skipped in 0.31s

@@ -1,0 +1,6 @@
+lane=gaussian-process-classifier
+commit=a3357cd9857cd79035f25d0c5147dbe592309252
+dirty_tracked=0
+worktree=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-gpc
+source=2599	17616972	bd683dca3d22505fbf31d639c94975036ce3e45d87d0d2529e9cce8719e681f0
+box_clock_minus_mac=0

@@ -115,6 +115,7 @@ from gbdt.host.gbdt_oracle_losses import (
     GBDT_OBJ_MAE,
     GBDT_OBJ_MAPE,
     GBDT_OBJ_POISSON,
+    GBDT_OBJ_PAIR_LOGIT,
     GBDT_OBJ_QUANTILE,
     GBDT_OBJ_QUERY_RMSE,
     GBDT_OBJ_TWEEDIE,
@@ -252,6 +253,8 @@ def _pointwise_objective(loss: String) -> Int:
         return GBDT_OBJ_HUBER
     if loss == String("QueryRMSE"):
         return GBDT_OBJ_QUERY_RMSE
+    if loss == String("PairLogit"):
+        return GBDT_OBJ_PAIR_LOGIT
     return -1
 
 
@@ -309,6 +312,11 @@ def _resolve_pointwise_loss(
     elif objective == GBDT_OBJ_POISSON:
         newton = 10
     elif objective == GBDT_OBJ_CROSSENTROPY:
+        newton = 10
+        gradient = 40
+    elif objective == GBDT_OBJ_PAIR_LOGIT:
+        # `GetEstimationMethodDefaults`' PairLogit case
+        # (`catboost_options.cpp:120-125`), as `gbdt/options/catboost_options.mojo`
         newton = 10
         gradient = 40
     elif objective == GBDT_OBJ_TWEEDIE:
@@ -554,9 +562,9 @@ def gbdt_fit_binding(
             + String(n_class_weights)
         )
     var fixed_and_weights = 35 + n_class_weights
-    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 5:
+    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 8:
         raise Error(
-            "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count values ("
+            "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count, then the pairs address, pair count and pair weights address values ("
             + String(35 + n_class_weights)
             + ") values, got "
             + String(len(params))
@@ -602,7 +610,7 @@ def gbdt_fit_binding(
     var tail_loss = String(py=strs[0])
     var tail_rows = Int(py=params[0])
     var host_group_sizes = List[Int]()
-    if len(params) == fixed_and_weights + 5:
+    if len(params) >= fixed_and_weights + 5:
         var n_groups = Int(py=params[fixed_and_weights + 4])
         if n_groups < 1:
             raise Error(
@@ -622,15 +630,48 @@ def gbdt_fit_binding(
                 "group_id: the group sizes cover " + String(covered)
                 + " rows of " + String(tail_rows)
             )
-        if tail_loss != String("QueryRMSE"):
+        if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit"):
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
-                " (QueryRMSE is trained here; PairLogit, YetiRank,"
+                " (QueryRMSE and PairLogit are trained here; YetiRank,"
                 " QuerySoftMax and QueryCrossEntropy are not implemented);"
                 " loss='" + tail_loss + "' does not use it, so it is refused by"
                 " name rather than carried and ignored"
             )
-    if tail_loss == String("QueryRMSE"):
+    # the PairLogit pairs tail, read with the GIL held; a count of -1 means
+    # generate them inside the fit, as `gbdt/train.mojo::train` does
+    var host_pair_winners = List[UInt32]()
+    var host_pair_losers = List[UInt32]()
+    var host_pair_weights = List[Float32]()
+    if len(params) == fixed_and_weights + 8:
+        var n_pairs = Int(py=params[fixed_and_weights + 6])
+        if n_pairs != -1 and n_pairs < 1:
+            raise Error(
+                "gbdt_fit: the pairs tail needs a positive pair count or -1,"
+                " got " + String(n_pairs)
+            )
+        if n_pairs > 0:
+            var pp = u32_ptr(Int(py=params[fixed_and_weights + 5]))
+            var pw = f32_ptr(Int(py=params[fixed_and_weights + 7]))
+            for q in range(n_pairs):
+                host_pair_winners.append(pp.unsafe_load(2 * q))
+                host_pair_losers.append(pp.unsafe_load(2 * q + 1))
+                host_pair_weights.append(pw.unsafe_load(q))
+    if len(host_pair_winners) > 0 and tail_loss != String("PairLogit"):
+        raise Error(
+            "pairs are read only by loss='PairLogit' here; loss='" + tail_loss
+            + "' does not use them"
+        )
+    if tail_loss == String("PairLogit") and len(host_group_sizes) == 0:
+        if len(host_pair_winners) > 0:
+            raise Error(
+                "pairs without group_id are not implemented here: the"
+                " reference regroups and reorders the whole pool by the"
+                " pairs' connected components (data_providers.cpp:857-872,"
+                " 922-942)"
+            )
+        raise Error("Cannot generate pairs for data without groups")
+    if tail_loss == String("QueryRMSE") or tail_loss == String("PairLogit"):
         # `TDocParallelSplit` (`gpu_data/doc_parallel_dataset.h:26-38`): the
         # pool's queries only with fewer groups than rows, otherwise every
         # row a query of one (`TWithoutQueriesGrouping`)
@@ -744,9 +785,9 @@ def gbdt_fit_binding(
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton, or Gradient under Lossguide)")
     if is_pointwise and leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (Gradient, Newton or Exact)")
-    if loss == String("QueryRMSE") and bootstrap_type != String("") and bootstrap_type != String("No"):
+    if (loss == String("QueryRMSE") or loss == String("PairLogit")) and bootstrap_type != String("") and bootstrap_type != String("No"):
         raise Error(
-            "loss='QueryRMSE' with a bootstrap is not implemented here:"
+            "loss='" + loss + "' with a bootstrap is not implemented here:"
             " the reference samples whole queries for querywise targets,"
             " which this implementation does not restate; use"
             " bootstrap_type='No'"
@@ -961,7 +1002,8 @@ def gbdt_fit_binding(
         elif is_pointwise:
             # gbdt/host/gbdt_oracle_losses.mojo
             var pw_model = gbdt_losses_host_fit(
-                x, y, n_rows, n_features, p, pw_loss, host_group_sizes
+                x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
+                host_pair_winners, host_pair_losers, host_pair_weights,
             )
             text = gbdt_host_model_text(pw_model)
             losses = pw_model.losses.copy()

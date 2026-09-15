@@ -1,0 +1,38 @@
+# vendor=cpu-x86-x86_64 commit=b5f80106d52eb069804dbf3da89ffaa3ee43f904 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 4564P 16-Core Processor' host.column=cpu host.families=['_mojolearn_core_host', '_mojolearn_gp_host', '_mojolearn_preprocessing_host']
+# identity_break  mode=identical  2026-09-15 17:58:28  Linux-6.8.0-51-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gp                     | ea70c56b99a74791 | c92496318cb78403 | f01c58a79fb1af27 | ca779c84b786d493 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | fba9e6f4ea05af2c | cbdbd1248c92a3f8 | 40fd2f479f775ec4 |
+| gp infer               | 1e032c58b3e9cd14 | 22b0b528124de8d0 | 6eec04108625b28e | 890cda1ff831faab | 353cd97119d0e754 | 353cd97119d0e754 | 52e6b306c452f16c | 9e3f1cf6c455f0fa | b2713d53a58fa4c9 |
+| gp model               | 8f4a54a0bd816175 | 5a2f8a826a1aab15 | e313387e268603e1 | 6de1e70ad300db07 | e2e8bcc686c2be72 | 4dbb90dfe4b757ae | 0eca938df7a74371 | b5496b305f465a2e | adc071acad296182 |
+| gp batch               | 305bfd4eaf79a5fa | 42c01186900b0c68 | f18ced6112fb55e8 | d3e6783a8a000e56 | 9305dbeb22908e4a | 9305dbeb22908e4a | 3caf5f428c1e5112 | e3e6d237ca783492 | 0284440d2cd65731 |
+| gp-normalize-y         | 295a3a943bb1e6c1 | dcd3de359f3c2074 | b3faa0b97f15bcba | 3f637d262c88b131 | 563ede6c2700528e | 563ede6c2700528e | 56127db3c25510e4 | c3c46d3bdd248167 | c162a835d708df60 |
+| gp-normalize-y infer   | 7c5123dc7a512038 | 0e6c262796044cb8 | b77bf4a2d0da8736 | 13332a5abc671f44 | c9c056f09a65ff3b | c9c056f09a65ff3b | 3c0b639788527068 | e8873986c9e0f24f | e8c9793a64ffecd4 |
+| gp-normalize-y model   | 988bc1c3b51246a4 | 4af86e76b34e092c | 78eb0a3ce16ce7c5 | 7aaddfff81162cc0 | 7838eff1539fb489 | 5f20cf42422bf2e9 | db1cd41ce6fd1b37 | 767941378d3c368a | f8b1eb8570f5e01b |
+| gp-normalize-y batch   | 10f20ff36a173c93 | d3aaf331f5414e4b | 83463eae32c0bbe9 | f83ca2d738dfbae9 | 00079f14e3f462fc | 00079f14e3f462fc | cd8dc4dd4d12cb25 | 290d32315445165d | d4b37ced285cc86d |
+| gp-sample-y            | d698872d7e33df6e | 15f827dc671917f0 | 1f0e45838e5c52d2 | ce0c19926bcf9dbf | 37e844812b3bd076 | 37e844812b3bd076 | 05aaa44e678259a6 | 23fab759980d7acc | 55e0efee90db4801 |
+| gp-sample-y infer      | b7cef1a89e642972 | 0811d434a92222cc | 1512a8f232028314 | eb0dc965d1fb9854 | 41aae3173e5800f3 | 41aae3173e5800f3 | 1ecf65597b149dc3 | 88b3eef5cfb3f1e8 | 4adb5317401462a1 |
+| gp-sample-y model      | 8f4a54a0bd816175 | 5a2f8a826a1aab15 | e313387e268603e1 | 6de1e70ad300db07 | e2e8bcc686c2be72 | 4dbb90dfe4b757ae | 0eca938df7a74371 | b5496b305f465a2e | adc071acad296182 |
+| gp-sample-y-normalize  | b5ad01b81c59fdf3 | 43811dbad15ad2f0 | 455f431e3dcb0773 | c11bb0e6d158bfe3 | 33512fcfac39fb55 | 33512fcfac39fb55 | 78ae9a8195ece8f9 | b4dd92087d7a5b3a | 0644e14fb6f52191 |
+| gp-sample-y-normalize infer | 0c4beaeb3b1aeb90 | 37a77ee22082dc29 | c0c2a3bec4606a09 | 296d00db02a3dc55 | d83e1344b5034607 | d83e1344b5034607 | 64889722931adde7 | 1ed38e7596ec035d | de0542b579ff2843 |
+| gp-sample-y-normalize model | 988bc1c3b51246a4 | 4af86e76b34e092c | 78eb0a3ce16ce7c5 | 7aaddfff81162cc0 | 7838eff1539fb489 | 5f20cf42422bf2e9 | db1cd41ce6fd1b37 | 767941378d3c368a | f8b1eb8570f5e01b |
+| gp-matern12            | a54e340b4a22147f | 2661efdd41bfdb23 | ece4c902bf99f265 | 770208f9d55b9e6d | 6ca669d68732c77e | 6ca669d68732c77e | dc7d705bf6b6fb42 | 91b8075bebf3738a | 5e78849478852ef7 |
+| gp-matern12 infer      | 4f79f8b5efa024a7 | a001b7e2647b5504 | d97f7a7856e5c3cf | d85b3fdd5a0d4b83 | b18535ebf335687e | b18535ebf335687e | f28fbf34f5e2f5e4 | 70c7a448533ae162 | 7a4ce4fbf93bfe0a |
+| gp-matern12 model      | ea851543bc06b7ca | 2a12147f489372a1 | beebaf027cfe7a70 | 46beb2c3302d3d68 | 48c41d7b4cb83a75 | dd194f8d55ac4e8b | c5921757366a1180 | 57c92e7dd6dba082 | 21d23bd74606c229 |
+| gp-matern12 batch      | 60ba7e42986f842e | afa881afdf169ffe | f61dcba2448ded11 | 2a36bbb9dbe1d986 | 6e00b6a519f68971 | 6e00b6a519f68971 | 9298e4ad500ce168 | e3e57f92fb8d7443 | 7d864314cdf560ff |
+| gp-matern32            | 03066455003d7df7 | f4c49d5c4fd7edda | 2a98418556cb39e1 | 710809cd4f31ce7e | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 5346a4ac3a9fb082 | 0e42009aae37b1a3 | 415c32e64ea7e125 |
+| gp-matern32 infer      | a89afc94af5f084c | d4ebe9e3a969d687 | 9b2c58c951e46aa6 | e01432f62e53b456 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e0a8a2dff9f3e703 | cebcbbd1a0cf26a5 | 59c1f19475065932 |
+| gp-matern32 model      | 2f0aa7aa6d573e8f | 643600b947937792 | 61ee8e6b6cb8b86d | 888d111afe6ab161 | 5e0b49391c46c389 | 1d3a19b8a625eff3 | 95b09e16e1e4201d | dbc28b4a4abe1085 | 41ff5d5c846cfe7d |
+| gp-matern32 batch      | 4d0c75f26ce30a17 | e0f8d36884ec439b | a696dd8895d78928 | 0e1eaf22f908fce3 | 9dc26cf63aee002d | 9dc26cf63aee002d | 314fbd59f78d11be | 6245f5a144c11e87 | 07269e71c177f0e5 |
+| gp-matern52-ard        | 68f9bac4021de057 | e7965892a63545e5 | 5a0369e0406e8d1a | fd640b7c289a6327 | 1991a044f55d7f40 | 1991a044f55d7f40 | c2a1b1e411a6de85 | f05b1867f7b7d159 | 51fb6cf765695237 |
+| gp-matern52-ard infer  | 7ed07da2d9a2b815 | d9e5f730b649eff6 | d616a8cbf56f719b | 74c9cc4f5bcd42f7 | 15773a44eee1c9ad | 15773a44eee1c9ad | 4cb708614a14be4f | de417da177231058 | 5ddd0786ba58e285 |
+| gp-matern52-ard model  | 922c3b283f374ede | 8dd23a27ab3a3f3b | 0a7e88c40917f65f | 07c08e717ae5f13a | 68633fa96ce40d4e | 3ac95409acbe4eac | 4df8669dab247308 | 2b205636e6a38315 | 02a0a5cfde095c5e |
+| gp-matern52-ard batch  | b67e8be0fee4333d | 8d902360cd06f9c6 | de23d37649d275cd | 25546aa3974473f3 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 | 2d242b760df0c661 | 331b54fb97101ccd | 7f3871eaa8cd8b17 |
+
+cells=63 stable=63 moved=0 refused=0
+infer: stable=63
+model: stable=63
+batch: stable=45 n/a=18
+n/a: gp-sample-y batch n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior), gp-sample-y-normalize batch n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)
+wrote /root/leg_out/cpu.json

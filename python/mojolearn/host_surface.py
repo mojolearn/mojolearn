@@ -162,6 +162,7 @@ CLASSICAL_RECORDED = (
     "bench/results/classical_host/2026-09-14-nvidia-h100-b",
     "bench/results/classical_host/2026-09-14-amd-mi300x-b",
     "bench/results/classical_host/2026-09-14-apple-m4-multiclass",
+    "bench/results/classical_host/2026-09-15-apple-m4-neighbors-density",
     # lane/inference-linear-svm (2026-09-15): the 17 saved-model lanes that
     # joined the estimators family's inference lanes, recorded on the M4's
     # Metal set on three fixtures. The NVIDIA and AMD recordings of these
@@ -171,6 +172,10 @@ CLASSICAL_RECORDED = (
     # lane/inference-forecast-umap-pca (2026-09-15): pca-full-whiten and umap,
     # recorded on the M4's Metal set; both bind families the gate builds.
     "bench/results/classical_host/2026-09-15-apple-m4-umap-pca",
+    # lane/inference-svm (2026-09-15): svc-linear, svc-poly, svr and
+    # svr-linear, recorded on the M4's Metal set on all nine fixtures. The
+    # NVIDIA and AMD recordings are owed to the next release record.
+    "bench/results/classical_host/2026-09-15-apple-m4-svm",
 )
 
 #: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
@@ -180,6 +185,29 @@ CLASSICAL_RECORDED = (
 #: The workflow reading this list is owed to its owner.
 FORECAST_RECORDED = (
     "bench/results/classical_host/2026-09-15-apple-m4-arima",
+)
+
+#: The iforest, GMM and HDBSCAN saved-model recordings (the neighbors and
+#: density inference lane, 2026-09-15), checked with
+#: `tools/classical_host_gate.py check` like CLASSICAL_RECORDED but kept apart
+#: from it, as FORECAST_RECORDED is: the GMM and HDBSCAN models bind the
+#: unrouted mixture_infer and hdbscan_infer families, which the CPU identity
+#: gate workflow does not build today. The workflow reading this list is owed
+#: to its owner.
+INFERENCE_ONLY_RECORDED = (
+    "bench/results/classical_host/2026-09-15-apple-m4-iforest-gmm-hdbscan",
+    "bench/results/classical_host/2026-09-15-apple-m4-gp-gmm-sample",
+)
+
+#: The saved IVF-Flat index and embedding table recordings
+#: (lane/inference-embedding-ivf-cholesky, 2026-09-15), checked with
+#: `tools/classical_host_gate.py check` like FORECAST_RECORDED and kept apart
+#: from CLASSICAL_RECORDED for the same reason: they bind
+#: `_mojolearn_ivf_search_host` and `_mojolearn_embedding_infer_host`,
+#: families with no route, which the CPU identity gate workflow does not build
+#: today. The workflow reading this list is owed to its owner.
+SEARCH_LOOKUP_RECORDED = (
+    "bench/results/classical_host/2026-09-15-apple-m4-ivf-embedding",
 )
 
 #: The forest inference recordings: every directory under this root whose
@@ -279,6 +307,16 @@ TRAINING_LANE_NAMES = {
     "gp-matern12": "the Gaussian process with a Matern kernel at nu 0.5",
     "gp-matern32": "the Gaussian process with a Matern kernel at nu 1.5",
     "gp-matern52-ard": "the Gaussian process with an ARD Matern kernel at nu 2.5",
+    # lane/cpu-training-small-gaps (2026-09-15): normalize_y=True, the folds
+    # through the preprocessing host binding's standard_fit and standard_transform.
+    "gp-normalize-y": "the Gaussian process with normalized targets",
+    # Gaussian process classification (lane/gaussian-process-classifier,
+    # 2026-09-15): gaussian_process/host/gpc_oracle.mojo over the gp oracle's
+    # kernel matrix, the Cholesky oracle and gemm_oracle, the Newton steps in
+    # gaussian_process/host/gpc_steps.mojo (the GPU path compiles the same
+    # file). No GPU record carries these lanes yet, so their cells are OWED.
+    "gpc": "the binary Gaussian process classifier",
+    "gpc-multiclass": "the one-vs-rest Gaussian process classifier",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
     # variants of families that already had a host path, every one in the
     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
@@ -309,6 +347,9 @@ TRAINING_LANE_NAMES = {
     "elasticnet-l2end-no-intercept": "elasticnet at the l2 end without an intercept",
     "holtwinters-multiplicative": "multiplicative Holt-Winters",
     "svc-linear": "the linear SVC",
+    # lane/cpu-training-small-gaps (2026-09-15): SVC(kernel='poly') through the
+    # svm host binding's svc_fit and svc_predict (degree and coef0 in params).
+    "svc-poly": "the polynomial SVC",
     "iforest-tuned": "the tuned isolation forest",
     # Same batch, each needing a host restatement it did not have: the
     # cosine, manhattan, chebyshev and minkowski k-NN metrics
@@ -466,6 +507,12 @@ TRAINING_LANE_NAMES = {
     # with the querywise target restated in gbdt/host/gbdt_oracle_query.mojo,
     # from the same binding.
     "gbdt-query-rmse": "gradient boosting with the QueryRMSE ranking loss on query groups",
+    # lane/gbdt-learning-to-rank stage 3 (2026-09-15): the PairLogit ranking
+    # loss on generated and explicit pairs trains through
+    # gbdt/host/gbdt_oracle_losses.mojo with the pairwise target restated in
+    # gbdt/host/gbdt_oracle_pair.mojo and the pairs of gbdt/data/pairs.mojo,
+    # from the same binding.
+    "gbdt-pair-logit": "gradient boosting with the PairLogit ranking loss on generated and explicit pairs",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -660,6 +707,10 @@ TRAINING_LANE_NAMES = {
     # own host binding, under both L2 metrics.
     "ivf": "the IVF-Flat index",
     "ivf-euclidean": "the IVF-Flat index under euclidean distance",
+    # lane/inference-embedding-ivf-cholesky stage 2 (2026-09-15): the rows
+    # added to a built index by IVFIndex.extend. No GPU record carries the
+    # lane yet, so every cell is OWED against the record.
+    "ivf-extend": "extending a built IVF-Flat index",
     # The GPU byte LM trainer's lanes (same branch): SmallByteLanguageModelTrainer,
     # stateless and on its resident session, whose single-device entries a
     # CPU-only install serves from the byte LM host binding's step, loss and
@@ -751,12 +802,23 @@ FAMILIES = (
         forest_kinds=(
             "rf_classifier", "rf_regressor", "et_classifier", "et_regressor",
             "gbdt_symmetric", "gbdt_depthwise", "gbdt_lossguide", "gbdt_rmse",
+            # lane/inference-gbdt-modes (2026-09-15): saved OrderedRMSE,
+            # ExperimentalTwoLevelFeatureFreq, pointwise Bayesian eval and
+            # one-hot categorical models through HostGBDT. Their CPU
+            # predictions read IDENTICAL against the 166-lane GPU columns
+            # (identity_break MOJOLEARN_IDENTITY_HOST_INFER on the
+            # gbdt-ordered-rmse, gbdt-feature-freq,
+            # gbdt-pointwise-l2-bayesian-eval and gbdt-categorical-ctr lanes);
+            # their forest gate fixtures are OWED to the next release record.
+            "gbdt_ordered_rmse", "gbdt_feature_freq", "gbdt_pointwise_bayesian_eval",
+            "gbdt_categorical_onehot",
         ),
         classes=(
             "RandomForestClassifier", "RandomForestRegressor",
             "ExtraTreesClassifier", "ExtraTreesRegressor", "GradientBoosting",
+            "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="random forests, Extra Trees and the four gradient boosting variants",
+        display="random forests, Extra Trees and eight gradient boosting variants",
         host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo"),
         exports=(
             "forest_host_numeric_mode", "forest_host_vendor", "forest_host_column",
@@ -875,13 +937,19 @@ FAMILIES = (
             "par-queries-knn", "par-queries-radius", "par-reference-knn",
             "par-reference-knn-reg",
         ),
-        inference_lanes=("knn", "knn-clf", "knn-reg"),
+        # The neighbors and density inference lane (2026-09-15) adds every
+        # k-NN metric, the ball cover, the distance-weighted vote and mean
+        # and RadiusNeighbors on its four metrics, all from a saved model.
+        inference_lanes=("knn", "knn-clf", "knn-reg", "knn-sqeuclidean", "knn-manhattan",
+                         "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
+                         "knn-clf-distance", "knn-reg-distance", "radius", "radius-manhattan",
+                         "radius-chebyshev", "radius-minkowski-p3"),
         forest_kinds=(),
         classes=(
             "NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans",
             "RadiusNeighbors",
         ),
-        display="nearest neighbors, k-NN classification and k-NN regression",
+        display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting and radius neighbors",
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
             "cluster/host/kmeans_oracle.mojo",
@@ -955,6 +1023,8 @@ FAMILIES = (
             "standard-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
             "minmax-scaler", "minmax-scaler-clip", "lasso", "elasticnet",
             "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler", "pca-full-whiten",
+            "kde-tophat-sqeuclidean", "kde-epanechnikov-l1", "kde-exponential-chebyshev",
+            "kde-linear-cosine", "kde-cosine-minkowski", "kde-weighted",
         ),
         forest_kinds=(),
         classes=(
@@ -963,7 +1033,7 @@ FAMILIES = (
             "Lasso", "ElasticNet", "KernelRidge", "Nystroem", "RBFSampler",
             "AgglomerativeClustering",
         ),
-        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
+        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density on every kernel, metric and weighting, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
         # lane/inference-transductive-predict (2026-09-15): `dbscan_fit_core`
         # (the fit's core mask for DBSCAN(prediction_data=True)) and
         # `labeled_reference_predict`, the out-of-sample labels of DBSCAN
@@ -1140,11 +1210,14 @@ FAMILIES = (
         routes="_mojolearn_svm",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear"),
-        inference_lanes=("svc",),
+        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear", "svc-poly"),
+        # The neighbors and density inference lane (2026-09-15): a saved
+        # IsolationForest scores through iforest_run, the same forest rebuild
+        # every GPU scoring call runs (DEVIATION 874).
+        inference_lanes=("svc", "svc-linear", "svc-poly", "svr", "svr-linear", "iforest", "iforest-tuned"),
         forest_kinds=(),
         classes=("SVC", "IsolationForest", "SVR"),
-        display="SVC",
+        display="SVC and the isolation forest",
         host_modules=(
             "svm/host/smo_oracle.mojo", "gemm/host/gemm_oracle.mojo",
             "isolation_forest/checks/if_oracle.mojo",
@@ -1247,20 +1320,26 @@ FAMILIES = (
         routes="_mojolearn_gp",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard"),
+        # GaussianProcessClassifier joined on
+        # lane/gaussian-process-classifier (2026-09-15): gpc_fit and
+        # gpc_predict under the GPU binding's contract.
+        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
+                        "gpc", "gpc-multiclass"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("GaussianProcessRegressor",),
-        display="the Gaussian process regressor",
+        classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
+        display="the Gaussian process regressor and classifier",
         host_modules=(
             "gaussian_process/host/gpr_oracle.mojo",
+            "gaussian_process/host/gpc_oracle.mojo",
+            "gaussian_process/host/gpc_steps.mojo",
             "cholesky/host/chol_oracle.mojo",
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
-            "gpr_fit", "gpr_predict", "cholesky_profile_jitter",
+            "gpr_fit", "gpr_predict", "gpr_sample_y", "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
@@ -1330,10 +1409,46 @@ FAMILIES = (
             "mixture_host_column", "mixture_host_sabotage",
             "mixture_vendor", "mixture_numeric_mode", "gmm_fit",
             "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
-            "gmm_score_bic_aic",
+            "gmm_score_bic_aic", "gmm_sample",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
+    ),
+    dict(
+        # The neighbors and density inference lane (2026-09-15): the
+        # INFERENCE-ONLY mixture binding a wheel ships. It registers the four
+        # scoring entries (bindings/mixture_host_scoring.mojo, the same
+        # functions the reference binding above registers) and no fit, so
+        # gmmh_fit and the starts are not compiled in; the neural family's
+        # pattern. `routes` stays None (the reference binding keeps the
+        # route); a saved model is served through `mojolearn.host_model`,
+        # whose host class binds this file, as lane/inference-linear-svm
+        # serves the scalers through the estimators binding.
+        family="mixture_infer",
+        binding="_mojolearn_mixture_infer_host",
+        routes=None,
+        loaded_by="python/mojolearn/_classical_host.py (mojolearn.host_model)",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("gmm", "gmm-random-init", "gmm-sample", "gmm-random-init-sample"),
+        forest_kinds=(),
+        classes=("GaussianMixture",),
+        display="the Gaussian mixture's scores, probabilities, labels and samples",
+        host_modules=(
+            "bindings/mixture_host_scoring.mojo",
+            "mixture/host/gmm_host_oracle.mojo",
+            "mixture/checks/sample.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "mixture_infer_host_numeric_mode", "mixture_infer_host_vendor",
+            "mixture_infer_host_column", "mixture_infer_host_sabotage",
+            "mixture_vendor", "mixture_numeric_mode",
+            "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
+            "gmm_score_bic_aic", "gmm_sample",
+        ),
+        gate="tools/classical_host_gate.py",
+        ships_in_wheel=True,
     ),
     dict(
         # CPU training for the workstream D estimators
@@ -1372,6 +1487,71 @@ FAMILIES = (
         ships_in_wheel=False,
     ),
     dict(
+        # The neighbors and density inference lane (2026-09-15): the
+        # INFERENCE-ONLY gp binding a wheel ships, gpr_predict from a saved
+        # model (bindings/gp_host_predict.mojo, the function the reference
+        # binding registers) and no fit, log marginal likelihood or Cholesky
+        # door. normalize_y's scale-back is host Python. Loaded like
+        # mixture_infer.
+        family="gp_infer",
+        binding="_mojolearn_gp_infer_host",
+        routes=None,
+        loaded_by="python/mojolearn/_classical_host.py (mojolearn.host_model)",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
+                         "gpc", "gpc-multiclass"),
+        forest_kinds=(),
+        classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
+        display="the Gaussian process regressor's predictive mean and std, normalized targets included, and the Gaussian process classifier's labels and probabilities",
+        host_modules=(
+            "bindings/gp_host_predict.mojo",
+            "gaussian_process/host/gpr_oracle.mojo",
+            "gaussian_process/host/gpc_oracle.mojo",
+            "gaussian_process/host/gpc_steps.mojo",
+        ),
+        exports=(
+            "gp_infer_host_numeric_mode", "gp_infer_host_vendor",
+            "gp_infer_host_column", "gp_infer_host_sabotage",
+            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict",
+        ),
+        gate="tools/classical_host_gate.py",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # The neighbors and density inference lane (2026-09-15): the
+        # INFERENCE-ONLY hdbscan binding a wheel ships, approximate_predict,
+        # membership_vector and all_points_membership_vectors from a saved
+        # model (bindings/hdbscan_host_predict.mojo, the same functions the
+        # reference binding registers) and no fit, prediction data
+        # generation or tree building. Loaded like mixture_infer.
+        family="hdbscan_infer",
+        binding="_mojolearn_hdbscan_infer_host",
+        routes=None,
+        loaded_by="python/mojolearn/_classical_host.py (mojolearn.host_model)",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("hdbscan", "hdbscan-leaf"),
+        forest_kinds=(),
+        classes=(
+            "hdbscan.approximate_predict", "hdbscan.membership_vector",
+            "hdbscan.all_points_membership_vectors",
+        ),
+        display="HDBSCAN's approximate_predict, membership_vector and all_points_membership_vectors",
+        host_modules=(
+            "bindings/hdbscan_host_predict.mojo",
+            "hdbscan/host/hdbscan_host_oracle.mojo",
+        ),
+        exports=(
+            "hdbscan_infer_host_numeric_mode", "hdbscan_infer_host_vendor",
+            "hdbscan_infer_host_column", "hdbscan_infer_host_sabotage",
+            "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_approximate_predict",
+            "hdbscan_membership_vector", "hdbscan_all_points_membership_vectors",
+        ),
+        gate="tools/classical_host_gate.py",
+        ships_in_wheel=True,
+    ),
+    dict(
         # Workstream E batch 3 (2026-09-14): the GradientBoosting family's
         # host binding. It routes `_mojolearn_gbdt` on a CPU-only install
         # with the GPU binding's fit, predict, model-dim and sigmoid names;
@@ -1399,7 +1579,7 @@ FAMILIES = (
             "gbdt-ordered-rmse", "gbdt-feature-freq",
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
-            "gbdt-query-rmse",
+            "gbdt-query-rmse", "gbdt-pair-logit",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1407,14 +1587,15 @@ FAMILIES = (
             "GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor",
             "model_selection.cross_val_score", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="gradient boosting on symmetric trees with the pointwise, multiclass and QueryRMSE losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
+        display="gradient boosting on symmetric trees with the pointwise, multiclass, QueryRMSE and PairLogit losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
             "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
             "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
             "gbdt/host/gbdt_oracle_pointwise.mojo", "gbdt/host/gbdt_oracle_onehot.mojo",
-            "gbdt/host/gbdt_oracle_query.mojo",
+            "gbdt/host/gbdt_oracle_query.mojo", "gbdt/host/gbdt_oracle_pair.mojo",
+            "gbdt/data/pairs.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(
@@ -1611,6 +1792,37 @@ FAMILIES = (
         ships_in_wheel=False,
     ),
     dict(
+        # lane/inference-embedding-ivf-cholesky (2026-09-15): public CPU
+        # lookup in a saved embedding table, with no backward in the binary.
+        # The reference embedding family above carries the backward fold and
+        # stays out of the wheels; this binding registers embedding_forward
+        # from the same source (bindings/embedding_host_forward.mojo) and
+        # ships. It serves `_mojolearn_embedding` on a CPU-only install when
+        # the reference binding is not built.
+        family="embedding_infer",
+        binding="_mojolearn_embedding_infer_host",
+        routes=None,
+        serves=("_mojolearn_embedding",),
+        loaded_by="_backend._HOST_INFERENCE_MODULES and python/mojolearn/_classical_host.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("embedding",),
+        forest_kinds=(),
+        classes=("Embedding",),
+        display="Embedding lookup in a saved table",
+        host_modules=(
+            "embedding/host/embedding_host.mojo", "bindings/embedding_host_forward.mojo",
+            "embedding/checks/embedding_oracle.mojo",
+        ),
+        exports=(
+            "embedding_infer_host_numeric_mode", "embedding_infer_host_vendor",
+            "embedding_infer_host_column", "embedding_infer_host_sabotage",
+            "embedding_vendor", "embedding_numeric_mode", "embedding_forward",
+        ),
+        gate="tools/classical_host_gate.py and tools/identity_break.py",
+        ships_in_wheel=True,
+    ),
+    dict(
         # lane/cpu-training-embedding-ivf (2026-09-15): IVFIndex's host
         # binding. It routes `_mojolearn_ivf` on a CPU-only install with the
         # GPU binding's whole surface (ivf_flat_build_and_search and the two
@@ -1623,7 +1835,7 @@ FAMILIES = (
         routes="_mojolearn_ivf",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("ivf", "ivf-euclidean"),
+        training_lanes=("ivf", "ivf-euclidean", "ivf-extend"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("IVFIndex",),
@@ -1638,10 +1850,43 @@ FAMILIES = (
         exports=(
             "ivf_host_numeric_mode", "ivf_host_vendor", "ivf_host_column",
             "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
-            "ivf_flat_build_and_search",
+            "ivf_flat_build_and_search", "ivf_flat_build", "ivf_flat_search",
+            "ivf_flat_extend",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
+    ),
+    dict(
+        # lane/inference-embedding-ivf-cholesky (2026-09-15): public CPU
+        # search over a saved, GPU-built IVF-Flat index, with no build in the
+        # binary. The reference ivf family above carries the k-means
+        # quantizer fit and stays out of the wheels; this binding registers
+        # ivf_flat_search from the same source (bindings/ivf_host_search.mojo)
+        # and ships. It serves `_mojolearn_ivf` on a CPU-only install when the
+        # reference binding is not built.
+        family="ivf_search",
+        binding="_mojolearn_ivf_search_host",
+        routes=None,
+        serves=("_mojolearn_ivf",),
+        loaded_by="_backend._HOST_INFERENCE_MODULES and python/mojolearn/_classical_host.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("ivf", "ivf-euclidean", "ivf-extend"),
+        forest_kinds=(),
+        classes=("IVFIndex",),
+        display="IVF-Flat search over a saved index and extending it",
+        host_modules=(
+            "ivf/host/ivf_host.mojo", "bindings/ivf_host_search.mojo",
+            "bindings/ivf_index_arrays.mojo",
+            "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo",
+        ),
+        exports=(
+            "ivf_search_host_numeric_mode", "ivf_search_host_vendor",
+            "ivf_search_host_column", "ivf_search_host_sabotage",
+            "ivf_vendor", "ivf_numeric_mode", "ivf_flat_search", "ivf_flat_extend",
+        ),
+        gate="tools/classical_host_gate.py and tools/identity_break.py",
+        ships_in_wheel=True,
     ),
     dict(
         # lane/inference-forecast-umap-pca (2026-09-15): public CPU inference
@@ -1922,6 +2167,8 @@ def as_dict():
         forest_kinds=forest_kinds(),
         classical_recorded=list(CLASSICAL_RECORDED),
         forecast_recorded=list(FORECAST_RECORDED),
+        inference_only_recorded=list(INFERENCE_ONLY_RECORDED),
+        search_lookup_recorded=list(SEARCH_LOOKUP_RECORDED),
         classical_gpu_columns=list(CLASSICAL_GPU_COLUMNS),
         training_gpu_columns=list(TRAINING_GPU_COLUMNS),
         training_fix_columns=list(TRAINING_FIX_COLUMNS),

@@ -1,0 +1,117 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 164 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_svm_host'] commit=b5d4417d066e7bdbbfbb00d142f38631ec8d0fb5
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    amd-mi325x-gfx942: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-7713-64-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    amd-mi325x-gfx942: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-7713-64-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-7713-64-core-processor: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| hdbscan-leaf/base            | IDENTICAL x4 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 |
+| hdbscan-leaf/dupes           | IDENTICAL x4 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 |
+| hdbscan-leaf/ties            | IDENTICAL x4 | 41045554964e4bd8 | 41045554964e4bd8 | 41045554964e4bd8 | 41045554964e4bd8 |
+| hdbscan/base                 | IDENTICAL x4 | 1032d54b827b0e0c | 1032d54b827b0e0c | 1032d54b827b0e0c | 1032d54b827b0e0c |
+| hdbscan/dupes                | IDENTICAL x4 | 1032d54b827b0e0c | 1032d54b827b0e0c | 1032d54b827b0e0c | 1032d54b827b0e0c |
+| hdbscan/ties                 | IDENTICAL x4 | 444bc82f0a607cfb | 444bc82f0a607cfb | 444bc82f0a607cfb | 444bc82f0a607cfb |
+
+summary: IDENTICAL=6
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| hdbscan-leaf/base            | infer  | OWED x2      | 72404979b3191f8d | n/a:transductive | n/a:transductive | 72404979b3191f8d |
+| hdbscan-leaf/base            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0b290a1896b58eb4 |
+| hdbscan-leaf/base            | batch  | OWED x2      | 88b044992cd41342 | n/a:transductive | n/a:transductive | 88b044992cd41342 |
+| hdbscan-leaf/dupes           | infer  | OWED x2      | 72404979b3191f8d | n/a:transductive | n/a:transductive | 72404979b3191f8d |
+| hdbscan-leaf/dupes           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0b290a1896b58eb4 |
+| hdbscan-leaf/dupes           | batch  | OWED x2      | 88b044992cd41342 | n/a:transductive | n/a:transductive | 88b044992cd41342 |
+| hdbscan-leaf/ties            | infer  | OWED x2      | e796aec36f4eda67 | n/a:transductive | n/a:transductive | e796aec36f4eda67 |
+| hdbscan-leaf/ties            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 51bd242c9ffc7f2f |
+| hdbscan-leaf/ties            | batch  | OWED x2      | cad94e47463e9d27 | n/a:transductive | n/a:transductive | cad94e47463e9d27 |
+| hdbscan/base                 | infer  | OWED x2      | a104cfe065750353 | n/a:transductive | n/a:transductive | a104cfe065750353 |
+| hdbscan/base                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | a2e0a25fe5cde3f8 |
+| hdbscan/base                 | batch  | OWED x2      | d49a36bc7e6177b4 | n/a:transductive | n/a:transductive | d49a36bc7e6177b4 |
+| hdbscan/dupes                | infer  | OWED x2      | a104cfe065750353 | n/a:transductive | n/a:transductive | a104cfe065750353 |
+| hdbscan/dupes                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | a2e0a25fe5cde3f8 |
+| hdbscan/dupes                | batch  | OWED x2      | d49a36bc7e6177b4 | n/a:transductive | n/a:transductive | d49a36bc7e6177b4 |
+| hdbscan/ties                 | infer  | OWED x2      | 324146f46faedded | n/a:transductive | n/a:transductive | 324146f46faedded |
+| hdbscan/ties                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0221975f3d53a433 |
+| hdbscan/ties                 | batch  | OWED x2      | c67a80723b373687 | n/a:transductive | n/a:transductive | c67a80723b373687 |
+
+summary (infer/model): OWED=12
+summary (batch): OWED=6
+summary (rlpair): 
+require-columns 4 over ['hdbscan', 'hdbscan-leaf']: OK (18 OWED)
+OWED hdbscan-leaf/base infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan-leaf/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan-leaf/base batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan-leaf/dupes infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan-leaf/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan-leaf/dupes batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan-leaf/ties infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan-leaf/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan-leaf/ties batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan/base infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan/base batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan/dupes infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan/dupes batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan/ties infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-7713-64-core-processor)
+OWED hdbscan/ties batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-amd-epyc-7713-64-core-processor)
+summary (owed): OWED=18; the next release record owes exactly these cell parts; wrote bench/results/identity_break/2026-09-15_inference-iforest-gmm-hdbscan/owed.hdbscan.json

@@ -1,0 +1,17 @@
+python/mojolearn/host:
+total 2764
+-rwxr-xr-x 1 root root 583160 Sep 15 17:13 _mojolearn_core_host.so
+-rwxr-xr-x 1 root root 635152 Sep 15 17:13 _mojolearn_estimators_host.so
+-rwxr-xr-x 1 root root 361944 Sep 15 17:13 _mojolearn_hdbscan_host.so
+-rwxr-xr-x 1 root root 205688 Sep 15 17:14 _mojolearn_hdbscan_infer_host.so
+-rwxr-xr-x 1 root root 408688 Sep 15 17:13 _mojolearn_mixture_host.so
+-rwxr-xr-x 1 root root 222368 Sep 15 17:14 _mojolearn_mixture_infer_host.so
+-rwxr-xr-x 1 root root 395080 Sep 15 17:13 _mojolearn_svm_host.so
+
+python/mojolearn/host-sabotage:
+total 2336
+-rwxr-xr-x 1 root root 583160 Sep 15 17:15 _mojolearn_core_host.so
+-rwxr-xr-x 1 root root 635152 Sep 15 17:15 _mojolearn_estimators_host.so
+-rwxr-xr-x 1 root root 361944 Sep 15 17:15 _mojolearn_hdbscan_host.so
+-rwxr-xr-x 1 root root 404592 Sep 15 17:14 _mojolearn_mixture_host.so
+-rwxr-xr-x 1 root root 395080 Sep 15 17:14 _mojolearn_svm_host.so

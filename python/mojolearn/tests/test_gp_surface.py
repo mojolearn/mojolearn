@@ -171,9 +171,9 @@ def main(out=sys.stdout):
     rep.raises(arm, NotImplementedError, "n_restarts_optimizer",
                "n_restarts_optimizer=3 is refused",
                GaussianProcessRegressor, n_restarts_optimizer=3)
-    rep.raises(arm, NotImplementedError, "DEVIATION 1764",
-               "normalize_y=True is refused",
-               GaussianProcessRegressor, normalize_y=True)
+    rep.raises(arm, TypeError, "normalize_y must be a bool",
+               "a non-bool normalize_y is refused by name",
+               GaussianProcessRegressor, normalize_y="yes")
     rep.raises(arm, NotImplementedError, "copy_X_train",
                "copy_X_train=False is refused",
                GaussianProcessRegressor, copy_X_train=False)
@@ -189,8 +189,8 @@ def main(out=sys.stdout):
     rep.raises(arm, NotImplementedError, "DEVIATION 1759",
                "predict(return_cov=True) is refused",
                gp.predict, x, **{"return_cov": True})
-    rep.raises(arm, NotImplementedError, "NOT IMPLEMENTED",
-               "sample_y is refused with the closure condition",
+    rep.raises(arm, ValueError, "call fit() first",
+               "sample_y on an unfitted model (the prior arm) is refused",
                gp.sample_y, x)
     # The two below are MOJO refusals and are the reason the surface judges
     # neither value: they would be unreachable if Python judged first.

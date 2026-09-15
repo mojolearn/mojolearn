@@ -1,0 +1,1 @@
+gate: bench/results/classical_host/2026-09-15-apple-m4-iforest-gmm-hdbscan/gmm/base host predict failed: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_mixture_infer_host.so is not built. Build it with bindings/build_mixture_infer_host.sh
