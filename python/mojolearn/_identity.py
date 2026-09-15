@@ -40,8 +40,8 @@ current directory cannot shadow the installed wheel, or the reverse.
 
 WHICH LANES. Every lane the three shipped columns carry, on a GPU box. On a
 CPU-only install (`mojolearn.vendor()` is 'cpu') only the lanes the manifest
-lists as trained on a CPU (`host_surface.covered_lanes()`): every other lane
-refuses by name there, and IDENTICAL x3 on a lane this box did not run is
+lists for small public reference checks (`host_surface.public_reference_lanes()`):
+full training verification uses the source harness, and IDENTICAL x3 on a lane this box did not run is
 not a pass for this box. `--lanes` narrows either set; it cannot name a lane
 the record does not carry, because there would be nothing to diff against.
 
@@ -303,10 +303,9 @@ def cmd_identity(args):
     record = host_surface.training_gpu_column_record()
     record_lanes, record_fixtures = _column_lanes_and_fixtures([p for _, p, _ in cols])
     cpu_only = _backend.vendor() == "cpu"
-    # A covered lane in TRAINING_FIX_LANES is diffed against the fix record by
-    # the gate, not against the record this command ships, so a CPU-only
-    # install does not run it here (host_surface.record_covered_lanes()).
-    lanes = [l for l in record_lanes if not cpu_only or l in host_surface.record_covered_lanes()]
+    # Public CPU checks use only the small probes supported by inference
+    # wheel dependencies. Full source verification has its own lane list.
+    lanes = [l for l in record_lanes if not cpu_only or l in host_surface.public_reference_lanes()]
     if args.lanes:
         asked = [x for x in args.lanes.split(",") if x]
         unknown = [x for x in asked if x not in record_lanes]
@@ -317,8 +316,8 @@ def cmd_identity(args):
         refused = [x for x in asked if x not in lanes]
         if refused:
             return _finish(args, _verify.EXIT_USAGE, "USAGE",
-                           f"--lanes names lanes with no CPU training path on this CPU-only "
-                           f"install: {refused}; the manifest covers {host_surface.record_covered_lanes()} "
+                           f"--lanes names lanes outside the public CPU reference checks on this "
+                           f"install: {refused}; the inference wheel supports reference checks for {host_surface.public_reference_lanes()} "
                            f"against this record")
         lanes = [l for l in lanes if l in asked]
     fixtures = record_fixtures

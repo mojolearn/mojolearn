@@ -31,6 +31,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -143,6 +144,7 @@ def test_workflow_triggers_on_the_new_files():
         assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 
 
+@reference_training()
 def test_the_five_configurations_fit_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
