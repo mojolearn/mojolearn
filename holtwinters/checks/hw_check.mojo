@@ -3,7 +3,7 @@
 """Holt-Winters: refusals, oracle sanity, device identity, launch
 invariance, signed zero, NaN, reach, and the packed pointer surface.
 
-DEVIATIONS 660-665, 697-699 and 930's gates. (The sentence this replaced
+DEVIATIONS 660-665, 697-699, 930 and 2717's gates. (The sentence this replaced
 said "DEVIATIONS 660-665's gates" and listed nine checks; DEVIATION 699's
 `check_hw_decision_branches` had been added to `main` without being added
 here, and DEVIATION 930's `check_hw_pack_round_trip` is new.) The checks,
@@ -81,6 +81,15 @@ in order:
                                        linesearch_iter_limit = 1 for LS_LIMIT,
                                        both now ASSERTED and not merely
                                        claimed (DEVIATION 961)
+    check_hw_linesearch_limit_keeps_best
+                                       DEVIATION 2717: one BFGS iteration at
+                                       linesearch_iter_limit 1/2/4/8 over 18
+                                       fixtures; the stored point (device and
+                                       oracle) is bit for bit a host replay's
+                                       lowest-loss trial on the limit arm and
+                                       its accepted trial otherwise; REACH and
+                                       NOT-VACUOUS (last != best somewhere)
+                                       asserted
     check_hw_pack_round_trip           DEVIATION 930, and the only gate that
                                        BREAKS THE ROUND TRIP: what
                                        `holtwinters_fit_ptr` packs into one
@@ -116,6 +125,10 @@ measured verdict of every arm):
                         -0.0 survives the clamp
       LS_TIE            the line-search acceptance test loosened to `>=`
       CRIT_ORDER        the two stop criteria tested in the other order
+    UNBUILT, MUST FAIL (added 2026-09-15, no run yet)
+      LS_LAST           DEVIATION 2717 off: the last line-search trial is
+                        stored at the limit; must fail
+                        check_hw_linesearch_limit_keeps_best
     NULL on Apple, RECORDED with the reason (both are other vendors' arms)
       STD_SQRT          std.math.sqrt for the BFGS step size -- on Metal
                         both spellings are the same correctly-rounded sqrt
@@ -205,6 +218,7 @@ from holtwinters.checks.hw_oracle import (
     oracle_sse_at,
 )
 from holtwinters.impl.internal.hw_decompose import host_filter, host_r1qt
+from holtwinters.impl.internal.hw_optim import HW_DEC_LS_LIMIT, HW_LS_INITIAL
 from holtwinters.impl.internal.hw_utils import (
     HW_OPTIM_TPB,
     bound_device,
@@ -216,6 +230,7 @@ from holtwinters.impl.runner import (
     HW_BETA0,
     HW_GAMMA0,
     HW_DEFAULT_EPS,
+    default_optim_params,
     holtwinters_eval,
     holtwinters_optim,
 )
@@ -225,7 +240,14 @@ from holtwinters.impl.tsa.holtwinters_params import (
     SEASONAL_MULTIPLICATIVE,
     criterion_name,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_mul_add,
+    identical_sqrt,
+    numeric_mode_name,
+)
 from solver.checks.record_canon import canon_nan_f32, canon_nan_list
 
 comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -1491,7 +1513,7 @@ def check_hw_decision_branches() raises:
         print("  census THIN (one series only, a bit away from vacuous): " + thin)
 
     # (1b) A BOUNDED REACH SEARCH for the two bits the standard fixtures do
-    # NOT set: LS_LIMIT (bit 2, cuml#888's path) and RHO_ZERO (bit 3, the
+    # NOT set: LS_LIMIT (bit 2, DEVIATION 2717's arm) and RHO_ZERO (bit 3, the
     # second NaN route). Both need a pathological series rather than a
     # pathological parameter, so the honest way to look is to LOOK: 64
     # hashed salts x two seasonal types, all at the standard small size.
@@ -1735,9 +1757,9 @@ def check_hw_decision_branches() raises:
         )
     if n_ls_limit == 0 and ls_salt < 0:
         raise Error(
-            "check_hw_decision_branches REACH FAILURE: LS_LIMIT (cuml#888's"
-            " path, where `x = nx` stores the LAST trial step rather than the"
-            " best one) is set by NO series anywhere in this census -- not by"
+            "check_hw_decision_branches REACH FAILURE: LS_LIMIT (DEVIATION"
+            " 2717's arm, where the lowest-loss trial is stored instead of the"
+            " reference's last trial) is set by NO series anywhere in this census -- not by"
             " the linesearch_iter_limit = 1 override fixture, and not by any of"
             " the 128 natural fits. holtwinters/README.md states the override"
             " fixture reaches the BRANCH; if this line is printing, that"
@@ -2563,6 +2585,294 @@ def check_hw_pack_round_trip() raises:
     )
 
 
+@fieldwise_init
+struct _LSReplay(ImplicitlyCopyable, Movable):
+    """One series' first-iteration line search, replayed on the host."""
+    #: False when the zero-direction guard (DEVIATION 662) returns first
+    var ran: Bool
+    var hit_limit: Bool
+    var n_trials: Int
+    #: the point the fix must store: the lowest-loss trial on the limit arm,
+    #: the accepted (last) trial on a normal exit
+    var exp1: Float32
+    var exp2: Float32
+    var exp3: Float32
+    #: the last trial, which is what the reference (and LS_LAST) stores
+    var last1: Float32
+    var last2: Float32
+    var last3: Float32
+
+
+@always_inline
+def _rdot3(
+    a1: Float32, a2: Float32, a3: Float32, b1: Float32, b2: Float32, b3: Float32
+) -> Float32:
+    """The pinned 3-term dot, written here again so the replay shares no
+    line with the kernel or the oracle: first product stored, two fused."""
+    var t = ftz(a1 * b1)
+    t = ftz(identical_mul_add(a2, b2, t))
+    t = ftz(identical_mul_add(a3, b3, t))
+    return t
+
+
+def _bits_differ(a: Float32, b: Float32) -> Bool:
+    return bitcast[DType.uint32](canon_nan_f32(a)) != bitcast[DType.uint32](canon_nan_f32(b))
+
+
+def _replay_first_linesearch(o: HWOracleFit[DType.float32], s: Int, ls_limit: Int) -> _LSReplay:
+    """DEVIATION 2717's witness. Replays iteration 0 of series `s` from the
+    start parameters (H = I), collecting EVERY trial point and its loss in
+    lists, and selects afterwards by a separate scan: the first index whose
+    loss is strictly below every earlier one. Losses come from
+    `oracle_sse_at`, the only oracle code used; the gradient, direction,
+    step, trials and selection are written here. Exact under IDENTICAL."""
+    var prm = default_optim_params(HW_DEFAULT_EPS)
+    var eps = prm.eps
+    var x1 = HW_ALPHA0
+    var x2 = HW_BETA0
+    var x3 = HW_GAMMA0
+    var two_eps = ftz(eps * Float32(2.0))
+    var g1 = ftz(ftz(oracle_sse_at[DType.float32](o, s, ftz(x1 + eps), x2, x3)
+        - oracle_sse_at[DType.float32](o, s, ftz(x1 - eps), x2, x3)) / two_eps)
+    var g2 = ftz(ftz(oracle_sse_at[DType.float32](o, s, x1, ftz(x2 + eps), x3)
+        - oracle_sse_at[DType.float32](o, s, x1, ftz(x2 - eps), x3)) / two_eps)
+    var g3 = ftz(ftz(oracle_sse_at[DType.float32](o, s, x1, x2, ftz(x3 + eps))
+        - oracle_sse_at[DType.float32](o, s, x1, x2, ftz(x3 - eps))) / two_eps)
+    var one = Float32(1.0)
+    var zero = Float32(0.0)
+    var p1 = -_rdot3(one, zero, zero, g1, g2, g3)
+    var p2 = -_rdot3(zero, one, zero, g1, g2, g3)
+    var p3 = -_rdot3(zero, zero, one, g1, g2, g3)
+    if _rdot3(p1, p2, p3, g1, g2, g3) > zero:
+        p1 = -g1
+        p2 = -g2
+        p3 = -g3
+    var pp = _rdot3(p1, p2, p3, p1, p2, p3)
+    if pp == zero:
+        return _LSReplay(False, False, 0, x1, x2, x3, x1, x2, x3)
+    var step = ftz(HW_LS_INITIAL / identical_sqrt(pp))
+    var cauchy = ftz(prm.linesearch_c * _rdot3(g1, g2, g3, p1, p2, p3))
+    var loss_ref = oracle_sse_at[DType.float32](o, s, x1, x2, x3)
+    var t1 = List[Float32]()
+    var t2 = List[Float32]()
+    var t3 = List[Float32]()
+    var tl = List[Float32]()
+    t1.append(ftz(identical_mul_add(step, p1, x1)))
+    t2.append(ftz(identical_mul_add(step, p2, x2)))
+    t3.append(ftz(identical_mul_add(step, p3, x3)))
+    tl.append(oracle_sse_at[DType.float32](o, s, t1[0], t2[0], t3[0]))
+    var i = 0
+    while i < ls_limit and tl[i] > ftz(identical_mul_add(step, cauchy, loss_ref)):
+        step = ftz(step * prm.linesearch_tau)
+        t1.append(ftz(identical_mul_add(step, p1, x1)))
+        t2.append(ftz(identical_mul_add(step, p2, x2)))
+        t3.append(ftz(identical_mul_add(step, p3, x3)))
+        tl.append(oracle_sse_at[DType.float32](o, s, t1[i + 1], t2[i + 1], t3[i + 1]))
+        i += 1
+    var last = len(tl) - 1
+    var pick = last
+    var hit = i >= ls_limit
+    if hit:
+        pick = 0
+        for j in range(1, len(tl)):
+            if tl[j] < tl[pick]:
+                pick = j
+    return _LSReplay(True, hit, len(tl), t1[pick], t2[pick], t3[pick], t1[last], t2[last], t3[last])
+
+
+def _device_iter0(
+    ctx: DeviceContext,
+    data: List[Float32],
+    seasonal: Int,
+    o: HWOracleFit[DType.float32],
+    ls_limit: Int,
+    mut trace0: List[Float32],
+    mut dec: List[Int32],
+) raises:
+    """One BFGS iteration on the device (`bfgs_iter_limit = 1`) from the
+    oracle's start values, writing iteration 0's stored parameters."""
+    var ts_h = List[Float32]()
+    for t in range(N):
+        for s in range(BATCH):
+            ts_h.append(data[s * N + t])
+    var h_sl = List[Float32]()
+    var h_st = List[Float32]()
+    var a0 = List[Float32]()
+    var b0 = List[Float32]()
+    var g0 = List[Float32]()
+    for s in range(BATCH):
+        h_sl.append(o.start_level[s])
+        h_st.append(o.start_trend[s])
+        a0.append(HW_ALPHA0)
+        b0.append(HW_BETA0)
+        g0.append(HW_GAMMA0)
+    var h_ss = List[Float32]()
+    for i in range(FREQ * BATCH):
+        h_ss.append(o.start_season[i])
+    var ts_d = upload_f32(ctx, ts_h)
+    var sl = upload_f32(ctx, h_sl)
+    var st = upload_f32(ctx, h_st)
+    var ss = upload_f32(ctx, h_ss)
+    var al = upload_f32(ctx, a0)
+    var be = upload_f32(ctx, b0)
+    var ga = upload_f32(ctx, g0)
+    var comps = (N - FREQ) * BATCH
+    var lv = ctx.enqueue_create_buffer[DType.float32](comps)
+    var tv = ctx.enqueue_create_buffer[DType.float32](comps)
+    var sv = ctx.enqueue_create_buffer[DType.float32](comps)
+    var ev = ctx.enqueue_create_buffer[DType.float32](BATCH)
+    var cr = ctx.enqueue_create_buffer[DType.int32](BATCH)
+    var ni = ctx.enqueue_create_buffer[DType.int32](BATCH)
+    var de = ctx.enqueue_create_buffer[DType.int32](BATCH)
+    var itr = ctx.enqueue_create_buffer[DType.float32](3 * BATCH)
+    ctx.synchronize()
+    holtwinters_optim(
+        ctx, ts_d, N, BATCH, FREQ, sl, st, ss, al, be, ga, lv, tv, sv, ev,
+        cr, ni, de, itr, 1, HW_DEFAULT_EPS, seasonal, HW_OPTIM_TPB, 1, ls_limit,
+    )
+    trace0 = download_f32(ctx, itr, 3 * BATCH)
+    dec = download_i32(ctx, de, BATCH)
+    _ = ts_d^
+    _ = sl^
+    _ = st^
+    _ = ss^
+    _ = al^
+    _ = be^
+    _ = ga^
+    _ = lv^
+    _ = tv^
+    _ = sv^
+    _ = ev^
+    _ = cr^
+    _ = ni^
+    _ = de^
+    _ = itr^
+
+
+def check_hw_linesearch_limit_keeps_best() raises:
+    """DEVIATION 2717's gate. For 2 seasonal kinds x 9 fixtures (salt 2 and
+    100-107) x `linesearch_iter_limit` in {1, 2, 4, 8}, one BFGS iteration
+    on the device and in the host oracle, against a host replay that
+    records every trial and selects by its own scan
+    (`_replay_first_linesearch`). Asserted under IDENTICAL, per series:
+      (a) REACH: the LS_LIMIT decision bit (device and oracle) equals the
+          replay's verdict, and at least one series reaches the limit;
+      (b) the stored iteration-0 point (device trace and oracle trace) is
+          BIT FOR BIT the replay's pick: the lowest-loss trial on the limit
+          arm (strict `<`, earliest on a tie), the last trial otherwise;
+      (c) NOT VACUOUS: at least one limit series has a last trial whose
+          bits differ from the best trial's, so the sabotage `LS_LAST`
+          (store the last trial on the device) has a series to fail on.
+    Counts print BEFORE anything raises (DEVIATION 960's lesson). Under
+    FAST and DETERMINISTIC (b) is RECORDED, not raised; (a) and (c) raise in
+    every mode because they are reach facts about the fixture set."""
+    var ctx = DeviceContext()
+    var limits: List[Int] = [1, 2, 4, 8]
+    var n_series = 0
+    var n_ran = 0
+    var n_hit = 0
+    var n_disc = 0
+    var n_bad = 0
+    var first_bad = String("")
+    for k in range(2):
+        var seasonal = SEASONAL_ADDITIVE if k == 0 else SEASONAL_MULTIPLICATIVE
+        for si in range(9):
+            var salt = 2 if si == 0 else 99 + si
+            var sp = spec_additive() if k == 0 else spec_multiplicative()
+            var data = hw_fixture(sp, N, BATCH, FREQ, salt)
+            for li in range(len(limits)):
+                var ls_limit = limits[li]
+                var o = oracle_fit[DType.float32](
+                    data, N, BATCH, FREQ, START_PERIODS, seasonal, HW_DEFAULT_EPS, 1, True, 1, ls_limit
+                )
+                var dtrace = List[Float32]()
+                var ddec = List[Int32]()
+                _device_iter0(ctx, data, seasonal, o, ls_limit, dtrace, ddec)
+                var fixture_desc = _seasonal_str(seasonal) + " salt " + String(salt) + " linesearch_iter_limit " + String(ls_limit)
+                for s in range(BATCH):
+                    n_series += 1
+                    var r = _replay_first_linesearch(o, s, ls_limit)
+                    if not r.ran:
+                        continue
+                    n_ran += 1
+                    if r.hit_limit:
+                        n_hit += 1
+                        if (_bits_differ(r.exp1, r.last1) or _bits_differ(r.exp2, r.last2)
+                                or _bits_differ(r.exp3, r.last3)):
+                            n_disc += 1
+                    var dev_hit = (Int(ddec[s]) & HW_DEC_LS_LIMIT) != 0
+                    var ora_hit = (o.decisions[s] & HW_DEC_LS_LIMIT) != 0
+                    var msg = String("")
+                    if dev_hit != r.hit_limit or ora_hit != r.hit_limit:
+                        msg = (
+                            "LS_LIMIT bit device " + String(dev_hit) + " oracle " + String(ora_hit)
+                            + " replay " + String(r.hit_limit)
+                        )
+                    else:
+                        var d1 = dtrace[0 * BATCH + s]
+                        var d2 = dtrace[1 * BATCH + s]
+                        var d3 = dtrace[2 * BATCH + s]
+                        var q1 = o.iter_trace[0 * BATCH + s]
+                        var q2 = o.iter_trace[1 * BATCH + s]
+                        var q3 = o.iter_trace[2 * BATCH + s]
+                        if _bits_differ(d1, r.exp1) or _bits_differ(d2, r.exp2) or _bits_differ(d3, r.exp3):
+                            msg = (
+                                "device stored (" + hex32(d1) + ", " + hex32(d2) + ", " + hex32(d3)
+                                + ") but the replay selects (" + hex32(r.exp1) + ", " + hex32(r.exp2)
+                                + ", " + hex32(r.exp3) + "); last trial (" + hex32(r.last1) + ", "
+                                + hex32(r.last2) + ", " + hex32(r.last3) + ")"
+                            )
+                        elif _bits_differ(q1, r.exp1) or _bits_differ(q2, r.exp2) or _bits_differ(q3, r.exp3):
+                            msg = (
+                                "host oracle stored (" + hex32(q1) + ", " + hex32(q2) + ", " + hex32(q3)
+                                + ") but the replay selects (" + hex32(r.exp1) + ", " + hex32(r.exp2)
+                                + ", " + hex32(r.exp3) + ")"
+                            )
+                    if msg != "":
+                        n_bad += 1
+                        if first_bad == "":
+                            first_bad = (
+                                fixture_desc + " series " + String(s) + " (" + String(r.n_trials)
+                                + " trials, limit " + ("reached" if r.hit_limit else "not reached") + "): " + msg
+                            )
+    print(
+        "  line-search limit census: " + String(n_series) + " series, " + String(n_ran)
+        + " ran a line search, " + String(n_hit) + " reached the limit, " + String(n_disc)
+        + " of those with a last trial that is not the best trial, " + String(n_bad)
+        + " disagreeing with the replay"
+    )
+    if n_bad > 0:
+        var bad = (
+            "check_hw_linesearch_limit_keeps_best FAILED (sabotage " + hw_sabotage_name() + "): "
+            + String(n_bad) + " series disagree; first: " + first_bad
+        )
+        comptime if IDENTICAL:
+            raise Error(bad)
+        else:
+            print("  RECORDED [" + _mode_name() + "] " + bad)
+    if n_hit == 0:
+        raise Error(
+            "check_hw_linesearch_limit_keeps_best REACH FAILURE: no series in "
+            + String(n_series) + " reached linesearch_iter_limit, so DEVIATION 2717's"
+            " arm is UNCOVERED. Widen the salts or lower the limits; do not remove"
+            " the assertion."
+        )
+    if n_disc == 0:
+        raise Error(
+            "check_hw_linesearch_limit_keeps_best REACH FAILURE: " + String(n_hit)
+            + " series reached the limit and on EVERY one the last trial is the best"
+            " trial bit for bit, so the fix and the reference's last-trial behavior"
+            " agree everywhere here and the LS_LAST sabotage cannot fail. Widen the"
+            " fixture set until a series separates them."
+        )
+    print(
+        "check_hw_linesearch_limit_keeps_best " + ("OK" if IDENTICAL else "REPORT") + " ["
+        + _mode_name() + "]: stored point == replay selection on " + String(n_ran)
+        + " series; limit reached on " + String(n_hit) + ", last != best on " + String(n_disc)
+    )
+    _ = ctx^
+
+
 def main() raises:
     print(
         "== holtwinters/checks/hw_check.mojo [" + _mode_name() + "] sabotage="
@@ -2577,6 +2887,7 @@ def main() raises:
     check_hw_device_equals_oracle()
     check_hw_launch_invariance()
     check_hw_card_is_emitted()
+    check_hw_linesearch_limit_keeps_best()
     check_hw_decision_branches()
     check_hw_pack_round_trip()
     print("== hw_check: ALL OK [" + _mode_name() + "] ==")

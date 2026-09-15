@@ -23,7 +23,7 @@ alpha | beta | gamma), `hw.sse`, `hw.level`, `hw.trend`, `hw.season`;
 ============ (solver/checks/record_canon.mojo, DEVIATION 612's helper,
 ============ IMPORTED) ======================================================
 WHAT THEIRS DOES: no card. Their optimizer can compute NaN (DEVIATION 662's
-header lists the routes; cuml#888) and their multiplicative eval divides by
+header lists the routes) and their multiplicative eval divides by
 `clevel`, which a legal positive series with a negative fitted trend can
 drive through zero.
 WHAT OURS DOES: every float stage is hashed through a COPY whose NaNs are
@@ -499,7 +499,7 @@ def holtwinters_optim(
     # whole block as unreachable because `HoltWintersFitHelper` passes a
     # nullptr `OptimParams`; that is still true of the FIT path, which is
     # untouched. These two exist so a check can reach `OPTIM_BFGS_ITER_LIMIT`
-    # and the `linesearch_iter_limit` branch (cuml#888's path) at the
+    # and the `linesearch_iter_limit` branch (DEVIATION 2717's arm) at the
     # SMALLEST size that reaches them, instead of hunting for a series that
     # fails to converge in 1000 iterations.
     if bfgs_iter_limit > 0:
