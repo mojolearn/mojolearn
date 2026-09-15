@@ -92,6 +92,7 @@ on:
       - "dbscan/host/dbscan_oracle.mojo"
       - "cluster/host/kmeans_oracle.mojo"
       - "metrics/host/metrics_oracle.mojo"
+      - "metrics/host/classification_oracle.mojo"
       - "spectral/host/spectral_oracle.mojo"
       - "umap/host/umap_oracle.mojo"
       - "umap/sparse_graph.mojo"
@@ -109,6 +110,9 @@ on:
       - "gbdt/host/gbdt_oracle_depthwise.mojo"
       - "gbdt/host/gbdt_oracle_lossguide.mojo"
       - "arima/host/arima_oracle.mojo"
+      - "training/host/mlp_oracle.mojo"
+      - "training/checks/loss_oracle.mojo"
+      - "training/checks/optimizer_oracle.mojo"
       - "arima/impl/tsa/arima_common.mojo"
       - "kernel_methods/host/km_host_oracle.mojo"
       - "kernel_methods/checks/random_features.mojo"
@@ -541,7 +545,8 @@ jobs:
       # in xorwow by one extra step before every split fraction (every
       # isolation tree, in kmeans_oracle by one extra unit in every
       # quantized centroid-sum cell, in metrics_oracle by shifting every
-      # slab tree's chunk boundaries by one value, in spectral_oracle by
+      # slab tree's chunk boundaries by one value (classification_oracle's
+      # log loss, regression errors and KL divergence fold through it), in spectral_oracle by
       # seeding the recluster one draw off, in scaler_oracle by the same
       # shifted tree plus the min-max offset's subtraction as an addition,
       # in qn_oracle by walking the solver's dot chains descending, in
@@ -552,6 +557,7 @@ jobs:
       # to be core, in
       # pca_full_oracle by folding every QR trailing-column dot product's
       # lanes serially descending, in
+      # mlp_oracle by walking every MLP row sum descending, in
       # rf_oracle by drawing every bootstrap row from the next Philox
       # subsequence, in gpr_oracle by walking the scaled distance's
       # feature axis descending, in gbdt_oracle by adding 1.0 to the
