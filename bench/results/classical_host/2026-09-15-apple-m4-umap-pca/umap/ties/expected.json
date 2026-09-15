@@ -1,0 +1,33 @@
+{
+  "commit": "ae97a3e0ffe3b1a1abf4dcdabf0a021e1a4e6aae",
+  "estimator": "UMAP",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "ties",
+  "lane": "umap",
+  "model_sha256": "fc7ef4ccd4d719f3139cfea799365e8d3a7fc40056308dec7a7fbe2826e9f5aa",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "cfe8cc2494350a30",
+    "seconds": 0.006104,
+    "transform": {
+      "dtype": "<f4",
+      "sha256": "94f414d40e88d389bf9afb59b5e7981b1fd0c0d834b80f78439bef32ae6daa28",
+      "shape": [
+        64,
+        2
+      ]
+    }
+  },
+  "recorded_at": "2026-09-15T12:54:28-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "cb717abc7fdea535547b185d7f6b53f113cbab5b15e61b6f0f7c62e31ea62f5e"
+}

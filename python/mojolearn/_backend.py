@@ -1037,8 +1037,10 @@ def host_families_built():
 #:     (estimate_x0, the Jones transform, the batched L-BFGS over the
 #:     finite-difference Kalman likelihood, the undifferenced forecast), the
 #:     GPU binding's whole surface; p, q or P above 1, any Q, d + D of 2,
-#:     p + q + k of 0 and an in-sample prediction (start < n_obs) refuse by
-#:     name.
+#:     p + q + k of 0 refuse by name; an in-sample prediction (start < n_obs)
+#:     runs since 2026-09-15. When this reference binding is not built (an
+#:     installed wheel), `_HOST_INFERENCE_MODULES` below routes the family to
+#:     `_mojolearn_forecast_host`, which carries predict and forecast only.
 _HOST_MODULES = host_surface.routed_modules()
 
 #: `_MODULES` name -> an INFERENCE-ONLY host binding that serves the route

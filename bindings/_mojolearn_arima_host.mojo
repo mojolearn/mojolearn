@@ -30,8 +30,10 @@ refuses is refused here in the same sentence), `_refuse_shape`
 checks (`:422-433`) and the forecast's `n_steps` bound (`:536-540`). After
 it, `arima_host_refuse_unrestated` refuses by name the parameter values
 whose arms the host file does not restate (p, q or P above 1, any Q, d + D
-of 2, p + q + k of 0), and `arima_predict` refuses an in-sample prediction
-(`start < n_obs`) by name.
+of 2, p + q + k of 0). Since 2026-09-15 `arima_predict` answers an in-sample
+prediction (`start < n_obs`) through `arima_host_predict`, from
+`bindings/arima_host_predict.mojo`, which the forecast inference binding
+registers too.
 
 The sabotage arm (`arima_host_sabotage`) is
 `arima/host/arima_oracle.mojo::ARIMA_ORACLE_HOST_SABOTAGE`: the

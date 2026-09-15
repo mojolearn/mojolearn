@@ -141,6 +141,18 @@ CLASSICAL_RECORDED = (
     "bench/results/classical_host/2026-09-14-nvidia-h100-b",
     "bench/results/classical_host/2026-09-14-amd-mi300x-b",
     "bench/results/classical_host/2026-09-14-apple-m4-multiclass",
+    # lane/inference-forecast-umap-pca (2026-09-15): pca-full-whiten and umap,
+    # recorded on the M4's Metal set; both bind families the gate builds.
+    "bench/results/classical_host/2026-09-15-apple-m4-umap-pca",
+)
+
+#: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
+#: checked with `tools/classical_host_gate.py check` like CLASSICAL_RECORDED
+#: but kept apart from it: they bind `_mojolearn_forecast_host`, a family
+#: with no route, which the CPU identity gate workflow does not build today.
+#: The workflow reading this list is owed to its owner.
+FORECAST_RECORDED = (
+    "bench/results/classical_host/2026-09-15-apple-m4-arima",
 )
 
 #: The forest inference recordings: every directory under this root whose
@@ -1246,8 +1258,9 @@ FAMILIES = (
         # Workstream E (lane/cpu-training-arima, 2026-09-14): batched
         # ARIMA's host binding. It routes `_mojolearn_arima` on a CPU-only
         # install with the GPU binding's whole surface (fit, predict,
-        # forecast); p, q or P above 1, any Q, d + D of 2, p + q + k of 0
-        # and an in-sample prediction refuse by name. par-arima is declared
+        # forecast); p, q or P above 1, any Q, d + D of 2 and p + q + k of 0
+        # refuse by name (an in-sample prediction runs since 2026-09-15, and
+        # the forecast family below ships the prediction half). par-arima is declared
         # since lane/cpu-training-par-classical (2026-09-15): fit_arima's
         # series shards run as host fits in their own workers.
         family="arima",
@@ -1547,6 +1560,7 @@ def as_dict():
         inference_lanes=inference_lanes(),
         forest_kinds=forest_kinds(),
         classical_recorded=list(CLASSICAL_RECORDED),
+        forecast_recorded=list(FORECAST_RECORDED),
         classical_gpu_columns=list(CLASSICAL_GPU_COLUMNS),
         training_gpu_columns=list(TRAINING_GPU_COLUMNS),
         training_fix_columns=list(TRAINING_FIX_COLUMNS),
