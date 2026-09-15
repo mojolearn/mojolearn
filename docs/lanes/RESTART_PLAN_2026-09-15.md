@@ -4,7 +4,7 @@ Written 2026-09-15 about 09:30 ET by the orchestrator session. Andrew may run ou
 under a different Claude account. This file lets a fresh session pick up every lane with no memory of the
 old one. It is on `main`; branch names below are on `origin`.
 
-**Andrew's instruction at the time of writing: do NOT start new lanes; let each lane below finish.**
+**SUPERSEDED FOR STATUS by docs/lanes/STOP_STATE_2026-09-15.md (Andrew stopped all lanes, Sep 15 ~10:25 ET). Rules below still hold.**
 
 
 
@@ -60,11 +60,11 @@ old one. It is on `main`; branch names below are on `origin`.
   - Two devices in one process means RunPod `MOJOLEARN_GEMM_LEG_GPU_COUNT=2`.
   - Datasets stage from Cloudflare R2 automatically (`R2 STAGED` in the leg log). Never refetch from the internet.
   - Bake commits with `git rev-parse`; never type a full sha.
-- **CI:** the CPU identity gate runs on seven hosted runners, about 95 minutes each, one gate at a time.
+- **CI:** routine pushes use three hosted CPU environments for inference/plumbing checks. Full CPU training verification runs weekly, manually and before publication, with parallel shards and caching. See CPU_GATE_RECOVERY_2026-09-15.md for retained coverage and validation.
   - Never cancel an owed run. Andrew approved cancelling ONLY duplicate or superseded runs (the same commit
     twice, or an older push on a branch that has since been re-pushed).
   - Push branches only when ready for a gate. WIP pushes carry `[skip ci]`.
-- **Merging:** only code that compiled and ran, with evidence and a green seven-runner gate on the branch.
+- **Merging:** only code that compiled and ran, with evidence and a green three-environment CPU gate on the branch.
   Merge origin/main into the branch; if the resolution touched only lists and generated spans, the merge may
   go to main without its own gate. Pushes to main are fast-forwards of a freshly fetched origin/main.
   `--no-verify` is allowed only for the known refusal of the multi_gpu `.tgz` files already on main.

@@ -74,8 +74,8 @@ Six agents run at once: gbdt, arima, cpudecl, harness, multigpu, legsdocs. Each 
 - NEVER cancel an owed run, a queued CI run, or another agent's box. `bash tools/hotaisle_leg.sh status` shows VMs; only reap one whose description names YOUR lane and whose driver is dead.
 
 ## 4. CI
-- The CPU identity gate (seven GitHub-hosted runners) is SLOW; 16 runs were queued at launch. Every push to a branch touching python/ or bindings/ queues more.
-- Push a branch only when it is ready for a gate. Batch your commits. Never cancel queued runs.
+- The routine CPU identity gate uses three hosted environments (Linux x86-64, Linux ARM64, Apple silicon macOS), with inference/plumbing checks on pushes. Full CPU training certification runs weekly, manually, and before publication, with parallel lane shards. See CPU_GATE_RECOVERY_2026-09-15.md. The seven-runner queue described at launch is historical.
+- Push a branch only when it is ready for a gate. Batch your commits. The workflow cancels superseded runs on the same branch only; main runs are never cancelled. Do not manually cancel other owed runs.
 - `gh run list --branch <b> -L 5`, `gh run view <id> --json jobs`, and `gh run view <id> --log-failed | tail -200` for failures. Poll every 5 to 10 minutes, not faster.
 
 ## 5. Evidence rules (the lessons behind them are expensive)
