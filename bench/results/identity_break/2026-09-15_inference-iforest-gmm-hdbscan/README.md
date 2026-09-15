@@ -10,7 +10,10 @@ What changed:
   from the training matrix (DEVIATION 874), so the file holds that matrix and the resolved knobs,
   and the svm host binding's `iforest_run` scores it, which already shipped.
 - `GaussianMixture.save` and `load` (`mojolearn-gmm-1`) and `HDBSCAN.save` and `load`
-  (`mojolearn-hdbscan-1`, prediction data required) for `mojolearn.hdbscan.approximate_predict`.
+  (`mojolearn-hdbscan-2`, prediction data required) for `mojolearn.hdbscan.approximate_predict`,
+  `membership_vector` and `all_points_membership_vectors`. Version 2 adds the tree parents,
+  exemplar indices, exemplar offsets and exemplar count the soft clustering calls read, after
+  main's HDBSCAN soft clustering merged (41f3462db); no version 1 file left this branch.
 - Two INFERENCE-ONLY host bindings that ship in the wheel, `_mojolearn_mixture_infer_host` and
   `_mojolearn_hdbscan_infer_host`, following the neural family's pattern (`routes=None`). The
   scoring and prediction entries moved into `bindings/mixture_host_scoring.mojo` and
@@ -46,20 +49,38 @@ step built nothing; the installed test wheel ran on the Mac instead.
 | `diff.hdbscan.txt`, `owed.hdbscan.json` | hdbscan against the hdbscan-predict Apple column with the record's NVIDIA and AMD columns: `summary: IDENTICAL=6`, `summary (infer/model): OWED=12`, `summary (batch): OWED=6`, require-columns 4 OK (18 OWED) |
 | `cpu-x86.iforest-gmm-hdbscan.sabotage.json`, `diff.sabotage.txt` | `-D MOJOLEARN_HOST_SABOTAGE=1` svm, mixture and hdbscan builds: `summary: DIVERGENT=18`, `summary (infer/model): DIVERGENT=18, ONE-COLUMN=18`, `summary (batch): DIVERGENT=18`; no train, infer or batch cell stays IDENTICAL |
 
-The isolated installed test wheel, on the Mac: a macOS arm64 wheel (1,119,513 bytes) built from
-this tree with no Metal set and no MAX runtime, carrying only the five host bindings this lane
-uses (core 581,400, estimators 534,192, svm 397,224, mixture_infer 232,112, hdbscan_infer 227,696
-bytes), pip-installed into an isolated target and imported from it (`vendor cpu`).
+## After merging main's HDBSCAN soft clustering (41f3462db)
+
+main's identity_break `hdbscan` and `hdbscan-leaf` infer probe now hashes approximate_predict's
+labels and probabilities, `membership_vector` on the same 256 rows and
+`all_points_membership_vectors`. The membership bindings moved into
+`bindings/hdbscan_host_predict.mojo` beside approximate_predict, so the inference-only hdbscan
+binding registers all three and still no fit, prediction data generation or tree building
+(`fit_symbols.txt`, merged section: `hdbh_approximate_predict`, `hdbh_membership_vector`,
+`hdbh_all_points_membership_vectors`, `hdbh_soft_pass`, 287,280 bytes). The two lanes were
+re-recorded on Metal with the binding rebuilt from the merged sources: all six identity hashes
+equal the membership lane's committed Metal column
+(`bench/results/identity_break/2026-09-15_hdbscan-membership-vector/apple-m4.json`: hdbscan base
+and dupes `cfe5f8df2a406451`, ties `6ec7f68f0f81ae9b`; hdbscan-leaf base and dupes
+`2117320835e91e8a`, ties `47607746aff5c75c`). The iforest and GMM recordings did not change.
+The x86 confirmation on the merge commit is in `merged-41f3462db/`.
+
+The isolated installed test wheel, on the Mac, rerun after the merge: a macOS arm64 wheel
+(1,146,506 bytes) built from this tree with no Metal set and no MAX runtime, carrying only the
+five host bindings this lane uses (core 581,400, estimators 534,192, svm 397,224, mixture_infer
+232,112, hdbscan_infer 287,280 bytes), pip-installed into an isolated target and imported from it
+(`vendor cpu`).
 
 | file | verdict |
 |---|---|
-| `installed_wheel_check.txt`, `installed_wheel_check.json` | the 16 recordings from the installed package: `gate verdict IDENTICAL (16 fixtures, 0 GPU columns, exit 0)` |
+| `installed_wheel_check.txt`, `installed_wheel_check.json` | the 16 recordings from the installed package, the re-recorded hdbscan models included: `gate verdict IDENTICAL (16 fixtures, 0 GPU columns, exit 0)` |
 | `../2026-09-15_inference-neighbors-density/installed_wheel_check.txt` | the 54 neighbor and KDE recordings: `gate verdict IDENTICAL (54 fixtures, 0 GPU columns, exit 0)` |
 | `installed_refusals.txt` | GaussianMixture, HDBSCAN, RadiusNeighbors and IsolationForest fits refuse; `host_model` on the saved gmm and hdbscan models returns HostGaussianMixture and HostHDBSCAN bound to `_mojolearn_mixture_infer_host` and `_mojolearn_hdbscan_infer_host`, in which `gmm_fit` and `hdbscan_fit` are absent |
 | `wheel.txt` | the wheel's `mojolearn/host/` listing and size |
 
-What enters a wheel from this lane: the two inference-only bindings, about 460 KB together on
-macOS arm64 (205,688 and 222,368 bytes on the x86 pod); no reference mixture or hdbscan binding,
+What enters a wheel from this lane: the two inference-only bindings, about 520 KB together on
+macOS arm64 (232,112 and 287,280 bytes after the merge; 222,368 and 205,688 bytes on the x86 pod
+before it); no reference mixture or hdbscan binding,
 so no EM step, Boruvka MST or prediction data generation. The neighbor, KDE and iforest lanes add
 no binary; they run on the core, estimators and svm bindings that already shipped.
 

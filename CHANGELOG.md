@@ -20,11 +20,12 @@ Linux legs are OWED before this heading reads published.
   and `load` (`mojolearn-iforest-1`; the file holds the training matrix and the knobs, since
   every scoring call rebuilds the forest, DEVIATION 874). `GaussianMixture` gains `save` and
   `load` (`mojolearn-gmm-1`) and `HDBSCAN(prediction_data=True)` gains `save` and `load`
-  (`mojolearn-hdbscan-1`) for `mojolearn.hdbscan.approximate_predict`; their CPU entries ship
+  (`mojolearn-hdbscan-2`) for `mojolearn.hdbscan.approximate_predict`, `membership_vector` and
+  `all_points_membership_vectors`; their CPU entries ship
   in two new INFERENCE-ONLY host bindings, `_mojolearn_mixture_infer_host` (232,112 bytes
   on the M4, against 406,456 for the reference binding with the fit) and
-  `_mojolearn_hdbscan_infer_host` (227,696 against 359,688), which register the scoring or
-  prediction entries and no fit: `nm` finds no EM step, Boruvka MST or prediction data
+  `_mojolearn_hdbscan_infer_host` (287,280 bytes with the two soft clustering entries), which
+  register the scoring or prediction entries and no fit: `nm` finds no EM step, Boruvka MST or prediction data
   generation in either file. `mojolearn.host_model(path)` loads a saved model into a host
   class that binds them, as the scalers are served through the estimators binding; CPU fits
   still refuse. On the

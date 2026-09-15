@@ -13,3 +13,10 @@
    1 hdbh_fit
 == _mojolearn_hdbscan_infer_host.so 227696 bytes
    1 hdbh_approximate_predict
+
+# after merging main's HDBSCAN soft clustering (41f3462db): the inference-only hdbscan binding also registers membership_vector and all_points_membership_vectors
+== _mojolearn_hdbscan_infer_host.so (merged) 287280 bytes
+   1 hdbh_all_points_membership_vectors
+   1 hdbh_approximate_predict
+   1 hdbh_membership_vector
+   1 hdbh_soft_pass

@@ -12,8 +12,8 @@
     "_mojolearn_svm": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_svm_host.so"
   },
   "binary": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_estimators_host.so",
-  "checked_at": "2026-09-15T13:20:19-0400",
-  "commit": "f1d9feecb137ab688cb826fdd12682e63665a7d9",
+  "checked_at": "2026-09-15T13:28:03-0400",
+  "commit": "41f3462dba148cc8d8561c9b7c297518f68fba39",
   "exit": 0,
   "expect_mismatch": false,
   "fixtures": [
@@ -77,7 +77,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.186561
+      "seconds": 0.181572
     },
     {
       "cases": [
@@ -139,7 +139,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000834
+      "seconds": 0.000922
     },
     {
       "cases": [
@@ -201,7 +201,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000887
+      "seconds": 0.001328
     },
     {
       "cases": [
@@ -247,7 +247,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000349
+      "seconds": 0.000384
     },
     {
       "cases": [
@@ -293,7 +293,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000341
+      "seconds": 0.000456
     },
     {
       "cases": [
@@ -339,10 +339,26 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.000347
+      "seconds": 0.000356
     },
     {
       "cases": [
+        {
+          "case": "all_points_membership_vectors",
+          "equal": true,
+          "got": "c9ae3e1c1a18e0caa61d207e2d4ea715a08e634539c7c2520d166273bb170026",
+          "got_dtype": "<f4",
+          "got_shape": [
+            6000,
+            2
+          ],
+          "want": "c9ae3e1c1a18e0caa61d207e2d4ea715a08e634539c7c2520d166273bb170026",
+          "want_dtype": "<f4",
+          "want_shape": [
+            6000,
+            2
+          ]
+        },
         {
           "case": "approximate_predict_labels",
           "equal": true,
@@ -355,6 +371,22 @@
           "want_dtype": "<i4",
           "want_shape": [
             256
+          ]
+        },
+        {
+          "case": "membership_vector",
+          "equal": true,
+          "got": "6878654dc03333a7a7a8ffac7f42fbc1efa68ac835e9c3fda95c188cd2c8165e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            2
+          ],
+          "want": "6878654dc03333a7a7a8ffac7f42fbc1efa68ac835e9c3fda95c188cd2c8165e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            2
           ]
         },
         {
@@ -376,19 +408,35 @@
       "estimator": "HDBSCAN",
       "identity_hash": {
         "equal": true,
-        "got": "a104cfe065750353",
-        "want": "a104cfe065750353"
+        "got": "cfe5f8df2a406451",
+        "want": "cfe5f8df2a406451"
       },
       "kind": "base",
       "lane": "hdbscan",
-      "model_sha256": "a2e0a25fe5cde3f81b460f86e2bac8ffee25fee51416c92d63f1447c68612b1c",
+      "model_sha256": "886b0c2a69e8f5b9bf8a77a3c830e74b27efdb56873bf074790d175855cf6a4c",
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.207306
+      "seconds": 0.673677
     },
     {
       "cases": [
+        {
+          "case": "all_points_membership_vectors",
+          "equal": true,
+          "got": "c9ae3e1c1a18e0caa61d207e2d4ea715a08e634539c7c2520d166273bb170026",
+          "got_dtype": "<f4",
+          "got_shape": [
+            6000,
+            2
+          ],
+          "want": "c9ae3e1c1a18e0caa61d207e2d4ea715a08e634539c7c2520d166273bb170026",
+          "want_dtype": "<f4",
+          "want_shape": [
+            6000,
+            2
+          ]
+        },
         {
           "case": "approximate_predict_labels",
           "equal": true,
@@ -401,6 +449,22 @@
           "want_dtype": "<i4",
           "want_shape": [
             256
+          ]
+        },
+        {
+          "case": "membership_vector",
+          "equal": true,
+          "got": "6878654dc03333a7a7a8ffac7f42fbc1efa68ac835e9c3fda95c188cd2c8165e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            2
+          ],
+          "want": "6878654dc03333a7a7a8ffac7f42fbc1efa68ac835e9c3fda95c188cd2c8165e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            2
           ]
         },
         {
@@ -422,19 +486,35 @@
       "estimator": "HDBSCAN",
       "identity_hash": {
         "equal": true,
-        "got": "a104cfe065750353",
-        "want": "a104cfe065750353"
+        "got": "cfe5f8df2a406451",
+        "want": "cfe5f8df2a406451"
       },
       "kind": "dupes",
       "lane": "hdbscan",
-      "model_sha256": "a2e0a25fe5cde3f81b460f86e2bac8ffee25fee51416c92d63f1447c68612b1c",
+      "model_sha256": "886b0c2a69e8f5b9bf8a77a3c830e74b27efdb56873bf074790d175855cf6a4c",
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.069746
+      "seconds": 0.412481
     },
     {
       "cases": [
+        {
+          "case": "all_points_membership_vectors",
+          "equal": true,
+          "got": "d1262d546e5d768108d45c3799327e239ca79bfd590f6a13c18b173b77c47a42",
+          "got_dtype": "<f4",
+          "got_shape": [
+            6000,
+            443
+          ],
+          "want": "d1262d546e5d768108d45c3799327e239ca79bfd590f6a13c18b173b77c47a42",
+          "want_dtype": "<f4",
+          "want_shape": [
+            6000,
+            443
+          ]
+        },
         {
           "case": "approximate_predict_labels",
           "equal": true,
@@ -447,6 +527,22 @@
           "want_dtype": "<i4",
           "want_shape": [
             256
+          ]
+        },
+        {
+          "case": "membership_vector",
+          "equal": true,
+          "got": "1e5f9bbe2ed66801794adbed0152553a157fa7b16f51cd4db36ee0ff5ee8d6e1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            443
+          ],
+          "want": "1e5f9bbe2ed66801794adbed0152553a157fa7b16f51cd4db36ee0ff5ee8d6e1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            443
           ]
         },
         {
@@ -468,19 +564,35 @@
       "estimator": "HDBSCAN",
       "identity_hash": {
         "equal": true,
-        "got": "324146f46faedded",
-        "want": "324146f46faedded"
+        "got": "6ec7f68f0f81ae9b",
+        "want": "6ec7f68f0f81ae9b"
       },
       "kind": "ties",
       "lane": "hdbscan",
-      "model_sha256": "0221975f3d53a4337d5f0293b5e774790d8f7d063c25c77a690ffb2ae733411e",
+      "model_sha256": "a282d01525378b33d0b0ce8287d6074552563a8cb4b9fec1e2cfceab83f7d73a",
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.069123
+      "seconds": 4.423501
     },
     {
       "cases": [
+        {
+          "case": "all_points_membership_vectors",
+          "equal": true,
+          "got": "e14e120f14515b462265bda91593d113fa48085a1bb89c923178a5772ad3dfe4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            6000,
+            74
+          ],
+          "want": "e14e120f14515b462265bda91593d113fa48085a1bb89c923178a5772ad3dfe4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            6000,
+            74
+          ]
+        },
         {
           "case": "approximate_predict_labels",
           "equal": true,
@@ -493,6 +605,22 @@
           "want_dtype": "<i4",
           "want_shape": [
             256
+          ]
+        },
+        {
+          "case": "membership_vector",
+          "equal": true,
+          "got": "53f9731c95bb7b4ed1674d241fbc2923426a4aa65ead8f475a8dfa3f2eccb5e6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            74
+          ],
+          "want": "53f9731c95bb7b4ed1674d241fbc2923426a4aa65ead8f475a8dfa3f2eccb5e6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            74
           ]
         },
         {
@@ -514,19 +642,35 @@
       "estimator": "HDBSCAN",
       "identity_hash": {
         "equal": true,
-        "got": "72404979b3191f8d",
-        "want": "72404979b3191f8d"
+        "got": "2117320835e91e8a",
+        "want": "2117320835e91e8a"
       },
       "kind": "base",
       "lane": "hdbscan-leaf",
-      "model_sha256": "0b290a1896b58eb42431d40feab86896aba8ab6c568adabfcb51ad3b9cee3e23",
+      "model_sha256": "b3541c15572495c66a6b314640f322749db3a5269421104baf7c863583c4525f",
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.070324
+      "seconds": 0.793921
     },
     {
       "cases": [
+        {
+          "case": "all_points_membership_vectors",
+          "equal": true,
+          "got": "e14e120f14515b462265bda91593d113fa48085a1bb89c923178a5772ad3dfe4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            6000,
+            74
+          ],
+          "want": "e14e120f14515b462265bda91593d113fa48085a1bb89c923178a5772ad3dfe4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            6000,
+            74
+          ]
+        },
         {
           "case": "approximate_predict_labels",
           "equal": true,
@@ -539,6 +683,22 @@
           "want_dtype": "<i4",
           "want_shape": [
             256
+          ]
+        },
+        {
+          "case": "membership_vector",
+          "equal": true,
+          "got": "53f9731c95bb7b4ed1674d241fbc2923426a4aa65ead8f475a8dfa3f2eccb5e6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            74
+          ],
+          "want": "53f9731c95bb7b4ed1674d241fbc2923426a4aa65ead8f475a8dfa3f2eccb5e6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            74
           ]
         },
         {
@@ -560,19 +720,35 @@
       "estimator": "HDBSCAN",
       "identity_hash": {
         "equal": true,
-        "got": "72404979b3191f8d",
-        "want": "72404979b3191f8d"
+        "got": "2117320835e91e8a",
+        "want": "2117320835e91e8a"
       },
       "kind": "dupes",
       "lane": "hdbscan-leaf",
-      "model_sha256": "0b290a1896b58eb42431d40feab86896aba8ab6c568adabfcb51ad3b9cee3e23",
+      "model_sha256": "b3541c15572495c66a6b314640f322749db3a5269421104baf7c863583c4525f",
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.072327
+      "seconds": 1.067426
     },
     {
       "cases": [
+        {
+          "case": "all_points_membership_vectors",
+          "equal": true,
+          "got": "a22ec3b1bb3b817bab3be478a7cf6124e2ca108677e02bfbb4917ac2f7ab7e1f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            6000,
+            183
+          ],
+          "want": "a22ec3b1bb3b817bab3be478a7cf6124e2ca108677e02bfbb4917ac2f7ab7e1f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            6000,
+            183
+          ]
+        },
         {
           "case": "approximate_predict_labels",
           "equal": true,
@@ -585,6 +761,22 @@
           "want_dtype": "<i4",
           "want_shape": [
             256
+          ]
+        },
+        {
+          "case": "membership_vector",
+          "equal": true,
+          "got": "e4ef87bfb61bade6695bc6a2058a9157c721f94714b5618c0e477611d812170a",
+          "got_dtype": "<f4",
+          "got_shape": [
+            256,
+            183
+          ],
+          "want": "e4ef87bfb61bade6695bc6a2058a9157c721f94714b5618c0e477611d812170a",
+          "want_dtype": "<f4",
+          "want_shape": [
+            256,
+            183
           ]
         },
         {
@@ -606,16 +798,16 @@
       "estimator": "HDBSCAN",
       "identity_hash": {
         "equal": true,
-        "got": "e796aec36f4eda67",
-        "want": "e796aec36f4eda67"
+        "got": "47607746aff5c75c",
+        "want": "47607746aff5c75c"
       },
       "kind": "ties",
       "lane": "hdbscan-leaf",
-      "model_sha256": "51bd242c9ffc7f2f6f031d338af2d2a10d6e6ed60ba27b9ae3435a5137e11dda",
+      "model_sha256": "7649091225d549bde2abad85bb194fdae58f13e8b8aea2c55b9aab9f7797937b",
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.071023
+      "seconds": 2.13178
     },
     {
       "cases": [
@@ -675,7 +867,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.401382
+      "seconds": 0.375684
     },
     {
       "cases": [
@@ -735,7 +927,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.260104
+      "seconds": 0.233928
     },
     {
       "cases": [
@@ -795,7 +987,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.274648
+      "seconds": 0.253858
     },
     {
       "cases": [
@@ -855,7 +1047,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.305475
+      "seconds": 0.271669
     }
   ],
   "gpu_columns": [],
