@@ -87,7 +87,7 @@ for directory, dirs, names in os.walk(root):
     for name in sorted(names):
         path = pathlib.Path(directory) / name
         rel = path.relative_to(root).as_posix()
-        if (name.endswith('.mojo') or rel.startswith(('bindings/', 'packaging/linux/', 'python/mojolearn/')) and name.endswith(('.py', '.sh'))
+        if (name.endswith('.mojo') or rel.startswith(('bindings/', 'packaging/linux/', 'python/mojolearn/', 'tokenizer/tools/')) and name.endswith(('.py', '.sh'))
                 or rel in ('pixi.toml', 'pixi.lock', 'tools/linux_surface_qualification.sh')):
             files.append([rel, hashlib.sha256(path.read_bytes()).hexdigest()])
 files.sort()

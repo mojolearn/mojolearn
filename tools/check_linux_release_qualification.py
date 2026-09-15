@@ -80,8 +80,10 @@ def native_inventory(root):
         for name in sorted(names):
             path = Path(directory) / name
             rel = path.relative_to(root).as_posix()
+            # tokenizer/tools/ writes tokenizer/impl/unicode_table_generated.mojo
+            # before the tokenizer host compile, so it is native source too.
             if (name.endswith('.mojo') or rel.startswith((
-                    'bindings/', 'packaging/linux/', 'python/mojolearn/'))
+                    'bindings/', 'packaging/linux/', 'python/mojolearn/', 'tokenizer/tools/'))
                     and name.endswith(('.py', '.sh')) or rel in (
                     'pixi.toml', 'pixi.lock', 'tools/linux_surface_qualification.sh')):
                 files.append([rel, digest_file(path)])
