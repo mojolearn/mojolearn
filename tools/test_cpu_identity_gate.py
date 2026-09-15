@@ -377,6 +377,53 @@ class SabotageDefinesTests(unittest.TestCase):
         self.assertNotIn('_hfile(path)', body)
         self.assertIn('if reload != infer:', body)
 
+def load_classical_gate():
+    spec = importlib.util.spec_from_file_location(
+        'classical_host_gate', Path(__file__).resolve().parent / 'classical_host_gate.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class SabotageVerdictTests(unittest.TestCase):
+    """classical_host_gate's --expect-mismatch rules (lane/ties-sabotage,
+    2026-09-15). The fixture shape is the one the old IVF arms left: the
+    lane moved on base and stayed EQUAL on ties."""
+
+    def setUp(self):
+        self.verdict = load_classical_gate().sabotage_verdict
+        self.moved = ['ivf/base', 'radius/base', 'radius/ties']
+        self.unmoved = ['ivf/ties']
+
+    def test_every_lane_passes_one_unmoved_fixture(self):
+        verdict, code, _ = self.verdict(False, self.moved, self.unmoved, every_lane=True)
+        self.assertEqual((verdict, code), ('EXPECTED MISMATCH SEEN', 0))
+
+    def test_every_fixture_fails_one_unmoved_fixture(self):
+        verdict, code, lines = self.verdict(False, self.moved, self.unmoved, every_fixture=True)
+        self.assertEqual(code, 1)
+        self.assertEqual(verdict, 'SABOTAGE NOT CAUGHT ON FIXTURES ivf/ties')
+        self.assertIn('check ivf/ties did not move', '\n'.join(lines))
+
+    def test_every_fixture_passes_when_all_move(self):
+        verdict, code, lines = self.verdict(False, self.moved + self.unmoved, [], every_fixture=True)
+        self.assertEqual((verdict, code, lines), ('EXPECTED MISMATCH SEEN', 0, []))
+
+    def test_lane_rule_only_keeps_the_looser_rule_by_name(self):
+        verdict, code, _ = self.verdict(False, self.moved, self.unmoved, every_fixture=True, lane_rule_only=['ivf'])
+        self.assertEqual((verdict, code), ('EXPECTED MISMATCH SEEN', 0))
+        # the exemption names a lane, and does not excuse a lane that moved nowhere
+        verdict, code, _ = self.verdict(False, ['radius/base'], ['ivf/base', 'ivf/ties'],
+                                        every_fixture=True, lane_rule_only=['ivf'])
+        self.assertEqual((verdict, code), ('SABOTAGE NOT CAUGHT ON LANES ivf', 1))
+        verdict, code, _ = self.verdict(False, self.moved, self.unmoved, every_fixture=True, lane_rule_only=['radius'])
+        self.assertEqual(code, 1)
+
+    def test_nothing_moved_is_never_a_catch(self):
+        verdict, code, _ = self.verdict(True, [], ['ivf/base'], every_fixture=True, lane_rule_only=['ivf'])
+        self.assertEqual(code, 1)
+        self.assertNotEqual(verdict, 'EXPECTED MISMATCH SEEN')
+
 
 if __name__ == '__main__':
     unittest.main()

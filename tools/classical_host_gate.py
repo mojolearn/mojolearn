@@ -529,6 +529,35 @@ def gpu_columns(paths):
     return cols
 
 
+def sabotage_verdict(verdict_ok, moved, unmoved, every_lane=False, every_fixture=False, lane_rule_only=()):
+    """The --expect-mismatch verdict over `<lane>/<fixture>` names.
+
+    Plain: one differing fixture anywhere is a catch. --every-lane: every lane
+    must differ on at least one fixture. --every-fixture (lane/ties-sabotage,
+    2026-09-15): every fixture of every lane must differ, except that a lane
+    named in `lane_rule_only` keeps the --every-lane rule, by name. Returns
+    (verdict, exit code, lines to print)."""
+    verdict = 'EXPECTED MISMATCH SEEN' if not verdict_ok else 'SABOTAGE NOT CAUGHT'
+    code = 0 if not verdict_ok else 1
+    lines = []
+    if not (every_lane or every_fixture):
+        return verdict, code, lines
+    exempt = set(lane_rule_only)
+    moved_lanes = {m.split('/')[0] for m in moved}
+    dead = sorted({u.split('/')[0] for u in unmoved} - moved_lanes)
+    for name in unmoved:
+        lane = name.split('/')[0]
+        rule = 'every-lane by name' if every_fixture and lane in exempt else ('every-fixture' if every_fixture else 'every-lane')
+        lines.append(f'check {name} did not move (its lane {"moved elsewhere" if lane in moved_lanes else "DID NOT MOVE"}; rule {rule})')
+    if every_fixture:
+        still = sorted(u for u in unmoved if u.split('/')[0] not in exempt)
+        if still:
+            return f'SABOTAGE NOT CAUGHT ON FIXTURES {",".join(still)}', 1, lines
+    if dead:
+        return f'SABOTAGE NOT CAUGHT ON LANES {",".join(dead)}', 1, lines
+    return verdict, code, lines
+
+
 def do_check(args):
     package_root(args)
     try:
@@ -631,19 +660,11 @@ def do_check(args):
                             identity_hash=dict(want=want['identity_hash'], got=got['identity_hash'], equal=ih_equal),
                             columns=vendors, seconds=got['seconds'], cases=cases))
     if args.expect_mismatch:
-        verdict = 'EXPECTED MISMATCH SEEN' if not verdict_ok else 'SABOTAGE NOT CAUGHT'
-        code = 0 if not verdict_ok else 1
-        if args.every_lane:
-            # A lane passes when at least one of its fixtures differs: a fold
-            # the sabotage arm moves can still be exact on one fixture (the IVF
-            # lanes' ties fixture, 2026-09-15), but a lane with no moved
-            # fixture is a family the sabotage build did not reach.
-            moved_lanes = {m.split('/')[0] for m in moved}
-            dead = sorted({u.split('/')[0] for u in unmoved} - moved_lanes)
-            for name in unmoved:
-                print(f'check {name} did not move (its lane {"moved elsewhere" if name.split("/")[0] in moved_lanes else "DID NOT MOVE"})')
-            if dead:
-                verdict, code = f'SABOTAGE NOT CAUGHT ON LANES {",".join(dead)}', 1
+        verdict, code, lines = sabotage_verdict(
+            verdict_ok, moved, unmoved, every_lane=args.every_lane,
+            every_fixture=args.every_fixture, lane_rule_only=args.lane_rule_only)
+        for line in lines:
+            print(line)
     else:
         verdict = 'IDENTICAL' if verdict_ok else 'MISMATCH'
         code = 0 if verdict_ok else 1
@@ -681,7 +702,13 @@ def main():
     chk.add_argument('--expect-mismatch', action='store_true')
     chk.add_argument('--every-lane', action='store_true',
                      help='with --expect-mismatch, every lane (not only one) must differ on at least one fixture')
+    chk.add_argument('--every-fixture', action='store_true',
+                     help='with --expect-mismatch, every fixture of every lane must differ')
+    chk.add_argument('--lane-rule-only', action='append', default=[], metavar='LANE',
+                     help='with --every-fixture, this lane keeps the --every-lane rule, by name (repeatable)')
     args = parser.parse_args()
+    if args.lane_rule_only and not args.every_fixture:
+        parser.error('--lane-rule-only needs --every-fixture')
     if args.command == 'record':
         return do_record(args)
     return do_check(args)

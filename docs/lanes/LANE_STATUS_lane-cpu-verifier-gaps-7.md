@@ -34,12 +34,20 @@ gate (`FULL_CPU_VERIFY`) runs every one-device lane.
 
 ## Done
 
-- [x] manifest, workflow, identity_break, tests (branch pushed)
+- [x] manifest, workflow, identity_break, tests (branch pushed at 11c5f2192;
+  its message says test_host_surface 153 passed, the run read 149 passed, and
+  test_cpu_identity_gate 26 OK)
 - [x] Metal models for the six missing fixtures
-- [ ] RunPod CPU pod: the gate's covered-lanes path for the seven lanes,
-  production and sabotage, `column` and `owed` checks
+- [x] RunPod CPU pod 03krlhu4sqjw8e (deleted and verified gone, $0.0153): the
+  gate's covered-lanes path for the seven lanes. Production 63 cells STABLE,
+  column check 0 failures, `--require-columns 4 --owed-json` OK with 189 OWED
+  parts and nothing DIVERGENT; sabotage column still STABLE and the owed check
+  189 of 189 moved. Evidence
+  `bench/results/identity_break/2026-09-15_cpu-verifier-gaps-7/`.
 - [ ] merge to main
 
 ## Resume
 
-Worktree `scratchpad/wt-cpu-gaps7`. Pod command: `scratchpad/gaps7/pod_cmd.sh`.
+Worktree `scratchpad/wt-cpu-gaps7`, origin/main merged (the one conflict was
+the end of `tools/test_cpu_identity_gate.py`, where main and this lane each
+appended a test class; both kept). Pod command: the evidence's `cmd.sh`.

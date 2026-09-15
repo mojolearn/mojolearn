@@ -1,0 +1,19 @@
+owed FAIL: radius-manhattan/base model: DID NOT MOVE under the sabotage host set (a57f1f07d75f73e1); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius-manhattan/denormal model: DID NOT MOVE under the sabotage host set (06e4242143d325b2); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius-manhattan/denormal_ftz model: DID NOT MOVE under the sabotage host set (18e8bdf07ef319ba); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius-manhattan/dupes model: DID NOT MOVE under the sabotage host set (d1c5d251599b1830); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius-manhattan/hashed model: DID NOT MOVE under the sabotage host set (d9fb91586aa3aa55); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius-manhattan/negative model: DID NOT MOVE under the sabotage host set (80b5baa8c1aabd6b); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius-manhattan/odd model: DID NOT MOVE under the sabotage host set (3440191387c43af8); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius-manhattan/ties model: DID NOT MOVE under the sabotage host set (d893a0c29ba99797); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius-manhattan/wide model: DID NOT MOVE under the sabotage host set (f4956308528d332e); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius/base model: DID NOT MOVE under the sabotage host set (2ee81955e923d21f); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius/denormal model: DID NOT MOVE under the sabotage host set (c6abf4949fd3ef45); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius/denormal_ftz model: DID NOT MOVE under the sabotage host set (83650c2063c0b192); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius/dupes model: DID NOT MOVE under the sabotage host set (5167cd08ec11b8bd); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius/hashed model: DID NOT MOVE under the sabotage host set (d6588b0e2d717746); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius/negative model: DID NOT MOVE under the sabotage host set (86a355173ea5999a); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius/odd model: DID NOT MOVE under the sabotage host set (5f50d73e7a4f1146); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius/ties model: DID NOT MOVE under the sabotage host set (57306f414d5af0b4); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: radius/wide model: DID NOT MOVE under the sabotage host set (76078d052fa5fc25); an owed cell that sabotage cannot move rests on nothing
+owed verdict FAIL (0 of 18 owed cell part(s) moved, 18 failure(s))

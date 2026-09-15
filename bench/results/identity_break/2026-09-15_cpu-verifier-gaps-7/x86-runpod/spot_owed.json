@@ -1,0 +1,115 @@
+{
+ "columns": [
+  "apple-m4",
+  "nvidia-h100-sm_90a",
+  "amd-mi325x-gfx942",
+  "cpu-amd-epyc-9654-96-core-processor"
+ ],
+ "require_columns": 4,
+ "lanes": [
+  "gmm",
+  "gmm-random-init",
+  "gp",
+  "gp-normalize-y"
+ ],
+ "owed": [
+  {
+   "lane": "gp-normalize-y",
+   "fixture": "base",
+   "part": "train",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9654-96-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "gmm-random-init",
+   "fixture": "base",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9654-96-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "gmm",
+   "fixture": "base",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9654-96-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "gp-normalize-y",
+   "fixture": "base",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9654-96-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "gp-normalize-y",
+   "fixture": "base",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9654-96-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "gp-normalize-y",
+   "fixture": "base",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9654-96-core-processor"
+   ],
+   "real_hashes": 1
+  },
+  {
+   "lane": "gp",
+   "fixture": "base",
+   "part": "model",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-amd-epyc-9654-96-core-processor"
+   ],
+   "real_hashes": 1
+  }
+ ]
+}

@@ -1,0 +1,481 @@
+NOTE: --lanes scopes this diff to 7 lane(s); 7 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_forest_host', '_mojolearn_gp_host', '_mojolearn_mixture_host', '_mojolearn_preprocessing_host', '_mojolearn_tokenizer_host'] commit=11c5f2192579b8aceada93096fdfcae37a2726a7
+FIXTURE MISMATCH on 'base': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'b5b0a0005efa3788', 'y_clf': '3a1bce5286de1274', 'y_reg': '308c22120b664e5b'}
+    arm64: {'X': 'b5b0a0005efa3788', 'y_clf': '3a1bce5286de1274', 'y_reg': '308c22120b664e5b'}
+    apple-m4: {'X': 'b5b0a0005efa3788', 'y_clf': '3a1bce5286de1274', 'y_reg': '308c22120b664e5b'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': 'b5b0a0005efa3788', 'y_clf': '3a1bce5286de1274', 'y_reg': '308c22120b664e5b'}
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    arm64: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    arm64: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    arm64: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    apple-m4: None
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    arm64: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    apple-m4: None
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    arm64: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    apple-m4: None
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    arm64: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    arm64: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    arm64: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    apple-m4: None
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-9654-96-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+HELD-OUT MISMATCH on 'base': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd4de6b4eb682c465'}
+    arm64: {'X': 'd4de6b4eb682c465'}
+    apple-m4: {'X': 'd4de6b4eb682c465'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': 'd4de6b4eb682c465'}
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    arm64: {'X': '5061056b118d07d0'}
+    apple-m4: None
+    apple-m4: {'X': '5061056b118d07d0'}
+    apple-m4: {'X': '5061056b118d07d0'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': '5061056b118d07d0'}
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    arm64: {'X': 'a8c3d1a560b5cabb'}
+    apple-m4: None
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    apple-m4: None
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': 'a8c3d1a560b5cabb'}
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    arm64: {'X': 'e4b16c115962dfcd'}
+    apple-m4: None
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': 'e4b16c115962dfcd'}
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    arm64: {'X': '9dc786ade4574aff'}
+    apple-m4: None
+    apple-m4: {'X': '9dc786ade4574aff'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: {'X': '9dc786ade4574aff'}
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': '9dc786ade4574aff'}
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    arm64: {'X': '45b539a3f66ce25d'}
+    apple-m4: None
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': '45b539a3f66ce25d'}
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    arm64: {'X': '32ea0bbed60b8e6c'}
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': '32ea0bbed60b8e6c'}
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd1ba686494256660'}
+    arm64: {'X': 'd1ba686494256660'}
+    apple-m4: {'X': 'd1ba686494256660'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    cpu-amd-epyc-9654-96-core-processor: {'X': 'd1ba686494256660'}
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    arm64: {'X': 'd52a1af18a3c2f1c'}
+    apple-m4: None
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: None
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-9654-96-core-processor: {'X': 'd52a1af18a3c2f1c'}
+| lane/fixture                 | verdict    | apple-m4         | arm64            | apple-m4         | apple-m4         | apple-m4         | apple-m4         | apple-m4         | apple-m4         | apple-m4         | apple-m4         | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr-tables/base | IDENTICAL x2 | (not run)        | (not run)        | 9aef0c9ccfa6907c | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 9aef0c9ccfa6907c |
+| gbdt-categorical-ctr-tables/denormal | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | 9aef0c9ccfa6907c | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 9aef0c9ccfa6907c |
+| gbdt-categorical-ctr-tables/denormal_ftz | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 9aef0c9ccfa6907c | (not run)        | (not run)        | (not run)        | (not run)        | 9aef0c9ccfa6907c |
+| gbdt-categorical-ctr-tables/dupes | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 25b392f853af49bc | (not run)        | (not run)        | (not run)        | 25b392f853af49bc |
+| gbdt-categorical-ctr-tables/hashed | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 3dfceb762e69749f | (not run)        | (not run)        | 3dfceb762e69749f |
+| gbdt-categorical-ctr-tables/negative | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1bc75b82705d1b39 | (not run)        | 1bc75b82705d1b39 |
+| gbdt-categorical-ctr-tables/odd | IDENTICAL x2 | (not run)        | (not run)        | 2b3fac1172a1b684 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 2b3fac1172a1b684 |
+| gbdt-categorical-ctr-tables/ties | IDENTICAL x2 | (not run)        | (not run)        | 24ff7d7c24861171 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 24ff7d7c24861171 |
+| gbdt-categorical-ctr-tables/wide | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 852e96ce7e62df7c | 852e96ce7e62df7c |
+| gbdt-tensor-ctr-tables/base  | IDENTICAL x2 | (not run)        | (not run)        | 7cc167fbb56c972e | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 7cc167fbb56c972e |
+| gbdt-tensor-ctr-tables/denormal | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 1489a9f5968cb79d | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1489a9f5968cb79d |
+| gbdt-tensor-ctr-tables/denormal_ftz | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 1489a9f5968cb79d | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1489a9f5968cb79d |
+| gbdt-tensor-ctr-tables/dupes | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | a972ee33b2bbafec | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | a972ee33b2bbafec |
+| gbdt-tensor-ctr-tables/hashed | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 1da6ad28d961ad35 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1da6ad28d961ad35 |
+| gbdt-tensor-ctr-tables/negative | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 0619163e8b8f3fc5 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 0619163e8b8f3fc5 |
+| gbdt-tensor-ctr-tables/odd   | IDENTICAL x2 | (not run)        | (not run)        | 7377ac4d24ab4fc7 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 7377ac4d24ab4fc7 |
+| gbdt-tensor-ctr-tables/ties  | IDENTICAL x2 | (not run)        | (not run)        | a57c449ae1a19b4e | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | a57c449ae1a19b4e |
+| gbdt-tensor-ctr-tables/wide  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 89d3d2eb687d4002 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 89d3d2eb687d4002 |
+| gmm-random-init-sample/base  | IDENTICAL x2 | e8402fa2c29319b0 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e8402fa2c29319b0 |
+| gmm-random-init-sample/denormal | IDENTICAL x2 | 53c4c0b31627c1f7 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 53c4c0b31627c1f7 |
+| gmm-random-init-sample/denormal_ftz | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 53c4c0b31627c1f7 |
+| gmm-random-init-sample/dupes | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e8402fa2c29319b0 |
+| gmm-random-init-sample/hashed | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1bbe32185de06c3e |
+| gmm-random-init-sample/negative | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | d97bf04817203928 |
+| gmm-random-init-sample/odd   | IDENTICAL x2 | 71ed1c1caf8e6874 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 71ed1c1caf8e6874 |
+| gmm-random-init-sample/ties  | IDENTICAL x2 | 101197bb7831587c | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 101197bb7831587c |
+| gmm-random-init-sample/wide  | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | ff8d9198a4228ebd |
+| gmm-sample/base              | IDENTICAL x2 | 2995412dbe6ede62 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 2995412dbe6ede62 |
+| gmm-sample/denormal          | IDENTICAL x2 | b0719a23f1750cd0 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | b0719a23f1750cd0 |
+| gmm-sample/denormal_ftz      | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | b0719a23f1750cd0 |
+| gmm-sample/dupes             | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 2995412dbe6ede62 |
+| gmm-sample/hashed            | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | c6652f13c1885399 |
+| gmm-sample/negative          | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | eff16f2b59cea1fe |
+| gmm-sample/odd               | IDENTICAL x2 | 2a8e73e4b6764522 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 2a8e73e4b6764522 |
+| gmm-sample/ties              | IDENTICAL x2 | 4f5c80e0a98f2fb7 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 4f5c80e0a98f2fb7 |
+| gmm-sample/wide              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 0473d696da7318bd |
+| gp-sample-y-normalize/base   | IDENTICAL x2 | (not run)        | b5ad01b81c59fdf3 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | b5ad01b81c59fdf3 |
+| gp-sample-y-normalize/denormal | IDENTICAL x2 | (not run)        | 33512fcfac39fb55 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 33512fcfac39fb55 |
+| gp-sample-y-normalize/denormal_ftz | IDENTICAL x2 | (not run)        | 33512fcfac39fb55 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 33512fcfac39fb55 |
+| gp-sample-y-normalize/dupes  | IDENTICAL x2 | (not run)        | 78ae9a8195ece8f9 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 78ae9a8195ece8f9 |
+| gp-sample-y-normalize/hashed | IDENTICAL x2 | (not run)        | 455f431e3dcb0773 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 455f431e3dcb0773 |
+| gp-sample-y-normalize/negative | IDENTICAL x2 | (not run)        | 0644e14fb6f52191 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 0644e14fb6f52191 |
+| gp-sample-y-normalize/odd    | IDENTICAL x2 | (not run)        | b4dd92087d7a5b3a | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | b4dd92087d7a5b3a |
+| gp-sample-y-normalize/ties   | IDENTICAL x2 | (not run)        | 43811dbad15ad2f0 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 43811dbad15ad2f0 |
+| gp-sample-y-normalize/wide   | IDENTICAL x2 | (not run)        | c11bb0e6d158bfe3 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | c11bb0e6d158bfe3 |
+| gp-sample-y/base             | IDENTICAL x2 | (not run)        | d698872d7e33df6e | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | d698872d7e33df6e |
+| gp-sample-y/denormal         | IDENTICAL x2 | (not run)        | 37e844812b3bd076 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 37e844812b3bd076 |
+| gp-sample-y/denormal_ftz     | IDENTICAL x2 | (not run)        | 37e844812b3bd076 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 37e844812b3bd076 |
+| gp-sample-y/dupes            | IDENTICAL x2 | (not run)        | 05aaa44e678259a6 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 05aaa44e678259a6 |
+| gp-sample-y/hashed           | IDENTICAL x2 | (not run)        | 1f0e45838e5c52d2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1f0e45838e5c52d2 |
+| gp-sample-y/negative         | IDENTICAL x2 | (not run)        | 55e0efee90db4801 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 55e0efee90db4801 |
+| gp-sample-y/odd              | IDENTICAL x2 | (not run)        | 23fab759980d7acc | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 23fab759980d7acc |
+| gp-sample-y/ties             | IDENTICAL x2 | (not run)        | 15f827dc671917f0 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 15f827dc671917f0 |
+| gp-sample-y/wide             | IDENTICAL x2 | (not run)        | ce0c19926bcf9dbf | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | ce0c19926bcf9dbf |
+| tokenizer/base               | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 08b10bbc6f4b565b |
+| tokenizer/denormal           | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | c55a5605e8de64b8 |
+| tokenizer/denormal_ftz       | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 8b9f4a27b574806e |
+| tokenizer/dupes              | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 46adf25a7982a9a6 |
+| tokenizer/hashed             | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e61f50aae6c6dbd9 |
+| tokenizer/negative           | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | cd7e602ad066e3d5 |
+| tokenizer/odd                | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 08b10bbc6f4b565b |
+| tokenizer/ties               | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 94eb3bf4446a414a |
+| tokenizer/wide               | ONE-COLUMN | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 30fd2b8c5fdcf9e1 |
+
+summary: IDENTICAL=44, ONE-COLUMN=19
+
+| lane/fixture                 | column | verdict      | apple-m4         | arm64            | apple-m4         | apple-m4         | apple-m4         | apple-m4         | apple-m4         | apple-m4         | apple-m4         | apple-m4         | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr-tables/base | infer  | IDENTICAL x2 | (not run)        | (not run)        | a624d9f200295ebd | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | a624d9f200295ebd |
+| gbdt-categorical-ctr-tables/base | model  | ONE-COLUMN   | (not run)        | (not run)        | bf3bea6dea6870d5 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/base | batch  | IDENTICAL x2 | (not run)        | (not run)        | d37a90de0b078e27 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | d37a90de0b078e27 |
+| gbdt-categorical-ctr-tables/denormal | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | a624d9f200295ebd | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | a624d9f200295ebd |
+| gbdt-categorical-ctr-tables/denormal | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | caf6bc21aff5297d | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/denormal | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | d37a90de0b078e27 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | d37a90de0b078e27 |
+| gbdt-categorical-ctr-tables/denormal_ftz | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | a624d9f200295ebd | (not run)        | (not run)        | (not run)        | (not run)        | a624d9f200295ebd |
+| gbdt-categorical-ctr-tables/denormal_ftz | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | caf6bc21aff5297d | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/denormal_ftz | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | d37a90de0b078e27 | (not run)        | (not run)        | (not run)        | (not run)        | d37a90de0b078e27 |
+| gbdt-categorical-ctr-tables/dupes | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | ae3a773120cd3c33 | (not run)        | (not run)        | (not run)        | ae3a773120cd3c33 |
+| gbdt-categorical-ctr-tables/dupes | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 48404a9e0deead0e | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/dupes | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | a171156aa53e5e8b | (not run)        | (not run)        | (not run)        | a171156aa53e5e8b |
+| gbdt-categorical-ctr-tables/hashed | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | db7c89907a783122 | (not run)        | (not run)        | db7c89907a783122 |
+| gbdt-categorical-ctr-tables/hashed | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 14956a34ee65064c | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/hashed | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | cd07fda7956d86ab | (not run)        | (not run)        | cd07fda7956d86ab |
+| gbdt-categorical-ctr-tables/negative | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | ad6465f38360fd0c | (not run)        | ad6465f38360fd0c |
+| gbdt-categorical-ctr-tables/negative | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 182c3af211932dae | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/negative | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | ca5eabccae08c416 | (not run)        | ca5eabccae08c416 |
+| gbdt-categorical-ctr-tables/odd | infer  | IDENTICAL x2 | (not run)        | (not run)        | d0a5ab298e3f354c | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | d0a5ab298e3f354c |
+| gbdt-categorical-ctr-tables/odd | model  | ONE-COLUMN   | (not run)        | (not run)        | d12b8a92dfaf4f57 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/odd | batch  | IDENTICAL x2 | (not run)        | (not run)        | 8a24ba90ab6fff7f | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 8a24ba90ab6fff7f |
+| gbdt-categorical-ctr-tables/ties | infer  | IDENTICAL x2 | (not run)        | (not run)        | ba5bb1e19090253b | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | ba5bb1e19090253b |
+| gbdt-categorical-ctr-tables/ties | model  | ONE-COLUMN   | (not run)        | (not run)        | 1a89f2f0c4b4089c | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/ties | batch  | IDENTICAL x2 | (not run)        | (not run)        | da78c16224627804 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | da78c16224627804 |
+| gbdt-categorical-ctr-tables/wide | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | a942bfe94df4d9db | a942bfe94df4d9db |
+| gbdt-categorical-ctr-tables/wide | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 9b400c71cad50af0 | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/wide | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | b9b2a1559aa6e945 | b9b2a1559aa6e945 |
+| gbdt-tensor-ctr-tables/base  | infer  | IDENTICAL x2 | (not run)        | (not run)        | 18c29c1d0b000438 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 18c29c1d0b000438 |
+| gbdt-tensor-ctr-tables/base  | model  | ONE-COLUMN   | (not run)        | (not run)        | d701b87375180e4b | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/base  | batch  | IDENTICAL x2 | (not run)        | (not run)        | c14b5f2874153914 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | c14b5f2874153914 |
+| gbdt-tensor-ctr-tables/denormal | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 39133503b753ec5d | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 39133503b753ec5d |
+| gbdt-tensor-ctr-tables/denormal | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 1a4382769846fc64 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/denormal | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | ddf0cf2c0e19ff1d | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | ddf0cf2c0e19ff1d |
+| gbdt-tensor-ctr-tables/denormal_ftz | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 39133503b753ec5d | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 39133503b753ec5d |
+| gbdt-tensor-ctr-tables/denormal_ftz | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 1a4382769846fc64 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/denormal_ftz | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | ddf0cf2c0e19ff1d | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | ddf0cf2c0e19ff1d |
+| gbdt-tensor-ctr-tables/dupes | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 431c16487b4df475 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 431c16487b4df475 |
+| gbdt-tensor-ctr-tables/dupes | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | f99b90a46f47a09c | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/dupes | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 577fb834656d49e9 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 577fb834656d49e9 |
+| gbdt-tensor-ctr-tables/hashed | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 19da48b6c3ba9d2c | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 19da48b6c3ba9d2c |
+| gbdt-tensor-ctr-tables/hashed | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | 5c1025887f1a4112 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/hashed | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 23554a4fe59a1961 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 23554a4fe59a1961 |
+| gbdt-tensor-ctr-tables/negative | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 4fbfc6dcd6ae0bc5 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 4fbfc6dcd6ae0bc5 |
+| gbdt-tensor-ctr-tables/negative | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | d388697c55275e5f | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/negative | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | af1429b2866dde66 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | af1429b2866dde66 |
+| gbdt-tensor-ctr-tables/odd   | infer  | IDENTICAL x2 | (not run)        | (not run)        | b6a857464e3fc541 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | b6a857464e3fc541 |
+| gbdt-tensor-ctr-tables/odd   | model  | ONE-COLUMN   | (not run)        | (not run)        | 4148bc1f3f9b7e87 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/odd   | batch  | IDENTICAL x2 | (not run)        | (not run)        | 3de632fb4d411bcf | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 3de632fb4d411bcf |
+| gbdt-tensor-ctr-tables/ties  | infer  | IDENTICAL x2 | (not run)        | (not run)        | 1659c6bbc45fd69d | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1659c6bbc45fd69d |
+| gbdt-tensor-ctr-tables/ties  | model  | ONE-COLUMN   | (not run)        | (not run)        | 4274b123a863584a | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/ties  | batch  | IDENTICAL x2 | (not run)        | (not run)        | c648d9eb03bb1455 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | c648d9eb03bb1455 |
+| gbdt-tensor-ctr-tables/wide  | infer  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 3073c208310a28ff | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 3073c208310a28ff |
+| gbdt-tensor-ctr-tables/wide  | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | e768f6d7a856ca3f | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/wide  | batch  | IDENTICAL x2 | (not run)        | (not run)        | (not run)        | 1ca38d2db239a5c8 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1ca38d2db239a5c8 |
+| gmm-random-init-sample/base  | infer  | IDENTICAL x2 | a460febf045cb5ed | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | a460febf045cb5ed |
+| gmm-random-init-sample/base  | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | de637910417c0f6a |
+| gmm-random-init-sample/base  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/denormal | infer  | IDENTICAL x2 | aaa5ba26b5120d24 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | aaa5ba26b5120d24 |
+| gmm-random-init-sample/denormal | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 7215e09b22afc315 |
+| gmm-random-init-sample/denormal | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/denormal_ftz | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | aaa5ba26b5120d24 |
+| gmm-random-init-sample/denormal_ftz | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 7215e09b22afc315 |
+| gmm-random-init-sample/denormal_ftz | batch  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/dupes | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | a460febf045cb5ed |
+| gmm-random-init-sample/dupes | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | de637910417c0f6a |
+| gmm-random-init-sample/dupes | batch  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/hashed | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 03db205033c0af3e |
+| gmm-random-init-sample/hashed | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 29f02d6785e39944 |
+| gmm-random-init-sample/hashed | batch  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/negative | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 3d34dcff3bce8426 |
+| gmm-random-init-sample/negative | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | ac301e8ebc5eac1d |
+| gmm-random-init-sample/negative | batch  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/odd   | infer  | IDENTICAL x2 | 0360f4cd3fa1dc5a | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 0360f4cd3fa1dc5a |
+| gmm-random-init-sample/odd   | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | a0ac5c07569f6749 |
+| gmm-random-init-sample/odd   | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/ties  | infer  | IDENTICAL x2 | c9f89c3987186292 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | c9f89c3987186292 |
+| gmm-random-init-sample/ties  | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 4bf7497302af00ff |
+| gmm-random-init-sample/ties  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/wide  | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 96b674083abf4f30 |
+| gmm-random-init-sample/wide  | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 3d9bbe884dc72d8c |
+| gmm-random-init-sample/wide  | batch  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/base              | infer  | IDENTICAL x2 | e3cad76ce9a060d0 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e3cad76ce9a060d0 |
+| gmm-sample/base              | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | c4a997dc3ae320a2 |
+| gmm-sample/base              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/denormal          | infer  | IDENTICAL x2 | e50606c37c34da5a | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e50606c37c34da5a |
+| gmm-sample/denormal          | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 8b5297c12a121af0 |
+| gmm-sample/denormal          | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/denormal_ftz      | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e50606c37c34da5a |
+| gmm-sample/denormal_ftz      | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 8b5297c12a121af0 |
+| gmm-sample/denormal_ftz      | batch  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/dupes             | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e3cad76ce9a060d0 |
+| gmm-sample/dupes             | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | c4a997dc3ae320a2 |
+| gmm-sample/dupes             | batch  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/hashed            | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 142ecc9ea938b11f |
+| gmm-sample/hashed            | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | c48e15de1d19c992 |
+| gmm-sample/hashed            | batch  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/negative          | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 3a34ddfeecac9dc9 |
+| gmm-sample/negative          | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 089dc6043d91ad45 |
+| gmm-sample/negative          | batch  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/odd               | infer  | IDENTICAL x2 | e0258bef7ebd4e21 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e0258bef7ebd4e21 |
+| gmm-sample/odd               | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 3789c99cf21ba8fd |
+| gmm-sample/odd               | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/ties              | infer  | IDENTICAL x2 | aa785d8205811e0f | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | aa785d8205811e0f |
+| gmm-sample/ties              | model  | ONE-COLUMN   | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | fa63a34d1b2e5088 |
+| gmm-sample/ties              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/wide              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | db69f4fbabda0294 |
+| gmm-sample/wide              | model  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e388ab98305cfc62 |
+| gmm-sample/wide              | batch  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gp-sample-y-normalize/base   | infer  | IDENTICAL x2 | (not run)        | 0c4beaeb3b1aeb90 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 0c4beaeb3b1aeb90 |
+| gp-sample-y-normalize/base   | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 988bc1c3b51246a4 |
+| gp-sample-y-normalize/base   | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/denormal | infer  | IDENTICAL x2 | (not run)        | d83e1344b5034607 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | d83e1344b5034607 |
+| gp-sample-y-normalize/denormal | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 7838eff1539fb489 |
+| gp-sample-y-normalize/denormal | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/denormal_ftz | infer  | IDENTICAL x2 | (not run)        | d83e1344b5034607 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | d83e1344b5034607 |
+| gp-sample-y-normalize/denormal_ftz | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 5f20cf42422bf2e9 |
+| gp-sample-y-normalize/denormal_ftz | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/dupes  | infer  | IDENTICAL x2 | (not run)        | 64889722931adde7 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 64889722931adde7 |
+| gp-sample-y-normalize/dupes  | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | db1cd41ce6fd1b37 |
+| gp-sample-y-normalize/dupes  | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/hashed | infer  | IDENTICAL x2 | (not run)        | c0c2a3bec4606a09 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | c0c2a3bec4606a09 |
+| gp-sample-y-normalize/hashed | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 78eb0a3ce16ce7c5 |
+| gp-sample-y-normalize/hashed | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/negative | infer  | IDENTICAL x2 | (not run)        | de0542b579ff2843 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | de0542b579ff2843 |
+| gp-sample-y-normalize/negative | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | f8b1eb8570f5e01b |
+| gp-sample-y-normalize/negative | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/odd    | infer  | IDENTICAL x2 | (not run)        | 1ed38e7596ec035d | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1ed38e7596ec035d |
+| gp-sample-y-normalize/odd    | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 767941378d3c368a |
+| gp-sample-y-normalize/odd    | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/ties   | infer  | IDENTICAL x2 | (not run)        | 37a77ee22082dc29 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 37a77ee22082dc29 |
+| gp-sample-y-normalize/ties   | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 4af86e76b34e092c |
+| gp-sample-y-normalize/ties   | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/wide   | infer  | IDENTICAL x2 | (not run)        | 296d00db02a3dc55 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 296d00db02a3dc55 |
+| gp-sample-y-normalize/wide   | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 7aaddfff81162cc0 |
+| gp-sample-y-normalize/wide   | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/base             | infer  | IDENTICAL x2 | (not run)        | b7cef1a89e642972 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | b7cef1a89e642972 |
+| gp-sample-y/base             | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 8f4a54a0bd816175 |
+| gp-sample-y/base             | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/denormal         | infer  | IDENTICAL x2 | (not run)        | 41aae3173e5800f3 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 41aae3173e5800f3 |
+| gp-sample-y/denormal         | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e2e8bcc686c2be72 |
+| gp-sample-y/denormal         | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/denormal_ftz     | infer  | IDENTICAL x2 | (not run)        | 41aae3173e5800f3 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 41aae3173e5800f3 |
+| gp-sample-y/denormal_ftz     | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 4dbb90dfe4b757ae |
+| gp-sample-y/denormal_ftz     | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/dupes            | infer  | IDENTICAL x2 | (not run)        | 1ecf65597b149dc3 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1ecf65597b149dc3 |
+| gp-sample-y/dupes            | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 0eca938df7a74371 |
+| gp-sample-y/dupes            | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/hashed           | infer  | IDENTICAL x2 | (not run)        | 1512a8f232028314 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1512a8f232028314 |
+| gp-sample-y/hashed           | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e313387e268603e1 |
+| gp-sample-y/hashed           | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/negative         | infer  | IDENTICAL x2 | (not run)        | 4adb5317401462a1 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 4adb5317401462a1 |
+| gp-sample-y/negative         | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | adc071acad296182 |
+| gp-sample-y/negative         | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/odd              | infer  | IDENTICAL x2 | (not run)        | 88b3eef5cfb3f1e8 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 88b3eef5cfb3f1e8 |
+| gp-sample-y/odd              | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | b5496b305f465a2e |
+| gp-sample-y/odd              | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/ties             | infer  | IDENTICAL x2 | (not run)        | 0811d434a92222cc | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 0811d434a92222cc |
+| gp-sample-y/ties             | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 5a2f8a826a1aab15 |
+| gp-sample-y/ties             | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/wide             | infer  | IDENTICAL x2 | (not run)        | eb0dc965d1fb9854 | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | eb0dc965d1fb9854 |
+| gp-sample-y/wide             | model  | ONE-COLUMN   | (not run)        | n/a:no-save      | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 6de1e70ad300db07 |
+| gp-sample-y/wide             | batch  | N/A          | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| tokenizer/base               | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1939b74da0333639 |
+| tokenizer/base               | model  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/base               | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 6e235476cc31241f |
+| tokenizer/denormal           | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | e881084e86e9c718 |
+| tokenizer/denormal           | model  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/denormal           | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 52a4b46c6638283e |
+| tokenizer/denormal_ftz       | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 0ce2094be5609967 |
+| tokenizer/denormal_ftz       | model  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/denormal_ftz       | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | ed742c6961610923 |
+| tokenizer/dupes              | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 5315d2de648bc57b |
+| tokenizer/dupes              | model  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/dupes              | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | b3db5e08a72d5afc |
+| tokenizer/hashed             | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 471b06ab4e24044f |
+| tokenizer/hashed             | model  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/hashed             | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 0a2474e3f79bd1c9 |
+| tokenizer/negative           | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 2188bf1646406ed2 |
+| tokenizer/negative           | model  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/negative           | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | b680bde5e6e8d3c8 |
+| tokenizer/odd                | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 1939b74da0333639 |
+| tokenizer/odd                | model  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/odd                | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 428ccb5ef4e44ab4 |
+| tokenizer/ties               | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 3b5edfe0d355b03e |
+| tokenizer/ties               | model  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/ties               | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 48f42ce5bfd939ae |
+| tokenizer/wide               | infer  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | c4af8e403d8a4ff5 |
+| tokenizer/wide               | model  | N/A          | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/wide               | batch  | ONE-COLUMN   | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | (not run)        | 023683c8a469bd0b |
+
+summary (infer/model): IDENTICAL=44, N/A=9, ONE-COLUMN=73
+summary (batch): IDENTICAL=18, N/A=36, ONE-COLUMN=9
+summary (rlpair): 
