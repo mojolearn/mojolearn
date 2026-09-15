@@ -12,12 +12,17 @@ These classes are not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
-from . import _mojolearn_solver
+from . import _mojolearn_solver, _serialize
+from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros
-from .linear_model import _r2_host, _shape_of
+from .linear_model import _check_saved_by, _r2_host, _restore_mode, _saved_mode, _shape_of
 
 # cuML's `loss_funct` / DistanceType style codes this surface uses.
 _SELECTION_SHUFFLE = {"cyclic": 0, "random": 1}
+
+#: The saved-model format of ElasticNet and Lasso (lane/inference-linear-svm,
+#: 2026-09-15): `mojolearn.host_model(path)` predicts from it on a CPU.
+_CD_FORMAT = "mojolearn-cd-1"
 
 
 # THE IMPORT-TIME MODE GUARD THAT STOOD HERE IS DELETED. DEVIATION 1931,
@@ -310,7 +315,17 @@ class ElasticNet:
             )
         return f, copied
 
+    def _solver(self):
+        """The binding `fit` and `predict` call; the host subclass of
+        `_classical_host.py` answers the CPU binding instead."""
+        return _mojolearn_solver
+
     def fit(self, X, y, sample_weight=None):
+        # The CPU inference boundary: ElasticNet does not inherit
+        # NumericModeMixin's guard, so on a CPU-only install the fit refuses
+        # outside mojolearn._cpu_reference.reference_training().
+        from ._cpu_reference import require_training
+        require_training(self)
         if sample_weight is not None:
             raise NotImplementedError(
                 "mojolearn ElasticNet: sample_weight is not implemented "
@@ -339,7 +354,7 @@ class ElasticNet:
 
         self.coef_ = zeros((n_cols,), "<f4")
         info = zeros((1,), "<f4")
-        n_iter = _mojolearn_solver.cd_fit(
+        n_iter = self._solver().cd_fit(
             addr_ro(work_x, name="X"), addr_ro(target, name="y"),
             addr(self.coef_, name="coef_"), addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_solver.mojo::cd_fit_binding.
@@ -366,7 +381,7 @@ class ElasticNet:
             raise ValueError(
                 "mojolearn ElasticNet feature count differs from fit")
         out = empty((work_x.shape[0],), "<f4")
-        _mojolearn_solver.cd_predict(
+        self._solver().cd_predict(
             addr_ro(work_x, name="X"), addr_ro(self.coef_, name="coef_"),
             addr(out, name="predictions"),
             # ORDER MATCHES bindings/_mojolearn_solver.mojo::cd_predict_binding.
@@ -374,6 +389,59 @@ class ElasticNet:
             [work_x.shape[0], work_x.shape[1], float(self.intercept_)],
         )
         return out
+
+    def save(self, path):
+        """Write the fitted model to `path` as an npz: `coef_` as fitted,
+        the intercept as float64, `hyper` `<f8` [alpha, l1_ratio, tol],
+        `meta` `<i8` [n_features_in_, fit_intercept, max_iter, n_iter_] and
+        the numeric mode (lane/inference-linear-svm, 2026-09-15).
+        `mojolearn.host_model(path)` predicts from it on a CPU with no GPU."""
+        if not hasattr(self, "coef_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        arrays = {
+            "format": _CD_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "coef": self.coef_,
+            "intercept": Array.from_list([float(self.intercept_)], "<f8"),
+            "hyper": Array.from_list(
+                [float(self.alpha), float(self.l1_ratio), float(self.tol)], "<f8"),
+            "meta": Array.from_list(
+                [int(self.n_features_in_), 1 if self.fit_intercept else 0,
+                 int(self.max_iter), int(self.n_iter_)], "<i8"),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts; it does not
+        refit."""
+        arrays = _serialize.read_npz(path, _CD_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 4:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 4 are needed")
+        hyper = _serialize.exact(arrays, "hyper", "<f8")
+        if hyper.size != 3:
+            raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, 3 are needed")
+        kwargs = dict(alpha=float(hyper[0]), fit_intercept=bool(int(meta[1])),
+                      max_iter=int(meta[2]), tol=float(hyper[2]))
+        if not issubclass(cls, Lasso):
+            kwargs["l1_ratio"] = float(hyper[1])
+        elif float(hyper[1]) != 1.0:
+            raise ValueError(f"mojolearn: {path!r} carries l1_ratio {float(hyper[1])}, a Lasso is 1.0")
+        obj = cls(**kwargs)
+        _restore_mode(obj, arrays)
+        obj.n_features_in_ = int(meta[0])
+        obj.coef_ = _serialize.exact(arrays, "coef", "<f4")
+        if obj.coef_.ndim != 1 or obj.coef_.size != obj.n_features_in_:
+            raise ValueError(f"mojolearn: {path!r} coef does not match n_features_in_")
+        intercept = _serialize.exact(arrays, "intercept", "<f8")
+        if intercept.size != 1:
+            raise ValueError(f"mojolearn: {path!r} intercept must hold one value")
+        obj.intercept_ = float(intercept[0])
+        obj.n_iter_ = int(meta[3])
+        return obj
 
     def score(self, X, y):
         """R^2, a sequential float64 host reduction outside the identity

@@ -10,6 +10,16 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- CPU inference from saved models for StandardScaler, MinMaxScaler, Lasso, ElasticNet,
+  KernelRidge (linear and rbf kernels), Nystroem (linear and rbf) and RBFSampler: each
+  gains `save` and `load`, and `mojolearn.host_model(path)` transforms or predicts on a
+  CPU-only install. The shipped estimators host binding serves the six entries
+  (`standard_transform`, `minmax_transform`, `cd_predict`, `kernel_ridge_predict`,
+  `nystroem_transform`, `rbf_sampler_transform`); the preprocessing, solver and
+  kernel_methods reference bindings still do not ship. The saved-model classical lanes
+  grow from 12 to 29, adding the ols, ridge and logistic option variants. On a CPU-only
+  install `StandardScaler.fit`, `MinMaxScaler.fit`, `Lasso.fit` and `ElasticNet.fit` now
+  refuse by name outside the internal reference scope, as every other estimator fit does.
 - New `mojolearn.metrics.fowlkes_mallows_score`, mirroring scikit-learn's definition (cuML
   has none): the device integer contingency matrix, exact Int64 pair counts, then
   `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, 0.0 when `tk == 0` (no samples, one sample,
