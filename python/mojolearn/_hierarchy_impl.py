@@ -413,9 +413,13 @@ class AgglomerativeClustering:
 
     def save(self, path):
         """Write the prediction data of a `prediction_data=True` fit to
-        `path` as an npz: `x` `<f4` (the training rows), `labels` and
-        `children` `<i4`, `meta` `<i8` [n_clusters, n_features_in_,
-        n_leaves_, n_connected_components_, n_boruvka_rounds_]. On a CPU-only
+        `path` as an npz: `x` `<f4` (the training rows), `labels` `<i4`,
+        `meta` `<i8` [n_clusters, n_features_in_, n_leaves_]. The file holds
+        the prediction state and nothing the fit ALGORITHM decides:
+        `children_` (its row orientation) and `n_boruvka_rounds_` (a Boruvka
+        pass count, -1 on the CPU reference, which runs Kruskal) are not
+        saved, so the same fit writes the same bytes on every GPU and on the
+        CPU reference. A loaded model has neither attribute. On a CPU-only
         install `AgglomerativeClustering.load(path).predict(X)` runs through
         `_mojolearn_estimators_host.labeled_reference_predict`."""
         if not hasattr(self, "labels_"):
@@ -432,10 +436,8 @@ class AgglomerativeClustering:
             "metric": str(self.metric),
             "x": self._fit_X,
             "labels": self.labels_,
-            "children": self.children_,
             "meta": Array.from_list(
-                [int(self.n_clusters_), int(self.n_features_in_), int(self.n_leaves_),
-                 int(self.n_connected_components_), int(self.n_boruvka_rounds_)], "<i8"
+                [int(self.n_clusters_), int(self.n_features_in_), int(self.n_leaves_)], "<i8"
             ),
         }
         return _serialize.write_npz(path, arrays)
@@ -447,24 +449,20 @@ class AgglomerativeClustering:
         arrays = _serialize.read_npz(path, _AGGLOMERATIVE_FORMAT)
         _check_saved_by(arrays, path, cls)
         meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 5:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 5 are needed")
-        k, nf, n_leaves, n_cc, rounds = (int(v) for v in meta.tolist())
+        if meta.size != 3:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
+        k, nf, n_leaves = (int(v) for v in meta.tolist())
         obj = cls(n_clusters=k, metric=_serialize.scalar_str(arrays, "metric"), prediction_data=True)
         _restore_mode(obj, arrays)
         x = _serialize.exact(arrays, "x", "<f4")
         labels = _serialize.exact(arrays, "labels", "<i4")
-        children = _serialize.exact(arrays, "children", "<i4")
         if x.ndim != 2 or tuple(x.shape) != (n_leaves, nf):
             raise ValueError(f"mojolearn: {path!r} x shape {tuple(x.shape)} is not ({n_leaves}, {nf})")
-        if labels.size != n_leaves or tuple(children.shape) != (n_leaves - 1, 2):
-            raise ValueError(f"mojolearn: {path!r} labels or children do not match n_leaves_")
+        if labels.size != n_leaves:
+            raise ValueError(f"mojolearn: {path!r} labels do not match n_leaves_")
         obj._fit_X = x
         obj.labels_ = labels
-        obj.children_ = children
         obj.n_clusters_ = k
         obj.n_leaves_ = n_leaves
-        obj.n_connected_components_ = n_cc
-        obj.n_boruvka_rounds_ = rounds
         obj.n_features_in_ = nf
         return obj

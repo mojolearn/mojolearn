@@ -145,7 +145,7 @@ def arm_dbscan(rep):
     rep.raises("DBSCAN", ValueError, "features", "a query with the wrong feature count", m.predict, x[:, :1])
     bad = x[:3].copy(); bad[1, 1] = np.float32("nan")
     rep.raises("DBSCAN", ValueError, "NaN", "a NaN query refused by name", m.predict, bad)
-    rep.raises("DBSCAN", ValueError, "no rows", "an empty query refused by name", m.predict, x[:0])
+    rep.raises("DBSCAN", ValueError, "empty", "an empty query refused by name (as_f32_c)", m.predict, x[:0])
     rep.raises("DBSCAN", TypeError, "prediction_data", "prediction_data must be a bool", DBSCAN(prediction_data=1).fit, x)
     return m, x
 
@@ -183,8 +183,8 @@ def arm_agglomerative(rep):
         m.save(path)
         back = AgglomerativeClustering.load(path)
         rep.check("AGGLOM", np.array_equal(np.asarray(back.predict(x)), p)
-                  and np.array_equal(np.asarray(back.children_), np.asarray(m.children_)),
-                  "save and load predict the same bytes and keep children_")
+                  and not hasattr(back, "children_") and not hasattr(back, "n_boruvka_rounds_"),
+                  "save and load predict the same bytes; the file holds no fit-algorithm state (children_, n_boruvka_rounds_)")
     rep.raises("AGGLOM", ValueError, "prediction_data=True", "predict without prediction data refused by name", plain.predict, x)
     rep.raises("AGGLOM", ValueError, "not fitted", "predict before fit refused by name", AgglomerativeClustering().predict, x)
     rep.raises("AGGLOM", ValueError, "features", "a query with the wrong feature count", m.predict, x[:, :1])

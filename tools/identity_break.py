@@ -4319,9 +4319,9 @@ _batch_decl(_batch_pq("radius_neighbors", sl=slice(0, 64), ragged=True, sort_res
 _batch_decl(_batch_pq("score_samples", sl=(slice(0, 256), slice(0, 4))), "par-queries-kde")
 _batch_decl(_batch_rsn("kneighbors", "predict", "predict_proba"), "par-reference-knn")
 _batch_decl(_batch_rsn("predict"), "par-reference-knn-reg")
-# parallel_graph.fit_graph is fit-only; see the agglomerative and spectral reasons above
-_batch_decl("n/a:transductive (AgglomerativeClustering has no predict on GPU, CPU or cuML; fit and fit_predict only)",
-            "par-graph-agglomerative")
+# parallel_graph.fit_graph fits; the fitted AgglomerativeClustering(prediction_data=True)
+# predicts like the plain lane's (DEVIATION 2740)
+_batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]), "par-graph-agglomerative")
 _batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
             "par-graph-spectral")
 _batch_decl(_rows_calls("predict"), "par-ordered-rmse")
