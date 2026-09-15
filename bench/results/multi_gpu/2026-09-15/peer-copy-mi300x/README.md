@@ -105,8 +105,8 @@ What follows from it:
 - The Cholesky column solve keeps its host staging
   (`cholesky/checks/trsm.mojo::_cho_solve_columns`).
 - `core/multi_gpu.mojo::transfer_bytes` stages cross-device copies through
-  host memory on AMD builds, and the byte-LM replica pools use it, because
-  the transport audit found them reading wrong
-  (`../transport-audit/README.md`).
+  host memory on AMD builds, and the byte-LM replica pools and the Cholesky
+  trailing-update rows use it, because the transport audit found both reading
+  wrong above 1 MiB (`../transport-audit/README.md`).
 - The failing variant is the repro to rerun on a new ROCm or MAX release:
   `training/checks/peer_copy_check.mojo`, PEERSOLVE `l_first` at n=513.

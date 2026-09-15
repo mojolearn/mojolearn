@@ -815,9 +815,10 @@ memory: its device-to-device form diverged on two MI300X for factors above
 kernel on those SR-IOV MI300X can read the target memory's previous contents
 after the copy and a drain of both contexts, a platform behavior two H100s
 never show (`bench/results/multi_gpu/2026-09-15/peer-copy-mi300x/`). The same
-audit found the byte-LM replica pools reading wrong on two MI300X at 2.1
-million parameters; their cross-device copies are now staged through host
-memory on AMD by `core/multi_gpu.mojo::transfer_bytes`
+audit found the byte-LM replica pools (at 2.1 million parameters) and the
+Cholesky trailing-update rows (at n=4500) reading wrong on two MI300X; their
+cross-device copies are now staged through host memory on AMD by
+`core/multi_gpu.mojo::transfer_bytes`
 (`bench/results/multi_gpu/2026-09-15/transport-audit/`). Final receipts on
 two H100s and two MI300X at one commit
 (`bench/results/multi_gpu/2026-09-15/kernel-methods-cholesky-final/`) pass the

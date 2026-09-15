@@ -26,7 +26,11 @@ and the gemm fp32.v1 fold of a cell is a function of `k = w` only (at
 rows share a launch or which plan the dispatcher picks for the launch shape.
 So contiguous output-row ranges of `G` run on owners that hold their rows of
 `L21` (left operand) and all of `L21` (right operand), and the rows are
-copied back as bytes into `G`. The subtraction, the panel factor, the panel
+copied back as bytes into `G`. Those copies go through
+`core/multi_gpu.mojo::transfer_bytes`, which stages them through host memory
+on AMD: with device copies, a two-MI300X factor at n=4500 (output rows of
+about 40 MiB per owner) differed from one device while two H100s were exact
+(`bench/results/multi_gpu/2026-09-15/transport-audit/`). The subtraction, the panel factor, the panel
 solve and the `info` decision stay on the root.
 
 ## The solve
