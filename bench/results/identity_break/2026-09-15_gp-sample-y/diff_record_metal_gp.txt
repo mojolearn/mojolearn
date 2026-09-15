@@ -1,0 +1,157 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 165 other lane(s) the JSONs carry are not compared
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | arm64            |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gp-matern12/base             | IDENTICAL x4 | a54e340b4a22147f | a54e340b4a22147f | a54e340b4a22147f | a54e340b4a22147f |
+| gp-matern12/denormal         | IDENTICAL x4 | 6ca669d68732c77e | 6ca669d68732c77e | 6ca669d68732c77e | 6ca669d68732c77e |
+| gp-matern12/denormal_ftz     | IDENTICAL x4 | 6ca669d68732c77e | 6ca669d68732c77e | 6ca669d68732c77e | 6ca669d68732c77e |
+| gp-matern12/dupes            | IDENTICAL x4 | dc7d705bf6b6fb42 | dc7d705bf6b6fb42 | dc7d705bf6b6fb42 | dc7d705bf6b6fb42 |
+| gp-matern12/hashed           | IDENTICAL x4 | ece4c902bf99f265 | ece4c902bf99f265 | ece4c902bf99f265 | ece4c902bf99f265 |
+| gp-matern12/negative         | IDENTICAL x4 | 5e78849478852ef7 | 5e78849478852ef7 | 5e78849478852ef7 | 5e78849478852ef7 |
+| gp-matern12/odd              | IDENTICAL x4 | 91b8075bebf3738a | 91b8075bebf3738a | 91b8075bebf3738a | 91b8075bebf3738a |
+| gp-matern12/ties             | IDENTICAL x4 | 2661efdd41bfdb23 | 2661efdd41bfdb23 | 2661efdd41bfdb23 | 2661efdd41bfdb23 |
+| gp-matern12/wide             | IDENTICAL x4 | 770208f9d55b9e6d | 770208f9d55b9e6d | 770208f9d55b9e6d | 770208f9d55b9e6d |
+| gp-matern32/base             | IDENTICAL x4 | 03066455003d7df7 | 03066455003d7df7 | 03066455003d7df7 | 03066455003d7df7 |
+| gp-matern32/denormal         | IDENTICAL x4 | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 36a4bd5f93641a74 |
+| gp-matern32/denormal_ftz     | IDENTICAL x4 | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 36a4bd5f93641a74 |
+| gp-matern32/dupes            | IDENTICAL x4 | 5346a4ac3a9fb082 | 5346a4ac3a9fb082 | 5346a4ac3a9fb082 | 5346a4ac3a9fb082 |
+| gp-matern32/hashed           | IDENTICAL x4 | 2a98418556cb39e1 | 2a98418556cb39e1 | 2a98418556cb39e1 | 2a98418556cb39e1 |
+| gp-matern32/negative         | IDENTICAL x4 | 415c32e64ea7e125 | 415c32e64ea7e125 | 415c32e64ea7e125 | 415c32e64ea7e125 |
+| gp-matern32/odd              | IDENTICAL x4 | 0e42009aae37b1a3 | 0e42009aae37b1a3 | 0e42009aae37b1a3 | 0e42009aae37b1a3 |
+| gp-matern32/ties             | IDENTICAL x4 | f4c49d5c4fd7edda | f4c49d5c4fd7edda | f4c49d5c4fd7edda | f4c49d5c4fd7edda |
+| gp-matern32/wide             | IDENTICAL x4 | 710809cd4f31ce7e | 710809cd4f31ce7e | 710809cd4f31ce7e | 710809cd4f31ce7e |
+| gp-matern52-ard/base         | IDENTICAL x4 | 68f9bac4021de057 | 68f9bac4021de057 | 68f9bac4021de057 | 68f9bac4021de057 |
+| gp-matern52-ard/denormal     | IDENTICAL x4 | 1991a044f55d7f40 | 1991a044f55d7f40 | 1991a044f55d7f40 | 1991a044f55d7f40 |
+| gp-matern52-ard/denormal_ftz | IDENTICAL x4 | 1991a044f55d7f40 | 1991a044f55d7f40 | 1991a044f55d7f40 | 1991a044f55d7f40 |
+| gp-matern52-ard/dupes        | IDENTICAL x4 | c2a1b1e411a6de85 | c2a1b1e411a6de85 | c2a1b1e411a6de85 | c2a1b1e411a6de85 |
+| gp-matern52-ard/hashed       | IDENTICAL x4 | 5a0369e0406e8d1a | 5a0369e0406e8d1a | 5a0369e0406e8d1a | 5a0369e0406e8d1a |
+| gp-matern52-ard/negative     | IDENTICAL x4 | 51fb6cf765695237 | 51fb6cf765695237 | 51fb6cf765695237 | 51fb6cf765695237 |
+| gp-matern52-ard/odd          | IDENTICAL x4 | f05b1867f7b7d159 | f05b1867f7b7d159 | f05b1867f7b7d159 | f05b1867f7b7d159 |
+| gp-matern52-ard/ties         | IDENTICAL x4 | e7965892a63545e5 | e7965892a63545e5 | e7965892a63545e5 | e7965892a63545e5 |
+| gp-matern52-ard/wide         | IDENTICAL x4 | fd640b7c289a6327 | fd640b7c289a6327 | fd640b7c289a6327 | fd640b7c289a6327 |
+| gp/base                      | IDENTICAL x4 | ea70c56b99a74791 | ea70c56b99a74791 | ea70c56b99a74791 | ea70c56b99a74791 |
+| gp/denormal                  | IDENTICAL x4 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 |
+| gp/denormal_ftz              | IDENTICAL x4 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 |
+| gp/dupes                     | IDENTICAL x4 | fba9e6f4ea05af2c | fba9e6f4ea05af2c | fba9e6f4ea05af2c | fba9e6f4ea05af2c |
+| gp/hashed                    | IDENTICAL x4 | f01c58a79fb1af27 | f01c58a79fb1af27 | f01c58a79fb1af27 | f01c58a79fb1af27 |
+| gp/negative                  | IDENTICAL x4 | 40fd2f479f775ec4 | 40fd2f479f775ec4 | 40fd2f479f775ec4 | 40fd2f479f775ec4 |
+| gp/odd                       | IDENTICAL x4 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 |
+| gp/ties                      | IDENTICAL x4 | c92496318cb78403 | c92496318cb78403 | c92496318cb78403 | c92496318cb78403 |
+| gp/wide                      | IDENTICAL x4 | ca779c84b786d493 | ca779c84b786d493 | ca779c84b786d493 | ca779c84b786d493 |
+
+summary: IDENTICAL=36
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | arm64            |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gp-matern12/base             | infer  | IDENTICAL x4 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 |
+| gp-matern12/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern12/base             | batch  | IDENTICAL x4 | 60ba7e42986f842e | 60ba7e42986f842e | 60ba7e42986f842e | 60ba7e42986f842e |
+| gp-matern12/denormal         | infer  | IDENTICAL x4 | b18535ebf335687e | b18535ebf335687e | b18535ebf335687e | b18535ebf335687e |
+| gp-matern12/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern12/denormal         | batch  | IDENTICAL x4 | 6e00b6a519f68971 | 6e00b6a519f68971 | 6e00b6a519f68971 | 6e00b6a519f68971 |
+| gp-matern12/denormal_ftz     | infer  | IDENTICAL x4 | b18535ebf335687e | b18535ebf335687e | b18535ebf335687e | b18535ebf335687e |
+| gp-matern12/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern12/denormal_ftz     | batch  | IDENTICAL x4 | 6e00b6a519f68971 | 6e00b6a519f68971 | 6e00b6a519f68971 | 6e00b6a519f68971 |
+| gp-matern12/dupes            | infer  | IDENTICAL x4 | f28fbf34f5e2f5e4 | f28fbf34f5e2f5e4 | f28fbf34f5e2f5e4 | f28fbf34f5e2f5e4 |
+| gp-matern12/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern12/dupes            | batch  | IDENTICAL x4 | 9298e4ad500ce168 | 9298e4ad500ce168 | 9298e4ad500ce168 | 9298e4ad500ce168 |
+| gp-matern12/hashed           | infer  | IDENTICAL x4 | d97f7a7856e5c3cf | d97f7a7856e5c3cf | d97f7a7856e5c3cf | d97f7a7856e5c3cf |
+| gp-matern12/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern12/hashed           | batch  | IDENTICAL x4 | f61dcba2448ded11 | f61dcba2448ded11 | f61dcba2448ded11 | f61dcba2448ded11 |
+| gp-matern12/negative         | infer  | IDENTICAL x4 | 7a4ce4fbf93bfe0a | 7a4ce4fbf93bfe0a | 7a4ce4fbf93bfe0a | 7a4ce4fbf93bfe0a |
+| gp-matern12/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern12/negative         | batch  | IDENTICAL x4 | 7d864314cdf560ff | 7d864314cdf560ff | 7d864314cdf560ff | 7d864314cdf560ff |
+| gp-matern12/odd              | infer  | IDENTICAL x4 | 70c7a448533ae162 | 70c7a448533ae162 | 70c7a448533ae162 | 70c7a448533ae162 |
+| gp-matern12/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern12/odd              | batch  | IDENTICAL x4 | e3e57f92fb8d7443 | e3e57f92fb8d7443 | e3e57f92fb8d7443 | e3e57f92fb8d7443 |
+| gp-matern12/ties             | infer  | IDENTICAL x4 | a001b7e2647b5504 | a001b7e2647b5504 | a001b7e2647b5504 | a001b7e2647b5504 |
+| gp-matern12/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern12/ties             | batch  | IDENTICAL x4 | afa881afdf169ffe | afa881afdf169ffe | afa881afdf169ffe | afa881afdf169ffe |
+| gp-matern12/wide             | infer  | IDENTICAL x4 | d85b3fdd5a0d4b83 | d85b3fdd5a0d4b83 | d85b3fdd5a0d4b83 | d85b3fdd5a0d4b83 |
+| gp-matern12/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern12/wide             | batch  | IDENTICAL x4 | 2a36bbb9dbe1d986 | 2a36bbb9dbe1d986 | 2a36bbb9dbe1d986 | 2a36bbb9dbe1d986 |
+| gp-matern32/base             | infer  | IDENTICAL x4 | a89afc94af5f084c | a89afc94af5f084c | a89afc94af5f084c | a89afc94af5f084c |
+| gp-matern32/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern32/base             | batch  | IDENTICAL x4 | 4d0c75f26ce30a17 | 4d0c75f26ce30a17 | 4d0c75f26ce30a17 | 4d0c75f26ce30a17 |
+| gp-matern32/denormal         | infer  | IDENTICAL x4 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e6f4a9df1fb82418 |
+| gp-matern32/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern32/denormal         | batch  | IDENTICAL x4 | 9dc26cf63aee002d | 9dc26cf63aee002d | 9dc26cf63aee002d | 9dc26cf63aee002d |
+| gp-matern32/denormal_ftz     | infer  | IDENTICAL x4 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e6f4a9df1fb82418 |
+| gp-matern32/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern32/denormal_ftz     | batch  | IDENTICAL x4 | 9dc26cf63aee002d | 9dc26cf63aee002d | 9dc26cf63aee002d | 9dc26cf63aee002d |
+| gp-matern32/dupes            | infer  | IDENTICAL x4 | e0a8a2dff9f3e703 | e0a8a2dff9f3e703 | e0a8a2dff9f3e703 | e0a8a2dff9f3e703 |
+| gp-matern32/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern32/dupes            | batch  | IDENTICAL x4 | 314fbd59f78d11be | 314fbd59f78d11be | 314fbd59f78d11be | 314fbd59f78d11be |
+| gp-matern32/hashed           | infer  | IDENTICAL x4 | 9b2c58c951e46aa6 | 9b2c58c951e46aa6 | 9b2c58c951e46aa6 | 9b2c58c951e46aa6 |
+| gp-matern32/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern32/hashed           | batch  | IDENTICAL x4 | a696dd8895d78928 | a696dd8895d78928 | a696dd8895d78928 | a696dd8895d78928 |
+| gp-matern32/negative         | infer  | IDENTICAL x4 | 59c1f19475065932 | 59c1f19475065932 | 59c1f19475065932 | 59c1f19475065932 |
+| gp-matern32/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern32/negative         | batch  | IDENTICAL x4 | 07269e71c177f0e5 | 07269e71c177f0e5 | 07269e71c177f0e5 | 07269e71c177f0e5 |
+| gp-matern32/odd              | infer  | IDENTICAL x4 | cebcbbd1a0cf26a5 | cebcbbd1a0cf26a5 | cebcbbd1a0cf26a5 | cebcbbd1a0cf26a5 |
+| gp-matern32/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern32/odd              | batch  | IDENTICAL x4 | 6245f5a144c11e87 | 6245f5a144c11e87 | 6245f5a144c11e87 | 6245f5a144c11e87 |
+| gp-matern32/ties             | infer  | IDENTICAL x4 | d4ebe9e3a969d687 | d4ebe9e3a969d687 | d4ebe9e3a969d687 | d4ebe9e3a969d687 |
+| gp-matern32/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern32/ties             | batch  | IDENTICAL x4 | e0f8d36884ec439b | e0f8d36884ec439b | e0f8d36884ec439b | e0f8d36884ec439b |
+| gp-matern32/wide             | infer  | IDENTICAL x4 | e01432f62e53b456 | e01432f62e53b456 | e01432f62e53b456 | e01432f62e53b456 |
+| gp-matern32/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern32/wide             | batch  | IDENTICAL x4 | 0e1eaf22f908fce3 | 0e1eaf22f908fce3 | 0e1eaf22f908fce3 | 0e1eaf22f908fce3 |
+| gp-matern52-ard/base         | infer  | IDENTICAL x4 | 7ed07da2d9a2b815 | 7ed07da2d9a2b815 | 7ed07da2d9a2b815 | 7ed07da2d9a2b815 |
+| gp-matern52-ard/base         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern52-ard/base         | batch  | IDENTICAL x4 | b67e8be0fee4333d | b67e8be0fee4333d | b67e8be0fee4333d | b67e8be0fee4333d |
+| gp-matern52-ard/denormal     | infer  | IDENTICAL x4 | 15773a44eee1c9ad | 15773a44eee1c9ad | 15773a44eee1c9ad | 15773a44eee1c9ad |
+| gp-matern52-ard/denormal     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern52-ard/denormal     | batch  | IDENTICAL x4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 |
+| gp-matern52-ard/denormal_ftz | infer  | IDENTICAL x4 | 15773a44eee1c9ad | 15773a44eee1c9ad | 15773a44eee1c9ad | 15773a44eee1c9ad |
+| gp-matern52-ard/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern52-ard/denormal_ftz | batch  | IDENTICAL x4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 |
+| gp-matern52-ard/dupes        | infer  | IDENTICAL x4 | 4cb708614a14be4f | 4cb708614a14be4f | 4cb708614a14be4f | 4cb708614a14be4f |
+| gp-matern52-ard/dupes        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern52-ard/dupes        | batch  | IDENTICAL x4 | 2d242b760df0c661 | 2d242b760df0c661 | 2d242b760df0c661 | 2d242b760df0c661 |
+| gp-matern52-ard/hashed       | infer  | IDENTICAL x4 | d616a8cbf56f719b | d616a8cbf56f719b | d616a8cbf56f719b | d616a8cbf56f719b |
+| gp-matern52-ard/hashed       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern52-ard/hashed       | batch  | IDENTICAL x4 | de23d37649d275cd | de23d37649d275cd | de23d37649d275cd | de23d37649d275cd |
+| gp-matern52-ard/negative     | infer  | IDENTICAL x4 | 5ddd0786ba58e285 | 5ddd0786ba58e285 | 5ddd0786ba58e285 | 5ddd0786ba58e285 |
+| gp-matern52-ard/negative     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern52-ard/negative     | batch  | IDENTICAL x4 | 7f3871eaa8cd8b17 | 7f3871eaa8cd8b17 | 7f3871eaa8cd8b17 | 7f3871eaa8cd8b17 |
+| gp-matern52-ard/odd          | infer  | IDENTICAL x4 | de417da177231058 | de417da177231058 | de417da177231058 | de417da177231058 |
+| gp-matern52-ard/odd          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern52-ard/odd          | batch  | IDENTICAL x4 | 331b54fb97101ccd | 331b54fb97101ccd | 331b54fb97101ccd | 331b54fb97101ccd |
+| gp-matern52-ard/ties         | infer  | IDENTICAL x4 | d9e5f730b649eff6 | d9e5f730b649eff6 | d9e5f730b649eff6 | d9e5f730b649eff6 |
+| gp-matern52-ard/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern52-ard/ties         | batch  | IDENTICAL x4 | 8d902360cd06f9c6 | 8d902360cd06f9c6 | 8d902360cd06f9c6 | 8d902360cd06f9c6 |
+| gp-matern52-ard/wide         | infer  | IDENTICAL x4 | 74c9cc4f5bcd42f7 | 74c9cc4f5bcd42f7 | 74c9cc4f5bcd42f7 | 74c9cc4f5bcd42f7 |
+| gp-matern52-ard/wide         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp-matern52-ard/wide         | batch  | IDENTICAL x4 | 25546aa3974473f3 | 25546aa3974473f3 | 25546aa3974473f3 | 25546aa3974473f3 |
+| gp/base                      | infer  | IDENTICAL x4 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 |
+| gp/base                      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/base                      | batch  | IDENTICAL x4 | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa |
+| gp/denormal                  | infer  | IDENTICAL x4 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 |
+| gp/denormal                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/denormal                  | batch  | IDENTICAL x4 | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a |
+| gp/denormal_ftz              | infer  | IDENTICAL x4 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 |
+| gp/denormal_ftz              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/denormal_ftz              | batch  | IDENTICAL x4 | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a |
+| gp/dupes                     | infer  | IDENTICAL x4 | 52e6b306c452f16c | 52e6b306c452f16c | 52e6b306c452f16c | 52e6b306c452f16c |
+| gp/dupes                     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/dupes                     | batch  | IDENTICAL x4 | 3caf5f428c1e5112 | 3caf5f428c1e5112 | 3caf5f428c1e5112 | 3caf5f428c1e5112 |
+| gp/hashed                    | infer  | IDENTICAL x4 | 6eec04108625b28e | 6eec04108625b28e | 6eec04108625b28e | 6eec04108625b28e |
+| gp/hashed                    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/hashed                    | batch  | IDENTICAL x4 | f18ced6112fb55e8 | f18ced6112fb55e8 | f18ced6112fb55e8 | f18ced6112fb55e8 |
+| gp/negative                  | infer  | IDENTICAL x4 | b2713d53a58fa4c9 | b2713d53a58fa4c9 | b2713d53a58fa4c9 | b2713d53a58fa4c9 |
+| gp/negative                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/negative                  | batch  | IDENTICAL x4 | 0284440d2cd65731 | 0284440d2cd65731 | 0284440d2cd65731 | 0284440d2cd65731 |
+| gp/odd                       | infer  | IDENTICAL x4 | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa |
+| gp/odd                       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/odd                       | batch  | IDENTICAL x4 | e3e6d237ca783492 | e3e6d237ca783492 | e3e6d237ca783492 | e3e6d237ca783492 |
+| gp/ties                      | infer  | IDENTICAL x4 | 22b0b528124de8d0 | 22b0b528124de8d0 | 22b0b528124de8d0 | 22b0b528124de8d0 |
+| gp/ties                      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/ties                      | batch  | IDENTICAL x4 | 42c01186900b0c68 | 42c01186900b0c68 | 42c01186900b0c68 | 42c01186900b0c68 |
+| gp/wide                      | infer  | IDENTICAL x4 | 890cda1ff831faab | 890cda1ff831faab | 890cda1ff831faab | 890cda1ff831faab |
+| gp/wide                      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| gp/wide                      | batch  | IDENTICAL x4 | d3e6783a8a000e56 | d3e6783a8a000e56 | d3e6783a8a000e56 | d3e6783a8a000e56 |
+
+summary (infer/model): IDENTICAL=36, N/A=36
+summary (batch): IDENTICAL=36
+summary (rlpair): 
+require-columns 4 over ['gp', 'gp-matern12', 'gp-matern32', 'gp-matern52-ard']: OK

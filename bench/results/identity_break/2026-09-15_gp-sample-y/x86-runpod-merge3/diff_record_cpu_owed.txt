@@ -1,0 +1,393 @@
+NOTE: --lanes scopes this diff to 7 lane(s); 162 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 4564P 16-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gp_host', '_mojolearn_preprocessing_host'] commit=b5f80106d52eb069804dbf3da89ffaa3ee43f904
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-x86-x86_64   |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gp-matern12/base             | IDENTICAL x4 | a54e340b4a22147f | a54e340b4a22147f | a54e340b4a22147f | a54e340b4a22147f |
+| gp-matern12/denormal         | IDENTICAL x4 | 6ca669d68732c77e | 6ca669d68732c77e | 6ca669d68732c77e | 6ca669d68732c77e |
+| gp-matern12/denormal_ftz     | IDENTICAL x4 | 6ca669d68732c77e | 6ca669d68732c77e | 6ca669d68732c77e | 6ca669d68732c77e |
+| gp-matern12/dupes            | IDENTICAL x4 | dc7d705bf6b6fb42 | dc7d705bf6b6fb42 | dc7d705bf6b6fb42 | dc7d705bf6b6fb42 |
+| gp-matern12/hashed           | IDENTICAL x4 | ece4c902bf99f265 | ece4c902bf99f265 | ece4c902bf99f265 | ece4c902bf99f265 |
+| gp-matern12/negative         | IDENTICAL x4 | 5e78849478852ef7 | 5e78849478852ef7 | 5e78849478852ef7 | 5e78849478852ef7 |
+| gp-matern12/odd              | IDENTICAL x4 | 91b8075bebf3738a | 91b8075bebf3738a | 91b8075bebf3738a | 91b8075bebf3738a |
+| gp-matern12/ties             | IDENTICAL x4 | 2661efdd41bfdb23 | 2661efdd41bfdb23 | 2661efdd41bfdb23 | 2661efdd41bfdb23 |
+| gp-matern12/wide             | IDENTICAL x4 | 770208f9d55b9e6d | 770208f9d55b9e6d | 770208f9d55b9e6d | 770208f9d55b9e6d |
+| gp-matern32/base             | IDENTICAL x4 | 03066455003d7df7 | 03066455003d7df7 | 03066455003d7df7 | 03066455003d7df7 |
+| gp-matern32/denormal         | IDENTICAL x4 | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 36a4bd5f93641a74 |
+| gp-matern32/denormal_ftz     | IDENTICAL x4 | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 36a4bd5f93641a74 | 36a4bd5f93641a74 |
+| gp-matern32/dupes            | IDENTICAL x4 | 5346a4ac3a9fb082 | 5346a4ac3a9fb082 | 5346a4ac3a9fb082 | 5346a4ac3a9fb082 |
+| gp-matern32/hashed           | IDENTICAL x4 | 2a98418556cb39e1 | 2a98418556cb39e1 | 2a98418556cb39e1 | 2a98418556cb39e1 |
+| gp-matern32/negative         | IDENTICAL x4 | 415c32e64ea7e125 | 415c32e64ea7e125 | 415c32e64ea7e125 | 415c32e64ea7e125 |
+| gp-matern32/odd              | IDENTICAL x4 | 0e42009aae37b1a3 | 0e42009aae37b1a3 | 0e42009aae37b1a3 | 0e42009aae37b1a3 |
+| gp-matern32/ties             | IDENTICAL x4 | f4c49d5c4fd7edda | f4c49d5c4fd7edda | f4c49d5c4fd7edda | f4c49d5c4fd7edda |
+| gp-matern32/wide             | IDENTICAL x4 | 710809cd4f31ce7e | 710809cd4f31ce7e | 710809cd4f31ce7e | 710809cd4f31ce7e |
+| gp-matern52-ard/base         | IDENTICAL x4 | 68f9bac4021de057 | 68f9bac4021de057 | 68f9bac4021de057 | 68f9bac4021de057 |
+| gp-matern52-ard/denormal     | IDENTICAL x4 | 1991a044f55d7f40 | 1991a044f55d7f40 | 1991a044f55d7f40 | 1991a044f55d7f40 |
+| gp-matern52-ard/denormal_ftz | IDENTICAL x4 | 1991a044f55d7f40 | 1991a044f55d7f40 | 1991a044f55d7f40 | 1991a044f55d7f40 |
+| gp-matern52-ard/dupes        | IDENTICAL x4 | c2a1b1e411a6de85 | c2a1b1e411a6de85 | c2a1b1e411a6de85 | c2a1b1e411a6de85 |
+| gp-matern52-ard/hashed       | IDENTICAL x4 | 5a0369e0406e8d1a | 5a0369e0406e8d1a | 5a0369e0406e8d1a | 5a0369e0406e8d1a |
+| gp-matern52-ard/negative     | IDENTICAL x4 | 51fb6cf765695237 | 51fb6cf765695237 | 51fb6cf765695237 | 51fb6cf765695237 |
+| gp-matern52-ard/odd          | IDENTICAL x4 | f05b1867f7b7d159 | f05b1867f7b7d159 | f05b1867f7b7d159 | f05b1867f7b7d159 |
+| gp-matern52-ard/ties         | IDENTICAL x4 | e7965892a63545e5 | e7965892a63545e5 | e7965892a63545e5 | e7965892a63545e5 |
+| gp-matern52-ard/wide         | IDENTICAL x4 | fd640b7c289a6327 | fd640b7c289a6327 | fd640b7c289a6327 | fd640b7c289a6327 |
+| gp-normalize-y/base          | OWED x1    | (not run)        | (not run)        | (not run)        | 295a3a943bb1e6c1 |
+| gp-normalize-y/denormal      | OWED x1    | (not run)        | (not run)        | (not run)        | 563ede6c2700528e |
+| gp-normalize-y/denormal_ftz  | OWED x1    | (not run)        | (not run)        | (not run)        | 563ede6c2700528e |
+| gp-normalize-y/dupes         | OWED x1    | (not run)        | (not run)        | (not run)        | 56127db3c25510e4 |
+| gp-normalize-y/hashed        | OWED x1    | (not run)        | (not run)        | (not run)        | b3faa0b97f15bcba |
+| gp-normalize-y/negative      | OWED x1    | (not run)        | (not run)        | (not run)        | c162a835d708df60 |
+| gp-normalize-y/odd           | OWED x1    | (not run)        | (not run)        | (not run)        | c3c46d3bdd248167 |
+| gp-normalize-y/ties          | OWED x1    | (not run)        | (not run)        | (not run)        | dcd3de359f3c2074 |
+| gp-normalize-y/wide          | OWED x1    | (not run)        | (not run)        | (not run)        | 3f637d262c88b131 |
+| gp-sample-y-normalize/base   | OWED x1    | (not run)        | (not run)        | (not run)        | b5ad01b81c59fdf3 |
+| gp-sample-y-normalize/denormal | OWED x1    | (not run)        | (not run)        | (not run)        | 33512fcfac39fb55 |
+| gp-sample-y-normalize/denormal_ftz | OWED x1    | (not run)        | (not run)        | (not run)        | 33512fcfac39fb55 |
+| gp-sample-y-normalize/dupes  | OWED x1    | (not run)        | (not run)        | (not run)        | 78ae9a8195ece8f9 |
+| gp-sample-y-normalize/hashed | OWED x1    | (not run)        | (not run)        | (not run)        | 455f431e3dcb0773 |
+| gp-sample-y-normalize/negative | OWED x1    | (not run)        | (not run)        | (not run)        | 0644e14fb6f52191 |
+| gp-sample-y-normalize/odd    | OWED x1    | (not run)        | (not run)        | (not run)        | b4dd92087d7a5b3a |
+| gp-sample-y-normalize/ties   | OWED x1    | (not run)        | (not run)        | (not run)        | 43811dbad15ad2f0 |
+| gp-sample-y-normalize/wide   | OWED x1    | (not run)        | (not run)        | (not run)        | c11bb0e6d158bfe3 |
+| gp-sample-y/base             | OWED x1    | (not run)        | (not run)        | (not run)        | d698872d7e33df6e |
+| gp-sample-y/denormal         | OWED x1    | (not run)        | (not run)        | (not run)        | 37e844812b3bd076 |
+| gp-sample-y/denormal_ftz     | OWED x1    | (not run)        | (not run)        | (not run)        | 37e844812b3bd076 |
+| gp-sample-y/dupes            | OWED x1    | (not run)        | (not run)        | (not run)        | 05aaa44e678259a6 |
+| gp-sample-y/hashed           | OWED x1    | (not run)        | (not run)        | (not run)        | 1f0e45838e5c52d2 |
+| gp-sample-y/negative         | OWED x1    | (not run)        | (not run)        | (not run)        | 55e0efee90db4801 |
+| gp-sample-y/odd              | OWED x1    | (not run)        | (not run)        | (not run)        | 23fab759980d7acc |
+| gp-sample-y/ties             | OWED x1    | (not run)        | (not run)        | (not run)        | 15f827dc671917f0 |
+| gp-sample-y/wide             | OWED x1    | (not run)        | (not run)        | (not run)        | ce0c19926bcf9dbf |
+| gp/base                      | IDENTICAL x4 | ea70c56b99a74791 | ea70c56b99a74791 | ea70c56b99a74791 | ea70c56b99a74791 |
+| gp/denormal                  | IDENTICAL x4 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 |
+| gp/denormal_ftz              | IDENTICAL x4 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 |
+| gp/dupes                     | IDENTICAL x4 | fba9e6f4ea05af2c | fba9e6f4ea05af2c | fba9e6f4ea05af2c | fba9e6f4ea05af2c |
+| gp/hashed                    | IDENTICAL x4 | f01c58a79fb1af27 | f01c58a79fb1af27 | f01c58a79fb1af27 | f01c58a79fb1af27 |
+| gp/negative                  | IDENTICAL x4 | 40fd2f479f775ec4 | 40fd2f479f775ec4 | 40fd2f479f775ec4 | 40fd2f479f775ec4 |
+| gp/odd                       | IDENTICAL x4 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 |
+| gp/ties                      | IDENTICAL x4 | c92496318cb78403 | c92496318cb78403 | c92496318cb78403 | c92496318cb78403 |
+| gp/wide                      | IDENTICAL x4 | ca779c84b786d493 | ca779c84b786d493 | ca779c84b786d493 | ca779c84b786d493 |
+
+summary: IDENTICAL=36, OWED=27
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-x86-x86_64   |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gp-matern12/base             | infer  | IDENTICAL x4 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 |
+| gp-matern12/base             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | ea851543bc06b7ca |
+| gp-matern12/base             | batch  | IDENTICAL x4 | 60ba7e42986f842e | 60ba7e42986f842e | 60ba7e42986f842e | 60ba7e42986f842e |
+| gp-matern12/denormal         | infer  | IDENTICAL x4 | b18535ebf335687e | b18535ebf335687e | b18535ebf335687e | b18535ebf335687e |
+| gp-matern12/denormal         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 48c41d7b4cb83a75 |
+| gp-matern12/denormal         | batch  | IDENTICAL x4 | 6e00b6a519f68971 | 6e00b6a519f68971 | 6e00b6a519f68971 | 6e00b6a519f68971 |
+| gp-matern12/denormal_ftz     | infer  | IDENTICAL x4 | b18535ebf335687e | b18535ebf335687e | b18535ebf335687e | b18535ebf335687e |
+| gp-matern12/denormal_ftz     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | dd194f8d55ac4e8b |
+| gp-matern12/denormal_ftz     | batch  | IDENTICAL x4 | 6e00b6a519f68971 | 6e00b6a519f68971 | 6e00b6a519f68971 | 6e00b6a519f68971 |
+| gp-matern12/dupes            | infer  | IDENTICAL x4 | f28fbf34f5e2f5e4 | f28fbf34f5e2f5e4 | f28fbf34f5e2f5e4 | f28fbf34f5e2f5e4 |
+| gp-matern12/dupes            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | c5921757366a1180 |
+| gp-matern12/dupes            | batch  | IDENTICAL x4 | 9298e4ad500ce168 | 9298e4ad500ce168 | 9298e4ad500ce168 | 9298e4ad500ce168 |
+| gp-matern12/hashed           | infer  | IDENTICAL x4 | d97f7a7856e5c3cf | d97f7a7856e5c3cf | d97f7a7856e5c3cf | d97f7a7856e5c3cf |
+| gp-matern12/hashed           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | beebaf027cfe7a70 |
+| gp-matern12/hashed           | batch  | IDENTICAL x4 | f61dcba2448ded11 | f61dcba2448ded11 | f61dcba2448ded11 | f61dcba2448ded11 |
+| gp-matern12/negative         | infer  | IDENTICAL x4 | 7a4ce4fbf93bfe0a | 7a4ce4fbf93bfe0a | 7a4ce4fbf93bfe0a | 7a4ce4fbf93bfe0a |
+| gp-matern12/negative         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 21d23bd74606c229 |
+| gp-matern12/negative         | batch  | IDENTICAL x4 | 7d864314cdf560ff | 7d864314cdf560ff | 7d864314cdf560ff | 7d864314cdf560ff |
+| gp-matern12/odd              | infer  | IDENTICAL x4 | 70c7a448533ae162 | 70c7a448533ae162 | 70c7a448533ae162 | 70c7a448533ae162 |
+| gp-matern12/odd              | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 57c92e7dd6dba082 |
+| gp-matern12/odd              | batch  | IDENTICAL x4 | e3e57f92fb8d7443 | e3e57f92fb8d7443 | e3e57f92fb8d7443 | e3e57f92fb8d7443 |
+| gp-matern12/ties             | infer  | IDENTICAL x4 | a001b7e2647b5504 | a001b7e2647b5504 | a001b7e2647b5504 | a001b7e2647b5504 |
+| gp-matern12/ties             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2a12147f489372a1 |
+| gp-matern12/ties             | batch  | IDENTICAL x4 | afa881afdf169ffe | afa881afdf169ffe | afa881afdf169ffe | afa881afdf169ffe |
+| gp-matern12/wide             | infer  | IDENTICAL x4 | d85b3fdd5a0d4b83 | d85b3fdd5a0d4b83 | d85b3fdd5a0d4b83 | d85b3fdd5a0d4b83 |
+| gp-matern12/wide             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 46beb2c3302d3d68 |
+| gp-matern12/wide             | batch  | IDENTICAL x4 | 2a36bbb9dbe1d986 | 2a36bbb9dbe1d986 | 2a36bbb9dbe1d986 | 2a36bbb9dbe1d986 |
+| gp-matern32/base             | infer  | IDENTICAL x4 | a89afc94af5f084c | a89afc94af5f084c | a89afc94af5f084c | a89afc94af5f084c |
+| gp-matern32/base             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2f0aa7aa6d573e8f |
+| gp-matern32/base             | batch  | IDENTICAL x4 | 4d0c75f26ce30a17 | 4d0c75f26ce30a17 | 4d0c75f26ce30a17 | 4d0c75f26ce30a17 |
+| gp-matern32/denormal         | infer  | IDENTICAL x4 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e6f4a9df1fb82418 |
+| gp-matern32/denormal         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 5e0b49391c46c389 |
+| gp-matern32/denormal         | batch  | IDENTICAL x4 | 9dc26cf63aee002d | 9dc26cf63aee002d | 9dc26cf63aee002d | 9dc26cf63aee002d |
+| gp-matern32/denormal_ftz     | infer  | IDENTICAL x4 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e6f4a9df1fb82418 | e6f4a9df1fb82418 |
+| gp-matern32/denormal_ftz     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1d3a19b8a625eff3 |
+| gp-matern32/denormal_ftz     | batch  | IDENTICAL x4 | 9dc26cf63aee002d | 9dc26cf63aee002d | 9dc26cf63aee002d | 9dc26cf63aee002d |
+| gp-matern32/dupes            | infer  | IDENTICAL x4 | e0a8a2dff9f3e703 | e0a8a2dff9f3e703 | e0a8a2dff9f3e703 | e0a8a2dff9f3e703 |
+| gp-matern32/dupes            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 95b09e16e1e4201d |
+| gp-matern32/dupes            | batch  | IDENTICAL x4 | 314fbd59f78d11be | 314fbd59f78d11be | 314fbd59f78d11be | 314fbd59f78d11be |
+| gp-matern32/hashed           | infer  | IDENTICAL x4 | 9b2c58c951e46aa6 | 9b2c58c951e46aa6 | 9b2c58c951e46aa6 | 9b2c58c951e46aa6 |
+| gp-matern32/hashed           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 61ee8e6b6cb8b86d |
+| gp-matern32/hashed           | batch  | IDENTICAL x4 | a696dd8895d78928 | a696dd8895d78928 | a696dd8895d78928 | a696dd8895d78928 |
+| gp-matern32/negative         | infer  | IDENTICAL x4 | 59c1f19475065932 | 59c1f19475065932 | 59c1f19475065932 | 59c1f19475065932 |
+| gp-matern32/negative         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 41ff5d5c846cfe7d |
+| gp-matern32/negative         | batch  | IDENTICAL x4 | 07269e71c177f0e5 | 07269e71c177f0e5 | 07269e71c177f0e5 | 07269e71c177f0e5 |
+| gp-matern32/odd              | infer  | IDENTICAL x4 | cebcbbd1a0cf26a5 | cebcbbd1a0cf26a5 | cebcbbd1a0cf26a5 | cebcbbd1a0cf26a5 |
+| gp-matern32/odd              | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | dbc28b4a4abe1085 |
+| gp-matern32/odd              | batch  | IDENTICAL x4 | 6245f5a144c11e87 | 6245f5a144c11e87 | 6245f5a144c11e87 | 6245f5a144c11e87 |
+| gp-matern32/ties             | infer  | IDENTICAL x4 | d4ebe9e3a969d687 | d4ebe9e3a969d687 | d4ebe9e3a969d687 | d4ebe9e3a969d687 |
+| gp-matern32/ties             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 643600b947937792 |
+| gp-matern32/ties             | batch  | IDENTICAL x4 | e0f8d36884ec439b | e0f8d36884ec439b | e0f8d36884ec439b | e0f8d36884ec439b |
+| gp-matern32/wide             | infer  | IDENTICAL x4 | e01432f62e53b456 | e01432f62e53b456 | e01432f62e53b456 | e01432f62e53b456 |
+| gp-matern32/wide             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 888d111afe6ab161 |
+| gp-matern32/wide             | batch  | IDENTICAL x4 | 0e1eaf22f908fce3 | 0e1eaf22f908fce3 | 0e1eaf22f908fce3 | 0e1eaf22f908fce3 |
+| gp-matern52-ard/base         | infer  | IDENTICAL x4 | 7ed07da2d9a2b815 | 7ed07da2d9a2b815 | 7ed07da2d9a2b815 | 7ed07da2d9a2b815 |
+| gp-matern52-ard/base         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 922c3b283f374ede |
+| gp-matern52-ard/base         | batch  | IDENTICAL x4 | b67e8be0fee4333d | b67e8be0fee4333d | b67e8be0fee4333d | b67e8be0fee4333d |
+| gp-matern52-ard/denormal     | infer  | IDENTICAL x4 | 15773a44eee1c9ad | 15773a44eee1c9ad | 15773a44eee1c9ad | 15773a44eee1c9ad |
+| gp-matern52-ard/denormal     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 68633fa96ce40d4e |
+| gp-matern52-ard/denormal     | batch  | IDENTICAL x4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 |
+| gp-matern52-ard/denormal_ftz | infer  | IDENTICAL x4 | 15773a44eee1c9ad | 15773a44eee1c9ad | 15773a44eee1c9ad | 15773a44eee1c9ad |
+| gp-matern52-ard/denormal_ftz | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 3ac95409acbe4eac |
+| gp-matern52-ard/denormal_ftz | batch  | IDENTICAL x4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 |
+| gp-matern52-ard/dupes        | infer  | IDENTICAL x4 | 4cb708614a14be4f | 4cb708614a14be4f | 4cb708614a14be4f | 4cb708614a14be4f |
+| gp-matern52-ard/dupes        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4df8669dab247308 |
+| gp-matern52-ard/dupes        | batch  | IDENTICAL x4 | 2d242b760df0c661 | 2d242b760df0c661 | 2d242b760df0c661 | 2d242b760df0c661 |
+| gp-matern52-ard/hashed       | infer  | IDENTICAL x4 | d616a8cbf56f719b | d616a8cbf56f719b | d616a8cbf56f719b | d616a8cbf56f719b |
+| gp-matern52-ard/hashed       | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0a7e88c40917f65f |
+| gp-matern52-ard/hashed       | batch  | IDENTICAL x4 | de23d37649d275cd | de23d37649d275cd | de23d37649d275cd | de23d37649d275cd |
+| gp-matern52-ard/negative     | infer  | IDENTICAL x4 | 5ddd0786ba58e285 | 5ddd0786ba58e285 | 5ddd0786ba58e285 | 5ddd0786ba58e285 |
+| gp-matern52-ard/negative     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 02a0a5cfde095c5e |
+| gp-matern52-ard/negative     | batch  | IDENTICAL x4 | 7f3871eaa8cd8b17 | 7f3871eaa8cd8b17 | 7f3871eaa8cd8b17 | 7f3871eaa8cd8b17 |
+| gp-matern52-ard/odd          | infer  | IDENTICAL x4 | de417da177231058 | de417da177231058 | de417da177231058 | de417da177231058 |
+| gp-matern52-ard/odd          | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2b205636e6a38315 |
+| gp-matern52-ard/odd          | batch  | IDENTICAL x4 | 331b54fb97101ccd | 331b54fb97101ccd | 331b54fb97101ccd | 331b54fb97101ccd |
+| gp-matern52-ard/ties         | infer  | IDENTICAL x4 | d9e5f730b649eff6 | d9e5f730b649eff6 | d9e5f730b649eff6 | d9e5f730b649eff6 |
+| gp-matern52-ard/ties         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8dd23a27ab3a3f3b |
+| gp-matern52-ard/ties         | batch  | IDENTICAL x4 | 8d902360cd06f9c6 | 8d902360cd06f9c6 | 8d902360cd06f9c6 | 8d902360cd06f9c6 |
+| gp-matern52-ard/wide         | infer  | IDENTICAL x4 | 74c9cc4f5bcd42f7 | 74c9cc4f5bcd42f7 | 74c9cc4f5bcd42f7 | 74c9cc4f5bcd42f7 |
+| gp-matern52-ard/wide         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 07c08e717ae5f13a |
+| gp-matern52-ard/wide         | batch  | IDENTICAL x4 | 25546aa3974473f3 | 25546aa3974473f3 | 25546aa3974473f3 | 25546aa3974473f3 |
+| gp-normalize-y/base          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 7c5123dc7a512038 |
+| gp-normalize-y/base          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 988bc1c3b51246a4 |
+| gp-normalize-y/base          | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 10f20ff36a173c93 |
+| gp-normalize-y/denormal      | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | c9c056f09a65ff3b |
+| gp-normalize-y/denormal      | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 7838eff1539fb489 |
+| gp-normalize-y/denormal      | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 00079f14e3f462fc |
+| gp-normalize-y/denormal_ftz  | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | c9c056f09a65ff3b |
+| gp-normalize-y/denormal_ftz  | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 5f20cf42422bf2e9 |
+| gp-normalize-y/denormal_ftz  | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 00079f14e3f462fc |
+| gp-normalize-y/dupes         | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 3c0b639788527068 |
+| gp-normalize-y/dupes         | model  | OWED x1      | (not run)        | (not run)        | (not run)        | db1cd41ce6fd1b37 |
+| gp-normalize-y/dupes         | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | cd8dc4dd4d12cb25 |
+| gp-normalize-y/hashed        | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | b77bf4a2d0da8736 |
+| gp-normalize-y/hashed        | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 78eb0a3ce16ce7c5 |
+| gp-normalize-y/hashed        | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 83463eae32c0bbe9 |
+| gp-normalize-y/negative      | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | e8c9793a64ffecd4 |
+| gp-normalize-y/negative      | model  | OWED x1      | (not run)        | (not run)        | (not run)        | f8b1eb8570f5e01b |
+| gp-normalize-y/negative      | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | d4b37ced285cc86d |
+| gp-normalize-y/odd           | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | e8873986c9e0f24f |
+| gp-normalize-y/odd           | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 767941378d3c368a |
+| gp-normalize-y/odd           | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 290d32315445165d |
+| gp-normalize-y/ties          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0e6c262796044cb8 |
+| gp-normalize-y/ties          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 4af86e76b34e092c |
+| gp-normalize-y/ties          | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | d3aaf331f5414e4b |
+| gp-normalize-y/wide          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 13332a5abc671f44 |
+| gp-normalize-y/wide          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 7aaddfff81162cc0 |
+| gp-normalize-y/wide          | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | f83ca2d738dfbae9 |
+| gp-sample-y-normalize/base   | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0c4beaeb3b1aeb90 |
+| gp-sample-y-normalize/base   | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 988bc1c3b51246a4 |
+| gp-sample-y-normalize/base   | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/denormal | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | d83e1344b5034607 |
+| gp-sample-y-normalize/denormal | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 7838eff1539fb489 |
+| gp-sample-y-normalize/denormal | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/denormal_ftz | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | d83e1344b5034607 |
+| gp-sample-y-normalize/denormal_ftz | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 5f20cf42422bf2e9 |
+| gp-sample-y-normalize/denormal_ftz | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/dupes  | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 64889722931adde7 |
+| gp-sample-y-normalize/dupes  | model  | OWED x1      | (not run)        | (not run)        | (not run)        | db1cd41ce6fd1b37 |
+| gp-sample-y-normalize/dupes  | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/hashed | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | c0c2a3bec4606a09 |
+| gp-sample-y-normalize/hashed | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 78eb0a3ce16ce7c5 |
+| gp-sample-y-normalize/hashed | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/negative | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | de0542b579ff2843 |
+| gp-sample-y-normalize/negative | model  | OWED x1      | (not run)        | (not run)        | (not run)        | f8b1eb8570f5e01b |
+| gp-sample-y-normalize/negative | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/odd    | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1ed38e7596ec035d |
+| gp-sample-y-normalize/odd    | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 767941378d3c368a |
+| gp-sample-y-normalize/odd    | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/ties   | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 37a77ee22082dc29 |
+| gp-sample-y-normalize/ties   | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 4af86e76b34e092c |
+| gp-sample-y-normalize/ties   | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/wide   | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 296d00db02a3dc55 |
+| gp-sample-y-normalize/wide   | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 7aaddfff81162cc0 |
+| gp-sample-y-normalize/wide   | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/base             | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | b7cef1a89e642972 |
+| gp-sample-y/base             | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 8f4a54a0bd816175 |
+| gp-sample-y/base             | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/denormal         | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 41aae3173e5800f3 |
+| gp-sample-y/denormal         | model  | OWED x1      | (not run)        | (not run)        | (not run)        | e2e8bcc686c2be72 |
+| gp-sample-y/denormal         | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/denormal_ftz     | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 41aae3173e5800f3 |
+| gp-sample-y/denormal_ftz     | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 4dbb90dfe4b757ae |
+| gp-sample-y/denormal_ftz     | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/dupes            | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1ecf65597b149dc3 |
+| gp-sample-y/dupes            | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 0eca938df7a74371 |
+| gp-sample-y/dupes            | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/hashed           | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1512a8f232028314 |
+| gp-sample-y/hashed           | model  | OWED x1      | (not run)        | (not run)        | (not run)        | e313387e268603e1 |
+| gp-sample-y/hashed           | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/negative         | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 4adb5317401462a1 |
+| gp-sample-y/negative         | model  | OWED x1      | (not run)        | (not run)        | (not run)        | adc071acad296182 |
+| gp-sample-y/negative         | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/odd              | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 88b3eef5cfb3f1e8 |
+| gp-sample-y/odd              | model  | OWED x1      | (not run)        | (not run)        | (not run)        | b5496b305f465a2e |
+| gp-sample-y/odd              | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/ties             | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0811d434a92222cc |
+| gp-sample-y/ties             | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 5a2f8a826a1aab15 |
+| gp-sample-y/ties             | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/wide             | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | eb0dc965d1fb9854 |
+| gp-sample-y/wide             | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 6de1e70ad300db07 |
+| gp-sample-y/wide             | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp/base                      | infer  | IDENTICAL x4 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 |
+| gp/base                      | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8f4a54a0bd816175 |
+| gp/base                      | batch  | IDENTICAL x4 | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa |
+| gp/denormal                  | infer  | IDENTICAL x4 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 |
+| gp/denormal                  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | e2e8bcc686c2be72 |
+| gp/denormal                  | batch  | IDENTICAL x4 | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a |
+| gp/denormal_ftz              | infer  | IDENTICAL x4 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 |
+| gp/denormal_ftz              | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4dbb90dfe4b757ae |
+| gp/denormal_ftz              | batch  | IDENTICAL x4 | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a |
+| gp/dupes                     | infer  | IDENTICAL x4 | 52e6b306c452f16c | 52e6b306c452f16c | 52e6b306c452f16c | 52e6b306c452f16c |
+| gp/dupes                     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0eca938df7a74371 |
+| gp/dupes                     | batch  | IDENTICAL x4 | 3caf5f428c1e5112 | 3caf5f428c1e5112 | 3caf5f428c1e5112 | 3caf5f428c1e5112 |
+| gp/hashed                    | infer  | IDENTICAL x4 | 6eec04108625b28e | 6eec04108625b28e | 6eec04108625b28e | 6eec04108625b28e |
+| gp/hashed                    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | e313387e268603e1 |
+| gp/hashed                    | batch  | IDENTICAL x4 | f18ced6112fb55e8 | f18ced6112fb55e8 | f18ced6112fb55e8 | f18ced6112fb55e8 |
+| gp/negative                  | infer  | IDENTICAL x4 | b2713d53a58fa4c9 | b2713d53a58fa4c9 | b2713d53a58fa4c9 | b2713d53a58fa4c9 |
+| gp/negative                  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | adc071acad296182 |
+| gp/negative                  | batch  | IDENTICAL x4 | 0284440d2cd65731 | 0284440d2cd65731 | 0284440d2cd65731 | 0284440d2cd65731 |
+| gp/odd                       | infer  | IDENTICAL x4 | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa |
+| gp/odd                       | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | b5496b305f465a2e |
+| gp/odd                       | batch  | IDENTICAL x4 | e3e6d237ca783492 | e3e6d237ca783492 | e3e6d237ca783492 | e3e6d237ca783492 |
+| gp/ties                      | infer  | IDENTICAL x4 | 22b0b528124de8d0 | 22b0b528124de8d0 | 22b0b528124de8d0 | 22b0b528124de8d0 |
+| gp/ties                      | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 5a2f8a826a1aab15 |
+| gp/ties                      | batch  | IDENTICAL x4 | 42c01186900b0c68 | 42c01186900b0c68 | 42c01186900b0c68 | 42c01186900b0c68 |
+| gp/wide                      | infer  | IDENTICAL x4 | 890cda1ff831faab | 890cda1ff831faab | 890cda1ff831faab | 890cda1ff831faab |
+| gp/wide                      | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6de1e70ad300db07 |
+| gp/wide                      | batch  | IDENTICAL x4 | d3e6783a8a000e56 | d3e6783a8a000e56 | d3e6783a8a000e56 | d3e6783a8a000e56 |
+
+summary (infer/model): IDENTICAL=36, OWED=90
+summary (batch): IDENTICAL=36, N/A=18, OWED=9
+summary (rlpair): 
+require-columns 4 over ['gp', 'gp-matern12', 'gp-matern32', 'gp-matern52-ard', 'gp-normalize-y', 'gp-sample-y', 'gp-sample-y-normalize']: OK (126 OWED)
+OWED gp-normalize-y/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern12/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern12/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern12/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern12/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern12/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern12/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern12/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern12/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern12/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern32/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern32/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern32/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern32/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern32/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern32/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern32/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern32/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern32/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern52-ard/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern52-ard/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern52-ard/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern52-ard/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern52-ard/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern52-ard/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern52-ard/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern52-ard/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-matern52-ard/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/denormal_ftz batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/hashed batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/negative batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-normalize-y/wide batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y-normalize/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp-sample-y/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+OWED gp/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-x86-x86_64)
+summary (owed): OWED=126; the next release record owes exactly these cell parts; wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-gp-sample-y/bench/results/identity_break/2026-09-15_gp-sample-y/x86-runpod-merge3/owed_merge3.json

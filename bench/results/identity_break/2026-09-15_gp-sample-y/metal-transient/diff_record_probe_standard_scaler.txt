@@ -1,0 +1,48 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 165 other lane(s) the JSONs carry are not compared
+| lane/fixture                 | verdict    | apple-m4         | apple-m4         |
+|------------------------------|------------|------------------|------------------|
+| standard-scaler/base         | ONE-COLUMN | 9954d8aba9fdfba3 | REFUSED          |
+| standard-scaler/denormal     | ONE-COLUMN | 87862ff4b450f03a | REFUSED          |
+| standard-scaler/denormal_ftz | ONE-COLUMN | 87862ff4b450f03a | REFUSED          |
+| standard-scaler/dupes        | ONE-COLUMN | 70e05276ca28159d | REFUSED          |
+| standard-scaler/hashed       | ONE-COLUMN | e9675c57b4a95c8f | REFUSED          |
+| standard-scaler/negative     | ONE-COLUMN | 252a531100f1ae68 | REFUSED          |
+| standard-scaler/odd          | ONE-COLUMN | 24632a63d5c0debd | REFUSED          |
+| standard-scaler/ties         | ONE-COLUMN | dc97bf1ab9890a0f | REFUSED          |
+| standard-scaler/wide         | ONE-COLUMN | 20a74ee4504bf472 | REFUSED          |
+
+summary: ONE-COLUMN=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|
+| standard-scaler/base         | infer  | ONE-COLUMN   | fa0fbdef7ccae250 | REFUSED          |
+| standard-scaler/base         | model  | N/A          | n/a:no-save      | REFUSED          |
+| standard-scaler/base         | batch  | ONE-COLUMN   | 917ae37b02618ab5 | REFUSED          |
+| standard-scaler/denormal     | infer  | ONE-COLUMN   | d0a324ba42db1e9c | REFUSED          |
+| standard-scaler/denormal     | model  | N/A          | n/a:no-save      | REFUSED          |
+| standard-scaler/denormal     | batch  | ONE-COLUMN   | adc8b864c7fd6591 | REFUSED          |
+| standard-scaler/denormal_ftz | infer  | ONE-COLUMN   | d0a324ba42db1e9c | REFUSED          |
+| standard-scaler/denormal_ftz | model  | N/A          | n/a:no-save      | REFUSED          |
+| standard-scaler/denormal_ftz | batch  | ONE-COLUMN   | adc8b864c7fd6591 | REFUSED          |
+| standard-scaler/dupes        | infer  | ONE-COLUMN   | 89d88a83a11d2485 | REFUSED          |
+| standard-scaler/dupes        | model  | N/A          | n/a:no-save      | REFUSED          |
+| standard-scaler/dupes        | batch  | ONE-COLUMN   | 303de898d7f06932 | REFUSED          |
+| standard-scaler/hashed       | infer  | ONE-COLUMN   | fc7e9239e772ec64 | REFUSED          |
+| standard-scaler/hashed       | model  | N/A          | n/a:no-save      | REFUSED          |
+| standard-scaler/hashed       | batch  | ONE-COLUMN   | f929bcdbb2293a30 | REFUSED          |
+| standard-scaler/negative     | infer  | ONE-COLUMN   | bd2b7e506db725c8 | REFUSED          |
+| standard-scaler/negative     | model  | N/A          | n/a:no-save      | REFUSED          |
+| standard-scaler/negative     | batch  | ONE-COLUMN   | 28349e692d1c6f69 | REFUSED          |
+| standard-scaler/odd          | infer  | ONE-COLUMN   | 6a7a884532f89e93 | REFUSED          |
+| standard-scaler/odd          | model  | N/A          | n/a:no-save      | REFUSED          |
+| standard-scaler/odd          | batch  | ONE-COLUMN   | 76422b3deb83eac1 | REFUSED          |
+| standard-scaler/ties         | infer  | ONE-COLUMN   | 4c66195589867f60 | REFUSED          |
+| standard-scaler/ties         | model  | N/A          | n/a:no-save      | REFUSED          |
+| standard-scaler/ties         | batch  | ONE-COLUMN   | 789ad47ddd5c18b0 | REFUSED          |
+| standard-scaler/wide         | infer  | ONE-COLUMN   | 3e17d9ac3db242ba | REFUSED          |
+| standard-scaler/wide         | model  | N/A          | n/a:no-save      | REFUSED          |
+| standard-scaler/wide         | batch  | ONE-COLUMN   | e0463d8bf2244791 | REFUSED          |
+
+summary (infer/model): N/A=9, ONE-COLUMN=9
+summary (batch): ONE-COLUMN=9
+summary (rlpair): 

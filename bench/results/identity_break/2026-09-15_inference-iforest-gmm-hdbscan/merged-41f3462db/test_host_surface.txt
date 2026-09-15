@@ -1,0 +1,2 @@
+FAILED mojolearn/tests/test_host_surface.py::test_recordings_and_columns_exist
+1 failed, 131 passed in 0.32s

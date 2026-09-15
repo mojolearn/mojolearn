@@ -1,0 +1,13 @@
+{
+ "columns": [
+  "apple-m4",
+  "nvidia-h100-sm_90a",
+  "amd-mi325x-gfx942",
+  "cpu-amd-epyc-9754-128-core-processor"
+ ],
+ "require_columns": 4,
+ "lanes": [
+  "gp-normalize-y"
+ ],
+ "owed": []
+}

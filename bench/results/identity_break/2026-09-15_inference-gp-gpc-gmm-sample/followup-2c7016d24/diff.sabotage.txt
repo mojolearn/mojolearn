@@ -1,0 +1,90 @@
+NOTE: --lanes scopes this diff to 3 lane(s); 2 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_preprocessing_host', '_mojolearn_svm_host'] commit=2c7016d24125d997a812d686b4ba09f00b69e925
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_preprocessing_host'] commit=2c7016d24125d997a812d686b4ba09f00b69e925
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-9754-128-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-9754-128-core-processor: None
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-9754-128-core-processor: None
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'e4b16c115962dfcd'}
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+    cpu-amd-epyc-9754-128-core-processor: None
+| lane/fixture                 | verdict    | apple-m4         | cpu-amd-epyc-9754-128-core-processor | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|
+| gmm-random-init-sample/base  | DIVERGENT  | parts differ: sample_X; agree: sample_y | e8402fa2c29319b0 | 74f318e0c93c671e |
+| gmm-random-init-sample/denormal | ONE-COLUMN | 53c4c0b31627c1f7 | (not run)        | (not run)        |
+| gmm-random-init-sample/dupes | DIVERGENT  | parts differ: sample_X; agree: sample_y | e8402fa2c29319b0 | 74f318e0c93c671e |
+| gmm-random-init-sample/odd   | ONE-COLUMN | 71ed1c1caf8e6874 | (not run)        | (not run)        |
+| gmm-random-init-sample/ties  | DIVERGENT  | parts differ: sample_X; agree: sample_y | 101197bb7831587c | f9270e76271f8235 |
+| gmm-sample/base              | DIVERGENT  | parts differ: sample_X; agree: sample_y | 2995412dbe6ede62 | f4fa11eaa3bc615f |
+| gmm-sample/denormal          | ONE-COLUMN | b0719a23f1750cd0 | (not run)        | (not run)        |
+| gmm-sample/dupes             | DIVERGENT  | parts differ: sample_X; agree: sample_y | 2995412dbe6ede62 | f4fa11eaa3bc615f |
+| gmm-sample/odd               | ONE-COLUMN | 2a8e73e4b6764522 | (not run)        | (not run)        |
+| gmm-sample/ties              | DIVERGENT  | parts differ: sample_X; agree: sample_y | 4f5c80e0a98f2fb7 | f692f3474a33be61 |
+| gp-normalize-y/base          | ONE-COLUMN | (not run)        | 295a3a943bb1e6c1 | REFUSED          |
+| gp-normalize-y/dupes         | ONE-COLUMN | (not run)        | 56127db3c25510e4 | REFUSED          |
+| gp-normalize-y/ties          | ONE-COLUMN | (not run)        | dcd3de359f3c2074 | REFUSED          |
+
+summary: DIVERGENT=6, ONE-COLUMN=7
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-amd-epyc-9754-128-core-processor | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| gmm-random-init-sample/base  | infer  | DIVERGENT    | a460febf045cb5ed | a460febf045cb5ed | f372e7ac219fef07 |
+| gmm-random-init-sample/base  | model  | DIVERGENT    | n/a:no-save      | de637910417c0f6a | b80752b4e03f2a05 |
+| gmm-random-init-sample/base  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/denormal | infer  | ONE-COLUMN   | aaa5ba26b5120d24 | (not run)        | (not run)        |
+| gmm-random-init-sample/denormal | model  | N/A          | n/a:no-save      | (not run)        | (not run)        |
+| gmm-random-init-sample/denormal | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        |
+| gmm-random-init-sample/dupes | infer  | DIVERGENT    | (not run)        | a460febf045cb5ed | f372e7ac219fef07 |
+| gmm-random-init-sample/dupes | model  | DIVERGENT    | (not run)        | de637910417c0f6a | b80752b4e03f2a05 |
+| gmm-random-init-sample/dupes | batch  | N/A          | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/odd   | infer  | ONE-COLUMN   | 0360f4cd3fa1dc5a | (not run)        | (not run)        |
+| gmm-random-init-sample/odd   | model  | N/A          | n/a:no-save      | (not run)        | (not run)        |
+| gmm-random-init-sample/odd   | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        |
+| gmm-random-init-sample/ties  | infer  | DIVERGENT    | c9f89c3987186292 | c9f89c3987186292 | b4ad372be861cccc |
+| gmm-random-init-sample/ties  | model  | DIVERGENT    | n/a:no-save      | 4bf7497302af00ff | ab683ed7badb9157 |
+| gmm-random-init-sample/ties  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/base              | infer  | DIVERGENT    | e3cad76ce9a060d0 | e3cad76ce9a060d0 | d95cffab4f81fec5 |
+| gmm-sample/base              | model  | DIVERGENT    | n/a:no-save      | c4a997dc3ae320a2 | 0c00d2ed45b423bc |
+| gmm-sample/base              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/denormal          | infer  | ONE-COLUMN   | e50606c37c34da5a | (not run)        | (not run)        |
+| gmm-sample/denormal          | model  | N/A          | n/a:no-save      | (not run)        | (not run)        |
+| gmm-sample/denormal          | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        |
+| gmm-sample/dupes             | infer  | DIVERGENT    | (not run)        | e3cad76ce9a060d0 | d95cffab4f81fec5 |
+| gmm-sample/dupes             | model  | DIVERGENT    | (not run)        | c4a997dc3ae320a2 | 0c00d2ed45b423bc |
+| gmm-sample/dupes             | batch  | N/A          | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/odd               | infer  | ONE-COLUMN   | e0258bef7ebd4e21 | (not run)        | (not run)        |
+| gmm-sample/odd               | model  | N/A          | n/a:no-save      | (not run)        | (not run)        |
+| gmm-sample/odd               | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | (not run)        | (not run)        |
+| gmm-sample/ties              | infer  | DIVERGENT    | aa785d8205811e0f | aa785d8205811e0f | 9b8cc401aad0696d |
+| gmm-sample/ties              | model  | DIVERGENT    | n/a:no-save      | fa63a34d1b2e5088 | e3567019afdcf8b2 |
+| gmm-sample/ties              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gp-normalize-y/base          | infer  | ONE-COLUMN   | (not run)        | 7c5123dc7a512038 | REFUSED          |
+| gp-normalize-y/base          | model  | ONE-COLUMN   | (not run)        | 988bc1c3b51246a4 | REFUSED          |
+| gp-normalize-y/base          | batch  | ONE-COLUMN   | (not run)        | 10f20ff36a173c93 | REFUSED          |
+| gp-normalize-y/dupes         | infer  | ONE-COLUMN   | (not run)        | 3c0b639788527068 | REFUSED          |
+| gp-normalize-y/dupes         | model  | ONE-COLUMN   | (not run)        | db1cd41ce6fd1b37 | REFUSED          |
+| gp-normalize-y/dupes         | batch  | ONE-COLUMN   | (not run)        | cd8dc4dd4d12cb25 | REFUSED          |
+| gp-normalize-y/ties          | infer  | ONE-COLUMN   | (not run)        | 0e6c262796044cb8 | REFUSED          |
+| gp-normalize-y/ties          | model  | ONE-COLUMN   | (not run)        | 4af86e76b34e092c | REFUSED          |
+| gp-normalize-y/ties          | batch  | ONE-COLUMN   | (not run)        | d3aaf331f5414e4b | REFUSED          |
+
+summary (infer/model): DIVERGENT=12, N/A=4, ONE-COLUMN=10
+summary (batch): N/A=10, ONE-COLUMN=3
+summary (rlpair): 

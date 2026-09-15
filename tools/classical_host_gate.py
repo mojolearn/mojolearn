@@ -7,7 +7,10 @@ whitened PCA (`pca-whiten`, an identity_break lane of its own), and since the
 knn host inference lane (2026-09-14) NearestNeighbors (`kneighbors`: distances
 and indices), KNeighborsClassifier (`predict`, `predict_proba`) and
 KNeighborsRegressor (`predict`), lanes knn, knn-clf and knn-reg, through
-`mojolearn/host/_mojolearn_core_host.so`.
+`mojolearn/host/_mojolearn_core_host.so`; since the neighbors and density
+inference lane (2026-09-15) also the k-NN metric, ball cover and weighted
+lanes, RadiusNeighbors (lanes radius, radius-manhattan, radius-chebyshev,
+radius-minkowski-p3) and the KDE kernel, metric and weight lanes.
 
 Two halves over tools/identity_break.py's own nine fixtures, so the
 held-out rows here ARE the rows behind the `infer` column of the committed
@@ -66,6 +69,24 @@ def _forecast_pair(e):
     h = ib.FORECAST_HORIZON
     return ib._same_bytes("forecast(h)", e.forecast(h),
                           "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + h))
+
+
+def _radius_probe(e, X):
+    """identity_break's radius infer probe: `_ragged` over the sorted query
+    of the first 64 held-out rows."""
+    return identity_tool()._ragged(e.radius_neighbors(X[:64], sort_results=True))
+
+
+def _approximate_predict(e, X):
+    """identity_break's hdbscan infer probe: approximate_predict's labels and
+    probabilities on the held-out rows' first four columns, then
+    membership_vector on the same rows and all_points_membership_vectors
+    (the probe since HDBSCAN's soft clustering, 2026-09-15)."""
+    from mojolearn.hdbscan import (
+        all_points_membership_vectors, approximate_predict, membership_vector,
+    )
+    return tuple(approximate_predict(e, X[:, :4])) + (
+        membership_vector(e, X[:, :4]), all_points_membership_vectors(e))
 
 
 #: The surfaces every ARIMA lane adds beside its identity probe.
@@ -134,6 +155,93 @@ LANES = {
                             lambda e, X: (e.predict_proba(X), e.predict(X)),
                             {'predict': lambda e, X: e.predict(X),
                              'decision_function': lambda e, X: e.decision_function(X)}),
+    # The neighbors and density inference lane (2026-09-15): every k-NN
+    # metric and the ball cover arm, the distance-weighted vote and mean, the
+    # radius query on its four metrics and the KDE kernel and metric pairs,
+    # each probed exactly as its identity_break lane probes the held-out
+    # rows (the radius probe is identity_break's `_ragged` over the sorted
+    # query; the cosine KDE pair shifts its rows by 8, as the lane does).
+    'knn-sqeuclidean': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                               {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-manhattan': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                             {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-chebyshev': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                             {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-cosine': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                          {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-minkowski-p3': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                                {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-rbc': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
+                       {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    'knn-clf-distance': ('KNeighborsClassifier',
+                         lambda e, X: (e.predict(X[:64]), e.predict_proba(X[:64])),
+                         {'predict_proba': lambda e, X: e.predict_proba(X[:64])}),
+    'knn-reg-distance': ('KNeighborsRegressor', lambda e, X: (e.predict(X[:64]),), {}),
+    'radius': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'radius-manhattan': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'radius-chebyshev': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'radius-minkowski-p3': ('RadiusNeighbors', lambda e, X: _radius_probe(e, X), {}),
+    'kde-tophat-sqeuclidean': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'kde-epanechnikov-l1': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'kde-exponential-chebyshev': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'kde-linear-cosine': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4] + 8.0),), {}),
+    'kde-cosine-minkowski': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    'kde-weighted': ('KernelDensity', lambda e, X: (e.score_samples(X[:, :4]),), {}),
+    # IsolationForest (same lane): identity_break scores every held-out row
+    # and predicts the first 512, so these two lanes probe the whole
+    # held-out draw (LANE_PROBE_ROWS) rather than its first PROBE_ROWS.
+    'iforest': ('IsolationForest', lambda e, X: (e.score_samples(X), e.predict(X[:512])),
+               {'predict': lambda e, X: e.predict(X[:512]),
+                'decision_function': lambda e, X: e.decision_function(X)}),
+    'iforest-tuned': ('IsolationForest', lambda e, X: (e.score_samples(X), e.predict(X[:512])),
+                     {'predict': lambda e, X: e.predict(X[:512]),
+                      'decision_function': lambda e, X: e.decision_function(X)}),
+    # GaussianMixture (same lane), through the inference-only mixture
+    # binding: 64 held-out rows of the first four columns, as the lanes ask.
+    'gmm': ('GaussianMixture',
+            lambda e, X: (e.score_samples(X[:64, :4]), e.predict(X[:64, :4]), e.predict_proba(X[:64, :4])),
+            {'predict': lambda e, X: e.predict(X[:64, :4]),
+             'predict_proba': lambda e, X: e.predict_proba(X[:64, :4])}),
+    'gmm-random-init': ('GaussianMixture', lambda e, X: (e.score_samples(X[:64, :4]),),
+                        {'predict': lambda e, X: e.predict(X[:64, :4])}),
+    # GaussianMixture.sample (same lane, after main's gmm-sample lanes): the
+    # identity_break probe is sample(1024)'s (X, y) from the saved model; it
+    # reads no held-out rows.
+    'gmm-sample': ('GaussianMixture', lambda e, X: tuple(e.sample(1024)),
+                   {'sample_y': lambda e, X: e.sample(1024)[1]}),
+    'gmm-random-init-sample': ('GaussianMixture', lambda e, X: tuple(e.sample(1024)),
+                               {'sample_y': lambda e, X: e.sample(1024)[1]}),
+    # GaussianProcessRegressor (same lane), through the inference-only gp
+    # binding: the predictive mean and std of 64 held-out rows of four
+    # columns, as every GP lane asks, normalize_y's scale-back included.
+    'gp': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+          {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-matern12': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                   {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-matern32': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                   {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-matern52-ard': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                       {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    'gp-normalize-y': ('GaussianProcessRegressor', lambda e, X: tuple(e.predict(X[:64, :4], return_std=True)),
+                      {'std': lambda e, X: e.predict(X[:64, :4], return_std=True)[1]}),
+    # GaussianProcessClassifier (same lane, after lane/gaussian-process-
+    # classifier merged): predict and predict_proba of 64 held-out rows of
+    # four columns, the pair both gpc lanes hash, through gpc_predict.
+    'gpc': ('GaussianProcessClassifier', lambda e, X: (e.predict(X[:64, :4]), e.predict_proba(X[:64, :4])),
+           {'predict_proba': lambda e, X: e.predict_proba(X[:64, :4])}),
+    'gpc-multiclass': ('GaussianProcessClassifier', lambda e, X: (e.predict(X[:64, :4]), e.predict_proba(X[:64, :4])),
+                      {'predict_proba': lambda e, X: e.predict_proba(X[:64, :4])}),
+    # HDBSCAN (same lane): approximate_predict's labels and probabilities,
+    # membership_vector on the first 256 held-out rows of four columns and
+    # all_points_membership_vectors, the tuple both lanes hash.
+    'hdbscan': ('HDBSCAN', lambda e, X: _approximate_predict(e, X),
+               {'probabilities': lambda e, X: _approximate_predict(e, X)[1],
+                'membership_vector': lambda e, X: _approximate_predict(e, X)[2],
+                'all_points_membership_vectors': lambda e, X: _approximate_predict(e, X)[3]}),
+    'hdbscan-leaf': ('HDBSCAN', lambda e, X: _approximate_predict(e, X),
+                    {'probabilities': lambda e, X: _approximate_predict(e, X)[1],
+                     'membership_vector': lambda e, X: _approximate_predict(e, X)[2],
+                     'all_points_membership_vectors': lambda e, X: _approximate_predict(e, X)[3]}),
     # lane/inference-forecast-umap-pca (2026-09-15). pca-full-whiten is the
     # dense SVD fit with the whitened pair. umap probes identity_break's
     # batch of 64 held-out rows in one call: the transform's answer depends
@@ -232,6 +340,13 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'ivf': 'search_distances', 'ivf-euclidean': 'search_distances', 'embedding': 'forward', 'ivf-extend': 'search_distances',
                'svc-linear': 'decision_function', 'svc-poly': 'decision_function',
                'svr': 'predict', 'svr-linear': 'predict'}
+PROBE_NAMES.update({lane: {'NearestNeighbors': 'kneighbors_distances', 'KNeighborsClassifier': 'predict',
+                           'KNeighborsRegressor': 'predict', 'RadiusNeighbors': 'radius_neighbors_counts',
+                           'KernelDensity': 'score_samples', 'IsolationForest': 'score_samples',
+                           'GaussianMixture': 'score_samples', 'HDBSCAN': 'approximate_predict_labels',
+                           'GaussianProcessRegressor': 'predict_mean',
+                           'GaussianProcessClassifier': 'predict'}[spec[0]]
+                    for lane, spec in LANES.items() if lane not in PROBE_NAMES})
 
 
 def _fit_logistic_multiclass(ml, X, yc, yr, Xh=None):
@@ -265,10 +380,21 @@ def package_root(args):
         sys.path.insert(0, os.path.abspath(args.package_root))
 
 
-def held_out(ib, kind):
+#: Lanes whose identity_break probe reads the whole held-out draw; every
+#: other lane reads its first PROBE_ROWS rows.
+LANE_PROBE_ROWS = {'iforest': None, 'iforest-tuned': None}
+
+
+def probe_rows(ib, lane, kind):
+    """The held-out row count `lane` probes on fixture `kind`."""
+    rows = LANE_PROBE_ROWS.get(lane, PROBE_ROWS)
+    return int(ib.heldout(kind).shape[0]) if rows is None else rows
+
+
+def held_out(ib, kind, lane=None):
     """The identity_break held-out slice the lane probes, as a numpy
     array, and its bytes' SHA-256."""
-    Xh = ib.heldout(kind)[:PROBE_ROWS]
+    Xh = ib.heldout(kind)[:probe_rows(ib, lane, kind)]
     return Xh, sha256_bytes(Xh.tobytes())
 
 
@@ -323,7 +449,7 @@ def do_record(args):
             if type(model).__name__ != estimator:
                 print(f'gate: lane {lane} fitted {type(model).__name__}, not {estimator}', file=sys.stderr)
                 return 2
-            Xh, x_sha = held_out(ib, kind)
+            Xh, x_sha = held_out(ib, kind, lane)
             gpu = digests_for(lane, model, Xh, ib)
             # The identity_break probe on the fitted model must agree with
             # the tool's own infer cell for this fit, or the probe here is
@@ -345,7 +471,7 @@ def do_record(args):
                           f'reload on the GPU path: {gpu[key]} vs {reload[key]}', file=sys.stderr)
                     return 1
             spec = dict(lane=lane, kind=kind, estimator=estimator, heldout_seed=ib.HELDOUT_SEED,
-                        probe_rows=PROBE_ROWS, x_sha256=x_sha)
+                        probe_rows=probe_rows(ib, lane, kind), x_sha256=x_sha)
             (directory / 'fixture.json').write_text(json.dumps(spec, indent=2, sort_keys=True) + '\n')
             report = dict(
                 status='RECORDED', lane=lane, kind=kind, estimator=estimator, vendor=vendor,
@@ -399,11 +525,11 @@ def do_check(args):
             return 2
         spec = json.loads((directory / 'fixture.json').read_text())
         lane, kind = spec['lane'], spec['kind']
-        if lane not in LANES or kind not in ib.FIXTURES or int(spec.get('probe_rows', 0)) != PROBE_ROWS:
+        if lane not in LANES or kind not in ib.FIXTURES or int(spec.get('probe_rows', 0)) != probe_rows(ib, lane, kind):
             print(f'gate: {directory} fixture.json names a lane, fixture or probe size this gate '
                   'does not know', file=sys.stderr)
             return 2
-        Xh, x_sha = held_out(ib, kind)
+        Xh, x_sha = held_out(ib, kind, lane)
         if x_sha != spec.get('x_sha256') or x_sha != expected.get('x_sha256'):
             print(f'gate: {directory} regenerated held-out rows hash {x_sha}, the fixture records '
                   f'{spec.get("x_sha256")}', file=sys.stderr)
@@ -450,6 +576,12 @@ def do_check(args):
             equal = theirs == got['identity_hash']
             if theirs is None:
                 status = 'ABSENT'
+            elif isinstance(theirs, str) and theirs.startswith('n/a:'):
+                # A record older than the lane's infer probe carries its
+                # reason (`n/a:transductive` on hdbscan before 2026-09-15),
+                # not a hash: nothing to compare, so it cannot differ.
+                status = 'N/A'
+                equal = None
             else:
                 status = 'EQUAL' if equal else 'DIFFER'
                 verdict_ok = verdict_ok and equal

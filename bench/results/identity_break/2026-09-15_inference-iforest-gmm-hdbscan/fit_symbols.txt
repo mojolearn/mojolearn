@@ -1,0 +1,22 @@
+# fit code in the reference host bindings and absent from the inference-only ones
+# built from this branch on the M4, one core; nm over each .so, counting symbol-name matches
+== _mojolearn_mixture_host.so 406456 bytes
+   1 gmmh_e_step
+   1 gmmh_m_step
+   1 gmmh_score_samples
+== _mojolearn_mixture_infer_host.so 232112 bytes
+   1 gmmh_score_samples
+== _mojolearn_hdbscan_host.so 359688 bytes
+   1 boruvka
+   3 generate_prediction_data
+   1 hdbh_approximate_predict
+   1 hdbh_fit
+== _mojolearn_hdbscan_infer_host.so 227696 bytes
+   1 hdbh_approximate_predict
+
+# after merging main's HDBSCAN soft clustering (41f3462db): the inference-only hdbscan binding also registers membership_vector and all_points_membership_vectors
+== _mojolearn_hdbscan_infer_host.so (merged) 287280 bytes
+   1 hdbh_all_points_membership_vectors
+   1 hdbh_approximate_predict
+   1 hdbh_membership_vector
+   1 hdbh_soft_pass

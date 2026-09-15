@@ -218,6 +218,12 @@ comptime OBJECTIVE_MULTICLASS_OVA = 13
 #: refuses it by name.
 comptime OBJECTIVE_QUERY_RMSE = 14
 
+#: `PairLogit`, the second querywise target (`TQuerywiseTargetsImpl`'s
+#: `InitPairLogit` arm, `targets/querywise_targets_impl.h:326-346`). Its
+#: derivatives are per PAIR and live in `gbdt/targets/kernel/pair_logit.mojo`;
+#: it reaches neither kernel in this file.
+comptime OBJECTIVE_PAIR_LOGIT = 15
+
 #: `NumErrors` is in their kernel switch (`pointwise_targets.cu:497-501`)
 #: and is deliberately NOT here: `TPointwiseTargetsImpl::Init`
 #: (`pointwise_target_impl.h:259-299`) has no `NumErrors` case, so its
@@ -265,11 +271,13 @@ def objective_from_name(name: String) raises -> Int:
         return OBJECTIVE_MULTICLASS_OVA
     if name == "QueryRMSE":
         return OBJECTIVE_QUERY_RMSE
+    if name == "PairLogit":
+        return OBJECTIVE_PAIR_LOGIT
     raise Error(
         "unknown loss '" + name + "': this implementation trains RMSE, Logloss,"
         " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
-        " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll and"
-        " QueryRMSE"
+        " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll,"
+        " QueryRMSE and PairLogit"
     )
 
 
@@ -305,6 +313,8 @@ def objective_name(objective: Int) -> String:
         return String("MultiClassOneVsAll")
     if objective == OBJECTIVE_QUERY_RMSE:
         return String("QueryRMSE")
+    if objective == OBJECTIVE_PAIR_LOGIT:
+        return String("PairLogit")
     return String("<unknown>")
 
 

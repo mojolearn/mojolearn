@@ -284,7 +284,7 @@ evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15, then `gmm-sample` and `gmm-random-init-sample` for GaussianMixture.sample the same day). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused, then `embedding-sort` for PLAN_SORT, and `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15, then `gmm-sample` and `gmm-random-init-sample` for GaussianMixture.sample the same day, then `gp-sample-y` and `gp-sample-y-normalize` for GaussianProcessRegressor.sample_y). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -304,7 +304,7 @@ sampler, a solver, a metric, a reduction).
                gbdt-multiclass gbdt-onevsall gbdt-parametric-losses
                gbdt-lossguide-newtoncosine gbdt-pointwise-l2-bayesian-eval
                gbdt-exact-mae gbdt-categorical-ctr gbdt-nan-modes gbdt-adapter-clf
-               gbdt-adapter-reg gbdt-query-rmse iforest-tuned (last, with iforest)
+               gbdt-adapter-reg gbdt-query-rmse gbdt-pair-logit iforest-tuned (last, with iforest)
       neural   mamba2-dtlimit transformer-window byte-lm-resident
                byte-lm-host-infer-threaded (the SHIPPED default arm; the
                2026-09-13 lane pins the reference arm) samba-untied-dropout-accum
@@ -340,6 +340,8 @@ sampler, a solver, a metric, a reduction).
       par-cholesky par-kernel-ridge par-nystroem par-rbf-sampler
     2026-09-15 (GaussianMixture.sample, DEVIATIONS 2791 and 2792)
       gmm-sample gmm-random-init-sample
+    2026-09-15 (GaussianProcessRegressor.sample_y, DEVIATION 2793)
+      gp-sample-y gp-sample-y-normalize
     2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
       ivf embedding
     2026-09-14 night (fix/ivf-l2sqrt, metric='euclidean' no longer refused)
@@ -1756,6 +1758,35 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-pair-logit")
+def _(ml, X, yc, yr, Xh=None):
+    """PairLogit (learning to rank, pairwise derivatives on query groups):
+    20 depth-6 symmetric trees on the gbdt-query-rmse queries and grades with
+    the pairs generated from them, and a second fit of 8 trees given explicit
+    `pairs` and `pairs_weight` (every third generated-style pair of the first
+    40 queries, hashed weights), so both input paths are hashed. Predict is
+    row-wise, so the held-out probe and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="PairLogit").fit(X, rel, group_id=g)
+    pairs = []
+    begin = 0
+    for q in range(40):
+        size = int(np.count_nonzero(g == q))
+        for a in range(begin, begin + size):
+            for b in range(a + 1, begin + size):
+                if rel[a] != rel[b] and (a + b) % 3 == 0:
+                    pairs.append((a, b) if rel[a] > rel[b] else (b, a))
+        begin += size
+    pw = _hw((len(pairs),), "gbdt-pair-logit:pairs_weight", 0.5, 2.0)
+    e = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="PairLogit").fit(
+        X, rel, group_id=g, pairs=pairs, pairs_weight=pw)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     explicit_predict=_h(e.predict(X)),
+                     explicit_loss_curve=_h(np.asarray(e.loss_curve_, dtype=np.float64))),
+                m, lambda est: (est.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -2286,6 +2317,30 @@ def _(ml, X, yc, yr, Xh=None):
                      y_stats=_h(np.float32([m._y_train_mean, m._y_train_std])),
                      mean=_h(mean), std=_h(std)),
                 m, lambda e: e.predict(Xh[:64, :4], return_std=True))
+
+
+def _gp_sample_y_lane(normalize_y):
+    def body(ml, X, yc, yr, Xh=None):
+        k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+        y = yr[:256]
+        if normalize_y:
+            y = np.ascontiguousarray(yr[:256] + np.float32(50.0)).astype(np.float32)
+        m = ml.GaussianProcessRegressor(kernel=k, normalize_y=normalize_y).fit(X[:256, :4], y)
+        s = m.sample_y(X[256:320, :4], n_samples=3, random_state=11)
+        _same_bytes("sample_y(n_samples=3)", s, "sample_y(n_samples=3) again",
+                    m.sample_y(X[256:320, :4], n_samples=3, random_state=11))
+        return _fit(dict(sample=_h(s)), m,
+                    lambda e: (e.sample_y(Xh[:64, :4], n_samples=4, random_state=2 ** 40 + 5),))
+    body.__doc__ = (f"GaussianProcessRegressor.sample_y (2026-09-15) on the gp{'-normalize-y' if normalize_y else ''} "
+                    "lane's fit: train hashes sample_y over 64 rows, 3 draws, held to a second call bit for bit; "
+                    "infer hashes 4 draws over 64 held-out rows with a key whose high word is set. The posterior "
+                    "covariance is factored by the identical Cholesky at 2^-20 and the normals are position-mapped "
+                    "Philox (DEVIATION 2793). Separate lanes so the gp lanes' recorded cells do not move.")
+    return body
+
+
+lane("gp-sample-y")(_gp_sample_y_lane(False))
+lane("gp-sample-y-normalize")(_gp_sample_y_lane(True))
 
 
 for _name, _nu, _ls in (("matern12", 0.5, 1.0), ("matern32", 1.5, 1.0), ("matern52-ard", 2.5, [1.0, 2.0, 0.5, 4.0])):
@@ -3919,7 +3974,7 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
-            "gbdt-query-rmse")
+            "gbdt-query-rmse", "gbdt-pair-logit")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 
@@ -4030,6 +4085,12 @@ def _batch_gp(ml, e, Xh):
 
 
 _batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp", "gp-normalize-y")
+# GaussianProcessRegressor.sample_y factors the posterior covariance over ALL
+# the rows of one call, so a row's draw depends on every other row asked with
+# it: splitting the rows changes the covariance, by the reference's contract
+# (gaussian_process/checks/sample_y.mojo, DEVIATION 2793)
+_batch_decl("n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+            "gp-sample-y", "gp-sample-y-normalize")
 # UMAP.transform is batch-dependent BY ITS OWN CONTRACT: umap/transform.mojo's
 # module docstring says "Query batching may change results (global sigma
 # floor, edge weighting and RNG ordinals)", and the part measured it on the

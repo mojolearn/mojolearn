@@ -1,0 +1,1824 @@
+{
+  "binaries": {
+    "_mojolearn": "/root/host-shipped/_mojolearn_core_host.so",
+    "_mojolearn_arima": "/root/host-shipped/_mojolearn_forecast_host.so",
+    "_mojolearn_estimators": "/root/host-shipped/_mojolearn_estimators_host.so",
+    "_mojolearn_gp": "/root/host-shipped/_mojolearn_gp_infer_host.so",
+    "_mojolearn_hdbscan": "/root/host-shipped/_mojolearn_hdbscan_infer_host.so",
+    "_mojolearn_kernel_methods": "/root/host-shipped/_mojolearn_estimators_host.so",
+    "_mojolearn_metrics": "/root/host-shipped/_mojolearn_metrics_host.so",
+    "_mojolearn_mixture": "/root/host-shipped/_mojolearn_mixture_infer_host.so",
+    "_mojolearn_preprocessing": "/root/host-shipped/_mojolearn_estimators_host.so",
+    "_mojolearn_solver": "/root/host-shipped/_mojolearn_estimators_host.so",
+    "_mojolearn_svm": "/root/host-shipped/_mojolearn_svm_host.so"
+  },
+  "binary": "/root/host-shipped/_mojolearn_estimators_host.so",
+  "checked_at": "2026-09-15T17:49:37+0000",
+  "commit": null,
+  "exit": 0,
+  "expect_mismatch": false,
+  "fixtures": [
+    {
+      "cases": [
+        {
+          "case": "sample_y",
+          "equal": true,
+          "got": "76bb42393d062a47e0100daecfb4331eb8b363007cb1a7285023af1695edb9fe",
+          "got_dtype": "<i4",
+          "got_shape": [
+            1024
+          ],
+          "want": "76bb42393d062a47e0100daecfb4331eb8b363007cb1a7285023af1695edb9fe",
+          "want_dtype": "<i4",
+          "want_shape": [
+            1024
+          ]
+        },
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "b56da2a1e9e9223f3e042183e62a9a1f739fd379935575c8607ebf1372208ae2",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1024,
+            4
+          ],
+          "want": "b56da2a1e9e9223f3e042183e62a9a1f739fd379935575c8607ebf1372208ae2",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1024,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "a460febf045cb5ed",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianMixture",
+      "identity_hash": {
+        "equal": true,
+        "got": "a460febf045cb5ed",
+        "want": "a460febf045cb5ed"
+      },
+      "kind": "base",
+      "lane": "gmm-random-init-sample",
+      "model_sha256": "de637910417c0f6ab01bd3ba78198d8670293487099793cc2e589759c4fe1de9",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.066836
+    },
+    {
+      "cases": [
+        {
+          "case": "sample_y",
+          "equal": true,
+          "got": "76bb42393d062a47e0100daecfb4331eb8b363007cb1a7285023af1695edb9fe",
+          "got_dtype": "<i4",
+          "got_shape": [
+            1024
+          ],
+          "want": "76bb42393d062a47e0100daecfb4331eb8b363007cb1a7285023af1695edb9fe",
+          "want_dtype": "<i4",
+          "want_shape": [
+            1024
+          ]
+        },
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "b56da2a1e9e9223f3e042183e62a9a1f739fd379935575c8607ebf1372208ae2",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1024,
+            4
+          ],
+          "want": "b56da2a1e9e9223f3e042183e62a9a1f739fd379935575c8607ebf1372208ae2",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1024,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianMixture",
+      "identity_hash": {
+        "equal": true,
+        "got": "a460febf045cb5ed",
+        "want": "a460febf045cb5ed"
+      },
+      "kind": "dupes",
+      "lane": "gmm-random-init-sample",
+      "model_sha256": "de637910417c0f6ab01bd3ba78198d8670293487099793cc2e589759c4fe1de9",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.001354
+    },
+    {
+      "cases": [
+        {
+          "case": "sample_y",
+          "equal": true,
+          "got": "76bb42393d062a47e0100daecfb4331eb8b363007cb1a7285023af1695edb9fe",
+          "got_dtype": "<i4",
+          "got_shape": [
+            1024
+          ],
+          "want": "76bb42393d062a47e0100daecfb4331eb8b363007cb1a7285023af1695edb9fe",
+          "want_dtype": "<i4",
+          "want_shape": [
+            1024
+          ]
+        },
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "8be79f20261371ec3e252b6cf327a52f384117e3928bad1c2ec6f1936b0c1394",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1024,
+            4
+          ],
+          "want": "8be79f20261371ec3e252b6cf327a52f384117e3928bad1c2ec6f1936b0c1394",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1024,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "c9f89c3987186292",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianMixture",
+      "identity_hash": {
+        "equal": true,
+        "got": "c9f89c3987186292",
+        "want": "c9f89c3987186292"
+      },
+      "kind": "ties",
+      "lane": "gmm-random-init-sample",
+      "model_sha256": "4bf7497302af00ff47ff45d53611762111fa4917d0536c0ef85794db109ec304",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.001296
+    },
+    {
+      "cases": [
+        {
+          "case": "sample_y",
+          "equal": true,
+          "got": "7c5a178ecea2027979020442273002b4e67d98cdae25984b6ae65b5594fb9c00",
+          "got_dtype": "<i4",
+          "got_shape": [
+            1024
+          ],
+          "want": "7c5a178ecea2027979020442273002b4e67d98cdae25984b6ae65b5594fb9c00",
+          "want_dtype": "<i4",
+          "want_shape": [
+            1024
+          ]
+        },
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "efd972e3892523abc20b943b3f90dd02bb624925efe2c88bd90ba2a20e5b45c4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1024,
+            4
+          ],
+          "want": "efd972e3892523abc20b943b3f90dd02bb624925efe2c88bd90ba2a20e5b45c4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1024,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "e3cad76ce9a060d0",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianMixture",
+      "identity_hash": {
+        "equal": true,
+        "got": "e3cad76ce9a060d0",
+        "want": "e3cad76ce9a060d0"
+      },
+      "kind": "base",
+      "lane": "gmm-sample",
+      "model_sha256": "c4a997dc3ae320a2142f906fa792e42361513925f520681a6f442c35167fa2e4",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.001288
+    },
+    {
+      "cases": [
+        {
+          "case": "sample_y",
+          "equal": true,
+          "got": "7c5a178ecea2027979020442273002b4e67d98cdae25984b6ae65b5594fb9c00",
+          "got_dtype": "<i4",
+          "got_shape": [
+            1024
+          ],
+          "want": "7c5a178ecea2027979020442273002b4e67d98cdae25984b6ae65b5594fb9c00",
+          "want_dtype": "<i4",
+          "want_shape": [
+            1024
+          ]
+        },
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "efd972e3892523abc20b943b3f90dd02bb624925efe2c88bd90ba2a20e5b45c4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1024,
+            4
+          ],
+          "want": "efd972e3892523abc20b943b3f90dd02bb624925efe2c88bd90ba2a20e5b45c4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1024,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianMixture",
+      "identity_hash": {
+        "equal": true,
+        "got": "e3cad76ce9a060d0",
+        "want": "e3cad76ce9a060d0"
+      },
+      "kind": "dupes",
+      "lane": "gmm-sample",
+      "model_sha256": "c4a997dc3ae320a2142f906fa792e42361513925f520681a6f442c35167fa2e4",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.001291
+    },
+    {
+      "cases": [
+        {
+          "case": "sample_y",
+          "equal": true,
+          "got": "fb5d476a9c351f500983258412af8ff62f9dc4ab772b8cd8b1e0910778b78567",
+          "got_dtype": "<i4",
+          "got_shape": [
+            1024
+          ],
+          "want": "fb5d476a9c351f500983258412af8ff62f9dc4ab772b8cd8b1e0910778b78567",
+          "want_dtype": "<i4",
+          "want_shape": [
+            1024
+          ]
+        },
+        {
+          "case": "score_samples",
+          "equal": true,
+          "got": "cf98d816c73e29c72dc3b1e560b05d86f6dddd5987b843c88096d9bfdf912837",
+          "got_dtype": "<f4",
+          "got_shape": [
+            1024,
+            4
+          ],
+          "want": "cf98d816c73e29c72dc3b1e560b05d86f6dddd5987b843c88096d9bfdf912837",
+          "want_dtype": "<f4",
+          "want_shape": [
+            1024,
+            4
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "aa785d8205811e0f",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianMixture",
+      "identity_hash": {
+        "equal": true,
+        "got": "aa785d8205811e0f",
+        "want": "aa785d8205811e0f"
+      },
+      "kind": "ties",
+      "lane": "gmm-sample",
+      "model_sha256": "fa63a34d1b2e5088d38354e456890e0a49e8673892e46a34e475b08340023a9e",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.001302
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "bd1ea87cdb8f58ccc0c8300ced15aa6931f1b4d88665cb390bb2e630676a3ccc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "bd1ea87cdb8f58ccc0c8300ced15aa6931f1b4d88665cb390bb2e630676a3ccc",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "b322f8488b84d320460487e955026e295f4ae008eae3a659836779168eed2d03",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "b322f8488b84d320460487e955026e295f4ae008eae3a659836779168eed2d03",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "1e032c58b3e9cd14",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "1e032c58b3e9cd14",
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "1e032c58b3e9cd14",
+        "want": "1e032c58b3e9cd14"
+      },
+      "kind": "base",
+      "lane": "gp",
+      "model_sha256": "8f4a54a0bd816175d5806889e8edbc5c7577e12e8b6b614d2be2d70546521383",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.013559
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "cc306952f577b4de96638a7b2de0e270a4b41f1569395f893768e7e8ad839985",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "cc306952f577b4de96638a7b2de0e270a4b41f1569395f893768e7e8ad839985",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "b322f8488b84d320460487e955026e295f4ae008eae3a659836779168eed2d03",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "b322f8488b84d320460487e955026e295f4ae008eae3a659836779168eed2d03",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "52e6b306c452f16c",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "52e6b306c452f16c",
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "52e6b306c452f16c",
+        "want": "52e6b306c452f16c"
+      },
+      "kind": "dupes",
+      "lane": "gp",
+      "model_sha256": "0eca938df7a74371eda98ff32841197b2a251afa8b93a44a5e471a904aaa4f27",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.012837
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "5f206f11628e5421e1c69c415c155d39b72e493b507634b240290cea6e0b0eb5",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "5f206f11628e5421e1c69c415c155d39b72e493b507634b240290cea6e0b0eb5",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "8d20b584f84d0db2478e87dd15cbb9805f4802dfa6545ee09b4e606499972dc4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "8d20b584f84d0db2478e87dd15cbb9805f4802dfa6545ee09b4e606499972dc4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "22b0b528124de8d0",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "22b0b528124de8d0",
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "22b0b528124de8d0",
+        "want": "22b0b528124de8d0"
+      },
+      "kind": "ties",
+      "lane": "gp",
+      "model_sha256": "5a2f8a826a1aab15da9f8ba6303474917da39ff3f6e1fda9ad6b0aba12ea1994",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.013999
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "c62868bd860a4f9813bbfbb4ac2bc13a3642030b07de1f8ceaed9a7ecedfdc2b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "c62868bd860a4f9813bbfbb4ac2bc13a3642030b07de1f8ceaed9a7ecedfdc2b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "41dbaaf4d5bb5ebcdb5beda60ec0cbe3bba17a14053de990c19e4a20e5a8d98d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "41dbaaf4d5bb5ebcdb5beda60ec0cbe3bba17a14053de990c19e4a20e5a8d98d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "4f79f8b5efa024a7",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "4f79f8b5efa024a7",
+        "want": "4f79f8b5efa024a7"
+      },
+      "kind": "base",
+      "lane": "gp-matern12",
+      "model_sha256": "ea851543bc06b7ca25a3b284d193829f174b272f0769e80fcff5565464cfda42",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.01361
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "8fd47905ec51416a8ff9b3e57e918bd39ee000d374321a8cab3a265d9e117ecc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "8fd47905ec51416a8ff9b3e57e918bd39ee000d374321a8cab3a265d9e117ecc",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "41dbaaf4d5bb5ebcdb5beda60ec0cbe3bba17a14053de990c19e4a20e5a8d98d",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "41dbaaf4d5bb5ebcdb5beda60ec0cbe3bba17a14053de990c19e4a20e5a8d98d",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "f28fbf34f5e2f5e4",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "f28fbf34f5e2f5e4",
+        "want": "f28fbf34f5e2f5e4"
+      },
+      "kind": "dupes",
+      "lane": "gp-matern12",
+      "model_sha256": "c5921757366a1180fa4b0cda3896c852779ded7955f47374f2aa39f6d62848fd",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.01384
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "5aa8aeb8474b0a29a2e58a13abe994dfbb7f4674b87e56f88645b5412cae1e1e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "5aa8aeb8474b0a29a2e58a13abe994dfbb7f4674b87e56f88645b5412cae1e1e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "18ba6ba49c4e1f06fc48518fc3dfa372c2f3b5658a327da328674c72f4cf208f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "18ba6ba49c4e1f06fc48518fc3dfa372c2f3b5658a327da328674c72f4cf208f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "a001b7e2647b5504",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "a001b7e2647b5504",
+        "want": "a001b7e2647b5504"
+      },
+      "kind": "ties",
+      "lane": "gp-matern12",
+      "model_sha256": "2a12147f489372a13a6e797e0aefc11b698f2d63fef9f92bc81fd38bfaf4ba5e",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.014503
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "c4c3f3ad3c2400d45d5a220b751406ccf3458872ff99cbfe68f5429443d1e1b8",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "c4c3f3ad3c2400d45d5a220b751406ccf3458872ff99cbfe68f5429443d1e1b8",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "cfe4c8605b62f609eb09d8084a74952c043c0baf558f8dcc7d359a61ca39cd14",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "cfe4c8605b62f609eb09d8084a74952c043c0baf558f8dcc7d359a61ca39cd14",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "a89afc94af5f084c",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "a89afc94af5f084c",
+        "want": "a89afc94af5f084c"
+      },
+      "kind": "base",
+      "lane": "gp-matern32",
+      "model_sha256": "2f0aa7aa6d573e8f59b92a152ac21a6e2f0b95fa9de90f31b5c11a7c1a6568af",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.014004
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "0ead2f8e54770172ecc512d4236f6deb7aca2b2d19e038c4c949cb011735d270",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "0ead2f8e54770172ecc512d4236f6deb7aca2b2d19e038c4c949cb011735d270",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "cfe4c8605b62f609eb09d8084a74952c043c0baf558f8dcc7d359a61ca39cd14",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "cfe4c8605b62f609eb09d8084a74952c043c0baf558f8dcc7d359a61ca39cd14",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "e0a8a2dff9f3e703",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "e0a8a2dff9f3e703",
+        "want": "e0a8a2dff9f3e703"
+      },
+      "kind": "dupes",
+      "lane": "gp-matern32",
+      "model_sha256": "95b09e16e1e4201d3b29125bde0439f9c0ed003fd1776df8028ae7e9d0e46438",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.013758
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "519ffcc632bb08c91fe8a0793abaf4ef2477982d74f82adf189e099473118299",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "519ffcc632bb08c91fe8a0793abaf4ef2477982d74f82adf189e099473118299",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "b3921e284772ed2d2ed477471e4b6ab9514f3c031d005a9a828d768e647ac522",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "b3921e284772ed2d2ed477471e4b6ab9514f3c031d005a9a828d768e647ac522",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "d4ebe9e3a969d687",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "d4ebe9e3a969d687",
+        "want": "d4ebe9e3a969d687"
+      },
+      "kind": "ties",
+      "lane": "gp-matern32",
+      "model_sha256": "643600b947937792d7cdfffe2aba983d22604f380c50567bdd0b4bfbbb09d3f6",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.014466
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "a850bb2132f01257f19045d830013af8f17543ecb8662aecbda1866490d88a16",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "a850bb2132f01257f19045d830013af8f17543ecb8662aecbda1866490d88a16",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "138ef121c6d83ca3dbafffbf42436a67dcbd7ab5d1f4d900c645dbbc92cfc776",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "138ef121c6d83ca3dbafffbf42436a67dcbd7ab5d1f4d900c645dbbc92cfc776",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "7ed07da2d9a2b815",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "7ed07da2d9a2b815",
+        "want": "7ed07da2d9a2b815"
+      },
+      "kind": "base",
+      "lane": "gp-matern52-ard",
+      "model_sha256": "922c3b283f374edeaeafd6d1906a61746620e316db778393e1512c770e0f6867",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.014003
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "24a5fd747e6aa29026fe28d4476438feb791a19d6dc04cfb8ee83b4c7e3ba9d5",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "24a5fd747e6aa29026fe28d4476438feb791a19d6dc04cfb8ee83b4c7e3ba9d5",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "138ef121c6d83ca3dbafffbf42436a67dcbd7ab5d1f4d900c645dbbc92cfc776",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "138ef121c6d83ca3dbafffbf42436a67dcbd7ab5d1f4d900c645dbbc92cfc776",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "4cb708614a14be4f",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "4cb708614a14be4f",
+        "want": "4cb708614a14be4f"
+      },
+      "kind": "dupes",
+      "lane": "gp-matern52-ard",
+      "model_sha256": "4df8669dab2473084d2d9c98897b4a96aa97b2df9e3276c3a95c98009e427329",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.013607
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "ee2caf76ff91a4dd8800e9523140964b42f1b4ef4ab096d5756b5ee393e63df7",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "ee2caf76ff91a4dd8800e9523140964b42f1b4ef4ab096d5756b5ee393e63df7",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "f12bfd644236284a9c1d353858269f3999bf39e803243bef00625f6253cfec66",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "f12bfd644236284a9c1d353858269f3999bf39e803243bef00625f6253cfec66",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "d9e5f730b649eff6",
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "d9e5f730b649eff6",
+        "want": "d9e5f730b649eff6"
+      },
+      "kind": "ties",
+      "lane": "gp-matern52-ard",
+      "model_sha256": "8dd23a27ab3a3f3b7a8e06ee726e73289c9aa9b3217c9daed0ab17e545d4a512",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.014755
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "badfc066dcd7a72083c66071433aa5c7f99495c6ad0656e010a23c761d093dd1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "badfc066dcd7a72083c66071433aa5c7f99495c6ad0656e010a23c761d093dd1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "0874950857c1e6464674d11f153c6ae93dfe4a2d85ddb9a68816e4ab3ac46a02",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "0874950857c1e6464674d11f153c6ae93dfe4a2d85ddb9a68816e4ab3ac46a02",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "7c5123dc7a512038",
+        "want": "7c5123dc7a512038"
+      },
+      "kind": "base",
+      "lane": "gp-normalize-y",
+      "model_sha256": "988bc1c3b51246a48ea9845b47951166b466ec02ea99a8f951137f2be4fb81f6",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.013248
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "191d8ed6b714fc14ce9dd4eb4fb3d2a32f6f6b40294a4880473fe936bacb676c",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "191d8ed6b714fc14ce9dd4eb4fb3d2a32f6f6b40294a4880473fe936bacb676c",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "902a23f3dbbe6d64e371806b4da8843f83ee89a9ed7a3833bff713b3917933cc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "902a23f3dbbe6d64e371806b4da8843f83ee89a9ed7a3833bff713b3917933cc",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "3c0b639788527068",
+        "want": "3c0b639788527068"
+      },
+      "kind": "dupes",
+      "lane": "gp-normalize-y",
+      "model_sha256": "db1cd41ce6fd1b37c590492392b852e1e593b8f1e32a06481ac757c9bcc85782",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.013173
+    },
+    {
+      "cases": [
+        {
+          "case": "predict_mean",
+          "equal": true,
+          "got": "2722fbcc425362d0770c0e284a59253e5b7656ac65e0e1b8555642fdc59049dc",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "2722fbcc425362d0770c0e284a59253e5b7656ac65e0e1b8555642fdc59049dc",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "std",
+          "equal": true,
+          "got": "d3fb3939f044fbc6ead45ce5067c9b44f7934e423b6623e2018eddb02edbae15",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "d3fb3939f044fbc6ead45ce5067c9b44f7934e423b6623e2018eddb02edbae15",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessRegressor",
+      "identity_hash": {
+        "equal": true,
+        "got": "0e6c262796044cb8",
+        "want": "0e6c262796044cb8"
+      },
+      "kind": "ties",
+      "lane": "gp-normalize-y",
+      "model_sha256": "4af86e76b34e092c01e34013533d37e45506cfac237148046d75ba1e5636c8e4",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.014497
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "6f0899523dc981a5bc7448085730395fbfafdad4f34c564873f68bed8bce058f",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64
+          ],
+          "want": "6f0899523dc981a5bc7448085730395fbfafdad4f34c564873f68bed8bce058f",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "34826f767500e450cb6b7ab356b75644e7fd4767aa73e4db6157edea510c97d6",
+          "got_dtype": "<f8",
+          "got_shape": [
+            64,
+            2
+          ],
+          "want": "34826f767500e450cb6b7ab356b75644e7fd4767aa73e4db6157edea510c97d6",
+          "want_dtype": "<f8",
+          "want_shape": [
+            64,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "fc0b4c2f28c2e079",
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessClassifier",
+      "identity_hash": {
+        "equal": true,
+        "got": "fc0b4c2f28c2e079",
+        "want": "fc0b4c2f28c2e079"
+      },
+      "kind": "base",
+      "lane": "gpc",
+      "model_sha256": "81b8bb9e635d8e83db6f61576f4d520ec6b404d196dfba0639c56334dbe66cbf",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.015008
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "6f0899523dc981a5bc7448085730395fbfafdad4f34c564873f68bed8bce058f",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64
+          ],
+          "want": "6f0899523dc981a5bc7448085730395fbfafdad4f34c564873f68bed8bce058f",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "34826f767500e450cb6b7ab356b75644e7fd4767aa73e4db6157edea510c97d6",
+          "got_dtype": "<f8",
+          "got_shape": [
+            64,
+            2
+          ],
+          "want": "34826f767500e450cb6b7ab356b75644e7fd4767aa73e4db6157edea510c97d6",
+          "want_dtype": "<f8",
+          "want_shape": [
+            64,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "fc0b4c2f28c2e079",
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessClassifier",
+      "identity_hash": {
+        "equal": true,
+        "got": "fc0b4c2f28c2e079",
+        "want": "fc0b4c2f28c2e079"
+      },
+      "kind": "dupes",
+      "lane": "gpc",
+      "model_sha256": "81b8bb9e635d8e83db6f61576f4d520ec6b404d196dfba0639c56334dbe66cbf",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.014447
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "26807946dcf057ac93974f574fccdc266f0688160c326c50f10e7ac202e65e17",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64
+          ],
+          "want": "26807946dcf057ac93974f574fccdc266f0688160c326c50f10e7ac202e65e17",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "1136c6fcba081cec644a49700ccea0a771bca3d0a802b81dd84db06739ac5478",
+          "got_dtype": "<f8",
+          "got_shape": [
+            64,
+            2
+          ],
+          "want": "1136c6fcba081cec644a49700ccea0a771bca3d0a802b81dd84db06739ac5478",
+          "want_dtype": "<f8",
+          "want_shape": [
+            64,
+            2
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "ede5baa0c8969b06",
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessClassifier",
+      "identity_hash": {
+        "equal": true,
+        "got": "ede5baa0c8969b06",
+        "want": "ede5baa0c8969b06"
+      },
+      "kind": "ties",
+      "lane": "gpc",
+      "model_sha256": "7b9bf869ad365c269a5555f6fe1cab9a723217623fdf2e978f00f254e63b56a8",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.01647
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "dad07fcbab207dc1224ee4f9ce08034859239df5122bb3ad06d71120ebd2a317",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64
+          ],
+          "want": "dad07fcbab207dc1224ee4f9ce08034859239df5122bb3ad06d71120ebd2a317",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "4ca1247f2c82b9e75f8457733c30e9aa24f1e1d9346e38f2744a402c7f3779c0",
+          "got_dtype": "<f8",
+          "got_shape": [
+            64,
+            3
+          ],
+          "want": "4ca1247f2c82b9e75f8457733c30e9aa24f1e1d9346e38f2744a402c7f3779c0",
+          "want_dtype": "<f8",
+          "want_shape": [
+            64,
+            3
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "84db38aa85e9efe3",
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessClassifier",
+      "identity_hash": {
+        "equal": true,
+        "got": "84db38aa85e9efe3",
+        "want": "84db38aa85e9efe3"
+      },
+      "kind": "base",
+      "lane": "gpc-multiclass",
+      "model_sha256": "a7da75ab43e33d5945adccfdcc33b97e7e9391abf6f4522a88b1d5b6b49c94fe",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.063901
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "dad07fcbab207dc1224ee4f9ce08034859239df5122bb3ad06d71120ebd2a317",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64
+          ],
+          "want": "dad07fcbab207dc1224ee4f9ce08034859239df5122bb3ad06d71120ebd2a317",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "4ca1247f2c82b9e75f8457733c30e9aa24f1e1d9346e38f2744a402c7f3779c0",
+          "got_dtype": "<f8",
+          "got_shape": [
+            64,
+            3
+          ],
+          "want": "4ca1247f2c82b9e75f8457733c30e9aa24f1e1d9346e38f2744a402c7f3779c0",
+          "want_dtype": "<f8",
+          "want_shape": [
+            64,
+            3
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "84db38aa85e9efe3",
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessClassifier",
+      "identity_hash": {
+        "equal": true,
+        "got": "84db38aa85e9efe3",
+        "want": "84db38aa85e9efe3"
+      },
+      "kind": "dupes",
+      "lane": "gpc-multiclass",
+      "model_sha256": "a7da75ab43e33d5945adccfdcc33b97e7e9391abf6f4522a88b1d5b6b49c94fe",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.063811
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "9cdc413f3a921ec6ea63b85af60286c3473a3962959e8aa6e12a5a2287f03f6e",
+          "got_dtype": "<i8",
+          "got_shape": [
+            64
+          ],
+          "want": "9cdc413f3a921ec6ea63b85af60286c3473a3962959e8aa6e12a5a2287f03f6e",
+          "want_dtype": "<i8",
+          "want_shape": [
+            64
+          ]
+        },
+        {
+          "case": "predict_proba",
+          "equal": true,
+          "got": "8df89a20061d6e9a0abc4f1414362a2ace30b0505fcbf1afd647991f1ca83dce",
+          "got_dtype": "<f8",
+          "got_shape": [
+            64,
+            3
+          ],
+          "want": "8df89a20061d6e9a0abc4f1414362a2ace30b0505fcbf1afd647991f1ca83dce",
+          "want_dtype": "<f8",
+          "want_shape": [
+            64,
+            3
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": true,
+          "infer": "5f34edf8c694f013",
+          "vendor": "arm64"
+        },
+        {
+          "column": "apple-m4.json",
+          "equal": null,
+          "infer": null,
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "GaussianProcessClassifier",
+      "identity_hash": {
+        "equal": true,
+        "got": "5f34edf8c694f013",
+        "want": "5f34edf8c694f013"
+      },
+      "kind": "ties",
+      "lane": "gpc-multiclass",
+      "model_sha256": "3b3ac4079026dcdbc2b3fe5c7cde49ef6739df1d7a294d610c987e5e3fd14dcc",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.066111
+    }
+  ],
+  "gpu_columns": [
+    "apple-m4.json",
+    "apple-m4.json",
+    "apple-m4.json"
+  ],
+  "host": {
+    "cpu": "AMD EPYC 9754 128-Core Processor",
+    "family": "25",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "160",
+    "python": "3.14.7",
+    "release": "5.15.0-94-generic",
+    "stepping": "2",
+    "system": "Linux",
+    "vendor": "AuthenticAMD"
+  },
+  "vendor": "cpu",
+  "verdict": "IDENTICAL"
+}
