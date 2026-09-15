@@ -64,10 +64,19 @@ the same define turns on, are left as they are), so the returned distances
 move by the order of a float fold and the ids move wherever that reorders a
 near tie. Read back by `ivf_host_sabotage`.
 
+A fold walked in the other order is EXACT on the integer-grid `ties`
+fixture: there the two arms above moved no bit of the ivf and ivf-euclidean
+saved-model checks (x86 RunPod, 2026-09-15). So the same build also moves a
+VALUE (lane/ties-sabotage, 2026-09-15): every distance `host_ivf_search`
+returns goes through `ivf_sabotage_value_flip` after the root, so the
+reported bits differ on every fixture, a root that rounds a one-unit step
+back included.
+
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the ivf and ivf-euclidean lanes is the
 measurement.
 """
+from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from checks.fixed_point import choose_scale
@@ -112,6 +121,18 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
 comptime IVF_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+
+@always_inline
+def ivf_sabotage_value_flip(v: Float32) -> Float32:
+    """The value arm of the sabotage build: a float32 whose bits always
+    differ from `v`'s. A magnitude below the smallest normal (zero or a
+    subnormal) becomes the smallest positive normal; every other value steps
+    its mantissa by one unit. Compiled only under IVF_HOST_SABOTAGE."""
+    var bits = bitcast[DType.uint32](v)
+    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
+        return bitcast[DType.float32](UInt32(0x00800000))
+    return bitcast[DType.float32](bits + UInt32(1))
 
 #: `ivf_flat_search.mojo`'s `IVF_SELECT_LIMIT` under IDENTICAL, which is
 #: `neighbors/checks/select_radix_identical.mojo`'s `IDENTICAL_MAX_K`,
@@ -371,7 +392,11 @@ def host_ivf_search(
         if not dist_is_identity:
             postprocess_distances(sel_dist, metric)
         for i in range(k):
-            out_dist.append(sel_dist[i])
+            comptime if IVF_HOST_SABOTAGE:
+                # THE VALUE ARM (THE NEGATIVE CONTROL above), after the root.
+                out_dist.append(ivf_sabotage_value_flip(sel_dist[i]))
+            else:
+                out_dist.append(sel_dist[i])
             out_idx.append(sel_orig[i])
     return IvfHostResult(out_dist^, out_idx^, cand_counts^)
 
