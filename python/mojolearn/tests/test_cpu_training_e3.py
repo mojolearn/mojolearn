@@ -16,8 +16,7 @@ module and nothing from `ensemble/` beyond the `checks/numerics.mojo`
 seams; the oracle spells the device constructs a bit claim rests on (the
 pinned width 32 reduction, the ftz-compared quantile unique, the bootstrap
 stride, the pure-node rule); the sabotage define reaches the bootstrap draw
-and the binding reads it back; the CPU identity gate workflow triggers on
-the oracle.
+and the binding reads it back.
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): both estimators fit twice through the host
@@ -107,10 +106,6 @@ def test_sabotage_define_moves_the_bootstrap():
     assert "sub = sub + UInt64(1)" in text, "the sabotage arm does not move the bootstrap subsequence"
     assert "RF_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("rf"))
 
-
-def test_workflow_triggers_on_the_oracle():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {ORACLE}"
 
 
 @reference_training()

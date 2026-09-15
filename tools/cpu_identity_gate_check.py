@@ -28,6 +28,15 @@ section 3.4), as a tool that runs on a laptop too.
              that ran a different machine, commit, fixture or binding bytes.
              Exit non-zero if any shard exits non-zero (a MOVED cell, a
              refusal of the lane list, a crash) or the merge refuses.
+  owed       the sabotage arm of the OWED cell parts (2026-09-15,
+             lane/cpu-gate-owed-cells). `identity_break --diff
+             --require-columns 4 --owed-json owed_cells.json` admits a cell
+             part that no committed GPU record hashes yet (absent, n/a, or a
+             lane not in the record) as OWED when the CPU column hashes it
+             STABLE and every column that has it agrees; this check then
+             requires every listed part to MOVE between the production CPU
+             column and the MOJOLEARN_HOST_SABOTAGE column. Exit 1 on a part
+             that did not move, is refused or absent under sabotage.
 
 Exit 0: every check holds. 1: a check failed. 2: the tool could not run.
 """
@@ -139,6 +148,71 @@ def do_column(args):
     for f in failures:
         print(f"column FAIL: {f}")
     print(f"column verdict {'OK' if not failures else 'FAIL'} ({len(failures)} failure(s))")
+    return 1 if failures else 0
+
+
+def _part_values(cell, part):
+    """The per-repeat values of one part of a cell: the train hashes, or the
+    `infer`, `model`, `batch` (and opt-in part) lists. None when the cell or
+    the part is absent or the cell was refused."""
+    if cell is None or cell.get("verdict") == "REFUSED":
+        return None
+    values = cell.get("hashes") if part == "train" else cell.get(part)
+    return list(values) if values else None
+
+
+def do_owed(args):
+    """The OWED cell parts' sabotage arm (lane/cpu-gate-owed-cells,
+    2026-09-15). identity_break --diff --owed-json admits a cell part no GPU
+    record hashes yet only when the CPU column hashes it STABLE and every
+    column that has it agrees. That alone cannot fail on a CPU fold that
+    does nothing, so every owed part must also MOVE under the sabotage host
+    set: its sabotage value must exist, must not be n/a, and must differ from
+    the production CPU hash (a BATCH_MOVED string differs from every hash).
+    A refused or absent sabotage cell is not a catch."""
+    try:
+        with open(args.owed_json) as fh:
+            owed = json.load(fh)
+        with open(args.production) as fh:
+            prod = json.load(fh)
+        with open(args.sabotage) as fh:
+            sab = json.load(fh)
+    except (OSError, ValueError) as exc:
+        print(f"owed: cannot read an input: {exc}", file=sys.stderr)
+        return 2
+    failures = []
+    if not prod.get("host") or not sab.get("host"):
+        failures.append("the production and sabotage JSONs must both be CPU columns (a host object)")
+    entries = owed.get("owed")
+    if not isinstance(entries, list):
+        print(f"owed: {args.owed_json} carries no owed list", file=sys.stderr)
+        return 2
+    moved = 0
+    for o in entries:
+        key, part = f"{o['lane']}/{o['fixture']}", o["part"]
+        p = _part_values(prod["cells"].get(key), part)
+        s = _part_values(sab["cells"].get(key), part)
+        if not p or len(set(p)) != 1 or str(p[0]).startswith("n/a"):
+            failures.append(f"{key} {part}: the production CPU column does not hash it STABLE ({p})")
+            continue
+        if not s:
+            failures.append(f"{key} {part}: the sabotage column has no value (absent or REFUSED); a refusal is not a catch")
+            continue
+        if str(s[0]).startswith("n/a"):
+            failures.append(f"{key} {part}: the sabotage column reads {s[0]}")
+            continue
+        if s[0] == p[0]:
+            failures.append(f"{key} {part}: DID NOT MOVE under the sabotage host set ({p[0]}); an owed cell "
+                            "that sabotage cannot move rests on nothing")
+            continue
+        moved += 1
+        print(f"owed {key} {part}: production {p[0]} sabotage {str(s[0])[:60]} MOVED")
+    if not entries:
+        print("owed: no OWED cell part in the list; nothing to move")
+    for f in failures:
+        print(f"owed FAIL: {f}")
+    print(f"owed verdict {'OK' if not failures else 'FAIL'} ({moved} of {len(entries)} owed cell part(s) moved, "
+          f"{len(failures)} failure(s))")
     return 1 if failures else 0
 
 
@@ -264,6 +338,10 @@ def main(argv=None):
     col.add_argument("--covered", default="", help="lanes that must be STABLE, comma separated; every other lane must be REFUSED by name")
     col.add_argument("--commit", default="", help="the commit the JSON must carry")
     col.add_argument("--binding", default="", help="host bindings that must appear in host.families with column cpu, comma separated")
+    ow = sub.add_parser("owed", help="every OWED cell part (identity_break --owed-json) must move under the sabotage host set")
+    ow.add_argument("owed_json")
+    ow.add_argument("--production", required=True, help="the production CPU column the owed list was diffed from")
+    ow.add_argument("--sabotage", required=True, help="the CPU column run on the MOJOLEARN_HOST_SABOTAGE host set")
     rc = sub.add_parser("run-column", help="run identity_break over --lanes in parallel shards and merge the parts")
     rc.add_argument("--lanes", required=True, help="the lanes to run, comma separated")
     rc.add_argument("--json", required=True, help="the merged column; parts and logs are written beside it")
@@ -274,6 +352,8 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.cmd == "readback":
         return do_readback(args)
+    if args.cmd == "owed":
+        return do_owed(args)
     if args.cmd == "run-column":
         if args.jobs <= 0:
             args.jobs = args.shards

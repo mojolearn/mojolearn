@@ -315,6 +315,11 @@ TRAINING_LANE_NAMES = {
     # nine train cells on the M4's CPU column (one core) before the gate ran,
     # and the sabotage build DIVERGENT on all nine.
     "metrics-classification": "the classification, ranking and regression metrics",
+    # The metrics-fowlkes-mallows lane (lane/cpu-training-small-gaps,
+    # 2026-09-15): scikit-learn's fowlkes_mallows_score over the integer
+    # contingency matrix, host_fowlkes_mallows in
+    # metrics/host/metrics_oracle.mojo, exported under the GPU binding's name.
+    "metrics-fowlkes-mallows": "the Fowlkes-Mallows index",
     # The mlp lane (lane/cpu-training-mlp, 2026-09-14): SmallMLPTrainer's
     # step through the training family's host binding (the three MLP
     # operations in training/host/mlp_oracle.mojo, the loss and AdamW over
@@ -378,7 +383,8 @@ TRAINING_LANE_NAMES = {
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
-    # the arima family's own host binding. par-arima is not declared. Gate
+    # the arima family's own host binding. par-arima was not declared until
+    # lane/cpu-training-par-classical (2026-09-15, below). Gate
     # run 34895909493 at 422a1b9e5: all 27 training and 27 infer cells
     # IDENTICAL x4; under the sabotage build 26 of 27 of each DIVERGENT
     # (arima-011/wide keeps its hash).
@@ -471,6 +477,17 @@ TRAINING_LANE_NAMES = {
     "rf-reg-gamma-ig": "the random forest regressor with the gamma and inverse Gaussian criteria",
     "et-clf-entropy-bestfirst": "the best-first Extra Trees classifier with entropy splits",
     "et-reg-bootstrap-parallel": "the bootstrapped Extra Trees regressor with the parallel groves engine",
+    # The Transformer block lanes (lane/cpu-training-transformer,
+    # 2026-09-15). TransformerBlock's forward (the stateless prefill, the
+    # carried-state prefill and the decode step) and its zero-state prefill
+    # backward run through the lane's own host oracles,
+    # transformer/checks/transformer_oracle.mojo and
+    # transformer_backward_oracle.mojo, composed by
+    # transformer/host/transformer_block_host.mojo, which also converts the KV
+    # cache between the device's packed (or ring) layout and the oracle's.
+    # The sliding window is the same oracles' window argument.
+    "transformer": "the Transformer block",
+    "transformer-window": "the sliding-window Transformer block",
     # The byte LM host lanes (lane/cpu-training-host-only-lanes, 2026-09-15).
     # Host code on every box, so the 166-lane record's three columns are the
     # host CPUs of the Apple M4, the H100 box and the MI325X box, IDENTICAL x3
@@ -481,13 +498,37 @@ TRAINING_LANE_NAMES = {
     "byte-lm-host-infer": "the byte LM forward pass on its reference path (inference)",
     "byte-lm-host-infer-threaded": "the byte LM forward pass on its threaded path (inference)",
     "byte-lm-host-train": "the published byte LM host training step",
+    # CPU training for the par-* lanes whose driver shards in Python
+    # (lane/cpu-training-par-classical, 2026-09-15). fit_scaler and
+    # transform_scaler (four column shards), fit_arima and
+    # fit_exponential_smoothing (two series per shard) run each shard as a
+    # host fit in its own worker process and merge in shard order through
+    # the drivers' unchanged code (_parallel_pool.CPU_OPERATIONS); the
+    # cooperative drivers refuse by name. On the M4's CPU column (one core)
+    # every train, infer and batch cell of the three lanes read IDENTICAL x4
+    # against the 166-lane record before the gate ran, and the sabotage set
+    # DIVERGENT on every train cell.
+    "par-scaler": "the column-sharded standard scaler",
+    "par-arima": "series-sharded ARIMA",
+    "par-holtwinters": "series-sharded Holt-Winters",
+    # Wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor
+    # drivers. ParallelQueries cuts query rows in Python (four shards of 16
+    # rows); ReferenceShardedNeighbors cuts the reference into four shards
+    # of 1024 rows, merges the shard candidates by composite key in Python
+    # and sends one vote request, served on CPU by the core host binding's
+    # knn_classify_neighbors and knn_regress_neighbors.
+    "par-queries-knn": "query-sharded k-NN classification",
+    "par-queries-radius": "query-sharded radius neighbors",
+    "par-queries-kde": "query-sharded kernel density",
+    "par-reference-knn": "reference-sharded k-NN classification",
+    "par-reference-knn-reg": "reference-sharded k-NN regression",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "the Transformer, Mamba and Samba blocks",
+    "the Mamba and Samba blocks",
     "the Embedding layer",
     "gradient boosting training outside its declared lanes (the ordered RMSE and feature-frequency fits, categorical features, sample weights, eval sets and the pointwise searcher among them)",
 )
@@ -621,6 +662,8 @@ FAMILIES = (
             "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
             "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
             "kmeans-sqrt", "kmeans-classic-pp", "kmeans-cosine",
+            "par-queries-knn", "par-queries-radius", "par-reference-knn",
+            "par-reference-knn-reg",
         ),
         inference_lanes=("knn", "knn-clf", "knn-reg"),
         forest_kinds=(),
@@ -636,7 +679,8 @@ FAMILIES = (
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
-            "knn_search", "knn_classify", "knn_regress", "kmeans_fit",
+            "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict",
+            "knn_classify_neighbors", "knn_regress_neighbors",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
@@ -679,6 +723,7 @@ FAMILIES = (
             "kde-weighted", "ols-no-intercept", "ols-weighted", "ridge-no-intercept",
             "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
             "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
+            "par-queries-kde",
         ),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
@@ -719,7 +764,8 @@ FAMILIES = (
         routes="_mojolearn_metrics",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification"),
+        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
+                        "metrics-fowlkes-mallows"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -734,7 +780,7 @@ FAMILIES = (
             "metrics.confusion_matrix", "metrics.precision_recall_curve",
             "metrics.mean_squared_error", "metrics.mean_absolute_error",
             "metrics.root_mean_squared_error", "metrics.kl_divergence",
-            "metrics.trustworthiness",
+            "metrics.trustworthiness", "metrics.fowlkes_mallows_score",
         ),
         display="the label, classification, ranking, regression, r2, KL, silhouette and trustworthiness metrics, spectral clustering and UMAP",
         host_modules=(
@@ -760,7 +806,7 @@ FAMILIES = (
             "rand_score", "mean_squared_error", "mean_absolute_error",
             "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",
             "log_loss", "confusion_matrix", "precision_recall_fscore",
-            "kl_divergence", "trustworthiness",
+            "kl_divergence", "trustworthiness", "fowlkes_mallows_score",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -776,7 +822,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
-            "standard-scaler-no-std", "minmax-scaler-clip",
+            "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -798,7 +844,7 @@ FAMILIES = (
         routes="_mojolearn_tsa",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss"),
+        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss", "par-holtwinters"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ExponentialSmoothing", "kpss_test"),
@@ -1186,14 +1232,15 @@ FAMILIES = (
         # ARIMA's host binding. It routes `_mojolearn_arima` on a CPU-only
         # install with the GPU binding's whole surface (fit, predict,
         # forecast); p, q or P above 1, any Q, d + D of 2, p + q + k of 0
-        # and an in-sample prediction refuse by name. par-arima is not
-        # declared.
+        # and an in-sample prediction refuse by name. par-arima is declared
+        # since lane/cpu-training-par-classical (2026-09-15): fit_arima's
+        # series shards run as host fits in their own workers.
         family="arima",
         binding="_mojolearn_arima_host",
         routes="_mojolearn_arima",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("arima", "arima-011", "arima-seasonal-c"),
+        training_lanes=("arima", "arima-011", "arima-seasonal-c", "par-arima"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ARIMA",),
@@ -1205,6 +1252,36 @@ FAMILIES = (
             "arima_fit", "arima_predict", "arima_forecast",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        family="transformer",
+        binding="_mojolearn_transformer_host",
+        routes="_mojolearn_transformer",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("transformer", "transformer-window"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("TransformerBlock",),
+        display="the Transformer block forward, decode step and backward",
+        host_modules=(
+            "transformer/host/transformer_block_host.mojo",
+            "transformer/checks/transformer_oracle.mojo",
+            "transformer/checks/transformer_backward_oracle.mojo",
+            "transformer/checks/transformer_fixture.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "transformer_host_numeric_mode", "transformer_host_vendor",
+            "transformer_host_column", "transformer_host_sabotage",
+            "transformer_vendor", "transformer_numeric_mode",
+            "transformer_forward", "transformer_forward_fresh",
+            "transformer_decode_step", "transformer_backward",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        # Training-only reference family: source builds for internal bitwise
+        # verification, not shipped (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
         ships_in_wheel=False,
     ),
 )

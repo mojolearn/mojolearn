@@ -2501,6 +2501,14 @@ if [ "$SHIPS_SOURCE" = 1 ]; then
   # body runs (the container mounts /root:/root, so it sees them).
   MOJOLEARN_STAGE_REMOTE_SH='sudo -n -H sh -s' sh tools/stage_from_r2.sh "${SSH_OPTS[*]} hotaisle@$SSH_IP" > "$OUT/stage.log" 2>&1 || true
   log "$(tail -1 "$OUT/stage.log")"
+  # lane/r2-binding-cache (2026-09-15), DEFAULT OFF: presigned URLs for
+  # tools/bincache.py under /root, which the container mounts; a body opts in
+  # with `python3 tools/bincache.py build <script>`. The image names the
+  # runtime too, and the key re-measures the OS the build really ran in.
+  if [ "${MOJOLEARN_BINCACHE:-0}" = 1 ]; then
+    MOJOLEARN_BINCACHE_REMOTE_SH='sudo -n -H sh -s' sh tools/bincache_leg.sh stage "${SSH_OPTS[*]} hotaisle@$SSH_IP" "hotaisle:$RUNTIME:$IMAGE" > "$OUT/bincache_stage.log" 2>&1 || true
+    log "$(tail -1 "$OUT/bincache_stage.log")"
+  fi
   sed 's/^/    /' "$TMPD/unpack.out"
   grep -q '^ARCHIVE-SHA-OK' "$TMPD/unpack.out" && grep -q '^UNPACKED ' "$TMPD/unpack.out" || die "the VM refused or failed to unpack the bundle" 7
 else
@@ -2578,6 +2586,10 @@ else
   FETCH_RED=1; log "FETCH FAILED or hit its ${FETCH_SECONDS}s bound; deleting regardless"
 fi
 rm -rf "$OUT/remote/tools-venv"
+if [ "${MOJOLEARN_BINCACHE:-0}" = 1 ] && [ -f "$OUT/remote/bincache/uploads.tsv" ]; then
+  sh tools/bincache_leg.sh promote "$OUT/remote/bincache" > "$OUT/bincache_promote.log" 2>&1 || true
+  log "$(tail -1 "$OUT/bincache_promote.log")"
+fi
 with_deadline 60 /dev/null "${SSHN[@]}" 'sudo -n cat /root/gemm_leg_console.log /root/mojolearn-pull.done' > "$OUT/remote_console.log" 2>/dev/null || true
 if [ "$SHIPS_SOURCE" = 1 ]; then
   _local_sha=$(cat "$OUT/source_sha256_local.txt" 2>/dev/null)

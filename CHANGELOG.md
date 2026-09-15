@@ -10,6 +10,25 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- New `mojolearn.metrics.fowlkes_mallows_score`, mirroring scikit-learn's definition (cuML
+  has none): the device integer contingency matrix, exact Int64 pair counts, then
+  `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, 0.0 when `tk == 0` (no samples, one sample,
+  all singletons). It was a named absence. The metrics GPU binding and the metrics host
+  binding both export it; the new `metrics-fowlkes-mallows` identity lane covers it, with
+  the metrics host sabotage build required to read DIVERGENT. Apple M4 Metal and CPU columns
+  only; the NVIDIA and AMD columns are owed to the release record.
+- New `HDBSCAN(prediction_data=True)` and `mojolearn.hdbscan.approximate_predict(clusterer,
+  points_to_predict)`, mirroring cuML's prediction data and `approximate_predict`: the label
+  and probability of new points under the fitted clustering, on the GPU binding and the CPU host
+  binding. Without `prediction_data=True` it refuses by name, as cuML does. A tie in mutual
+  reachability distance resolves in (distance, index) order (DEVIATION 1615). The fit is
+  unchanged: the committed Apple, NVIDIA and AMD train hashes of the `hdbscan` and
+  `hdbscan-leaf` lanes still match. Those lanes and `par-hdbscan` now carry infer and batch
+  cells instead of `n/a:transductive`, with the batch and host sabotage builds required to
+  move them. Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the
+  release record. `membership_vector` and `all_points_membership_vectors` are not
+  implemented and refuse by name.
+
 - Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
   namely the byte LM's, the forest's, the tokenizer's and the twelve routed families (core,
   linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp, arima), fifteen in

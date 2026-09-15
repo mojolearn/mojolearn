@@ -83,6 +83,7 @@ __all__ = [
     "adjusted_rand_score",
     "completeness_score",
     "entropy",
+    "fowlkes_mallows_score",
     "homogeneity_completeness_v_measure",
     "homogeneity_score",
     "kl_divergence",
@@ -438,6 +439,54 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
     # n, lower_class_range, upper_class_range
     return float(
         _get_binding().mutual_info_score(
+            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
+        )
+    )
+
+
+def fowlkes_mallows_score(labels_true, labels_pred, *, sparse="deprecated"):
+    """The Fowlkes-Mallows index between two clusterings.
+
+    MIRRORS scikit-learn's `fowlkes_mallows_score`
+    (`sklearn/metrics/cluster/_supervised.py`); cuML 26.08 has no such
+    metric. The contingency matrix is built with INTEGER atomics on the
+    device (the kernel mutual_info_score uses), the three pair counts
+
+        tk = sum_ij c_ij^2 - n,  pk = sum_j (column sum)^2 - n,
+        qk = sum_i (row sum)^2 - n
+
+    are exact Int64 sums on the host, and the score is
+    `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, or 0.0 when `tk == 0`
+    (every class split into singletons, a single sample, or no samples),
+    exactly as scikit-learn returns.
+
+        labels_true,   honored   int32 labels, same length, remapped onto
+        labels_pred              [0, n_classes - 1] over the union of their
+                                 distinct labels as mutual_info_score does
+        sparse         refused   scikit-learn deprecated it (1.7) and
+                                 ignores it; any explicit value is refused
+                                 by name rather than silently ignored
+    """
+    if sparse != "deprecated":
+        raise NotImplementedError(
+            "mojolearn fowlkes_mallows_score: sparse= is refused; scikit-learn "
+            "deprecated and ignores it, and this surface has no sparse arm"
+        )
+    try:
+        empty = len(labels_true) == 0 and len(labels_pred) == 0
+    except TypeError:
+        empty = False
+    if empty:
+        # scikit-learn's check_clusterings allows no samples
+        # (ensure_min_samples=0); the empty contingency matrix gives
+        # tk == 0 and the score 0.0. The label loaders refuse empty input,
+        # so the case is answered here, before them.
+        return 0.0
+    yt, yp, n, lower, upper = _prepare_cluster_labels(labels_true, labels_pred)
+    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::fowlkes_mallows_score_binding.
+    # n, lower_class_range, upper_class_range
+    return float(
+        _get_binding().fowlkes_mallows_score(
             addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
         )
     )
@@ -1241,7 +1290,6 @@ _UNSUPPORTED = {
     ),
     "normalized_mutual_info_score": "normalization conventions and public validation are not implemented",
     "adjusted_mutual_info_score": "expected mutual information and its public contract are not implemented",
-    "fowlkes_mallows_score": "public score and normalization checks are not implemented",
     "hinge_loss": "GPU margin reduction and its public label contract are not implemented",
 }
 

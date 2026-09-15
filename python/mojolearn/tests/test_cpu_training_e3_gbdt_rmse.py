@@ -15,8 +15,7 @@ spells the device constructs a bit claim rests on (the Float32 narrowing of
 the target average, the flushed der, the negated squared residual, the
 Hessian guard and the `1e-20` epsilon, the minimum leaf weight zero, the
 fused cursor update, the `bias` record after `losses`); the sabotage define
-reaches the RMSE leaf; the CPU identity gate workflow triggers on the RMSE
-oracle.
+reaches the RMSE leaf; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): a small RMSE fit runs twice through the host
@@ -112,10 +111,6 @@ def test_sabotage_define_moves_the_rmse_leaf():
     assert "comptime if GBDT_ORACLE_HOST_SABOTAGE:" in text
     assert "reg = reg + Float32(1.0)" in text
 
-
-def test_workflow_triggers_on_the_rmse_oracle():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {ORACLE}"
 
 
 @reference_training()

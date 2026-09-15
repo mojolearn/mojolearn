@@ -358,11 +358,16 @@ every whole-batch answer and must turn every hashed cell `BATCH_MOVED`.
 
 What it tests is the host call path's batch splitting through the bindings,
 on one box. What it does not test is serving-scale B, padding or ragged
-batches (no sequence API takes them), the backward pass, or a transductive
-fit; a cross-vendor statement comes only from `--diff` over records. As of
-this section one Apple M4 smoke on `base` for each of standard-scaler and
-transformer read STABLE and the sabotage read `BATCH_MOVED`; the first
-three-column record is owed.
+batches, the backward pass, or a transductive fit; since 2026-09-15 the
+first three are the opt-in parts `--batch-scale`, `--ragged` (through the
+`lengths=` argument the causal sequence models then gained) and
+`--batch-grad` (per-row gradients and optimizer contract clause 9.2's aligned
+accumulation), described in the tool's docstring. A cross-vendor statement
+comes only from `--diff` over records. The batch part's first three-column
+record is `bench/results/identity_break/2026-09-14_166-lanes/diff.batch.txt`;
+the three opt-in parts' first record, on 26 lanes (Apple M4, one H100 and one
+MI325X at 1cc7a2f47), is `bench/results/identity_break/2026-09-15_batch2/`,
+whose README says what it does and does not show.
 
 ## The sampler's log-probabilities equal the trainer's (2026-09-15)
 

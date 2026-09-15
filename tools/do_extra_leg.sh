@@ -1174,6 +1174,12 @@ grep -q '^ARCHIVE-SHA-OK' "$TMPD/unpack.out" && grep -q '^UNPACKED ' "$TMPD/unpa
 # DEVIATION 2704: datasets and corpora from R2, staged before the body runs.
 sh tools/stage_from_r2.sh "${SSH_OPTS[*]} root@$IP" > "$OUT/stage.log" 2>&1 || true
 log "$(tail -1 "$OUT/stage.log")"
+# lane/r2-binding-cache (2026-09-15), DEFAULT OFF: presigned URLs for
+# tools/bincache.py; a body opts in with `python3 tools/bincache.py build <script>`.
+if [ "${MOJOLEARN_BINCACHE:-0}" = 1 ]; then
+  sh tools/bincache_leg.sh stage "${SSH_OPTS[*]} root@$IP" "do:$IMAGE" > "$OUT/bincache_stage.log" 2>&1 || true
+  log "$(tail -1 "$OUT/bincache_stage.log")"
+fi
 
 # MOJOLEARN_DO_EXTRA_UPLOAD: data the box cannot fetch, each file checked by
 # sha256 on the box against the one computed before the create.
@@ -1267,6 +1273,10 @@ else
 fi
 # Never commit a tools venv.
 rm -rf "$OUT/remote/tools-venv"
+if [ "${MOJOLEARN_BINCACHE:-0}" = 1 ] && [ -f "$OUT/remote/bincache/uploads.tsv" ]; then
+  sh tools/bincache_leg.sh promote "$OUT/remote/bincache" > "$OUT/bincache_promote.log" 2>&1 || true
+  log "$(tail -1 "$OUT/bincache_promote.log")"
+fi
 with_deadline 60 "${SSHN[@]}" 'cat /root/gemm_leg_console.log' > "$OUT/remote_console.log" 2>/dev/null || true
 tail -5 "$OUT/remote_console.log" 2>/dev/null | sed 's/^/    /'
 
