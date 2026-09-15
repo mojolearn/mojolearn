@@ -52,6 +52,16 @@ monte-carlo, par-resample, optim-sgd, optim-adam-clip.
   Metal equal too); record diff summary IDENTICAL=72, ONE-COLUMN=1, summary
   (batch) IDENTICAL=6, N/A=66, ONE-COLUMN=1; sabotage 7 of 7 Metal and 6 of 6
   CPU BATCH_MOVED.
+- Two more merges of origin/main before the push. The first (small-gaps,
+  metrics.fowlkes_mallows_score) conflicted in the declaration list; the
+  resolution keeps this branch's declarations and gives
+  metrics-fowlkes-mallows main's own reason. The second (par-wave2, which
+  changed the core host binding and _parallel_pool.py) merged cleanly. At
+  246e9851b, base fixture, metrics and core host rebuilt, CPU copy resynced:
+  179 lanes, one batch declaration each; the 7 Metal and 6 CPU batch hashes
+  equal every earlier head's; record diff summary IDENTICAL=72, ONE-COLUMN=1,
+  summary (batch) IDENTICAL=6, N/A=66, ONE-COLUMN=1, no DIVERGENT row;
+  sabotage 7 of 7 Metal and 6 of 6 CPU BATCH_MOVED.
 - docs_facts --check and wheel_ci.py pins . pass. The gate's one pinned batch
   summary diffs the committed GPU JSONs, which this lane does not change.
 
