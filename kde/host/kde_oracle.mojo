@@ -79,9 +79,13 @@ from checks.numerics import (
 #: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,
 #: 2026-09-13, brief section 3.4). `-D MOJOLEARN_HOST_SABOTAGE=1` makes
 #: `oracle_logsumexp_row` sum the shifted exponentials DESCENDING instead of
-#: ascending, so the estimators host binding built with it computes a
-#: different fold and the kde lane must read DIVERGENT against the GPU
-#: columns. Passed by the host build scripts only; a host binding that
+#: ascending, from one extra unit instead of from zero, so the estimators
+#: host binding built with it computes a different fold and every kde lane
+#: must read DIVERGENT against the GPU columns. The extra unit is there for
+#: the tophat kernel (lane kde-tophat-sqeuclidean, 2026-09-14): its shifted
+#: exponentials are exactly 0 or 1, so a descending sum of them is the same
+#: integer and the descending walk alone left all nine fixtures IDENTICAL
+#: under sabotage (measured on the M4's CPU column, one core). Passed by the host build scripts only; a host binding that
 #: carries it says so through `<prefix>_sabotage()` and is refused outside
 #: the gate (`python/mojolearn/_backend.py::load_host_module`).
 comptime KDE_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -248,8 +252,9 @@ def oracle_logsumexp_row(
         return (max_exp, max_exp)
     var s = Float32(0.0)
     comptime if KDE_ORACLE_HOST_SABOTAGE:
-        # THE SABOTAGE ARM: the same row, summed DESCENDING. Wrong on
-        # purpose; see KDE_ORACLE_HOST_SABOTAGE.
+        # THE SABOTAGE ARM: the same row, summed DESCENDING from one extra
+        # unit. Wrong on purpose; see KDE_ORACLE_HOST_SABOTAGE.
+        s = Float32(1.0)
         for jj in range(n_train):
             var j = n_train - 1 - jj
             s = ftz(s + ftz(identical_exp(ftz(logk[base + j] - max_exp))))

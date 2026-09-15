@@ -87,6 +87,7 @@ on:
       - "python/mojolearn/_classical_host.py"
       - "core/classical_host_predict.mojo"
       - "decomposition/host/pca_oracle.mojo"
+      - "decomposition/host/pca_full_oracle.mojo"
       - "glm/host/glm_oracle.mojo"
       - "dbscan/host/dbscan_oracle.mojo"
       - "cluster/host/kmeans_oracle.mojo"
@@ -97,6 +98,7 @@ on:
       - "umap/graph.mojo"
       - "umap/curve.mojo"
       - "umap/params.mojo"
+      - "tsa/checks/kpss_oracle.mojo"
       - "preprocessing/host/scaler_oracle.mojo"
       - "glm/host/qn_oracle.mojo"
       - "ensemble/host/rf_oracle.mojo"
@@ -117,6 +119,7 @@ on:
       - "bench/results/identity_break/2026-09-14_46-lanes/**"
       - "bench/results/identity_break/2026-09-14_47-lanes/**"
       - "bench/results/identity_break/2026-09-14_136-lanes/**"
+      - "bench/results/identity_break/2026-09-14_166-lanes/**"
       - "bench/results/forest_host/**"
       - ".github/workflows/cpu-identity-gate.yml"
 
@@ -141,8 +144,10 @@ env:
   #                       pca, pca-whiten, tsvd, ols and ridge lanes train on
   #                       the host too and sit in both lists, and dbscan
   #                       trains on the host; batch 2 adds logistic (the
-  #                       binary L-BFGS arm) to the training list, so only
-  #                       logistic-multiclass stays inference-only.
+  #                       binary L-BFGS arm) to the training list, and batch
+  #                       3 (lane/cpu-training-batch3) adds
+  #                       logistic-multiclass (the softmax loss), so no
+  #                       classical lane is inference-only any more.
   #   HOST_FAMILIES       the routed (phase 1) families, space separated; each
   #                       is built by bindings/build_<family>_host.sh (a shim
   #                       over bindings/build_host_family.sh) into
@@ -227,6 +232,7 @@ jobs:
             /bench/results/identity_break/2026-09-14_46-lanes/
             /bench/results/identity_break/2026-09-14_47-lanes/
             /bench/results/identity_break/2026-09-14_136-lanes/
+            /bench/results/identity_break/2026-09-14_166-lanes/
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -395,19 +401,27 @@ jobs:
           python3 tools/classical_host_gate.py check $CLASSICAL_RECORDED $columns \
             --report "$GATE_OUT/classical_gate_prod.json" 2>&1 | tee "$GATE_OUT/classical_gate_prod.log"
 
-      # The tool loads on this CPU and the three committed GPU columns still
-      # diff to IDENTICAL x3 on all 1224 train cells (the 2026-09-14 136-lane record at 4048e1b51,
-      # the 2712/2713 fix and the sixteen one-device par-* lanes; the AMD column is the MI325X one,
-      # which carries every lane). The exact summary token is
-      # required: a diff that printed nothing, or fewer cells, is a failure.
+      # The tool loads on this CPU and the three committed GPU columns diff
+      # exactly as recorded (the 2026-09-14 166-lane record at 1eea14f80, the
+      # batch part and 31 par-* lanes, AMD column MI325X): 1493 train cells
+      # IDENTICAL x3 and ONE DIVERGENT, kmeans-sqrt/wide, where the H100
+      # inertia stands alone (docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md).
+      # --diff exits 1 on that cell, so the step requires exit 1 AND the exact
+      # summary tokens AND that row: a fix, a second divergence, a diff that
+      # printed nothing, or fewer cells changes a token and fails the step.
       - name: identity_break --diff over the three committed GPU columns (require 3)
         if: always()
         run: |
-          set -o pipefail
-          python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 3 2>&1 \
-            | tee "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary: IDENTICAL=1224' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (infer/model): IDENTICAL=1665, N/A=783' "$GATE_OUT/diff_gpu3.txt"
+          st=0
+          python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 3 \
+            > "$GATE_OUT/diff_gpu3.txt" 2>&1 || st=$?
+          cat "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary: DIVERGENT=1, IDENTICAL=1493' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (infer/model): IDENTICAL=1899, N/A=1089' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (batch): IDENTICAL=1188, N/A=306' "$GATE_OUT/diff_gpu3.txt"
+          grep -E '^\| kmeans-sqrt/wide +\| DIVERGENT +\| parts differ: inertia;' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'require-columns 3 over' "$GATE_OUT/diff_gpu3.txt" | grep -F ': OK'
+          [ "$st" = 1 ] || { echo "expected --diff to exit 1 on the one recorded DIVERGENT cell, got $st" >&2; exit 1; }
 
       # The control for the step above: demanding a fourth real hash on a lane
       # no CPU column has covered must FAIL. If it passes, --require-columns
@@ -475,7 +489,8 @@ jobs:
       # -D MOJOLEARN_HOST_SABOTAGE=1 into its own directory (honored in
       # gemm_oracle by walking every leaf DESCENDING, which reaches every
       # lane whose host oracle folds through gemm_oracle_cell, and in
-      # kde_oracle by summing every logsumexp row descending, in hw_oracle
+      # kde_oracle by summing every logsumexp row descending from one extra
+      # unit (the tophat kernel sums exact integers), in hw_oracle
       # by splitting the SSE fused multiply-add, in smo_oracle by walking
       # its GEMM leaf descending, in linkage_oracle by walking the sorted
       # edge keys descending (the maximum spanning tree), in pcg_rng by one
@@ -487,6 +502,13 @@ jobs:
       # seeding the recluster one draw off, in scaler_oracle by the same
       # shifted tree plus the min-max offset's subtraction as an addition,
       # in qn_oracle by walking the solver's dot chains descending, in
+      # kpss_oracle by walking every strided series partial descending, in
+      # knn_host_predict by walking the unexpanded, cosine and ball cover
+      # distance chains descending (Chebyshev: the next float above the
+      # maximum), in dbscan_oracle by one more neighbor or unit of weight
+      # to be core, in
+      # pca_full_oracle by folding every QR trailing-column dot product's
+      # lanes serially descending, in
       # rf_oracle by drawing every bootstrap row from the next Philox
       # subsequence, in gpr_oracle by walking the scaled distance's
       # feature axis descending, in gbdt_oracle by adding 1.0 to the

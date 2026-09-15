@@ -65,8 +65,11 @@ def test_binding_registers_kmeans_fit():
     src = _read(host_surface.binding_source("core"))
     assert '("kmeans_fit")' in src, "the core host binding does not register kmeans_fit"
     assert "kmeans_fit" in host_surface.family("core")["exports"], "the manifest does not list kmeans_fit"
-    for absent in ("rbc_knn_search", "radius_neighbors_count", "radius_neighbors_fill"):
-        assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
+    # The ball cover entries joined on lane/cpu-training-batch3 (the radius
+    # and knn-rbc lanes); the manifest must list what the binding registers.
+    for present in ("rbc_knn_search", "radius_neighbors_count", "radius_neighbors_fill"):
+        assert f'("{present}")' in src, f"{present} is not registered"
+        assert present in host_surface.family("core")["exports"], f"the manifest does not list {present}"
 
 
 def test_oracle_imports_no_gpu_and_reads_the_matrix():
@@ -248,8 +251,10 @@ def test_manifest_covers_logistic():
     assert "from checks.numerics import" in text
     assert "from glm.host.glm_oracle import host_xty" in text
     assert "from decomposition.host.pca_oracle import STATS_TPB, host_halving_sum" in text
-    for refused in ("QN_LOSS_SOFTMAX", "OWL-QN", "sample_weight is NOT IMPLEMENTED"):
-        assert refused in text, f"{refused} is not refused by name"
+    # The softmax loss and OWL-QN train on the host since
+    # lane/cpu-training-batch3; sample_weight still refuses by name.
+    for named in ("QN_LOSS_SOFTMAX", "def host_min_owlqn", "sample_weight is NOT IMPLEMENTED"):
+        assert named in text, f"{named} is not in {QN_ORACLE}"
     assert "comptime if QN_ORACLE_HOST_SABOTAGE:" in text
     assert "QN_ORACLE_HOST_SABOTAGE" in src
     assert f'- "{QN_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
@@ -272,12 +277,10 @@ def test_logistic_runs_on_the_host_when_built():
     assert fits[0].retcode_ in (0, 3) and int(np.asarray(fits[0].n_iter_)[0]) >= 1
     pred = np.asarray(fits[0].predict(x))
     assert (pred == y).mean() > 0.9, "the host fit does not separate a separable draw"
-    try:
-        mojolearn.LogisticRegression(penalty="l1", C=1.0).fit(x, y)
-    except Exception as exc:  # noqa: BLE001
-        assert "OWL-QN" in str(exc), str(exc)
-    else:
-        raise AssertionError("an l1 penalty must refuse by name on the host")
+    # An l1 penalty takes the host OWL-QN arm (lane/cpu-training-batch3).
+    l1 = [np.asarray(mojolearn.LogisticRegression(penalty="l1", C=1.0, max_iter=30).fit(x, y).coef_)
+          for _ in range(2)]
+    assert l1[0].tobytes() == l1[1].tobytes(), "two host OWL-QN fits returned different coefficients"
 
 
 def test_metrics_run_on_the_host_when_built():

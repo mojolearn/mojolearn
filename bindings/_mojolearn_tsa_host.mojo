@@ -25,8 +25,17 @@ the SAME address contract and packed layouts (level, trend, season each
 `components_len = (n - frequency) * batch_size` and TIME-MAJOR; sse, alpha,
 beta, gamma; niter, criterion; mirrored word for word in `_tsa_impl.py`
 and `bindings/_mojolearn_tsa.mojo`), and `tsa_vendor` answering "cpu".
-`kpss_test` and `select_d` (ARIMA's) are deliberately absent and refuse BY
-NAME through `_HostBinding`.
+`select_d` (ARIMA's) is deliberately absent and refuses BY NAME through
+`_HostBinding`.
+
+`kpss_test` (lane/cpu-training-batch3, 2026-09-14, the kpss lane) is
+`tsa/checks/kpss_oracle.mojo::kpss_host_f32`, "the serial Float32 REPLAY of
+every device stage in `tsa/impl/timeSeries/stationarity.mojo`, statement
+for statement", which `stationarity_check` holds the device to bit for bit
+under IDENTICAL. The guards are `kpss_test_host`'s, `kpss_test`'s and
+`prepare_data`'s, in their order and words (`tsa/estimator.mojo`,
+`tsa/impl/timeSeries/stationarity.mojo`, `tsa/impl/timeSeries/
+arima_helpers.mojo`); the flag is `kpss_pvalue(stat) > pval_threshold`.
 """
 from std.os import abort
 from std.python import Python, PythonObject
@@ -39,6 +48,8 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_name,
 )
+from std.math import isfinite
+
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from holtwinters.host.hw_oracle import (
     HW_ORACLE_HOST_SABOTAGE,
@@ -54,6 +65,7 @@ from holtwinters.impl.tsa.holtwinters_params import (
     SEASONAL_ADDITIVE,
     seasonal_from_name,
 )
+from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE, kpss_host_f32
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -91,9 +103,10 @@ def tsa_host_column_binding() raises -> PythonObject:
 
 
 def tsa_host_sabotage_binding() raises -> PythonObject:
-    """Whether this binary splits the SSE fused multiply-add on purpose
-    (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's negative control)."""
-    return PythonObject(HW_ORACLE_HOST_SABOTAGE)
+    """Whether this binary splits the SSE fused multiply-add and walks the
+    KPSS series sums descending on purpose (-D MOJOLEARN_HOST_SABOTAGE=1,
+    the gate's negative control; one define, both arms)."""
+    return PythonObject(HW_ORACLE_HOST_SABOTAGE or KPSS_ORACLE_HOST_SABOTAGE)
 
 
 # The GPU binding's names, same contract.
@@ -272,6 +285,82 @@ def holtwinters_forecast_binding(
     return PythonObject(written)
 
 
+def kpss_test_binding(
+    y_addr: PythonObject,
+    flags_addr: PythonObject,
+    stat_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`kpss_test` on the host by `kpss_host_f32`. Returns `batch_size`.
+
+    `params` is, in this exact order (the GPU binding's, mirrored in
+    `python/mojolearn/_tsa_impl.py`):
+
+        0  batch_size
+        1  n_obs
+        2  d               order of simple differencing
+        3  D               order of seasonal differencing
+        4  s               seasonal period
+        5  pval_threshold  (float)
+
+    `y_addr` reads `batch_size * n_obs` float32, each series contiguous.
+    `flags_addr` is written with `batch_size` int32 (1 stationary, 0 not),
+    `stat_addr` with `batch_size` float32 statistics."""
+    if len(params) != 6:
+        raise Error(
+            "kpss_test: params must contain 6 values (batch_size, n_obs, d,"
+            " D, s, pval_threshold), got " + String(len(params))
+        )
+    var y_address = _index(y_addr)
+    var fp = i32_ptr(_index(flags_addr))
+    var sp = f32_ptr(_index(stat_addr))
+    var batch_size = _index(params[0])
+    var n_obs = _index(params[1])
+    var d = _index(params[2])
+    var D = _index(params[3])
+    var s = _index(params[4])
+    var pval = Float32(Float64(py=params[5]))
+    with GILReleased(Python()):
+        # `kpss_test_host`'s `_refuse_empty_shape`.
+        if batch_size < 1:
+            raise Error(
+                "kpss_test: batch_size must be >= 1 (batch_size=" + String(batch_size) + ")"
+            )
+        if n_obs < 1:
+            raise Error("kpss_test: n_obs must be >= 1 (n_obs=" + String(n_obs) + ")")
+        # `kpss_test`'s, in its order.
+        var d_sD = d + s * D
+        if n_obs <= d_sD:
+            raise Error(
+                "stationarity: n_obs (" + String(n_obs)
+                + ") must be greater than d + s*D (" + String(d_sD) + ")"
+            )
+        var y = read_f32(y_address, batch_size * n_obs)
+        for i in range(batch_size * n_obs):
+            if not isfinite(y[i]):
+                raise Error(
+                    "kpss_test: y contains a non-finite value at index "
+                    + String(i) + "; missing or infinite observations are refused by name"
+                )
+        # `prepare_data`'s, reached only when there is differencing to do.
+        if d != 0 or D != 0:
+            if d + D > 2:
+                raise Error(
+                    "prepare_data: d + D must be <= 2 (d=" + String(d) + ", D="
+                    + String(D) + "), refused by name (arima.pyx:313)"
+                )
+            if D > 0 and s < 2:
+                raise Error(
+                    "prepare_data: seasonal differencing needs s >= 2 (s=" + String(s)
+                    + "), refused by name (arima.pyx:310)"
+                )
+        var st = kpss_host_f32(y, batch_size, n_obs, d, D, s, pval)
+        for b in range(batch_size):
+            fp[b] = Int32(1) if st.stationary[b] else Int32(0)
+            sp[b] = st.stat[b]
+    return PythonObject(batch_size)
+
+
 @export
 def PyInit__mojolearn_tsa_host() abi("C") -> PythonObject:
     try:
@@ -283,6 +372,7 @@ def PyInit__mojolearn_tsa_host() abi("C") -> PythonObject:
         module.def_function[tsa_vendor_binding]("tsa_vendor")
         module.def_function[holtwinters_fit_binding]("holtwinters_fit")
         module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
+        module.def_function[kpss_test_binding]("kpss_test")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tsa_host: ", error))

@@ -29,8 +29,15 @@ float64 info slots, mirrored word for word in `_svm_impl.py`), `svm_vendor`
 answering "cpu" and `svm_numeric_mode`; and, since the iforest lane
 (2026-09-14), `iforest_run` under the GPU binding's 16-slot contract over
 `isolation_forest/checks/if_oracle.mojo` (the docstring of
-`iforest_run_binding` below). `svr_fit` and `svr_predict` are deliberately
-absent and refuse BY NAME through `_HostBinding` until their lane lands.
+`iforest_run_binding` below). `svr_fit` and `svr_predict` joined on
+2026-09-14 (lane/cpu-training-batch3, the svr and svr-linear lanes): they were
+absent only because no lane had landed them, not for a reason in the
+arithmetic. `smo_oracle_fit` has solved EPSILON_SVR through the same loop
+since 2026-08-31 (its header, "THE REGRESSION ARM"), the SVR device gates hold
+the device to that oracle, and the regression estimate is `svcPredict` with
+the class epilogue off, which is `smo_oracle_decision`. The two entries keep
+the GPU binding's nine-value and seven-value params lists and its three
+float64 info slots.
 
 What the CPU column certifies is what the lane hashes, the decision
 function and the predicted labels on the training rows and on held-out
@@ -80,6 +87,7 @@ from svm.host.smo_oracle import (
 from svm.impl.svc_impl import unique_labels_sorted
 from svm.impl.svm_parameter import (
     C_SVC,
+    EPSILON_SVR,
     KERNEL_LINEAR,
     KERNEL_RBF,
     KernelParams,
@@ -372,6 +380,195 @@ def svc_predict_binding(
     return PythonObject(n_rows)
 
 
+def svr_fit_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    dual_addr: PythonObject,
+    support_idx_addr: PythonObject,
+    support_matrix_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`SVR.fit` on the host by `smo_oracle_fit` under EPSILON_SVR:
+    epsilon-SVR, dense FP32, LINEAR or RBF. Returns `n_support`.
+
+    `params` is, in this exact order (the GPU binding's
+    `bindings/_mojolearn_svm.mojo::svr_fit_binding`, mirrored in
+    `python/mojolearn/_svm_impl.py`):
+
+        0  n_rows
+        1  n_features
+        2  kernel          (0 = LINEAR, 2 = RBF)
+        3  gamma           (float; read only by RBF)
+        4  C               (float)
+        5  epsilon         (float; the width of the insensitive tube)
+        6  tol             (float)
+        7  max_iter        (-1 = no limit)
+        8  nochange_steps
+
+    The output buffers are the classifier's worst-case sizes (`n_rows`,
+    `n_rows`, `n_rows * n_features`); the doubled alpha domain is internal
+    and `CombineCoefs` folds it back to `n_rows` before the selection, in
+    the oracle as on the device. `info_addr` is THREE float64: b, n_support,
+    n_iter. The guards are `svr_fit_host`'s, then `svr_fit`'s
+    (`svm/estimator.mojo`, `svm/impl/svr_impl.mojo`), in their order."""
+    if len(params) != 9:
+        raise Error(
+            "svr_fit: params must contain 9 values, got " + String(len(params))
+        )
+    var xp = f32_ptr(_index(x_addr))
+    var y_address = _index(y_addr)
+    var dp = f32_ptr(_index(dual_addr))
+    var sip = i32_ptr(_index(support_idx_addr))
+    var smp = f32_ptr(_index(support_matrix_addr))
+    var ip = f64_ptr(_index(info_addr))
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var kernel = _index(params[2])
+    var gamma = Float64(py=params[3])
+    var c = Float64(py=params[4])
+    var epsilon = Float64(py=params[5])
+    var tol = Float64(py=params[6])
+    var max_iter = _index(params[7])
+    var nochange_steps = _index(params[8])
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error("svr_fit: n_rows and n_features must both be positive")
+    var targets = read_f32(y_address, max(0, n_rows))
+    var n_support = 0
+    with GILReleased(Python()):
+        # `svr_fit_host`'s guards and parameter pins, in its order.
+        if n_rows <= 0:
+            raise Error("Parameter n_rows: number of rows cannot be less than one")
+        if n_cols <= 0:
+            raise Error("Parameter n_cols: number of columns cannot be less than one")
+        if len(targets) != n_rows:
+            raise Error(
+                "svr_fit_host: y has " + String(len(targets)) + " values, n_rows is "
+                + String(n_rows)
+            )
+        var kp = _kernel_params(kernel, gamma)
+        var param = SvmParameter.default()
+        param.C = c
+        param.tol = tol
+        param.max_iter = max_iter
+        param.max_outer_iter = -1
+        param.nochange_steps = nochange_steps
+        param.cache_size = 0.0
+        param.epsilon = epsilon
+        param.svmType = EPSILON_SVR
+        param.verbosity = 0
+        check_rung1_scope(param, kp, False)
+        # `svr_fit`'s: the scope again, then DEVIATION 636's finite scans.
+        check_rung1_scope(param, kp, False)
+        check_finite_ptr(xp, n_rows * n_cols, "X")
+        check_finite_list(targets, "labels")
+        var x = read_f32(Int(xp), n_rows * n_cols)
+        # THE ONE CALL THAT COMPUTES ANYTHING. `y` is the regression
+        # targets; the oracle builds the +-1 label vector and the gradient
+        # as `SvrInit` does.
+        var res = smo_oracle_fit[DType.float32](x, targets, n_rows, n_cols, param, kp)
+        if isnan(res.b):
+            # DEVIATION 637, the device's refusal in its words.
+            raise Error(
+                "SMO error: NaN found during fitting (DEVIATION 637: the"
+                " intercept b is NaN, floating point overflow in f)"
+            )
+        n_support = len(res.dual_coefs)
+        if len(res.support_idx) != n_support or n_support > n_rows:
+            raise Error("svr_fit: the host oracle returned support of an unexpected length; nothing written")
+        for j in range(n_support):
+            var r = Int(res.support_idx[j])
+            if r < 0 or r >= n_rows:
+                raise Error("svr_fit: the host oracle returned a support index out of range; nothing written")
+        for j in range(n_support):
+            dp[j] = res.dual_coefs[j]
+            sip[j] = res.support_idx[j]
+            # `CollectSupportVectorMatrix`: row `support_idx[j]` of X.
+            var r = Int(res.support_idx[j])
+            for col in range(n_cols):
+                smp[j * n_cols + col] = x[r * n_cols + col]
+        ip[0] = Float64(res.b)
+        ip[1] = Float64(n_support)
+        ip[2] = Float64(res.n_iter)
+    return PythonObject(n_support)
+
+
+def svr_predict_binding(
+    x_addr: PythonObject,
+    dual_addr: PythonObject,
+    support_matrix_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`SVR.predict` on the host: `smo_oracle_decision` over the support
+    matrix handed back in, `sum_j K(x, sv_j) dual_j + b`, the class
+    epilogue off (upstream's `svcPredict(..., predict_class = false)`).
+    Writes `n_rows` float32 to `out_addr` and returns `n_rows`.
+
+    `params` is, in this exact order (the GPU binding's):
+
+        0  n_rows
+        1  n_features
+        2  n_support
+        3  b               (float)
+        4  kernel          (0 = LINEAR, 2 = RBF)
+        5  gamma           (float; the gamma the FIT resolved)
+        6  cache_size_mib  (float; launch-invariant on the device, only its
+                            positivity is checked here, as there)"""
+    if len(params) != 7:
+        raise Error(
+            "svr_predict: params must contain 7 values, got " + String(len(params))
+        )
+    var x_address = _index(x_addr)
+    var op = f32_ptr(_index(out_addr))
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var n_support = _index(params[2])
+    var b = Float32(Float64(py=params[3]))
+    var kernel = _index(params[4])
+    var gamma = Float64(py=params[5])
+    var buffer_mib = Float64(py=params[6])
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error("svr_predict: n_rows and n_features must both be positive")
+    if n_support < 0:
+        raise Error("svr_predict: n_support cannot be negative")
+    var dual_address = 0
+    var support_address = 0
+    if n_support > 0:
+        dual_address = _index(dual_addr)
+        support_address = _index(support_matrix_addr)
+    with GILReleased(Python()):
+        # `svr_predict_host`'s guards, in its order and words.
+        if n_rows <= 0:
+            raise Error("svr_predict_host: n_rows must be at least one")
+        if n_cols <= 0:
+            raise Error("svr_predict_host: n_cols must be at least one")
+        if not (buffer_mib > 0.0):
+            raise Error(
+                "svr_predict_host: the predict buffer (cache_size) must be a"
+                " positive number of MiB, got " + String(buffer_mib)
+            )
+        var kp = _kernel_params(kernel, gamma)
+        var x = read_f32(x_address, n_rows * n_cols)
+        var res = OracleResult[DType.float32]()
+        res.b = b
+        var support = List[Float32]()
+        if n_support > 0:
+            res.dual_coefs = read_f32(dual_address, n_support)
+            support = read_f32(support_address, n_support * n_cols)
+            for j in range(n_support):
+                res.support_idx.append(Int32(j))
+        # The support matrix IS the support rows in support order, so it is
+        # the oracle's "training" matrix under the identity index, as in
+        # `svc_predict_binding`.
+        var dec = smo_oracle_decision[DType.float32](
+            res, support, n_support, x, n_rows, n_cols, kp
+        )
+        for i in range(n_rows):
+            op[i] = dec[i]
+    return PythonObject(n_rows)
+
+
 def _iforest_host_scores(
     forest: OracleForest, x: List[Float32], n_rows: Int, n_cols: Int
 ) raises -> List[Float32]:
@@ -587,6 +784,8 @@ def PyInit__mojolearn_svm_host() abi("C") -> PythonObject:
         module.def_function[svm_numeric_mode_binding]("svm_numeric_mode")
         module.def_function[svc_fit_binding]("svc_fit")
         module.def_function[svc_predict_binding]("svc_predict")
+        module.def_function[svr_fit_binding]("svr_fit")
+        module.def_function[svr_predict_binding]("svr_predict")
         module.def_function[iforest_run_binding]("iforest_run")
         return module.finalize()
     except error:

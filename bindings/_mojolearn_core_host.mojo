@@ -37,13 +37,18 @@ selection, the estimator's sort, the vote and the mean; that file's header
 names every original by file and line. THESE THREE HAVE A FOLD, so the
 sabotage define reaches them (every distance chain walked descending) and
 `core_host_sabotage()` reports it. The host computes the L2 expanded pair
-(euclidean/l2, sqeuclidean) and refuses every other metric BY NAME; the
-returned "query tile" is 1, the batch the host runs.
+(euclidean/l2, sqeuclidean) and, since lane/cpu-training-batch3
+(2026-09-14), cosine, manhattan, chebyshev and minkowski through
+`metric_distance_kernel`'s cores; the two L2 unexpanded values are refused
+BY NAME. The returned "query tile" is 1, the batch the host runs.
 
-The base binding's OTHER estimator entries (`rbc_knn_search`,
-`radius_neighbors_*`) and its other helpers are deliberately ABSENT here, so
-the rbc and radius lanes keep refusing BY NAME through `_HostBinding` until
-a lane lands them.
+THE BALL COVER ENTRIES (lane/cpu-training-batch3, 2026-09-14):
+`radius_neighbors_count`, `radius_neighbors_fill` and `rbc_knn_search` keep
+the GPU binding's names and params lists and answer by an exhaustive scan
+(`core/knn_host_predict.mojo`, "THE BALL COVER'S TWO QUERIES"), the cover's
+pruning being exact. Their refusals are `neighbors/estimator.mojo`'s, in its
+order and words. The base binding's other helpers stay ABSENT and refuse BY
+NAME through `_HostBinding`.
 
 THE k-MEANS TRAINING ENTRY (workstream E batch 2, lane/cpu-training-e2,
 2026-09-14): `kmeans_fit` is exported under the GPU binding's name with the
@@ -102,6 +107,8 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from neighbors.impl.ball_cover.common import rbc_validate_metric
+from neighbors.impl.ball_cover.knn import RBC_KNN_MAX_K
 from cluster.host.kmeans_oracle import (
     INIT_ARRAY,
     KMEANS_ORACLE_HOST_SABOTAGE,
@@ -110,6 +117,9 @@ from cluster.host.kmeans_oracle import (
 )
 from core.knn_host_predict import (
     KNN_HOST_SABOTAGE,
+    host_rbc_edge_distance,
+    host_rbc_knn_row,
+    host_rbc_radius_row,
     KNN_HOST_WEIGHTS_DISTANCE,
     KNN_HOST_WEIGHTS_UNIFORM,
     host_class_probs,
@@ -441,7 +451,8 @@ def knn_search_binding(
         var out_dist = List[Float32](length=max(0, nq * kk), fill=Float32(0.0))
         var out_idx = List[UInt32](length=max(0, nq * kk), fill=UInt32(0))
         host_knn_search(
-            index, ni, queries, nq, nf, kk, dt[0], sq, out_dist, out_idx
+            index, ni, queries, nq, nf, kk, dt[0], sq, out_dist, out_idx,
+            dt[1],
         )
         for i in range(nq * kk):
             dp[i] = out_dist[i]
@@ -537,7 +548,7 @@ def knn_classify_binding(
         var dist = List[Float32](length=max(0, nq * kk), fill=Float32(0.0))
         var idx = List[UInt32](length=max(0, nq * kk), fill=UInt32(0))
         # policy 8: the weighted arm needs the ROOTED distance
-        host_knn_search(index, ni, queries, nq, nf, kk, dt[0], weighted, dist, idx)
+        host_knn_search(index, ni, queries, nq, nf, kk, dt[0], weighted, dist, idx, dt[1])
         var w = List[Float32]()
         if weighted:
             w = host_distance_weights(dist, nq, kk)
@@ -637,7 +648,7 @@ def knn_regress_binding(
         var queries = read_f32(queries_address, nq * nf)
         var dist = List[Float32](length=max(0, nq * kk), fill=Float32(0.0))
         var idx = List[UInt32](length=max(0, nq * kk), fill=UInt32(0))
-        host_knn_search(index, ni, queries, nq, nf, kk, dt[0], weighted, dist, idx)
+        host_knn_search(index, ni, queries, nq, nf, kk, dt[0], weighted, dist, idx, dt[1])
         var w = List[Float32]()
         if weighted:
             w = host_distance_weights(dist, nq, kk)
@@ -651,6 +662,217 @@ def knn_regress_binding(
         for j in range(nq * no):
             op[j] = out[j]
     return PythonObject(KNN_HOST_QUERY_TILE)
+
+
+# ===========================================================================
+# THE BALL COVER ENTRIES (lane/cpu-training-batch3, 2026-09-14). The GPU
+# binding's names and params lists (`bindings/_mojolearn.mojo:467-627`).
+# ===========================================================================
+
+
+def _radius_check_shapes(
+    n_index: Int, n_queries: Int, n_features: Int, radius: Float32, who: String
+) raises:
+    """`neighbors/estimator.mojo::_radius_check_shapes`, its words."""
+    if n_index <= 0:
+        raise Error(who + ": n_index must be positive, got " + String(n_index))
+    if n_queries <= 0:
+        raise Error(
+            who + ": n_queries must be positive, got " + String(n_queries)
+        )
+    if n_features <= 0:
+        raise Error(
+            who + ": n_features must be positive, got " + String(n_features)
+        )
+    if not (radius > Float32(0.0)):
+        raise Error(
+            who
+            + ": radius must be positive and finite, got "
+            + String(radius)
+            + ". A radius of zero returns each query's exact duplicates only,"
+            " which the index is not built to answer, and a negative or NaN"
+            " radius has no neighbourhood at all."
+        )
+
+
+def radius_neighbors_count_binding(
+    index_addr: PythonObject,
+    queries_addr: PythonObject,
+    out_indptr_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Pass one of the radius query on the host. Writes `n_queries + 1`
+    int32 row starts and returns the edge count.
+
+    `params`: n_index, n_queries, n_features, radius (float), metric,
+    metric_arg, the GPU binding's order."""
+    if len(params) != 6:
+        raise Error(
+            "radius_neighbors_count: params must hold 6 values, got "
+            + String(len(params))
+        )
+    var index_address = _index(index_addr)
+    var queries_address = _index(queries_addr)
+    var ap = i32_ptr(_index(out_indptr_addr))
+    var ni = _index(params[0])
+    var nq = _index(params[1])
+    var nf = _index(params[2])
+    var rad = Float32(Float64(py=params[3]))
+    var mtr = _index(params[4])
+    var marg = Float32(Float64(py=params[5]))
+    var nnz = 0
+    with GILReleased(Python()):
+        _radius_check_shapes(ni, nq, nf, rad, "radius_neighbors_count")
+        rbc_validate_metric(mtr, marg)
+        var index = read_f32(index_address, ni * nf)
+        var queries = read_f32(queries_address, nq * nf)
+        ap[0] = Int32(0)
+        for q in range(nq):
+            var row = host_rbc_radius_row(index, ni, queries, q, nf, rad, mtr, marg)
+            nnz += len(row)
+            ap[q + 1] = Int32(nnz)
+    return PythonObject(nnz)
+
+
+def radius_neighbors_fill_binding(
+    index_addr: PythonObject,
+    queries_addr: PythonObject,
+    out_indptr_addr: PythonObject,
+    out_idx_addr: PythonObject,
+    out_dist_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Pass two on the host: the columns ascending within each row and the
+    distances, in CSR order. Returns the edge count it found.
+
+    `params`: n_index, n_queries, n_features, radius (float), nnz_capacity,
+    return_sqrt, metric, metric_arg, the GPU binding's order."""
+    if len(params) != 8:
+        raise Error(
+            "radius_neighbors_fill: params must hold 8 values, got "
+            + String(len(params))
+        )
+    var index_address = _index(index_addr)
+    var queries_address = _index(queries_addr)
+    var ap = i32_ptr(_index(out_indptr_addr))
+    var ni = _index(params[0])
+    var nq = _index(params[1])
+    var nf = _index(params[2])
+    var rad = Float32(Float64(py=params[3]))
+    var cap = _index(params[4])
+    var sq = _index(params[5]) != 0
+    var mtr = _index(params[6])
+    var marg = Float32(Float64(py=params[7]))
+    var idx_address = 0
+    var dist_address = 0
+    if cap > 0:
+        idx_address = _index(out_idx_addr)
+        dist_address = _index(out_dist_addr)
+    var nnz = 0
+    with GILReleased(Python()):
+        _radius_check_shapes(ni, nq, nf, rad, "radius_neighbors_fill")
+        rbc_validate_metric(mtr, marg)
+        if cap < 0:
+            raise Error(
+                "radius_neighbors_fill: nnz_capacity must not be negative, got "
+                + String(cap)
+            )
+        var index = read_f32(index_address, ni * nf)
+        var queries = read_f32(queries_address, nq * nf)
+        var indptr = List[Int32](length=nq + 1, fill=Int32(0))
+        var cols = List[Int32]()
+        var dists = List[Float32]()
+        for q in range(nq):
+            var row = host_rbc_radius_row(index, ni, queries, q, nf, rad, mtr, marg)
+            for p in range(len(row)):
+                cols.append(row[p])
+                dists.append(
+                    host_rbc_edge_distance(index, queries, q, Int(row[p]), nf, sq, mtr, marg)
+                )
+            indptr[q + 1] = Int32(len(cols))
+        nnz = len(cols)
+        if nnz > cap:
+            raise Error(
+                "radius_neighbors_fill: the search found "
+                + String(nnz)
+                + " edges and the caller allocated for "
+                + String(cap)
+                + ". The two calls saw different data. Re-run"
+                " radius_neighbors_count against the arrays this call was given"
+                " rather than truncating, which would return a subset that looks"
+                " like a complete answer."
+            )
+        if nnz > 0:
+            var xp = i32_ptr(idx_address)
+            var dp = f32_ptr(dist_address)
+            for p in range(nnz):
+                xp[p] = cols[p]
+                dp[p] = dists[p]
+        for q in range(nq + 1):
+            ap[q] = indptr[q]
+    return PythonObject(nnz)
+
+
+def rbc_knn_search_binding(
+    index_addr: PythonObject,
+    queries_addr: PythonObject,
+    out_idx_addr: PythonObject,
+    out_dist_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """EXACT k-NN on the host under the ball cover's metric table and total
+    order. Writes `n_queries * k` int32 indices and float32 TRUE distances
+    and returns the candidate distances computed, `n_queries * n_index`.
+
+    `params`: n_index, n_queries, n_features, k, metric, metric_arg, the
+    GPU binding's order."""
+    if len(params) != 6:
+        raise Error(
+            "rbc_knn_search: params must hold 6 values, got "
+            + String(len(params))
+        )
+    var index_address = _index(index_addr)
+    var queries_address = _index(queries_addr)
+    var xp = i32_ptr(_index(out_idx_addr))
+    var dp = f32_ptr(_index(out_dist_addr))
+    var ni = _index(params[0])
+    var nq = _index(params[1])
+    var nf = _index(params[2])
+    var kk = _index(params[3])
+    var mtr = _index(params[4])
+    var marg = Float32(Float64(py=params[5]))
+    with GILReleased(Python()):
+        _radius_check_shapes(ni, nq, nf, Float32(1.0), "rbc_knn_search")
+        rbc_validate_metric(mtr, marg)
+        if kk < 1:
+            raise Error("rbc_knn_search: k must be at least 1, got " + String(kk))
+        if kk > ni:
+            raise Error(
+                "rbc_knn_search: k = "
+                + String(kk)
+                + " exceeds the "
+                + String(ni)
+                + " points in the index. Refused rather than padded: a padded"
+                " answer is indistinguishable from a complete one."
+            )
+        if kk > RBC_KNN_MAX_K:
+            raise Error(
+                "rbc_knn_search: k = "
+                + String(kk)
+                + " exceeds RBC_KNN_MAX_K = "
+                + String(RBC_KNN_MAX_K)
+                + ". Use knn_search, whose selector is sized per launch."
+            )
+        var index = read_f32(index_address, ni * nf)
+        var queries = read_f32(queries_address, nq * nf)
+        var out_idx = List[Int32](length=nq * kk, fill=Int32(-1))
+        var out_dist = List[Float32](length=nq * kk, fill=Float32(0.0))
+        for q in range(nq):
+            host_rbc_knn_row(index, ni, queries, q, nf, kk, mtr, marg, out_idx, out_dist)
+        for i in range(nq * kk):
+            xp[i] = out_idx[i]
+            dp[i] = out_dist[i]
+    return PythonObject(nq * ni)
 
 
 # ===========================================================================
@@ -763,6 +985,9 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[knn_classify_binding]("knn_classify")
         module.def_function[knn_regress_binding]("knn_regress")
         module.def_function[kmeans_fit_binding]("kmeans_fit")
+        module.def_function[radius_neighbors_count_binding]("radius_neighbors_count")
+        module.def_function[radius_neighbors_fill_binding]("radius_neighbors_fill")
+        module.def_function[rbc_knn_search_binding]("rbc_knn_search")
         module.def_function[transpose_f32_binding]("transpose_f32")
         module.def_function[cast_colmajor_f64_to_f32_binding]("cast_colmajor_f64_to_f32")
         module.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
