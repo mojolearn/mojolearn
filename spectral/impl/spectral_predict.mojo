@@ -105,20 +105,44 @@ def spectral_predict_device(
     if affinity == SPECTRAL_AFFINITY_NEAREST_NEIGHBORS:
         if len(input) < n_queries * n_features or len(train_x) < n_train * n_features:
             raise Error("spectral_predict: a buffer is shorter than its shape; refused by name")
-        var dist = List[Float32](length=n_queries * n_neighbors, fill=Float32(0.0))
-        var idx = List[UInt32](length=n_queries * n_neighbors, fill=UInt32(0))
+        # The search goes through buffers the runtime made, exactly as the
+        # fit's `create_connectivity_graph` stages it: the rows and queries in
+        # host buffers, the outputs in host buffers, then copied out.
+        var nnz = n_queries * n_neighbors
+        var h_index = ctx.enqueue_create_host_buffer[DType.float32](n_train * n_features)
+        var h_queries = ctx.enqueue_create_host_buffer[DType.float32](n_queries * n_features)
+        var h_dist = ctx.enqueue_create_host_buffer[DType.float32](nnz)
+        var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](nnz)
+        ctx.synchronize()
+        for i in range(n_train * n_features):
+            h_index.unsafe_ptr().unsafe_store(i, train_x[i])
+        for i in range(n_queries * n_features):
+            h_queries.unsafe_ptr().unsafe_store(i, input[i])
         _ = knn_search(
             ctx,
-            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(train_x.unsafe_ptr())),
+            h_index.unsafe_ptr(),
             n_train,
-            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(input.unsafe_ptr())),
+            h_queries.unsafe_ptr(),
             n_queries,
             n_features,
             n_neighbors,
-            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(dist.unsafe_ptr())),
-            MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(idx.unsafe_ptr())),
+            h_dist.unsafe_ptr(),
+            h_idx.unsafe_ptr(),
             True,
         )
+        var idx = List[UInt32](capacity=nnz)
+        for e in range(nnz):
+            var j = h_idx.unsafe_ptr().unsafe_load(e)
+            if Int(j) >= n_train:
+                raise Error(
+                    "spectral_predict: the k-NN search returned training index " + String(j)
+                    + " for n_train=" + String(n_train) + "; refused by name"
+                )
+            idx.append(j)
+        _ = h_index^
+        _ = h_queries^
+        _ = h_dist^
+        _ = h_idx^
         slots = spectral_slots_from_knn(idx, n_queries, n_neighbors)
     else:
         if len(input) < n_queries * n_train:
