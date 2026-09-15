@@ -52,14 +52,14 @@ def test_manifest_declares_gbdt_rmse():
     assert "gbdt-rmse" in host_surface.covered_lanes()
     assert "RMSE" in host_surface.TRAINING_LANE_NAMES["gbdt-rmse"]
     sentence = host_surface.no_cpu_path_sentence()
-    assert "other than symmetric trees with the Logloss or RMSE loss" in sentence, sentence
+    assert "gradient boosting training outside its declared lanes" in sentence, sentence
 
 
 def test_binding_dispatches_rmse_and_lifts_only_its_refusals():
     src = _read(host_surface.binding_source("gbdt"))
     assert "from gbdt.host.gbdt_oracle_rmse import" in src
     assert 'var is_rmse = loss == String("RMSE")' in src
-    assert 'if loss != String("Logloss") and not is_rmse:' in src
+    assert 'if loss != String("Logloss") and not is_rmse and not is_pointwise and not is_multi:' in src
     assert "if boost_from_average == 1 and not is_rmse:" in src
     assert "if is_rmse and leaf_iterations >= 0 and leaf_iterations != 1:" in src
     assert "gbdt_rmse_host_fit(" in src and "gbdt_rmse_host_model_text(fit)" in src

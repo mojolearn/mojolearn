@@ -74,7 +74,7 @@ def test_manifest_covers_both_lanes():
     for cls in ("OrderedRMSE", "ExperimentalTwoLevelFeatureFreq"):
         assert cls in fam["classes"], cls
     sentence = host_surface.no_cpu_path_sentence()
-    assert "OrderedRMSE and the two-level FeatureFreq estimator" in sentence, sentence
+    assert "CTR categorical features" in sentence, sentence
 
 
 def test_binding_registers_and_refuses_weights_by_name():

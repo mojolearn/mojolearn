@@ -179,7 +179,7 @@ def test_cpu_only_selector_stubs_raise_by_name(monkeypatch):
         assert _backend._select_cpu_only(pkg, 'identical', 'NO SUPPORTED GPU FOUND (test)') == 'identical'
         assert _backend.vendor() == 'cpu'
         assert _backend.gpu_arch() is None
-        # Mamba has no host binding (the neural blocks, host_surface.NO_CPU_PATH);
+        # Mamba has no host binding (the Mamba blocks, host_surface.NO_CPU_PATH);
         # gbdt stood here until workstream E batch 3 gave it one and ARIMA
         # until 030d4e3b2 did, and a family routed on a box where its binding
         # is built is not a stub.

@@ -57,7 +57,7 @@ def test_manifest_covers_both_lanes():
     covered = host_surface.covered_lanes()
     assert "gbdt-depthwise" in covered and "gbdt-lossguide" in covered
     sentence = host_surface.no_cpu_path_sentence()
-    assert "depthwise and lossguide trees with the Logloss loss" in sentence, sentence
+    assert "gradient boosting training outside its declared lanes" in sentence, sentence
 
 
 def test_oracles_import_no_gpu_module():
@@ -66,11 +66,13 @@ def test_oracles_import_no_gpu_module():
         assert not GPU_IMPORTS.search(text), f"{rel} imports a GPU module"
     imports = sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", _read(DRIVER), re.M)))
     assert imports == [
-        "checks.fixed_point", "checks.numerics",
+        "checks.fixed_point", "checks.numerics", "gbdt.data.permutation",
         "gbdt.gpu_data.compressed_index_builder", "gbdt.gpu_data.feature_blocks",
-        "gbdt.gpu_data.grid_policy", "gbdt.host.gbdt_oracle",
+        "gbdt.gpu_data.grid_policy", "gbdt.gpu_util.kernel.random_gen",
+        "gbdt.host.gbdt_oracle", "gbdt.host.gbdt_oracle_losses",
         "gbdt.host.gbdt_oracle_lossguide",
         "gbdt.methods.greedy_subsets_searcher.split_properties_helper",
+        "std.math", "std.memory",
     ], imports
     lg_imports = sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", _read(LOSSGUIDE), re.M)))
     assert lg_imports == ["checks.numerics", "gbdt.host.gbdt_oracle"], lg_imports
@@ -104,7 +106,7 @@ def test_binding_dispatches_and_refuses_by_name():
     assert "gbdt_host_fit_non_symmetric(x, y, n_rows, n_features, tp)" in src
     assert "gbdt_host_ns_model_text(ns_model)" in src
     for what in ('"min_split_gain="', '"min_child_hessian="', '"min_data_in_leaf="',
-                 "under Lossguide (only NewtonL2)", "(only Cosine)"):
+                 "under Lossguide (only NewtonL2 and NewtonCosine)", "(only Cosine)"):
         assert what in src, f"no by-name refusal for {what}"
     assert f'"{REFUSAL}"' in src
     assert 'kind == String("ntree")' in src and 'kind == String("node")' in src
