@@ -420,6 +420,11 @@ def gbdt_fit(
     # the pool's grouping as run lengths in row order (`train`'s
     # `group_sizes`); empty means no `group_id`
     group_sizes: List[UInt32] = List[UInt32](),
+    # the caller's PairLogit pairs; all empty to generate them (`train`'s
+    # `pair_winners`, `pair_losers`, `pair_weights`)
+    pair_winners: List[UInt32] = List[UInt32](),
+    pair_losers: List[UInt32] = List[UInt32](),
+    pair_weights: List[Float32] = List[Float32](),
 ) raises -> GbdtFitResult:
     """Fit and return the model as `model_text`, plus both loss curves.
 
@@ -572,6 +577,9 @@ def gbdt_fit(
         feature_fraction=params.feature_fraction,
         x_borrow=x_borrow,
         group_sizes=group_sizes,
+        pair_winners=pair_winners,
+        pair_losers=pair_losers,
+        pair_weights=pair_weights,
     )
     host_times.stop_host("gbdt_fit_train", t_phase)
     t_phase = host_times.start()

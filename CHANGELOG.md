@@ -117,6 +117,18 @@ Linux legs are OWED before this heading reads published.
   query, as in the reference, so the fit learns nothing. Prediction is the ordinary row-wise raw
   score, so saved-model CPU inference covers it. New identity lane `gbdt-query-rmse` with a batch
   part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed to the release record.
+- New `loss="PairLogit"` for `GradientBoosting`, the pairwise ranking loss of the CatBoost reference
+  (`pair_logit.cu` through the querywise target), on the same arm as QueryRMSE. Without `pairs` the
+  pairs are generated from `group_id` and the grades as the reference's default does (every two rows
+  of a query with different grades, the higher grade the winner); `fit(pairs=..., pairs_weight=...)`
+  takes explicit `[winner, loser]` row pairs inside groups. Two named DEVIATIONs: each row's pair
+  derivatives are summed in one fixed order where the reference sums them in thread arrival order,
+  and the search weight plane follows `secondDerAsWeights` as the pointwise target does, where the
+  reference's querywise branch has the two arms reversed (so at the default Cosine score the trees
+  can differ from the reference's GPU and follow its CPU weighting). `pairs` without `group_id`, the
+  `max_pairs` subsample and PairLogitPairwise are not implemented. New identity lane
+  `gbdt-pair-logit` with a batch part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed
+  to the release record.
 - Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
   namely the byte LM's, the forest's, the tokenizer's and the twelve routed families (core,
   linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp, arima), fifteen in

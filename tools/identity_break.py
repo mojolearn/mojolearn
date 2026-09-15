@@ -304,7 +304,7 @@ sampler, a solver, a metric, a reduction).
                gbdt-multiclass gbdt-onevsall gbdt-parametric-losses
                gbdt-lossguide-newtoncosine gbdt-pointwise-l2-bayesian-eval
                gbdt-exact-mae gbdt-categorical-ctr gbdt-nan-modes gbdt-adapter-clf
-               gbdt-adapter-reg gbdt-query-rmse iforest-tuned (last, with iforest)
+               gbdt-adapter-reg gbdt-query-rmse gbdt-pair-logit iforest-tuned (last, with iforest)
       neural   mamba2-dtlimit transformer-window byte-lm-resident
                byte-lm-host-infer-threaded (the SHIPPED default arm; the
                2026-09-13 lane pins the reference arm) samba-untied-dropout-accum
@@ -1705,6 +1705,35 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="QueryRMSE").fit(X, rel, group_id=g)
     return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64))),
                 m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-pair-logit")
+def _(ml, X, yc, yr, Xh=None):
+    """PairLogit (learning to rank, pairwise derivatives on query groups):
+    20 depth-6 symmetric trees on the gbdt-query-rmse queries and grades with
+    the pairs generated from them, and a second fit of 8 trees given explicit
+    `pairs` and `pairs_weight` (every third generated-style pair of the first
+    40 queries, hashed weights), so both input paths are hashed. Predict is
+    row-wise, so the held-out probe and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="PairLogit").fit(X, rel, group_id=g)
+    pairs = []
+    begin = 0
+    for q in range(40):
+        size = int(np.count_nonzero(g == q))
+        for a in range(begin, begin + size):
+            for b in range(a + 1, begin + size):
+                if rel[a] != rel[b] and (a + b) % 3 == 0:
+                    pairs.append((a, b) if rel[a] > rel[b] else (b, a))
+        begin += size
+    pw = _hw((len(pairs),), "gbdt-pair-logit:pairs_weight", 0.5, 2.0)
+    e = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="PairLogit").fit(
+        X, rel, group_id=g, pairs=pairs, pairs_weight=pw)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     explicit_predict=_h(e.predict(X)),
+                     explicit_loss_curve=_h(np.asarray(e.loss_curve_, dtype=np.float64))),
+                m, lambda est: (est.predict(Xh),))
 
 
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
@@ -3798,7 +3827,7 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
-            "gbdt-query-rmse")
+            "gbdt-query-rmse", "gbdt-pair-logit")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 

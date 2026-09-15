@@ -121,6 +121,10 @@ from gbdt.targets.kernel.query_rmse import (
     QuerywiseTargetBuffers,
     launch_query_rmse_with,
 )
+from gbdt.targets.kernel.pair_logit import (
+    PairwiseTargetBuffers,
+    launch_pair_logit_with,
+)
 from std.sys.compile import is_defined
 
 # ================= DEVIATION BLOCK 2030 =================
@@ -307,6 +311,13 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: the inverse of this oracle's bin order and keeps the targets in row
     #: order, where the pointwise calcer gathers them (`:57-72`).
     var query: Optional[QuerywiseTargetBuffers]
+    #: the PairLogit pairs and scratch, present only for PairLogit: the same
+    #: querywise der calcer over per-pair derivatives
+    #: (`gbdt/targets/kernel/pair_logit.mojo`)
+    var pairs: Optional[PairwiseTargetBuffers]
+    #: how many value partials an evaluation writes and the host folds: one
+    #: per 256 rows, or one per 256 PAIRS for PairLogit
+    var fv_blocks: Int
 
     def point_dim(self) -> Int:
         return self.bin_count * self.single_bin_dim
@@ -402,6 +413,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             defer_shift = (
                 self.cursor_dim == 1 and self.single_bin_dim == 1
                 and not self.query.__bool__()
+                and not self.pairs.__bool__()
             )
         if defer_shift:
             self.pending_shift = True
@@ -478,7 +490,13 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # querywise der calcer (`permutation_der_calcer.h:192-205`),
             # the point read back to row order through `query.inverse`
             # and the der/der2 planes written at each row's bin position.
-            if self.query.__bool__():
+            if self.pairs.__bool__():
+                launch_pair_logit_with[True, False](
+                    self.ctx, self.pairs.value(), self.d_cursor, True,
+                    self.d_eval_stats, self.d_fv, True,
+                    self.d_mag_dummy, False,
+                )
+            elif self.query.__bool__():
                 launch_query_rmse_with[True](
                     self.ctx, self.query.value(), self.d_cursor, True,
                     self.d_eval_stats, self.d_fv, True,
@@ -591,7 +609,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # 2026-08-22 in the Newton-walk audit; the walk-divergence
             # entry carries the measurement.
             var fv32 = Float32(0.0)
-            for b in range(blocks):
+            for b in range(self.fv_blocks):
                 fv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
             value = Float64(fv32)
             return
@@ -1009,6 +1027,7 @@ def make_bin_optimized_oracle(
     estimation_method: Int = LEAF_ESTIMATION_NEWTON,
     num_classes: Int = 0,
     var query: Optional[QuerywiseTargetBuffers] = None,
+    var pairs: Optional[PairwiseTargetBuffers] = None,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -1037,7 +1056,7 @@ def make_bin_optimized_oracle(
             )
         cursor_dim = num_classes
         single_bin_dim = num_classes
-    if query.__bool__() and estimation_method == LEAF_ESTIMATION_EXACT:
+    if (query.__bool__() or pairs.__bool__()) and estimation_method == LEAF_ESTIMATION_EXACT:
         # `ComputeExactValue`'s querywise arm
         # (`targets/permutation_der_calcer.h:206-216`), their message
         raise Error(
@@ -1067,8 +1086,11 @@ def make_bin_optimized_oracle(
     )
     var d_eval_stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
     var blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
-    var d_fv = ctx.enqueue_create_buffer[DType.float32](blocks)
-    var h_fv = ctx.enqueue_create_host_buffer[DType.float32](blocks)
+    var fv_blocks = blocks
+    if pairs.__bool__():
+        fv_blocks = pairs.value().blocks()
+    var d_fv = ctx.enqueue_create_buffer[DType.float32](fv_blocks)
+    var h_fv = ctx.enqueue_create_host_buffer[DType.float32](fv_blocks)
     var d_mag_dummy = ctx.enqueue_create_buffer[DType.float32](2)
 
     var sm = sm_count
@@ -1242,4 +1264,6 @@ def make_bin_optimized_oracle(
         est_times^,
         False,  # pending_shift (DEVIATION 2030): no deferred move yet
         query^,
+        pairs^,
+        fv_blocks,
     )

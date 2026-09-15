@@ -1,0 +1,26 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=52a4e4a638c1e1e27f7886d8f99ac1343507d74f
+| lane/fixture                 | verdict    | apple-m4         | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| gbdt-pair-logit/base         | IDENTICAL x2 | 17a73830398a5752 | 17a73830398a5752 |
+| gbdt-pair-logit/odd          | IDENTICAL x2 | 1a6dddc3bcd557e7 | 1a6dddc3bcd557e7 |
+| gbdt-pair-logit/ties         | IDENTICAL x2 | f57375f407f88c26 | f57375f407f88c26 |
+
+summary: IDENTICAL=3
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| gbdt-pair-logit/base         | infer  | IDENTICAL x2 | 916d4f0f79d1277f | 916d4f0f79d1277f |
+| gbdt-pair-logit/base         | model  | IDENTICAL x2 | cfcb870dc3b7d6fa | cfcb870dc3b7d6fa |
+| gbdt-pair-logit/base         | batch  | IDENTICAL x2 | c459fa28e16a0794 | c459fa28e16a0794 |
+| gbdt-pair-logit/odd          | infer  | IDENTICAL x2 | ad7b849614270d86 | ad7b849614270d86 |
+| gbdt-pair-logit/odd          | model  | IDENTICAL x2 | f4bccde2bdc33c91 | f4bccde2bdc33c91 |
+| gbdt-pair-logit/odd          | batch  | IDENTICAL x2 | b3a226552e3f3ce8 | b3a226552e3f3ce8 |
+| gbdt-pair-logit/ties         | infer  | IDENTICAL x2 | 09f9cf51864eb743 | 09f9cf51864eb743 |
+| gbdt-pair-logit/ties         | model  | IDENTICAL x2 | 11730346a61ad6dd | 11730346a61ad6dd |
+| gbdt-pair-logit/ties         | batch  | IDENTICAL x2 | 748df688cc3a6a55 | 748df688cc3a6a55 |
+
+summary (infer/model): IDENTICAL=6
+summary (batch): IDENTICAL=3
+summary (rlpair): 
+require-columns 2 over ['gbdt-pair-logit']: OK
