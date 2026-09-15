@@ -1,0 +1,99 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 168 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_preprocessing_host', '_mojolearn_svm_host'] commit=2c7016d24125d997a812d686b4ba09f00b69e925
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-h100-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    amd-mi325x-gfx942: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    nvidia-h100-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    amd-mi325x-gfx942: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gp-normalize-y/base          | OWED x1    | (not run)        | (not run)        | (not run)        | 295a3a943bb1e6c1 |
+| gp-normalize-y/dupes         | OWED x1    | (not run)        | (not run)        | (not run)        | 56127db3c25510e4 |
+| gp-normalize-y/ties          | OWED x1    | (not run)        | (not run)        | (not run)        | dcd3de359f3c2074 |
+
+summary: OWED=3
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gp-normalize-y/base          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 7c5123dc7a512038 |
+| gp-normalize-y/base          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 988bc1c3b51246a4 |
+| gp-normalize-y/base          | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 10f20ff36a173c93 |
+| gp-normalize-y/dupes         | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 3c0b639788527068 |
+| gp-normalize-y/dupes         | model  | OWED x1      | (not run)        | (not run)        | (not run)        | db1cd41ce6fd1b37 |
+| gp-normalize-y/dupes         | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | cd8dc4dd4d12cb25 |
+| gp-normalize-y/ties          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0e6c262796044cb8 |
+| gp-normalize-y/ties          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 4af86e76b34e092c |
+| gp-normalize-y/ties          | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | d3aaf331f5414e4b |
+
+summary (infer/model): OWED=6
+summary (batch): OWED=3
+summary (rlpair): 
+require-columns 4 over ['gp-normalize-y']: OK (12 OWED)
+OWED gp-normalize-y/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-normalize-y/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-normalize-y/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-normalize-y/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-normalize-y/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-normalize-y/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-normalize-y/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-normalize-y/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-normalize-y/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-normalize-y/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-normalize-y/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED gp-normalize-y/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+summary (owed): OWED=12; the next release record owes exactly these cell parts; wrote bench/results/identity_break/2026-09-15_inference-gp-gpc-gmm-sample/followup-2c7016d24/owed.gp-normalize-y.json

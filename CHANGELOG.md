@@ -10,6 +10,22 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- Public CPU inference from a saved model for `GaussianProcessRegressor` (every kernel the fit
+  accepts, `normalize_y` included), `GaussianProcessClassifier` (binary and one-vs-rest) and
+  `GaussianMixture.sample` (lane/inference-neighbors-density). `GaussianProcessRegressor` gains
+  `save` and `load` (`mojolearn-gp-1`); `mojolearn.host_model(path)` returns the predictive mean
+  and std, and a saved classifier's labels and probabilities, through a new INFERENCE-ONLY host
+  binding, `_mojolearn_gp_infer_host`, which registers `gpr_predict` and `gpc_predict` and no fit,
+  Laplace Newton loop, log marginal likelihood or Cholesky door; the gp reference binding still
+  does not ship. `_mojolearn_mixture_infer_host` also registers `gmm_sample`. On the M4 the 27
+  models saved by the Metal classes (base, ties and dupes) match every committed infer cell that
+  carries one (the 166-lane record's Apple, NVIDIA and AMD columns for the four RBF and Matern GP
+  lanes, the gpc and gmm-sample lanes' own columns); gp-normalize-y has no committed column, and its
+  x86 CPU infer hashes equal the Metal recording on all three fixtures, so its NVIDIA and AMD cells are
+  owed. On x86 the 27 recordings read IDENTICAL through the shipped bindings and EXPECTED MISMATCH SEEN
+  under the host sabotage build, with a new sample sabotage arm in `gmm_sample_binding` because the
+  existing arm cannot reach a sample drawn from a saved model
+  (bench/results/identity_break/2026-09-15_inference-gp-gpc-gmm-sample).
 - Public CPU inference from a model saved on a GPU for more neighbor and density lanes
   (lane/inference-neighbors-density). `NearestNeighbors` on the sqeuclidean, manhattan,
   chebyshev, cosine and minkowski metrics and over the random ball cover, the
