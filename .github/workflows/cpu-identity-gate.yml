@@ -236,12 +236,7 @@ jobs:
             slot: x86-a
             label: x86-64 Linux (24.04)
     runs-on: ${{ matrix.runner }}
-    # 120, not 60: with every covered lane through 2026-09-15 the covered
-    # lanes step and its sabotage twin (50 minutes each, below) no longer
-    # fit a 60-minute job; gate runs 34956243867 (main at 2cf5562b1) and
-    # 34959448460 were killed with exit 143 inside the sabotage step on
-    # every runner that had passed the covered lanes step.
-    timeout-minutes: 120
+    timeout-minutes: 60
     permissions:
       contents: read
     env:
