@@ -723,16 +723,23 @@ FAMILIES = (
         routes="_mojolearn_linalg",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gemm-pinned", "gemm-transposed"),
+        # The Cholesky door joined this family on
+        # lane/inference-embedding-ivf-cholesky (2026-09-15) so that public
+        # CPU Cholesky inference (a saved factor, or a factor of a given
+        # matrix, then solve) ships: this family is in the wheel and gp is
+        # not. On a CPU-only install `Cholesky` binds `_mojolearn_linalg`,
+        # so the cholesky lane reads through this binding.
+        training_lanes=("gemm-pinned", "gemm-transposed", "cholesky"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("linalg.gemm", "linalg.gemv"),
-        display="pinned GEMM",
-        host_modules=("gemm/host/gemm_oracle.mojo",),
+        classes=("linalg.gemm", "linalg.gemv", "Cholesky"),
+        display="pinned GEMM and the Cholesky factorization and solve",
+        host_modules=("gemm/host/gemm_oracle.mojo", "cholesky/host/chol_oracle.mojo"),
         exports=(
             "linalg_host_numeric_mode", "linalg_host_vendor", "linalg_host_column",
             "linalg_host_sabotage", "linalg_vendor", "linalg_numeric_mode",
-            "linalg_profile_version", "gemm",
+            "linalg_profile_version", "gemm", "cholesky_profile_jitter",
+            "cholesky_factor", "cholesky_solve",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -1011,17 +1018,21 @@ FAMILIES = (
         # cholesky lane, which the 136-lane record predated, is covered since
         # lane/cpu-training-d-estimators (2026-09-15) against the 166-lane
         # record. gp_parallel_available stays absent, so the ordered
-        # multi-GPU driver refuses by name.
+        # multi-GPU driver refuses by name. Since
+        # lane/inference-embedding-ivf-cholesky (2026-09-15) the cholesky
+        # lane and the Cholesky class are the linalg family's: a CPU-only
+        # install binds Cholesky to `_mojolearn_linalg`, which ships. This
+        # binding still exports the three door names for its own GP.
         family="gp",
         binding="_mojolearn_gp_host",
         routes="_mojolearn_gp",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "cholesky"),
+        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("GaussianProcessRegressor", "Cholesky"),
-        display="the Gaussian process regressor and the Cholesky door",
+        classes=("GaussianProcessRegressor",),
+        display="the Gaussian process regressor",
         host_modules=(
             "gaussian_process/host/gpr_oracle.mojo",
             "cholesky/host/chol_oracle.mojo",
@@ -1396,7 +1407,7 @@ def public_reference_lanes():
     Full CPU training verification uses source bindings and covered_lanes().
     These probes need only public inference dependencies, including linalg.
     """
-    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca"]
+    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky"]
 
 
 def training_gpu_column_record():
