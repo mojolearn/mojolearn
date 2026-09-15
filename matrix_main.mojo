@@ -39,6 +39,12 @@ from checks.kernel_matrix import (
     K_LIB_SELECT_WARPSORT,
     PINNED_LIB_REDUCE_LANES,
     TARGET_COLUMN,
+    cap_name,
+    column_fma_instruction,
+    column_float32_division,
+    column_float_bits_readable,
+    column_int32_exact,
+    column_kernel_language,
     column_has_dedicated_shared_memory,
     column_has_float_atomics,
     column_has_threadgroup_int_atomics,
@@ -181,6 +187,20 @@ def main() raises:
             "\t",
             _yn(column_meets_identity_floor(c)),
         )
+        #: The contract primitives (2026-09-14). Printed on their own line so
+        #: the table row above reads exactly as it did before they existed.
+        print(
+            "      primitives: fma",
+            cap_name(column_fma_instruction(c)),
+            " div",
+            cap_name(column_float32_division(c)),
+            " int32",
+            cap_name(column_int32_exact(c)),
+            " float-bits",
+            cap_name(column_float_bits_readable(c)),
+            " kernel language",
+            column_kernel_language(c),
+        )
         var why = identity_refusal_reason(c)
         if why.byte_length() > 0:
             print("      refused:", why)
@@ -196,6 +216,12 @@ def main() raises:
         "logical lanes, block",
         IDENTITY_FLOOR_BLOCK,
         ", threadgroup int atomics.",
+    )
+    print(
+        "  primitives: 'yes' = a kernel on the column can name it, 'NO' ="
+        " the vendor's documentation names none (a refusal), '?' = not"
+        " audited (never a refusal). Rounding is a measurement:"
+        " check-ieee-arith and check-division."
     )
     print(
         "  FROZEN. A vendor that misses it is refused for IDENTICAL and runs"

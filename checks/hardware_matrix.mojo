@@ -51,6 +51,12 @@ VALIDATION HONESTY, which is this repo's stated posture
   advance. Their MACHINE rows here are mostly conservative PLACEHOLDERS and
   are labelled individually, because "how many cores does a Qualcomm GPU
   have" has no single answer worth pinning and no bit depends on it.
+- TPU and TRAINIUM (2026-09-14) are DECLARED-NOT-BUILDABLE and not
+  simulatable: Mojo emits nothing for either, and a kernel reaches them only
+  through the vendor's own kernel language (Pallas, NKI). Their rows here are
+  transcriptions where the vendor page states the number and labelled
+  placeholders where it does not; `kernel_matrix.column_arithmetic_refusal_reason`
+  is what refuses them, not any row in this file.
 
 WHAT IS DELIBERATELY NOT MODELED (all three columns)
 -----------------------------------------------------
@@ -73,6 +79,8 @@ from checks.kernel_matrix import (
     COLUMN_NVIDIA,
     COLUMN_QUALCOMM,
     COLUMN_SPEC_BASELINE,
+    COLUMN_TPU,
+    COLUMN_TRAINIUM,
     column_name,
     column_shared_limit,
 )
@@ -127,6 +135,13 @@ def gpu_cores_for[column: Int]() -> Int:
         #: read is conservative and equal to what a host build read under
         #: the Apple fallthrough before the column existed.
         return 10
+    if column == COLUMN_TPU:
+        #: 2 TensorCores: "If your chip has multiple TensorCores (e.g. TPU
+        #: v5p has 2), the kernel runs on all of them" (Pallas TPU
+        #: quickstart). The v5p count, the one the page states. UNVALIDATED.
+        return 2
+    if column == COLUMN_TRAINIUM:
+        return 1  # PLACEHOLDER: the NKI pages read for this lane state no per-chip NeuronCore count
     return 10  # apple, and the bit-identical intersection
 
 
@@ -154,6 +169,10 @@ def max_threads_per_core_for[column: Int]() -> Int:
         return 128  # the spec's guaranteed invocations per workgroup
     if column == COLUMN_CPU:
         return 2048  # the bit-identical intersection; no block is resident on a host
+    if column == COLUMN_TPU:
+        return 1024  # one 8x128 vector register tile (TPU v6); PLACEHOLDER as an occupancy divisor
+    if column == COLUMN_TRAINIUM:
+        return 128  # an NKI instruction's partition axis "must not exceed 128"; PLACEHOLDER as an occupancy divisor
     return 2048  # nvidia, amd, and the bit-identical intersection
 
 
@@ -186,6 +205,9 @@ def smem_statically_partitioned_for[column: Int]() -> Bool:
     - qualcomm, intel: True. Both partition a per-core local-memory pool
       between resident work-groups; Intel's guide computes occupancy from
       exactly that division. UNVALIDATED.
+    - tpu, trainium: True, the restrictive reading. Trainium's SBUF is
+      partitioned ("the physical size of each SBUF partition",
+      nki.isa.reciprocal); the TPU pages read for this lane do not say.
     The bit-identical intersection is True (the restrictive reading).
     """
     return column != COLUMN_APPLE
@@ -221,6 +243,12 @@ def smem_per_core_for[column: Int]() -> Int:
         return 16 * 1024  # the spec floor, and nothing above it is promised
     if column == COLUMN_CPU:
         return 32 * 1024  # the bit-identical intersection; no pool is partitioned on a host
+    if column == COLUMN_TPU:
+        #: VMEM is "fairly large for such a low-level memory hierarchy
+        #: (16MB+)" (Pallas TPU details page). The stated lower bound.
+        return 16 * 1024 * 1024
+    if column == COLUMN_TRAINIUM:
+        return 32 * 1024  # PLACEHOLDER: the SBUF partition size is not transcribed
     return 32 * 1024  # apple, and the bit-identical intersection
 
 
