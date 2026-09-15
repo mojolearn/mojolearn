@@ -1,0 +1,312 @@
+NOTE: --lanes scopes this diff to 17 lane(s); 149 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_preprocessing_host', '_mojolearn_solver_host'] commit=59cbcedd2b3c7bb809ffd3b28dc26a2d7791c8fa
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    nvidia-h100-sm_90a: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    amd-mi325x-gfx942: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    nvidia-h100-sm_90a: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    amd-mi325x-gfx942: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-apple-m4: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    nvidia-h100-sm_90a: {'X': 'e4b16c115962dfcd'}
+    amd-mi325x-gfx942: {'X': 'e4b16c115962dfcd'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd1ba686494256660'}
+    nvidia-h100-sm_90a: {'X': 'd1ba686494256660'}
+    amd-mi325x-gfx942: {'X': 'd1ba686494256660'}
+    cpu-apple-m4: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    cpu-apple-m4: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| elasticnet-l2end-no-intercept/base | IDENTICAL x4 | 5346e205a1021396 | 5346e205a1021396 | 5346e205a1021396 | 5346e205a1021396 |
+| elasticnet-l2end-no-intercept/denormal | IDENTICAL x4 | 87ba9a45e3804809 | 87ba9a45e3804809 | 87ba9a45e3804809 | 87ba9a45e3804809 |
+| elasticnet-l2end-no-intercept/odd | IDENTICAL x4 | 810604d104c7fb79 | 810604d104c7fb79 | 810604d104c7fb79 | 810604d104c7fb79 |
+| elasticnet/base              | IDENTICAL x4 | 2cf742083831ee9d | 2cf742083831ee9d | 2cf742083831ee9d | 2cf742083831ee9d |
+| elasticnet/denormal          | IDENTICAL x4 | 3add60ff69fd788c | 3add60ff69fd788c | 3add60ff69fd788c | 3add60ff69fd788c |
+| elasticnet/odd               | IDENTICAL x4 | 1a518e703b7dd1d9 | 1a518e703b7dd1d9 | 1a518e703b7dd1d9 | 1a518e703b7dd1d9 |
+| kernel-ridge/base            | IDENTICAL x4 | f556d0ce44d56b91 | f556d0ce44d56b91 | f556d0ce44d56b91 | f556d0ce44d56b91 |
+| kernel-ridge/denormal        | IDENTICAL x4 | 08fc4a04cb059cdc | 08fc4a04cb059cdc | 08fc4a04cb059cdc | 08fc4a04cb059cdc |
+| kernel-ridge/odd             | IDENTICAL x4 | 252bb6c9e80b6930 | 252bb6c9e80b6930 | 252bb6c9e80b6930 | 252bb6c9e80b6930 |
+| lasso/base                   | IDENTICAL x4 | 2fa3301e45a46091 | 2fa3301e45a46091 | 2fa3301e45a46091 | 2fa3301e45a46091 |
+| lasso/denormal               | IDENTICAL x4 | 5374b434a96382d6 | 5374b434a96382d6 | 5374b434a96382d6 | 5374b434a96382d6 |
+| lasso/odd                    | IDENTICAL x4 | 5593579edd6113d6 | 5593579edd6113d6 | 5593579edd6113d6 | 5593579edd6113d6 |
+| logistic-elasticnet/base     | IDENTICAL x4 | 13d16c952886809e | 13d16c952886809e | 13d16c952886809e | 13d16c952886809e |
+| logistic-elasticnet/denormal | IDENTICAL x4 | d057c6546ef4a432 | d057c6546ef4a432 | d057c6546ef4a432 | d057c6546ef4a432 |
+| logistic-elasticnet/odd      | IDENTICAL x4 | c3c78dc7813e1dd1 | c3c78dc7813e1dd1 | c3c78dc7813e1dd1 | c3c78dc7813e1dd1 |
+| logistic-l1/base             | IDENTICAL x4 | 2a6077809e43f596 | 2a6077809e43f596 | 2a6077809e43f596 | 2a6077809e43f596 |
+| logistic-l1/denormal         | IDENTICAL x4 | b03374c1e49f2ae8 | b03374c1e49f2ae8 | b03374c1e49f2ae8 | b03374c1e49f2ae8 |
+| logistic-l1/odd              | IDENTICAL x4 | d165146dba6f3d02 | d165146dba6f3d02 | d165146dba6f3d02 | d165146dba6f3d02 |
+| logistic-unpenalized-no-intercept/base | IDENTICAL x4 | 2d680bec24348fb1 | 2d680bec24348fb1 | 2d680bec24348fb1 | 2d680bec24348fb1 |
+| logistic-unpenalized-no-intercept/denormal | IDENTICAL x4 | 626de4d1000c3305 | 626de4d1000c3305 | 626de4d1000c3305 | 626de4d1000c3305 |
+| logistic-unpenalized-no-intercept/odd | IDENTICAL x4 | 4c2b1a307f3901c0 | 4c2b1a307f3901c0 | 4c2b1a307f3901c0 | 4c2b1a307f3901c0 |
+| minmax-scaler-clip/base      | IDENTICAL x4 | 2c223d868d9144bd | 2c223d868d9144bd | 2c223d868d9144bd | 2c223d868d9144bd |
+| minmax-scaler-clip/denormal  | IDENTICAL x4 | 7dc0c86e7125bd63 | 7dc0c86e7125bd63 | 7dc0c86e7125bd63 | 7dc0c86e7125bd63 |
+| minmax-scaler-clip/odd       | IDENTICAL x4 | 44e4955bb9a96707 | 44e4955bb9a96707 | 44e4955bb9a96707 | 44e4955bb9a96707 |
+| minmax-scaler/base           | IDENTICAL x4 | 646b46cf73ead58e | 646b46cf73ead58e | 646b46cf73ead58e | 646b46cf73ead58e |
+| minmax-scaler/denormal       | IDENTICAL x4 | 760381e656d7edc6 | 760381e656d7edc6 | 760381e656d7edc6 | 760381e656d7edc6 |
+| minmax-scaler/odd            | IDENTICAL x4 | 803149932ba8b2da | 803149932ba8b2da | 803149932ba8b2da | 803149932ba8b2da |
+| nystroem/base                | IDENTICAL x4 | 51cd84d728ad878c | 51cd84d728ad878c | 51cd84d728ad878c | 51cd84d728ad878c |
+| nystroem/denormal            | IDENTICAL x4 | 9c20e9397f8d75af | 9c20e9397f8d75af | 9c20e9397f8d75af | 9c20e9397f8d75af |
+| nystroem/odd                 | IDENTICAL x4 | ac49556f30e24606 | ac49556f30e24606 | ac49556f30e24606 | ac49556f30e24606 |
+| ols-no-intercept/base        | IDENTICAL x4 | bc9714aa8394d319 | bc9714aa8394d319 | bc9714aa8394d319 | bc9714aa8394d319 |
+| ols-no-intercept/denormal    | IDENTICAL x4 | 172fbbe0bc0a7c91 | 172fbbe0bc0a7c91 | 172fbbe0bc0a7c91 | 172fbbe0bc0a7c91 |
+| ols-no-intercept/odd         | IDENTICAL x4 | 3d456f2024b12b13 | 3d456f2024b12b13 | 3d456f2024b12b13 | 3d456f2024b12b13 |
+| ols-weighted/base            | IDENTICAL x4 | 91b9e03ba0bb0253 | 91b9e03ba0bb0253 | 91b9e03ba0bb0253 | 91b9e03ba0bb0253 |
+| ols-weighted/denormal        | IDENTICAL x4 | 9896adcaa53b73e3 | 9896adcaa53b73e3 | 9896adcaa53b73e3 | 9896adcaa53b73e3 |
+| ols-weighted/odd             | IDENTICAL x4 | 806d776bed929869 | 806d776bed929869 | 806d776bed929869 | 806d776bed929869 |
+| rbf-sampler/base             | IDENTICAL x4 | 2c2d8da2b42d472a | 2c2d8da2b42d472a | 2c2d8da2b42d472a | 2c2d8da2b42d472a |
+| rbf-sampler/denormal         | IDENTICAL x4 | d0f7e01fbefae473 | d0f7e01fbefae473 | d0f7e01fbefae473 | d0f7e01fbefae473 |
+| rbf-sampler/odd              | IDENTICAL x4 | cd3871f38ffab071 | cd3871f38ffab071 | cd3871f38ffab071 | cd3871f38ffab071 |
+| ridge-no-intercept/base      | IDENTICAL x4 | 273f820b187f1a36 | 273f820b187f1a36 | 273f820b187f1a36 | 273f820b187f1a36 |
+| ridge-no-intercept/denormal  | IDENTICAL x4 | 606b59a04cbd098a | 606b59a04cbd098a | 606b59a04cbd098a | 606b59a04cbd098a |
+| ridge-no-intercept/odd       | IDENTICAL x4 | 64449bd167f8e9cf | 64449bd167f8e9cf | 64449bd167f8e9cf | 64449bd167f8e9cf |
+| standard-scaler-no-mean/base | IDENTICAL x4 | 8e822e639ac24f60 | 8e822e639ac24f60 | 8e822e639ac24f60 | 8e822e639ac24f60 |
+| standard-scaler-no-mean/denormal | IDENTICAL x4 | 7688757091a44290 | 7688757091a44290 | 7688757091a44290 | 7688757091a44290 |
+| standard-scaler-no-mean/odd  | IDENTICAL x4 | e96dbecddd2bb06a | e96dbecddd2bb06a | e96dbecddd2bb06a | e96dbecddd2bb06a |
+| standard-scaler-no-std/base  | IDENTICAL x4 | a381f22821f82024 | a381f22821f82024 | a381f22821f82024 | a381f22821f82024 |
+| standard-scaler-no-std/denormal | IDENTICAL x4 | 8ac8111d55fd1f91 | 8ac8111d55fd1f91 | 8ac8111d55fd1f91 | 8ac8111d55fd1f91 |
+| standard-scaler-no-std/odd   | IDENTICAL x4 | 2ac9839d045e284d | 2ac9839d045e284d | 2ac9839d045e284d | 2ac9839d045e284d |
+| standard-scaler/base         | IDENTICAL x4 | 9954d8aba9fdfba3 | 9954d8aba9fdfba3 | 9954d8aba9fdfba3 | 9954d8aba9fdfba3 |
+| standard-scaler/denormal     | IDENTICAL x4 | 87862ff4b450f03a | 87862ff4b450f03a | 87862ff4b450f03a | 87862ff4b450f03a |
+| standard-scaler/odd          | IDENTICAL x4 | 24632a63d5c0debd | 24632a63d5c0debd | 24632a63d5c0debd | 24632a63d5c0debd |
+
+summary: IDENTICAL=51
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| elasticnet-l2end-no-intercept/base | infer  | IDENTICAL x4 | 63a154f8f524d3be | 63a154f8f524d3be | 63a154f8f524d3be | 63a154f8f524d3be |
+| elasticnet-l2end-no-intercept/base | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8be696fed327895c |
+| elasticnet-l2end-no-intercept/base | batch  | IDENTICAL x4 | f182600116558577 | f182600116558577 | f182600116558577 | f182600116558577 |
+| elasticnet-l2end-no-intercept/denormal | infer  | IDENTICAL x4 | 00300017193bf8a5 | 00300017193bf8a5 | 00300017193bf8a5 | 00300017193bf8a5 |
+| elasticnet-l2end-no-intercept/denormal | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | fc5bae3cec858874 |
+| elasticnet-l2end-no-intercept/denormal | batch  | IDENTICAL x4 | d960b91ea7d32a59 | d960b91ea7d32a59 | d960b91ea7d32a59 | d960b91ea7d32a59 |
+| elasticnet-l2end-no-intercept/odd | infer  | IDENTICAL x4 | c03221f3656309a4 | c03221f3656309a4 | c03221f3656309a4 | c03221f3656309a4 |
+| elasticnet-l2end-no-intercept/odd | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | fbdf792626d3fd09 |
+| elasticnet-l2end-no-intercept/odd | batch  | IDENTICAL x4 | 0be9aed689343358 | 0be9aed689343358 | 0be9aed689343358 | 0be9aed689343358 |
+| elasticnet/base              | infer  | IDENTICAL x4 | 483bce4b8cc1a137 | 483bce4b8cc1a137 | 483bce4b8cc1a137 | 483bce4b8cc1a137 |
+| elasticnet/base              | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2e79bea4a0df84ff |
+| elasticnet/base              | batch  | IDENTICAL x4 | 956915d5c61aa604 | 956915d5c61aa604 | 956915d5c61aa604 | 956915d5c61aa604 |
+| elasticnet/denormal          | infer  | IDENTICAL x4 | 0047832ca8c561a3 | 0047832ca8c561a3 | 0047832ca8c561a3 | 0047832ca8c561a3 |
+| elasticnet/denormal          | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 7f16adbc1a1fea7e |
+| elasticnet/denormal          | batch  | IDENTICAL x4 | 19772c145c4b0d34 | 19772c145c4b0d34 | 19772c145c4b0d34 | 19772c145c4b0d34 |
+| elasticnet/odd               | infer  | IDENTICAL x4 | 75a88217f1114867 | 75a88217f1114867 | 75a88217f1114867 | 75a88217f1114867 |
+| elasticnet/odd               | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 14095ddb22139e58 |
+| elasticnet/odd               | batch  | IDENTICAL x4 | f140130bad4b7f18 | f140130bad4b7f18 | f140130bad4b7f18 | f140130bad4b7f18 |
+| kernel-ridge/base            | infer  | IDENTICAL x4 | 6d91b2e922c596c9 | 6d91b2e922c596c9 | 6d91b2e922c596c9 | 6d91b2e922c596c9 |
+| kernel-ridge/base            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 962ae4a3e685e49d |
+| kernel-ridge/base            | batch  | IDENTICAL x4 | 013c14ab12301b2a | 013c14ab12301b2a | 013c14ab12301b2a | 013c14ab12301b2a |
+| kernel-ridge/denormal        | infer  | IDENTICAL x4 | 1d93958dfff6ae9c | 1d93958dfff6ae9c | 1d93958dfff6ae9c | 1d93958dfff6ae9c |
+| kernel-ridge/denormal        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | ed24c9b215022886 |
+| kernel-ridge/denormal        | batch  | IDENTICAL x4 | 84d10ac93d168343 | 84d10ac93d168343 | 84d10ac93d168343 | 84d10ac93d168343 |
+| kernel-ridge/odd             | infer  | IDENTICAL x4 | be1d82e6396343af | be1d82e6396343af | be1d82e6396343af | be1d82e6396343af |
+| kernel-ridge/odd             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | dbfe86f6ed7a5b2a |
+| kernel-ridge/odd             | batch  | IDENTICAL x4 | e461f2292f79bcd5 | e461f2292f79bcd5 | e461f2292f79bcd5 | e461f2292f79bcd5 |
+| lasso/base                   | infer  | IDENTICAL x4 | 7334b38e7b651e27 | 7334b38e7b651e27 | 7334b38e7b651e27 | 7334b38e7b651e27 |
+| lasso/base                   | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | e9921dc22b63c22b |
+| lasso/base                   | batch  | IDENTICAL x4 | 17cc629044f18231 | 17cc629044f18231 | 17cc629044f18231 | 17cc629044f18231 |
+| lasso/denormal               | infer  | IDENTICAL x4 | b92e9bfda9b725b4 | b92e9bfda9b725b4 | b92e9bfda9b725b4 | b92e9bfda9b725b4 |
+| lasso/denormal               | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 7f40c2a34c2e9d0e |
+| lasso/denormal               | batch  | IDENTICAL x4 | 569fc3172ebd0164 | 569fc3172ebd0164 | 569fc3172ebd0164 | 569fc3172ebd0164 |
+| lasso/odd                    | infer  | IDENTICAL x4 | 1c17e2eb1ef6a2e2 | 1c17e2eb1ef6a2e2 | 1c17e2eb1ef6a2e2 | 1c17e2eb1ef6a2e2 |
+| lasso/odd                    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | dd93f0301683411b |
+| lasso/odd                    | batch  | IDENTICAL x4 | 14762f161b0b7377 | 14762f161b0b7377 | 14762f161b0b7377 | 14762f161b0b7377 |
+| logistic-elasticnet/base     | infer  | IDENTICAL x4 | bb41dcdcc6b956cb | bb41dcdcc6b956cb | bb41dcdcc6b956cb | bb41dcdcc6b956cb |
+| logistic-elasticnet/base     | model  | IDENTICAL x4 | 73c4066bfcea08e1 | 73c4066bfcea08e1 | 73c4066bfcea08e1 | 73c4066bfcea08e1 |
+| logistic-elasticnet/base     | batch  | IDENTICAL x4 | 790a349c8d79c171 | 790a349c8d79c171 | 790a349c8d79c171 | 790a349c8d79c171 |
+| logistic-elasticnet/denormal | infer  | IDENTICAL x4 | 9124d29f98d5f3a3 | 9124d29f98d5f3a3 | 9124d29f98d5f3a3 | 9124d29f98d5f3a3 |
+| logistic-elasticnet/denormal | model  | IDENTICAL x4 | 0fc41d637c47c533 | 0fc41d637c47c533 | 0fc41d637c47c533 | 0fc41d637c47c533 |
+| logistic-elasticnet/denormal | batch  | IDENTICAL x4 | dd992527e3a3b1b2 | dd992527e3a3b1b2 | dd992527e3a3b1b2 | dd992527e3a3b1b2 |
+| logistic-elasticnet/odd      | infer  | IDENTICAL x4 | 959dbbc72b9e84fd | 959dbbc72b9e84fd | 959dbbc72b9e84fd | 959dbbc72b9e84fd |
+| logistic-elasticnet/odd      | model  | IDENTICAL x4 | 2fc5c63d76b381f2 | 2fc5c63d76b381f2 | 2fc5c63d76b381f2 | 2fc5c63d76b381f2 |
+| logistic-elasticnet/odd      | batch  | IDENTICAL x4 | 4139fcaafcc5beec | 4139fcaafcc5beec | 4139fcaafcc5beec | 4139fcaafcc5beec |
+| logistic-l1/base             | infer  | IDENTICAL x4 | 87f24b6ab0f699de | 87f24b6ab0f699de | 87f24b6ab0f699de | 87f24b6ab0f699de |
+| logistic-l1/base             | model  | IDENTICAL x4 | e8c4053e100eb43b | e8c4053e100eb43b | e8c4053e100eb43b | e8c4053e100eb43b |
+| logistic-l1/base             | batch  | IDENTICAL x4 | db991c1fff13c957 | db991c1fff13c957 | db991c1fff13c957 | db991c1fff13c957 |
+| logistic-l1/denormal         | infer  | IDENTICAL x4 | 9d5061f6cc0e010e | 9d5061f6cc0e010e | 9d5061f6cc0e010e | 9d5061f6cc0e010e |
+| logistic-l1/denormal         | model  | IDENTICAL x4 | cbaa801dd6c0e8d0 | cbaa801dd6c0e8d0 | cbaa801dd6c0e8d0 | cbaa801dd6c0e8d0 |
+| logistic-l1/denormal         | batch  | IDENTICAL x4 | 5d0f088a5893e0ef | 5d0f088a5893e0ef | 5d0f088a5893e0ef | 5d0f088a5893e0ef |
+| logistic-l1/odd              | infer  | IDENTICAL x4 | b792319498542c26 | b792319498542c26 | b792319498542c26 | b792319498542c26 |
+| logistic-l1/odd              | model  | IDENTICAL x4 | c4194b58746aff39 | c4194b58746aff39 | c4194b58746aff39 | c4194b58746aff39 |
+| logistic-l1/odd              | batch  | IDENTICAL x4 | a412f35d8b8f12f3 | a412f35d8b8f12f3 | a412f35d8b8f12f3 | a412f35d8b8f12f3 |
+| logistic-unpenalized-no-intercept/base | infer  | IDENTICAL x4 | cdf9799cd24dc82b | cdf9799cd24dc82b | cdf9799cd24dc82b | cdf9799cd24dc82b |
+| logistic-unpenalized-no-intercept/base | model  | IDENTICAL x4 | 39289af0a057344b | 39289af0a057344b | 39289af0a057344b | 39289af0a057344b |
+| logistic-unpenalized-no-intercept/base | batch  | IDENTICAL x4 | 78b7d1e815634918 | 78b7d1e815634918 | 78b7d1e815634918 | 78b7d1e815634918 |
+| logistic-unpenalized-no-intercept/denormal | infer  | IDENTICAL x4 | bb1c22a7662b5818 | bb1c22a7662b5818 | bb1c22a7662b5818 | bb1c22a7662b5818 |
+| logistic-unpenalized-no-intercept/denormal | model  | IDENTICAL x4 | d69f80caed7c3bf0 | d69f80caed7c3bf0 | d69f80caed7c3bf0 | d69f80caed7c3bf0 |
+| logistic-unpenalized-no-intercept/denormal | batch  | IDENTICAL x4 | eba48adb0f43e69c | eba48adb0f43e69c | eba48adb0f43e69c | eba48adb0f43e69c |
+| logistic-unpenalized-no-intercept/odd | infer  | IDENTICAL x4 | 96b781fca9afcde0 | 96b781fca9afcde0 | 96b781fca9afcde0 | 96b781fca9afcde0 |
+| logistic-unpenalized-no-intercept/odd | model  | IDENTICAL x4 | e82a04f98e35b088 | e82a04f98e35b088 | e82a04f98e35b088 | e82a04f98e35b088 |
+| logistic-unpenalized-no-intercept/odd | batch  | IDENTICAL x4 | 580129145dacc4f5 | 580129145dacc4f5 | 580129145dacc4f5 | 580129145dacc4f5 |
+| minmax-scaler-clip/base      | infer  | IDENTICAL x4 | 601b3471b9f7478a | 601b3471b9f7478a | 601b3471b9f7478a | 601b3471b9f7478a |
+| minmax-scaler-clip/base      | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2df3dff433519713 |
+| minmax-scaler-clip/base      | batch  | IDENTICAL x4 | 5d3b185c6df7c1b8 | 5d3b185c6df7c1b8 | 5d3b185c6df7c1b8 | 5d3b185c6df7c1b8 |
+| minmax-scaler-clip/denormal  | infer  | IDENTICAL x4 | 672201861cc97847 | 672201861cc97847 | 672201861cc97847 | 672201861cc97847 |
+| minmax-scaler-clip/denormal  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8ff5b72119fa36fa |
+| minmax-scaler-clip/denormal  | batch  | IDENTICAL x4 | 1f03e7472d6c92a6 | 1f03e7472d6c92a6 | 1f03e7472d6c92a6 | 1f03e7472d6c92a6 |
+| minmax-scaler-clip/odd       | infer  | IDENTICAL x4 | 667e82d3d7ee49dd | 667e82d3d7ee49dd | 667e82d3d7ee49dd | 667e82d3d7ee49dd |
+| minmax-scaler-clip/odd       | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 03cc4e1eaeafb283 |
+| minmax-scaler-clip/odd       | batch  | IDENTICAL x4 | a6c1e06513ef4a67 | a6c1e06513ef4a67 | a6c1e06513ef4a67 | a6c1e06513ef4a67 |
+| minmax-scaler/base           | infer  | IDENTICAL x4 | 5b934842e164f80f | 5b934842e164f80f | 5b934842e164f80f | 5b934842e164f80f |
+| minmax-scaler/base           | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 24956a7dff42ccef |
+| minmax-scaler/base           | batch  | IDENTICAL x4 | bdcf978b59eaee06 | bdcf978b59eaee06 | bdcf978b59eaee06 | bdcf978b59eaee06 |
+| minmax-scaler/denormal       | infer  | IDENTICAL x4 | 17c9e6cc1a1bfd82 | 17c9e6cc1a1bfd82 | 17c9e6cc1a1bfd82 | 17c9e6cc1a1bfd82 |
+| minmax-scaler/denormal       | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1f70dcfa4e160e3e |
+| minmax-scaler/denormal       | batch  | IDENTICAL x4 | e470cfca3c51904a | e470cfca3c51904a | e470cfca3c51904a | e470cfca3c51904a |
+| minmax-scaler/odd            | infer  | IDENTICAL x4 | c170795fb6119629 | c170795fb6119629 | c170795fb6119629 | c170795fb6119629 |
+| minmax-scaler/odd            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | be72f1cc9a133351 |
+| minmax-scaler/odd            | batch  | IDENTICAL x4 | 380e2675e1096b8e | 380e2675e1096b8e | 380e2675e1096b8e | 380e2675e1096b8e |
+| nystroem/base                | infer  | IDENTICAL x4 | 301ea319efafa3d7 | 301ea319efafa3d7 | 301ea319efafa3d7 | 301ea319efafa3d7 |
+| nystroem/base                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 30a3131e08a4f036 |
+| nystroem/base                | batch  | IDENTICAL x4 | f08ea096ad64867a | f08ea096ad64867a | f08ea096ad64867a | f08ea096ad64867a |
+| nystroem/denormal            | infer  | IDENTICAL x4 | 8fcb15ff3d9d1b88 | 8fcb15ff3d9d1b88 | 8fcb15ff3d9d1b88 | 8fcb15ff3d9d1b88 |
+| nystroem/denormal            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 866787b752a7878e |
+| nystroem/denormal            | batch  | IDENTICAL x4 | 8c770ae1ec43369f | 8c770ae1ec43369f | 8c770ae1ec43369f | 8c770ae1ec43369f |
+| nystroem/odd                 | infer  | IDENTICAL x4 | dfb23ba9068104f6 | dfb23ba9068104f6 | dfb23ba9068104f6 | dfb23ba9068104f6 |
+| nystroem/odd                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | d38d8e2e1d8583e1 |
+| nystroem/odd                 | batch  | IDENTICAL x4 | 1bc69db81163813f | 1bc69db81163813f | 1bc69db81163813f | 1bc69db81163813f |
+| ols-no-intercept/base        | infer  | IDENTICAL x4 | 5fbab3a7de51017a | 5fbab3a7de51017a | 5fbab3a7de51017a | 5fbab3a7de51017a |
+| ols-no-intercept/base        | model  | IDENTICAL x4 | f3ef9126ad986141 | f3ef9126ad986141 | f3ef9126ad986141 | f3ef9126ad986141 |
+| ols-no-intercept/base        | batch  | IDENTICAL x4 | dc55264f9670b923 | dc55264f9670b923 | dc55264f9670b923 | dc55264f9670b923 |
+| ols-no-intercept/denormal    | infer  | IDENTICAL x4 | 15ca54a4cd747c03 | 15ca54a4cd747c03 | 15ca54a4cd747c03 | 15ca54a4cd747c03 |
+| ols-no-intercept/denormal    | model  | IDENTICAL x4 | eb819356230f741a | eb819356230f741a | eb819356230f741a | eb819356230f741a |
+| ols-no-intercept/denormal    | batch  | IDENTICAL x4 | 6af1552ec8d1ebef | 6af1552ec8d1ebef | 6af1552ec8d1ebef | 6af1552ec8d1ebef |
+| ols-no-intercept/odd         | infer  | IDENTICAL x4 | 2659af88e6d096ad | 2659af88e6d096ad | 2659af88e6d096ad | 2659af88e6d096ad |
+| ols-no-intercept/odd         | model  | IDENTICAL x4 | 6c6ad7bbc740a643 | 6c6ad7bbc740a643 | 6c6ad7bbc740a643 | 6c6ad7bbc740a643 |
+| ols-no-intercept/odd         | batch  | IDENTICAL x4 | 316836dd567e0c8b | 316836dd567e0c8b | 316836dd567e0c8b | 316836dd567e0c8b |
+| ols-weighted/base            | infer  | IDENTICAL x4 | aa6de46fa1ca4da9 | aa6de46fa1ca4da9 | aa6de46fa1ca4da9 | aa6de46fa1ca4da9 |
+| ols-weighted/base            | model  | IDENTICAL x4 | 22419c862a253d42 | 22419c862a253d42 | 22419c862a253d42 | 22419c862a253d42 |
+| ols-weighted/base            | batch  | IDENTICAL x4 | 488e990b37795fd5 | 488e990b37795fd5 | 488e990b37795fd5 | 488e990b37795fd5 |
+| ols-weighted/denormal        | infer  | IDENTICAL x4 | d0bc0fd5d809e428 | d0bc0fd5d809e428 | d0bc0fd5d809e428 | d0bc0fd5d809e428 |
+| ols-weighted/denormal        | model  | IDENTICAL x4 | 414bf055344a03b7 | 414bf055344a03b7 | 414bf055344a03b7 | 414bf055344a03b7 |
+| ols-weighted/denormal        | batch  | IDENTICAL x4 | 45a3a04f42105be5 | 45a3a04f42105be5 | 45a3a04f42105be5 | 45a3a04f42105be5 |
+| ols-weighted/odd             | infer  | IDENTICAL x4 | 9c27cf5534996fea | 9c27cf5534996fea | 9c27cf5534996fea | 9c27cf5534996fea |
+| ols-weighted/odd             | model  | IDENTICAL x4 | aa11e8df832f5320 | aa11e8df832f5320 | aa11e8df832f5320 | aa11e8df832f5320 |
+| ols-weighted/odd             | batch  | IDENTICAL x4 | 8d21160ea1720605 | 8d21160ea1720605 | 8d21160ea1720605 | 8d21160ea1720605 |
+| rbf-sampler/base             | infer  | IDENTICAL x4 | b07160af23992ad7 | b07160af23992ad7 | b07160af23992ad7 | b07160af23992ad7 |
+| rbf-sampler/base             | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0033e59ff3fcc60d |
+| rbf-sampler/base             | batch  | IDENTICAL x4 | 8308d98bf2b02312 | 8308d98bf2b02312 | 8308d98bf2b02312 | 8308d98bf2b02312 |
+| rbf-sampler/denormal         | infer  | IDENTICAL x4 | 090ab3cf318cc2f5 | 090ab3cf318cc2f5 | 090ab3cf318cc2f5 | 090ab3cf318cc2f5 |
+| rbf-sampler/denormal         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0033e59ff3fcc60d |
+| rbf-sampler/denormal         | batch  | IDENTICAL x4 | d6e52f75534b16b3 | d6e52f75534b16b3 | d6e52f75534b16b3 | d6e52f75534b16b3 |
+| rbf-sampler/odd              | infer  | IDENTICAL x4 | b48ce39cf9d5a2d4 | b48ce39cf9d5a2d4 | b48ce39cf9d5a2d4 | b48ce39cf9d5a2d4 |
+| rbf-sampler/odd              | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | b22681a46d9fcb49 |
+| rbf-sampler/odd              | batch  | IDENTICAL x4 | 443f9847d32d75b8 | 443f9847d32d75b8 | 443f9847d32d75b8 | 443f9847d32d75b8 |
+| ridge-no-intercept/base      | infer  | IDENTICAL x4 | de95aa3133824540 | de95aa3133824540 | de95aa3133824540 | de95aa3133824540 |
+| ridge-no-intercept/base      | model  | IDENTICAL x4 | 63c4b76f9b193631 | 63c4b76f9b193631 | 63c4b76f9b193631 | 63c4b76f9b193631 |
+| ridge-no-intercept/base      | batch  | IDENTICAL x4 | 29f3e535a8785f0a | 29f3e535a8785f0a | 29f3e535a8785f0a | 29f3e535a8785f0a |
+| ridge-no-intercept/denormal  | infer  | IDENTICAL x4 | 63dff4ada90afa03 | 63dff4ada90afa03 | 63dff4ada90afa03 | 63dff4ada90afa03 |
+| ridge-no-intercept/denormal  | model  | IDENTICAL x4 | 5079aebbea7e74ce | 5079aebbea7e74ce | 5079aebbea7e74ce | 5079aebbea7e74ce |
+| ridge-no-intercept/denormal  | batch  | IDENTICAL x4 | a009a8fdc6793565 | a009a8fdc6793565 | a009a8fdc6793565 | a009a8fdc6793565 |
+| ridge-no-intercept/odd       | infer  | IDENTICAL x4 | 1ac4267394e4baca | 1ac4267394e4baca | 1ac4267394e4baca | 1ac4267394e4baca |
+| ridge-no-intercept/odd       | model  | IDENTICAL x4 | 1378173105e52beb | 1378173105e52beb | 1378173105e52beb | 1378173105e52beb |
+| ridge-no-intercept/odd       | batch  | IDENTICAL x4 | 44fb03ff9054331c | 44fb03ff9054331c | 44fb03ff9054331c | 44fb03ff9054331c |
+| standard-scaler-no-mean/base | infer  | IDENTICAL x4 | e103471072f6f93c | e103471072f6f93c | e103471072f6f93c | e103471072f6f93c |
+| standard-scaler-no-mean/base | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | d78daa5087ee6443 |
+| standard-scaler-no-mean/base | batch  | IDENTICAL x4 | f2b20a155236588f | f2b20a155236588f | f2b20a155236588f | f2b20a155236588f |
+| standard-scaler-no-mean/denormal | infer  | IDENTICAL x4 | 43674cd8b2e13d95 | 43674cd8b2e13d95 | 43674cd8b2e13d95 | 43674cd8b2e13d95 |
+| standard-scaler-no-mean/denormal | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 78297e76f6f3d5ea |
+| standard-scaler-no-mean/denormal | batch  | IDENTICAL x4 | 818949f8942b8e66 | 818949f8942b8e66 | 818949f8942b8e66 | 818949f8942b8e66 |
+| standard-scaler-no-mean/odd  | infer  | IDENTICAL x4 | 4286a08fcc88b3e4 | 4286a08fcc88b3e4 | 4286a08fcc88b3e4 | 4286a08fcc88b3e4 |
+| standard-scaler-no-mean/odd  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4e644d0ae19ab3ac |
+| standard-scaler-no-mean/odd  | batch  | IDENTICAL x4 | a83affc9c2e55ee6 | a83affc9c2e55ee6 | a83affc9c2e55ee6 | a83affc9c2e55ee6 |
+| standard-scaler-no-std/base  | infer  | IDENTICAL x4 | 3e359a1ee902bec9 | 3e359a1ee902bec9 | 3e359a1ee902bec9 | 3e359a1ee902bec9 |
+| standard-scaler-no-std/base  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 50f25f32ffde8935 |
+| standard-scaler-no-std/base  | batch  | IDENTICAL x4 | ad43b69d0964595d | ad43b69d0964595d | ad43b69d0964595d | ad43b69d0964595d |
+| standard-scaler-no-std/denormal | infer  | IDENTICAL x4 | 3c22fb9e38e0528c | 3c22fb9e38e0528c | 3c22fb9e38e0528c | 3c22fb9e38e0528c |
+| standard-scaler-no-std/denormal | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | f8c4b0aba49a85ec |
+| standard-scaler-no-std/denormal | batch  | IDENTICAL x4 | b0c03753068ba1f9 | b0c03753068ba1f9 | b0c03753068ba1f9 | b0c03753068ba1f9 |
+| standard-scaler-no-std/odd   | infer  | IDENTICAL x4 | 5c562c5c90fb0b9d | 5c562c5c90fb0b9d | 5c562c5c90fb0b9d | 5c562c5c90fb0b9d |
+| standard-scaler-no-std/odd   | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1c5eb8a35f8fece9 |
+| standard-scaler-no-std/odd   | batch  | IDENTICAL x4 | 51fa2154c3c96e47 | 51fa2154c3c96e47 | 51fa2154c3c96e47 | 51fa2154c3c96e47 |
+| standard-scaler/base         | infer  | IDENTICAL x4 | fa0fbdef7ccae250 | fa0fbdef7ccae250 | fa0fbdef7ccae250 | fa0fbdef7ccae250 |
+| standard-scaler/base         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 3adc4c98c02a61b6 |
+| standard-scaler/base         | batch  | IDENTICAL x4 | 917ae37b02618ab5 | 917ae37b02618ab5 | 917ae37b02618ab5 | 917ae37b02618ab5 |
+| standard-scaler/denormal     | infer  | IDENTICAL x4 | d0a324ba42db1e9c | d0a324ba42db1e9c | d0a324ba42db1e9c | d0a324ba42db1e9c |
+| standard-scaler/denormal     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 68df93d8ec0c437b |
+| standard-scaler/denormal     | batch  | IDENTICAL x4 | adc8b864c7fd6591 | adc8b864c7fd6591 | adc8b864c7fd6591 | adc8b864c7fd6591 |
+| standard-scaler/odd          | infer  | IDENTICAL x4 | 6a7a884532f89e93 | 6a7a884532f89e93 | 6a7a884532f89e93 | 6a7a884532f89e93 |
+| standard-scaler/odd          | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 05cf9a316c018eea |
+| standard-scaler/odd          | batch  | IDENTICAL x4 | 76422b3deb83eac1 | 76422b3deb83eac1 | 76422b3deb83eac1 | 76422b3deb83eac1 |
+
+summary (infer/model): IDENTICAL=69, OWED=33
+summary (batch): IDENTICAL=51
+summary (rlpair): 
+require-columns 4 over ['elasticnet', 'elasticnet-l2end-no-intercept', 'kernel-ridge', 'lasso', 'logistic-elasticnet', 'logistic-l1', 'logistic-unpenalized-no-intercept', 'minmax-scaler', 'minmax-scaler-clip', 'nystroem', 'ols-no-intercept', 'ols-weighted', 'rbf-sampler', 'ridge-no-intercept', 'standard-scaler', 'standard-scaler-no-mean', 'standard-scaler-no-std']: OK (33 OWED)
+OWED elasticnet-l2end-no-intercept/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED elasticnet-l2end-no-intercept/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED elasticnet-l2end-no-intercept/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED elasticnet/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED elasticnet/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED elasticnet/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kernel-ridge/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kernel-ridge/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kernel-ridge/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED lasso/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED lasso/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED lasso/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED minmax-scaler-clip/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED minmax-scaler-clip/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED minmax-scaler-clip/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED minmax-scaler/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED minmax-scaler/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED minmax-scaler/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED nystroem/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED nystroem/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED nystroem/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED rbf-sampler/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED rbf-sampler/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED rbf-sampler/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED standard-scaler-no-mean/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED standard-scaler-no-mean/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED standard-scaler-no-mean/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED standard-scaler-no-std/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED standard-scaler-no-std/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED standard-scaler-no-std/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED standard-scaler/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED standard-scaler/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED standard-scaler/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+summary (owed): OWED=33; the next release record owes exactly these cell parts; wrote <scratchpad>/inf/runs/gc-owed.json
