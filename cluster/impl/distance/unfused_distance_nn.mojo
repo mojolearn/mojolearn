@@ -66,12 +66,11 @@ from checks.kernel_matrix import (
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
-from std.math import sqrt
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import ftz, identical_mul_add, identical_sqrt
 
 
 # `P::Nthreads` for their SIMT fused kernel is 256
@@ -271,7 +270,9 @@ def reduce_min_kernel(
         if is_sqrt_in != 0:
             if best_value <= Float32(0.0):
                 best_value = Float32(0.0)
-            best_value = sqrt(best_value)
+            # DEVIATION 2715: the pinned root, as in the fused arm
+            # (`simt_kernel.mojo`); the stdlib root is approximate on NVIDIA.
+            best_value = identical_sqrt(best_value)
         if init_out_buffer_in != 0:
             out_key.unsafe_store(row, best_key)
             out_value.unsafe_store(row, best_value)

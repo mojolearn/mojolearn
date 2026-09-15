@@ -72,8 +72,9 @@ class KMeans(NumericModeMixin):
         cuVS's `DistanceType`. 'euclidean' and 'l2_expanded' are
         `L2Expanded` (squared distances in `inertia_`, the default every
         recorded cell was measured at); 'l2_sqrt_expanded' takes the root
-        (`metric_is_sqrt`, a different `inertia_` and a different
-        `sum_scale_`). 'cosine' and 'cosine_expanded' are routed and
+        of each reduced distance (`metric_is_sqrt`, so a different
+        `inertia_`; each label is still the nearest center, and `sum_scale_`, which
+        depends on `X` alone, is the same). 'cosine' and 'cosine_expanded' are routed and
         REFUSED BY NAME on the Mojo host (`kmeans_params.mojo::validate`):
         the kernel has code for the cosine norm rule and no fused
         assignment arm for it, so the refusal is ours, not cuVS's. Routed

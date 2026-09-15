@@ -208,6 +208,18 @@ non-zero on any DIVERGENT, MOVED or RELOAD-MOVED cell. FAST is refused on
 purpose: a bitwise question to a FAST arm is a category error
 (fast-is-not-identical).
 
+A leg that splits one column across processes (two one-device processes on
+a two-GPU box, or two sequential legs on one box type) joins the parts with
+
+    python3 tools/identity_break.py --merge part_a.json part_b.json --json column.json
+
+which refuses parts that differ in vendor, commit, mode, repeats, fixtures,
+held-out bytes, batch protocol, par_devices or loaded binding digests, and a
+cell two parts carry differently (2026-09-14 night). Parts from two legs
+(two builds of the same commit) need `--allow-separate-builds`, and the
+merged JSON then says `merged_separate_builds: true` and keeps each part's
+binding digests.
+
 THE FOURTH COLUMN, a CPU (the CPU training lane, 2026-09-13; brief
 docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.3). On an install whose
 `mojolearn.vendor()` is 'cpu' (no GPU set, a host binding under
@@ -2272,9 +2284,10 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("kmeans-sqrt")
 def _(ml, X, yc, yr, Xh=None):
-    """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken in
-    the assignment norms and the inertia (`metric_is_sqrt`); a different
-    inertia_ and a different sum_scale_ from the squared arm."""
+    """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken on
+    the assignment's reduced distance (`metric_is_sqrt`, `identical_sqrt`,
+    DEVIATION 2715) and so in the inertia, the row norms squared as under
+    L2Expanded (DEVIATION 2716); a different inertia_ from the squared arm."""
     m = ml.KMeans(n_clusters=8, random_state=3, metric="l2_sqrt_expanded").fit(X)
     return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_),
                      inertia=_h(np.float64(m.inertia_)), scales=_h(np.asarray([m.sum_scale_, m.weight_scale_], dtype=np.float64))),
@@ -3950,6 +3963,14 @@ def diff(paths, require_columns=0, require_lanes=None):
             j = json.load(fh)
         cols.append((j.get("vendor") or os.path.basename(p), j))
     keys = sorted(set(k for _, j in cols for k in j["cells"]))
+    if require_lanes:
+        # --lanes SCOPES the diff (2026-09-14 night): the verdicts, the
+        # summaries and the exit status are over the named lanes only. Until
+        # then it scoped only --require-columns, so a DIVERGENT cell on a lane
+        # a CPU column does not cover failed the CPU gate's covered-lanes diff.
+        outside = len(set(k.split("/")[0] for k in keys) - set(require_lanes))
+        keys = [k for k in keys if k.split("/")[0] in set(require_lanes)]
+        print(f"NOTE: --lanes scopes this diff to {len(set(require_lanes))} lane(s); {outside} other lane(s) the JSONs carry are not compared")
     names = [c for c, _ in cols]
     if require_columns and require_columns > len(cols):
         print(f"REQUIRE FAIL: --require-columns {require_columns} with {len(cols)} JSONs given")
@@ -4103,6 +4124,73 @@ def diff(paths, require_columns=0, require_lanes=None):
     return 1 if bad else 0
 
 
+#: the keys every part of one column must agree on before --merge joins them
+MERGE_SAME = ("vendor", "commit", "mode", "repeats", "heldout_seed", "fixtures", "heldout",
+              "batch_protocol", "batch_sabotage")
+
+
+def merge(paths, out, allow_separate_builds=False):
+    """ONE column from the parts a leg split across processes (two
+    one-device processes on a two-GPU box, 2026-09-14 night). Refuses parts
+    that are not the same column: any MERGE_SAME key differing, a
+    different `package.par_devices`, or different binding digests (the
+    parts must have loaded the SAME build, byte for byte), a sabotage part,
+    and a cell two parts both carry with different contents. The merged
+    JSON orders cells by LANES and FIXTURES, is `complete` only if every
+    part is, and lists its parts under `merged_from`."""
+    parts = []
+    for p in paths:
+        with open(p) as fh:
+            parts.append((p, json.load(fh)))
+    first = parts[0][1]
+    for p, j in parts:
+        for k in MERGE_SAME:
+            if json.dumps(j.get(k), sort_keys=True) != json.dumps(first.get(k), sort_keys=True):
+                raise SystemExit(f"REFUSING --merge: {p} differs from {parts[0][0]} on {k!r}")
+        if j.get("batch_sabotage"):
+            raise SystemExit(f"REFUSING --merge: {p} is a batch sabotage run")
+        pk, fk = j.get("package") or {}, first.get("package") or {}
+        if pk.get("par_devices") != fk.get("par_devices"):
+            raise SystemExit(f"REFUSING --merge: {p} ran par_devices={pk.get('par_devices')!r}, "
+                             f"{parts[0][0]} ran {fk.get('par_devices')!r}")
+        dig = sorted((b["module"], b["sha256"]) for b in pk.get("bindings", []))
+        same_build = dig and dig == sorted((b["module"], b["sha256"]) for b in fk.get("bindings", []))
+        if not same_build and not (allow_separate_builds and dig):
+            raise SystemExit(f"REFUSING --merge: {p} loaded different (or unrecorded) binding bytes than "
+                             f"{parts[0][0]}; the parts of one column must run one build")
+    cells = {}
+    for p, j in parts:
+        for k, c in j["cells"].items():
+            if k in cells and json.dumps(cells[k], sort_keys=True) != json.dumps(c, sort_keys=True):
+                raise SystemExit(f"REFUSING --merge: cell {k} is in two parts with different contents")
+            cells[k] = c
+    lane_rank = {n: i for i, n in enumerate(LANES)}
+    fx_rank = {f: i for i, f in enumerate(FIXTURES)}
+    order = sorted(cells, key=lambda k: (lane_rank.get(k.split("/")[0], len(lane_rank)), k.split("/")[0],
+                                         fx_rank.get(k.split("/", 1)[1], len(fx_rank))))
+    record = {k: first[k] for k in first if k != "cells"}
+    record["cells"] = {k: cells[k] for k in order}
+    record["complete"] = all(j.get("complete", False) for _, j in parts)
+    # A part whose leg hit its lease is `complete: false` with its finished
+    # lanes on disk; a later part that ran exactly the missing lanes makes
+    # the column whole. Complete by coverage means every lane of this
+    # harness has a cell on every fixture the parts were handed.
+    covered = all(f"{n}/{f}" in cells for n in LANES for f in (first.get("fixtures") or {}))
+    record["complete_by_coverage"] = bool(covered and first.get("fixtures"))
+    record["complete"] = record["complete"] or record["complete_by_coverage"]
+    record["skipped"] = sorted(set(s for _, j in parts for s in j.get("skipped", [])))
+    record["merged_from"] = [dict(file=os.path.basename(p), cells=len(j["cells"]), complete=j.get("complete"),
+                                  platform=j.get("platform"), bindings=(j.get("package") or {}).get("bindings"))
+                             for p, j in parts]
+    record["merged_separate_builds"] = len(set(json.dumps(sorted((b["module"], b["sha256"]) for b in
+                                                                 (j.get("package") or {}).get("bindings", [])))
+                                               for _, j in parts)) > 1
+    with open(out, "w") as fh:
+        json.dump(record, fh, indent=1)
+    print(f"merged {len(parts)} parts, {len(cells)} cells, complete={record['complete']} -> {out}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--json", default="")
@@ -4124,8 +4212,18 @@ def main():
                     help="compare JSONs cell by cell: the train column, then infer and model where carried")
     ap.add_argument("--require-columns", type=int, default=0, metavar="N",
                     help="with --diff: exit non-zero unless every compared cell of the lanes named by "
-                         "--lanes (every lane when --lanes is empty) rests on at least N real hashes")
+                         "--lanes (every lane when --lanes is empty) rests on at least N real hashes; "
+                         "--lanes also scopes which cells --diff compares at all")
+    ap.add_argument("--merge", nargs="+", default=None, metavar="JSON",
+                    help="join the parts of ONE column (same vendor, commit, fixtures, build) into --json")
+    ap.add_argument("--allow-separate-builds", action="store_true",
+                    help="with --merge: admit parts whose binding digests differ (two legs, two builds of the "
+                         "same commit on the same box type); every part's digests are kept under merged_from")
     args = ap.parse_args()
+    if args.merge:
+        if not args.json:
+            raise SystemExit("REFUSING: --merge needs --json <out>")
+        return merge(args.merge, args.json, args.allow_separate_builds)
     if args.diff:
         lanes = [n for n in args.lanes.split(",") if n] if args.lanes else None
         if lanes:
