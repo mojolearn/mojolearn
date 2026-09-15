@@ -249,8 +249,13 @@ def run_models(harness, ml, table, pkg_dir=None, log=None):
         rows.append(dict(lane=key, fixture=fixture, part="model", value=file_hash, error=None,
                          reference_part=("model", lane)))
         try:
-            cls = getattr(ml, m["class"])
-            est = getattr(cls, m.get("load", "load"))(path)
+            # a CPU-only install loads a saved model through the documented
+            # CPU door, `mojolearn.host_model(path)`; a GPU install through
+            # the class's own `load`
+            if ml.vendor() == "cpu":
+                est = ml.host_model(path)
+            else:
+                est = getattr(getattr(ml, m["class"]), m.get("load", "load"))(path)
             if fixture not in held_cache:
                 held_cache[fixture] = harness.heldout(fixture)
             fit = harness.Fit({})

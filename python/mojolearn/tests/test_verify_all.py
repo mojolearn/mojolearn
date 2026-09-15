@@ -139,6 +139,8 @@ ENT = dict(ref="0123456789abcdef", cols={"apple": 0})
     (None, ENT, vref.REFUSED),
     ("n/a:transductive", dict(ref="n/a:transductive", cols={}), vref.NA),
     ("n/a:no-save", None, vref.NA),
+    ("0123456789abcdef", dict(ref="n/a:function", cols={}), vref.OWED),
+    ("n/a:function", ENT, vref.OWED),
 ])
 def test_judge_states(value, ent, state):
     got, _ = vref.judge(value, ent, error="NotImplementedError: no CPU implementation of x.y yet")

@@ -160,6 +160,12 @@ def judge(value, ent, error=None):
     ref = ent.get("ref")
     if value.startswith("n/a") and isinstance(ref, str) and ref.startswith("n/a"):
         return NA, value
+    if value.startswith("n/a") != (isinstance(ref, str) and ref.startswith("n/a")):
+        # A hash against an n/a, either way round, is the probe changing
+        # between the record and this harness (a lane that gained a batch
+        # declaration or a held-out probe), not arithmetic; the harness's
+        # own --diff reads the pair ONE-COLUMN, never DIVERGENT.
+        return OWED, f"the record carries {ref} and this harness {value}; the part changed after the record"
     if value == ref:
         return IDENTICAL, ""
     return DIVERGENT, f"this box {value}, reference {ref}"
