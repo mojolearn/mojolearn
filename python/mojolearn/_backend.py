@@ -944,12 +944,13 @@ def host_families_built():
 #:     metrics/host/metrics_oracle.mojo, spectral_fit_predict_dataset
 #:     over spectral/host/spectral_oracle.mojo (the spectral lane) and
 #:     spectral_fit_predict_graph over the same oracle (the
-#:     spectral-precomputed lane, 2026-09-14), and umap_fit_transform,
+#:     spectral-precomputed lane, 2026-09-14), umap_fit_transform,
 #:     umap_transform and umap_numeric_mode over umap/host/umap_oracle.mojo
 #:     (the umap lane, lane/cpu-training-umap-b, 2026-09-14: the IDENTICAL
-#:     device epoch fold restated on the host); rand_score, the ranking and
-#:     classification metrics, the regression errors, kl_divergence and
-#:     trustworthiness are absent.
+#:     device epoch fold restated on the host), and (the
+#:     metrics-classification lane, 2026-09-14) rand_score, the ranking and
+#:     classification metrics, the three regression errors, kl_divergence
+#:     and trustworthiness over metrics/host/classification_oracle.mojo.
 #:   _mojolearn_preprocessing -> _mojolearn_preprocessing_host (workstream
 #:     E batch 2, 2026-09-14): standard_fit, standard_transform, minmax_fit
 #:     and minmax_transform over preprocessing/host/scaler_oracle.mojo, the
@@ -1011,6 +1012,14 @@ def host_families_built():
 #:     gbdt-feature-freq; lane/cpu-training-gbdt-ordered, 2026-09-15);
 #:     gbdt_predict_multi and the adapters' binary transforms are absent. Its own family for the reason the rf family is: the
 #:     forest host binding exports other names under another contract.
+#:   _mojolearn_training -> _mojolearn_training_host (the mlp lane,
+#:     2026-09-14): optimizer_step and ce_loss over
+#:     training/checks/optimizer_oracle.mojo and loss_oracle.mojo (the
+#:     normative answers of the optimizer and loss profiles) and
+#:     mlp_bias_activation, mlp_relu_backward and mlp_sum_rows over
+#:     training/host/mlp_oracle.mojo, so SmallMLPTrainer trains on the CPU;
+#:     the clip on its own, the accumulation, the Samba operations and the
+#:     neural RNG are absent.
 #:   _mojolearn_arima -> _mojolearn_arima_host (arima, arima-011,
 #:     arima-seasonal-c; workstream E, 2026-09-14): arima_fit,
 #:     arima_predict and arima_forecast over arima/host/arima_oracle.mojo
