@@ -214,6 +214,70 @@ TRAINING_LANE_NAMES = {
     "gp-matern12": "the Gaussian process with a Matern kernel at nu 0.5",
     "gp-matern32": "the Gaussian process with a Matern kernel at nu 1.5",
     "gp-matern52-ard": "the Gaussian process with an ARD Matern kernel at nu 2.5",
+    # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
+    # variants of families that already had a host path, every one in the
+    # 136-lane record and IDENTICAL x4 against its three GPU columns on the
+    # M4's CPU column (one core) before the gate ran. Served by the host
+    # entries as they stood: the k-NN squared euclidean metric and the
+    # distance-weighted vote and mean (core), the transposed GEMM ops
+    # (linalg), brute-force L1 DBSCAN, the five kernel and metric pairs and
+    # the weighted KDE, OLS without an intercept and with weights, ridge
+    # without an intercept, unpenalized logistic regression without an
+    # intercept (estimators), elasticnet at the l2 end without an intercept
+    # (solver), the multiplicative Holt-Winters (tsa), the linear SVC and the
+    # tuned isolation forest (svm).
+    "knn-sqeuclidean": "nearest neighbors under squared euclidean distance",
+    "knn-clf-distance": "the distance-weighted k-NN classifier",
+    "knn-reg-distance": "the distance-weighted k-NN regressor",
+    "gemm-transposed": "the transposed GEMM ops",
+    "dbscan-brute-l1": "brute-force DBSCAN under manhattan distance",
+    "kde-tophat-sqeuclidean": "kernel density with the tophat kernel under squared euclidean distance",
+    "kde-epanechnikov-l1": "kernel density with the Epanechnikov kernel under manhattan distance",
+    "kde-exponential-chebyshev": "kernel density with the exponential kernel under chebyshev distance",
+    "kde-linear-cosine": "kernel density with the linear kernel under cosine distance",
+    "kde-cosine-minkowski": "kernel density with the cosine kernel under minkowski distance",
+    "kde-weighted": "weighted kernel density",
+    "ols-no-intercept": "linear regression without an intercept",
+    "ols-weighted": "weighted linear regression",
+    "ridge-no-intercept": "ridge without an intercept",
+    "logistic-unpenalized-no-intercept": "unpenalized logistic regression without an intercept",
+    "elasticnet-l2end-no-intercept": "elasticnet at the l2 end without an intercept",
+    "holtwinters-multiplicative": "multiplicative Holt-Winters",
+    "svc-linear": "the linear SVC",
+    "iforest-tuned": "the tuned isolation forest",
+    # Same batch, each needing a host restatement it did not have: the
+    # cosine, manhattan, chebyshev and minkowski k-NN metrics
+    # (core/knn_host_predict.mojo over metric_distance_kernel's cores), the
+    # ball cover's radius and k-NN queries as an exhaustive scan (the cover
+    # prunes exactly), the weighted DBSCAN core test
+    # (dbscan/host/dbscan_oracle.mojo), the OWL-QN arm and the softmax loss
+    # (glm/host/qn_oracle.mojo), the KPSS test (tsa/checks/kpss_oracle.mojo),
+    # and epsilon-SVR (svm/host/smo_oracle.mojo's regression arm).
+    "knn-manhattan": "nearest neighbors under manhattan distance",
+    "knn-chebyshev": "nearest neighbors under chebyshev distance",
+    "knn-cosine": "nearest neighbors under cosine distance",
+    "knn-minkowski-p3": "nearest neighbors under minkowski distance at p 3",
+    "knn-rbc": "nearest neighbors over the random ball cover",
+    "radius": "radius neighbors",
+    "radius-manhattan": "radius neighbors under manhattan distance",
+    "radius-chebyshev": "radius neighbors under chebyshev distance",
+    "radius-minkowski-p3": "radius neighbors under minkowski distance at p 3",
+    "dbscan-weighted": "weighted DBSCAN",
+    "logistic-l1": "l1-penalized logistic regression",
+    "logistic-elasticnet": "elasticnet-penalized logistic regression",
+    "logistic-multiclass": "multiclass logistic regression",
+    "kpss": "the KPSS stationarity test",
+    "svr": "SVR",
+    "svr-linear": "the linear SVR",
+    # The pca-full-whiten lane (lane/cpu-training-pca-whiten, 2026-09-14):
+    # PCA with svd_solver='full' trains through
+    # decomposition/host/pca_full_oracle.mojo, the tall TSQR Householder QR
+    # and the one-sided Jacobi of svd_full.mojo restated on the host,
+    # exported as pca_fit_full from the estimators host binding (a wide
+    # matrix refuses by name). IDENTICAL x4 on all 27 train, infer and model
+    # cells on the M4's CPU column (one core) before the gate ran, and the
+    # sabotage build DIVERGENT on all 27.
+    "pca-full-whiten": "whitened PCA through the full SVD",
     # Workstream E batch 3 (2026-09-14): gradient boosting on its default
     # symmetric tree with the Logloss loss trains through
     # gbdt/host/gbdt_oracle.mojo, the device trainer restated on the host,
@@ -243,13 +307,22 @@ TRAINING_LANE_NAMES = {
     "arima": "ARIMA",
     "arima-011": "differenced ARIMA",
     "arima-seasonal-c": "seasonal ARIMA",
+    # The umap host lane (lane/cpu-training-umap-b, 2026-09-14): UMAP fits
+    # and transforms through umap/host/umap_oracle.mojo, exported under the
+    # GPU binding's names from the metrics host binding. The fit's optimizer
+    # is the IDENTICAL DEVICE epoch fold (kernel-matrix row
+    # umap_device_optimizer_for) restated vertex by vertex, not the serial
+    # host loop, which produces different bits. Gate run 34914545371 at
+    # 5988700d9 (136-lane record): all nine train and nine infer cells
+    # IDENTICAL x4 on the seven runners, the sabotage build DIVERGENT on all
+    # eighteen; the 166-lane record carries the same umap hashes.
+    "umap": "UMAP",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "UMAP",
     "the neural blocks",
     "gradient boosting training other than symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss",
 )
@@ -355,11 +428,16 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "knn", "knn-clf", "knn-reg", "kmeans", "kmeans-random", "kmeans-array",
-            "kmeans-weighted",
+            "kmeans-weighted", "knn-sqeuclidean", "knn-clf-distance", "knn-reg-distance",
+            "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
+            "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
         ),
         inference_lanes=("knn", "knn-clf", "knn-reg"),
         forest_kinds=(),
-        classes=("NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans"),
+        classes=(
+            "NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans",
+            "RadiusNeighbors",
+        ),
         display="nearest neighbors, k-NN classification and k-NN regression",
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
@@ -368,7 +446,8 @@ FAMILIES = (
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
-            "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "transpose_f32",
+            "knn_search", "knn_classify", "knn_regress", "kmeans_fit",
+            "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "argmax_rows_f32",
             "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
@@ -383,7 +462,7 @@ FAMILIES = (
         routes="_mojolearn_linalg",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gemm-pinned",),
+        training_lanes=("gemm-pinned", "gemm-transposed"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("linalg.gemm", "linalg.gemv"),
@@ -403,7 +482,14 @@ FAMILIES = (
         routes="_mojolearn_estimators",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("kde", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan", "logistic"),
+        training_lanes=(
+            "kde", "pca", "pca-whiten", "tsvd", "ols", "ridge", "dbscan", "logistic",
+            "dbscan-brute-l1", "kde-tophat-sqeuclidean", "kde-epanechnikov-l1",
+            "kde-exponential-chebyshev", "kde-linear-cosine", "kde-cosine-minkowski",
+            "kde-weighted", "ols-no-intercept", "ols-weighted", "ridge-no-intercept",
+            "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
+            "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
+        ),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
         classes=(
@@ -415,12 +501,13 @@ FAMILIES = (
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
             "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
+            "decomposition/host/pca_full_oracle.mojo",
         ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
-            "pca_fit", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
+            "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",
@@ -433,30 +520,37 @@ FAMILIES = (
         # metrics family's first host binding. It routes `_mojolearn_metrics`
         # on a CPU-only install and carries the five metrics the identity
         # harness's metrics lane computes plus the four label metrics that
-        # share their integer kernels; the spectral, UMAP and remaining
-        # metric entries stay absent and refuse by name.
+        # share their integer kernels; the spectral entries joined in the
+        # same batch and the UMAP entries on lane/cpu-training-umap-b
+        # (umap_fit_transform, umap_transform, umap_numeric_mode); the
+        # remaining metric entries stay absent and refuse by name.
         family="metrics",
         binding="_mojolearn_metrics_host",
         routes="_mojolearn_metrics",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("metrics", "spectral", "spectral-precomputed"),
+        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
-            "SpectralClustering",
+            "SpectralClustering", "UMAP",
             "metrics.accuracy_score", "metrics.adjusted_rand_score",
             "metrics.entropy", "metrics.mutual_info_score",
             "metrics.homogeneity_score", "metrics.completeness_score",
             "metrics.v_measure_score", "metrics.r2_score",
             "metrics.silhouette_score", "metrics.silhouette_samples",
         ),
-        display="the label, r2 and silhouette metrics and spectral clustering",
+        display="the label, r2 and silhouette metrics, spectral clustering and UMAP",
         host_modules=(
             "metrics/host/metrics_oracle.mojo",
             "spectral/host/spectral_oracle.mojo",
             "cluster/host/kmeans_oracle.mojo",
             "core/knn_host_predict.mojo",
+            "umap/host/umap_oracle.mojo",
+            "umap/sparse_graph.mojo",
+            "umap/graph.mojo",
+            "umap/curve.mojo",
+            "umap/params.mojo",
         ),
         exports=(
             "metrics_host_numeric_mode", "metrics_host_vendor",
@@ -465,6 +559,7 @@ FAMILIES = (
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
             "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
+            "umap_fit_transform", "umap_transform", "umap_numeric_mode",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -502,16 +597,16 @@ FAMILIES = (
         routes="_mojolearn_tsa",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("holtwinters",),
+        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("ExponentialSmoothing",),
+        classes=("ExponentialSmoothing", "kpss_test"),
         display="Holt-Winters",
-        host_modules=("holtwinters/host/hw_oracle.mojo",),
+        host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo"),
         exports=(
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
             "tsa_host_sabotage", "tsa_vendor", "holtwinters_fit",
-            "holtwinters_forecast",
+            "holtwinters_forecast", "kpss_test",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -522,7 +617,7 @@ FAMILIES = (
         routes="_mojolearn_solver",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("lasso", "elasticnet", "agglomerative"),
+        training_lanes=("lasso", "elasticnet", "agglomerative", "elasticnet-l2end-no-intercept"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("Lasso", "ElasticNet", "AgglomerativeClustering"),
@@ -545,10 +640,10 @@ FAMILIES = (
         routes="_mojolearn_svm",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("svc", "iforest"),
+        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear"),
         inference_lanes=("svc",),
         forest_kinds=(),
-        classes=("SVC", "IsolationForest"),
+        classes=("SVC", "IsolationForest", "SVR"),
         display="SVC",
         host_modules=(
             "svm/host/smo_oracle.mojo", "gemm/host/gemm_oracle.mojo",
@@ -558,7 +653,7 @@ FAMILIES = (
         exports=(
             "svm_host_numeric_mode", "svm_host_vendor", "svm_host_column",
             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
-            "svc_predict", "iforest_run",
+            "svc_predict", "svr_fit", "svr_predict", "iforest_run",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

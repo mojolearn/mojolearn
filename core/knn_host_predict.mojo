@@ -91,9 +91,57 @@ what this file states once:
                            `weighted_regress_avg_kernel` (`:309-348`) of
                            the same file.
 
-WHAT IS NOT HERE. The cosine, L1, Linf, L2 unexpanded and Lp metrics
-(`metric_distance_kernel`, `neighbors/impl/distance/detail/distance_ops.
-mojo`) and the random ball cover arm (`rbc_knn_search`). The host binding
+THE FOUR UNEXPANDED AND COSINE METRICS (lane/cpu-training-batch3,
+2026-09-14, lanes knn-manhattan, knn-chebyshev, knn-minkowski-p3 and
+knn-cosine). Under IDENTICAL every metric but the L2 expanded pair reaches
+`metric_distance_kernel` (`neighbors/impl/distance/detail/distance_ops.mojo`)
+from `tiled_brute_force_knn` (`knn_brute_force.mojo`, "THEIR `else` AT
+`:224`" and the cosine arm beside it): one cell per thread, the feature
+axis ascending, `ftz` on each loaded operand, then the op's core and
+epilogue. `host_metric_cell` calls THE SAME CORES (`l1_core`, `linf_core`,
+`lp_unexp_core` and `lp_unexp_epilog`, `inner_product_core` and
+`cosine_epilog`), which are host-callable `@always_inline` functions, the
+way the ball cover calls them (`neighbors/impl/ball_cover/common.mojo`,
+DEVIATION 564). Cosine's norm is `cosine_row_norm_kernel`'s: the row norm
+tree above with the clamp and `identical_sqrt`. The refusals are
+`knn_search_traced`'s, before any distance: `validate_metric_arg`
+(DEVIATION 552) and the all-zero cosine row (DEVIATION 553), index first.
+The selection and the sort are the L2 pair's, unchanged; the answer is a
+top-k under a total order, so the tiling that differs by column moves no
+bit.
+
+THE BALL COVER'S TWO QUERIES, AS AN EXHAUSTIVE SCAN (lane/cpu-training-batch3,
+2026-09-14, lanes radius, radius-manhattan, radius-chebyshev,
+radius-minkowski-p3 and knn-rbc). `radius_neighbors_count` /
+`radius_neighbors_fill` and `rbc_knn_search` (`neighbors/estimator.mojo`)
+build a random ball cover and PRUNE with the triangle inequality; the
+pruning is exact (`neighbors/impl/ball_cover/knn.mojo`, "THE BOUNDS, AND THE
+PROOF THAT EACH ONE IS EXACT"; DEVIATION 567's slack on the k-NN arm), so
+the answer is a function of the comparison-space distances alone and not of
+the landmark draw. The host therefore computes EVERY pair and keeps what the
+cover keeps:
+  `host_rbc_cmp_dist`      `rbc_cmp_dist` (`common.mojo`, DEVIATION 564):
+                           the Euclidean arm is `eps_dist_sq` (`diff =
+                           ftz(ftz(a) - ftz(b))`, `acc = ftz(fma(diff, diff,
+                           acc))`), the other three call the same op cores
+                           as `metric_distance_kernel`, query first.
+  `host_rbc_radius_row`    a query's eps row: every index column `c`
+                           ascending with `host_rbc_cmp_dist(q, x_c) <=
+                           rbc_cmp_bound(metric, eps)`, which is the fill
+                           kernel's membership test and DEVIATION 551's
+                           canonical column order.
+  `host_rbc_edge_distance` `rbc_edge_distance_kernel` (`neighbors/checks/
+                           radius_distances.mojo`): the same distance
+                           recomputed against the ORIGINAL rows,
+                           `rbc_true_dist` when `return_sqrt`.
+  `host_rbc_knn_row`       the k smallest `(comparison-space distance,
+                           index)` pairs ascending, the total order at the
+                           top of `knn.mojo`, reported as `rbc_true_dist`.
+The distance count `rbc_knn_search` returns is the scan's, `n_queries *
+n_index`; no lane hashes it.
+
+WHAT IS NOT HERE. The L2 unexpanded metrics on the brute arm, which no
+public metric name reaches (`neighbors.py::_METRIC_TABLE`). The host binding
 refuses those BY NAME; nothing here computes something else under their
 name.
 
@@ -113,6 +161,24 @@ from checks.kernel_matrix import (
     lib_block_size_for,
 )
 from checks.numerics import ftz, identical_div, identical_mul_add, identical_sqrt
+from neighbors.impl.distance.detail.distance_ops import (
+    DIST_COSINE_EXPANDED,
+    DIST_L1,
+    DIST_LINF,
+    DIST_LP_UNEXPANDED,
+    cosine_epilog,
+    cosine_zero_norm_row,
+    inner_product_core,
+    l1_core,
+    linf_core,
+    lp_unexp_core,
+    lp_unexp_epilog,
+    validate_metric_arg,
+)
+from neighbors.impl.ball_cover.common import (
+    rbc_cmp_bound,
+    rbc_true_dist,
+)
 
 
 #: The gate's negative control, the same define the classical and phase 1
@@ -155,10 +221,18 @@ def host_resolve_metric(metric: Int, is_sqrt: Bool) raises -> Int:
         return KNN_HOST_DIST_L2_SQRT_EXPANDED if is_sqrt else KNN_HOST_DIST_L2_EXPANDED
     if metric == KNN_HOST_DIST_L2_EXPANDED or metric == KNN_HOST_DIST_L2_SQRT_EXPANDED:
         return metric
+    if (
+        metric == DIST_L1
+        or metric == DIST_LINF
+        or metric == DIST_LP_UNEXPANDED
+        or metric == DIST_COSINE_EXPANDED
+    ):
+        return metric
     raise Error(
         "knn host: no CPU implementation of cuVS DistanceType value "
         + String(metric)
-        + " yet; the host computes euclidean/l2 (1) and sqeuclidean (0)"
+        + " yet; the host computes sqeuclidean (0), euclidean/l2 (1),"
+        " cosine (2), manhattan (3), chebyshev (7) and minkowski (9)"
         " only (core/knn_host_predict.mojo)"
     )
 
@@ -194,6 +268,61 @@ def host_row_norm(x: List[Float32], row: Int, d: Int) -> Float32:
             red[t] = red[t] + red[t + step]
         step //= 2
     return ftz(red[0])
+
+
+def host_cosine_row_norms(x: List[Float32], n_rows: Int, d: Int) -> List[Float32]:
+    """`cosine_row_norm_kernel` (`distance_ops.mojo`), every row: the same
+    strided partials and halving tree as `host_row_norm` (its fold width is
+    the same kernel-matrix row), then the clamp `total <= 0 -> 0` and
+    `ftz(identical_sqrt(total))`, the TRUE L2 norm cosine's epilogue
+    divides by."""
+    var out = List[Float32](length=n_rows, fill=Float32(0.0))
+    for row in range(n_rows):
+        var total = host_row_norm(x, row, d)
+        if total <= Float32(0.0):
+            total = Float32(0.0)
+        out[row] = ftz(identical_sqrt(total))
+    return out^
+
+
+def host_metric_cell(
+    q: List[Float32], row: Int, y: List[Float32], col: Int, d: Int,
+    qn: Float32, yn: Float32, metric: Int, metric_arg: Float32,
+) -> Float32:
+    """One cell of `metric_distance_kernel` for the four metrics above,
+    `x = q` (the query tile) and `y` (the index tile), the feature axis
+    ascending, each operand `ftz`'d as it is loaded. `qn` and `yn` are the
+    TRUE L2 norms and are read by cosine only.
+
+    THE SABOTAGE ARM walks the feature chain DESCENDING for L1, Lp and
+    cosine (a float fold in the other order), and for Chebyshev, whose
+    running max is order-free, returns the next float32 above the maximum."""
+    var acc = Float32(0.0)
+    if metric == DIST_LINF:
+        for f in range(d):
+            acc = linf_core(acc, ftz(q[row * d + f]), ftz(y[col * d + f]))
+        comptime if KNN_HOST_SABOTAGE:
+            acc = bitcast[DType.float32](bitcast[DType.uint32](acc) + UInt32(1))
+        return acc
+    for g in range(d):
+        var f = g
+        comptime if KNN_HOST_SABOTAGE:
+            f = d - 1 - g
+        var qv = ftz(q[row * d + f])
+        var yv = ftz(y[col * d + f])
+        if metric == DIST_L1:
+            acc = l1_core(acc, qv, yv)
+        elif metric == DIST_LP_UNEXPANDED:
+            acc = lp_unexp_core(acc, qv, yv, metric_arg)
+        else:
+            acc = inner_product_core(acc, qv, yv)
+    if metric == DIST_L1:
+        return acc
+    if metric == DIST_LP_UNEXPANDED:
+        # `:67`: `one_over_p` formed once per cell, a pure function of p.
+        var one_over_p = ftz(identical_div(Float32(1.0), metric_arg))
+        return lp_unexp_epilog(acc, one_over_p)
+    return cosine_epilog(acc, ftz(qn), ftz(yn))
 
 
 def host_row_norms(x: List[Float32], n_rows: Int, d: Int) -> List[Float32]:
@@ -322,6 +451,7 @@ def host_knn_search(
     queries: List[Float32], n_queries: Int, d: Int, k: Int,
     metric: Int, return_sqrt: Bool,
     mut out_dist: List[Float32], mut out_idx: List[UInt32],
+    metric_arg: Float32 = Float32(2.0),
 ) raises:
     """`knn_search_traced` (`neighbors/estimator.mojo:389-700`) on the
     host: the shape refusals in its order, the metric resolved, both norm
@@ -349,10 +479,44 @@ def host_knn_search(
             + "); the upstream's short-index fill is not implemented"
         )
     var mtr = host_resolve_metric(metric, return_sqrt)
+    validate_metric_arg(mtr, metric_arg)  # DEVIATION 552
+    if mtr == DIST_COSINE_EXPANDED:
+        # DEVIATION 553, `knn_search_traced`'s words, index first.
+        var zi = cosine_zero_norm_row(index, n_index, d)
+        if zi >= 0:
+            raise Error(
+                "knn_search: metric='cosine' but index row "
+                + String(zi)
+                + " is all zeros; cosine distance divides by ||x|| and is"
+                " undefined at the origin (DEVIATION 553)"
+            )
+        var zq = cosine_zero_norm_row(queries, n_queries, d)
+        if zq >= 0:
+            raise Error(
+                "knn_search: metric='cosine' but query row "
+                + String(zq)
+                + " is all zeros; cosine distance divides by ||x|| and is"
+                " undefined at the origin (DEVIATION 553)"
+            )
+    var dist_row = List[Float32](length=n_index, fill=Float32(0.0))
+    if mtr != KNN_HOST_DIST_L2_EXPANDED and mtr != KNN_HOST_DIST_L2_SQRT_EXPANDED:
+        # `compute_norms_for_metric`: cosine's TRUE norm, none for the rest.
+        var index_cn = List[Float32](length=n_index, fill=Float32(0.0))
+        var query_cn = List[Float32](length=n_queries, fill=Float32(0.0))
+        if mtr == DIST_COSINE_EXPANDED:
+            index_cn = host_cosine_row_norms(index, n_index, d)
+            query_cn = host_cosine_row_norms(queries, n_queries, d)
+        for row in range(n_queries):
+            for col in range(n_index):
+                dist_row[col] = host_metric_cell(
+                    queries, row, index, col, d, query_cn[row], index_cn[col],
+                    mtr, metric_arg,
+                )
+            host_select_k(dist_row, n_index, k, out_dist, out_idx, row * k)
+        return
     var is_sqrt = mtr == KNN_HOST_DIST_L2_SQRT_EXPANDED
     var index_norm = host_row_norms(index, n_index, d)
     var query_norm = host_row_norms(queries, n_queries, d)
-    var dist_row = List[Float32](length=n_index, fill=Float32(0.0))
     for row in range(n_queries):
         var qn = query_norm[row]
         for col in range(n_index):
@@ -574,3 +738,100 @@ def host_weighted_regress_avg(
             num = ftz(num + ftz(yv * wv))
             den = ftz(den + wv)
         out[row * n_outputs + output_offset] = ftz(identical_div(num, den))
+
+
+# ===========================================================================
+# THE BALL COVER'S QUERIES AS AN EXHAUSTIVE SCAN (lane/cpu-training-batch3).
+# See the module docstring.
+# ===========================================================================
+
+#: `DIST_L2_SQRT_UNEXPANDED`, the ball cover's Euclidean tag
+#: (`distance_ops.mojo`, `RBC_METRIC_DEFAULT` in `common.mojo`).
+comptime KNN_HOST_DIST_L2_SQRT_UNEXPANDED = 5
+
+
+def host_rbc_cmp_dist(
+    a: List[Float32], a_off: Int, b: List[Float32], b_off: Int, n_dims: Int,
+    metric: Int, metric_arg: Float32,
+) -> Float32:
+    """`rbc_cmp_dist` over host lists: SQUARED Euclidean on the Euclidean
+    arm, the plain metric on L1, Linf and Lp. The caller has validated the
+    metric. THE SABOTAGE ARM walks the dimensions DESCENDING on the three
+    folds and returns the next float32 above Chebyshev's maximum."""
+    var acc = Float32(0.0)
+    if metric == DIST_LINF:
+        for i in range(n_dims):
+            acc = linf_core(acc, ftz(a[a_off + i]), ftz(b[b_off + i]))
+        comptime if KNN_HOST_SABOTAGE:
+            acc = bitcast[DType.float32](bitcast[DType.uint32](acc) + UInt32(1))
+        return acc
+    for g in range(n_dims):
+        var i = g
+        comptime if KNN_HOST_SABOTAGE:
+            i = n_dims - 1 - g
+        if metric == KNN_HOST_DIST_L2_SQRT_UNEXPANDED:
+            var diff = ftz(ftz(a[a_off + i]) - ftz(b[b_off + i]))
+            acc = ftz(identical_mul_add(diff, diff, acc))
+        elif metric == DIST_L1:
+            acc = l1_core(acc, ftz(a[a_off + i]), ftz(b[b_off + i]))
+        else:
+            acc = lp_unexp_core(acc, ftz(a[a_off + i]), ftz(b[b_off + i]), metric_arg)
+    if metric == DIST_LP_UNEXPANDED:
+        return lp_unexp_epilog(acc, ftz(identical_div(Float32(1.0), metric_arg)))
+    return acc
+
+
+def host_rbc_radius_row(
+    index: List[Float32], n_index: Int, queries: List[Float32], q: Int,
+    d: Int, eps: Float32, metric: Int, metric_arg: Float32,
+) -> List[Int32]:
+    """One query's neighbors within `eps`, columns ascending."""
+    var out = List[Int32]()
+    var eps_cmp = rbc_cmp_bound(metric, eps)
+    for c in range(n_index):
+        var dist = host_rbc_cmp_dist(queries, q * d, index, c * d, d, metric, metric_arg)
+        if dist <= eps_cmp:
+            out.append(Int32(c))
+    return out^
+
+
+def host_rbc_edge_distance(
+    index: List[Float32], queries: List[Float32], q: Int, c: Int, d: Int,
+    return_sqrt: Bool, metric: Int, metric_arg: Float32,
+) -> Float32:
+    """`rbc_edge_distance_kernel` for one edge."""
+    var d2 = host_rbc_cmp_dist(queries, q * d, index, c * d, d, metric, metric_arg)
+    if return_sqrt:
+        return rbc_true_dist(metric, d2)
+    return d2
+
+
+def host_rbc_knn_row(
+    index: List[Float32], n_index: Int, queries: List[Float32], q: Int,
+    d: Int, k: Int, metric: Int, metric_arg: Float32,
+    mut out_idx: List[Int32], mut out_dist: List[Float32],
+):
+    """The k smallest `(cmp distance, index)` of one query, ascending, the
+    indices and the TRUE distances written at `q * k`."""
+    var best_d = List[Float32](length=k, fill=Float32(0.0))
+    var best_i = List[Int](length=k, fill=-1)
+    var filled = 0
+    for c in range(n_index):
+        var dist = host_rbc_cmp_dist(queries, q * d, index, c * d, d, metric, metric_arg)
+        # Insertion into the ascending list; the index ascends with `c`, so
+        # a tie in distance keeps the earlier (smaller) index first.
+        if filled == k and not (dist < best_d[k - 1]):
+            continue
+        var pos = filled if filled < k else k - 1
+        while pos > 0 and dist < best_d[pos - 1]:
+            if pos < k:
+                best_d[pos] = best_d[pos - 1]
+                best_i[pos] = best_i[pos - 1]
+            pos -= 1
+        best_d[pos] = dist
+        best_i[pos] = c
+        if filled < k:
+            filled += 1
+    for o in range(k):
+        out_idx[q * k + o] = Int32(best_i[o])
+        out_dist[q * k + o] = rbc_true_dist(metric, best_d[o])

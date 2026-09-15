@@ -47,7 +47,29 @@ comptime COLUMN_SPEC_BASELINE = 7
 #: `comptime assert TARGET_COLUMN == COLUMN_CPU`.
 comptime COLUMN_CPU = 8
 
-comptime COLUMN_COUNT = 9
+#: THE TPU AND TRAINIUM COLUMNS (2026-09-14, lane/declared-graph-columns;
+#: docs/lanes/DECLARED_TPU_TRAINIUM_COLUMNS_2026-09-14.md). DECLARED, NOT
+#: BUILDABLE, and NOT SIMULATABLE: neither has a `-D MOJOLEARN_COLUMN_*`
+#: define in `TARGET_COLUMN`, so no build compiles against them and no row
+#: they answer can reach a kernel. Mojo emits code for neither. Each takes
+#: user kernels only through its vendor's own kernel language: Google's
+#: Pallas on the TPU (`jax.experimental.pallas.tpu`) and AWS's Neuron Kernel
+#: Interface on Trainium (`nki.isa`). Both machines are kernel-shaped the way
+#: our GPU columns are (128 lanes, an on-chip scratchpad, explicit placement),
+#: so the kernel-shaped rows answer the identical reading, as `COLUMN_CPU`
+#: does. What refuses them is ARITHMETIC. The primitive rows below
+#: (`column_fma_instruction`, `column_float32_division`, ...) record what
+#: each vendor's documentation lets a kernel name, and IDENTICAL builds every
+#: float it produces from those primitives.
+#:
+#: TPU pinned to v6 (Trillium), the generation the Pallas TPU details page
+#: describes ("8x128 for 32-bit values (as of TPU v6)"). Trainium pinned to
+#: NeuronCore-v2/v3 (Trn2, Trn3), the generations the NKI ISA reference
+#: pages are marked relevant for.
+comptime COLUMN_TPU = 9
+comptime COLUMN_TRAINIUM = 10
+
+comptime COLUMN_COUNT = 11
 
 comptime COLUMN_METAL = COLUMN_APPLE
 comptime COLUMN_CUDA = COLUMN_NVIDIA
@@ -78,6 +100,10 @@ def column_name(column: Int) -> String:
         return String("spec-baseline")
     if column == COLUMN_CPU:
         return String("cpu")
+    if column == COLUMN_TPU:
+        return String("tpu")
+    if column == COLUMN_TRAINIUM:
+        return String("trainium")
     return String("unknown")
 
 
@@ -93,6 +119,170 @@ def column_is_buildable(column: Int) -> Bool:
         or column == COLUMN_AMD
         or column == COLUMN_AMD_RDNA
         or column == COLUMN_CPU
+    )
+
+
+#: CONTRACT PRIMITIVES (2026-09-14, lane/declared-graph-columns). IDENTICAL
+#: builds every float it produces from a short list, namely binary32 add,
+#: subtract and multiply; ONE fused multiply-add instruction (`numerics.identical_mul_add`,
+#: IDENTITY_PATHS row 9, and the residual inside every portable transcendental
+#: and `portable_sqrtf`); ONE hardware division (`portable_divf`, row 49);
+#: exact 32-bit integer arithmetic (the fixed-point accumulators, Philox);
+#: and reading a float's bits (`ftz` flushes by bits, row 10). Square root,
+#: rsqrt, exp, log and the trig functions are NOT primitives, because each is
+#: built from the list. Each row below answers whether a kernel on the column can
+#: NAME the primitive. Whether its rounding is right is a measurement, not a
+#: row: `check-ieee-arith` (with its built-to-separate FMA arm) and
+#: `check-division` are the first gates on every new column.
+comptime CAP_ABSENT = 0
+comptime CAP_PRESENT = 1
+comptime CAP_UNAUDITED = 2
+
+
+def cap_name(cap: Int) -> String:
+    if cap == CAP_PRESENT:
+        return String("yes")
+    if cap == CAP_ABSENT:
+        return String("NO")
+    return String("?")
+
+
+def column_kernel_language(column: Int) -> String:
+    """What a user kernel on this column is written in. `mojo` for every column Mojo emits code for; `none` for the declared GPU columns, whose kernel language is whatever a future Mojo target emits; the vendor's own language for the TPU (Pallas, `jax.experimental.pallas.tpu`) and Trainium (the Neuron Kernel Interface, `nki.isa`), because those are the only doors either vendor documents and Mojo emits for neither."""
+    if column == COLUMN_TPU:
+        return String("pallas")
+    if column == COLUMN_TRAINIUM:
+        return String("nki")
+    if column_is_buildable(column):
+        return String("mojo")
+    return String("none")
+
+
+def column_fma_instruction(column: Int) -> Int:
+    """CONTRACT PRIMITIVE: a fused multiply-add a kernel can name.
+
+    - bit-identical, apple, nvidia, amd, amd-rdna, cpu: PRESENT. `std.math.fma`
+      is the shipped spelling on all of them (row 9); Metal through MAX
+      measured FUSED on 1,629 of 1,629 separating patterns.
+    - tpu: ABSENT. The Pallas TPU op list (docs.jax.dev/en/latest/pallas/tpu/
+      details.html, "Elementwise operations") has add, sub, mul, divide, max,
+      min, select, abs, bitwise ops, shifts, compares, casts, exp, tanh, pow,
+      sin and cos, and warns the list "might not be comprehensive" because JAX
+      functions compose primitives. No JAX primitive and no StableHLO op
+      (openxla/stablehlo docs/spec.md at 5a1e6d92, the full op index) is a
+      fused multiply-add, so there is nothing to compose one from.
+    - trainium: ABSENT. The NKI ISA operator table ("Supported Math Operators
+      for NKI ISA", nki/api/nki.api.shared.html) lists add, subtract,
+      multiply, max, min, compares, logical ops, power, abs_max, abs_min, abs,
+      square, relu, rsqrt and reciprocal. `scalar_tensor_tensor` applies two
+      operators "in sequence", documented as equivalent to two instructions
+      back to back, which is the unfused spelling.
+    - qualcomm, intel, spec-baseline: UNAUDITED by this lane.
+    """
+    if column == COLUMN_TPU or column == COLUMN_TRAINIUM:
+        return CAP_ABSENT
+    if column_is_buildable(column):
+        return CAP_PRESENT
+    return CAP_UNAUDITED
+
+
+def column_float32_division(column: Int) -> Int:
+    """CONTRACT PRIMITIVE: one binary32 division a kernel can name (`portable_divf` is one hardware division between two bit flushes, row 49).
+
+    - bit-identical, apple, nvidia, amd, amd-rdna, cpu: PRESENT. Apple
+      measured correctly rounded on the normal class (`check-division`); the
+      NVIDIA/AMD re-print is still owed per row 49.
+    - tpu: PRESENT as a name (`/` in the Pallas TPU op list, cost class
+      medium); its rounding is unmeasured.
+    - trainium: ABSENT. The NKI ISA operator table has no divide. The nearest
+      instruction is `reciprocal`, and the same page says the Vector Engine
+      computes it "at a higher precision compared to Scalar Engine" (whose
+      activations are "approximated with piece-wise polynomials"), which
+      documents neither one as a correctly rounded binary32 division.
+    - qualcomm, intel, spec-baseline: UNAUDITED by this lane.
+    """
+    if column == COLUMN_TRAINIUM:
+        return CAP_ABSENT
+    if column == COLUMN_TPU:
+        return CAP_PRESENT
+    if column_is_buildable(column):
+        return CAP_PRESENT
+    return CAP_UNAUDITED
+
+
+def column_int32_exact(column: Int) -> Int:
+    """CONTRACT PRIMITIVE: exact 32-bit integer elementwise arithmetic (the fixed-point accumulators, the Philox draws).
+
+    - bit-identical, apple, nvidia, amd, amd-rdna, cpu: PRESENT.
+    - tpu: PRESENT. Pallas TPU supports `jnp.int*` and `jnp.uint*` and says
+      the hardware "generally only supports elementwise computation using
+      32-bit types". Integer REDUCTIONS are not supported there, so an
+      integer fold is spelled elementwise. Wraparound on overflow is not
+      documented (StableHLO leaves integer overflow implementation-defined).
+    - trainium: PRESENT. `nki.isa.tensor_tensor`: all-int32/uint32 operands
+      default to the GpSimd Engine, "which uses native integer arithmetic.
+      This ensures exact results for all 32-bit integer values."
+    - qualcomm, intel, spec-baseline: UNAUDITED by this lane.
+    """
+    if column == COLUMN_TPU or column == COLUMN_TRAINIUM:
+        return CAP_PRESENT
+    if column_is_buildable(column):
+        return CAP_PRESENT
+    return CAP_UNAUDITED
+
+
+def column_float_bits_readable(column: Int) -> Int:
+    """CONTRACT PRIMITIVE: reinterpreting a binary32 as its 32 bits and back (`ftz` flushes by bits, because Metal's compares flush their operands, row 49's finding (i)).
+
+    - bit-identical, apple, nvidia, amd, amd-rdna, cpu: PRESENT (`bitcast`).
+    - tpu: UNAUDITED. StableHLO has `bitcast_convert`; the Pallas TPU op list
+      names type casts (`.astype`, a value conversion) and does not say
+      whether a bit reinterpretation lowers.
+    - trainium: UNAUDITED. NKI bitvec operators treat INTEGER tiles as bit
+      patterns; the reference read for this lane does not say how a float32
+      tile's bits reach an integer tile.
+    - qualcomm, intel, spec-baseline: UNAUDITED by this lane.
+    """
+    if column == COLUMN_TPU or column == COLUMN_TRAINIUM:
+        return CAP_UNAUDITED
+    if column_is_buildable(column):
+        return CAP_PRESENT
+    return CAP_UNAUDITED
+
+
+def column_arithmetic_refusal_reason(column: Int) -> String:
+    """Why the column cannot run IDENTICAL's arithmetic, naming EVERY absent primitive, or empty. Only a documented ABSENT refuses: UNAUDITED is a measurement owed, never a verdict in either direction."""
+    var missing = String("")
+    if column_fma_instruction(column) == CAP_ABSENT:
+        missing = missing + (
+            " no fused multiply-add instruction (IDENTICAL spells every a*b+c,"
+            " every portable transcendental and portable_sqrtf's residual with"
+            " one fma, IDENTITY_PATHS row 9);"
+        )
+    if column_float32_division(column) == CAP_ABSENT:
+        missing = missing + (
+            " no binary32 division instruction (portable_divf is one hardware"
+            " division, row 49);"
+        )
+    if column_int32_exact(column) == CAP_ABSENT:
+        missing = missing + (
+            " no exact 32-bit integer arithmetic (the fixed-point accumulators"
+            " and Philox);"
+        )
+    if column_float_bits_readable(column) == CAP_ABSENT:
+        missing = missing + (
+            " no way to read a float's bits (ftz flushes by bits, row 10);"
+        )
+    if missing.byte_length() == 0:
+        return missing
+    return (
+        column_name(column)
+        + " (kernel language "
+        + column_kernel_language(column)
+        + ") documents"
+        + missing
+        + " the column stays refused until the vendor documents the"
+        " instruction or an exact-integer construction of it is gated"
     )
 
 comptime K_HIST_BINARY = 0
@@ -154,16 +344,20 @@ comptime IDENTITY_FLOOR_BLOCK = 512
 
 
 def column_meets_identity_floor(column: Int) -> Bool:
-    """Whether this vendor can join `IDENTICAL` without the floor moving."""
+    """Whether this vendor can join `IDENTICAL` without the floor moving. The arithmetic clause (2026-09-14) refuses only on a documented ABSENT primitive, so every column declared before it resolves as it did."""
     return (
         column_shared_limit(column) >= IDENTITY_FLOOR_SHARED_BYTES
         and column_has_threadgroup_int_atomics(column)
         and column_max_block_size(column) >= IDENTITY_FLOOR_BLOCK
+        and column_arithmetic_refusal_reason(column).byte_length() == 0
     )
 
 
 def identity_refusal_reason(column: Int) -> String:
     """Why `IDENTICAL` refuses this column, or empty if it does not."""
+    var arithmetic = column_arithmetic_refusal_reason(column)
+    if arithmetic.byte_length() > 0:
+        return arithmetic
     if column_shared_limit(column) < IDENTITY_FLOOR_SHARED_BYTES:
         return (
             column_name(column)
@@ -221,6 +415,18 @@ def column_shared_limit(column: Int) -> Int:
         # gemm/checks/gemm_identical.mojo, and 32 KB is the value it compiled
         # under the Apple fallthrough on seven runners.
         return IDENTITY_FLOOR_SHARED_BYTES
+    if column == COLUMN_TPU:
+        # The identical reading, not a vendor budget. A Pallas TPU kernel
+        # computes in VMEM, which the details page calls "fairly large for
+        # such a low-level memory hierarchy (16MB+)", shared by the kernel
+        # rather than claimed per block; no build compiles this row.
+        return IDENTITY_FLOOR_SHARED_BYTES
+    if column == COLUMN_TRAINIUM:
+        # The identical reading, not a vendor budget. An NKI kernel computes
+        # in SBUF ("On-chip scratchpad SRAM that serves as a software-managed
+        # cache"); the per-partition size is not transcribed here, and no
+        # build compiles this row.
+        return IDENTITY_FLOOR_SHARED_BYTES
     return IDENTITY_FLOOR_SHARED_BYTES  # BIT_IDENTICAL: frozen, not derived
 
 
@@ -277,8 +483,17 @@ def vendor_fp32_matmul_precision_name(
 
 
 def column_has_threadgroup_int_atomics(column: Int) -> Bool:
-    """Whether a block can `atomicAdd` an `Int32` in THREADGROUP memory."""
-    return True
+    """Whether a block can `atomicAdd` an `Int32` in THREADGROUP memory.
+
+    TPU and Trainium answer False, because neither vendor's kernel pages
+    document an atomic add. The TPU column is the interesting one. A Pallas TPU grid runs
+    "sequentially, in lexicographic order", and consecutive invocations may
+    write the same output slice "without any risk of race conditions", so a
+    plain integer store has a fixed order there and needs no atomic. The
+    floor's clause is written for concurrent blocks; restating it for a
+    sequential grid is a profile question owed at bring-up, not decided here.
+    """
+    return column != COLUMN_TPU and column != COLUMN_TRAINIUM
 
 
 def column_has_dedicated_shared_memory(column: Int) -> Bool:
@@ -287,8 +502,8 @@ def column_has_dedicated_shared_memory(column: Int) -> Bool:
 
 
 def column_spec_guarantees_onchip_shared(column: Int) -> Bool:
-    """Whether anything PROMISES the shared memory is on chip."""
-    return column != COLUMN_SPEC_BASELINE
+    """Whether anything PROMISES the shared memory is on chip. The TPU column answers False, since the Pallas TPU pages call VMEM "small but fast" and a lower level of the memory hierarchy, and nothing read for this lane says where it lives. Trainium answers True, since the NKI overview calls SBUF "On-chip scratchpad SRAM"."""
+    return column != COLUMN_SPEC_BASELINE and column != COLUMN_TPU
 
 
 def column_max_block_size(column: Int) -> Int:
@@ -297,6 +512,10 @@ def column_max_block_size(column: Int) -> Int:
         return 128
     if column == COLUMN_CPU:
         return 1024  # the identical reading; no block is ever dispatched
+    if column == COLUMN_TPU:
+        return 1024  # the identical reading; also one 8x128 vector register tile (TPU v6)
+    if column == COLUMN_TRAINIUM:
+        return 1024  # the identical reading; no NKI instruction maps to a thread block
     return 1024
 
 
@@ -320,6 +539,17 @@ def column_lane_width(column: Int) -> Int:
         # gemm/checks/gemm_identical.mojo:2882 is compiled into the byte LM
         # host binding, which matched the GPU bits on seven runners at 32.
         return PINNED_REPLICATION_LANES
+    if column == COLUMN_TPU:
+        # "TPUs perform the bulk of the computation on 2D vector registers,
+        # which are typically of size 8x128 for 32-bit values (as of TPU
+        # v6)", sublanes and lanes respectively (Pallas TPU details page).
+        return 128
+    if column == COLUMN_TRAINIUM:
+        # NKI instructions run over a partition axis that "must not exceed
+        # 128", and the Scalar Engine keeps "one 32-bit register per compute
+        # lane, 128 registers in total" (nki.isa.activation). The pinned 32
+        # lanes divide 128.
+        return 128
     return 32
 
 

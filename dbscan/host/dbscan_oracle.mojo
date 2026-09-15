@@ -92,11 +92,27 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
                            invariant), the vertex degrees, the core mask
                            (`vd >= min_pts`), the propagation, the relabel.
 
-NOT RESTATED, REFUSED BY NAME: `sample_weight` (the weighted core test is
-a pinned float fold over the CSR row in the kernel's write order,
-`weighted_vertex_deg_csr_kernel`, owed with a GPU record that carries the
-dbscan-weighted lane) and an explicit `max_mbytes_per_batch` (the host runs
-one batch and says so rather than pretending to size a device).
+THE WEIGHTED CORE TEST (lane/cpu-training-batch3, 2026-09-14, the
+dbscan-weighted lane, which the 136-lane record carries on all three GPU
+columns). `sample_weight` changes the answer in one place,
+`core_points_weighted_kernel` (`dbscan/impl/corepoints/compute.mojo`):
+a row is core when its weighted degree `>= Float32(min_pts)`. The degree is
+`host_weighted_degree`, a second spelling of the two device folds
+(`dbscan/impl/vertexdeg/algo.mojo`), each WVD_TPB strided partials `acc =
+ftz(acc + ftz(w))` then `pinned_block_sum`'s halving tree with no flush
+inside and none after:
+  the ball cover arm, `weighted_vertex_deg_csr_kernel`, strides CSR
+  POSITIONS of the row as `rbc_eps_nn_query_fill` leaves it under
+  IDENTICAL, canonicalized to ascending column (DEVIATION 551,
+  `neighbors/checks/ball_cover_canonical_order.mojo`), so the host sorts
+  the kernel-write-order row first;
+  the brute arm, `weighted_vertex_deg_dense_kernel`, strides COLUMNS of the
+  dense adjacency, adding where the bit is set.
+WVD_TPB is read through `lib_block_size_for[K_LIB_WEIGHTED_VERTEX_DEG]`, a
+NUMERIC row that resolves to the identity floor on every column.
+
+NOT RESTATED, REFUSED BY NAME: an explicit `max_mbytes_per_batch` (the host
+runs one batch and says so rather than pretending to size a device).
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` (the routed families'
 one define) shifts the core test to `vd >= min_pts + 1`, so every fixture
@@ -111,7 +127,12 @@ The restatement is a prediction until measured. The CPU identity gate
 from std.math import sqrt
 from std.sys.compile import is_defined
 
-from checks.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
+from checks.kernel_matrix import (
+    K_LIB_WEIGHTED_VERTEX_DEG,
+    TARGET_COLUMN,
+    lib_block_size_for,
+    lib_lane_width_for,
+)
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 
 
@@ -119,6 +140,10 @@ comptime DBSCAN_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 #: `RBC_LANES` (`registers.mojo:170`), the chunk of the member scan.
 comptime RBC_LANES = lib_lane_width_for[TARGET_COLUMN]()
+
+#: `WVD_TPB` (`dbscan/impl/vertexdeg/algo.mojo`), the weighted degree's
+#: stride and fold width, through the same accessor.
+comptime WVD_TPB = lib_block_size_for[K_LIB_WEIGHTED_VERTEX_DEG, TARGET_COLUMN]()
 
 #: `MAX_LABEL` (`csr.mojo`), `RBC_FLT_MAX` (`common.mojo:85`), the metric
 #: and method ids (`epsilon_neighborhood.mojo`, `runner.mojo`), restated
@@ -429,6 +454,57 @@ def host_make_monotonic(mut labels: List[Int32], n_rows: Int):
             labels[i] = labels[i] - Int32(1)
 
 
+def host_weighted_degree(
+    row: List[Int32], weights: List[Float32], by_column: Bool, n_rows: Int,
+) -> Float32:
+    """One row's weighted degree. `row` is the row's neighbor columns in
+    ASCENDING order. `by_column` False is `weighted_vertex_deg_csr_kernel`
+    (thread `t` strides CSR positions `t, t + WVD_TPB, ...`); True is
+    `weighted_vertex_deg_dense_kernel` (thread `t` strides columns `t, t +
+    WVD_TPB, ...` over all `n_rows`, adding where the adjacency bit is set).
+    Both close on the halving tree `red[t] = red[t] + red[t + step]`."""
+    comptime assert (WVD_TPB & (WVD_TPB - 1)) == 0, (
+        "dbscan host: the halving tree needs a power-of-two block"
+    )
+    var red = List[Float32](length=WVD_TPB, fill=Float32(0.0))
+    var n = len(row)
+    if by_column:
+        # Column `c` belongs to thread `c % WVD_TPB`, and each thread walks
+        # its columns ascending, so the ascending row distributes exactly.
+        for p in range(n):
+            var c = Int(row[p])
+            var t = c % WVD_TPB
+            red[t] = ftz(red[t] + ftz(weights[c]))
+    else:
+        for t in range(WVD_TPB):
+            var acc = Float32(0.0)
+            var p = t
+            while p < n:
+                acc = ftz(acc + ftz(weights[Int(row[p])]))
+                p += WVD_TPB
+            red[t] = acc
+    var step = WVD_TPB // 2
+    while step > 0:
+        for t in range(step):
+            red[t] = red[t] + red[t + step]
+        step //= 2
+    return red[0]
+
+
+def host_sorted_row(row: List[Int32]) -> List[Int32]:
+    """A CSR row in ascending column order (insertion sort; the columns of
+    one row are unique)."""
+    var out = row.copy()
+    for a in range(1, len(out)):
+        var v = out[a]
+        var b = a - 1
+        while b >= 0 and out[b] > v:
+            out[b + 1] = out[b]
+            b -= 1
+        out[b + 1] = v
+    return out^
+
+
 @fieldwise_init
 struct DBSCANHostFit(Movable):
     var labels: List[Int32]
@@ -444,6 +520,8 @@ def host_dbscan_fit(
     max_iterations: Int,
     eps_nn_method: Int,
     metric: Int,
+    weights: List[Float32] = List[Float32](),
+    has_weights: Bool = False,
 ) raises -> DBSCANHostFit:
     """`dbscan_fit` (`dbscan/estimator.mojo`) without the DeviceContext,
     one batch of every row."""
@@ -499,11 +577,21 @@ def host_dbscan_fit(
     # The eps neighborhood of every row, CSR, in the arm's write order.
     var row_ptr = List[Int](length=n_rows + 1, fill=0)
     var col_ind = List[Int32]()
+    var wght_sum = List[Float32]()
+    if has_weights and len(weights) != n_rows:
+        raise Error(
+            "dbscan_fit: sample_weight holds " + String(len(weights))
+            + " values, n_samples is " + String(n_rows)
+        )
     if sparse_rbc_mode:
         var index = host_rbc_build(x, n_rows, n_features)
         var eps_radius = Float32(eps)
         for q in range(n_rows):
             var row = host_rbc_eps_row(index, x, q, n_features, eps_radius)
+            if has_weights:
+                wght_sum.append(
+                    host_weighted_degree(host_sorted_row(row), weights, False, n_rows)
+                )
             for p in range(len(row)):
                 col_ind.append(row[p])
             row_ptr[q + 1] = len(col_ind)
@@ -520,6 +608,8 @@ def host_dbscan_fit(
         var thresh = host_metric_threshold(metric, eps)
         for q in range(n_rows):
             var row = host_brute_eps_row(x, q, n_rows, n_features, thresh, metric)
+            if has_weights:
+                wght_sum.append(host_weighted_degree(row, weights, True, n_rows))
             for p in range(len(row)):
                 col_ind.append(row[p])
             row_ptr[q + 1] = len(col_ind)
@@ -532,9 +622,14 @@ def host_dbscan_fit(
         # THE SABOTAGE ARM: one neighbor more to be a core point. Wrong on
         # purpose; see the module docstring.
         min_pts = min_samples + 1
-    for i in range(n_rows):
-        var vd = row_ptr[i + 1] - row_ptr[i]
-        core[i] = UInt8(1) if vd >= min_pts else UInt8(0)
+    if has_weights:
+        # `core_points_weighted_kernel`: the float compared directly.
+        for i in range(n_rows):
+            core[i] = UInt8(1) if wght_sum[i] >= Float32(min_pts) else UInt8(0)
+    else:
+        for i in range(n_rows):
+            var vd = row_ptr[i + 1] - row_ptr[i]
+            core[i] = UInt8(1) if vd >= min_pts else UInt8(0)
 
     var labels = List[Int32](length=n_rows, fill=MAX_LABEL)
     var passes = host_weak_cc(labels, row_ptr, col_ind, core, n_rows, cap)
