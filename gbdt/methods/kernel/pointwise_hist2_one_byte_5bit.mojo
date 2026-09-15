@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The 5-bit pointwise accumulator: `TPointHist<0, 0, BlockSize>`.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_5bit.cu` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_5bit.cu`
+(CatBoost `54a8143a`).
 
 The first `PointHist2` implementor. It handles FOUR features at a time, each
 occupying one byte of a `UInt32` compressed-index word, with up to 32 bins
@@ -24,7 +24,7 @@ slots, and the whole 1024-slot warp slice is 32 bins x (4 inner copies x 8
 slots). This repository already implemented that arithmetic once, in
 `gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_5bit.mojo`, and
 it is written again here rather than imported because CatBoost has two files
-and the implementation mirrors CatBoost's tree. It is three lines; it is not the
+and the file layout here matches that split. It is three lines; it is not the
 hundred-line loop `archive/reference/PORTING.md` 13 is about.
 
 **They part at two places and both matter:**

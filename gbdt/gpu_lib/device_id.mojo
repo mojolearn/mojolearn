@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which host, which device.
 
-FOLLOWS `catboost/cuda/cuda_lib/device_id.h` at CatBoost `54a8143a`.
-Followed statement for statement.
+Reference: `catboost/cuda/cuda_lib/device_id.h` (CatBoost `54a8143a`).
 
 Their `TDeviceId` is a `(HostId, DeviceId)` pair because a CatBoost run may
 span hosts over MPI. Both fields default to -1 (`device_id.h:10-11`), which is

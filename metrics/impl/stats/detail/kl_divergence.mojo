@@ -11,7 +11,7 @@ THEIRS (:33-72):
 
 `scipy.stats.entropy(pk, qk)` (what sklearn users call): `sum(pk * log(pk /
 qk))` after normalizing both -- RAFT does NOT normalize and spells the log
-of a quotient as a difference of logs; ours mirrors RAFT. `p > 0, q == 0`
+of a quotient as a difference of logs; this implementation matches RAFT. `p > 0, q == 0`
 is `p * (log p - (-inf)) = +inf` in both. `DataT` is Float32 (cuML's float
 overload; the double one is refused, NOT_IMPLEMENTED.tsv).
 

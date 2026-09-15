@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`pairwise_distance` for the metrics KDE reaches: the per-metric dispatch.
 
-FOLLOWS cuVS `cpp/src/distance/detail/distance.cuh::distance_impl` at cuVS
-`94c2819`, the `L2SqrtUnexpanded`, `L2Expanded`, `L1`, `Linf`,
+Reference: `distance_impl`, `cpp/src/distance/detail/distance.cuh` (cuVS
+`94c2819`), the `L2SqrtUnexpanded`, `L2Expanded`, `L1`, `Linf`,
 `CosineExpanded` (`:180-226`) and `LpUnexpanded` (`:643-667`) tags
-(`distance-inl.cuh:261-311` is the `switch` that reaches them). Partial. Do
-not improve.
+(`distance-inl.cuh:261-311` is the `switch` that reaches them). Partial.
 
 COSINE AND MINKOWSKI, 2026-09-01. `metric='cosine'` and
 `metric='minkowski'` were REFUSED BY NAME in this lane until now, and the
@@ -31,7 +30,7 @@ that arithmetic, pinned, in `neighbors/checks/pinned_distance_tile.mojo`
 `core/row_norms.mojo` (row 19): under IDENTICAL those two are CALLED, not
 re-spelled, with `is_sqrt = 0`. Under FAST the arm is the vendor spelling
 the k-NN tile uses -- `core/gemm.mojo::gemm_nt` (MAX matmul) plus
-`core/expand_distances.mojo` -- which is their cuBLAS/CUTLASS design and
+`core/expand_distances.mojo` -- which is the cuBLAS/CUTLASS approach and
 not reproducible across vendors, exactly as `knn_brute_force.mojo` records.
 
 The three older unexpanded arms (`L2SqrtUnexpanded`, `L1`, `Linf`) never

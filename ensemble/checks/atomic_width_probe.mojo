@@ -149,7 +149,7 @@ def _global_f32_kernel(out_buf: MutPointer[Float32, MutAnyOrigin]):
 
 
 def _global_u64_kernel(out_buf: MutPointer[UInt64, MutAnyOrigin]):
-    """cuML's own width, transcribed (`bins.cuh:31`).
+    """cuML's width, as the reference declares it (`bins.cuh:31`).
 
     The BODY is behind the `atomic_matrix` row, not the definition:
     Mojo 1.0 rejects `comptime if` at module scope ("'comptime if' must be

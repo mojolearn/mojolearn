@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The optimum constant starting approx, per loss.
 
-MIRRORS `catboost/libs/metrics/optimal_const_for_loss.h`. This is what
+Reference: `catboost/libs/metrics/optimal_const_for_loss.h`. This is what
 `boost_from_average` seeds the cursors with and what the model records as
 its bias (`doc_parallel_boosting.h:174-182`, `:434`).
 

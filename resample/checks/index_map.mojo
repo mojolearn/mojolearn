@@ -15,7 +15,7 @@ governs nothing in this file. What IS implemented, and is implemented without a 
 of any kind, is the GENERATOR underneath it: `core/philox.mojo` holds RAFT's
 `PhiloxGenerator` (cuRAND's `curandStatePhilox4_32_10_t`) and RAFT's Lemire
 range reduction (`custom_next` for `UniformIntDistParams<OutType, uint32_t>`,
-`rng_device.cuh:175-196`), both transcribed line by line and held to an
+`rng_device.cuh:175-196`), both held to an
 oracle built by compiling their generator. This file spends that generator at
 positions of its own choosing; it does not reimplement one bit of it.
 

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`Tikhonov` and `RegularizedGLM`: the l2 penalty and how it wraps a loss.
 
-FOLLOWS `cuml/cpp/src/glm/qn/glm_regularizer.cuh` at cuML `00094f7`. Whole
+Reference: `cuml/cpp/src/glm/qn/glm_regularizer.cuh` (cuML `00094f7`). Whole
 file.
 
 `Tikhonov::reg_grad` (`glm_regularizer.cuh:40-54`): the BIAS IS NOT

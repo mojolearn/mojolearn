@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""k-means on the GPU, mirroring cuVS."""
+"""k-means on the GPU. Reference: cuVS."""
 
 from . import _mojolearn
 from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
@@ -38,7 +38,7 @@ _METRIC_NAMES = {
 
 
 class KMeans(NumericModeMixin):
-    """k-means, mirroring cuVS's `kmeans::fit_predict`.
+    """k-means. Reference: cuVS's `kmeans::fit_predict`.
 
     **THE DEFAULTS ARE cuVS'S, NOT scikit-learn's**, and one of them changes
     results rather than just speed:

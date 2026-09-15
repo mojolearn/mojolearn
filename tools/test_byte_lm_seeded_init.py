@@ -14,7 +14,7 @@ WHAT IS PINNED HERE, and why each one would otherwise rot silently:
     changed while the string did not would be undetectable from the trees.
   * the grid. 257 distinct values on a dyadic step of 2^-10. A draw that moved
     onto a finer grid would still look plausible in a histogram.
-  * the norm vectors. 128 exact ones, which a draw-only port would miss in
+  * the norm vectors. 128 exact ones, which a draw-only implementation would miss in
     precisely four tensors.
   * that a WRONG seed does not reproduce the digest, because a check that
     passes under any input is not reading what it claims to.

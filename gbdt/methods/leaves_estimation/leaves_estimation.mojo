@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Leaf values for a grown tree.
 
-MIRRORS `catboost/cuda/methods/leaves_estimation/`, which in CatBoost is a
+Reference: `catboost/cuda/methods/leaves_estimation/`, which in CatBoost is a
 whole subsystem: `TLeavesEstimation` with a descent loop, an ordered variant,
 exact estimation for some objectives, and per-objective backtracking.
 

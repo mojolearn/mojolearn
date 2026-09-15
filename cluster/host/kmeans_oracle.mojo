@@ -7,7 +7,7 @@ the kmeans lane of docs/lanes/BRIEF_cpu_training_2026-09-13.md section 1.1
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. Every kernel of the fit is spelled a
-SECOND time here from the device source, statement for statement, in the
+SECOND time here from the device source, with the same arithmetic order, in the
 order `cluster/estimator.mojo::kmeans_fit` then
 `cluster/impl/kmeans.mojo::fit_predict` reach them at the shipped default
 (k-means|| init, L2 expanded, `n_init` 1, `inertia_check` off). The
@@ -411,7 +411,7 @@ def host_assign(
         if is_sqrt:
             # DEVIATION 2715: the kernel's root is `identical_sqrt` now. The
             # host libm root is correctly rounded too, so this moves no bit;
-            # it keeps the mirror statement for statement.
+            # it keeps the host spelling the same as the kernel's.
             val = identical_sqrt(val)
         min_dist[row] = val
         labels[row] = key

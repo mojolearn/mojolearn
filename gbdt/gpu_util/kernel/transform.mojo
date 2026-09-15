@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`GatherWithMask` and `ScatterWithMask`: the two masked permutation moves.
 
-FOLLOWS `catboost/cuda/cuda_util/kernel/transform.cu:214-274` at CatBoost
-`54a8143a` -- `GatherWithMaskImpl`/`GatherWithMask` (`:214-233`) and
+Reference: `catboost/cuda/cuda_util/kernel/transform.cu:214-274` (CatBoost
+`54a8143a`), `GatherWithMaskImpl`/`GatherWithMask` (`:214-233`) and
 `ScatterWithMaskImpl`/`ScatterWithMask` (`:257-276`).
 
 Both are three lines of arithmetic and one grid-stride loop:

@@ -3197,7 +3197,7 @@ class _BatchRows:
     each of the first `BATCH_ALONE` rows alone, and the split 1, 7, rest.
 
     `min_batch` and `refusal` declare a method that REFUSES a smaller batch
-    BY NAME. The coordinate descent predict mirrors cuML's `cdPredict`
+    BY NAME. The coordinate descent predict matches cuML's `cdPredict`
     (`cd.cuh:341`, `ASSERT(n_rows > 1, "Parameter n_rows: number of rows
     cannot be less than two")`, restated in solver/impl/cd.mojo::cd_predict
     and bindings/_mojolearn_solver_host.mojo), so a row cannot be asked

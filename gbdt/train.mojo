@@ -4,7 +4,7 @@
 
 NO REFERENCE FILE -- this is the convenience layer over implemented machinery, the
 `fit(X, y)` shape callers actually hold. Everything under it is the
-followed statement for statement pipeline: borders from `grid_creator.binarization`
+implemented pipeline: borders from `grid_creator.binarization`
 (their GreedyLogSum, heap semantics included), device quantization
 through `binarize_float_feature_kernel` (their BinarizeFloatFeatureImpl,
 the same kernel their own predict quantizes with), the compressed index
@@ -893,7 +893,7 @@ def train(
     predictions no longer reproduce the fit's loss bit for bit -- because
     the ordered statistic a `Borders` column is trained on is not the
     full-learn-set histogram an applied model carries. That gap is
-    CatBoost's design, not a defect here; see
+    a property of the reference, not a defect here; see
     `gbdt/models/ctr_value_table.mojo`.
 
     A feature may be in `cat_features` OR in `one_hot`, not both: `one_hot`

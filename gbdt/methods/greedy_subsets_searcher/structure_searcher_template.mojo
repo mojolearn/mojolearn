@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The level loop: grow one oblivious tree.
 
-FOLLOWS `TGreedyTreeLikeStructureSearcher::FitImpl` in
+Reference: `TGreedyTreeLikeStructureSearcher::FitImpl`,
 `catboost/cuda/methods/greedy_subsets_searcher/structure_searcher_template.h`
-and the two calls it makes into `greedy_search_helper.cpp`, at CatBoost
-`54a8143a`. Followed statement for statement.
+and the two calls it makes into `greedy_search_helper.cpp` (CatBoost
+`54a8143a`).
 
-Their whole tree is five lines:
+The reference tree is five lines:
 
     TPointsSubsets subsets = searchHelper.CreateInitialSubsets(objective);
     while (true) {

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Density-based clustering on the GPU, mirroring cuML's DBSCAN."""
+"""Density-based clustering on the GPU. Reference: cuML's DBSCAN."""
 
 from . import _mojolearn_estimators, _serialize
 from ._array import Array
@@ -47,7 +47,7 @@ _ARM_METRICS = {
 
 
 class DBSCAN(NumericModeMixin):
-    """L2 DBSCAN backed by the implemented cuML/RAFT GPU path.
+    """L2 DBSCAN backed by a GPU implementation (reference: cuML/RAFT).
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
     because a parameter that is accepted and ignored is a wrong answer
@@ -80,8 +80,8 @@ class DBSCAN(NumericModeMixin):
                                        seven clusters for one, silently
         metric               honored   'euclidean'/'l2' (default), and
                                        'manhattan'/'l1'/'cityblock' on
-                                       algorithm='brute'. The L1 arm is
-                                       ORIGINAL work, not an implementation: cuML's
+                                       algorithm='brute'. The L1 arm has
+                                       no reference implementation: cuML's
                                        DBSCAN offers euclidean, cosine and
                                        precomputed only (dbscan.pyx:110-115).
                                        Its per-pair arithmetic follows RAFT's
@@ -288,7 +288,7 @@ class DBSCAN(NumericModeMixin):
 
 
 class KernelDensity(NumericModeMixin):
-    """Kernel density estimation backed by the implemented cuML path (`kde/`,
+    """Kernel density estimation backed by a GPU implementation (`kde/`,
     DEVIATIONS 600-604; kde/README.md), the scikit-learn surface.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter:

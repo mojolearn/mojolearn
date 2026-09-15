@@ -6,8 +6,8 @@ solution, through the Gram of the ROWS and the same device Jacobi.
 **NO UPSTREAM. This routine is ORIGINAL to mojolearn.** cuML does not have
 it: `olsFit` sends `n_cols > n_rows` to `lstsqSvdJacobi`
 (`cuml/cpp/src/glm/ols.cuh:112-113`), which is `cusolverDnGesvdj`, a
-one-sided Jacobi SVD inside a closed vendor library. There is nothing to
-follow statement for statement, so this docstring carries the derivation.
+one-sided Jacobi SVD inside a closed vendor library. There is no source
+reference to check against, so this docstring carries the derivation.
 DEVIATION 550.
 
 WHY THE OLD REFUSAL WAS RIGHT ABOUT THE MATH AND WRONG ABOUT THE CONCLUSION

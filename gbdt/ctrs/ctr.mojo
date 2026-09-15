@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CTR types, configurations and priors.
 
-MIRRORS `catboost/cuda/ctrs/ctr.h` plus the enum and the two predicate
+Reference: `catboost/cuda/ctrs/ctr.h` plus the enum and the two predicate
 tables it leans on, `catboost/private/libs/ctr_description/ctr_type.{h,cpp}`
-and `catboost/private/libs/ctr_description/ctr_config.h`, at CatBoost
-`54a8143a`.
+and `catboost/private/libs/ctr_description/ctr_config.h` (CatBoost
+`54a8143a`).
 
 A CTR turns a categorical column into a NUMERIC column the histogram
 kernels can already split on. Their GPU `simple_ctr` default is TWO

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Support vector classification and regression on the GPU, mirroring
+"""Support vector classification and regression on the GPU. Reference:
 cuML's SVC and SVR.
 
 PRIVATE MODULE. `SVC` and `SVR` are named exactly as scikit-learn names
@@ -191,8 +191,8 @@ def _dual_times_sv(dual_coef, support_vectors):
 
 
 class SVC(NumericModeMixin):
-    """Binary C-support vector classification, backed by the implemented cuML
-    SMO solver and cuVS kernel matrices (`svm/`, DEVIATIONS 630-637;
+    """Binary C-support vector classification, backed by an SMO
+    solver and GPU kernel matrices (`svm/`, DEVIATIONS 630-637;
     `svm/README.md`), the scikit-learn surface.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
@@ -223,7 +223,7 @@ class SVC(NumericModeMixin):
                                   has no implementation (svm/NOT_IMPLEMENTED.tsv)
         max_iter        honored   cuML's total inner-iteration cap; -1 (the
                                   default) is no limit
-        nochange_steps  honored   cuML's convergence rule, transcribed with
+        nochange_steps  honored   cuML's convergence rule, with
                                   its n_small_diff counter
         verbose         refused   anything truthy. It selects LOG LINES
                                   upstream (CUML_LOG_DEBUG); this implementation
@@ -747,8 +747,8 @@ def _as_targets(y, n_rows):
 
 
 class SVR(NumericModeMixin):
-    """Epsilon-support vector regression, backed by the implemented cuML SMO
-    solver and cuVS kernel matrices (`svm/`, DEVIATIONS 630-637;
+    """Epsilon-support vector regression, backed by an SMO
+    solver and GPU kernel matrices (`svm/`, DEVIATIONS 630-637;
     `svm/README.md`), the scikit-learn surface.
 
     THE TUBE IS THE ALGORITHM. Rows whose prediction lands inside a band of
@@ -803,7 +803,7 @@ class SVR(NumericModeMixin):
         max_iter        honored   cuML's total inner-iteration cap; -1 (the
                                   default) is no limit. `_svm_impl.py`
                                   refuses 0 and anything below -1
-        nochange_steps  honored   cuML's convergence rule, transcribed with
+        nochange_steps  honored   cuML's convergence rule, with
                                   its n_small_diff counter. NOT a
                                   scikit-learn parameter; it is cuML's, and
                                   it is here because the solver reads it

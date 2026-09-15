@@ -3,12 +3,12 @@
 """The POLYNOMIAL and TANH epilogues: `polynomial_kernel_nopad`,
 `tanh_kernel_nopad`, `PolynomialKernel::evaluate`, `TanhKernel::evaluate`.
 
-FOLLOWS `cuvs/cpp/src/distance/detail/kernels/kernel_matrices.cu` at cuVS
-`6ba2ce2` (`upstream/cuvs-v26.08.00`), lines 18-92 and 136-190. Dense,
+Reference: `cuvs/cpp/src/distance/detail/kernels/kernel_matrices.cu`, lines
+18-92 and 136-190 (cuVS `6ba2ce2`, `upstream/cuvs-v26.08.00`). Dense,
 row-major, FP32.
 
-**THIS FILE COMPLETES A MIRROR THAT ALREADY EXISTS AND IS PARTIAL.**
-`svm/impl/distance/kernel_matrices.mojo` mirrors the SAME upstream file and
+**THIS FILE COMPLETES AN IMPLEMENTATION THAT ALREADY EXISTS AND IS PARTIAL.**
+`svm/impl/distance/kernel_matrices.mojo` cites the SAME reference file and
 implements only its LINEAR and RBF halves; its header says so in one line
 ("POLYNOMIAL and TANH are NOT implemented (refused by name in
 `svm_parameter.mojo`; `svm/NOT_IMPLEMENTED.tsv`)"). That refusal is the SVM lane's
@@ -24,14 +24,14 @@ through `identical_gemm_into` at `OP_NT`, and `kernel_methods/checks/
 kernel_matrix.mojo` calls that and then launches one of these. One matrix
 product in this repository, under one profile.
 
-THE ROUNDING SEQUENCE. Theirs, for `math_t = float`:
+THE ROUNDING SEQUENCE. The reference, for `math_t = float`:
 
     poly: out = pow(gain * out + offset, exponent)      exponent is `exp_t`,
                                                         an INT at every cuVS
                                                         call site
     tanh: out = tanh(gain * out + offset)
 
-Ours, both modes the same association, the pins under IDENTICAL:
+Here, both modes the same association, the pins under IDENTICAL:
 
     t    = ftz( identical_mul_add(gain, dot, offset) )
     poly = the ascending repeated product of `degree` copies of `t`
@@ -42,12 +42,12 @@ Ours, both modes the same association, the pins under IDENTICAL:
 # DEVIATION 1663: THE POLYNOMIAL POWER IS REPEATED MULTIPLICATION AT AN
 # INTEGER DEGREE, AND A NON-INTEGER DEGREE RAISES BY NAME.
 #
-# THEIRS is `pow(base, exponent)` with `exponent` an `int`
+# THE REFERENCE is `pow(base, exponent)` with `exponent` an `int`
 # (`cuvs::distance::kernels::PolynomialKernel<math_t, exp_t>` is instantiated
 # with `exp_t = int` from `KernelParams::degree`, and C's `pow` is exact about
 # the sign of a negative base raised to an integral power).
 #
-# OURS CANNOT SAY THAT. `checks/numerics.mojo::identical_pow` is
+# THIS IMPLEMENTATION CANNOT SAY THAT. `checks/numerics.mojo::identical_pow` is
 # `portable_powf`, which is `exp(p * log(x))`, and its own docstring records
 # that it "returns NaN" for `x < 0` because its consumer's base is a positive
 # `-log(u + 1e-20)`. **A polynomial kernel's base is routinely negative**:
@@ -99,10 +99,10 @@ def polynomial_epilogue_kernel(
     gain: Float32,
     offset: Float32,
 ):
-    """FOLLOWS `polynomial_kernel_nopad` (`kernel_matrices.cu:27-34`).
+    """Reference: `polynomial_kernel_nopad` (`kernel_matrices.cu:27-34`).
 
     `inout[tid] = pow(gain * inout[tid] + offset, exponent)`, one thread per
-    cell. Theirs strides a grid-stride loop over `len`; ours is one thread per
+    cell. The reference strides a grid-stride loop over `len`; this kernel is one thread per
     cell with a bounds test, which is the shape every other elementwise kernel
     in this tree has and which reads no launch geometry into a value.
 
@@ -128,7 +128,7 @@ def tanh_epilogue_kernel(
     gain: Float32,
     offset: Float32,
 ):
-    """FOLLOWS `tanh_kernel_nopad` (`kernel_matrices.cu:66-72`).
+    """Reference: `tanh_kernel_nopad` (`kernel_matrices.cu:66-72`).
 
     `inout[tid] = tanh(gain * inout[tid] + offset)`, one thread per cell.
 
