@@ -69,7 +69,7 @@ def test_manifest_declares_the_gbdt_family():
     for lane in ():
         assert lane not in covered, f"{lane} is declared covered and has no host trainer"
     sentence = host_surface.no_cpu_path_sentence()
-    assert "gradient boosting training other than symmetric" in sentence, sentence
+    assert "gradient boosting training outside its declared lanes" in sentence, sentence
     # The forest host binding stays loaded by path, never routed.
     assert host_surface.family("forest")["routes"] is None
 
@@ -78,12 +78,12 @@ def test_binding_registers_the_gpu_names():
     src = _read(host_surface.binding_source("gbdt"))
     exports = host_surface.family("gbdt")["exports"]
     for name in ("gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid",
-                 "gbdt_vendor", "gbdt_numeric_mode"):
+                 "gbdt_vendor", "gbdt_numeric_mode", "gbdt_binary_probabilities",
+                 "gbdt_binary_classes", "gbdt_predict_multi"):
         assert f'("{name}")' in src, f"the gbdt host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name} for gbdt"
-    for absent in ("gbdt_predict_multi", "gbdt_fit_ordered_rmse",
-                   "gbdt_fit_two_level_feature_freq", "gbdt_binary_probabilities",
-                   "gbdt_binary_classes", "gbdt_per_round_paths",
+    for absent in ("gbdt_fit_ordered_rmse",
+                   "gbdt_fit_two_level_feature_freq", "gbdt_per_round_paths",
                    "gbdt_parallel_available", "pointwise_parallel_available"):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
@@ -93,7 +93,7 @@ def test_every_fit_refusal_names_the_missing_cpu_implementation():
     assert f'"{REFUSAL}"' in src
     for what in ("loss='", "grow_policy code", "use_pointwise_searcher=True",
                  "score_function code", "leaf_estimation_method code",
-                 "bootstrap_type='", '"sample_weight"', '"class_weights"',
+                 "bootstrap_type='", '"sample_weight"', '"class_weights outside',
                  '"cat_features or one_hot_features"', '"eval_set"',
                  "random_strength=", "boost_from_average=True",
                  "feature_fraction=", "an X carrying NaN"):
@@ -102,6 +102,32 @@ def test_every_fit_refusal_names_the_missing_cpu_implementation():
     assert "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a" in oracle, (
         "the binary-policy refusal must carry the gate's sentence"
     )
+
+
+def test_nan_modes_and_adapters_are_declared():
+    """lane/cpu-training-gbdt-losses, 2026-09-15: gbdt-nan-modes and the two
+    adapter lanes train through the same binding. The binary transforms are
+    the device kernel's per-element body, and NaN is accepted only on the
+    measured symmetric Logloss fit."""
+    fam = host_surface.family("gbdt")
+    for lane in ("gbdt-nan-modes", "gbdt-adapter-clf", "gbdt-adapter-reg"):
+        assert lane in fam["training_lanes"], lane
+        assert lane in host_surface.covered_lanes(), lane
+    for cls in ("GradientBoostingClassifier", "GradientBoostingRegressor"):
+        assert cls in fam["classes"], cls
+    src = _read(host_surface.binding_source("gbdt"))
+    assert "var positive = ftz(identical_sigmoid(ftz(margin)))" in src, "the probability body"
+    assert "Scalar[dtype](ftz(Float32(1) - positive))" in src, "the flushed complement"
+    assert "(bits & UInt32(0x80000000)) == 0 and (bits & UInt32(0x7fffffff)) != 0" in src, (
+        "the class code is strict raw > 0 read from the bits"
+    )
+    assert '"binary prediction: finite Float32 margins required"' in src
+    assert "if is_rmse or grow_code != 0 or is_pointwise or is_multi:" in src, "NaN refused outside the measured fit"
+    kernel = _read("gbdt/binary_prediction.mojo")
+    assert "var positive = ftz(identical_sigmoid(ftz(margin)))" in kernel, (
+        "the device kernel moved; the host restatement must move with it"
+    )
+    assert "either NaN mode and the classifier and regressor adapters" in fam["display"], fam["display"]
 
 
 def test_oracle_imports_no_gpu_module():
@@ -176,6 +202,26 @@ def test_gradient_boosting_fits_on_the_host_when_built():
     assert outs[0] == outs[1], "two host fits returned different bytes"
     proba = np.asarray(m.predict_proba(x))
     assert proba.shape == (600, 2) and float(proba.min()) >= 0.0 and float(proba.max()) <= 1.0
+    # the NaN modes and the classifier adapter's transforms
+    xn = x.copy()
+    xn[::8, 2:4] = np.float32(np.nan)
+    for mode in ("Min", "Max"):
+        a = mojolearn.GradientBoosting(n_estimators=3, max_depth=3, loss="Logloss", nan_mode=mode).fit(xn, y)
+        b = mojolearn.GradientBoosting(n_estimators=3, max_depth=3, loss="Logloss", nan_mode=mode).fit(xn, y)
+        assert a.model_ == b.model_, f"two host fits under nan_mode={mode} returned different bytes"
+        assert np.asarray(a.predict(xn)).tobytes() == np.asarray(b.predict(xn)).tobytes(), mode
+    clf = mojolearn.GradientBoostingClassifier(n_estimators=3, max_depth=3).fit(x, y)
+    margins = np.asarray(clf.decision_function(x))
+    pp = np.asarray(clf.predict_proba(x))
+    assert pp.shape == (600, 2) and pp.dtype == np.float32
+    labels = np.asarray(clf.predict(x))
+    assert labels.tolist() == [1 if v > 0 else 0 for v in margins.tolist()], "strict raw > 0"
+    try:
+        mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="RMSE").fit(xn, x[:, 0])
+    except Exception as exc:
+        assert "no CPU implementation of" in str(exc), str(exc)
+    else:
+        raise AssertionError("an RMSE fit on an X carrying NaN did not refuse on the host binding")
     try:
         mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Logloss",
                                    grow_policy="Lossguide", score_function="Cosine").fit(x, y)

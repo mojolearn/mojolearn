@@ -1217,8 +1217,10 @@ the readback's `MIN_FINITE` fix; `split_not_valid`, `partition_samples`,
 `NodeQueue.push`; DEVIATION 205's rescue keyed as the device keys it; and
 the leaf pass as `leaf_kernel` computes it over the device's label plane
 (class ids, or `quantize_labels`'s fixed point with `Float32(1 / scale)`).
-Both objectives go through it. Best-first growth (`max_leaf_nodes`) is
-refused by name on that path. The docstring of
+Both objectives go through it. Best-first growth (`max_leaf_nodes`) was
+refused by name on that path until 2026-09-15, when
+`train_tree_exact_bestfirst` restated it (see the forest variant lanes
+section at the end). The docstring of
 `fit_extra_trees_regressor_device` at `extratrees/estimator.mojo`, which
 said the split decision "is made on integer sums on both sides", now says
 what each side orders by; `extratrees/checks/device_regression_check.mojo:11-15`
@@ -1669,7 +1671,10 @@ four-column diff are owed to the seven-runner gate and the commands below.
   midpoint and slot `update`; the retry of invalid, non-terminal nodes;
   `count_local_left_kernel` and the scan writer's stable partition;
   `NodeQueue.push`; the leaf pass and `SetLeafVector`. Class weights and the
-  POISSON, GAMMA and INVERSE_GAUSSIAN criteria refuse by name.
+  POISSON, GAMMA and INVERSE_GAUSSIAN criteria refused by name until
+  2026-09-15 (the forest variant lanes section at the end restates the
+  three criteria and the weighted bootstrap; weights without a bootstrap
+  still refuse).
 - A family of its own, `rf`: `bindings/_mojolearn_rf_host.mojo` (shim
   `bindings/build_rf_host.sh`) routes `_mojolearn_rf` on a CPU-only install
   with the GPU binding's names (the eight fit entries, the three export
@@ -2019,3 +2024,46 @@ claim.
     MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_core_host.sh
     MOJOLEARN_HOST_DIR=<dir> python3 tools/identity_break.py --lanes umap --json <cpu>.json
     python3 tools/identity_break.py --diff $(python3 python/mojolearn/host_surface.py --training-gpu-columns) <cpu>.json --require-columns 4 --lanes umap
+
+## The forest variant lanes (lane/cpu-training-forest-variants, 2026-09-15)
+
+Six lanes of the 166-lane record: rf-clf-entropy-log2-noboot,
+rf-clf-balanced-parallel, rf-reg-poisson, rf-reg-gamma-ig,
+et-clf-entropy-bestfirst and et-reg-bootstrap-parallel.
+
+- rf-clf-entropy-log2-noboot needed no fit change: `rf_oracle.mojo` already
+  carried Entropy, the column fraction, the identity row set and the
+  level-order leaf cap, and read IDENTICAL x4 on its first run. Its
+  sabotage could not move under the bootstrap arm (no draw), so the rf
+  arm now also adds one to every node's column-sample seed.
+- `ensemble/host/rf_oracle.mojo` gains `PoissonGain`, `GammaGain` and
+  `InverseGaussianGain` (`objectives.mojo:981-1245`: the right label sum
+  subtracted at storage width, the `10 * 2^-23` guards, `identical_log`,
+  every store flushed) and the class-weighted bootstrap
+  (`RowSampler.prepare_weights`' Float64 CDF, Philox `uniform<double>` at
+  stride 110592, `upper_bound`). Weights without a bootstrap reach
+  `WeightedClassificationBin` and still refuse by name. The rf host
+  binding exports `rf_classifier_fit_weighted` and its `_export` form.
+- `core/forest_host_groves.mojo` restates the `parallel_groves` kernels of
+  `core/forest_inference.mojo` (the finite-key walk, 32 lanes, the flushed
+  add, the shuffle-down from 16, the flushed `identical_div`, the
+  RandomForest input flush), and both forest bindings export
+  `forest_prepare_gpu`, `forest_predict_resident_reuse_gpu` and
+  `forest_release_gpu` over it (`bindings/forest_host_groves_binding.mojo`).
+- `train_tree_exact` dispatches `max_leaf_nodes` to
+  `train_tree_exact_bestfirst`: per tree, search the admitted nodes on the
+  exact key with the keyed rescue, admit, pop, partition, expand, which is
+  the device driver's best-first cycle with the other trees of its merged
+  batch removed (every draw is keyed per tree and node, and the frontier is
+  per tree).
+
+MEASURED on the M4 host path, one core, shared machine: the six lanes read
+54 train, 108 infer and model and 54 batch cells IDENTICAL x4 against the
+166-lane record; rf-clf, rf-reg, et-clf and et-reg still read IDENTICAL x4;
+the sabotage rf and trees builds read every cell of the ten forest lanes
+DIVERGENT, every cell STABLE. The seven-runner gate is the claim.
+
+    MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_rf_host.sh
+    MOJOLEARN_HOST_OUTDIR=<dir> sh bindings/build_trees_host.sh
+    MOJOLEARN_HOST_DIR=<dir> python3 tools/identity_break.py --lanes rf-clf-entropy-log2-noboot,rf-clf-balanced-parallel,rf-reg-poisson,rf-reg-gamma-ig,et-clf-entropy-bestfirst,et-reg-bootstrap-parallel --json <cpu>.json
+    python3 tools/identity_break.py --diff $(python3 python/mojolearn/host_surface.py --training-gpu-columns) <cpu>.json --require-columns 4 --lanes <the six>

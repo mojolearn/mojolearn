@@ -253,6 +253,20 @@ def chol_host_potrf(a_in: List[Float32], n: Int, jitter: Float32) raises -> Chol
     the device line of every step."""
     chol_host_validate_matrix(a_in, n, String("the matrix"))
     chol_host_validate_jitter(jitter)
+    return chol_host_factor_lower(a_in, n, jitter)
+
+
+def chol_host_factor_lower(
+    a_in: List[Float32], n: Int, jitter: Float32
+) raises -> CholHostFactor:
+    """`jitter_diag_kernel` then `potrf_lower` and the log-determinant, with
+    NO host validation: the arithmetic `chol_host_potrf` runs after its two
+    refusals. The callers that reach `potrf_lower` without
+    `cholesky_factor_host`'s validation on the device (the kernel ridge
+    solve, the Gaussian mixture's precision Cholesky, whose covariance is
+    not bitwise symmetric) call this, so the host refuses nothing the device
+    would have factored. Added for the kernel_methods and mixture host
+    families (2026-09-15); `chol_host_potrf`'s bits are unchanged."""
     var nb = chol_host_nb(n)
     var a = a_in.copy()
 

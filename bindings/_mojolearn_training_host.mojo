@@ -31,14 +31,34 @@ byte LM step from the same normative oracles:
                   the offsets registry, the hyperparameters) and its `info`
                   convention.
 
-Every other entry of the GPU training binding (the clip on its own, the
-accumulation, the Samba stack's operations, the neural RNG and the
-multi-GPU availability probes) is deliberately ABSENT, so those surfaces
-refuse BY NAME through `_HostBinding`.
+lane/cpu-training-misc batch 3 (2026-09-15) adds, under the same names and
+contracts, the neural primitives the optim-adam-clip, cross-entropy-arms and
+training-primitives lanes reach:
+
+  `clip_grad_norm`
+                  `training/checks/optimizer_oracle.mojo::clip_grad_norm_oracle`
+                  behind `identical_clip_grad_norm_host`'s refusals
+                  (`training/estimator.mojo:465`) and its `info` convention
+                  (the pre-clip global norm, then the clamped coefficient).
+  `accumulate`, `accumulation_is_aligned`
+                  `training/host/samba_ops_oracle.mojo::host_samba_accumulate`,
+                  the clause 9.2 balanced tree, and
+                  `microbatch_split_is_identical` itself.
+  `embedding_forward`, `embedding_backward`, `rms_norm_forward`,
+  `rms_norm_backward`, `linear_forward`, `linear_backward`
+                  `training/host/samba_ops_oracle.mojo`, `training/samba_ops.
+                  mojo` restated over the embedding and GEMM oracles and the
+                  RMSNorm kernels' statements with the caller's eps.
+
+Every other entry of the GPU training binding (the Samba stack's own block
+operations, the neural RNG and the multi-GPU availability probes) is
+deliberately ABSENT, so those surfaces refuse BY NAME through `_HostBinding`.
 
 The sabotage arm (`training_host_sabotage`) is
 `training/host/mlp_oracle.mojo::MLP_ORACLE_HOST_SABOTAGE`: every row sum is
-walked descending.
+walked descending; the same define walks every `gemm_oracle` leaf descending
+(`GEMM_ORACLE_HOST_SABOTAGE`), which moves the clip, the loss, the linear
+operations and the RMSNorm weight gradient.
 """
 from std.os import abort
 from std.python import Python, PythonObject
@@ -65,8 +85,19 @@ from training.checks.optimizer_oracle import (
     OPT_ADAMW,
     OPT_SGD,
     OptimizerConfig,
+    clip_grad_norm_oracle,
+    microbatch_split_is_identical,
     optimizer_step_oracle,
     refuse_nonfinite_scalar,
+)
+from training.host.samba_ops_oracle import (
+    host_samba_accumulate,
+    host_samba_embedding_backward,
+    host_samba_embedding_forward,
+    host_samba_linear_backward,
+    host_samba_linear_forward,
+    host_samba_rms_norm_backward,
+    host_samba_rms_norm_forward,
 )
 from training.host.mlp_oracle import (
     MLP_ORACLE_HOST_SABOTAGE,
@@ -447,6 +478,261 @@ def mlp_sum_rows_binding(
     return PythonObject(count)
 
 
+# ===========================================================================
+# THE CLIP ON ITS OWN (lane/cpu-training-misc, 2026-09-15)
+# ===========================================================================
+
+
+def clip_grad_norm_binding(
+    grad_addr: PythonObject,
+    offsets_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`torch.nn.utils.clip_grad_norm_` at `norm_type = 2` on the host.
+    Scales the gradient IN PLACE. Returns `N`. `params`: `0 n_tensors,
+    1 max_norm` (the GPU binding's list, word for word); `info` receives the
+    pre-clip global norm and the clamped coefficient."""
+    if len(params) != 2:
+        raise Error(
+            "clip_grad_norm: params must contain 2 values, got "
+            + String(len(params))
+        )
+    var gp = f32_ptr(_index(grad_addr))
+    var op = i32_ptr(_index(offsets_addr))
+    var fp = f32_ptr(_index(info_addr))
+    var n_tensors = _index(params[0])
+    var max_norm = Float32(Float64(py=params[1]))
+    var n_total = 0
+    with GILReleased(Python()):
+        if max_norm <= Float32(0.0):
+            raise Error(
+                String("mojolearn training: max_norm must be > 0, got ")
+                + String(max_norm)
+                + String("; this entry point IS the clip, and 'no clipping' is")
+                + String(" spelled by not calling it (the optimizer step takes")
+                + String(" max_norm <= 0 as OFF because it has another job)")
+            )
+        refuse_nonfinite_scalar(String("max_norm"), max_norm)
+        var offsets = _host_offsets(op, n_tensors)
+        n_total = offsets[n_tensors]
+        var grads = List[Float32](length=n_total, fill=Float32(0.0))
+        for i in range(n_total):
+            grads[i] = gp[i]
+        var sumsq = List[Float32]()
+        var norms = List[Float32]()
+        var total = List[Float32]()
+        _ = clip_grad_norm_oracle(grads, offsets, max_norm, sumsq, norms, total)
+        for i in range(n_total):
+            gp[i] = grads[i]
+        fp[0] = total[1]
+        fp[1] = total[2]
+    return PythonObject(n_total)
+
+
+# ===========================================================================
+# THE SAMBA STACK'S OPS AND THE ACCUMULATE (lane/cpu-training-misc,
+# 2026-09-15). The (addresses, params) lists of the GPU binding, in its
+# order and words.
+# ===========================================================================
+
+
+def _addrs(addresses: PythonObject, want: Int, name: String) raises -> List[Int]:
+    if len(addresses) != want:
+        raise Error(
+            name + ": addresses must contain " + String(want) + " entries, got "
+            + String(len(addresses))
+        )
+    var out = List[Int]()
+    for i in range(want):
+        var a = Int(py=addresses[i])
+        if a == 0:
+            raise Error(name + ": null buffer address at slot " + String(i))
+        out.append(a)
+    return out^
+
+
+def _params(params: PythonObject, want: Int, name: String) raises:
+    if len(params) != want:
+        raise Error(
+            name + ": params must contain " + String(want) + " values, got "
+            + String(len(params))
+        )
+
+
+def _write_f32(values: List[Float32], dst: MutPointer[Float32, MutUntrackedOrigin]):
+    for i in range(len(values)):
+        dst[i] = values[i]
+
+
+def embedding_forward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [y (n_positions*width f32, written), w (vocab*width f32),
+    ids (n_positions i32)]; params = [n_positions, vocab, width]."""
+    var a = _addrs(addresses, 3, "embedding_forward")
+    _params(params, 3, "embedding_forward")
+    var n_positions = Int(py=params[0])
+    var vocab = Int(py=params[1])
+    var width = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        if n_positions < 1 or vocab < 1 or width < 1:
+            raise Error("mojolearn samba ops: embedding shape must be positive")
+        var y = host_samba_embedding_forward(
+            read_f32(a[1], vocab * width), read_i32(a[2], n_positions),
+            n_positions, vocab, width,
+        )
+        _write_f32(y, f32_ptr(a[0]))
+        count = n_positions * width
+    return PythonObject(count)
+
+
+def embedding_backward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [dw (vocab*width f32, written), dy (n_positions*width f32),
+    ids (n_positions i32)]; params = [n_positions, vocab, width]."""
+    var a = _addrs(addresses, 3, "embedding_backward")
+    _params(params, 3, "embedding_backward")
+    var n_positions = Int(py=params[0])
+    var vocab = Int(py=params[1])
+    var width = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        if n_positions < 1 or vocab < 1 or width < 1:
+            raise Error("mojolearn samba ops: embedding shape must be positive")
+        var dw = host_samba_embedding_backward(
+            read_f32(a[1], n_positions * width), read_i32(a[2], n_positions),
+            n_positions, vocab, width,
+        )
+        _write_f32(dw, f32_ptr(a[0]))
+        count = vocab * width
+    return PythonObject(count)
+
+
+def rms_norm_forward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [y (m*dm f32, written), x (m*dm f32), w (dm f32)];
+    params = [m, dm, eps (float)]."""
+    var a = _addrs(addresses, 3, "rms_norm_forward")
+    _params(params, 3, "rms_norm_forward")
+    var m = Int(py=params[0])
+    var dm = Int(py=params[1])
+    var eps = Float32(Float64(py=params[2]))
+    var count = 0
+    with GILReleased(Python()):
+        if m < 1 or dm < 1:
+            raise Error("mojolearn samba ops: rms_norm shape must be positive")
+        var y = host_samba_rms_norm_forward(
+            read_f32(a[1], m * dm), read_f32(a[2], dm), m, dm, eps
+        )
+        _write_f32(y, f32_ptr(a[0]))
+        count = m * dm
+    return PythonObject(count)
+
+
+def rms_norm_backward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [dx (m*dm f32, written), dw (dm f32, written), dy (m*dm
+    f32), x (m*dm f32), w (dm f32)]; params = [m, dm, eps (float)]."""
+    var a = _addrs(addresses, 5, "rms_norm_backward")
+    _params(params, 3, "rms_norm_backward")
+    var m = Int(py=params[0])
+    var dm = Int(py=params[1])
+    var eps = Float32(Float64(py=params[2]))
+    var count = 0
+    with GILReleased(Python()):
+        if m < 1 or dm < 1:
+            raise Error("mojolearn samba ops: rms_norm shape must be positive")
+        var r = host_samba_rms_norm_backward(
+            read_f32(a[2], m * dm), read_f32(a[3], m * dm), read_f32(a[4], dm),
+            m, dm, eps,
+        )
+        _write_f32(r[0], f32_ptr(a[0]))
+        _write_f32(r[1], f32_ptr(a[1]))
+        count = m * dm
+    return PythonObject(count)
+
+
+def linear_forward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`C[m, n] = A[m, k] . W[n, k]^T`. addresses = [c (written), a, w];
+    params = [m, n, k]."""
+    var a = _addrs(addresses, 3, "linear_forward")
+    _params(params, 3, "linear_forward")
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        if m < 1 or n < 1 or k < 1:
+            raise Error("mojolearn samba ops: linear shape must be positive")
+        var c = host_samba_linear_forward(read_f32(a[1], m * k), read_f32(a[2], n * k), m, n, k)
+        _write_f32(c, f32_ptr(a[0]))
+        count = m * n
+    return PythonObject(count)
+
+
+def linear_backward_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [da (m*k, written), dw (n*k, written), dc (m*n), a (m*k),
+    w (n*k)]; params = [m, n, k]."""
+    var a = _addrs(addresses, 5, "linear_backward")
+    _params(params, 3, "linear_backward")
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        if m < 1 or n < 1 or k < 1:
+            raise Error("mojolearn samba ops: linear shape must be positive")
+        var r = host_samba_linear_backward(
+            read_f32(a[2], m * n), read_f32(a[3], m * k), read_f32(a[4], n * k), m, n, k
+        )
+        _write_f32(r[0], f32_ptr(a[0]))
+        _write_f32(r[1], f32_ptr(a[1]))
+        count = m * k
+    return PythonObject(count)
+
+
+def accumulate_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """The clause 9.2 balanced tree. addresses = [out (n f32, written),
+    parts (a*n f32, ascending microbatch index)]; params = [n, a, t_tokens]
+    where `t_tokens >= 1` asks for the alignment predicate and `-1` makes
+    no alignment claim."""
+    var a = _addrs(addresses, 2, "accumulate")
+    _params(params, 3, "accumulate")
+    var n = Int(py=params[0])
+    var steps = Int(py=params[1])
+    var t_tokens = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        if n < 1 or steps < 1:
+            raise Error("mojolearn samba ops: accumulate n and accumulation_steps must be at least 1")
+        var out = host_samba_accumulate(read_f32(a[1], n * steps), n, steps, t_tokens)
+        _write_f32(out, f32_ptr(a[0]))
+        count = n
+    return PythonObject(count)
+
+
+def accumulation_is_aligned_binding(params: PythonObject) raises -> PythonObject:
+    """`microbatch_split_is_identical(t_tokens, a)`, contract clause 9.2,
+    as 1 or 0. params = [t_tokens, a]. Host only, no device."""
+    _params(params, 2, "accumulation_is_aligned")
+    var t_tokens = Int(py=params[0])
+    var a = Int(py=params[1])
+    if microbatch_split_is_identical(t_tokens, a):
+        return PythonObject(1)
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_training_host() abi("C") -> PythonObject:
     try:
@@ -462,6 +748,15 @@ def PyInit__mojolearn_training_host() abi("C") -> PythonObject:
         module.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
         module.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
         module.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
+        module.def_function[clip_grad_norm_binding]("clip_grad_norm")
+        module.def_function[accumulate_binding]("accumulate")
+        module.def_function[accumulation_is_aligned_binding]("accumulation_is_aligned")
+        module.def_function[embedding_forward_binding]("embedding_forward")
+        module.def_function[embedding_backward_binding]("embedding_backward")
+        module.def_function[rms_norm_forward_binding]("rms_norm_forward")
+        module.def_function[rms_norm_backward_binding]("rms_norm_backward")
+        module.def_function[linear_forward_binding]("linear_forward")
+        module.def_function[linear_backward_binding]("linear_backward")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_training_host: ", error))

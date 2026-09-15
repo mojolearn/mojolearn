@@ -34,9 +34,17 @@ same column-major bytes DEVIATION 2637's pinned stage produces),
 `et_predict`, `trees_vendor` answering "cpu" and `trees_numeric_mode`.
 Slot 20 (`device`) is accepted at 1, the only value the wrapper sends: the
 GPU binding's "Extra Trees training is GPU-only" refusal is the one line
-this binding drops (brief section 3.2). `et_predict_gpu_parallel` and the
-resident `forest_*` entries are absent and refuse BY NAME through
-`_HostBinding` (`inference_engine='parallel_groves'` is a GPU engine).
+this binding drops (brief section 3.2). `inference_engine='parallel_groves'`
+predicts through the resident entries, and since 2026-09-15
+(et-reg-bootstrap-parallel) `forest_prepare_gpu`,
+`forest_predict_resident_reuse_gpu` and `forest_release_gpu` are exported
+here under those names over `core/forest_host_groves.mojo`, the grove
+kernels restated on the host (`RF_INPUT=False`: no input flush). The
+non-resident `et_predict_gpu_parallel`, the pool entries and the other
+resident comparison arms stay absent and refuse BY NAME through
+`_HostBinding`. Best-first growth (`max_leaf_nodes`, DEVIATION 466) fits
+through `train_tree_exact_bestfirst` (et-clf-entropy-bestfirst, the same
+day).
 
 The sabotage arm (`-D MOJOLEARN_HOST_SABOTAGE=1`, `trees_host_sabotage`)
 is `extratrees/checks/pcg_rng.mojo::PCG_HOST_SABOTAGE`: one extra draw
@@ -61,6 +69,11 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.forest_host_predict import et_host_predict, et_host_trees
+from bindings.forest_host_groves_binding import (
+    forest_predict_resident_host_binding,
+    forest_prepare_host_binding,
+    forest_release_host_binding,
+)
 from extratrees.checks.pcg_rng import PCG_HOST_SABOTAGE
 from extratrees.estimator import (
     ExtraTreesConfig,
@@ -473,6 +486,30 @@ def et_predict_binding(
     return PythonObject(wrote)
 
 
+def resident_prepare_binding(
+    offsets_addr: PythonObject, colid_addr: PythonObject,
+    quesval_addr: PythonObject, left_child_addr: PythonObject,
+    leaves_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`forest_prepare_gpu`: the resident parallel_groves snapshot, on the host."""
+    return forest_prepare_host_binding[False](
+        offsets_addr, colid_addr, quesval_addr, left_child_addr, leaves_addr, params
+    )
+
+
+def resident_predict_binding(
+    handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`forest_predict_resident_reuse_gpu`: the grove reduction, on the host."""
+    return forest_predict_resident_host_binding[False](handle, x_addr, out_addr, params)
+
+
+def resident_release_binding(handle: PythonObject) raises -> PythonObject:
+    """`forest_release_gpu`."""
+    return forest_release_host_binding[False](handle)
+
+
 @export
 def PyInit__mojolearn_trees_host() abi("C") -> PythonObject:
     try:
@@ -495,6 +532,9 @@ def PyInit__mojolearn_trees_host() abi("C") -> PythonObject:
         module.def_function[et_forest_export_legacy_binding]("forest_export_legacy")
         module.def_function[et_forest_export_release_binding]("forest_export_release")
         module.def_function[et_predict_binding]("et_predict")
+        module.def_function[resident_prepare_binding]("forest_prepare_gpu")
+        module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")
+        module.def_function[resident_release_binding]("forest_release_gpu")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_trees_host: ", error))

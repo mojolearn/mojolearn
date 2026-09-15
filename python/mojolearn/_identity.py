@@ -303,7 +303,10 @@ def cmd_identity(args):
     record = host_surface.training_gpu_column_record()
     record_lanes, record_fixtures = _column_lanes_and_fixtures([p for _, p, _ in cols])
     cpu_only = _backend.vendor() == "cpu"
-    lanes = [l for l in record_lanes if not cpu_only or l in host_surface.covered_lanes()]
+    # A covered lane in TRAINING_FIX_LANES is diffed against the fix record by
+    # the gate, not against the record this command ships, so a CPU-only
+    # install does not run it here (host_surface.record_covered_lanes()).
+    lanes = [l for l in record_lanes if not cpu_only or l in host_surface.record_covered_lanes()]
     if args.lanes:
         asked = [x for x in args.lanes.split(",") if x]
         unknown = [x for x in asked if x not in record_lanes]
@@ -315,7 +318,8 @@ def cmd_identity(args):
         if refused:
             return _finish(args, _verify.EXIT_USAGE, "USAGE",
                            f"--lanes names lanes with no CPU training path on this CPU-only "
-                           f"install: {refused}; the manifest covers {host_surface.covered_lanes()}")
+                           f"install: {refused}; the manifest covers {host_surface.record_covered_lanes()} "
+                           f"against this record")
         lanes = [l for l in lanes if l in asked]
     fixtures = record_fixtures
     if args.fixtures:

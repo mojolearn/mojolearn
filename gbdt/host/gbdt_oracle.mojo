@@ -34,11 +34,12 @@ outside it (bindings/_mojolearn_gbdt_host.mojo, `_refuse`):
   no bootstrap, no sample_weight, no class_weights, no cat_features or
   one_hot_features, no eval_set and no overfitting detector,
   random_strength 0, the greedy searcher (use_pointwise_searcher False),
-  boost_from_average unset or False, feature_fraction 1, no NaN in X, and no
+  boost_from_average unset or False, feature_fraction 1, and no
   feature with exactly one border (the BINARY histogram policy, whose
   nibble-combination decode is not restated). border_count, n_estimators,
-  max_depth, learning_rate, l2_leaf_reg, random_state, nan_mode on NaN-free
-  data and border_build_max_samples (both border paths) are carried.
+  max_depth, learning_rate, l2_leaf_reg, random_state, nan_mode (Min and
+  Max on an X carrying NaN since 2026-09-15, the gbdt-nan-modes lane) and
+  border_build_max_samples (both border paths) are carried.
 
 WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build, the
 default flags: DEVIATION 2550 borrow, 2031 ridx splits OFF, 2580 level

@@ -2,7 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_gbdt` family, GradientBoosting on the
 gbdt-symmetric, gbdt-rmse, gbdt-depthwise and gbdt-lossguide lanes
-(workstream E batch 3, 2026-09-14; brief
+(workstream E batch 3, 2026-09-14) and the gbdt-nan-modes, gbdt-adapter-clf,
+gbdt-adapter-reg, gbdt-parametric-losses, gbdt-exact-mae,
+gbdt-lossguide-newtoncosine, gbdt-multiclass and gbdt-onevsall lanes
+(lane/cpu-training-gbdt-losses, 2026-09-15: the pointwise losses, the Exact
+leaves and the row bootstraps through `gbdt/host/gbdt_oracle_losses.mojo`,
+the Lossguide searcher options through `gbdt/host/gbdt_oracle_depthwise.mojo`,
+MultiClass and MultiClassOneVsAll through
+`gbdt/host/gbdt_oracle_multiclass.mojo`; brief
 docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 gbdt and the batch
 3 sections). `loss="RMSE"` fits through
 `gbdt/host/gbdt_oracle_rmse.mojo::gbdt_rmse_host_fit`.
@@ -25,13 +32,22 @@ THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES for what this covers, so
 counted class-weight tail and optional float tail, the same four strings,
 the same five-element return), `gbdt_predict` and `gbdt_model_dim` (the
 model text in, as `bindings/_mojolearn_gbdt.mojo:410-450`), `gbdt_sigmoid`
-(its body), `gbdt_vendor` answering "cpu" and `gbdt_numeric_mode`.
+(its body), `gbdt_binary_probabilities` and `gbdt_binary_classes` (the
+classifier adapter's transforms, `bindings/_mojolearn_gbdt.mojo:107-130`
+over `gbdt/binary_prediction.mojo`'s kernel, restated per element),
+`gbdt_predict_multi` (a multi-dimensional model's raw, softmax and sigmoid
+columns), `gbdt_vendor` answering "cpu" and `gbdt_numeric_mode`.
 
-ABSENT, and so refused BY NAME through `_HostBinding`: `gbdt_predict_multi`
-(a multi-dimensional model), `gbdt_fit_ordered_rmse`,
-`gbdt_fit_two_level_feature_freq`, `gbdt_binary_probabilities` and
-`gbdt_binary_classes` (the adapters' device transforms),
-`gbdt_per_round_paths` and the two `*_parallel_available` probes.
+ABSENT, and so refused BY NAME through `_HostBinding`: `gbdt_fit_ordered_rmse`,
+`gbdt_fit_two_level_feature_freq`, `gbdt_per_round_paths` and the two
+`*_parallel_available` probes.
+
+NaN IN X. The oracle's grid places the NaN border (`nan_mode` Min or Max,
+`_calc_quantization_phase_b`) and `_binarize_columns` substitutes the value
+before binning, which is the device fit's order, so an X carrying NaN trains
+through the same entries on SymmetricTree with Logloss (the gbdt-nan-modes
+lane). Under RMSE or a non-symmetric policy NaN is unmeasured and still
+refused by name.
 
 REFUSED BY NAME INSIDE `gbdt_fit`, with the sentence
 `cpu_identity_gate_check.py` requires ("no CPU implementation of"), every
@@ -58,7 +74,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_name,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, identical_exp64
+from checks.numerics import GLOBAL_NUMERIC_MODE, ftz, identical_exp64, identical_sigmoid
 from core.gbdt_host_predict import gbdt_host_predict
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_FALSE,
@@ -72,12 +88,39 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_fit,
     gbdt_host_model_text,
 )
+from gbdt.host.gbdt_oracle_losses import (
+    GBDT_BOOT_BERNOULLI,
+    GBDT_BOOT_POISSON,
+    GBDT_LEAF_EXACT,
+    GBDT_LEAF_GRADIENT,
+    GBDT_LEAF_NEWTON,
+    GBDT_OBJ_CROSSENTROPY,
+    GBDT_OBJ_EXPECTILE,
+    GBDT_OBJ_HUBER,
+    GBDT_OBJ_LOGLINQUANTILE,
+    GBDT_OBJ_LOGLOSS,
+    GBDT_OBJ_LQ,
+    GBDT_OBJ_MAE,
+    GBDT_OBJ_MAPE,
+    GBDT_OBJ_POISSON,
+    GBDT_OBJ_QUANTILE,
+    GBDT_OBJ_TWEEDIE,
+    GbdtHostLoss,
+    gbdt_losses_host_fit,
+)
+from gbdt.host.gbdt_oracle_multiclass import (
+    GBDT_OBJ_MULTICLASS,
+    GBDT_OBJ_MULTICLASS_OVA,
+    gbdt_multi_host_fit,
+    gbdt_multi_host_model_text,
+)
 from gbdt.host.gbdt_oracle_rmse import (
     gbdt_rmse_host_fit,
     gbdt_rmse_host_model_text,
 )
 from gbdt.host.gbdt_oracle_depthwise import (
     GBDT_HOST_GROW_LOSSGUIDE,
+    GBDT_HOST_SCORE_NEWTON_COSINE,
     GBDT_HOST_SCORE_NEWTON_L2,
     GbdtHostTreeParams,
     gbdt_host_fit_non_symmetric,
@@ -151,13 +194,133 @@ def _refuse(what: String) raises:
     cover reads REFUSED and never a hash."""
     raise Error(
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
-        + "; the gbdt host binding trains the gbdt-symmetric, gbdt-rmse,"
-        " gbdt-depthwise and gbdt-lossguide lanes only (SymmetricTree with"
-        " Logloss or RMSE and Cosine, Depthwise with Logloss and Cosine,"
-        " Lossguide with Logloss and NewtonL2, Newton leaves, no bootstrap,"
-        " weights, categoricals, eval set or NaN), see"
-        " gbdt/host/gbdt_oracle.mojo, gbdt/host/gbdt_oracle_rmse.mojo and"
-        " gbdt/host/gbdt_oracle_depthwise.mojo"
+        + "; the gbdt host binding trains the twelve declared GBDT lanes"
+        " only (SymmetricTree with Cosine and the Logloss, RMSE, pointwise"
+        " and multiclass losses, Depthwise with Logloss and Cosine,"
+        " Lossguide with Logloss and NewtonL2 or NewtonCosine; no sample"
+        " weights, categoricals, eval set or pointwise searcher), see"
+        " gbdt/host/gbdt_oracle.mojo and the gbdt/host oracles beside it"
+    )
+
+
+def _pointwise_objective(loss: String) -> Int:
+    """`objective_from_name` (`gbdt/targets/kernel/pointwise_targets.mojo:
+    83-123`) for the losses `gbdt_oracle_losses.mojo` restates; -1 else."""
+    if loss == String("CrossEntropy"):
+        return GBDT_OBJ_CROSSENTROPY
+    if loss == String("Quantile"):
+        return GBDT_OBJ_QUANTILE
+    if loss == String("MAE"):
+        return GBDT_OBJ_MAE
+    if loss == String("LogLinQuantile"):
+        return GBDT_OBJ_LOGLINQUANTILE
+    if loss == String("MAPE"):
+        return GBDT_OBJ_MAPE
+    if loss == String("Poisson"):
+        return GBDT_OBJ_POISSON
+    if loss == String("Lq"):
+        return GBDT_OBJ_LQ
+    if loss == String("Expectile"):
+        return GBDT_OBJ_EXPECTILE
+    if loss == String("Tweedie"):
+        return GBDT_OBJ_TWEEDIE
+    if loss == String("Huber"):
+        return GBDT_OBJ_HUBER
+    return -1
+
+
+def _resolve_pointwise_loss(
+    objective: Int,
+    name: String,
+    loss_alpha: Float32,
+    loss_q: Float32,
+    loss_delta: Float32,
+    loss_variance_power: Float32,
+    method_override: Int,
+    iterations_override: Int,
+    bootstrap_type: String,
+    subsample: Float32,
+) raises -> GbdtHostLoss:
+    """What `train` resolves for these losses, restated because the option
+    modules import a kernel module: `make_loss_description` and `validate`
+    (`gbdt/options/loss_description.mojo:110-219`), `kernel_alpha` and
+    `get_alpha`, `get_estimation_method_defaults`, `use_exact_leaves`,
+    `set_leaves_estimation_default` and `ensure_newton_is_available`
+    (`gbdt/options/catboost_options.mojo:1247-1499`), and the bootstrap
+    parameter (`gbdt/train.mojo:1660-1690`, `DEFAULT_SUBSAMPLE` 0.66)."""
+    var has_alpha = loss_alpha >= Float32(0.0)
+    var estimator_alpha = loss_alpha if has_alpha else Float32(0.5)
+    if objective == GBDT_OBJ_LQ and not (loss_q >= Float32(0.0)):
+        raise Error("Param q is mandatory for Lq loss")
+    if objective == GBDT_OBJ_HUBER and not (loss_delta >= Float32(0.0)):
+        raise Error("For Huber delta parameter is mandatory")
+    if objective == GBDT_OBJ_TWEEDIE and not (loss_variance_power >= Float32(0.0)):
+        raise Error("For Tweedie variance_power parameter is mandatory")
+    if objective == GBDT_OBJ_EXPECTILE and not has_alpha:
+        raise Error("Param alpha is mandatory for expectile loss")
+    var kernel_alpha = Float32(0.0)
+    if objective == GBDT_OBJ_MAE:
+        kernel_alpha = Float32(0.5)
+    elif objective == GBDT_OBJ_LQ:
+        kernel_alpha = loss_q
+    elif objective == GBDT_OBJ_HUBER:
+        kernel_alpha = loss_delta
+    elif objective == GBDT_OBJ_TWEEDIE:
+        kernel_alpha = loss_variance_power
+    elif objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_LOGLINQUANTILE or objective == GBDT_OBJ_EXPECTILE:
+        kernel_alpha = estimator_alpha
+    var method = GBDT_LEAF_NEWTON
+    var newton = 1
+    var gradient = 1
+    if objective == GBDT_OBJ_LQ:
+        if loss_q < Float32(2.0):
+            method = GBDT_LEAF_GRADIENT
+    elif objective == GBDT_OBJ_MAE or objective == GBDT_OBJ_MAPE or objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_LOGLINQUANTILE:
+        method = GBDT_LEAF_GRADIENT
+    elif objective == GBDT_OBJ_EXPECTILE:
+        newton = 5
+        gradient = 10
+    elif objective == GBDT_OBJ_POISSON:
+        newton = 10
+    elif objective == GBDT_OBJ_CROSSENTROPY:
+        newton = 10
+        gradient = 40
+    elif objective == GBDT_OBJ_TWEEDIE:
+        newton = 20
+        gradient = 20
+    if objective == GBDT_OBJ_MAE or objective == GBDT_OBJ_MAPE or objective == GBDT_OBJ_QUANTILE:
+        method = GBDT_LEAF_EXACT
+        newton = 1
+        gradient = 1
+    if method_override >= 0:
+        method = method_override
+    var iterations = 1
+    if method == GBDT_LEAF_NEWTON:
+        iterations = newton
+    elif method == GBDT_LEAF_GRADIENT:
+        iterations = gradient
+    if iterations_override >= 0:
+        iterations = iterations_override
+    if method == GBDT_LEAF_NEWTON:
+        if objective == GBDT_OBJ_QUANTILE or objective == GBDT_OBJ_MAE or objective == GBDT_OBJ_LOGLINQUANTILE or objective == GBDT_OBJ_MAPE:
+            raise Error("Newton leaves estimation method is not supported for " + name + " loss function")
+        if objective == GBDT_OBJ_LQ and loss_q < Float32(2.0):
+            raise Error("Newton leaves estimation method is not supported for Lq loss function with q < 2")
+    if method == GBDT_LEAF_EXACT and not (
+        objective == GBDT_OBJ_MAE or objective == GBDT_OBJ_MAPE or objective == GBDT_OBJ_QUANTILE
+    ):
+        raise Error("Only MAPE, MAE and Quantile are supported for Exact leaves estimation on GPU")
+    var boot_kind = -1
+    var boot_param = Float32(0.0)
+    if bootstrap_type == String("Bernoulli"):
+        boot_kind = GBDT_BOOT_BERNOULLI
+        boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    elif bootstrap_type == String("Poisson"):
+        boot_kind = GBDT_BOOT_POISSON
+        boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    return GbdtHostLoss(
+        objective, kernel_alpha, estimator_alpha, method, iterations,
+        boot_kind, boot_param, Float32(0.5),
     )
 
 
@@ -211,6 +374,9 @@ def gbdt_fit_binding(
     var n_features = Int(py=params[1])
     var n_weights = Int(py=params[2])
     var n_flags = Int(py=params[3])
+    var class_weights = List[Float32]()
+    for i in range(n_class_weights):
+        class_weights.append(Float32(Float64(py=params[35 + i])))
     var grow_code = Int(py=params[31])
     if grow_code != 0 and grow_code != 1 and grow_code != 2:
         raise Error(
@@ -276,8 +442,27 @@ def gbdt_fit_binding(
 
     # ---- what the host fit does not restate, refused by name ----
     var is_rmse = loss == String("RMSE")
-    if loss != String("Logloss") and not is_rmse:
+    # the pointwise losses of gbdt/host/gbdt_oracle_losses.mojo
+    var pw_objective = _pointwise_objective(loss)
+    var is_pointwise = pw_objective >= 0
+    # the multi-output losses of gbdt/host/gbdt_oracle_multiclass.mojo
+    var is_multi = loss == String("MultiClass") or loss == String("MultiClassOneVsAll")
+    if loss != String("Logloss") and not is_rmse and not is_pointwise and not is_multi:
         _refuse("loss='" + loss + "'")
+    if is_multi and grow_code != 0:
+        raise Error(
+            "Error: optimization scheme is not supported for GPU learning"
+            " Loss=MultiClass;OptimizationScheme="
+            + String("Depthwise" if grow_code == 1 else "Lossguide")
+            + " (their TGpuTrainerFactory has no non-symmetric"
+            " multiclass trainer, multiclass.cpp:5-14, train.cpp:279)"
+        )
+    if is_multi and leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON:
+        _refuse("leaf_estimation_method code " + String(leaf_method) + " under loss='" + loss + "' (only Newton)")
+    if is_multi and leaf_iterations >= 0 and leaf_iterations != 1:
+        _refuse("leaf_estimation_iterations=" + String(leaf_iterations) + " under loss='" + loss + "' (only 1)")
+    if is_pointwise and grow_code != 0:
+        _refuse("loss='" + loss + "' under grow_policy code " + String(grow_code) + " (Depthwise or Lossguide)")
     if is_rmse and leaf_iterations >= 0 and leaf_iterations != 1:
         _refuse(
             "leaf_estimation_iterations=" + String(leaf_iterations)
@@ -290,38 +475,51 @@ def gbdt_fit_binding(
         _refuse("use_pointwise_searcher=True")
     # the score function each covered lane runs: Cosine under SymmetricTree
     # and Depthwise, NewtonL2 under Lossguide (the policy defaults)
+    # and NewtonCosine under Lossguide (gbdt-lossguide-newtoncosine), where
+    # the searcher knobs of that lane are restated as well
+    var lossguide_knobs = grow_code == GBDT_HOST_GROW_LOSSGUIDE and loss == String("Logloss")
     if grow_code == GBDT_HOST_GROW_LOSSGUIDE:
-        if score_function != GBDT_HOST_SCORE_NEWTON_L2:
-            _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2)")
+        if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
+            _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2 and NewtonCosine)")
     elif score_function != GBDT_HOST_SCORE_COSINE:
         _refuse("score_function code " + String(score_function) + " (only Cosine)")
-    if grow_code != 0:
+    if grow_code == 1:
         if min_split_gain >= 0:
-            _refuse("min_split_gain=" + String(min_split_gain))
+            _refuse("min_split_gain=" + String(min_split_gain) + " under Depthwise")
         if min_child_hessian >= 0:
-            _refuse("min_child_hessian=" + String(min_child_hessian))
+            _refuse("min_child_hessian=" + String(min_child_hessian) + " under Depthwise")
         if min_data_in_leaf != 1:
-            _refuse("min_data_in_leaf=" + String(min_data_in_leaf) + " under Depthwise or Lossguide")
-    if leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON:
-        _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton)")
+            _refuse("min_data_in_leaf=" + String(min_data_in_leaf) + " under Depthwise")
+    var leaf_gradient_ok = lossguide_knobs and leaf_method == GBDT_LEAF_GRADIENT
+    if not is_pointwise and leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON and not leaf_gradient_ok:
+        _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton, or Gradient under Lossguide)")
+    if is_pointwise and leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT:
+        _refuse("leaf_estimation_method code " + String(leaf_method) + " (Gradient, Newton or Exact)")
     if bootstrap_type != String("") and bootstrap_type != String("No"):
-        _refuse("bootstrap_type='" + bootstrap_type + "'")
+        var pw_boot = is_pointwise and (
+            bootstrap_type == String("Poisson") or bootstrap_type == String("Bernoulli")
+        )
+        var lg_boot = lossguide_knobs and bootstrap_type == String("Bernoulli")
+        if not pw_boot and not lg_boot:
+            _refuse("bootstrap_type='" + bootstrap_type + "' under loss='" + loss + "'")
     if n_weights != 0:
         _refuse("sample_weight")
-    if n_class_weights != 0:
-        _refuse("class_weights")
+    if n_class_weights != 0 and not is_multi:
+        _refuse("class_weights outside MultiClass and MultiClassOneVsAll")
     if n_flags != 0:
         _refuse("cat_features or one_hot_features")
     if n_eval_rows != 0:
         _refuse("eval_set")
     if od_type.byte_length() > 0 or od_pvalue >= 0.0 or od_wait >= 0:
         _refuse("the overfitting detector (od_type, od_pvalue, od_wait)")
-    if random_strength != Float32(0.0):
-        _refuse("random_strength=" + String(random_strength))
+    if random_strength != Float32(0.0) and not lossguide_knobs:
+        _refuse("random_strength=" + String(random_strength) + " outside Lossguide with Logloss")
     if boost_from_average == 1 and not is_rmse:
         _refuse("boost_from_average=True")
-    if feature_fraction != 1.0:
-        _refuse("feature_fraction=" + String(feature_fraction))
+    if feature_fraction != 1.0 and not lossguide_knobs:
+        _refuse("feature_fraction=" + String(feature_fraction) + " outside Lossguide with Logloss")
+    if not (feature_fraction > 0.0) or feature_fraction > 1.0:
+        raise Error("feature_fraction must be finite and in (0, 1]")
     if border_count < 1 or border_count > 255:
         _refuse("border_count=" + String(border_count) + " (1 to 255)")
     if max_depth < 0 or max_depth > GBDT_HOST_MAX_DEPTH:
@@ -337,15 +535,23 @@ def gbdt_fit_binding(
             "min_child_hessian must be -1 (disabled) or finite nonnegative"
             " and <= Float32.MAX_FINITE"
         )
-    if min_child_hessian >= 0:
+    if min_child_hessian >= 0 and grow_code == 0:
         raise Error("min_child_hessian requires Depthwise or Lossguide")
+    if min_child_hessian >= 0 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE and score_function != GBDT_HOST_SCORE_NEWTON_L2:
+        raise Error("min_child_hessian requires NewtonL2 or NewtonCosine; first-order scores store weights, not Hessians")
+    # `child_hessian_threshold`'s round-up (`child_hessian.mojo:17-25`)
+    var child_hessian = Float32(-1.0)
+    if min_child_hessian >= 0:
+        child_hessian = Float32(min_child_hessian)
+        if Float64(child_hessian) < min_child_hessian:
+            child_hessian = bitcast[DType.float32](bitcast[DType.uint32](child_hessian) + UInt32(1))
     if not isfinite(min_split_gain) or (
         min_split_gain < 0 and min_split_gain != -1
     ):
         raise Error("min_split_gain must be -1 (disabled) or finite and nonnegative")
-    if min_split_gain >= 0:
+    if min_split_gain >= 0 and grow_code == 0:
         raise Error("min_split_gain requires Depthwise or Lossguide")
-    if min_data_in_leaf != 1:
+    if min_data_in_leaf != 1 and grow_code == 0:
         raise Error(
             "min_data_in_leaf=" + String(min_data_in_leaf) + " does nothing"
             " under grow_policy=SymmetricTree: CatBoost guards its leaf-size"
@@ -430,6 +636,33 @@ def gbdt_fit_binding(
         border_count, border_build_max_samples, n_estimators, max_depth,
         learning_rate, l2_leaf_reg, random_seed, nan_mode, border, iterations,
     )
+    var pw_loss = GbdtHostLoss(-1, Float32(0), Float32(0), -1, -1, -1, Float32(0), border)
+    # the non-symmetric fit's estimator and bootstrap: Logloss, Newton at the
+    # resolved count or Gradient at 40 unless overridden
+    # (`catboost_options.mojo:1304-1308`), Bernoulli at `subsample` or 0.66
+    var ns_method = GBDT_LEAF_NEWTON
+    var ns_iterations = iterations
+    if leaf_method == GBDT_LEAF_GRADIENT:
+        ns_method = GBDT_LEAF_GRADIENT
+        ns_iterations = leaf_iterations if leaf_iterations >= 0 else 40
+    var ns_boot = -1
+    var ns_boot_param = Float32(0.0)
+    if bootstrap_type == String("Bernoulli"):
+        ns_boot = GBDT_BOOT_BERNOULLI
+        var subsample = Float32(Float64(py=params[19]))
+        ns_boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    var ns_loss = GbdtHostLoss(
+        GBDT_OBJ_LOGLOSS, border, Float32(0.5), ns_method, ns_iterations,
+        ns_boot, ns_boot_param, border,
+    )
+    if is_pointwise:
+        pw_loss = _resolve_pointwise_loss(
+            pw_objective, loss,
+            Float32(Float64(py=params[11])), Float32(Float64(py=params[12])),
+            Float32(Float64(py=params[13])), Float32(Float64(py=params[14])),
+            leaf_method, leaf_iterations, bootstrap_type,
+            Float32(Float64(py=params[19])),
+        )
     var x_address = Int(py=x_addr)
     var y_address = Int(py=y_addr)
     _ = xp
@@ -439,41 +672,65 @@ def gbdt_fit_binding(
     var best_iteration = 0
     var stopped_early = False
     var has_nan = False
-    with GILReleased(Python()):
-        var x = read_f32(x_address, n_rows * n_features)
+    if is_rmse or grow_code != 0 or is_pointwise or is_multi:
+        # NaN is measured on the symmetric Logloss fit only (gbdt-nan-modes)
+        var xs = f32_ptr(x_address)
         for i in range(n_rows * n_features):
-            if x[i] != x[i]:
+            var v = xs.unsafe_load(i)
+            if v != v:
                 has_nan = True
                 break
-        if not has_nan:
-            var y = read_f32(y_address, n_rows)
-            if is_rmse:
-                # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:
-                # 1597-1600`): unset is True for RMSE
-                var fit = gbdt_rmse_host_fit(
-                    x, y, n_rows, n_features, p, boost_from_average != 0
-                )
-                text = gbdt_rmse_host_model_text(fit)
-                losses = fit.model.losses.copy()
-                best_iteration = fit.model.best_iteration
-                stopped_early = fit.model.stopped_early
-            elif grow_code == 0:
-                var model = gbdt_host_fit(x, y, n_rows, n_features, p)
-                text = gbdt_host_model_text(model)
-                losses = model.losses.copy()
-                best_iteration = model.best_iteration
-                stopped_early = model.stopped_early
-            else:
-                # Depthwise and Lossguide: gbdt/host/gbdt_oracle_depthwise.mojo
-                var tp = GbdtHostTreeParams(
-                    p, grow_code, ns_max_leaves, Float64(min_data_in_leaf),
-                    score_function,
-                )
-                var ns_model = gbdt_host_fit_non_symmetric(x, y, n_rows, n_features, tp)
-                text = gbdt_host_ns_model_text(ns_model)
-                losses = ns_model.losses.copy()
     if has_nan:
-        _refuse("an X carrying NaN (the nan_mode Min and Max arms)")
+        _refuse(
+            "an X carrying NaN under loss='" + loss + "' and grow_policy code "
+            + String(grow_code) + " (NaN is measured on SymmetricTree with"
+            " Logloss only, the gbdt-nan-modes lane)"
+        )
+    with GILReleased(Python()):
+        var x = read_f32(x_address, n_rows * n_features)
+        var y = read_f32(y_address, n_rows)
+        if is_multi:
+            # gbdt/host/gbdt_oracle_multiclass.mojo
+            var multi_model = gbdt_multi_host_fit(
+                x, y, n_rows, n_features, p,
+                GBDT_OBJ_MULTICLASS if loss == String("MultiClass") else GBDT_OBJ_MULTICLASS_OVA,
+                class_weights,
+            )
+            text = gbdt_multi_host_model_text(multi_model)
+            losses = multi_model.losses.copy()
+        elif is_pointwise:
+            # gbdt/host/gbdt_oracle_losses.mojo
+            var pw_model = gbdt_losses_host_fit(x, y, n_rows, n_features, p, pw_loss)
+            text = gbdt_host_model_text(pw_model)
+            losses = pw_model.losses.copy()
+            best_iteration = pw_model.best_iteration
+            stopped_early = pw_model.stopped_early
+        elif is_rmse:
+            # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:
+            # 1597-1600`): unset is True for RMSE
+            var fit = gbdt_rmse_host_fit(
+                x, y, n_rows, n_features, p, boost_from_average != 0
+            )
+            text = gbdt_rmse_host_model_text(fit)
+            losses = fit.model.losses.copy()
+            best_iteration = fit.model.best_iteration
+            stopped_early = fit.model.stopped_early
+        elif grow_code == 0:
+            var model = gbdt_host_fit(x, y, n_rows, n_features, p)
+            text = gbdt_host_model_text(model)
+            losses = model.losses.copy()
+            best_iteration = model.best_iteration
+            stopped_early = model.stopped_early
+        else:
+            # Depthwise and Lossguide: gbdt/host/gbdt_oracle_depthwise.mojo
+            var tp = GbdtHostTreeParams(
+                p, grow_code, ns_max_leaves, Float64(min_data_in_leaf),
+                score_function, child_hessian, min_split_gain,
+                random_strength, feature_fraction, ns_loss,
+            )
+            var ns_model = gbdt_host_fit_non_symmetric(x, y, n_rows, n_features, tp)
+            text = gbdt_host_ns_model_text(ns_model)
+            losses = ns_model.losses.copy()
 
     var learn = Python.list()
     for i in range(len(losses)):
@@ -854,6 +1111,120 @@ def gbdt_predict_binding(
     return PythonObject(n_rows)
 
 
+def gbdt_predict_multi_binding(
+    model: PythonObject,
+    x_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`gbdt_predict_multi_binding` (`bindings/_mojolearn_gbdt.mojo:453-485`)
+    over `gbdt/estimator.mojo::gbdt_predict_multi`: `params` is
+    `[n_rows, mode]`, mode 0 RAW (`dim` columns), 1 SOFTMAX (`dim + 1`,
+    `gbdt/train.mojo::multiclass_probabilities`), 2 SIGMOID (`dim`,
+    `one_vs_all_probabilities`), both transforms in double through
+    `identical_exp64`, row-major out. Returns the width written."""
+    if len(params) != 2:
+        raise Error(
+            "gbdt_predict_multi: params must hold [n_rows,"
+            " as_probabilities], got " + String(len(params))
+        )
+    var text = String(py=model)
+    var x_address = Int(py=x_addr)
+    var op = f32_ptr(Int(py=out_addr))
+    _ = f32_ptr(x_address)
+    var n_rows = Int(py=params[0])
+    var mode = Int(py=params[1])
+    if n_rows <= 0:
+        raise Error("gbdt_predict_multi: n_rows must be positive")
+    var m = _parse_model(text)
+    var dim = m.dim
+    var n_features = len(m.fold_counts)
+    var n_trees = len(m.tree_offsets) - 1
+    if mode != 0 and dim < 2:
+        raise Error(
+            "gbdt_predict_multi: a probability mode needs a"
+            " multi-dimensional model; this one has dim " + String(dim)
+            + ". A two-class problem's link is the sigmoid, which"
+            " Logloss's own predict_proba applies."
+        )
+    if mode != 0 and mode != 1 and mode != 2:
+        raise Error("gbdt_predict_multi: unknown mode " + String(mode))
+    var width = dim
+    if mode == 1:
+        width = dim + 1
+    with GILReleased(Python()):
+        var x = read_f32(x_address, n_rows * n_features)
+        var out = List[Float32](length=n_rows * dim, fill=Float32(0.0))
+        var node_left = m.node_left.copy()
+        var node_right = m.node_right.copy()
+        if len(node_left) == 0:
+            node_left.append(Int32(0))
+            node_right.append(Int32(0))
+        var split_feature = m.split_feature.copy()
+        var split_bin = m.split_bin.copy()
+        var split_take_bin = m.split_take_bin.copy()
+        if len(split_feature) == 0:
+            split_feature.append(Int32(0))
+            split_bin.append(Int32(0))
+            split_take_bin.append(Int32(0))
+        var borders = m.borders.copy()
+        if len(borders) == 0:
+            borders.append(Float32(0.0))
+        var leaves = m.leaves.copy()
+        if len(leaves) == 0:
+            leaves.append(Float32(0.0))
+        gbdt_host_predict(
+            x, n_rows, n_features,
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.border_offsets.unsafe_ptr()),
+            rebind[MutPointer[Float32, MutUntrackedOrigin]](borders.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.fold_counts.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.one_hot.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.nan_treatment.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.tree_offsets.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](split_feature.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](split_bin.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](split_take_bin.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](node_left.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](node_right.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.leaf_offsets.unsafe_ptr()),
+            rebind[MutPointer[Float32, MutUntrackedOrigin]](leaves.unsafe_ptr()),
+            n_trees, dim, m.non_symmetric, len(m.split_feature), len(m.leaves), m.bias,
+            out,
+        )
+        # KEEP-ALIVE past the walk (see `gbdt_predict_binding`)
+        _ = split_feature^
+        _ = split_bin^
+        _ = split_take_bin^
+        _ = node_left^
+        _ = node_right^
+        _ = borders^
+        _ = leaves^
+        _ = x^
+        _ = m^
+        if mode == 0:
+            for i in range(n_rows * dim):
+                op[i] = out[i]
+        elif mode == 1:
+            var eff = dim
+            for r in range(n_rows):
+                var mx = Float64(0.0)
+                for k in range(eff):
+                    var v = Float64(out[r * eff + k])
+                    if v > mx:
+                        mx = v
+                var se = Float64(0.0)
+                for k in range(eff):
+                    se += identical_exp64(Float64(out[r * eff + k]) - mx)
+                se += identical_exp64(-mx)
+                for k in range(eff):
+                    op[r * (eff + 1) + k] = Float32(identical_exp64(Float64(out[r * eff + k]) - mx) / se)
+                op[r * (eff + 1) + eff] = Float32(identical_exp64(-mx) / se)
+        else:
+            for i in range(n_rows * dim):
+                op[i] = Float32(1.0 / (1.0 + identical_exp64(-Float64(out[i]))))
+    return PythonObject(width)
+
+
 def gbdt_model_dim_binding(model: PythonObject) raises -> PythonObject:
     """`gbdt_model_dim` (`bindings/_mojolearn_gbdt.mojo:442-450`): 1 for an
     empty ensemble, else the trees' common dim."""
@@ -874,6 +1245,60 @@ def gbdt_sigmoid_binding(
     return PythonObject(count)
 
 
+def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
+    raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`gbdt_binary_prediction_binding` (`bindings/_mojolearn_gbdt.mojo:
+    107-130`), the GradientBoostingClassifier adapter's two transforms, with
+    the same checks in the same words. The body is
+    `gbdt/binary_prediction.mojo::binary_prediction_kernel` restated per
+    element on the host: the probability pair
+    `[ftz(1 - p), p]` with `p = ftz(identical_sigmoid(ftz(margin)))`, and the
+    class code from the margin's sign and magnitude bits (strict raw > 0,
+    so a positive subnormal margin is class one on every column)."""
+    if len(params) != 1:
+        raise Error("binary prediction: params must contain n")
+    var n = Int(py=params[0])
+    if n <= 0 or n > 2147483647:
+        raise Error("binary prediction: positive n<=Int32.max required")
+    var rp = f32_ptr(Int(py=raw_addr))
+    var address = Int(py=out_addr)
+    if address == 0:
+        raise Error("binary prediction: null output")
+    var op = MutPointer[Scalar[dtype], MutUntrackedOrigin](unsafe_from_address=address)
+    # `binary_prediction_host`'s own refusal (`gbdt/binary_prediction.mojo:47-50`)
+    for i in range(n):
+        if not isfinite(rp.unsafe_load(i)):
+            raise Error("binary prediction: finite Float32 margins required")
+    var count = 2 * n if probabilities else n
+    with GILReleased(Python()):
+        for i in range(n):
+            var margin = rp.unsafe_load(i)
+            comptime if probabilities:
+                var positive = ftz(identical_sigmoid(ftz(margin)))
+                op.unsafe_store(2 * i, Scalar[dtype](ftz(Float32(1) - positive)))
+                op.unsafe_store(2 * i + 1, Scalar[dtype](positive))
+            else:
+                var bits = bitcast[DType.uint32](margin)
+                var is_positive = (bits & UInt32(0x80000000)) == 0 and (bits & UInt32(0x7fffffff)) != 0
+                op.unsafe_store(i, Scalar[dtype](Int32(1) if is_positive else Int32(0)))
+    return PythonObject(count)
+
+
+def gbdt_binary_probabilities_binding(
+    raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`[1 - p, p]` per margin, Float32 (see `gbdt_binary_prediction_binding`)."""
+    return gbdt_binary_prediction_binding[True, DType.float32](raw_addr, out_addr, params)
+
+
+def gbdt_binary_classes_binding(
+    raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """The Int32 class code per margin (see `gbdt_binary_prediction_binding`)."""
+    return gbdt_binary_prediction_binding[False, DType.int32](raw_addr, out_addr, params)
+
+
 @export
 def PyInit__mojolearn_gbdt_host() abi("C") -> PythonObject:
     try:
@@ -886,8 +1311,11 @@ def PyInit__mojolearn_gbdt_host() abi("C") -> PythonObject:
         module.def_function[gbdt_numeric_mode_binding]("gbdt_numeric_mode")
         module.def_function[gbdt_fit_binding]("gbdt_fit")
         module.def_function[gbdt_predict_binding]("gbdt_predict")
+        module.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
         module.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         module.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
+        module.def_function[gbdt_binary_probabilities_binding]("gbdt_binary_probabilities")
+        module.def_function[gbdt_binary_classes_binding]("gbdt_binary_classes")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_gbdt_host: ", error))
