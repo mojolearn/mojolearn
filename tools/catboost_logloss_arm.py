@@ -6,9 +6,9 @@ A separate module from `catboost_arm.py` ON PURPOSE: that file carries
 another lane's uncommitted work, and a new file cannot collide with it.
 
 Settings are the repository's pinned set with exactly two changes, both
-theirs: `loss_function="Logloss"`, and Logloss's OWN estimation default --
+taken from CatBoost: `loss_function="Logloss"`, and Logloss's OWN estimation default --
 Newton at 10 iterations (`GetEstimationMethodDefaults`,
-`catboost_options.cpp:157-164`, the GPU arm the Mojo side transcribed).
+`catboost_options.cpp:157-164`, the GPU arm the Mojo side references).
 Pinning iterations to 1 here would be the `leaf_estimation_iterations=1`
 cheat this repository already priced for RMSE; BOTH arms get 10.
 

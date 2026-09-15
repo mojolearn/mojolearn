@@ -15,8 +15,7 @@ need-weights block, the sixteen-step search, splitmix64 and the stride walk
 of the bootstrap, the one-per-launch level seed, the child-Hessian bit test,
 the 1e-7 probability clip, the pinned MultiClass class, the Cholesky solve);
 the binding dispatches the new losses, exports the multi-dimensional predict
-and refuses the Bayesian bootstrap by name; the workflow triggers on the new
-files.
+and refuses the Bayesian bootstrap by name; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): small fits of each configuration run twice
@@ -137,11 +136,6 @@ def test_binding_dispatches_and_refuses_by_name():
     assert "_refuse(\"bootstrap_type='\" + bootstrap_type + \"' under loss='\" + loss + \"'\")" in src
     assert "if is_rmse or grow_code != 0 or is_pointwise or is_multi:" in src
 
-
-def test_workflow_triggers_on_the_new_files():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in (LOSSES, MULTI) + REUSED[:2]:
-        assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 
 
 @reference_training()

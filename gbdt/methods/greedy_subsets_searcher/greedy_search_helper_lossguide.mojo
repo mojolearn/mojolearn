@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Which ONE leaf Lossguide splits next, and when it stops.
 
-FOLLOWS the `EGrowPolicy::Lossguide` arms of
-`catboost/cuda/methods/greedy_subsets_searcher/greedy_search_helper.cpp` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: the `EGrowPolicy::Lossguide` arms of
+`catboost/cuda/methods/greedy_subsets_searcher/greedy_search_helper.cpp`
+(CatBoost `54a8143a`).
 
 ============================ DEVIATION 316 ============================
-**Theirs is ONE file and ours is three.** `TGreedySearchHelper` holds every
+**The reference is ONE file and this implementation is three.** `TGreedySearchHelper` holds every
 policy's arm in `greedy_search_helper.cpp`; here the symmetric arm is in
 `greedy_search_helper.mojo`, the Depthwise arm is in
 `greedy_search_helper_depthwise.mojo` and this is the Lossguide arm.
@@ -119,7 +119,7 @@ def find_best_leaf_to_split(leaves: List[TLeaf]) raises -> Int:
     (`:355-359`). Lossguide takes the best leaf whatever its sign. **A
     Lossguide tree therefore keeps splitting after every remaining split
     makes the objective worse**, until `MaxLeaves` or `IsTerminalLeaf`
-    stops it. That is their design and it is what `max_leaves` is FOR. A
+    stops it. That is the reference behavior and it is what `max_leaves` is FOR. An
     implementation that "helpfully" added `score < 0` here would grow smaller trees
     than CatBoost on every dataset and would look like a tuning difference
     rather than a defect.

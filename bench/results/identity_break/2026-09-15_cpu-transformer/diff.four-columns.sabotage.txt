@@ -1,0 +1,85 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 164 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_transformer_host'] commit=82ffcb3888d082ad208e225972580fba647b99b7
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| transformer-window/base      | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 49ffb2316f238e6d | 49ffb2316f238e6d | 189df18a6c9c8172 |
+| transformer-window/denormal  | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 4f8ec13b57260957 | 4f8ec13b57260957 | 1e715f0fe5c6ae9c |
+| transformer-window/denormal_ftz | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 4f8ec13b57260957 | 4f8ec13b57260957 | 1e715f0fe5c6ae9c |
+| transformer-window/dupes     | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 44fa7ec52d690ee9 | 44fa7ec52d690ee9 | dac1a5f173e8daa6 |
+| transformer-window/hashed    | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | af2bffef90669cb5 | af2bffef90669cb5 | 32a94e6de88aa318 |
+| transformer-window/negative  | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | e1f21e879b6d8fa9 | e1f21e879b6d8fa9 | 21fa4d13e7de45e1 |
+| transformer-window/odd       | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 49ffb2316f238e6d | 49ffb2316f238e6d | 189df18a6c9c8172 |
+| transformer-window/ties      | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 4cc1690c572f7931 | 4cc1690c572f7931 | 12ce4bcfd7e09d44 |
+| transformer-window/wide      | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 44a2b49da1619c85 | 44a2b49da1619c85 | 11ff921f564ee893 |
+| transformer/base             | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 48e67b34f60bd81a |
+| transformer/denormal         | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | da87cbc4fb93d086 | da87cbc4fb93d086 | 42fe8916f0f7a42b |
+| transformer/denormal_ftz     | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | da87cbc4fb93d086 | da87cbc4fb93d086 | 42fe8916f0f7a42b |
+| transformer/dupes            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | e48bc0a8545b1a29 | e48bc0a8545b1a29 | 51f902ef5fa8cf5e |
+| transformer/hashed           | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 7d565e3a35324caa | 7d565e3a35324caa | d212feef7bfab97c |
+| transformer/negative         | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 79d66e219ac996a9 | 79d66e219ac996a9 | d9e7855ce5c54211 |
+| transformer/odd              | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 48e67b34f60bd81a |
+| transformer/ties             | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 251eb6369ef11d70 | 251eb6369ef11d70 | 2178e12046a6b808 |
+| transformer/wide             | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | ecbe59229197362b | ecbe59229197362b | b1df95f2d87a8ef7 |
+
+summary: DIVERGENT=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| transformer-window/base      | infer  | DIVERGENT    | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 | 6d3cce5e3acb87de |
+| transformer-window/base      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/base      | batch  | DIVERGENT    | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 | ae6ecfa4f682d08e |
+| transformer-window/denormal  | infer  | DIVERGENT    | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | f0a11d1b83f20677 |
+| transformer-window/denormal  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/denormal  | batch  | DIVERGENT    | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 | 586aec93e87b85e1 |
+| transformer-window/denormal_ftz | infer  | DIVERGENT    | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | 82b8315aa5e3eff3 | f0a11d1b83f20677 |
+| transformer-window/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/denormal_ftz | batch  | DIVERGENT    | 7c86487e6c8de244 | 7c86487e6c8de244 | 7c86487e6c8de244 | 586aec93e87b85e1 |
+| transformer-window/dupes     | infer  | DIVERGENT    | c8727f6975c294a0 | c8727f6975c294a0 | c8727f6975c294a0 | 1493e7c0bee28ef3 |
+| transformer-window/dupes     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/dupes     | batch  | DIVERGENT    | 2609e898b7c93177 | 2609e898b7c93177 | 2609e898b7c93177 | d1cee9c7a2caa1d2 |
+| transformer-window/hashed    | infer  | DIVERGENT    | 980b88a5ef026b11 | 980b88a5ef026b11 | 980b88a5ef026b11 | dab8d98c6148a221 |
+| transformer-window/hashed    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/hashed    | batch  | DIVERGENT    | 235440a27bc0150e | 235440a27bc0150e | 235440a27bc0150e | 937215b18f504c5f |
+| transformer-window/negative  | infer  | DIVERGENT    | 4d10337584b45e49 | 4d10337584b45e49 | 4d10337584b45e49 | 1711b3adb8a2640c |
+| transformer-window/negative  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/negative  | batch  | DIVERGENT    | bda185330c5accc5 | bda185330c5accc5 | bda185330c5accc5 | d4a6f323bbcb88a3 |
+| transformer-window/odd       | infer  | DIVERGENT    | a35cf82209713d66 | a35cf82209713d66 | a35cf82209713d66 | 6d3cce5e3acb87de |
+| transformer-window/odd       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/odd       | batch  | DIVERGENT    | e0499610bd0279e1 | e0499610bd0279e1 | e0499610bd0279e1 | ae6ecfa4f682d08e |
+| transformer-window/ties      | infer  | DIVERGENT    | 22a7a20579fe94db | 22a7a20579fe94db | 22a7a20579fe94db | c19a977595d7217f |
+| transformer-window/ties      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/ties      | batch  | DIVERGENT    | 27cdeafedfb90f1a | 27cdeafedfb90f1a | 27cdeafedfb90f1a | 9b1d3d92085ffdaf |
+| transformer-window/wide      | infer  | DIVERGENT    | 75cf7df2cce4aea9 | 75cf7df2cce4aea9 | 75cf7df2cce4aea9 | e01bb81b8b745026 |
+| transformer-window/wide      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer-window/wide      | batch  | DIVERGENT    | 68798687c33a64ff | 68798687c33a64ff | 68798687c33a64ff | 7891decdc6d2bc03 |
+| transformer/base             | infer  | DIVERGENT    | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 | 07f9d37e77d87002 |
+| transformer/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/base             | batch  | DIVERGENT    | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 | 0b12906fcf644a41 |
+| transformer/denormal         | infer  | DIVERGENT    | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be | d1f168584e9e1a72 |
+| transformer/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/denormal         | batch  | DIVERGENT    | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | 53dd0889d21e13ca |
+| transformer/denormal_ftz     | infer  | DIVERGENT    | 2dd718be6601b4be | 2dd718be6601b4be | 2dd718be6601b4be | d1f168584e9e1a72 |
+| transformer/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/denormal_ftz     | batch  | DIVERGENT    | aad837e59ba3f9c6 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | 53dd0889d21e13ca |
+| transformer/dupes            | infer  | DIVERGENT    | cc0485bd3463891b | cc0485bd3463891b | cc0485bd3463891b | 72dcdfaf205c34af |
+| transformer/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/dupes            | batch  | DIVERGENT    | 4b51e3c2db7f9667 | 4b51e3c2db7f9667 | 4b51e3c2db7f9667 | 2dac2083ee6c5599 |
+| transformer/hashed           | infer  | DIVERGENT    | 33aa6df81aac0bcd | 33aa6df81aac0bcd | 33aa6df81aac0bcd | 2d6dbb6822c186f1 |
+| transformer/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/hashed           | batch  | DIVERGENT    | 10988a93701693a8 | 10988a93701693a8 | 10988a93701693a8 | 4db1da4bb28c01e4 |
+| transformer/negative         | infer  | DIVERGENT    | 0804b57610d9b1f5 | 0804b57610d9b1f5 | 0804b57610d9b1f5 | 2bf1485119797852 |
+| transformer/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/negative         | batch  | DIVERGENT    | 55ca8b3a54e10ffa | 55ca8b3a54e10ffa | 55ca8b3a54e10ffa | 27de71a8fe28a6f9 |
+| transformer/odd              | infer  | DIVERGENT    | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 | 07f9d37e77d87002 |
+| transformer/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/odd              | batch  | DIVERGENT    | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 | 0b12906fcf644a41 |
+| transformer/ties             | infer  | DIVERGENT    | f222fca146b15f94 | f222fca146b15f94 | f222fca146b15f94 | 0cdfdcf7e79a3a95 |
+| transformer/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/ties             | batch  | DIVERGENT    | 8548d6f52de06b7b | 8548d6f52de06b7b | 8548d6f52de06b7b | 42b2fafa1e1ed92b |
+| transformer/wide             | infer  | DIVERGENT    | 976e818c75ac481c | 976e818c75ac481c | 976e818c75ac481c | 477d523e8a69477d |
+| transformer/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/wide             | batch  | DIVERGENT    | a487428103ce49a8 | a487428103ce49a8 | a487428103ce49a8 | 3f9de0dc9d751d87 |
+
+summary (infer/model): DIVERGENT=18, N/A=18
+summary (batch): DIVERGENT=18
+require-columns 4 over ['transformer', 'transformer-window']: OK

@@ -178,7 +178,7 @@ def build():
 # name -> (catboost loss string, target, leaf_estimation_method,
 #          leaf_estimation_iterations, {param: value}, metric string)
 #
-# METHOD AND ITERATIONS ARE THEIR CPU DEFAULTS, transcribed from
+# METHOD AND ITERATIONS ARE CATBOOST'S CPU DEFAULTS, read from
 # `GetEstimationMethodDefaults` (`catboost_options.cpp:31-244`) and the
 # `useExact` block (`:289-300`), which upgrades MAE / MAPE / Quantile to
 # Exact on CPU whenever `ApproxOnFullHistory` is off and there are no

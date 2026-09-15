@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`SmoBlockSolve`: one block solves the working-set QP by SMO.
 
-FOLLOWS `cuml/cpp/src/svm/smoblocksolve.cuh` at cuML v26.08.00, the kernel
-body transcribed branch for branch (`:154-271`). The math is documented in
-their header and is not repeated here; what follows is what changed.
+Reference: `cuml/cpp/src/svm/smoblocksolve.cuh` (cuML v26.08.00), the kernel
+body (`:154-271`), with the same branches. The math is documented in
+the reference header and is not repeated here; what follows is what changed.
 
     typedef cub::BlockReduce<Pair, WSIZE>    -> pinned_block_argmin/argmax
     typedef cub::BlockReduce<math_t, WSIZE>  -> pinned_block_argmax (value only

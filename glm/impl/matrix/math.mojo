@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The RAFT matrix primitives `ridgeSolve` and `svdEig` call, one kernel each.
 
-FOLLOWS `raft/cpp/include/raft/matrix/detail/math.cuh` at RAFT `661a3b8`
+Reference: `raft/cpp/include/raft/matrix/detail/math.cuh` (RAFT `661a3b8`)
 (plus `raft/linalg/detail/add.cuh::addScalar`, which lives here rather than
 in a one-function file). Partial: only the entries `cuml/cpp/src/glm/
 ridge.cuh` and `raft/linalg/detail/svd.cuh::svdEig` reach.

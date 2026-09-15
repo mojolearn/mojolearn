@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`raft/linalg/contractions.cuh`: the contraction tile policy. **COPY, DO NOT
-IMPROVE.**
+"""`raft/linalg/contractions.cuh`: the contraction tile policy. The tile
+order is pinned by `gemm/IDENTICAL_FP32_CONTRACT.md`; a change needs a DEVIATION.
 
-Upstream: RAFT at `661a3b8`, `cpp/include/raft/linalg/contractions.cuh`
-(`KernelPolicy`, `ColKernelPolicy`, `Policy4x4`, `Policy4x4Skinny`,
-`Policy2x8`). The load/accumulate machinery those policies parameterize is
+Reference: `KernelPolicy`, `ColKernelPolicy`, `Policy4x4`, `Policy4x4Skinny`,
+`Policy2x8`, `cpp/include/raft/linalg/contractions.cuh` (RAFT `661a3b8`). The load/accumulate machinery those policies parameterize is
 `cpp/include/raft/linalg/detail/contractions.cuh`, and the loop that drives
 it is `cpp/include/raft/distance/detail/pairwise_distance_base.cuh:128-152`.
 
@@ -15,10 +14,10 @@ WHY THIS FILE EXISTS SEPARATELY FROM THE CONSTANTS IN `core/gemm.mojo`
 `comptime` integers, because the one kernel instantiated at that policy
 (`cluster/impl/distance/fused_distance_nn/simt_kernel.mojo`) needs exactly
 that instantiation and nothing else. Those constants are correct and this
-file does not replace them; it transcribes the POLICY ITSELF, parameterized,
+file does not replace them; it expresses the POLICY ITSELF, parameterized,
 so a second instantiation (the skinny policy for small `k`, the column-major
 policy, the `Policy2x8` shape) is a type argument rather than a second set of
-hand-copied integers.
+hand-written integers.
 
 WHAT THE POLICY IS AND IS NOT, IN THIS LANE'S TERMS
 ----------------------------------------------------
@@ -26,7 +25,7 @@ Every field below is an EXECUTION PLAN quantity in the sense of
 `archive/plans/IDENTICAL_GEMM_PLAN.md`'s table: tile sizes, thread counts, how many loads
 each thread issues, and the shared-memory page layout. **None of it is a
 numerical plan quantity**, and that is a statement about RAFT's kernel, not a
-hope about ours: their main loop walks `kidx` from `0` to `k` ASCENDING in
+hope about this one: the reference main loop walks `kidx` from `0` to `k` ASCENDING in
 steps of `Kblk`, and inside each `Kblk` walks `ki` from `0` to `Kblk`
 ascending in steps of `Veclen`, with ONE block owning the entire `k` range for
 its output tile (`pairwise_distance_base.cuh:139-149`, `:223-241`). There is
@@ -37,9 +36,9 @@ the SEQUENCE of values accumulated into it.
 That is the property `gemm/IDENTICAL_FP32_CONTRACT.md` requires of an
 execution plan, and RAFT's own contraction already has it. It is the reason
 the contract's k ordering is stated as "ascending, one leaf at a time": it
-mirrors upstream rather than inventing a rule.
+matches the reference rather than inventing a rule.
 
-`SmemStride = Kblk + Veclen` is theirs and is not a rounding: the padding
+`SmemStride = Kblk + Veclen` comes from the reference and is not a rounding: the padding
 staggers each row's start so threads reading down a column of shared memory
 do not all land in the same bank.
 
@@ -67,7 +66,7 @@ struct KernelPolicy[
     on Metal); `DBYTES` carries the one place the element type appears, in
     `SmemSize`.
 
-    Their parameter documentation, kept verbatim in substance:
+    The reference's parameter documentation, in substance:
 
     - `_veclen`: k-elements loaded by each thread per LDG. Configure from `k`
       and the data type; for float and `k` a multiple of 4, 4 gives the best
@@ -120,7 +119,7 @@ struct KernelPolicy[
         ((Self.CPT * Self.TC) * (Self.KBLK // Self.VECLEN))
         // (Self.TR * Self.TC)
     )
-    #: `SmemStride = Kblk + Veclen`. THEIRS, and it is bank-conflict padding.
+    #: `SmemStride = Kblk + Veclen`. FROM THE REFERENCE, and it is bank-conflict padding.
     comptime smem_stride = Self.KBLK + Self.VECLEN
     #: `SmemPageX = SmemStride * Mblk`.
     comptime smem_page_x = (Self.KBLK + Self.VECLEN) * (Self.RPT * Self.TR)
@@ -152,8 +151,8 @@ struct ColKernelPolicy[
 
     Differs from `KernelPolicy` in the loader geometry only: `LdgThRow` is
     `Mblk / Veclen` rather than `Kblk / Veclen`, both pages are `Kblk` rows
-    tall, and `SmemStride` pads `Mblk` rather than `Kblk`. Their
-    `static_assert(Mblk == Nblk)` is transcribed as `assert_col_policy_square`
+    tall, and `SmemStride` pads `Mblk` rather than `Kblk`. The reference's
+    `static_assert(Mblk == Nblk)` is expressed as `assert_col_policy_square`
     below, because Mojo has no `static_assert` in a struct body here.
     """
 

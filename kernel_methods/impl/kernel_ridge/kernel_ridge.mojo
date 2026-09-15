@@ -2,20 +2,20 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`_solve_cholesky_kernel` and `_safe_solve`: cuML's kernel-ridge solver.
 
-FOLLOWS `cuml/python/cuml/cuml/kernel_ridge/kernel_ridge.py` at cuML
-`265b9da` (`upstream/cuml-v26.08.00`), lines 26-88 and 285-349.
+Reference: `cuml/python/cuml/cuml/kernel_ridge/kernel_ridge.py`, lines 26-88
+and 285-349 (cuML `265b9da`, `upstream/cuml-v26.08.00`).
 
-**AN UPSTREAM EXISTS FOR KERNEL RIDGE AND IT IS PURE PYTHON.** cuML ships no
+**A REFERENCE EXISTS FOR KERNEL RIDGE AND IT IS PURE PYTHON.** cuML ships no
 `cpp/src/kernel_ridge/` at this pin; the estimator is a `Base` subclass whose
 `fit` calls `pairwise_kernels` and then a module-level `_solve_cholesky_kernel`
 that reaches `cupyx.lapack.posv` -- cuSOLVER's `potrf` followed by `potrs`.
-So the ALGORITHM is fully readable and is followed statement for statement here line for line;
+So the ALGORITHM is fully readable and is implemented here line for line;
 only the two library calls underneath it are closed, and
 `archive/reference/VENDOR_LIBS.md`'s surviving exception plus `cholesky/`'s pinned
 `potrf_lower` / `cho_solve` stand in for them. `ENGINEERING_RULES` rule 2 is why
-this file exists at all: their control plane is on the host, so ours is.
+this file exists at all: the reference control plane is on the host, so this one is.
 
-THEIR SEQUENCE, `kernel_ridge.py:48-72`, transcribed branch for branch:
+THE REFERENCE SEQUENCE, `kernel_ridge.py:48-72`, branch for branch:
 
     n_samples = K.shape[0]
     K = cp.asarray(K, dtype=np.float64)            # :53   DEVIATION 1661

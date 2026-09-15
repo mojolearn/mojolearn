@@ -1106,7 +1106,7 @@ def main() raises:
             if c.gini_num < Int64(0):
                 b_negative += 1
     # The ORDER, per PAIR, within each node, against sklearn's proxy as
-    # `fixed_point.mojo` transcribes it. That file is the authority here: it is
+    # `fixed_point.mojo` restates it. That file is the authority here: it is
     # `_criterion.pyx:944-973` in Int128 and it shares no line with the key.
     for nid in range(n_nodes):
         for i in range(N_COLS):

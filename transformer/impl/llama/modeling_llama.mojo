@@ -4,14 +4,14 @@
 block, on the device, under profile
 `mojolearn.identical.transformer.fp32.v1`.
 
-FOLLOWS huggingface/transformers at `d56c55b`,
-`src/transformers/models/llama/modeling_llama.py`, read on disk at
+Reference: `src/transformers/models/llama/modeling_llama.py`
+(huggingface/transformers `d56c55b`), read on disk at
 `/Users/andrewhendel/CascadeProjects/upstream/transformers/` on 2026-08-24.
-Partial, inference only, eager attention only. What is MIRRORED here, symbol
+Partial, inference only, eager attention only. What is implemented here, symbol
 by symbol (line numbers verified against that checkout, not quoted from the
 contract):
 
-| theirs | lines | here |
+| reference | lines | here |
 |---|---|---|
 | `LlamaRMSNorm.forward` | :62-67 | `llama_rms_norm_kernel`, `llama_rms_norm` |
 | `LlamaRotaryEmbedding.compute_default_rope_parameters` | :93-109 | `llama_rope_inv_freq_host` |
@@ -28,7 +28,7 @@ FROZEN. Section 4's seam table decides every rounding below; section 9's
 stage list decides every tag and their order; section 5 decides the softmax.
 This file CONSUMES that document and never amends it. The host oracle
 `transformer/checks/transformer_oracle.mojo` is the ANSWER, bit for bit;
-this file is an independent transcription of the same order into kernels and
+this file is an independent spelling of the same order into kernels and
 the two share only the seam functions themselves (`ftz`,
 `identical_mul_add`, `identical_exp`, `identical_div`, `identical_rsqrt`,
 `identical_sin`, `identical_cos`, `identical_fmax`, `identical_silu`,
@@ -55,7 +55,7 @@ than assumed.
   power is spelled here.
 * **The residual add (S22, S23)** is IMPORTED from the mamba lane's device
   spelling, `residual_add_kernel`. Contract section 0 marks it REUSED and it
-  is reused literally, not transcribed.
+  is reused literally, not restated.
 * **`pinned_mul` (DEVIATION 720)** is IMPORTED from the same file rather
   than copied a fourth time. Contract section 12.3's DEVIATION 816 permits
   either; the import is the one that does not add a place to drift.
@@ -144,7 +144,7 @@ file's construction forced, which the contract does not decide, are numbered
 in the fresh range **1020-1029**, this file's alone.
 
 **DEVIATION 1020 -- the execution plan.** Upstream is torch ops over whole
-tensors; there is no upstream kernel decomposition to mirror for the
+tensors; there is no reference kernel decomposition for the
 elementwise seams, and the two reference SHAPES the contract cites
 (`mha_gpu_naive`, `softmax_kernel`) are shapes this profile deliberately
 does not take, because both fold across threads. The plan here is one thread
@@ -210,7 +210,7 @@ That kernel reads `RMS_EPS`, a module constant `1e-5` at
 values give different bits, so the mamba kernel CANNOT be called from here
 until eps is an ARGUMENT -- which is contract DEVIATION 801, a cross-lane
 edit in the mamba tree that this lane is forbidden to make. The kernel below
-is `mamba_rms_norm_kernel` transcribed with `RMS_EPS` replaced by `eps_in`
+is `mamba_rms_norm_kernel` restated with `RMS_EPS` replaced by `eps_in`
 and NOTHING else changed, so that the block can be built and gated now. **It
 is duplicated arithmetic and that is a defect, not a design.** When 801
 lands, delete `llama_rms_norm_kernel` and make `llama_rms_norm`'s body a
@@ -703,7 +703,7 @@ def llama_key_span(pos0: Int, l: Int, window: Int) -> Int:
 # ===========================================================================
 # DEVICE I/O PLUMBING. Not seams, not arithmetic -- these three are
 # `modeling_mamba.mojo`'s `mamba_upload`, `mamba_download` and `mamba_zeros`
-# transcribed under lane-neutral names, because a llama file calling
+# restated under lane-neutral names, because a llama file calling
 # `mamba_upload` reads as a mistake. If a shared `core/` home for them ever
 # appears, both lanes should move.
 # ===========================================================================

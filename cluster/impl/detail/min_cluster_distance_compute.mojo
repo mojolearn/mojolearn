@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Assign every sample to its nearest centroid, tiled to bound memory.
 
-FOLLOWS `minClusterAndDistanceCompute`,
-`cuvs/src/cluster/detail/kmeans_common.cuh:360-493`, at cuVS `94c2819`.
+Reference: `minClusterAndDistanceCompute`,
+`cuvs/src/cluster/detail/kmeans_common.cuh:360-493` (cuVS `94c2819`).
 Partial. (There is no `minClusterDistanceCompute.cu` in
 cuVS; this function lives in `kmeans_common.cuh`.)
 

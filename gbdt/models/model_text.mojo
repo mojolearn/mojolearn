@@ -135,7 +135,7 @@ rather than annotated.
   loader raises if they do not: two spellings of one fact are two chances
   to be wrong.
 * The CTR tables go in their own records AFTER the `feature` block and
-  before the first `tree`. `ctr_table` mirrors their `TCtrFeature`'s
+  before the first `tree`. `ctr_table` matches the reference `TCtrFeature`'s
   `prior_numerator` / `prior_denomerator` (`json_model_helpers.cpp:104-114`)
   plus the `shift`, `scale` and `target_border` of their `TModelCtr`
   (`online_ctr.h:260-266`) and the `CounterDenominator` and

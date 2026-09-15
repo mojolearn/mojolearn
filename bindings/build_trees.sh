@@ -226,7 +226,7 @@ for estimator in (et.ExtraTreesClassifier, et.ExtraTreesRegressor):
         raise SystemExit("smoke: removed CPU learner was accepted")
 
 # Refusals must cross the boundary by name. (bootstrap=True and
-# criterion='entropy' were in this list until DEVIATIONS 459/460 ported
+# criterion='entropy' were in this list until DEVIATIONS 459/460 implemented
 # them; they are now REACH-checked below instead.)
 for bad in (dict(oob_score=True), dict(warm_start=True),
             dict(ccp_alpha=0.1), dict(max_samples=0.5)):

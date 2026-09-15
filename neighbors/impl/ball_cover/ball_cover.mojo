@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Building the random ball cover index, and the eps query entry points.
 
-FOLLOWS `cuvs/src/neighbors/ball_cover/ball_cover.cuh` at cuVS `94c2819`:
+Reference: `cuvs/src/neighbors/ball_cover/ball_cover.cuh` (cuVS `94c2819`):
 `sample_landmarks` (`:62`), `construct_landmark_1nn` (`:121`),
 `k_closest_landmarks` (`:180`), `compute_landmark_radii` (`:212`),
 `rbc_build_index` (`:330`), `perform_rbc_eps_nn_query` (`:277`, `:300`) and

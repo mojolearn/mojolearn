@@ -2,16 +2,16 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cub::BlockReduce<T, TPB>::Sum`: the block-wide sum cuML's RF counts with.
 
-FOLLOWS `cub/cub/block/block_reduce.cuh` and its default algorithm
+Reference: `cub/cub/block/block_reduce.cuh` and its default algorithm
 `cub/cub/block/specializations/block_reduce_warp_reductions.cuh`
-(`BLOCK_REDUCE_WARP_REDUCTIONS`, `block_reduce.cuh:291`) at NVIDIA/cccl
+(`BLOCK_REDUCE_WARP_REDUCTIONS`, `block_reduce.cuh:291`) (NVIDIA/cccl
 `d10a88a945caa4ea63dd2a909cf789c6dbe085a4`, cloned read-only into
-`~/CascadeProjects/upstream/cccl` for this lane.
+`~/CascadeProjects/upstream/cccl` for this lane).
 
-CUB IS OPEN SOURCE, SO IT IS A IMPLEMENTATION TARGET, NOT A VENDOR CALL. The rule
+CUB IS OPEN SOURCE, SO IT IS AN IMPLEMENTATION TARGET, NOT A VENDOR CALL. The rule
 that says "substitute the platform primitive for a vendor call" applies to
 cuBLAS and cuSOLVER, whose kernels nobody can read. `block_reduce.cuh` can
-be read, so it is transcribed. `max.gpu.primitives.block.sum` was NOT
+be read, so its algorithm is implemented here. `max.gpu.primitives.block.sum` was NOT
 called in its place: it is addition over a scalar with no say in the fold
 ORDER, and the fold order is the whole content of
 `ApplyWarpAggregates` below.
@@ -49,7 +49,7 @@ flushed with an atomic. Both halves are here: the reduction and the flush.
      `1 .. warps-1` into its own aggregate IN ASCENDING WARP ORDER.
 
 That ascending, single-threaded fold is why the result is deterministic
-and why it is transcribed rather than replaced by a tree or an atomic.
+and why it is kept rather than replaced by a tree or an atomic.
 CUB ships an atomic variant right beside it
 (`ApplyWarpAggregatesNonDeterministic`, `:112-135`) and the default
 algorithm does not select it.
@@ -59,7 +59,7 @@ algorithm does not select it.
 #
 # DEVIATION 124. THE WARP WIDTH IS QUERIED, NOT CUB'S HARDCODED 32.
 #
-# THEIRS: `BlockReduceWarpReductions` sizes itself from `warp_threads`
+# REFERENCE: `BlockReduceWarpReductions` sizes itself from `warp_threads`
 # (`block_reduce_warp_reductions.cuh:60-64`), which is
 # `CUB_PTX_WARP_THREADS` (`cub/util_arch.cuh:105`), i.e. 32; and
 # `raft::WarpSize` is a literal 32
@@ -68,7 +68,7 @@ algorithm does not select it.
 # `builder_kernels_impl.cuh:365`). CUB and RAFT compile for one vendor, so
 # a literal is correct there.
 #
-# OURS: `WARP_SIZE` from `std.gpu`, which is 32 on NVIDIA and Apple, 64 on
+# HERE: `WARP_SIZE` from `std.gpu`, which is 32 on NVIDIA and Apple, 64 on
 # AMD CDNA and 32 on AMD RDNA. `WARPS` therefore differs per vendor, and so
 # does the NUMBER OF PARTIAL SUMS thread 0 folds and the number of lanes the
 # warp stage folds.
@@ -87,17 +87,17 @@ algorithm does not select it.
 #     `replication_lanes` is pinned to 32 there for the histogram. Declared,
 #     not taken.
 #
-# The alternative -- transcribing 32 -- was REFUSED: it is the precise
+# The alternative -- hardcoding 32 -- was REFUSED: it is the precise
 # defect `kernel_matrix.mojo` was written to prevent, and on AMD CDNA it
 # would size `warp_aggregates` for twice as many warps as exist and fold
 # uninitialised threadgroup memory into the total.
 #
 # DEVIATION 125. THE FLUSH ATOMIC IS 32-BIT, NOT 64-BIT.
 #
-# THEIRS: `atomicAdd` on an `unsigned long long*` aliasing
+# REFERENCE: `atomicAdd` on an `unsigned long long*` aliasing
 # `Split::local_nLeft`, which is `std::int64_t` (`split.cuh:51`).
 #
-# OURS: `Atomic.fetch_add` on an `Int32`. NOT A CHOICE. MEASURED this
+# HERE: `Atomic.fetch_add` on an `Int32`. NOT A CHOICE. MEASURED this
 # session: a 64-bit `Atomic.fetch_add` on this target is a hard COMPILE
 # error -- "Atomic operation is not supported for this type on Apple GPU"
 # -- so the 64-bit form cannot be built at all, let alone run.
@@ -197,7 +197,7 @@ def block_reduce_sum[
     # ASCENDING warp order. `FullTile` is True at this entry point
     # (`block_reduce.cuh:592` passes `<true>`), so their
     # `if (FullTile || ...)` guard is unconditionally taken and is not
-    # transcribed.
+    # needed here.
     comptime if sabotage == 1:
         # SABOTAGE: warps 1.. never reach the total. Thread 0 returns its
         # own warp's aggregate, which is right whenever the block is one

@@ -3,12 +3,12 @@
 """`set_unavailable`, `set_upper`, `set_lower`: the flag kernels of the
 working-set selection.
 
-FOLLOWS `cuml/cpp/src/svm/ws_util.cuh` at cuML v26.08.00. `update_priority`
+Reference: `cuml/cpp/src/svm/ws_util.cuh` (cuML v26.08.00). `update_priority`
 is NOT implemented: it serves `PrioritySelect`, which `FIFO_strategy = true`
 never calls ("only FIFO is tested so far", `workingset.h:36`); see
 `svm/NOT_IMPLEMENTED.tsv`.
 
-The flags are `UInt8` where theirs are `bool`, because the scan that
+The flags are `UInt8` where the reference uses `bool`, because the scan that
 compacts them (`gbdt/gpu_util/kernel/reorder_one_bit.mojo::
 block_scan_flags_kernel`) reads a byte array. Same values, 0 and 1.
 """

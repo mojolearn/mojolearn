@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """When to rebuild a level's histograms from scratch, and how big they are.
 
-FOLLOWS `catboost/cuda/methods/histograms_helper.h` at CatBoost `54a8143a`,
-`TComputeHistogramsHelper`. Followed statement for statement.
+Reference: `catboost/cuda/methods/histograms_helper.h`,
+`TComputeHistogramsHelper` (CatBoost `54a8143a`).
 
 This is the object the doc-parallel oblivious searcher holds one of per
 FEATURE GROUPING POLICY -- binary, half-byte, one-byte -- and drives once per
@@ -151,9 +151,9 @@ struct ComputeHistogramsHelper(Copyable, Movable):
         var was_from_scratch = self.build_from_scratch
         var part_count = 1 << self.current_bit
 
-        # their `BuildFromScratch = false;` after the launch (`:79`). It is
-        # inside `if (DataSet->GetGridSize(Policy))` upstream, so a policy
-        # with no features never clears it -- transcribed in
+        # the reference `BuildFromScratch = false;` after the launch (`:79`). It is
+        # inside `if (DataSet->GetGridSize(Policy))` in the reference, so a policy
+        # with no features never clears it -- kept in
         # `clear_from_scratch`, which the caller invokes only when it
         # actually launched.
         return HistogramPlan(self.current_bit, was_from_scratch, part_count)

@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Boolean adjacency to CSR.
 
-FOLLOWS `cuml/cpp/src/dbscan/adjgraph/algo.cuh` at cuML `00094f7`.
+Reference: `cuml/cpp/src/dbscan/adjgraph/algo.cuh` (cuML `00094f7`).
 Partial.
 
-Their `launcher` is two calls and both are here:
+The reference `launcher` is two calls and both are here:
 
     thrust::exclusive_scan(policy, dev_vd, dev_vd + batch_size, dev_ex_scan);
     raft::sparse::convert::adj_to_csr(handle, adj, data.ex_scan, num_rows,

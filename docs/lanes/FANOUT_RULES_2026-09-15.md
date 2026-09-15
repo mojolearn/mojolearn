@@ -107,3 +107,18 @@ that fit CPU estimators should use the scoped private
 `mojolearn._cpu_reference.reference_training()` context/decorator, as the
 source identity harness does. Ordinary CPU estimator fits refuse; public
 saved-model inference and the already-published byte-LM trainer remain.
+
+## 000. CI is a light touch (Andrew, Sep 15 2026 ~12:15 ET)
+
+- No workflow runs heavy checks on push. The CPU identity gate, the byte LM CPU gate, the forest host gate and wheel CI run only by hand (`gh workflow run`), on the CPU identity gate's weekly schedule, or from the release workflow.
+- Community health (a ten minute doc and diagnostics check) still runs on pushes that touch its paths. The external contribution checks still run on outside pull requests.
+- Lanes never wait on CI. A lane merges on its one-core M4 small-fixture evidence plus `python3 tools/docs_facts.py --check` and `python3 packaging/wheel_ci.py pins .`.
+- Never workflow_dispatch a full gate for a single lane.
+
+### CI shape since the light-touch rewrite
+
+- `light-checks.yml` is the ONLY workflow that starts by itself: push to main, one Linux runner, Python only, a ten minute cap. It runs doc facts, build pins, package inventory, and a check that fails if any other workflow gains a push or schedule trigger.
+- Every other workflow is manual. Each of its jobs is skipped unless the dispatch input `confirm` is `RUN-HEAVY`, so a wrong trigger costs nothing.
+  - The CPU identity gate, byte LM CPU gate, forest host gate, wheel CI, GPU validation, the self-hosted Python tests and community health all follow this rule.
+  - The release workflow passes `RUN-HEAVY` to the CPU certification it calls.
+  - The daily issue bot and the outside-contributor pull request checks are unchanged.

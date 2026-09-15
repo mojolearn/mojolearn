@@ -957,7 +957,7 @@ def check_entropy_analytic() -> Int:
     # --- E2. BALANCED TWO-CLASS NODE, 32 + 32. ONE BIT. --------------------
     # H = -(0.5*log2(0.5) + 0.5*log2(0.5)) = -(0.5*-1 + 0.5*-1) = 1, EXACTLY.
     # BASE-SENSITIVE BY CONSTRUCTION: in nats this is 0.6931472, so this cell
-    # is the gate on `sklearn/tree/_utils.pyx:64-65` having been transcribed.
+    # is the gate on `sklearn/tree/_utils.pyx:64-65` having been implemented.
     for k in range(N_CLASSES):
         h_buf[k].x = 0
     h_buf[0].x = 32
@@ -1181,7 +1181,7 @@ def check_rejection() -> Int:
     # not guard: their `invLeft = One / nLeft` is +inf and `0 * inf` makes the
     # gain NaN. Ours marks the candidate invalid (DEVIATION 144). Both halves
     # are asserted, because the NaN is THEIR behaviour and this file is the
-    # record that we transcribed it rather than quietly repaired it.
+    # record that we kept it rather than quietly repaired it.
     var unguarded = GiniObjectiveFunction[F](2, 0)
     left_buf[0] = CountBin(0)
     left_buf[1] = CountBin(0)

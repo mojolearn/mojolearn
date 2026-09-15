@@ -2,17 +2,15 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The state a growing tree carries between its two phases.
 
-FOLLOWS `TPointsSubsets`, `TLeaf` and `TBestSplitProperties` from
+Reference: `TPointsSubsets`, `TLeaf` and `TBestSplitProperties`,
 `catboost/cuda/methods/greedy_subsets_searcher/split_properties_helper.h:40`
-and `catboost/cuda/gpu_data/gpu_structures.h:64` at CatBoost `54a8143a`.
-Followed statement for statement.
+and `catboost/cuda/gpu_data/gpu_structures.h:64` (CatBoost `54a8143a`).
 
-Every function in their level loop takes `TPointsSubsets*`. It is the reason
+Every function in the reference level loop takes `TPointsSubsets*`. It is the reason
 `ComputeOptimalSplits` and `SplitLeaves` are two functions and not one long
-body, and implementing it is what lets ours be two functions as well.
+body, and implementing it is what lets this implementation have two functions as well.
 
-Their comments on the fields are kept verbatim where they had them, because
-they say which buffer is already reduced and which is not.
+Field comments note which buffer is already reduced and which is not.
 """
 
 from max.gpu.host import DeviceBuffer, HostBuffer

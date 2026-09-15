@@ -4,9 +4,9 @@
 `estimate_x0` needs, written here because `cublasgelsBatched` is closed.
 
 STANDS IN FOR `cuml/cpp/src_prims/linalg/batched/matrix.cuh::b_gels`
-(`:644-669`) at cuML 265b9da6 (v26.08.00). Theirs is a nine-line wrapper
-over `raft::linalg::detail::cublasgelsBatched`; there is no upstream
-arithmetic to follow statement for statement, only an upstream CONTRACT: non-transpose
+(`:644-669`) at cuML 265b9da6 (v26.08.00). The reference is a nine-line wrapper
+over `raft::linalg::detail::cublasgelsBatched`; it has no readable
+arithmetic order, only a CONTRACT: non-transpose
 mode, overdetermined only (`ASSERT(m > n)`), `A` copied so the caller's
 matrix survives, the solution written into the first `n` rows of `C` in
 place, one `devInfoArray` entry per problem.

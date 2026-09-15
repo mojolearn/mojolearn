@@ -1,0 +1,32 @@
+started=2026-09-15T13:52:58Z commit=8d4fa23af429b784cbc74d4392fb6493be10f41f
+device=NVIDIA H100 80GB HBM3  archs=sm_90a column=nvidia
+bindings_built=7 failed=none
+cd626e0cd6608c02e08ab04065a4db25d733a6aff626aff38765589b5be43b13  python/mojolearn/identical/_mojolearn.so
+836aa23185a1560775bb55bf8ba15f1e175c9f27cf2e7de813f0eaa8d8767e1a  python/mojolearn/identical/_mojolearn_byte_lm.so
+d787525229006266e3e969783f1cf58f7c48ea92628e58e224b54b4cd674e854  python/mojolearn/identical/_mojolearn_mamba.so
+e0f7143a8f8d67d8ffca5d6961f1bfb0e070a74a7f9d8f97a2c73d45205da4e2  python/mojolearn/identical/_mojolearn_training.so
+a300b22c06401ea1bc49a7200f908ff77d926d761680336af80ec8176ed28a3f  python/mojolearn/identical/_mojolearn_transformer.so
+732d265f4ec8018069e9d4d4f7cebcf39d2a303d4effc62a7e4e04e297c873f2  python/mojolearn/host/_mojolearn_byte_lm_host.so
+84ac73c9af3b4922d9684eb92d6e73b2130dc27abbc12b46d84260bd7800cf7f  python/mojolearn/host/_mojolearn_core_host.so
+vendor_label=nvidia-nvidia-h100-80gb-hbm3-sm_90a
+identity_break_exit=0
+cells=108 stable=108 moved=0 refused=0
+infer: stable=108
+model: stable=36 n/a=72
+batch: stable=108
+rlpair: stable=108
+sabotage_exit=1
+rlpair: rlpair_moved=12
+RLPAIR_MOVED byte-lm/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x40ab2a84 vs 0x40ab2a85
+RLPAIR_MOVED byte-lm-host-infer/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x40ab20a4 vs 0x40ab20a5
+RLPAIR_MOVED mamba1/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x401646a9 vs 0x401646a8
+RLPAIR_MOVED mamba2/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x3f74221c vs 0x3f74221d
+RLPAIR_MOVED mamba3/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x3f1bd715 vs 0x3f1bd714
+RLPAIR_MOVED transformer/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x4006c21d vs 0x4006c21c
+RLPAIR_MOVED samba/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x40a60ba0 vs 0x40a60ba1
+RLPAIR_MOVED mamba2-dtlimit/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x3f84cf92 vs 0x3f84cf93
+RLPAIR_MOVED transformer-window/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x4006c21d vs 0x4006c21c
+RLPAIR_MOVED byte-lm-resident/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x40ab2a84 vs 0x40ab2a85
+RLPAIR_MOVED byte-lm-host-infer-threaded/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x40ab20a4 vs 0x40ab20a5
+RLPAIR_MOVED samba-untied-dropout-accum/base: RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x40a7e5f4 vs 0x40a7e5f5
+finished=2026-09-15T13:59:48Z

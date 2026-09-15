@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The doc-parallel oblivious searcher: one split per level, all leaves at once.
 
-FOLLOWS `catboost/cuda/methods/
-oblivious_tree_doc_parallel_structure_searcher.{h,cpp}` at CatBoost
-`54a8143a` -- `TDocParallelObliviousTreeSearcher::FitImpl`. Followed statement for statement.
+Reference: `catboost/cuda/methods/
+oblivious_tree_doc_parallel_structure_searcher.{h,cpp}` (CatBoost
+`54a8143a`), `TDocParallelObliviousTreeSearcher::FitImpl`.
 
 **THIS IS THE FIRST CALLER OF THE POINTWISE FAMILY.** Everything under it --
 six accumulators, three drivers, the host launch layer, the scorer, the

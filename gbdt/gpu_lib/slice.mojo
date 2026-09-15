@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A half-open range of objects inside a buffer.
 
-FOLLOWS `catboost/cuda/cuda_lib/slice.h` at CatBoost `54a8143a`.
-Followed statement for statement.
+Reference: `catboost/cuda/cuda_lib/slice.h` (CatBoost `54a8143a`).
 
 `TSlice` is how every read in their level loop names the part it wants.
 `ParallelStripeView(subsets->PartitionsCpu, TSlice(newId, newId + 1))`
@@ -15,7 +14,7 @@ answers questions about device ownership by returning slices of the object
 range (`mapping.h:31-61`).
 
 ================================ DEVIATION BLOCK ======================
-Theirs stores `Left`/`Right` as `ui64` (`slice.h:10-11`). Ours stores `Int`,
+Theirs stores `Left`/`Right` as `ui64` (`slice.h:10-11`). This implementation stores `Int`,
 which is signed and 64-bit. This matters in exactly one place: their
 `IsEmpty()` is `Left >= Right` (`slice.h:52`), which under `ui64` plus their
 `Y_ASSERT(left <= right)` can only ever be `Left == Right`. Ours keeps the
@@ -23,7 +22,7 @@ which is signed and 64-bit. This matters in exactly one place: their
 constructor still reads as empty rather than reporting a negative size.
 
 `Y_ASSERT` (`slice.h:26`, `slice.h:48`) is a debug-build assert in their tree
-and compiles out of a release build, so it is transcribed as a comment rather
+and compiles out of a release build, so it is written as a comment rather
 than as a `raise`. `CB_ENSURE` (`slice.h:74`) is live in every build and IS a
 `raise`, which is why `remove` is the only raising method here.
 ======================================================================

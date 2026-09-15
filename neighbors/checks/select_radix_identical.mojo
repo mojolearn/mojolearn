@@ -6,7 +6,7 @@ DEVIATIONS 500 and 501 (IDENTITY_PATHS row 11). Reached only under
 `NUMERIC_IDENTICAL`.
 
 NO REFERENCE FILE, and it is deliberately not one. `neighbors/impl/matrix/detail/
-select_radix.mojo` is RAFT's `select_radix.cuh` followed statement for statement, tie handling
+select_radix.mojo` matches RAFT's `select_radix.cuh`, tie handling
 included, and its module docstring records what that handling costs:
 
     bits <  kth  ->  pos      = atomicAdd(p_out_cnt, 1)

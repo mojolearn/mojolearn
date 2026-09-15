@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`svcFit` / `svcPredict`: the C-SVC entry points, dense FP32.
 
-FOLLOWS `cuml/cpp/src/svm/svc_impl.cuh` + `svc.cu` at cuML v26.08.00:
+Reference: `cuml/cpp/src/svm/svc_impl.cuh` + `svc.cu` (cuML v26.08.00):
 `svcFitX` (dense), `svcPredictX` (dense, dense support), `applyPrediction`,
 `computeBatchDecisionFunction`, and the `SVC` class's `fit` / `predict` /
 `decisionFunction`. NOT implemented: `svcFitSparse` / `svcPredictSparse` and the
-CSR arms, the PRECOMPUTED arm, multiclass (their own `ASSERT(model.n_classes
+CSR arms, the PRECOMPUTED arm, multiclass (the reference `ASSERT(model.n_classes
 == 2, "Only binary classification is implemented at the moment")` is kept
 as a raise), `svmFreeBuffers` (host lists).
 
@@ -18,8 +18,8 @@ as a raise), `svmFreeBuffers` (host lists).
                                      else -1 -- `getOvrlabels(..., idx=1)`
     raft::linalg::gemv (predict)   -> decision_kernel, one thread per query
                                      row, ascending over the support vectors
-                                     (DEVIATION 634's rule again; theirs is
-                                     cuBLAS)
+                                     (DEVIATION 634's rule again; the reference
+                                     uses cuBLAS)
     applyPrediction                -> the same kernel's epilogue:
                                      `val + b < 0 ? labels[0] : labels[1]`
                                      or `val + b`

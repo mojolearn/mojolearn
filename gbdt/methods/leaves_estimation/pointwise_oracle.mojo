@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`TBinOptimizedOracle`: the walker's device-side eyes, per-bin.
 
-FOLLOWS `catboost/cuda/methods/leaves_estimation/pointwise_oracle.{h,cpp}`
-at CatBoost `54a8143a`, the rowSize==1 arm -- every single-dim pointwise
-loss. Followed statement for statement.
+Reference: `catboost/cuda/methods/leaves_estimation/pointwise_oracle.{h,cpp}`
+(CatBoost `54a8143a`), the rowSize==1 arm -- every single-dim pointwise
+loss.
 
-WHAT THE ORACLE HOLDS, in their layout: the target, weights and CURSOR
+WHAT THE ORACLE HOLDS, in the reference layout: the target, weights and CURSOR
 COPY gathered into BIN ORDER (docs of leaf 0, then leaf 1, ...), with
 per-bin offsets/sizes. Their doc-parallel factory sorts by the model's
 bins at construction; ours receives the order for free, because the
@@ -869,8 +869,8 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         floats instead of one copy of `binCount * lowTriangleMatrixSize`.
         SAME NUMBERS, same order within a row. It costs `numClasses - 1`
         extra device-to-host copies per estimation iteration and buys not
-        having to reproduce their `offset` bookkeeping, which is the part
-        of their function most likely to be transcribed wrong.
+        having to reproduce the reference `offset` bookkeeping, which is the part
+        of that function most likely to be reproduced wrong.
         ===================================================
         """
         var hbs = self.single_bin_dim

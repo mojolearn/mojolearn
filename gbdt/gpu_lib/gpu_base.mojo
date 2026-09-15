@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Streams, and the handle a stream is addressed by.
 
-FOLLOWS `catboost/cuda/cuda_lib/cuda_base.h` at CatBoost `54a8143a`.
-Followed statement for statement where it follow statement for statements. See the DEVIATION BLOCK.
+Reference: `catboost/cuda/cuda_lib/cuda_base.h` (CatBoost `54a8143a`).
+Differences from the reference are listed in the DEVIATION BLOCK.
 
 Their `TCudaStreamsProvider` (`cuda_base.h:27-84`) is a free list. A stream
 is handed out by `RequestStream()` (`cuda_base.h:75-83`) and returned to the
