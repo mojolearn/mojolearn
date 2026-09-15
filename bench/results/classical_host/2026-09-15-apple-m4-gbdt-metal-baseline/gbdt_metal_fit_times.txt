@@ -1,0 +1,48 @@
+GBDT Metal fit times, Apple M4, 2026-09-15 19:39 to 19:42 EDT
+
+THIS IS A FIRST BASELINE, NOT A PROVEN HEALTHY FIGURE.
+
+It exists because the repo had no GBDT Metal timing at all, so when fits went
+about 20x slow on Sep 15 there was nothing to measure the slowdown against.
+These numbers were taken once the machine was known good again, meaning the
+degraded state had cleared, so a future slowdown has a reference point. They
+are not a target, not a claim about how fast this path should be, and the
+figure "about 1 s per fit" that circulated on Sep 15 is unverified and must not
+be quoted. See docs/lanes/LANE_STATUS_lane-metal-queue-leak.md.
+
+Conditions
+  mojolearn    identical tier, vendor metal, the shared checkout's built
+               bindings (python/mojolearn/identical/_mojolearn_gbdt.so)
+  isolation    alone under the Metal lock (scratchpad mac_slot.sh metal), one
+               core, nice -n 19, no other GPU job
+  machine      Apple M4, macOS 26.5.2, uptime 9 days at the time of the run
+
+Small fixture: 2000 rows x 8 features, n_estimators=20, max_depth=6, Logloss,
+default grow policy. Five fits in one process, milliseconds:
+
+  7185.8  7066.9  6746.9  6999.7  7159.8
+
+Large fixture: 20000 rows x 16 features, n_estimators=20, max_depth=6, Logloss.
+Three fits per grow policy in one process, seconds, beside the degraded numbers
+from the same script and shape earlier that afternoon
+(~/mojolearn-evidence/gbdt-metal-slowdown-2026-09-15/):
+
+  policy          this baseline            degraded Sep 15 afternoon
+  SymmetricTree   8.289  7.735  8.288      21.5 to 23.4
+  Depthwise       11.848 14.082 13.373     27.0 to 30.4
+
+So this baseline is about 2.7x faster than the degraded state on SymmetricTree
+and about 2.2x on Depthwise.
+
+Metal command queues, `ioclasscount AGXCommandQueue`, sampled around both runs:
+34 before each run, 34 after every individual fit, 34 the moment each process
+exited, and 34 again 20 to 30 s later. Eleven fits across two processes added
+none, which is why the per-call DeviceContext in the GBDT binding path is not
+the source of the queue pileup investigated in that lane.
+
+Reproduce the large fixture arm:
+
+  bash $SP/mac_slot.sh metal env MOJOLEARN_NUMERIC_MODE=identical nice -n 19 \
+    $REPO/.pixi/envs/test/bin/python \
+    ~/mojolearn-evidence/gbdt-metal-slowdown-2026-09-15/gbdt_direct.py \
+    $REPO/python 20000

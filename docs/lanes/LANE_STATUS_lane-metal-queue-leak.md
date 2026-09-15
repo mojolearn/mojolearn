@@ -36,7 +36,10 @@ to 40.
    process, and every binding call builds a `DeviceContext`) crosses the limit
    inside its own lifetime, and queue creation begins to fail or crawl.
 2. **The queues are not leaked past process exit.** They come back when the
-   process dies, so a per-process fix (reuse one context) is a real fix.
+   process dies. This first suggested that reusing one context per process
+   would be a real fix. The health check below then ruled that out for the
+   binding path: eleven GBDT fits in two processes left the count flat at 34,
+   so the per-call `DeviceContext` is not what accumulates.
 
 ## How to count queues, and the trap that produced the opposite conclusion
 
@@ -130,10 +133,42 @@ check binary, or another lane's shape) is what phase 2 has to find.
 - No Python module builds a context; Python reaches the GPU only through the
   bindings.
 
-## Phase 2 protocol, for a session with none of this context
+## What phase 2 would have to measure, and why. NOT started
 
-Run these in order on a quiet GPU, meaning no other Metal job is running. A
-reboot is not required, here or anywhere below. Everything is macOS specific. `$REPO` is
+This lane is CLOSED at the finding above. Andrew has said no new lanes, so
+nothing below has been run and no binding was touched. It is written down so
+whoever picks this up does not repeat the two dead ends this lane already
+paid for.
+
+**The obvious fix is ruled out by measurement.** Reusing one `DeviceContext`
+per process, instead of the per-call one every binding builds, would fix
+nothing measurable: the queue count sat flat at 34 across eleven GBDT fits in
+two processes, before, during and after each. The per-call path in the GBDT
+binding does not accumulate queues in this build. Do not start there.
+
+**The open question is which workload shape does accumulate.** pid 78701, a
+`mojo` process, held 1211 of 1243 queues and was still climbing at 2491. Its
+shape is unknown; GBDT fits through the Python binding are excluded. The
+candidates worth measuring first, in order:
+
+1. Contexts held CONCURRENTLY rather than created and dropped in sequence. A
+   per-shard `DeviceContext(device_id=rank)` inside a fit, or a pool holding
+   several at once, keeps N queues alive where the binding path keeps one.
+   `core/forest_inference_pool.mojo:117`, `training/byte_lm_*` pools and the
+   two multi-GPU shard sites listed above are the places to instrument.
+2. A native `mojo run` or check binary rather than the Python bindings, since
+   the process caught accumulating was named `mojo`, not `python`.
+3. Long single processes that do thousands of calls, such as
+   `tools/identity_break.py` over every lane, fixture and repeat, which is
+   what was running when the kernel first complained.
+
+The reproduction `checks/device_context_queue_repro.mojo` stays on this branch
+for that work: it creates, uses and drops one `DeviceContext` per iteration,
+with `-D ONE_CTX=1` for the reuse arm, so it separates the runtime's behavior
+from any of our call shapes. `tools/diag/metal_queue_leak.py` samples both
+counters around any of it, and its docstring carries the counting trap.
+
+The runbook below is kept only as reference for that future work. `$REPO` is
 the shared checkout `/Users/andrewhendel/CascadeProjects/mojolearn`; never
 build, commit or switch branches there. Work in a worktree of this branch,
 `lane/metal-queue-leak`. One GPU job at a time: wrap every GPU command in
@@ -162,8 +197,14 @@ once no accumulating process is alive.
         print('fit', r, round(time.perf_counter() - t, 3), 's', flush=True)
     "
 
-About 1 s per fit on this base fixture is healthy. Around 20 s per fit is the
-degraded state that started this lane.
+Compare against the measured baseline in
+`bench/results/classical_host/2026-09-15-apple-m4-gbdt-metal-baseline/gbdt_metal_fit_times.txt`:
+6747 to 7186 ms per fit on this 2000 row fixture, taken once the machine was
+known good. That is a FIRST baseline, not a proven healthy figure. The "about
+1 s per fit" figure that circulated on Sep 15 is UNVERIFIED and must not be
+quoted; no GBDT Metal timing from before the slowdown exists anywhere in this
+repo. The degraded state that started this lane read 21.5 to 23.4 s per fit on
+the 20000 row fixture, against 7.7 to 8.3 s in that baseline.
 
 **Step 2, one fit, queues created and released.** In one terminal run the
 health check again; in another, before, during and 30 s after it:
@@ -194,22 +235,28 @@ no estimator, only a loop creating, using and dropping one `DeviceContext`:
     ITERS=200 /tmp/qrepro            # sample with --watch <pid> from the script
     mojo build -I . -D ONE_CTX=1 checks/device_context_queue_repro.mojo -o /tmp/qrepro_one
 
-Per-iteration contexts growing while `ONE_CTX=1` stays flat means the runtime
-allocates a queue per context and never releases it inside the process, and
-that context reuse is the fix.
+Per-iteration contexts growing while `ONE_CTX=1` stays flat would mean the
+runtime allocates a queue per context and does not release it inside the
+process. Note what this lane already measured: through the GBDT binding, which
+builds a context per call, the count did not grow at all. So if this arm shows
+growth, the difference between it and the binding path is the thing to explain,
+and reuse is a candidate for the accumulating shape only, not for the binding
+layer.
 
-**Step 5, the fix.** Reuse one `DeviceContext` per process in the bindings
-(module level, `max.gpu.host` only, GPU agnostic; load the mojo-syntax and
-mojo-gpu-fundamentals skills first). Re-measure steps 2 and 3. Prove it with
-queues flat over 200 fits, per-fit seconds stable, and a base-fixture
-`tools/identity_break.py` spot check of a few GBDT lanes against the committed
-Apple column. Then `python3 tools/docs_facts.py --check` and
-`python3 packaging/wheel_ci.py pins .`, merge and push HEAD:main.
+**Step 5, a fix, only once a shape is caught accumulating.** Whatever that
+shape turns out to be, the change belongs where the contexts are held, not in
+the per-call binding path this lane cleared. Any candidate fix must be proved
+with queues flat over the accumulating workload, per-fit seconds no worse than
+the baseline file, and a base-fixture `tools/identity_break.py` spot check of a
+few GBDT lanes against the committed Apple column, then
+`python3 tools/docs_facts.py --check` and `python3 packaging/wheel_ci.py pins .`.
 
-**Step 6, if the runtime leaks regardless of our shape**, write the report for
-Modular from the reproduction's numbers, and keep the context reuse as the
-workaround. Do not contact anyone.
+**Step 6, if the runtime accumulates a queue per context regardless of our
+shape**, write the report for Modular from the reproduction's numbers. Do not
+contact anyone.
 
-Until the fix lands, a long Metal run on the Mac should be split into smaller
-processes: a process making thousands of binding calls will cross 512 queues
-inside its own lifetime.
+What NOT to carry forward: the claim that a process making thousands of binding
+calls will cross the 512 queue limit inside its own lifetime. This lane
+measured eleven GBDT fits, each with several binding calls, and the count never
+moved off 34. Splitting long Metal runs into smaller processes is therefore not
+a justified workaround on this evidence.
