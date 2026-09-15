@@ -326,6 +326,12 @@ TRAINING_LANE_NAMES = {
     # contingency matrix, host_fowlkes_mallows in
     # metrics/host/metrics_oracle.mojo, exported under the GPU binding's name.
     "metrics-fowlkes-mallows": "the Fowlkes-Mallows index",
+    # The weighted score lanes (lane/cpu-training-small-gaps, 2026-09-15):
+    # score(X, y, sample_weight) of the gradient boosting adapters and the
+    # random forests through host_weighted_accuracy and host_weighted_r2 in
+    # metrics/host/metrics_oracle.mojo, exported from the metrics host binding.
+    "gbdt-adapter-score-weighted": "the weighted scores of the gradient boosting classifier and regressor",
+    "rf-score-weighted": "the weighted scores of the random forest classifier and regressor",
     # The mlp lane (lane/cpu-training-mlp, 2026-09-14): SmallMLPTrainer's
     # step through the training family's host binding (the three MLP
     # operations in training/host/mlp_oracle.mojo, the loss and AdamW over
@@ -941,6 +947,7 @@ FAMILIES = (
             "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",
             "log_loss", "confusion_matrix", "precision_recall_fscore",
             "kl_divergence", "trustworthiness", "fowlkes_mallows_score",
+            "accuracy_score_weighted", "r2_score_weighted",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -1083,7 +1090,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "rf-clf", "rf-reg", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
-            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest",
+            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest", "rf-score-weighted",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1278,6 +1285,7 @@ FAMILIES = (
             "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall",
             "gbdt-ordered-rmse", "gbdt-feature-freq",
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
+            "gbdt-adapter-score-weighted",
         ),
         inference_lanes=(),
         forest_kinds=(),

@@ -59,6 +59,7 @@ from umap.params import UMAPParams
 
 from metrics.estimator import (
     accuracy_score_host,
+    accuracy_score_weighted_host,
     adjusted_rand_score_host,
     completeness_score_host,
     entropy_host,
@@ -67,6 +68,7 @@ from metrics.estimator import (
     kl_divergence_host,
     mutual_info_score_host,
     r2_score_host,
+    r2_score_weighted_host,
     regression_error_host,
     log_loss_host,
     binary_ranking_host,
@@ -229,6 +231,56 @@ def mutual_info_score_binding(
     return PythonObject(out)
 
 
+def accuracy_score_weighted_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    w_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Weighted accuracy (`metrics/impl/weighted_scores.mojo`), scikit-learn's
+    `np.average(y_true == y_pred, weights=w)` in Float32.
+
+    `params`, in this exact order (matched in
+    `python/mojolearn/_metrics_impl.py`):
+
+        0  n
+    """
+    _want(String("accuracy_score_weighted"), params, 1)
+    var n = Int(py=params[0])
+    var yt = _load_i32(Int(py=y_true_addr), n)
+    var yp = _load_i32(Int(py=y_pred_addr), n)
+    var w = _load_f32(Int(py=w_addr), n)
+    var out = Float32(0.0)
+    with GILReleased(Python()):
+        out = accuracy_score_weighted_host(yt, yp, w, n)
+    return PythonObject(Float64(out))
+
+
+def r2_score_weighted_binding(
+    y_addr: PythonObject,
+    y_hat_addr: PythonObject,
+    w_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Weighted R2 (`metrics/impl/weighted_scores.mojo`), scikit-learn's
+    weighted `r2_score` with `force_finite=True`, Float32.
+
+    `params`, in this exact order (matched in
+    `python/mojolearn/_metrics_impl.py`):
+
+        0  n
+    """
+    _want(String("r2_score_weighted"), params, 1)
+    var n = Int(py=params[0])
+    var y = _load_f32(Int(py=y_addr), n)
+    var yh = _load_f32(Int(py=y_hat_addr), n)
+    var w = _load_f32(Int(py=w_addr), n)
+    var out = Float32(0.0)
+    with GILReleased(Python()):
+        out = r2_score_weighted_host(y, yh, w, n)
+    return PythonObject(Float64(out))
+
+
 def fowlkes_mallows_score_binding(
     y_true_addr: PythonObject,
     y_pred_addr: PythonObject,
@@ -237,7 +289,7 @@ def fowlkes_mallows_score_binding(
     """scikit-learn `fowlkes_mallows_score` (cuML has none) over the device
     contingency matrix (`metrics/impl/fowlkes_mallows.mojo`).
 
-    `params`, in this exact order (mirrored in
+    `params`, in this exact order (matched in
     `python/mojolearn/_metrics_impl.py`):
 
         0  n
@@ -873,6 +925,8 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
         m.def_function[entropy_binding]("entropy")
         m.def_function[mutual_info_score_binding]("mutual_info_score")
         m.def_function[fowlkes_mallows_score_binding]("fowlkes_mallows_score")
+        m.def_function[accuracy_score_weighted_binding]("accuracy_score_weighted")
+        m.def_function[r2_score_weighted_binding]("r2_score_weighted")
         m.def_function[homogeneity_score_binding]("homogeneity_score")
         m.def_function[completeness_score_binding]("completeness_score")
         m.def_function[v_measure_score_binding]("v_measure_score")
