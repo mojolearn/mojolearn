@@ -11,8 +11,19 @@
   `bench/results/identity_break/2026-09-15_cpu-transformer/`; scratch copies in `~/mojolearn-evidence/cpu-training-transformer/`.
 - No rented boxes, nothing running remotely.
 
-## Running
-- CPU identity gate run 34969598898 on the branch at 6839b4b12 (Wheel CI 34969598717). Not merged to main yet.
+## Gate result so far
+- CPU identity gate run 34969598898 at 6839b4b12: NOT green. On all seven runners the covered-lanes step passed with
+  `require-columns 4 ... : OK` and all 18 transformer and transformer-window train cells IDENTICAL x4. Apple M1, x86 draw a
+  and draw d finished green (sabotage caught). ARM64 and x86 draws b, c, e were cancelled at the job's 60-minute limit
+  inside the sabotage step, the same cancellation main's own runs 34968255704 and 34956243867 hit. The fix is
+  lane/cpu-training-gate-budget (sharded identity_break), gating as run 34971932337.
+- Restart (Sep 15 ~11:05 ET): origin/main (590c11c86) merged in with no conflicts as 787d1015e. On the M4, one
+  core, bindings rebuilt from 787d1015e into a fresh directory: `summary: IDENTICAL=18`, `summary (infer/model):
+  IDENTICAL=18, N/A=18`, `summary (batch): IDENTICAL=18`, `require-columns 4 ... : OK`; the sabotage build read
+  DIVERGENT=18 on all three. docs_facts --check and wheel_ci pins pass. Pushed with [skip ci] until Codex's routine
+  gate (08b50887a, lane/cpu-training-routine-speed) is on main, which replaces gate-budget as the gate fix.
+- Not merged to main. Plan: once the routine gate is on origin/main, merge origin/main into this branch, push (the gate
+  queues), and merge to main when that run is green.
 
 ## Next commands (from a worktree on this branch)
 ```
