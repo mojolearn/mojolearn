@@ -652,12 +652,23 @@ FAMILIES = (
         forest_kinds=(
             "rf_classifier", "rf_regressor", "et_classifier", "et_regressor",
             "gbdt_symmetric", "gbdt_depthwise", "gbdt_lossguide", "gbdt_rmse",
+            # lane/inference-gbdt-modes (2026-09-15): saved OrderedRMSE,
+            # ExperimentalTwoLevelFeatureFreq, pointwise Bayesian eval and
+            # one-hot categorical models through HostGBDT. Their CPU
+            # predictions read IDENTICAL against the 166-lane GPU columns
+            # (identity_break MOJOLEARN_IDENTITY_HOST_INFER on the
+            # gbdt-ordered-rmse, gbdt-feature-freq,
+            # gbdt-pointwise-l2-bayesian-eval and gbdt-categorical-ctr lanes);
+            # their forest gate fixtures are OWED to the next release record.
+            "gbdt_ordered_rmse", "gbdt_feature_freq", "gbdt_pointwise_bayesian_eval",
+            "gbdt_categorical_onehot",
         ),
         classes=(
             "RandomForestClassifier", "RandomForestRegressor",
             "ExtraTreesClassifier", "ExtraTreesRegressor", "GradientBoosting",
+            "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="random forests, Extra Trees and the four gradient boosting variants",
+        display="random forests, Extra Trees and eight gradient boosting variants",
         host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo"),
         exports=(
             "forest_host_numeric_mode", "forest_host_vendor", "forest_host_column",

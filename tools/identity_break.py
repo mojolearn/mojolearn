@@ -5447,6 +5447,52 @@ def _has_save_load(est):
     return _save_load(est) is not None
 
 
+#: PUBLIC CPU INFERENCE (lane/inference-gbdt-modes, 2026-09-15). `1` for
+#: every lane, or a comma list of lanes: the infer cell is the held-out probe
+#: asked of `mojolearn.host_model(<the saved file>)` (HostForest, HostGBDT or
+#: a classical host model, the shipped wheel families) instead of the fitted
+#: estimator, and the model cell hashes that file. The reload cell stays the
+#: estimator class's own `load`, so a host answer that differs from the
+#: class's reads RELOAD-MOVED here as well as DIVERGENT against the GPU
+#: columns. A file host_model refuses reads REFUSED. The JSON records the
+#: lanes under `host_infer`.
+HOST_INFER_ENV = "MOJOLEARN_IDENTITY_HOST_INFER"
+
+
+def _host_infer_lanes():
+    raw = os.environ.get(HOST_INFER_ENV, "").strip()
+    if not raw or raw == "0":
+        return None
+    return True if raw == "1" else set(p.strip() for p in raw.split(",") if p.strip())
+
+
+def _host_infer_on(name):
+    lanes = _host_infer_lanes()
+    return lanes is True or (lanes is not None and name in lanes)
+
+
+def _probe_fit_host(fit, name):
+    """`_probe_fit` under HOST_INFER_ENV: save, then predict through
+    `host_model`. Same return shape."""
+    if not _has_save_load(fit.est):
+        return None, None, None, "infer: host infer asked of an estimator with no save"
+    save, load, suffix = _save_load(fit.est)
+    from mojolearn._forest_host import host_model
+    try:
+        with tempfile.TemporaryDirectory(prefix="identity_break_host_") as tmp:
+            path = os.path.join(tmp, f"{name}{suffix}")
+            getattr(fit.est, save)(path)
+            model = _hfile(path)
+            try:
+                infer = _h(*fit.probe(host_model(path)))
+            except Exception as exc:
+                return None, None, None, f"infer (host_model): {type(exc).__name__}: {exc}"
+            reload = _h(*fit.probe(getattr(type(fit.est), load)(path)))
+    except Exception as exc:
+        return None, None, None, f"model: {type(exc).__name__}: {exc}"
+    return infer, model, reload, None
+
+
 def _probe_fit(fit, name):
     """The infer and model columns of ONE fit. Returns (infer, model, reload,
     error) where infer and model are a hash or an `n/a:<reason>` string,
@@ -5455,6 +5501,8 @@ def _probe_fit(fit, name):
     stage that raised leaves its column None, which reads REFUSED."""
     if not callable(fit.probe):
         return fit.probe, "n/a:no-save", None, None
+    if _host_infer_on(name):
+        return _probe_fit_host(fit, name)
     try:
         infer = _h(*fit.probe(fit.est))
     except Exception as exc:
@@ -5595,6 +5643,9 @@ def _run_reference(args):
                       skipped=sorted(skip), batch_protocol=batch_protocol,
                       batch_sabotage=batch_sabotage, rlpair_protocol=rlpair_protocol,
                       rlpair_sabotage=rlpair_sabotage)
+        host_infer = _host_infer_lanes()
+        if host_infer is not None:
+            record["host_infer"] = "all" if host_infer is True else sorted(host_infer)
         for part in extra:
             record[f"{part}_protocol"] = _part_protocol(part, args.batch_alone)
             record[f"{part}_sabotage"] = extra_sabotage[part] or False
