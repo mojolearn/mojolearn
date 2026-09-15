@@ -6,7 +6,8 @@ built, plus a runtime check that runs only where the arima host binding is
 built and the package took the CPU-only path.
 
 What the source checks hold: the manifest declares the arima family, routes
-`_mojolearn_arima`, covers the three ARIMA lanes (and not par-arima) and no
+`_mojolearn_arima`, covers the three ARIMA lanes (and par-arima since
+lane/cpu-training-par-classical, 2026-09-15) and no
 longer names ARIMA as having no CPU path; the binding registers the GPU
 binding's fit, predict and forecast names; the oracle imports no GPU module
 and nothing from `arima/` or any other package beyond the
@@ -48,14 +49,16 @@ def _read(rel):
 def test_manifest_declares_the_arima_family():
     fam = host_surface.family("arima")
     assert fam["routes"] == "_mojolearn_arima"
-    assert fam["training_lanes"] == LANES
+    assert fam["training_lanes"] == LANES + ("par-arima",)
     assert ORACLE in fam["host_modules"] and (ROOT / ORACLE).is_file()
     assert (ROOT / host_surface.build_shim("arima")).is_file()
     assert (ROOT / host_surface.binding_source("arima")).is_file()
     assert host_surface.routed_modules()["_mojolearn_arima"] == "_mojolearn_arima_host"
     for lane in LANES:
         assert lane in host_surface.covered_lanes(), f"{lane} is not a covered training lane"
-    assert "par-arima" not in host_surface.covered_lanes(), "par-arima must not be declared"
+    # par-arima is declared since lane/cpu-training-par-classical (2026-09-15):
+    # fit_arima's series shards run as host fits through the pool's CPU route.
+    assert "par-arima" in host_surface.covered_lanes(), "par-arima is not a covered training lane"
     assert "ARIMA" not in host_surface.no_cpu_path_sentence(), host_surface.no_cpu_path_sentence()
     assert "seasonal ARIMA" in host_surface.training_sentence()
 
