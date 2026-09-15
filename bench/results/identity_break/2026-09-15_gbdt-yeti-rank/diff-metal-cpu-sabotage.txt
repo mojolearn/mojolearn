@@ -1,0 +1,25 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=b58caf9fb1724ee0a334ad8491d4ecad5e09f691
+| lane/fixture                 | verdict    | apple-m4         | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| gbdt-yeti-rank/base          | DIVERGENT  | parts differ: predict,seeded_predict; agree: loss_curve | 056411a6d676707a |
+| gbdt-yeti-rank/odd           | DIVERGENT  | parts differ: predict,seeded_predict; agree: loss_curve | 20401fd02ae324a0 |
+| gbdt-yeti-rank/ties          | DIVERGENT  | parts differ: predict,seeded_predict; agree: loss_curve | b44572e7b3a74173 |
+
+summary: DIVERGENT=3
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| gbdt-yeti-rank/base          | infer  | DIVERGENT    | 09302e69a820d4d2 | 45011f15b0055861 |
+| gbdt-yeti-rank/base          | model  | DIVERGENT    | 61b246f4d443ada8 | c406ff93ed1d3e00 |
+| gbdt-yeti-rank/base          | batch  | DIVERGENT    | 1d4efc6c8dd79d17 | cf51ea6acad97605 |
+| gbdt-yeti-rank/odd           | infer  | DIVERGENT    | 4f27a4e93e0b10ae | 927b00bcc2fc5002 |
+| gbdt-yeti-rank/odd           | model  | DIVERGENT    | 6b0f6c184a2f7a1c | 91bf2ca9b7c814a4 |
+| gbdt-yeti-rank/odd           | batch  | DIVERGENT    | 4b907129f7e6a11d | ea772992552d018b |
+| gbdt-yeti-rank/ties          | infer  | DIVERGENT    | b9ffe828b9fbd29b | 227388ca5f47499f |
+| gbdt-yeti-rank/ties          | model  | DIVERGENT    | 829d963be374fd19 | 3974b48b761b6469 |
+| gbdt-yeti-rank/ties          | batch  | DIVERGENT    | eacc647f6bcc57aa | ab82108a7ed11fa1 |
+
+summary (infer/model): DIVERGENT=6
+summary (batch): DIVERGENT=3
+summary (rlpair): 

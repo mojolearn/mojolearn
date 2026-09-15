@@ -119,6 +119,7 @@ from gbdt.host.gbdt_oracle_losses import (
     GBDT_OBJ_QUANTILE,
     GBDT_OBJ_QUERY_RMSE,
     GBDT_OBJ_TWEEDIE,
+    GBDT_OBJ_YETI_RANK,
     GbdtHostLoss,
     gbdt_losses_host_fit,
 )
@@ -255,6 +256,8 @@ def _pointwise_objective(loss: String) -> Int:
         return GBDT_OBJ_QUERY_RMSE
     if loss == String("PairLogit"):
         return GBDT_OBJ_PAIR_LOGIT
+    if loss == String("YetiRank"):
+        return GBDT_OBJ_YETI_RANK
     return -1
 
 
@@ -327,6 +330,12 @@ def _resolve_pointwise_loss(
         newton = 1
         gradient = 1
     if method_override >= 0:
+        if method_override != method and objective == GBDT_OBJ_YETI_RANK:
+            # `catboost_options.cpp:307-308`, their message verbatim
+            raise Error(
+                "At the moment, in the YetiRank mode, changing the"
+                " leaf_estimation_method parameter is prohibited."
+            )
         method = method_override
     var iterations = 1
     if method == GBDT_LEAF_NEWTON:
@@ -630,10 +639,10 @@ def gbdt_fit_binding(
                 "group_id: the group sizes cover " + String(covered)
                 + " rows of " + String(tail_rows)
             )
-        if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit"):
+        if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit") and tail_loss != String("YetiRank"):
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
-                " (QueryRMSE and PairLogit are trained here; YetiRank,"
+                " (QueryRMSE, PairLogit and YetiRank are trained here;"
                 " QuerySoftMax and QueryCrossEntropy are not implemented);"
                 " loss='" + tail_loss + "' does not use it, so it is refused by"
                 " name rather than carried and ignored"
@@ -671,7 +680,7 @@ def gbdt_fit_binding(
                 " 922-942)"
             )
         raise Error("Cannot generate pairs for data without groups")
-    if tail_loss == String("QueryRMSE") or tail_loss == String("PairLogit"):
+    if tail_loss == String("QueryRMSE") or tail_loss == String("PairLogit") or tail_loss == String("YetiRank"):
         # `TDocParallelSplit` (`gpu_data/doc_parallel_dataset.h:26-38`): the
         # pool's queries only with fewer groups than rows, otherwise every
         # row a query of one (`TWithoutQueriesGrouping`)
@@ -686,6 +695,9 @@ def gbdt_fit_binding(
     var random_seed = UInt64(Int(py=params[9]))
     var score_function = Int(py=params[10])
     var loss = String(py=strs[0])
+    if loss == String("YetiRank") and l2_leaf_reg == Float32(0.0):
+        # `catboost_options.cpp:357-359`, as `gbdt/train.mojo::train` applies it
+        l2_leaf_reg = Float32(1e-20)
     var loss_border = Float32(Float64(py=params[15]))
     var leaf_iterations = Int(py=params[16])
     var leaf_method = Int(py=params[17])
@@ -785,7 +797,7 @@ def gbdt_fit_binding(
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton, or Gradient under Lossguide)")
     if is_pointwise and leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (Gradient, Newton or Exact)")
-    if (loss == String("QueryRMSE") or loss == String("PairLogit")) and bootstrap_type != String("") and bootstrap_type != String("No"):
+    if (loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank")) and bootstrap_type != String("") and bootstrap_type != String("No"):
         raise Error(
             "loss='" + loss + "' with a bootstrap is not implemented here:"
             " the reference samples whole queries for querywise targets,"

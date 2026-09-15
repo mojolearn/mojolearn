@@ -302,6 +302,19 @@ Linux legs are OWED before this heading reads published.
   `group_id`, the `max_pairs` subsample and PairLogitPairwise are not implemented. New identity lane
   `gbdt-pair-logit` with a batch part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed
   to the release record.
+- New `loss="YetiRank"` for `GradientBoosting`, the sampled-permutation ranking loss of the CatBoost
+  reference (`yeti_rank_pointwise.cu` and its two radix-sort passes, through the querywise target), on
+  the same arm as QueryRMSE, at the reference's defaults: 10 permutations, decay 0.85, Newton leaves at
+  one iteration (changing the method is refused in the reference's words) and an L2 of 0. A query over
+  1023 rows is refused as the reference refuses it. Two named DEVIATIONs: each task of at most 1024
+  rows runs sequentially on one device thread in the reference's per-document order (draws, the stable
+  sort, then each lane's two phases), and the derivative seeds come from a YetiRank stream of
+  `random_state` kept apart from the searcher's, so the trees cannot match the reference's GPU bit
+  for bit. Leaves are shifted to average zero as for PairLogit; `loss_curve_` is zero because the
+  reference's target writes no value. `GradientBoosting(l2_leaf_reg=...)` now defaults to `None`,
+  which takes the loss's default (0 for YetiRank, 3.0 for every other loss, the value it was); an
+  explicit value is used as given. New identity lane `gbdt-yeti-rank` with a batch part. Apple M4
+  Metal and CPU columns only; NVIDIA and AMD are owed to the release record.
 - The host (CPU) bindings `python/mojolearn/host_surface.py` marks `ships_in_wheel` ship in
   both wheels under `mojolearn/host/`: ten families, byte_lm, forest, tokenizer, neural, core,
   linalg, estimators, metrics, svm and forecast. The other seventeen families the manifest
