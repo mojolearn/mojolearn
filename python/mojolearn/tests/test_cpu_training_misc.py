@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU training for the misc lanes (lane/cpu-training-misc, 2026-09-15):
 kmeans-sqrt, kmeans-classic-pp, kmeans-cosine, cross-val, bootstrap,
-permutation-test and monte-carlo, checked from
+permutation-test, monte-carlo, optim-sgd, optim-adam-clip,
+cross-entropy-arms and training-primitives, checked from
 SOURCE so it runs on a box with nothing built, plus runtime checks that run
 only where the host bindings are built and the package took the CPU-only
 path.
@@ -22,14 +23,20 @@ binding's name, and the oracle refuses the cosine metric in the device's
 words; the resample family routes `_mojolearn_resample` to its own host
 binding, which registers the GPU binding's three entries and read-backs and
 not the multi-GPU range probe, and whose oracle imports no GPU module, calls
-the device path's own host stages and carries the sabotage arm.
+the device path's own host stages and carries the sabotage arm; the training
+family declares the four neural lanes, its host binding registers the GPU
+binding's clip, accumulate and Samba operation names, the new oracle imports
+no GPU module, and the no-CPU-path sentence names the blocks that still have
+none rather than "the neural blocks".
 
 The runtime checks (skipped, and SAID to be skipped, when a binding is
 absent or a GPU set loaded): `KMeans(metric='cosine')` refuses with the
 device's sentence; the fold-row gather returns the rows a Python index
 returns, byte for byte, and refuses an out-of-range index before writing;
 a bootstrap run twice returns the same bytes and its `r_first` slice equals
-the whole run's, and the range probe refuses by name.
+the whole run's, and the range probe refuses by name; the host embedding
+forward is the gather, the two-piece accumulate is the elementwise sum, and
+the clip refuses max_norm <= 0 by name.
 The bit claim against the GPU columns is the CPU identity gate's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_misc
@@ -48,6 +55,11 @@ KMEANS_LANES = ("kmeans-sqrt", "kmeans-classic-pp", "kmeans-cosine")
 KMEANS_ORACLE = "cluster/host/kmeans_oracle.mojo"
 RESAMPLE_ORACLE = "resample/host/resample_host.mojo"
 RESAMPLE_LANES = ("bootstrap", "permutation-test", "monte-carlo")
+NEURAL_LANES = ("optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives")
+SAMBA_ORACLE = "training/host/samba_ops_oracle.mojo"
+NEURAL_EXPORTS = ("clip_grad_norm", "accumulate", "accumulation_is_aligned", "embedding_forward",
+                  "embedding_backward", "rms_norm_forward", "rms_norm_backward", "linear_forward",
+                  "linear_backward")
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 COSINE_REFUSAL = "kmeans only supports L2Expanded or L2SqrtExpanded distance metrics."
 FIXTURES = ("base", "ties", "hashed", "wide", "denormal", "denormal_ftz", "dupes", "odd", "negative")
@@ -174,6 +186,30 @@ def test_resample_oracle_is_host_only_and_sabotaged():
     assert f'- "{RESAMPLE_ORACLE}"' in wf
 
 
+def test_manifest_covers_the_neural_lanes():
+    fam = host_surface.family("training")
+    for lane in NEURAL_LANES:
+        assert lane in host_surface.record_covered_lanes(), f"{lane} is not a record-covered lane"
+        assert lane in fam["training_lanes"]
+    src = _read(host_surface.binding_source("training"))
+    gpu = _read("bindings/_mojolearn_training.mojo")
+    for name in NEURAL_EXPORTS:
+        assert f'("{name}")' in src and f'("{name}")' in gpu, name
+        assert name in fam["exports"], name
+    for absent in ("neural_rng", "clip_parallel_available", "optimizer_parallel_available"):
+        assert f'("{absent}")' in gpu and f'("{absent}")' not in src, absent
+    assert SAMBA_ORACLE in fam["host_modules"] and (ROOT / SAMBA_ORACLE).is_file()
+    text = _read(SAMBA_ORACLE)
+    assert not GPU_IMPORTS.search(text), f"{SAMBA_ORACLE} imports a GPU module"
+    assert not re.search(r"^\s*from training\.samba_ops import", text, re.M)
+    for oracle in ("emb_forward_oracle", "emb_backward_oracle", "gemm_oracle", "gemm_backward_a_call",
+                   "gemm_backward_b_call", "identical_rsqrt"):
+        assert oracle in text, oracle
+    assert f'- "{SAMBA_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
+    sentence = host_surface.no_cpu_path_sentence()
+    assert "neural blocks" not in sentence and "Transformer, Mamba and Samba blocks" in sentence, sentence
+
+
 def _cpu_only_with(basename):
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -245,6 +281,28 @@ def test_bootstrap_runs_on_the_host_when_built():
         assert "resample_ranges_parallel_available" in str(exc)
     else:
         raise AssertionError("the host binding exported the multi-GPU range probe")
+
+
+def test_neural_primitives_run_on_the_host_when_built():
+    if not _cpu_only_with("_mojolearn_training_host"):
+        return
+    import numpy as np
+    T = mojolearn.training
+    module = _backend.load_host_module("_mojolearn_training_host")
+    assert not bool(module.training_host_sabotage()), "a sabotage build loaded outside the gate"
+    rng = np.random.default_rng(3)
+    w = rng.standard_normal((10, 4)).astype(np.float32)
+    ids = np.asarray([3, 0, 9, 3], dtype=np.int32)
+    assert np.asarray(T.embedding_forward(w, ids)).tobytes() == w[ids].tobytes()
+    a = np.asarray([1.0, 2.0, -4.0], dtype=np.float32)
+    b = np.asarray([0.5, -2.0, 8.0], dtype=np.float32)
+    assert np.asarray(T.accumulate_grads([a, b], None)).tolist() == [1.5, 0.0, 4.0]
+    try:
+        T.clip_grad_norm_([a.copy()], 0.0)
+    except (ValueError, RuntimeError, Exception) as exc:
+        assert "max_norm" in str(exc), str(exc)
+    else:
+        raise AssertionError("clip_grad_norm_ accepted max_norm=0")
 
 
 if __name__ == "__main__":

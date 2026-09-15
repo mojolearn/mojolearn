@@ -1015,8 +1015,11 @@ def host_families_built():
 #:     normative answers of the optimizer and loss profiles) and
 #:     mlp_bias_activation, mlp_relu_backward and mlp_sum_rows over
 #:     training/host/mlp_oracle.mojo, so SmallMLPTrainer trains on the CPU;
-#:     the clip on its own, the accumulation, the Samba operations and the
-#:     neural RNG are absent.
+#:     and (lane/cpu-training-misc, 2026-09-15) clip_grad_norm over the same
+#:     optimizer oracle, and accumulate, accumulation_is_aligned and the
+#:     embedding, RMSNorm and linear forward and backward over
+#:     training/host/samba_ops_oracle.mojo; the Samba stack's block
+#:     operations and the neural RNG are absent.
 #:   _mojolearn_resample -> _mojolearn_resample_host (bootstrap,
 #:     permutation-test, monte-carlo; lane/cpu-training-misc, 2026-09-15):
 #:     bootstrap, permutation_test and monte_carlo_integrate over

@@ -364,7 +364,7 @@ byte LM's. Each also builds from source through
 | rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | gp | `_mojolearn_gp_host.so` | `_mojolearn_gp` | gp, gp-matern12, gp-matern32, gp-matern52-ard | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric, gbdt-rmse, gbdt-depthwise, gbdt-lossguide, cross-val | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
-| training | `_mojolearn_training_host.so` | `_mojolearn_training` | mlp | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| training | `_mojolearn_training_host.so` | `_mojolearn_training` | mlp, optim-sgd, optim-adam-clip, cross-entropy-arms, training-primitives | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | resample | `_mojolearn_resample_host.so` | `_mojolearn_resample` | bootstrap, permutation-test, monte-carlo | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | arima | `_mojolearn_arima_host.so` | `_mojolearn_arima` | arima, arima-011, arima-seasonal-c | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |<!--/fact-->
 

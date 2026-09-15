@@ -387,13 +387,28 @@ TRAINING_LANE_NAMES = {
     "bootstrap": "the bootstrap",
     "permutation-test": "the permutation test",
     "monte-carlo": "Monte Carlo integration",
+    # lane/cpu-training-misc batch 3 (2026-09-15): the neural primitives
+    # through the training family's host binding. optim-sgd and
+    # cross-entropy-arms reach optimizer_step and ce_loss (the mlp lane's
+    # entries); optim-adam-clip adds clip_grad_norm over
+    # training/checks/optimizer_oracle.mojo and accumulate over
+    # training/host/samba_ops_oracle.mojo; training-primitives adds the
+    # embedding, RMSNorm and linear operations over the same file (the
+    # embedding and GEMM oracles and the RMSNorm kernels' statements with
+    # the caller's eps). On the M4, one core: all 36 train, 9 infer and 18
+    # batch cells IDENTICAL x4 before the gate ran.
+    "optim-sgd": "SGD with momentum, Nesterov and dampening",
+    "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
+    "cross-entropy-arms": "the cross-entropy loss arms",
+    "training-primitives": "the embedding, RMSNorm and linear training primitives",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "the neural blocks",
+    "the Transformer, Mamba and Samba blocks",
+    "the Embedding layer",
     "gradient boosting training other than symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss",
 )
 
@@ -869,29 +884,41 @@ FAMILIES = (
         # family's host binding. It routes `_mojolearn_training` on a
         # CPU-only install with the GPU binding's optimizer_step, ce_loss and
         # the three small MLP operations, so SmallMLPTrainer (and the
-        # optimizers and cross_entropy on their own) run unchanged; the clip
-        # on its own, the accumulation, the Samba operations, the neural RNG
+        # optimizers and cross_entropy on their own) run unchanged;
+        # lane/cpu-training-misc batch 3 (2026-09-15) adds clip_grad_norm,
+        # accumulate, accumulation_is_aligned and the embedding, RMSNorm and
+        # linear forward and backward. The Samba operations, the neural RNG
         # and the multi-GPU probes stay absent and refuse by name.
         family="training",
         binding="_mojolearn_training_host",
         routes="_mojolearn_training",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mlp",),
+        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("SmallMLPTrainer", "SGD", "Adam", "AdamW", "cross_entropy"),
-        display="the small MLP trainer, the optimizers and the cross-entropy loss",
+        classes=(
+            "SmallMLPTrainer", "SGD", "Adam", "AdamW", "cross_entropy", "clip_grad_norm_",
+            "accumulate_grads", "embedding_forward", "embedding_backward", "rms_norm_forward",
+            "rms_norm_backward", "linear_forward", "linear_backward",
+        ),
+        display="the small MLP trainer, the optimizers, the gradient clip, the cross-entropy loss and the training primitives",
         host_modules=(
             "training/host/mlp_oracle.mojo",
             "training/checks/loss_oracle.mojo",
             "training/checks/optimizer_oracle.mojo",
+            "training/host/samba_ops_oracle.mojo",
+            "embedding/checks/embedding_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
             "training_host_numeric_mode", "training_host_vendor",
             "training_host_column", "training_host_sabotage",
             "training_numeric_mode", "training_vendor", "optimizer_step",
             "ce_loss", "mlp_bias_activation", "mlp_relu_backward", "mlp_sum_rows",
+            "clip_grad_norm", "accumulate", "accumulation_is_aligned",
+            "embedding_forward", "embedding_backward", "rms_norm_forward",
+            "rms_norm_backward", "linear_forward", "linear_backward",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
