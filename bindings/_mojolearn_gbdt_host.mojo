@@ -102,6 +102,12 @@ from gbdt.host.gbdt_oracle_losses import (
     GbdtHostLoss,
     gbdt_losses_host_fit,
 )
+from gbdt.host.gbdt_oracle_multiclass import (
+    GBDT_OBJ_MULTICLASS,
+    GBDT_OBJ_MULTICLASS_OVA,
+    gbdt_multi_host_fit,
+    gbdt_multi_host_model_text,
+)
 from gbdt.host.gbdt_oracle_rmse import (
     gbdt_rmse_host_fit,
     gbdt_rmse_host_model_text,
@@ -364,6 +370,9 @@ def gbdt_fit_binding(
     var n_features = Int(py=params[1])
     var n_weights = Int(py=params[2])
     var n_flags = Int(py=params[3])
+    var class_weights = List[Float32]()
+    for i in range(n_class_weights):
+        class_weights.append(Float32(Float64(py=params[35 + i])))
     var grow_code = Int(py=params[31])
     if grow_code != 0 and grow_code != 1 and grow_code != 2:
         raise Error(
@@ -432,8 +441,22 @@ def gbdt_fit_binding(
     # the pointwise losses of gbdt/host/gbdt_oracle_losses.mojo
     var pw_objective = _pointwise_objective(loss)
     var is_pointwise = pw_objective >= 0
-    if loss != String("Logloss") and not is_rmse and not is_pointwise:
+    # the multi-output losses of gbdt/host/gbdt_oracle_multiclass.mojo
+    var is_multi = loss == String("MultiClass") or loss == String("MultiClassOneVsAll")
+    if loss != String("Logloss") and not is_rmse and not is_pointwise and not is_multi:
         _refuse("loss='" + loss + "'")
+    if is_multi and grow_code != 0:
+        raise Error(
+            "Error: optimization scheme is not supported for GPU learning"
+            " Loss=MultiClass;OptimizationScheme="
+            + String("Depthwise" if grow_code == 1 else "Lossguide")
+            + " (their TGpuTrainerFactory has no non-symmetric"
+            " multiclass trainer, multiclass.cpp:5-14, train.cpp:279)"
+        )
+    if is_multi and leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON:
+        _refuse("leaf_estimation_method code " + String(leaf_method) + " under loss='" + loss + "' (only Newton)")
+    if is_multi and leaf_iterations >= 0 and leaf_iterations != 1:
+        _refuse("leaf_estimation_iterations=" + String(leaf_iterations) + " under loss='" + loss + "' (only 1)")
     if is_pointwise and grow_code != 0:
         _refuse("loss='" + loss + "' under grow_policy code " + String(grow_code) + " (Depthwise or Lossguide)")
     if is_rmse and leaf_iterations >= 0 and leaf_iterations != 1:
@@ -477,8 +500,8 @@ def gbdt_fit_binding(
             _refuse("bootstrap_type='" + bootstrap_type + "' under loss='" + loss + "'")
     if n_weights != 0:
         _refuse("sample_weight")
-    if n_class_weights != 0:
-        _refuse("class_weights")
+    if n_class_weights != 0 and not is_multi:
+        _refuse("class_weights outside MultiClass and MultiClassOneVsAll")
     if n_flags != 0:
         _refuse("cat_features or one_hot_features")
     if n_eval_rows != 0:
@@ -645,7 +668,7 @@ def gbdt_fit_binding(
     var best_iteration = 0
     var stopped_early = False
     var has_nan = False
-    if is_rmse or grow_code != 0 or is_pointwise:
+    if is_rmse or grow_code != 0 or is_pointwise or is_multi:
         # NaN is measured on the symmetric Logloss fit only (gbdt-nan-modes)
         var xs = f32_ptr(x_address)
         for i in range(n_rows * n_features):
@@ -662,7 +685,16 @@ def gbdt_fit_binding(
     with GILReleased(Python()):
         var x = read_f32(x_address, n_rows * n_features)
         var y = read_f32(y_address, n_rows)
-        if is_pointwise:
+        if is_multi:
+            # gbdt/host/gbdt_oracle_multiclass.mojo
+            var multi_model = gbdt_multi_host_fit(
+                x, y, n_rows, n_features, p,
+                GBDT_OBJ_MULTICLASS if loss == String("MultiClass") else GBDT_OBJ_MULTICLASS_OVA,
+                class_weights,
+            )
+            text = gbdt_multi_host_model_text(multi_model)
+            losses = multi_model.losses.copy()
+        elif is_pointwise:
             # gbdt/host/gbdt_oracle_losses.mojo
             var pw_model = gbdt_losses_host_fit(x, y, n_rows, n_features, p, pw_loss)
             text = gbdt_host_model_text(pw_model)
@@ -1075,6 +1107,120 @@ def gbdt_predict_binding(
     return PythonObject(n_rows)
 
 
+def gbdt_predict_multi_binding(
+    model: PythonObject,
+    x_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`gbdt_predict_multi_binding` (`bindings/_mojolearn_gbdt.mojo:453-485`)
+    over `gbdt/estimator.mojo::gbdt_predict_multi`: `params` is
+    `[n_rows, mode]`, mode 0 RAW (`dim` columns), 1 SOFTMAX (`dim + 1`,
+    `gbdt/train.mojo::multiclass_probabilities`), 2 SIGMOID (`dim`,
+    `one_vs_all_probabilities`), both transforms in double through
+    `identical_exp64`, row-major out. Returns the width written."""
+    if len(params) != 2:
+        raise Error(
+            "gbdt_predict_multi: params must hold [n_rows,"
+            " as_probabilities], got " + String(len(params))
+        )
+    var text = String(py=model)
+    var x_address = Int(py=x_addr)
+    var op = f32_ptr(Int(py=out_addr))
+    _ = f32_ptr(x_address)
+    var n_rows = Int(py=params[0])
+    var mode = Int(py=params[1])
+    if n_rows <= 0:
+        raise Error("gbdt_predict_multi: n_rows must be positive")
+    var m = _parse_model(text)
+    var dim = m.dim
+    var n_features = len(m.fold_counts)
+    var n_trees = len(m.tree_offsets) - 1
+    if mode != 0 and dim < 2:
+        raise Error(
+            "gbdt_predict_multi: a probability mode needs a"
+            " multi-dimensional model; this one has dim " + String(dim)
+            + ". A two-class problem's link is the sigmoid, which"
+            " Logloss's own predict_proba applies."
+        )
+    if mode != 0 and mode != 1 and mode != 2:
+        raise Error("gbdt_predict_multi: unknown mode " + String(mode))
+    var width = dim
+    if mode == 1:
+        width = dim + 1
+    with GILReleased(Python()):
+        var x = read_f32(x_address, n_rows * n_features)
+        var out = List[Float32](length=n_rows * dim, fill=Float32(0.0))
+        var node_left = m.node_left.copy()
+        var node_right = m.node_right.copy()
+        if len(node_left) == 0:
+            node_left.append(Int32(0))
+            node_right.append(Int32(0))
+        var split_feature = m.split_feature.copy()
+        var split_bin = m.split_bin.copy()
+        var split_take_bin = m.split_take_bin.copy()
+        if len(split_feature) == 0:
+            split_feature.append(Int32(0))
+            split_bin.append(Int32(0))
+            split_take_bin.append(Int32(0))
+        var borders = m.borders.copy()
+        if len(borders) == 0:
+            borders.append(Float32(0.0))
+        var leaves = m.leaves.copy()
+        if len(leaves) == 0:
+            leaves.append(Float32(0.0))
+        gbdt_host_predict(
+            x, n_rows, n_features,
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.border_offsets.unsafe_ptr()),
+            rebind[MutPointer[Float32, MutUntrackedOrigin]](borders.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.fold_counts.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.one_hot.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.nan_treatment.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.tree_offsets.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](split_feature.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](split_bin.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](split_take_bin.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](node_left.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](node_right.unsafe_ptr()),
+            rebind[MutPointer[Int32, MutUntrackedOrigin]](m.leaf_offsets.unsafe_ptr()),
+            rebind[MutPointer[Float32, MutUntrackedOrigin]](leaves.unsafe_ptr()),
+            n_trees, dim, m.non_symmetric, len(m.split_feature), len(m.leaves), m.bias,
+            out,
+        )
+        # KEEP-ALIVE past the walk (see `gbdt_predict_binding`)
+        _ = split_feature^
+        _ = split_bin^
+        _ = split_take_bin^
+        _ = node_left^
+        _ = node_right^
+        _ = borders^
+        _ = leaves^
+        _ = x^
+        _ = m^
+        if mode == 0:
+            for i in range(n_rows * dim):
+                op[i] = out[i]
+        elif mode == 1:
+            var eff = dim
+            for r in range(n_rows):
+                var mx = Float64(0.0)
+                for k in range(eff):
+                    var v = Float64(out[r * eff + k])
+                    if v > mx:
+                        mx = v
+                var se = Float64(0.0)
+                for k in range(eff):
+                    se += identical_exp64(Float64(out[r * eff + k]) - mx)
+                se += identical_exp64(-mx)
+                for k in range(eff):
+                    op[r * (eff + 1) + k] = Float32(identical_exp64(Float64(out[r * eff + k]) - mx) / se)
+                op[r * (eff + 1) + eff] = Float32(identical_exp64(-mx) / se)
+        else:
+            for i in range(n_rows * dim):
+                op[i] = Float32(1.0 / (1.0 + identical_exp64(-Float64(out[i]))))
+    return PythonObject(width)
+
+
 def gbdt_model_dim_binding(model: PythonObject) raises -> PythonObject:
     """`gbdt_model_dim` (`bindings/_mojolearn_gbdt.mojo:442-450`): 1 for an
     empty ensemble, else the trees' common dim."""
@@ -1161,6 +1307,7 @@ def PyInit__mojolearn_gbdt_host() abi("C") -> PythonObject:
         module.def_function[gbdt_numeric_mode_binding]("gbdt_numeric_mode")
         module.def_function[gbdt_fit_binding]("gbdt_fit")
         module.def_function[gbdt_predict_binding]("gbdt_predict")
+        module.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
         module.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         module.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
         module.def_function[gbdt_binary_probabilities_binding]("gbdt_binary_probabilities")
