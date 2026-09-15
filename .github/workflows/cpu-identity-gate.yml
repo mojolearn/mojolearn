@@ -705,9 +705,12 @@ jobs:
           python3 tools/classical_host_gate.py check $CLASSICAL_RECORDED --expect-mismatch \
             --report "$GATE_OUT/classical_gate_sab.json" 2>&1 | tee "$GATE_OUT/classical_gate_sab.log"
 
-      # The same sabotage host set must move EVERY saved-model fixture
-      # (--every-fixture): one moved family must not hide one that did not.
-      - name: Saved-model host gate, the sabotage build must be caught on every fixture
+      # The same sabotage host set must move EVERY saved-model lane on at least
+      # one fixture (--every-lane): one moved family must not hide one that did
+      # not. Not every fixture: ivf/ties and ivf-euclidean/ties stay EQUAL
+      # under the sabotage build (x86 RunPod, 2026-09-15) while their other
+      # eight fixtures differ.
+      - name: Saved-model host gate, the sabotage build must be caught on every lane
         if: always()
         env:
           MOJOLEARN_HOST_DIR: ${{ runner.temp }}/host-sab
@@ -718,7 +721,7 @@ jobs:
                    _mojolearn_hdbscan_infer_host _mojolearn_ivf_search_host _mojolearn_embedding_infer_host; do
             [ -f "$MOJOLEARN_HOST_DIR/$b.so" ] || { echo "no sabotage $b under $MOJOLEARN_HOST_DIR" >&2; exit 1; }
           done
-          python3 tools/classical_host_gate.py check $SAVED_MODEL_RECORDED --expect-mismatch --every-fixture \
+          python3 tools/classical_host_gate.py check $SAVED_MODEL_RECORDED --expect-mismatch --every-lane \
             --report "$GATE_OUT/saved_model_gate_sab.json" 2>&1 | tee "$GATE_OUT/saved_model_gate_sab.log"
 
       - name: Upload reports and logs

@@ -600,10 +600,17 @@ def do_check(args):
     if args.expect_mismatch:
         verdict = 'EXPECTED MISMATCH SEEN' if not verdict_ok else 'SABOTAGE NOT CAUGHT'
         code = 0 if not verdict_ok else 1
-        if args.every_fixture and unmoved:
+        if args.every_lane:
+            # A lane passes when at least one of its fixtures differs: a fold
+            # the sabotage arm moves can still be exact on one fixture (the IVF
+            # lanes' ties fixture, 2026-09-15), but a lane with no moved
+            # fixture is a family the sabotage build did not reach.
+            moved_lanes = {m.split('/')[0] for m in moved}
+            dead = sorted({u.split('/')[0] for u in unmoved} - moved_lanes)
             for name in unmoved:
-                print(f'check {name} DID NOT MOVE under --expect-mismatch --every-fixture')
-            verdict, code = f'SABOTAGE NOT CAUGHT ON {len(unmoved)} FIXTURES', 1
+                print(f'check {name} did not move (its lane {"moved elsewhere" if name.split("/")[0] in moved_lanes else "DID NOT MOVE"})')
+            if dead:
+                verdict, code = f'SABOTAGE NOT CAUGHT ON LANES {",".join(dead)}', 1
     else:
         verdict = 'IDENTICAL' if verdict_ok else 'MISMATCH'
         code = 0 if verdict_ok else 1
@@ -639,8 +646,8 @@ def main():
                      help='an identity_break JSON whose infer cells are compared too (repeatable)')
     chk.add_argument('--report', type=Path, help='new exclusive JSON report')
     chk.add_argument('--expect-mismatch', action='store_true')
-    chk.add_argument('--every-fixture', action='store_true',
-                     help='with --expect-mismatch, every fixture (not only one) must differ somewhere')
+    chk.add_argument('--every-lane', action='store_true',
+                     help='with --expect-mismatch, every lane (not only one) must differ on at least one fixture')
     args = parser.parse_args()
     if args.command == 'record':
         return do_record(args)

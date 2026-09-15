@@ -135,7 +135,7 @@ Behavior here:
   gate workflow builds every declared host family, `ivf_search` and
   `embedding_infer` included, and checks `SEARCH_LOOKUP_RECORDED` through
   `host_surface.saved_model_recorded()`, with the sabotage set required to
-  move every fixture.
+  move every lane (the two IVF ties fixtures stay EQUAL under it).
 - Stage 2 ivf-extend cells on Apple (a record column), NVIDIA and AMD: the next release record.
 - An intermittent Metal failure seen once on the M4 (2026-09-15 about 13:45 ET)
   needs its own lane.
