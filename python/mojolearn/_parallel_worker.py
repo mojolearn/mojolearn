@@ -185,6 +185,57 @@ def execute(request):
             raise ImportError('rebuild HDBSCAN binding for distributed neighbor and distance rows')
         state.fit(*args)
         return state
+    if operation in ('km_fit', 'km_apply'):
+        import os
+        native = state._extension()
+        if (not callable(getattr(native, 'kernel_methods_rows_parallel_available', None))
+                or native.kernel_methods_rows_parallel_available() != 1):
+            raise ImportError('rebuild kernel methods binding for distributed kernel rows')
+        from .parallel_classical import _admit_kernel_method
+        _admit_kernel_method(state)
+        # Kernel rows follow MOJOLEARN_SVM_DEVICE_COUNT (set by the pool); the
+        # KernelRidge factorization and multi-target solve follow the scoped
+        # Cholesky switch, which the GP and GaussianMixture workers never see.
+        previous = os.environ.get('MOJOLEARN_CHOLESKY_DEVICE_COUNT')
+        os.environ['MOJOLEARN_CHOLESKY_DEVICE_COUNT'] = os.environ.get('MOJOLEARN_SVM_DEVICE_COUNT', '1')
+        try:
+            if operation == 'km_fit':
+                state.fit(*args)
+                return state
+            method, X = args
+            if method not in ('predict', 'transform'):
+                raise ValueError('invalid kernel method operation')
+            return getattr(state, method)(X)
+        finally:
+            if previous is None:
+                os.environ.pop('MOJOLEARN_CHOLESKY_DEVICE_COUNT', None)
+            else:
+                os.environ['MOJOLEARN_CHOLESKY_DEVICE_COUNT'] = previous
+    if operation == 'rbf_sampler_rows':
+        from .kernel_methods import RBFSampler
+        if type(state) is not RBFSampler:
+            raise TypeError('requires mojolearn.RBFSampler')
+        return state.transform(args[0])
+    if operation in ('cholesky_fit', 'cholesky_solve'):
+        import os
+        native = state._extension()
+        if (not callable(getattr(native, 'cholesky_parallel_available', None))
+                or native.cholesky_parallel_available() != 1):
+            raise ImportError('rebuild GP binding for operation-level multi-GPU Cholesky')
+        # Scoped to this operation: the GP and GaussianMixture workers keep
+        # their own root factorization paths.
+        previous = os.environ.get('MOJOLEARN_CHOLESKY_DEVICE_COUNT')
+        os.environ['MOJOLEARN_CHOLESKY_DEVICE_COUNT'] = os.environ.get('MOJOLEARN_GP_DEVICE_COUNT', '1')
+        try:
+            if operation == 'cholesky_fit':
+                state.fit(*args)
+                return state
+            return state.solve(*args)
+        finally:
+            if previous is None:
+                os.environ.pop('MOJOLEARN_CHOLESKY_DEVICE_COUNT', None)
+            else:
+                os.environ['MOJOLEARN_CHOLESKY_DEVICE_COUNT'] = previous
     if operation in ('gp_fit', 'gp_predict'):
         native = state._extension()
         if (not callable(getattr(native, 'gp_parallel_available', None))

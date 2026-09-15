@@ -596,6 +596,13 @@ def gpr_predict_binding(
 # ===========================================================================
 
 
+def cholesky_parallel_available() raises -> PythonObject:
+    """1: potrf_lower and cho_solve read MOJOLEARN_CHOLESKY_DEVICE_COUNT and
+    move whole trailing-update rows and right-hand-side columns
+    (cholesky/multi_gpu.mojo)."""
+    return PythonObject(1)
+
+
 def cholesky_profile_jitter_binding() raises -> PythonObject:
     """The profile's pinned ridge (`chol_jitter_pinned`, DEVIATION 1637),
     as a Python float. The Python side reads it here so its default is the
@@ -753,6 +760,7 @@ def PyInit__mojolearn_gp() abi("C") -> PythonObject:
         m.def_function[gpr_fit_binding]("gpr_fit")
         m.def_function[gpr_predict_binding]("gpr_predict")
         # The Cholesky door (workstream D, 2026-09-14).
+        m.def_function[cholesky_parallel_available]("cholesky_parallel_available")
         m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         m.def_function[cholesky_factor_binding]("cholesky_factor")
         m.def_function[cholesky_solve_binding]("cholesky_solve")

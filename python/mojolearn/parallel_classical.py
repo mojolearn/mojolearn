@@ -404,3 +404,137 @@ def fit_hdbscan(estimator, X, *, devices=(0,)):
         pool.close()
     estimator.__dict__ = result.__dict__.copy()
     return estimator
+
+
+def _admit_cholesky(estimator):
+    from ._cholesky_impl import Cholesky
+    if type(estimator) is not Cholesky:
+        raise TypeError('requires mojolearn.Cholesky')
+    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
+        raise ValueError('parallel Cholesky requires IDENTICAL numeric mode')
+
+
+def fit_cholesky(estimator, A, *, devices=(0,)):
+    """Factor with whole trailing-update output rows on the selected GPUs.
+
+    Each panel's factorization, info read-back, panel solve and subtraction
+    stay on the root in the original panel order; only the rows of each
+    panel's L21 L21^T product move. The full matrix stays on the root.
+    """
+    _admit_cholesky(estimator)
+    A, _ = as_f32_c(A, ndim=2, name='A')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('cholesky_fit', estimator, (A,))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
+
+
+def solve_cholesky(estimator, B, *, devices=(0,)):
+    """Solve with whole right-hand-side columns on the selected GPUs.
+
+    A single right-hand side is sequential in its rows and runs on one GPU.
+    """
+    _admit_cholesky(estimator)
+    if not hasattr(estimator, 'L_'):
+        raise ValueError('Cholesky is not fitted')
+    B, _ = as_f32_c(B, ndim=None, name='B')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        return pool.map([('cholesky_solve', estimator, (B,))])[0]
+    finally:
+        pool.close()
+
+
+def _admit_kernel_method(estimator):
+    from .kernel_methods import KernelRidge, Nystroem
+    if type(estimator) not in (KernelRidge, Nystroem):
+        raise TypeError('requires mojolearn.KernelRidge or Nystroem')
+    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
+        raise ValueError('parallel kernel methods require IDENTICAL numeric mode')
+    if estimator.kernel == 'laplacian':
+        raise ValueError("parallel kernel methods refuse kernel='laplacian' by name: its L1 "
+                         "distance matrix has no distributed row seam in this lane")
+
+
+def fit_kernel_method(estimator, X, y=None, *, devices=(0,)):
+    """KernelRidge or Nystroem fit with distributed kernel-matrix output rows.
+
+    Rows use the SVM kernel-row seam (original FP32-v1 dot per cell and the
+    original epilogue). KernelRidge's factorization moves whole trailing-update
+    rows and its multi-target solve whole target columns; Nystroem's Jacobi
+    eigensolver stays on the root. 'laplacian' is refused by name.
+    """
+    _admit_kernel_method(estimator)
+    X, _ = as_f32_c(X, ndim=2, name='X')
+    from .kernel_methods import KernelRidge
+    if type(estimator) is KernelRidge:
+        if y is None:
+            raise ValueError('KernelRidge fit requires y')
+        args = (X, y)
+    else:
+        args = (X,)
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('km_fit', estimator, args)])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
+
+
+def apply_kernel_method(estimator, X, *, devices=(0,)):
+    """KernelRidge.predict or Nystroem.transform with distributed kernel rows."""
+    _admit_kernel_method(estimator)
+    from .kernel_methods import KernelRidge
+    method = 'predict' if type(estimator) is KernelRidge else 'transform'
+    X, _ = as_f32_c(X, ndim=2, name='X')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        return pool.map([('km_apply', estimator, (method, X))])[0]
+    finally:
+        pool.close()
+
+
+def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
+    """RBFSampler.transform over whole query rows on separate GPUs.
+
+    The fitted random weights and offsets are position-mapped draws with
+    global feature and component IDs, so every worker receives the same
+    fitted state. Each output row is a pure function of its input row
+    (identical GEMM cell contract and a per-cell epilogue); rows are joined
+    by copying bytes in input order.
+    """
+    import numpy as np
+    from .kernel_methods import RBFSampler
+    if type(estimator) is not RBFSampler:
+        raise TypeError('requires mojolearn.RBFSampler')
+    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
+        raise ValueError('parallel RBFSampler requires IDENTICAL numeric mode')
+    if not hasattr(estimator, 'random_weights_'):
+        raise ValueError('RBFSampler is not fitted')
+    if type(rows_per_shard) is not int or rows_per_shard < 1:
+        raise ValueError('rows_per_shard must be a positive int')
+    X, _ = as_f32_c(X, ndim=2, name='X')
+    if X.shape[1] != estimator.n_features_in_:
+        raise ValueError('X has %d features, the fit had %d' % (X.shape[1], estimator.n_features_in_))
+    rows = X.shape[0]
+    if rows == 0:
+        return estimator.transform(X)
+    shards = [np.ascontiguousarray(np.asarray(X)[start:start + rows_per_shard])
+              for start in range(0, rows, rows_per_shard)]
+    pool = DevicePool(devices)
+    try:
+        parts = pool.map([('rbf_sampler_rows', estimator, (shard,)) for shard in shards])
+    finally:
+        pool.close()
+    q = estimator.random_weights_.shape[1]
+    out = np.empty((rows, q), dtype='<f4')
+    start = 0
+    for part in parts:
+        part = np.asarray(part)
+        out[start:start + part.shape[0]] = part
+        start += part.shape[0]
+    return out
