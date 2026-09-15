@@ -32,4 +32,8 @@ Worktree: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/
 3. Phases setup, smoke, cells, lgbm_cuda; pull `/root/rank_out/`; reap and verify.
 
 ## Log
-- 2026-09-15: code written; prep running locally (one core).
+- 2026-09-15: code written; prep passed; istella_rank.npz pushed to R2 and
+  pinned (eda607eda).
+- 2026-09-15 19:05 ET: leg 1 pod z0jbxz113hwf3n (H100, driver 580.126.09),
+  60-minute watchdog armed (deadline about 20:05 ET), shipped eda607eda, R2
+  staged 2 keys in 64 s. If the Mac restarted: `TREES_LEG_STATE=$HOME/mojolearn-evidence/istella-rank/pod sh tools/trees_leg.sh reap`.
