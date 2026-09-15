@@ -28,7 +28,17 @@ Earlier tonight I reported that the Mac held 6,754 Metal command queues, that mo
 - About 15 seconds after that process exited, the count fell to 34.
 - With no mojolearn GPU process alive the machine idles at 40 to 41 queues.
 
-So queues are released on process exit. The roughly 20x slowdown comes from a single process crossing the 512 queue limit inside its own lifetime, because `tools/identity_break.py` runs every lane, fixture and repeat in one process while every binding call builds a `DeviceContext`. Reusing one context per process is a real fix. Until it lands, run long recordings as several short processes. Health check is one GBDT Metal fit on the base fixture, about 1 second healthy against about 20 seconds degraded.
+So queues are released on process exit, and the slowdown came from a single process crossing the 512 queue limit inside its own lifetime.
+
+**Two further corrections, from the health check at `be12003b8`, evidence in `~/mojolearn-evidence/metal-queue-leak-2026-09-15/gbdt-metal-health.log`.**
+
+First, **the degraded state is gone**. Like for like against this afternoon's degraded evidence, the same `gbdt_direct.py` at 20,000 rows: SymmetricTree 8.289, 7.735 and 8.288 seconds now against 21.5 to 23.4 seconds then, and Depthwise 11.848, 14.082 and 13.373 seconds now against 27.0 to 30.4 seconds then. That is about 2.7x and 2.2x, with nothing resembling the 20x fits.
+
+Second, **my "about 1 second per fit is healthy" figure is unverified and should not be quoted.** No GBDT Metal timing from before the slowdown is committed anywhere in the repository, so 7 to 8 seconds is neither proven healthy nor proven slow. What is proven is only that the degraded state is gone. Committing a real baseline for this shape is worthwhile separate work.
+
+Third, **do not write the "reuse one `DeviceContext` per process" fix on the strength of this file.** Queue counts held flat at 34 before each run, after every fit, at each process exit and 20 to 30 seconds later, across eleven fits in two processes. The per-call `DeviceContext` in the GBDT path does not accumulate queues in this build, so that change would fix nothing measurable. Phase 2 must first find which workload shape actually accumulates, most likely long-lived contexts held concurrently rather than created and dropped per call. The reproduction at `checks/device_context_queue_repro.mojo` is built to answer exactly that.
+
+The safe mitigation in the meantime is unchanged and cheap: run long recordings as several short processes rather than one long-lived process.
 
 ## Release 0.8.6, in progress, do not publish
 
@@ -63,9 +73,11 @@ Frozen at `db9047b9f`. State file on `release/0.8.6` at `9f2ccff71`.
 | `lane/metal-queue-leak` | `839611c76` | The measurement in the Correction section above, plus a phase 2 protocol written for a context free session and the GBDT health check. No fix written yet. The fix is context reuse per process in the binding layer. |
 | `lane/ties-sabotage` | `78311d743` | Neighbor and IVF cells that read inert on the `ties` fixture. Not worked tonight. Its head carries a changelog entry aimed at 0.8.7 and its lane status. |
 
-### Queued, never started
+### Not started, and NOT to be started
 
-`lane/arima-rest` (after `arima-exog` merges), `lane/ivf-rest`, `lane/svm-spectral-holtwinters-rest`, `lane/extratrees-rest`. Each is a NOT_IMPLEMENTED triage lane. The pattern that worked tonight: triage every row into user facing, internal plumbing, or intentionally excluded, each with a precise reason and a citation, then build only the user facing rows, proving new cells fully and spot checking existing ones.
+**Andrew, September 15 2026 at 19:50 ET: "no more new lanes."** `lane/arima-rest`, `lane/ivf-rest`, `lane/svm-spectral-holtwinters-rest` and `lane/extratrees-rest` were queued earlier in the evening and are now off the board. Do not open them, and do not open any other new lane. Finish, prove and merge what already exists.
+
+Kept only as a record of the pattern that worked tonight, for whenever new work is authorized again: triage every NOT_IMPLEMENTED row into user facing, internal plumbing, or intentionally excluded, each with a precise reason and a citation, then build only the user facing rows, proving new cells fully and spot checking existing ones.
 
 ## Coverage, measured this evening
 
@@ -79,10 +91,11 @@ Frozen at `db9047b9f`. State file on `release/0.8.6` at `9f2ccff71`.
 1. Run the GBDT Metal health check once the Metal lock is free. If it reads about 1 second per fit, the GPU is healthy and the release proceeds tonight.
 2. Finish 0.8.6. AMD record, then NVIDIA record, then the Apple chunks run as several short processes rather than one long one, then the four column diff, record commit, final pack and audit. Then stop and wait for Andrew.
 3. Take the owed Metal columns for `gbdt-rest`, `neighbors-rest` and `gp-optimizer`, and merge those lanes.
-4. Fix the `DeviceContext` per call issue, since it is the root of the slowdown and makes every future long recording cheaper.
+4. Do not write the `DeviceContext` fix yet. Run the phase 2 reproduction first to find which workload shape actually accumulates queues, since the per-call path provably does not. Commit a GBDT Metal timing baseline while the machine is known good, so the next slowdown has something to be measured against.
 5. Cover `par-samba` and `par-samba-clip`, the two cheap CPU verifier wins.
-6. Start the queued triage lanes in Andrew's order.
-7. The Istella intercept, that 1,278 ms Python `_group_sizes` loop, is the clearest ranking speed win on the board.
+6. The Istella intercept, that 1,278 ms Python `_group_sizes` loop, is the clearest ranking speed win on the board.
+
+No new lanes. Steps 1 through 6 are all work that already exists and is owed. When they are done, ask Andrew rather than opening anything.
 
 ## Cautions earned tonight
 
