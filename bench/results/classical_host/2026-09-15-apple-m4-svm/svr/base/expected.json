@@ -1,0 +1,32 @@
+{
+  "commit": "4ca95fb533a65ef9e96ea009d51c3201c53285ec",
+  "estimator": "SVR",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.6",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "base",
+  "lane": "svr",
+  "model_sha256": "e28c2681321f99dfec73b10cbd19ec41a10bbb1d3417cb122cfbe4389440993c",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "021831e9ffd2bb9d",
+    "predict": {
+      "dtype": "<f4",
+      "sha256": "a5d4407d05233fc031523cacefab52c2af6257da800505faf9c5879ed069cdb6",
+      "shape": [
+        256
+      ]
+    },
+    "seconds": 0.003225
+  },
+  "recorded_at": "2026-09-15T13:37:17-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "81b95ad35ae40207bf9d58c1ac22161034eab4823e33bc91bebee40ddda2ac8d"
+}

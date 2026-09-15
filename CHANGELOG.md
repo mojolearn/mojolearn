@@ -63,6 +63,16 @@ Linux legs are OWED before this heading reads published.
   grow from 12 to 29, adding the ols, ridge and logistic option variants. On a CPU-only
   install `StandardScaler.fit`, `MinMaxScaler.fit`, `Lasso.fit` and `ElasticNet.fit` now
   refuse by name outside the internal reference scope, as every other estimator fit does.
+- CPU inference from saved SVM models for `SVC(kernel='linear')`, `SVC(kernel='poly')`,
+  `SVR` and `SVR(kernel='linear')`: `SVR` gains `save` and `load` (format
+  `mojolearn-svr-1`), and `mojolearn.host_model(path)`, or the classes on a CPU-only
+  install, answer `decision_function` and `predict` through the shipped svm host binding's
+  `svc_predict` and `svr_predict`. No entry was added to that binding. The svm family's
+  saved-model lanes grow from one (`svc`) to five. The svm host sabotage build gains an
+  intercept arm in the fit and a decision arm in predict, so on an integer-grid fixture
+  such as `ties` a saved model's file and its predictions now move there too. Apple M4 Metal recording checked on an x86 CPU against the committed Apple,
+  NVIDIA and AMD columns; the SVR model cells and every `svc-poly` GPU cell are owed to the
+  release record.
 - Public CPU `Cholesky` inference. On a CPU-only install `Cholesky().fit(A)` factors a given
   matrix and `solve` answers from it, and `Cholesky.save` / `Cholesky.load` (or
   `mojolearn.host_model`, which returns a `HostCholesky`) carry a factor from a GPU box to a

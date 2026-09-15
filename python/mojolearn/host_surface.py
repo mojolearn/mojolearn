@@ -171,6 +171,10 @@ CLASSICAL_RECORDED = (
     # lane/inference-forecast-umap-pca (2026-09-15): pca-full-whiten and umap,
     # recorded on the M4's Metal set; both bind families the gate builds.
     "bench/results/classical_host/2026-09-15-apple-m4-umap-pca",
+    # lane/inference-svm (2026-09-15): svc-linear, svc-poly, svr and
+    # svr-linear, recorded on the M4's Metal set on all nine fixtures. The
+    # NVIDIA and AMD recordings are owed to the next release record.
+    "bench/results/classical_host/2026-09-15-apple-m4-svm",
 )
 
 #: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
@@ -1136,7 +1140,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear", "svc-poly"),
-        inference_lanes=("svc",),
+        inference_lanes=("svc", "svc-linear", "svc-poly", "svr", "svr-linear"),
         forest_kinds=(),
         classes=("SVC", "IsolationForest", "SVR"),
         display="SVC",
