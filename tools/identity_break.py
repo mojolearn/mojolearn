@@ -591,6 +591,15 @@ def _h(*arrays):
     return m.hexdigest()[:16]
 
 
+def _train_hash(parts):
+    """The train column's cell hash of one fit: `_h` over the lane's parts
+    dict spelled `key=value`, sorted by key, joined by `|`. The run loop and
+    `python -m mojolearn verify --all` (python/mojolearn/_verify_all.py, which
+    imports this module) both call this, so the shipped verifier cannot hash
+    a cell differently from the record."""
+    return _h(np.frombuffer("|".join(f"{k}={v}" for k, v in sorted(parts.items())).encode(), dtype=np.uint8))
+
+
 def _hfile(path):
     with open(path, "rb") as fh:
         return hashlib.sha256(fh.read()).hexdigest()[:16]
@@ -5713,7 +5722,7 @@ def _run_reference(args):
                     _DUMP_TAG = f"{name}/{f}/{repeat}"
                     p = LANES[name](ml, X, yc, yr, held[f].copy())
                     parts.append(dict(p))
-                    hs.append(_h(np.frombuffer("|".join(f"{k}={v}" for k, v in sorted(p.items())).encode(), dtype=np.uint8)))
+                    hs.append(_train_hash(p))
                 except Exception as exc:
                     err = f"{type(exc).__name__}: {exc}"
                     if args.verbose:
