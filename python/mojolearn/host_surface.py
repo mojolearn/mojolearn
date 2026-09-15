@@ -756,20 +756,28 @@ FAMILIES = (
         forest_kinds=(),
         classes=(
             "LinearRegression", "Ridge", "TruncatedSVD", "LogisticRegression",
-            "PCA", "KernelDensity", "DBSCAN",
+            "PCA", "KernelDensity", "DBSCAN", "AgglomerativeClustering",
         ),
         display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening and kernel density",
+        # lane/inference-transductive-predict (2026-09-15): `dbscan_fit_core`
+        # (the fit's core mask for DBSCAN(prediction_data=True)) and
+        # `labeled_reference_predict`, the out-of-sample labels of DBSCAN
+        # and AgglomerativeClustering (DEVIATION 2740). The agglomerative FIT
+        # stays in the solver family, which does not ship; its predict entry
+        # is here so a saved model predicts from the inference wheel.
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
             "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
             "decomposition/host/pca_full_oracle.mojo",
+            "core/labeled_reference_host_predict.mojo",
         ),
         exports=(
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
             "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
+            "dbscan_fit_core", "labeled_reference_predict",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",

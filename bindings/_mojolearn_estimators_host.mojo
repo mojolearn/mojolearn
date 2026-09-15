@@ -78,6 +78,12 @@ from core.classical_host_predict import (
     host_qn_softmax,
     host_tsvd_transform,
 )
+from core.labeled_reference_host_predict import (
+    LABELED_PREDICT_HOST_SABOTAGE,
+    host_labeled_reference_predict,
+    labeled_reference_threshold,
+    labeled_reference_validate,
+)
 from dbscan.host.dbscan_oracle import (
     DBSCAN_ORACLE_HOST_SABOTAGE,
     host_dbscan_fit,
@@ -149,6 +155,7 @@ def estimators_host_sabotage_binding() raises -> PythonObject:
         or PCA_ORACLE_HOST_SABOTAGE
         or DBSCAN_ORACLE_HOST_SABOTAGE
         or QN_ORACLE_HOST_SABOTAGE
+        or LABELED_PREDICT_HOST_SABOTAGE
     )
 
 
@@ -489,6 +496,85 @@ def dbscan_fit_binding(
     reads `n_rows` float32 weights and takes the weighted core test
     (`host_weighted_degree`, lane/cpu-training-batch3). `budget_mb != 0` is
     refused BY NAME: the device-sized batch has no host restatement."""
+    return _dbscan_fit_run(x_addr, labels_addr, weight_addr, 0, params)
+
+
+def dbscan_fit_core_binding(
+    x_addr: PythonObject,
+    labels_addr: PythonObject,
+    weight_addr: PythonObject,
+    core_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`dbscan_fit` with the fit's core mask written to `core_addr`
+    (`n_rows` uint8, `DBSCANHostFit.core`), the GPU binding's contract
+    (lane/inference-transductive-predict, 2026-09-15)."""
+    var ca = _index(core_addr)
+    if ca == 0:
+        raise Error("dbscan_fit_core: core_addr must be an array address, got 0")
+    return _dbscan_fit_run(x_addr, labels_addr, weight_addr, ca, params)
+
+
+def labeled_reference_predict_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """Out-of-sample labels for DBSCAN and AgglomerativeClustering on the
+    host by `host_labeled_reference_predict`, the GPU binding's contract
+    (addrs refs, keys, ref_labels, queries, out_labels, out_refs; params
+    n_refs, n_queries, n_features, metric, eps, has_thresh). Returns 0."""
+    if len(addrs) != 6:
+        raise Error(
+            "labeled_reference_predict: addrs must contain 6 addresses, got "
+            + String(len(addrs))
+        )
+    if len(params) != 6:
+        raise Error(
+            "labeled_reference_predict: params must contain 6 values, got "
+            + String(len(params))
+        )
+    var refs_address = _index(addrs[0])
+    var keys_address = _index(addrs[1])
+    var labels_address = _index(addrs[2])
+    var queries_address = _index(addrs[3])
+    var olp = i32_ptr(_index(addrs[4]))
+    var orp = i32_ptr(_index(addrs[5]))
+    var n_refs = _index(params[0])
+    var n_queries = _index(params[1])
+    var n_features = _index(params[2])
+    var metric = _index(params[3])
+    var eps = Float64(py=params[4])
+    var has_thresh = _index(params[5]) != 0
+    with GILReleased(Python()):
+        labeled_reference_validate(n_refs, n_queries, n_features, metric)
+        var refs = read_f32(refs_address, n_refs * n_features)
+        var queries = read_f32(queries_address, n_queries * n_features)
+        var kp = i32_ptr(keys_address)
+        var lp = i32_ptr(labels_address)
+        var keys = List[Int32](capacity=n_refs)
+        var ref_labels = List[Int32](capacity=n_refs)
+        for i in range(n_refs):
+            keys.append(kp[i])
+            ref_labels.append(lp[i])
+        var thresh = Float32(0.0)
+        if has_thresh:
+            thresh = labeled_reference_threshold(metric, eps)
+        var out = host_labeled_reference_predict(
+            refs, n_refs, keys, ref_labels, queries, n_queries, n_features,
+            metric, thresh, has_thresh,
+        )
+        for i in range(n_queries):
+            olp[i] = out.labels[i]
+            orp[i] = out.refs[i]
+    return PythonObject(0)
+
+
+def _dbscan_fit_run(
+    x_addr: PythonObject,
+    labels_addr: PythonObject,
+    weight_addr: PythonObject,
+    core_address: Int,
+    params: PythonObject,
+) raises -> PythonObject:
     if len(params) != 8:
         raise Error(
             "dbscan_fit: params must contain 8 values, got "
@@ -530,6 +616,12 @@ def dbscan_fit_binding(
         )
         for i in range(nr):
             lp[i] = fit.labels[i]
+        if core_address != 0:
+            var cp = MutPointer[UInt8, MutUntrackedOrigin](
+                unsafe_from_address=core_address
+            )
+            for i in range(nr):
+                cp.unsafe_store(i, fit.core[i])
         passes = fit.passes
     return PythonObject(passes)
 
@@ -849,6 +941,8 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[ols_fit_binding]("ols_fit")
         module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[dbscan_fit_binding]("dbscan_fit")
+        module.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
+        module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[ols_predict_binding]("ols_predict")
         module.def_function[tsvd_transform_binding]("tsvd_transform")

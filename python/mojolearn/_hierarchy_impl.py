@@ -15,8 +15,15 @@ This class is not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
-from . import _mojolearn_solver
+from . import _backend, _mojolearn_solver, _serialize
+from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
+from .density import _check_queries
+from .linear_model import _check_saved_by, _restore_mode, _saved_mode
+
+#: `AgglomerativeClustering.save`'s format tag
+#: (lane/inference-transductive-predict, 2026-09-15).
+_AGGLOMERATIVE_FORMAT = "mojolearn-agglomerative-1"
 
 # `cuml/common/distance_type.hpp`, the codes cuML's Python layer passes
 # (`agglomerative.pyx:36-43`).
@@ -123,6 +130,12 @@ class AgglomerativeClustering:
                                       rather than accepted and ignored.
         memory              refused   scikit-learn's joblib cache; there is
                                       no host tree to cache
+        prediction_data     honored   False (the default) fits exactly as
+                                      before. True also keeps a copy of the
+                                      training rows, which `predict` and
+                                      `save` need; the fit is the same call
+        predict             NEW       DEVIATION 2740; neither cuML nor
+                                      scikit-learn has one. See `predict`
         n_rows < 2          refused by name (`pairwise_distances`)
         n_rows > 46340      refused by name: the dense connectivity matrix is
                             `m * m` of their `int` and overflows past that
@@ -160,10 +173,16 @@ class AgglomerativeClustering:
     card, and no claim is made that a Python fit was carded.
     """
 
+    #: The binding `predict` calls. The FIT is `_mojolearn_solver`'s, a
+    #: training-only family; the prediction entry lives in the estimators
+    #: family, whose host binding ships in the inference wheel.
+    _BINDING = "_mojolearn_estimators"
+
     def __init__(self, n_clusters=2, *, metric="euclidean",
                  connectivity="pairwise", linkage="single", c=15,
                  memory=None, compute_full_tree="auto",
-                 distance_threshold=None, compute_distances=False):
+                 distance_threshold=None, compute_distances=False,
+                 prediction_data=False):
         # cuML's own guards, in their order and with their messages
         # (`agglomerative.pyx:157-173`), so a script that catches theirs
         # catches these.
@@ -252,8 +271,17 @@ class AgglomerativeClustering:
         self.compute_full_tree = compute_full_tree
         self.distance_threshold = None
         self.compute_distances = False
+        self.prediction_data = prediction_data
+
+    def _bind(self, name=None):
+        return _backend.binding(name or self._BINDING, getattr(self, "numeric_mode", None))
 
     def fit(self, X, y=None):
+        if not isinstance(self.prediction_data, bool):
+            raise TypeError(
+                "mojolearn AgglomerativeClustering: prediction_data must be a "
+                f"bool, got {type(self.prediction_data).__name__}"
+            )
         if hasattr(X, "toarray") or hasattr(X, "tocsr"):
             raise NotImplementedError(
                 "mojolearn AgglomerativeClustering: sparse X is refused; the "
@@ -306,7 +334,137 @@ class AgglomerativeClustering:
         self.n_boruvka_rounds_ = int(info[0])
         self.n_connected_components_ = int(info[1])
         self.n_features_in_ = n_cols
+        # A borrowed input is copied so a caller's later write cannot move
+        # what predict reads.
+        self._fit_X = (x if self.input_copied_ else x.copy()) if self.prediction_data else None
         return self
 
     def fit_predict(self, X, y=None):
         return self.fit(X).labels_
+
+    def predict(self, X):
+        """Label NEW rows under the fitted clustering. NEW CAPABILITY
+        (DEVIATION 2740): neither scikit-learn's nor cuML's
+        AgglomerativeClustering has a `predict`, and this is not either
+        library's behavior.
+
+        THE RULE, BY LINKAGE. The rule is the linkage's own criterion taken
+        between the new row and each fitted cluster.
+
+          single    (the only linkage this class fits) the cluster at the
+                    smallest single-linkage distance, which is the smallest
+                    distance from the row to ANY member: the cluster of the
+                    nearest training row.
+          average, complete, ward
+                    refused at construction, so there is no fitted model to
+                    predict from. Their criteria would be the mean distance
+                    to the members, the largest distance to a member, and
+                    the Ward increase in within-cluster sum of squares.
+
+        THE DISTANCE is DBSCAN's eps accumulator
+        (`dbscan/impl/neighbors/epsilon_neighborhood.mojo::_eps_acc`, L2
+        arm): the squared Euclidean distance summed features ascending,
+        never rooted, the training row flushed. It is NOT the fit's pairwise
+        distance (the expanded `||a||^2 + ||b||^2 - 2 a.b` of the MST, whose
+        value for a row against itself need not be 0). The unexpanded sum
+        is exactly 0 for a row against itself, which is what makes the
+        training-row property below hold. Ties go to the lowest cluster
+        label, then to the lowest training index. One thread per query row,
+        no fold across rows; the GPU binding and the CPU host binding
+        (`core/labeled_reference_host_predict.mojo`) compute the same bytes.
+
+        ON THE TRAINING ROWS: a training row predicts its fitted label,
+        except where a row at distance 0 from it under this accumulator (a
+        duplicate, or a copy different only in subnormal amounts) was cut
+        into a cluster with a lower label. A single-linkage cut separates
+        such rows only when it cuts an edge of (near) zero weight, that is
+        when n_clusters exceeds the number of distinct rows.
+
+        Requires `prediction_data=True` at fit; refused by name otherwise.
+        Returns int32 labels, the dtype and numbering of `labels_`.
+        """
+        if not hasattr(self, "labels_"):
+            raise ValueError(
+                "mojolearn AgglomerativeClustering.predict: this instance is not "
+                "fitted yet; call fit first"
+            )
+        if getattr(self, "_fit_X", None) is None:
+            raise ValueError(
+                "mojolearn AgglomerativeClustering.predict: prediction data was not "
+                "stored. Fit with AgglomerativeClustering(prediction_data=True), "
+                "which keeps the training rows this rule needs (DEVIATION 2740)"
+            )
+        q = _check_queries(X, self.n_features_in_, "AgglomerativeClustering.predict")
+        nq = int(q.shape[0])
+        n_refs = int(self._fit_X.shape[0])
+        out = empty((nq,), "<i4")
+        chosen = empty((nq,), "<i4")
+        self._bind(self._BINDING).labeled_reference_predict(
+            # ORDER MATCHES bindings/_mojolearn_estimators.mojo::labeled_reference_predict_binding.
+            # The key of every training row is its label: ties go to the
+            # lowest cluster label, then the lowest training index.
+            [addr_ro(self._fit_X, name="training rows"), addr_ro(self.labels_, name="labels_ (keys)"),
+             addr_ro(self.labels_, name="labels_"), addr_ro(q, name="X"),
+             addr(out, name="labels"), addr(chosen, name="training rows chosen")],
+            # n_refs, n_queries, n_features, metric (0: L2), eps (unused), has_thresh
+            [n_refs, nq, int(self.n_features_in_), 0, 0.0, 0],
+        )
+        return out
+
+    def save(self, path):
+        """Write the prediction data of a `prediction_data=True` fit to
+        `path` as an npz: `x` `<f4` (the training rows), `labels` and
+        `children` `<i4`, `meta` `<i8` [n_clusters, n_features_in_,
+        n_leaves_, n_connected_components_, n_boruvka_rounds_]. On a CPU-only
+        install `AgglomerativeClustering.load(path).predict(X)` runs through
+        `_mojolearn_estimators_host.labeled_reference_predict`."""
+        if not hasattr(self, "labels_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        if getattr(self, "_fit_X", None) is None:
+            raise ValueError(
+                "mojolearn AgglomerativeClustering.save: prediction data was not "
+                "stored; fit with AgglomerativeClustering(prediction_data=True)"
+            )
+        arrays = {
+            "format": _AGGLOMERATIVE_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "metric": str(self.metric),
+            "x": self._fit_X,
+            "labels": self.labels_,
+            "children": self.children_,
+            "meta": Array.from_list(
+                [int(self.n_clusters_), int(self.n_features_in_), int(self.n_leaves_),
+                 int(self.n_connected_components_), int(self.n_boruvka_rounds_)], "<i8"
+            ),
+        }
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        """Load a model saved by `save`. The result predicts; every array is
+        read at its saved dtype and never cast."""
+        arrays = _serialize.read_npz(path, _AGGLOMERATIVE_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        meta = _serialize.exact(arrays, "meta", "<i8")
+        if meta.size != 5:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 5 are needed")
+        k, nf, n_leaves, n_cc, rounds = (int(v) for v in meta.tolist())
+        obj = cls(n_clusters=k, metric=_serialize.scalar_str(arrays, "metric"), prediction_data=True)
+        _restore_mode(obj, arrays)
+        x = _serialize.exact(arrays, "x", "<f4")
+        labels = _serialize.exact(arrays, "labels", "<i4")
+        children = _serialize.exact(arrays, "children", "<i4")
+        if x.ndim != 2 or tuple(x.shape) != (n_leaves, nf):
+            raise ValueError(f"mojolearn: {path!r} x shape {tuple(x.shape)} is not ({n_leaves}, {nf})")
+        if labels.size != n_leaves or tuple(children.shape) != (n_leaves - 1, 2):
+            raise ValueError(f"mojolearn: {path!r} labels or children do not match n_leaves_")
+        obj._fit_X = x
+        obj.labels_ = labels
+        obj.children_ = children
+        obj.n_clusters_ = k
+        obj.n_leaves_ = n_leaves
+        obj.n_connected_components_ = n_cc
+        obj.n_boruvka_rounds_ = rounds
+        obj.n_features_in_ = nf
+        return obj
