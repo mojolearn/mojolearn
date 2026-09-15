@@ -1102,15 +1102,15 @@ FAMILIES = (
         # INFERENCE-ONLY mixture binding a wheel ships. It registers the four
         # scoring entries (bindings/mixture_host_scoring.mojo, the same
         # functions the reference binding above registers) and no fit, so
-        # gmmh_fit and the starts are not compiled in. `routes` stays None so
-        # the reference gate builds and routes the reference binding;
-        # `serves` is the GPU binding `_backend` routes here when the
-        # reference binding is not built (inference_routes()).
+        # gmmh_fit and the starts are not compiled in; the neural family's
+        # pattern. `routes` stays None (the reference binding keeps the
+        # route); a saved model is served through `mojolearn.host_model`,
+        # whose host class binds this file, as lane/inference-linear-svm
+        # serves the scalers through the estimators binding.
         family="mixture_infer",
         binding="_mojolearn_mixture_infer_host",
         routes=None,
-        serves="_mojolearn_mixture",
-        loaded_by="_backend._HOST_INFERENCE_MODULES",
+        loaded_by="python/mojolearn/_classical_host.py (mojolearn.host_model)",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(),
         inference_lanes=("gmm", "gmm-random-init"),
@@ -1172,12 +1172,11 @@ FAMILIES = (
         # INFERENCE-ONLY hdbscan binding a wheel ships, approximate_predict
         # from a saved model (bindings/hdbscan_host_predict.mojo, the same
         # function the reference binding registers) and no fit, prediction
-        # data generation or tree code. Routed like mixture_infer.
+        # data generation or tree code. Loaded like mixture_infer.
         family="hdbscan_infer",
         binding="_mojolearn_hdbscan_infer_host",
         routes=None,
-        serves="_mojolearn_hdbscan",
-        loaded_by="_backend._HOST_INFERENCE_MODULES",
+        loaded_by="python/mojolearn/_classical_host.py (mojolearn.host_model)",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(),
         inference_lanes=("hdbscan", "hdbscan-leaf"),
@@ -1441,14 +1440,6 @@ def routed_modules():
     return {f["routes"]: f["binding"] for f in FAMILIES if f["routes"]}
 
 
-def inference_routes():
-    """GPU binding -> INFERENCE-ONLY host binding basename: what `_backend`
-    routes a CPU-only install through when the family's reference binding
-    (`routed_modules()`) is not built, as in a wheel. A family declares it
-    with `serves`."""
-    return {f["serves"]: f["binding"] for f in FAMILIES if f.get("serves")}
-
-
 def routed_families():
     """The families with a route, the phase 1 set the gate builds in a loop."""
     return [f["family"] for f in FAMILIES if f["routes"]]
@@ -1533,14 +1524,6 @@ def _join(items):
     return ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def _route_cell(f):
-    if f["routes"]:
-        return "`" + f["routes"] + "`"
-    if f.get("serves"):
-        return "`" + f["serves"] + "` when its reference binding is not built"
-    return "loaded by path"
-
-
 def markdown_table():
     """The CPU surface as one table, for the marked spans in
     SUPPORT_MATRIX.md and docs/BYTE_LM_CPU_TRAINING.md."""
@@ -1562,7 +1545,7 @@ def markdown_table():
         else:
             predicts = "no"
         rows.append(
-            f"| {f['family']} | `{f['binding']}.so` | {_route_cell(f)} "
+            f"| {f['family']} | `{f['binding']}.so` | {('`' + f['routes'] + '`') if f['routes'] else 'loaded by path'} "
             f"| {trains} | {predicts} | {f['gate']} | {'yes' if f['ships_in_wheel'] else 'no, `' + build_shim(f['family']) + '`'} |"
         )
     return "\n".join(rows)
@@ -1574,7 +1557,6 @@ def as_dict():
         builder=BUILDER,
         families=[dict(f) for f in FAMILIES],
         routed=routed_modules(),
-        inference_routes=inference_routes(),
         covered_lanes=covered_lanes(),
         record_covered_lanes=record_covered_lanes(),
         fix_covered_lanes=fix_covered_lanes(),

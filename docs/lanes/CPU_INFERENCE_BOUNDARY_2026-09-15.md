@@ -55,8 +55,9 @@ build; its scoring or prediction entries move into a shared module
 (`bindings/mixture_host_scoring.mojo`, `bindings/hdbscan_host_predict.mojo`)
 that both the reference binding and the inference binding register, so the two
 binaries answer through one source. The manifest declares the inference family
-with `routes=None` and `serves=<GPU binding>`; `_backend._select_cpu_only`
-routes that GPU binding to it when the reference binding is not built. On the
+with `routes=None`, the neural family's pattern, and `mojolearn.host_model`
+loads a saved model into a host class that binds it, as the scalers are served
+through the estimators binding. On the
 M4 the inference files are 232,112 and 227,696 bytes against 406,456 and
 359,688 for the reference ones, and `nm` finds no fit symbol in them
 (bench/results/identity_break/2026-09-15_inference-iforest-gmm-hdbscan/fit_symbols.txt).

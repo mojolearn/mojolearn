@@ -25,8 +25,9 @@ Linux legs are OWED before this heading reads published.
   on the M4, against 406,456 for the reference binding with the fit) and
   `_mojolearn_hdbscan_infer_host` (227,696 against 359,688), which register the scoring or
   prediction entries and no fit: `nm` finds no EM step, Boruvka MST or prediction data
-  generation in either file. `_backend` routes the GPU binding to them when the reference
-  binding is not built (`host_surface.inference_routes()`); CPU fits still refuse. On the
+  generation in either file. `mojolearn.host_model(path)` loads a saved model into a host
+  class that binds them, as the scalers are served through the estimators binding; CPU fits
+  still refuse. On the
   M4, one core: the 54 neighbor and KDE models saved by the Metal classes predict IDENTICAL
   on the CPU against their recordings and the 166-lane record's Apple, NVIDIA and AMD infer
   cells, and the host sabotage build reads DIVERGENT on 50 of 54

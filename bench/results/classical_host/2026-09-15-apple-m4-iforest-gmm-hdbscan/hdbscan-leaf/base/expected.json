@@ -1,0 +1,39 @@
+{
+  "commit": "07dbbadc42191393d33408e6e8aa74ec2ee90a56",
+  "estimator": "HDBSCAN",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "base",
+  "lane": "hdbscan-leaf",
+  "model_sha256": "0b290a1896b58eb42431d40feab86896aba8ab6c568adabfcb51ad3b9cee3e23",
+  "numeric_mode": "identical",
+  "predictions": {
+    "approximate_predict_labels": {
+      "dtype": "<i4",
+      "sha256": "370703290d31b995fd33699ec7809d27f1744107ed89f9e2f6c1638e97642959",
+      "shape": [
+        256
+      ]
+    },
+    "identity_hash": "72404979b3191f8d",
+    "probabilities": {
+      "dtype": "<f4",
+      "sha256": "2c873676a19f290d3c8663d3267b015d5e9a5f28f1287f5007bf084c96062ecb",
+      "shape": [
+        256
+      ]
+    },
+    "seconds": 0.014398
+  },
+  "recorded_at": "2026-09-15T13:05:05-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "81b95ad35ae40207bf9d58c1ac22161034eab4823e33bc91bebee40ddda2ac8d"
+}

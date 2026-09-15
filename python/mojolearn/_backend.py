@@ -1041,12 +1041,6 @@ def host_families_built():
 #:     name.
 _HOST_MODULES = host_surface.routed_modules()
 
-#: GPU family -> its INFERENCE-ONLY host binding (the neighbors and density
-#: inference lane, 2026-09-15): a wheel ships the scoring entries of a family
-#: whose reference binding (fit included) stays a source build, so a CPU-only
-#: install routes the family here when `_HOST_MODULES`' binding is absent.
-_HOST_INFERENCE_MODULES = host_surface.inference_routes()
-
 #: The env switch the CPU identity gate sets to load a host binding built
 #: with `-D MOJOLEARN_HOST_SABOTAGE=1`; refused otherwise.
 _HOST_ALLOW_SABOTAGE = "MOJOLEARN_HOST_ALLOW_SABOTAGE"
@@ -1196,8 +1190,6 @@ def _select_cpu_only(pkg, mode, reason):
     for name in _MODULES:
         full = f"{pkg.__name__}.{name}"
         basename = _HOST_MODULES.get(name)
-        if not (basename and os.path.exists(host_module_path(basename))):
-            basename = _HOST_INFERENCE_MODULES.get(name) or basename
         if basename and os.path.exists(host_module_path(basename)):
             module = _HostBinding(full, name, basename, reason)
         else:

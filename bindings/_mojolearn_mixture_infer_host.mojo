@@ -9,10 +9,10 @@ This is the mixture binary a wheel ships. It registers the four scoring
 entries of `bindings/mixture_host_scoring.mojo`, the same functions the
 reference binding `bindings/_mojolearn_mixture_host.mojo` registers, and no
 fit: `gmmh_fit`, the EM loop, the k-means and random starts are not
-imported, so they are not compiled into this file. `_backend` routes
-`_mojolearn_mixture` here when the reference binding is not built
-(`host_surface.inference_routes()`); `gmm_fit` is then absent and refused
-by name, beside the public CPU fit guard.
+imported, so they are not compiled into this file. `mojolearn.host_model`
+loads a saved GaussianMixture into a host class that binds this file
+(`python/mojolearn/_classical_host.py`); there is no `gmm_fit` to reach,
+beside the public CPU fit guard.
 
 The sabotage arm (`mixture_infer_host_sabotage`) is the reference binding's:
 `gemm/host/gemm_oracle.mojo::GEMM_ORACLE_HOST_SABOTAGE`

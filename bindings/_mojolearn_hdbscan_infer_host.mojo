@@ -10,8 +10,8 @@ This is the hdbscan binary a wheel ships. It registers
 same function the reference binding `bindings/_mojolearn_hdbscan_host.mojo`
 registers, and nothing that fits: `hdbh_fit`, the Boruvka MST, the condensed
 tree and `generate_prediction_data` are not imported, so they are not
-compiled into this file. `_backend` routes `_mojolearn_hdbscan` here when the
-reference binding is not built (`host_surface.inference_routes()`).
+compiled into this file. `mojolearn.host_model` loads a saved HDBSCAN into a
+host class that binds this file (`python/mojolearn/_classical_host.py`).
 
 The sabotage arm (`hdbscan_infer_host_sabotage`) is
 `hdbscan/host/hdbscan_host_oracle.mojo::HDBH_HOST_SABOTAGE`

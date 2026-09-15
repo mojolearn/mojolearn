@@ -120,15 +120,15 @@ def test_sabotage_define_reaches_each_binding():
         )
 
 
-#: The fit entry points an inference-only binding must never name, by the GPU
-#: binding it serves (the neighbors and density inference lane, 2026-09-15).
+#: The fit entry points an inference-only binding must never name, by family
+#: (the neighbors and density inference lane, 2026-09-15).
 #: Mojo compiles only what a binding reaches, so a source that names none of
 #: these ships none of them; bench/results/identity_break/
 #: 2026-09-15_inference-iforest-gmm-hdbscan/fit_symbols.txt shows the built
 #: files agree.
 _FIT_NAMES = {
-    "_mojolearn_mixture": ("gmmh_fit", "gmm_fit", "gmmh_m_step", "gmmh_initial_resp"),
-    "_mojolearn_hdbscan": ("hdbh_fit", "hdbscan_fit", "generate_prediction_data"),
+    "mixture_infer": ("gmmh_fit", "gmm_fit", "gmmh_m_step", "gmmh_initial_resp"),
+    "hdbscan_infer": ("hdbh_fit", "hdbscan_fit", "generate_prediction_data"),
 }
 
 
@@ -140,14 +140,13 @@ def _mojo_code(text):
 
 
 def test_inference_only_bindings_name_no_fit():
-    served = {f["serves"]: f for f in host_surface.FAMILIES if f.get("serves")}
-    assert set(served) == set(_FIT_NAMES), f"inference-only families {sorted(served)} have no fit list here"
-    for gpu, f in served.items():
-        texts = [_mojo_code(_read(host_surface.binding_source(f["family"])))]
+    for name, fits in _FIT_NAMES.items():
+        f = host_surface.family(name)
+        texts = [_mojo_code(_read(host_surface.binding_source(name)))]
         texts += [_mojo_code(_read(m)) for m in f["host_modules"] if m.startswith("bindings/")]
-        for name in _FIT_NAMES[gpu]:
-            hits = [t for t in texts if re.search(rf"\b{name}\b", t)]
-            assert not hits, f"{f['family']}: {name} is named in its binding sources"
+        for fit in fits:
+            hits = [t for t in texts if re.search(rf"\b{fit}\b", t)]
+            assert not hits, f"{name}: {fit} is named in its binding sources"
 
 
 def test_host_modules_exist():
@@ -281,14 +280,12 @@ def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
         "byte_lm", "forest", "tokenizer", "core", "linalg", "estimators", "metrics", "svm",
         "mixture_infer", "hdbscan_infer",
     }
-    # An inference-only family serves a GPU binding whose reference family
-    # does not ship, and exports no fit.
-    for f in host_surface.FAMILIES:
-        if f.get("serves"):
-            assert f["routes"] is None and f["training_lanes"] == ()
-            assert not any(name.endswith("_fit") for name in f["exports"]), f["family"]
-            assert f["serves"] in set(host_surface.routed_modules())
-    assert set(_backend._HOST_INFERENCE_MODULES.values()) <= shipped
+    # The inference-only families ship; the reference families whose
+    # scoring and prediction entries they carry do not.
+    for inference, reference in (("mixture_infer", "mixture"), ("hdbscan_infer", "hdbscan")):
+        assert host_surface.family(inference)["ships_in_wheel"] and host_surface.family(inference)["routes"] is None
+        assert not host_surface.family(reference)["ships_in_wheel"]
+        assert host_surface.family(inference)["training_lanes"] == ()
     assert len(host_surface.families()) > len(host_surface.wheel_families())
     assert host_surface.training_gpu_column_record() == host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 2)[1]
     for rel, token in (

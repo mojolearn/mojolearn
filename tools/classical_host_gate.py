@@ -382,6 +382,12 @@ def do_check(args):
             equal = theirs == got['identity_hash']
             if theirs is None:
                 status = 'ABSENT'
+            elif isinstance(theirs, str) and theirs.startswith('n/a:'):
+                # A record older than the lane's infer probe carries its
+                # reason (`n/a:transductive` on hdbscan before 2026-09-15),
+                # not a hash: nothing to compare, so it cannot differ.
+                status = 'N/A'
+                equal = None
             else:
                 status = 'EQUAL' if equal else 'DIFFER'
                 verdict_ok = verdict_ok and equal
