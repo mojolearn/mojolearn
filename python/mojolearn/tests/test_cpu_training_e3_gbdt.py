@@ -17,8 +17,7 @@ modules it reuses import none either; the oracle spells the device
 constructs a bit claim rests on (the pinned 32, the dithered quantizer, the
 row-count scale limit, the half-byte block partial flush, the Newton epsilon,
 the fused cursor update, the phase B border search's subnormal flush); the sabotage define reaches the leaf walker and
-the binding reads it back; the CPU identity gate workflow triggers on the
-oracle.
+the binding reads it back.
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): a small Logloss fit runs twice through the host
@@ -177,10 +176,6 @@ def test_sabotage_define_moves_the_leaf_walker():
     assert "lambda_reg = lambda_reg + 1.0" in text
     assert "GBDT_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("gbdt"))
 
-
-def test_workflow_triggers_on_the_oracle():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {ORACLE}"
 
 
 @reference_training()

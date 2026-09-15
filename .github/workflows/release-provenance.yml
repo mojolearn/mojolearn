@@ -96,6 +96,8 @@ jobs:
     name: Full CPU reference certification
     if: inputs.publish != 'none'
     uses: ./.github/workflows/cpu-identity-gate.yml
+    with:
+      confirm: RUN-HEAVY
     permissions:
       contents: read
 

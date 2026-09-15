@@ -8,7 +8,7 @@ cholesky_r1_update.cuh:77` for the rank-one update, `cuml/src/solver/
 lars_impl.cuh:349` and `:369` for the two LARS back-solves, and
 `cusolverDnpotrs` for cuVS's ScaNN solve (`cuvs/src/neighbors/scann/detail/
 scann_avq.cuh:190`). cuBLAS and cuSOLVER are CLOSED. There is no source to
-follow statement for statement, so `ENGINEERING_RULES` 0b-i's narrow exception applies and the
+read, so `ENGINEERING_RULES` 0b-i's narrow exception applies and the
 question becomes what to call instead -- and under `NUMERIC_IDENTICAL` the
 answer cannot be MAX's equivalent either, for the reason
 `neighbors/checks/pinned_distance_tile.mojo` gives about `linalg.matmul`:
@@ -61,7 +61,7 @@ second rounding. `identical_div` is row 49's seam
 (`checks/numerics.mojo`), correctly rounded on every column measured;
 `1/x` followed by `x*y` is two roundings whose composition is not the
 correctly-rounded quotient. `CHOL_SAB_TRSM_RECIPROCAL` is that arm.
-`cholesky/impl/matrix/detail/matrix.mojo` mirrors the RAFT kernel anyway,
+`cholesky/impl/matrix/detail/matrix.mojo` implements that kernel anyway,
 with its own banner saying it is unreachable from any identity path here.
 """
 

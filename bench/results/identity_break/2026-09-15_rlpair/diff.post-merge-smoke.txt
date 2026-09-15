@@ -1,0 +1,256 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 8 other lane(s) the JSONs carry are not compared
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    apple-m4: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    apple-m4: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    apple-m4: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    apple-m4: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    apple-m4: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': '5061056b118d07d0'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': 'e4b16c115962dfcd'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': '9dc786ade4574aff'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': '45b539a3f66ce25d'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd1ba686494256660'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': 'd1ba686494256660'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-nvidia-h100-80gb-hbm3-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    apple-m4: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-nvidia-h100-80gb-hbm3-sm_90a | apple-m4         |
+|------------------------------|------------|------------------|------------------|------------------|
+| byte-lm/base                 | IDENTICAL x3 | f9a8d760f503f795 | f9a8d760f503f795 | f9a8d760f503f795 |
+| byte-lm/denormal             | IDENTICAL x2 | 9f7725f93b3c2400 | 9f7725f93b3c2400 | (not run)        |
+| byte-lm/denormal_ftz         | IDENTICAL x2 | 65bde5a2fb67dfdb | 65bde5a2fb67dfdb | (not run)        |
+| byte-lm/dupes                | IDENTICAL x2 | 9d9fe9205064bac3 | 9d9fe9205064bac3 | (not run)        |
+| byte-lm/hashed               | IDENTICAL x2 | e1937509a223711e | e1937509a223711e | (not run)        |
+| byte-lm/negative             | IDENTICAL x2 | 2ac343da560e4d31 | 2ac343da560e4d31 | (not run)        |
+| byte-lm/odd                  | IDENTICAL x2 | f9a8d760f503f795 | f9a8d760f503f795 | (not run)        |
+| byte-lm/ties                 | IDENTICAL x2 | b6939352795ff292 | b6939352795ff292 | (not run)        |
+| byte-lm/wide                 | IDENTICAL x2 | f06570ace1982aab | f06570ace1982aab | (not run)        |
+| mamba2/base                  | IDENTICAL x3 | 5b05a3ecbd70248e | 5b05a3ecbd70248e | 5b05a3ecbd70248e |
+| mamba2/denormal              | IDENTICAL x2 | a143926e29ac0813 | a143926e29ac0813 | (not run)        |
+| mamba2/denormal_ftz          | IDENTICAL x2 | a143926e29ac0813 | a143926e29ac0813 | (not run)        |
+| mamba2/dupes                 | IDENTICAL x2 | c565acd587b39ab2 | c565acd587b39ab2 | (not run)        |
+| mamba2/hashed                | IDENTICAL x2 | 2689cc3187df61fd | 2689cc3187df61fd | (not run)        |
+| mamba2/negative              | IDENTICAL x2 | 3506202ab66d8a1f | 3506202ab66d8a1f | (not run)        |
+| mamba2/odd                   | IDENTICAL x2 | 5b05a3ecbd70248e | 5b05a3ecbd70248e | (not run)        |
+| mamba2/ties                  | IDENTICAL x2 | 48a4bec7b6f6e4f6 | 48a4bec7b6f6e4f6 | (not run)        |
+| mamba2/wide                  | IDENTICAL x2 | 0d1022f692c144dd | 0d1022f692c144dd | (not run)        |
+| samba/base                   | IDENTICAL x3 | 037e7701daa7fc7c | 037e7701daa7fc7c | 037e7701daa7fc7c |
+| samba/denormal               | IDENTICAL x2 | 97c929c9824ede42 | 97c929c9824ede42 | (not run)        |
+| samba/denormal_ftz           | IDENTICAL x2 | 2dc833bbce3de194 | 2dc833bbce3de194 | (not run)        |
+| samba/dupes                  | IDENTICAL x2 | daa904c0d89aefde | daa904c0d89aefde | (not run)        |
+| samba/hashed                 | IDENTICAL x2 | 0fb42364f4c84411 | 0fb42364f4c84411 | (not run)        |
+| samba/negative               | IDENTICAL x2 | 8c6bfc3b26396833 | 8c6bfc3b26396833 | (not run)        |
+| samba/odd                    | IDENTICAL x2 | 037e7701daa7fc7c | 037e7701daa7fc7c | (not run)        |
+| samba/ties                   | IDENTICAL x2 | e02c7412e926a415 | e02c7412e926a415 | (not run)        |
+| samba/wide                   | IDENTICAL x2 | 68e2e32002737938 | 68e2e32002737938 | (not run)        |
+| transformer/base             | IDENTICAL x3 | 295d4e62d4c78b14 | 295d4e62d4c78b14 | 295d4e62d4c78b14 |
+| transformer/denormal         | IDENTICAL x2 | da87cbc4fb93d086 | da87cbc4fb93d086 | (not run)        |
+| transformer/denormal_ftz     | IDENTICAL x2 | da87cbc4fb93d086 | da87cbc4fb93d086 | (not run)        |
+| transformer/dupes            | IDENTICAL x2 | e48bc0a8545b1a29 | e48bc0a8545b1a29 | (not run)        |
+| transformer/hashed           | IDENTICAL x2 | 7d565e3a35324caa | 7d565e3a35324caa | (not run)        |
+| transformer/negative         | IDENTICAL x2 | 79d66e219ac996a9 | 79d66e219ac996a9 | (not run)        |
+| transformer/odd              | IDENTICAL x2 | 295d4e62d4c78b14 | 295d4e62d4c78b14 | (not run)        |
+| transformer/ties             | IDENTICAL x2 | 251eb6369ef11d70 | 251eb6369ef11d70 | (not run)        |
+| transformer/wide             | IDENTICAL x2 | ecbe59229197362b | ecbe59229197362b | (not run)        |
+
+summary: IDENTICAL=36
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-nvidia-h100-80gb-hbm3-sm_90a | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| byte-lm/base                 | infer  | IDENTICAL x3 | 220885cbd8d2f82f | 220885cbd8d2f82f | 220885cbd8d2f82f |
+| byte-lm/base                 | model  | IDENTICAL x3 | b1d65b99997911c5 | b1d65b99997911c5 | b1d65b99997911c5 |
+| byte-lm/base                 | batch  | IDENTICAL x3 | c44734e41960ea7d | c44734e41960ea7d | c44734e41960ea7d |
+| byte-lm/base                 | rlpair | IDENTICAL x3 | 75d10aa264b7a173 | 75d10aa264b7a173 | 75d10aa264b7a173 |
+| byte-lm/denormal             | infer  | IDENTICAL x2 | 16c555cc1776f127 | 16c555cc1776f127 | (not run)        |
+| byte-lm/denormal             | model  | IDENTICAL x2 | 90d95bea0a099246 | 90d95bea0a099246 | (not run)        |
+| byte-lm/denormal             | batch  | IDENTICAL x2 | 9a4f9d37b38b6127 | 9a4f9d37b38b6127 | (not run)        |
+| byte-lm/denormal             | rlpair | IDENTICAL x2 | 8ab8f644645ef801 | 8ab8f644645ef801 | (not run)        |
+| byte-lm/denormal_ftz         | infer  | IDENTICAL x2 | 21c7e2e9e4e3c163 | 21c7e2e9e4e3c163 | (not run)        |
+| byte-lm/denormal_ftz         | model  | IDENTICAL x2 | ff9e808d37f12ae2 | ff9e808d37f12ae2 | (not run)        |
+| byte-lm/denormal_ftz         | batch  | IDENTICAL x2 | 3e3cfcb8788e7cf3 | 3e3cfcb8788e7cf3 | (not run)        |
+| byte-lm/denormal_ftz         | rlpair | IDENTICAL x2 | 9898acc0a6d417c0 | 9898acc0a6d417c0 | (not run)        |
+| byte-lm/dupes                | infer  | IDENTICAL x2 | a76dcc66f0b0b3d6 | a76dcc66f0b0b3d6 | (not run)        |
+| byte-lm/dupes                | model  | IDENTICAL x2 | 78870cb1fb90caf6 | 78870cb1fb90caf6 | (not run)        |
+| byte-lm/dupes                | batch  | IDENTICAL x2 | ad53b8960db92852 | ad53b8960db92852 | (not run)        |
+| byte-lm/dupes                | rlpair | IDENTICAL x2 | 6bf12066f8169234 | 6bf12066f8169234 | (not run)        |
+| byte-lm/hashed               | infer  | IDENTICAL x2 | d9a8ae1211de63a8 | d9a8ae1211de63a8 | (not run)        |
+| byte-lm/hashed               | model  | IDENTICAL x2 | 0fa0ffc6bdf7e8da | 0fa0ffc6bdf7e8da | (not run)        |
+| byte-lm/hashed               | batch  | IDENTICAL x2 | 2a8fad887169cf0e | 2a8fad887169cf0e | (not run)        |
+| byte-lm/hashed               | rlpair | IDENTICAL x2 | fa10ffc49616575d | fa10ffc49616575d | (not run)        |
+| byte-lm/negative             | infer  | IDENTICAL x2 | feaf17f14d1fa224 | feaf17f14d1fa224 | (not run)        |
+| byte-lm/negative             | model  | IDENTICAL x2 | a6aa56e3723d26e7 | a6aa56e3723d26e7 | (not run)        |
+| byte-lm/negative             | batch  | IDENTICAL x2 | 6daa8fd7fe40b602 | 6daa8fd7fe40b602 | (not run)        |
+| byte-lm/negative             | rlpair | IDENTICAL x2 | 54680d0fdf3ebf0a | 54680d0fdf3ebf0a | (not run)        |
+| byte-lm/odd                  | infer  | IDENTICAL x2 | 220885cbd8d2f82f | 220885cbd8d2f82f | (not run)        |
+| byte-lm/odd                  | model  | IDENTICAL x2 | b1d65b99997911c5 | b1d65b99997911c5 | (not run)        |
+| byte-lm/odd                  | batch  | IDENTICAL x2 | c44734e41960ea7d | c44734e41960ea7d | (not run)        |
+| byte-lm/odd                  | rlpair | IDENTICAL x2 | 75d10aa264b7a173 | 75d10aa264b7a173 | (not run)        |
+| byte-lm/ties                 | infer  | IDENTICAL x2 | efab6527ef0195aa | efab6527ef0195aa | (not run)        |
+| byte-lm/ties                 | model  | IDENTICAL x2 | 947981070e61e180 | 947981070e61e180 | (not run)        |
+| byte-lm/ties                 | batch  | IDENTICAL x2 | 4178e56fb2b92328 | 4178e56fb2b92328 | (not run)        |
+| byte-lm/ties                 | rlpair | IDENTICAL x2 | 5ab9db09132a0874 | 5ab9db09132a0874 | (not run)        |
+| byte-lm/wide                 | infer  | IDENTICAL x2 | d9cdc033be91d67a | d9cdc033be91d67a | (not run)        |
+| byte-lm/wide                 | model  | IDENTICAL x2 | 24cbda1caad25158 | 24cbda1caad25158 | (not run)        |
+| byte-lm/wide                 | batch  | IDENTICAL x2 | 6d2986674bd92c94 | 6d2986674bd92c94 | (not run)        |
+| byte-lm/wide                 | rlpair | IDENTICAL x2 | b2d04e8471f8694e | b2d04e8471f8694e | (not run)        |
+| mamba2/base                  | infer  | IDENTICAL x3 | b0084ee171c0720f | b0084ee171c0720f | b0084ee171c0720f |
+| mamba2/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| mamba2/base                  | batch  | IDENTICAL x3 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | d21a83ab6b3ce297 |
+| mamba2/base                  | rlpair | IDENTICAL x3 | f4abbd5451ff5172 | f4abbd5451ff5172 | f4abbd5451ff5172 |
+| mamba2/denormal              | infer  | IDENTICAL x2 | 715e3b3d9ee219ba | 715e3b3d9ee219ba | (not run)        |
+| mamba2/denormal              | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| mamba2/denormal              | batch  | IDENTICAL x2 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | (not run)        |
+| mamba2/denormal              | rlpair | IDENTICAL x2 | c43d27b4d3607e26 | c43d27b4d3607e26 | (not run)        |
+| mamba2/denormal_ftz          | infer  | IDENTICAL x2 | 715e3b3d9ee219ba | 715e3b3d9ee219ba | (not run)        |
+| mamba2/denormal_ftz          | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| mamba2/denormal_ftz          | batch  | IDENTICAL x2 | ce1a26dfa4587c15 | ce1a26dfa4587c15 | (not run)        |
+| mamba2/denormal_ftz          | rlpair | IDENTICAL x2 | 85aeeec8c5a056a1 | 85aeeec8c5a056a1 | (not run)        |
+| mamba2/dupes                 | infer  | IDENTICAL x2 | bc19a007224d9860 | bc19a007224d9860 | (not run)        |
+| mamba2/dupes                 | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| mamba2/dupes                 | batch  | IDENTICAL x2 | 82b6615b36847109 | 82b6615b36847109 | (not run)        |
+| mamba2/dupes                 | rlpair | IDENTICAL x2 | f4abbd5451ff5172 | f4abbd5451ff5172 | (not run)        |
+| mamba2/hashed                | infer  | IDENTICAL x2 | fa5cdfa7a8028ea4 | fa5cdfa7a8028ea4 | (not run)        |
+| mamba2/hashed                | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| mamba2/hashed                | batch  | IDENTICAL x2 | a824974d95e976a1 | a824974d95e976a1 | (not run)        |
+| mamba2/hashed                | rlpair | IDENTICAL x2 | ebd9a6af0f062bee | ebd9a6af0f062bee | (not run)        |
+| mamba2/negative              | infer  | IDENTICAL x2 | e47047c1022164fb | e47047c1022164fb | (not run)        |
+| mamba2/negative              | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| mamba2/negative              | batch  | IDENTICAL x2 | 5e4dc2619d55149f | 5e4dc2619d55149f | (not run)        |
+| mamba2/negative              | rlpair | IDENTICAL x2 | 08cdec93b208dfcc | 08cdec93b208dfcc | (not run)        |
+| mamba2/odd                   | infer  | IDENTICAL x2 | b0084ee171c0720f | b0084ee171c0720f | (not run)        |
+| mamba2/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| mamba2/odd                   | batch  | IDENTICAL x2 | d21a83ab6b3ce297 | d21a83ab6b3ce297 | (not run)        |
+| mamba2/odd                   | rlpair | IDENTICAL x2 | f4abbd5451ff5172 | f4abbd5451ff5172 | (not run)        |
+| mamba2/ties                  | infer  | IDENTICAL x2 | bbd1634ec2e78ddf | bbd1634ec2e78ddf | (not run)        |
+| mamba2/ties                  | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| mamba2/ties                  | batch  | IDENTICAL x2 | 4b2801f8f573c8c8 | 4b2801f8f573c8c8 | (not run)        |
+| mamba2/ties                  | rlpair | IDENTICAL x2 | f899efc2a35ec48a | f899efc2a35ec48a | (not run)        |
+| mamba2/wide                  | infer  | IDENTICAL x2 | b67647742c88aaf1 | b67647742c88aaf1 | (not run)        |
+| mamba2/wide                  | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| mamba2/wide                  | batch  | IDENTICAL x2 | 0a20d6f3d8237f24 | 0a20d6f3d8237f24 | (not run)        |
+| mamba2/wide                  | rlpair | IDENTICAL x2 | 47957b59ac09a5d8 | 47957b59ac09a5d8 | (not run)        |
+| samba/base                   | infer  | IDENTICAL x3 | 77db10c414ebd846 | 77db10c414ebd846 | 77db10c414ebd846 |
+| samba/base                   | model  | IDENTICAL x3 | 674582804fcf1a50 | 674582804fcf1a50 | 674582804fcf1a50 |
+| samba/base                   | batch  | IDENTICAL x3 | aacbe0585755bc0f | aacbe0585755bc0f | aacbe0585755bc0f |
+| samba/base                   | rlpair | IDENTICAL x3 | 8ae8dda8ba22a4aa | 8ae8dda8ba22a4aa | 8ae8dda8ba22a4aa |
+| samba/denormal               | infer  | IDENTICAL x2 | ca618a38cf786fa4 | ca618a38cf786fa4 | (not run)        |
+| samba/denormal               | model  | IDENTICAL x2 | f7f05521e7cdfec7 | f7f05521e7cdfec7 | (not run)        |
+| samba/denormal               | batch  | IDENTICAL x2 | f5880effe032ad0f | f5880effe032ad0f | (not run)        |
+| samba/denormal               | rlpair | IDENTICAL x2 | 87af7af2b081fddc | 87af7af2b081fddc | (not run)        |
+| samba/denormal_ftz           | infer  | IDENTICAL x2 | b728af86ccc442fb | b728af86ccc442fb | (not run)        |
+| samba/denormal_ftz           | model  | IDENTICAL x2 | f34e7e4227d3ab4b | f34e7e4227d3ab4b | (not run)        |
+| samba/denormal_ftz           | batch  | IDENTICAL x2 | d765507d7d144423 | d765507d7d144423 | (not run)        |
+| samba/denormal_ftz           | rlpair | IDENTICAL x2 | ee2093efea1daf9e | ee2093efea1daf9e | (not run)        |
+| samba/dupes                  | infer  | IDENTICAL x2 | 3bb2585d8a536f77 | 3bb2585d8a536f77 | (not run)        |
+| samba/dupes                  | model  | IDENTICAL x2 | 5113ff087cd1d774 | 5113ff087cd1d774 | (not run)        |
+| samba/dupes                  | batch  | IDENTICAL x2 | a77ce9563430eca6 | a77ce9563430eca6 | (not run)        |
+| samba/dupes                  | rlpair | IDENTICAL x2 | 2f241faee9373acb | 2f241faee9373acb | (not run)        |
+| samba/hashed                 | infer  | IDENTICAL x2 | b0b897d724d5a625 | b0b897d724d5a625 | (not run)        |
+| samba/hashed                 | model  | IDENTICAL x2 | 284aef669039f101 | 284aef669039f101 | (not run)        |
+| samba/hashed                 | batch  | IDENTICAL x2 | 685cfa1d3a50b038 | 685cfa1d3a50b038 | (not run)        |
+| samba/hashed                 | rlpair | IDENTICAL x2 | af0e02cacfad8270 | af0e02cacfad8270 | (not run)        |
+| samba/negative               | infer  | IDENTICAL x2 | 3a11eda41792501b | 3a11eda41792501b | (not run)        |
+| samba/negative               | model  | IDENTICAL x2 | bf0a203a904b24cf | bf0a203a904b24cf | (not run)        |
+| samba/negative               | batch  | IDENTICAL x2 | 87de84abeab25d86 | 87de84abeab25d86 | (not run)        |
+| samba/negative               | rlpair | IDENTICAL x2 | 1af4d714620deaf5 | 1af4d714620deaf5 | (not run)        |
+| samba/odd                    | infer  | IDENTICAL x2 | 77db10c414ebd846 | 77db10c414ebd846 | (not run)        |
+| samba/odd                    | model  | IDENTICAL x2 | 674582804fcf1a50 | 674582804fcf1a50 | (not run)        |
+| samba/odd                    | batch  | IDENTICAL x2 | aacbe0585755bc0f | aacbe0585755bc0f | (not run)        |
+| samba/odd                    | rlpair | IDENTICAL x2 | 8ae8dda8ba22a4aa | 8ae8dda8ba22a4aa | (not run)        |
+| samba/ties                   | infer  | IDENTICAL x2 | a777e99f0a27b647 | a777e99f0a27b647 | (not run)        |
+| samba/ties                   | model  | IDENTICAL x2 | 1e49500f833e02a1 | 1e49500f833e02a1 | (not run)        |
+| samba/ties                   | batch  | IDENTICAL x2 | ca83b11a24eb8695 | ca83b11a24eb8695 | (not run)        |
+| samba/ties                   | rlpair | IDENTICAL x2 | e4e74a603305d265 | e4e74a603305d265 | (not run)        |
+| samba/wide                   | infer  | IDENTICAL x2 | a9c9aafd145646b1 | a9c9aafd145646b1 | (not run)        |
+| samba/wide                   | model  | IDENTICAL x2 | 6adcd1530cd32c5e | 6adcd1530cd32c5e | (not run)        |
+| samba/wide                   | batch  | IDENTICAL x2 | 609a185bf1638192 | 609a185bf1638192 | (not run)        |
+| samba/wide                   | rlpair | IDENTICAL x2 | cb7ed4b4430e1283 | cb7ed4b4430e1283 | (not run)        |
+| transformer/base             | infer  | IDENTICAL x3 | d658bafd272776e1 | d658bafd272776e1 | d658bafd272776e1 |
+| transformer/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| transformer/base             | batch  | IDENTICAL x3 | 321df8136b576084 | 321df8136b576084 | 321df8136b576084 |
+| transformer/base             | rlpair | IDENTICAL x3 | 41c065998015307c | 41c065998015307c | 41c065998015307c |
+| transformer/denormal         | infer  | IDENTICAL x2 | 2dd718be6601b4be | 2dd718be6601b4be | (not run)        |
+| transformer/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| transformer/denormal         | batch  | IDENTICAL x2 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | (not run)        |
+| transformer/denormal         | rlpair | IDENTICAL x2 | 174e6a3a08b33eab | 174e6a3a08b33eab | (not run)        |
+| transformer/denormal_ftz     | infer  | IDENTICAL x2 | 2dd718be6601b4be | 2dd718be6601b4be | (not run)        |
+| transformer/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| transformer/denormal_ftz     | batch  | IDENTICAL x2 | aad837e59ba3f9c6 | aad837e59ba3f9c6 | (not run)        |
+| transformer/denormal_ftz     | rlpair | IDENTICAL x2 | 3e90019a6be2628a | 3e90019a6be2628a | (not run)        |
+| transformer/dupes            | infer  | IDENTICAL x2 | cc0485bd3463891b | cc0485bd3463891b | (not run)        |
+| transformer/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| transformer/dupes            | batch  | IDENTICAL x2 | 4b51e3c2db7f9667 | 4b51e3c2db7f9667 | (not run)        |
+| transformer/dupes            | rlpair | IDENTICAL x2 | 41c065998015307c | 41c065998015307c | (not run)        |
+| transformer/hashed           | infer  | IDENTICAL x2 | 33aa6df81aac0bcd | 33aa6df81aac0bcd | (not run)        |
+| transformer/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| transformer/hashed           | batch  | IDENTICAL x2 | 10988a93701693a8 | 10988a93701693a8 | (not run)        |
+| transformer/hashed           | rlpair | IDENTICAL x2 | d64e16e9457f1512 | d64e16e9457f1512 | (not run)        |
+| transformer/negative         | infer  | IDENTICAL x2 | 0804b57610d9b1f5 | 0804b57610d9b1f5 | (not run)        |
+| transformer/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| transformer/negative         | batch  | IDENTICAL x2 | 55ca8b3a54e10ffa | 55ca8b3a54e10ffa | (not run)        |
+| transformer/negative         | rlpair | IDENTICAL x2 | 0b99fe53b0eaa46a | 0b99fe53b0eaa46a | (not run)        |
+| transformer/odd              | infer  | IDENTICAL x2 | d658bafd272776e1 | d658bafd272776e1 | (not run)        |
+| transformer/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| transformer/odd              | batch  | IDENTICAL x2 | 321df8136b576084 | 321df8136b576084 | (not run)        |
+| transformer/odd              | rlpair | IDENTICAL x2 | 41c065998015307c | 41c065998015307c | (not run)        |
+| transformer/ties             | infer  | IDENTICAL x2 | f222fca146b15f94 | f222fca146b15f94 | (not run)        |
+| transformer/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| transformer/ties             | batch  | IDENTICAL x2 | 8548d6f52de06b7b | 8548d6f52de06b7b | (not run)        |
+| transformer/ties             | rlpair | IDENTICAL x2 | 88f6733750d71307 | 88f6733750d71307 | (not run)        |
+| transformer/wide             | infer  | IDENTICAL x2 | 976e818c75ac481c | 976e818c75ac481c | (not run)        |
+| transformer/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | (not run)        |
+| transformer/wide             | batch  | IDENTICAL x2 | a487428103ce49a8 | a487428103ce49a8 | (not run)        |
+| transformer/wide             | rlpair | IDENTICAL x2 | f7b820c4caf9e16d | f7b820c4caf9e16d | (not run)        |
+
+summary (infer/model): IDENTICAL=54, N/A=18
+summary (batch): IDENTICAL=36
+summary (rlpair): IDENTICAL=36

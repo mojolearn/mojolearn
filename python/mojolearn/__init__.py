@@ -182,7 +182,7 @@ from . import resample
 
 # `IVFIndex` and `Embedding` JOINED 2026-09-14 (lane/expose-ivf-embedding),
 # the two entries `_NOT_YET` held since the claim-surface census. IVFIndex
-# is cuVS `ivf_flat` build plus search under one card
+# is IVF-Flat build plus search under one card (reference: cuVS `ivf_flat`)
 # (`bindings/_mojolearn_ivf.mojo`); `pixi run check-ivf` reads ALL OK with
 # one IDENTICAL card on Apple, NVIDIA and AMD
 # (bench/results/ivf_embed_km_legs_2026-09-14/README.md). Embedding is
@@ -204,7 +204,7 @@ from .embedding import Embedding
 # was written that day. Its binding `_mojolearn_gp` resolves on FIRST USE
 # like every other: an unbuilt extension leaves the package importable and
 # raises BY NAME with the build command when touched (`_backend.py`'s
-# design). ORIGINAL WORK: no upstream GP exists in cuML/cuVS/RAFT at the
+# design). No reference GP exists in cuML/cuVS/RAFT at the
 # pinned commits; scikit-learn `_gpr.py` is the semantics oracle only.
 from ._gp_impl import (
     ConstantKernel,

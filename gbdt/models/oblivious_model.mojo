@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The trained tree, and the ensemble of them.
 
-FOLLOWS `catboost/cuda/models/oblivious_model.h` and `additive_model.h` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/models/oblivious_model.h` and `additive_model.h`
+(CatBoost `54a8143a`).
 
-Their structure is remarkably small:
+The reference structure is remarkably small:
 
     struct TObliviousTreeStructure { TVector<TBinarySplit> Splits; };
 

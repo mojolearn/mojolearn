@@ -3,7 +3,7 @@
 """`SquaredLoss` and `AbsLoss`: the two regression objectives, per row, and
 `nrm1`, the gradient norm the absolute-value losses converge on.
 
-FOLLOWS `cuml/cpp/src/glm/qn/glm_linear.cuh` at cuML `00094f7`. Whole
+Reference: `cuml/cpp/src/glm/qn/glm_linear.cuh` (cuML `00094f7`). Whole
 file: both `Lz`/`Dlz` pairs and both `gradNorm`s. Plus `nrm1` from
 `simple_mat/dense.hpp:313-321`, which `simple_mat/dense.mojo` does not carry
 and which three losses (`AbsLoss`, `SVCL1Loss`, `SVRL1Loss`) return from
@@ -11,7 +11,7 @@ and which three losses (`AbsLoss`, `SVCL1Loss`, `SVRL1Loss`) return from
 belongs beside `nrm_max` in `dense.mojo` (HAND-OFF in `glm/README.md`). Do
 not improve.
 
-THEIR FOUR FUNCTORS, copied (`glm_linear.cuh:21-60`):
+THE REFERENCE'S FOUR FUNCTORS (`glm_linear.cuh:21-60`):
 
     Squared  lz(y, z)  = diff * diff * 0.5,  diff = z - y
              dlz(y, z) = z - y

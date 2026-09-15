@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`make_cluster_tree`, the two `parent_csr`s, and the CSR scan they need.
 
-FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/detail/utils.h` (cuML `265b9da`):
+Reference: `cuml-v26.08.00/cpp/src/hdbscan/detail/utils.h` (cuML `265b9da`):
 `make_cluster_tree` (`:83-140`) and `parent_csr` (`:150-170`); plus
 `cuvs`/RAFT's `raft::sparse::convert::sorted_coo_to_csr` (`csr.cuh:78-90`)
 as the host counting scan both of them call. Their `cub_segmented_reduce`

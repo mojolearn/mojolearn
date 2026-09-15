@@ -54,6 +54,7 @@ from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, fromb
 from ._bufcheck import flat_view, is_int32, is_native_f32, le_bytes, memcopy, probe
 from ._byte_lm_config import ByteLanguageModelConfig, require_shape, state_shape
 from ._byte_lm_host import _greedy_next_bytes, _logits_ids
+from . import _ragged
 
 PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 # Compatibility constants describe only the original regression fixture.
@@ -881,10 +882,17 @@ class SmallByteLanguageModelTrainer:
         with self._lock:
             return self._run(ids, False)
 
-    def logits(self, ids):
+    def logits(self, ids, *, lengths=None):
         """Float32 logits `[batch, length, vocab]` for int32 ids `[batch,
         length]` (DEVIATION 2658), for positions 0 to length - 1 of each row,
-        prefilled from absolute position 0. `batch` must be in [1, 1024],
+        prefilled from absolute position 0.
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `batch` integers in
+        `[1, length]`, row `i` real at positions `[0, lengths[i])` and
+        padding after, whatever int32 values the padding holds. Real
+        positions' logits are byte for byte the row alone at its own length
+        (causal attention, no arithmetic changes, `_ragged.py` says why) and
+        padding positions' logits are exactly `+0.0`. `batch` must be in [1, 1024],
         `length` in [1, shape.length], `batch * length * vocab` at most
         268435456 and every id in [0, shape.vocab_size); anything else is
         refused with ValueError before any native call.
@@ -907,6 +915,10 @@ class SmallByteLanguageModelTrainer:
         state as `evaluate` does, builds and destroys one device context,
         and requires the parameter and id bytes it handed over unchanged
         afterward."""
+        if lengths is not None:
+            raw, _ = as_i32_c(ids, ndim=2, name='ids')
+            return _ragged.ragged_forward(self.logits, raw, None, lengths, '<i4',
+                                          'SmallByteLanguageModelTrainer.logits')[0]
         with self._lock:
             shape = state_shape(self._state)
             tokens, batch, length = _gpu_logits_ids(ids, shape)
@@ -914,10 +926,18 @@ class SmallByteLanguageModelTrainer:
                 return self._logits_resident(tokens, batch, length, shape)
             return self._logits_stateless(tokens, batch, length, shape)
 
-    def next_bytes(self, ids):
+    def next_bytes(self, ids, *, lengths=None):
         """The greedy next byte after each row of ids `[batch, length]`, ties
         to the lowest byte value, picked from `logits(ids)` by the helper
-        `LanguageModelInference.next_bytes` uses (DEVIATION 2658)."""
+        `LanguageModelInference.next_bytes` uses (DEVIATION 2658). With
+        `lengths` (a ragged batch, see `logits`) the byte after each row's
+        LAST REAL position."""
+        if lengths is not None:
+            raw, _ = as_i32_c(ids, ndim=2, name='ids')
+            logits, lens = _ragged.ragged_forward(self.logits, raw, None, lengths, '<i4',
+                                                  'SmallByteLanguageModelTrainer.next_bytes')
+            return _greedy_next_bytes(_ragged.last_real_rows(logits, lens,
+                                                             'SmallByteLanguageModelTrainer.next_bytes'))
         return _greedy_next_bytes(self.logits(ids))
 
     def _logits_stateless(self, tokens, batch, length, shape):

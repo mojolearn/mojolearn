@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`core[i] = vd[i] >= min_pts`, which is the whole of their file.
+"""`core[i] = vd[i] >= min_pts`, which is the whole of the reference file.
 
-FOLLOWS `cuml/cpp/src/dbscan/corepoints/compute.cuh` at cuML `00094f7`.
-Followed statement for statement.
+Reference: `cuml/cpp/src/dbscan/corepoints/compute.cuh` (cuML `00094f7`).
 
-Kept as its own file, mirroring theirs, even though it is four lines. The
-mirror is the point: `ls` answers "did we implement this", and a reviewer can put
+Kept as its own file, matching the reference layout, even though it is four lines.
+That is the point: `ls` answers "did we implement this", and a reviewer can put
 this beside `compute.cuh`. Collapsing it into the caller would save nothing
 and would lose that.
 
@@ -19,8 +18,8 @@ THE WEIGHTED OVERLOAD IS THE SAME FILE, BECAUSE IT IS THE SAME FUNCTION
 `template <typename Values_ = int, typename Index_ = int>`), and
 `runner.cuh:300-306` instantiates it twice: `Values_ = Index_` over `vd` on
 the unweighted path and `Values_ = Type_f` over `wght_sum` on the weighted
-one. Mojo has no template here, so it is two functions in the file their one
-template lives in.
+one. Mojo has no template here, so it is two functions in the file that
+corresponds to the reference template.
 
 `core_points_compute_weighted` is where `sample_weight` actually CHANGES THE
 ANSWER, and it is the only place it does. Everything before it -- the

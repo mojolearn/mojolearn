@@ -339,7 +339,7 @@ def arm_d_workspace_and_smem() raises -> Int:
         fails += 1
         print("  arm D: depth 12 is the last DENSE case and must be 2^13-1")
 
-    # -- workspaceSize (`:299-332`), transcribed here a SECOND time and
+    # -- workspaceSize (`:299-332`), written here a SECOND time and
     #    spelled differently, because a check that imports the formula it is
     #    checking moves with its own sabotage. (That happened to another lane
     #    this round and ran green.)

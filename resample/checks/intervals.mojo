@@ -106,7 +106,7 @@ DEVIATION 1701. `alternative` NARROWS THE INTERVAL EXACTLY AS SciPy DOES.
 `scipy.stats.bootstrap` sets `alpha = (1 - confidence_level)/2` for
 `'two-sided'` and `alpha = 1 - confidence_level` for the one-sided arms, then
 replaces the unused endpoint with an infinity (`-inf` for `'less'`, `+inf` for
-`'greater'`). Transcribed, infinities and all, including the ORDER: the
+`'greater'`). Implemented the same way, infinities and all, including the ORDER: the
 one-sided endpoint is computed from the same `alpha` machinery and only then
 is its partner overwritten.
 
@@ -396,7 +396,7 @@ def permutation_pvalue(
     observed: Float32,
     alternative: Int,
 ) -> PValue:
-    """SciPy's `permutation_test` p-value, transcribed.
+    """SciPy's `permutation_test` p-value.
 
         gamma     = abs(eps * observed)                eps = float32 eps * 100
         p_less    = (count(null <= observed + gamma) + 1) / (n + 1)

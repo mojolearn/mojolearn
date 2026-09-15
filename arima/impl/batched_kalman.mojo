@@ -3,14 +3,14 @@
 """The batched Kalman filter for ARIMA: state-space matrices, initial state
 and covariance, the per-series filter loop, the log-likelihood, the forecast.
 
-FOLLOWS `cuml/cpp/src/arima/batched_kalman.cu` at cuML 265b9da6 (v26.08.00):
+Reference: `cuml/cpp/src/arima/batched_kalman.cu` (cuML 265b9da6, v26.08.00):
 `Mv_l` / `MM_l` / `numerical_stability` (:34-92),
 `batched_kalman_loop_kernel` (:117-333, the `rd <= 8` one-thread-per-series
 kernel their dispatch takes at `:772`), `batched_kalman_loop` (:746-819),
 `_lyapunov_wrapper` (:845-886, the `r <= 5` direct arm),
 `_batched_kalman_filter` (:889-1139), `init_batched_kalman_matrices`
 (:1141-1245), `batched_kalman_filter` (:1248-1303).
-Layout is theirs: series `b` contiguous in `ys`/`pred` (`bid * nobs`),
+Layout: series `b` contiguous in `ys`/`pred` (`bid * nobs`),
 `T` at `bid * rd * rd` column-major, `Z`/`R`/`alpha` at `bid * rd`.
 
 NOT IMPLEMENTED, each refused by name one layer up (`arima_common.mojo::
@@ -23,10 +23,10 @@ OBSERVATIONS (`isnan(yt)` arms at `:191,193,219,236,246`; NaN is refused at the
 surface so those arms would be unreachable, and an unreached branch is an
 unchecked one -- ENGINEERING_RULES 8). `arima/NOT_IMPLEMENTED.tsv` lists each.
 
-PRECISION: DEVIATION 670 (`arima_common.mojo`): Float32 where theirs is
-`double`.
+PRECISION: DEVIATION 670 (`arima_common.mojo`): Float32 where the reference
+is `double`.
 
-THE SEAMS, statement for statement (IDENTITY_PATHS rows 9/10/12):
+THE SEAMS, where arithmetic order is pinned (IDENTITY_PATHS rows 9/10/12):
   `sum += A[i + j*n] * v[j]`            Mv_l/MM_l  -> identical_mul_add, k ascending
   `_Fs += P[j*rd+i] * Z[i] * Z[j]`       -> t = P*Z[i]; identical_mul_add(t, Z[j], F)
   `log(_Fs)`                             -> identical_log

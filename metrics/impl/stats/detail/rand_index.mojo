@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """RAFT `cpp/include/raft/stats/detail/rand_index.cuh` (ebf9268).
 
-THEIRS (:67-158): a 2-D grid of 16x16 blocks over (i, j), `j < i`; a thread
+REFERENCE (:67-158): a 2-D grid of 16x16 blocks over (i, j), `j < i`; a thread
 counts `a` (same cluster in BOTH labelings) or `b` (different in both);
 `cub::BlockReduce<uint64_t>::Sum` twice, then thread (0,0) does
 `atomicAdd(unsigned long long)` on `a` and `b` (:93-109); the host
@@ -22,8 +22,8 @@ is one correctly-rounded host op.
 DEVIATION 652 (metrics lane, 2026-08-23): THE 64-BIT ATOMIC IS REPLACED
 BY PER-BLOCK PARTIALS SUMMED ON THE HOST.
 =========================================================================
-THEIRS: `raft::myAtomicAdd<unsigned long long>` on the two totals.
-OURS: thread (0,0) of every block WRITES its block's two counts to
+REFERENCE: `raft::myAtomicAdd<unsigned long long>` on the two totals.
+HERE: thread (0,0) of every block WRITES its block's two counts to
 `partials[2 * block + {0, 1}]` (each at most 256, an Int32) and the host
 sums them into Int64. WHY: Apple's GPU has no 64-bit atomic -- `core/
 block_reduce.mojo`'s DEVIATION 125 banner records the compiler's refusal

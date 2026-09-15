@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Boruvka's kernels, from RAFT.
 
-FOLLOWS `raft/cpp/include/raft/sparse/solver/detail/mst_kernels.cuh` at
-RAFT `661a3b8` (the `raft-v26.08.00` checkout carries the same file), plus
-`get_1D_idx` from `detail/mst_utils.cuh`. Followed statement for statement kernel for kernel,
-in their order, with the ONE declared departure below.
+Reference: `raft/cpp/include/raft/sparse/solver/detail/mst_kernels.cuh`
+(RAFT `661a3b8`; the `raft-v26.08.00` checkout carries the same file), plus
+`get_1D_idx` from `detail/mst_utils.cuh`. Kernels are in the reference's order,
+with the ONE declared departure below.
 
 DEVIATION 620 (see `hierarchy/checks/edge_order.mojo` for the block):
 `alteration_kernel` (`mst_kernels.cuh:289-307`) is NOT implemented and nothing
-reads `altered_weights`. Where theirs compares an altered `double`, ours
+reads `altered_weights`. Where the reference compares an altered `double`, this implementation
 compares the triple `(weight_order_key(w), min(u,v), max(u,v))` through
 `triple_less`, and the per-color minimum is taken in THREE integer
 `atomicMin` phases instead of their one (`:94`): `kernel_min_edge_per_vertex`
@@ -18,9 +18,9 @@ among the vertices whose key equals the color's, then
 `min_edge_hi_per_color` publishes `max(u,v)` among those. Each phase is an
 integer min, so its result does not depend on which thread's atomic lands
 first, and the three together are the lexicographic minimum of the triple.
-Every other line is theirs.
+Every other line matches the reference.
 
-THE SHAPE THAT IS THEIRS AND IS ALSO IDENTITY-SAFE. `kernel_min_edge_per_
+THE REFERENCE SHAPE THAT IS ALSO IDENTITY-SAFE. `kernel_min_edge_per_
 vertex` is launched with ONE 32-THREAD BLOCK PER ROW (`mst_solver_inl.cuh:
 287-295`: `n_threads = 32`, grid `v`), each lane scanning edges
 `row_start + lane, +32, ...` and the 32 partials folded by a halving tree

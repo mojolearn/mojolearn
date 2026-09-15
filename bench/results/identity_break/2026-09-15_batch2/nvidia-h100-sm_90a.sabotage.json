@@ -1,0 +1,512 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-6.8.0-106-generic-x86_64-with-glibc2.35",
+ "vendor": "nvidia-nvidia-h100-80gb-hbm3-sm_90a",
+ "commit": "1cc7a2f47d160080518e9c38c52795cea088ceca",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  }
+ },
+ "cells": {
+  "pca/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "426e098860cb885e"
+   ],
+   "parts": [
+    {
+     "components": "a9e323aa9a2eb0a7",
+     "variance": "379a299c3f468464",
+     "transform": "3b500d79660e0a98"
+    }
+   ],
+   "infer": [
+    "5ec98c317c9314a6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b41a408ef6ffb8c9"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "5ec98c317c9314a6"
+   ],
+   "batch": [
+    "BATCH_MOVED:transform:row 0 of 256 alone:output 0 element 0: whole 0xbe363ee1 vs alone 0xbe363ee0"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "BATCH_MOVED:transform:row 0 of 1024 in B=1 starting at row 0:output 0 element 0: whole 0xbe363ee1 vs B=1 starting at row 0 0xbe363ee0"
+   ],
+   "batchscale_verdict": "BATCH_MOVED",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A"
+  },
+  "byte-lm/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f9a8d760f503f795"
+   ],
+   "parts": [
+    {
+     "loss": "08c41aea43d82173",
+     "params": "fa339c06dccfb5db",
+     "logits": "310c2e67a48ecb0f"
+    }
+   ],
+   "infer": [
+    "220885cbd8d2f82f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b1d65b99997911c5"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "220885cbd8d2f82f"
+   ],
+   "batch": [
+    "BATCH_MOVED:logits:row 0 of 16 alone:output 0 element 0: whole 0xbb90f346 vs alone 0xbb90f347"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "BATCH_MOVED:logits L=32:row 0 of 1024 in B=1 starting at row 0:output 0 element 0: whole 0xbb90f346 vs B=1 starting at row 0 0xbb90f347"
+   ],
+   "batchscale_verdict": "BATCH_MOVED",
+   "ragged": [
+    "BATCH_MOVED:logits, next_bytes(lengths) L=32:row 0 (length 32 of 32) output 0 real positions: element 0: padded 0xbb90f346 vs alone 0xbb90f347"
+   ],
+   "ragged_verdict": "BATCH_MOVED"
+  },
+  "byte-lm-host-infer/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9a22cf6df14a6ca8"
+   ],
+   "parts": [
+    {
+     "loss_bits": "4904f86d2a8a4e7a",
+     "logits": "9192e9f205ff4407",
+     "next": "44076661be92dd9b"
+    }
+   ],
+   "infer": [
+    "b67a1f3d482ffaca"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:logits:row 0 of 16 alone:output 0 element 0: whole 0x3b9d519f vs alone 0x3b9d519e"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "BATCH_MOVED:logits L=32:row 0 of 1024 in B=1 starting at row 0:output 0 element 0: whole 0x3b9d519f vs B=1 starting at row 0 0x3b9d519e"
+   ],
+   "batchscale_verdict": "BATCH_MOVED",
+   "ragged": [
+    "BATCH_MOVED:logits, next_bytes(lengths) L=32:row 0 (length 32 of 32) output 0 real positions: element 0: padded 0x3b9d519f vs alone 0x3b9d519e"
+   ],
+   "ragged_verdict": "BATCH_MOVED"
+  },
+  "mamba2/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5b05a3ecbd70248e"
+   ],
+   "parts": [
+    {
+     "forward": "22f79ee009fd9884",
+     "prefill": "22f79ee009fd9884",
+     "step": "3fa40f29231409be",
+     "backward": "f252b3fc19f5f9f5"
+    }
+   ],
+   "infer": [
+    "b0084ee171c0720f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:forward:row 0 of 8 alone:output 0 element 0: whole 0x3eae4fda vs alone 0x3eae4fdb"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "BATCH_MOVED:backward x (per row):row 0 of 8 alone:output 0 element 0: whole 0x3fc9652b vs alone 0x3fc9652a"
+   ],
+   "batchgrad_verdict": "BATCH_MOVED",
+   "batchscale": [
+    "BATCH_MOVED:forward L=16:row 0 of 1024 in B=1 starting at row 0:output 0 element 0: whole 0x3eae4fda vs B=1 starting at row 0 0x3eae4fdb"
+   ],
+   "batchscale_verdict": "BATCH_MOVED",
+   "ragged": [
+    "BATCH_MOVED:forward(lengths) L=16:row 0 (length 16 of 16) output 0 real positions: element 0: padded 0x3eae4fda vs alone 0x3eae4fdb"
+   ],
+   "ragged_verdict": "BATCH_MOVED"
+  },
+  "transformer/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "295d4e62d4c78b14"
+   ],
+   "parts": [
+    {
+     "forward": "8d431df291630b43",
+     "prefill": "8d431df291630b43",
+     "step": "cb617deca75d536b",
+     "backward": "2b4978ef99181243"
+    }
+   ],
+   "infer": [
+    "d658bafd272776e1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:forward:row 0 of 8 alone:output 0 element 0: whole 0x3e99dafc vs alone 0x3e99dafd"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "BATCH_MOVED:backward x (per row):row 0 of 8 alone:output 0 element 0: whole 0x3fba0315 vs alone 0x3fba0314"
+   ],
+   "batchgrad_verdict": "BATCH_MOVED",
+   "batchscale": [
+    "BATCH_MOVED:forward L=16:row 0 of 1024 in B=1 starting at row 0:output 0 element 0: whole 0x3e99dafc vs B=1 starting at row 0 0x3e99dafd"
+   ],
+   "batchscale_verdict": "BATCH_MOVED",
+   "ragged": [
+    "BATCH_MOVED:forward(lengths) L=16:row 0 (length 16 of 16) output 0 real positions: element 0: padded 0x3e99dafc vs alone 0x3e99dafd"
+   ],
+   "ragged_verdict": "BATCH_MOVED"
+  },
+  "samba/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "037e7701daa7fc7c"
+   ],
+   "parts": [
+    {
+     "loss": "a4ec77c75e14345b",
+     "logits": "0fe4484b8ae121c4",
+     "params": "925e00879ea7d1b2"
+    }
+   ],
+   "infer": [
+    "77db10c414ebd846"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "674582804fcf1a50"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "77db10c414ebd846"
+   ],
+   "batch": [
+    "BATCH_MOVED:forward:row 0 of 8 alone:output 0 element 0: whole 0xbe2e0815 vs alone 0xbe2e0814"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "BATCH_MOVED:loss_and_grads(num_items=T):A=2 of T=512 (clause 9.2 aligned) tensor norm_f.weight element 0: whole 0x3aacd856 vs 0x3aacd857"
+   ],
+   "batchgrad_verdict": "BATCH_MOVED",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))"
+   ],
+   "batchscale": [
+    "BATCH_MOVED:forward L=16:row 0 of 1024 in B=1 starting at row 0:output 0 element 0: whole 0xbe2e0815 vs B=1 starting at row 0 0xbe2e0814"
+   ],
+   "batchscale_verdict": "BATCH_MOVED",
+   "ragged": [
+    "BATCH_MOVED:forward(lengths) L=16:row 0 (length 16 of 16) output 0 real positions: element 0: padded 0xbe2e0815 vs alone 0xbe2e0814"
+   ],
+   "ragged_verdict": "BATCH_MOVED"
+  },
+  "embedding/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "bcc23cf76ecd9bd0"
+   ],
+   "parts": [
+    {
+     "fwd": "eb24279d27ba1663",
+     "dw": "281d49fd1379b72b",
+     "dw_nopad": "842b7092f36eb9a6"
+    }
+   ],
+   "infer": [
+    "9532e67b65b07c0b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:forward:row 0 of 64 alone:output 0 element 0: whole 0xbdc93121 vs alone 0xbdc93120"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "BATCH_MOVED:backward carry:carry over split 1,7,504 element 0: whole 0x3fd7ef47 vs 0x3fd7ef46"
+   ],
+   "batchgrad_verdict": "BATCH_MOVED",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": true,
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": "1",
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": "1",
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": "1",
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "cd626e0cd6608c02e08ab04065a4db25d733a6aff626aff38765589b5be43b13",
+    "size": 6686048
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "55985dc952032e3102d23e995bb8cece8536b4a0a5a232dcc01a5f17d570ff8f",
+    "size": 754792
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "836aa23185a1560775bb55bf8ba15f1e175c9f27cf2e7de813f0eaa8d8767e1a",
+    "size": 8291000
+   },
+   {
+    "module": "_mojolearn_embedding",
+    "sha256": "89da0974d10907a157bfb259fb1fc2f1e4946bb73abb500382d0a542931e54f0",
+    "size": 300640
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "1da3ab8fa91d37a8f7b1c717e11c60d1b6da251f93c009436697f0a43d13acc0",
+    "size": 6360248
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "0376fdf648da762ddb93b8b4a2afdc90d3e7e2b737014f700b91e07952f960e4",
+    "size": 6997032
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "7a645d5ce25fee3e2d9dd00fc8ed75daf93b23884d1b615eeff687e61cd24930",
+    "size": 3149216
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "9a89f2f3a4bac0cc3f91cd79d519a857901b232448487a4f1ee26a3cbdfe9254",
+    "size": 4847792
+   },
+   {
+    "module": "_mojolearn_ivf",
+    "sha256": "52f700bc3e104848236a092385a6134903abedbe93cd0dbb4b65f1c2a289dbd2",
+    "size": 1998608
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "cafacf06eebaa7afe30ae1925e78056c5ed0b3ef5468f062396c217ac456167a",
+    "size": 3225928
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "cd03b0321989aab48d2d9722932e2d3ae46631aab2302d17d15fe4b12e733634",
+    "size": 2522136
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "d787525229006266e3e969783f1cf58f7c48ea92628e58e224b54b4cd674e854",
+    "size": 4784872
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "66fe82bd8e98844295708d3616f747476f5571121cdf1582d7f1eab1cb1491f5",
+    "size": 9322776
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "6a828adaee3ddb1026499ba55db35d87ee7eaec8580ba4ae993580bab3c26523",
+    "size": 4722064
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "ef260f8890ecafcdf37debe68076d23ff3f9683265427437414f63f0e32d5903",
+    "size": 318824
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "f8a4e047318794b9b20414a0169121f7784ed8c773c96f1f24532ad9f7370f81",
+    "size": 1460720
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "81568e5303b1c54e6378654133753e4a377bd6a6e0893c4e0dbb597d81c1859f",
+    "size": 1933336
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "ad101d993582739e6f9bbd5b66dd399f8c411cdfd9b53bf49d271cc877e7420e",
+    "size": 3036456
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "e094559a7122c5c811d1da25e60f7b9a8e89f5e934439d1651d175e5e3762ee0",
+    "size": 3486200
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "e0f7143a8f8d67d8ffca5d6961f1bfb0e070a74a7f9d8f97a2c73d45205da4e2",
+    "size": 3165480
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "a300b22c06401ea1bc49a7200f908ff77d926d761680336af80ec8176ed28a3f",
+    "size": 7095400
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "942fc1d52f54abcc912a2cd1a1e98d7063a1e35679cbb51e9c82df207f2bd501",
+    "size": 1610112
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "9db6be6e4aa4cf99527988dcdc232bd2cd8662c3820373d0b1be22f0d811d257",
+    "size": 716216
+   }
+  ]
+ }
+}

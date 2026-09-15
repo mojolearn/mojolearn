@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Isolation Forest on the GPU, mirroring cuML's `IsolationForest`.
+"""Isolation Forest on the GPU. Reference: cuML's `IsolationForest`.
 
 PRIVATE MODULE. `IsolationForest` is named exactly as scikit-learn names
 it, but nothing here is re-exported from `mojolearn/__init__.py`; that
@@ -56,7 +56,7 @@ _WANT_PREDICT = 2
 
 
 class IsolationForest(NumericModeMixin):
-    """Isolation Forest backed by the implemented cuML path
+    """Isolation Forest backed by a GPU implementation
     (`isolation_forest/`, DEVIATIONS 680-686 and 750-751), the
     scikit-learn surface.
 
@@ -65,8 +65,8 @@ class IsolationForest(NumericModeMixin):
         n_estimators    honored   the tree count (cuML's default 100)
         max_samples     honored   'auto' (= min(256, n_samples)), a
                                   positive int (clipped to n_samples), or
-                                  a float in (0, 1]; cuML's `fit`
-                                  resolution, transcribed
+                                  a float in (0, 1]; the same
+                                  resolution as cuML's `fit`
         max_depth       honored   None (the default) is their auto, an
                                   integer ceil(log2(max_samples_)) computed
                                   in integers rather than through a libm

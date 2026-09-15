@@ -2,12 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Core distances from the k-NN graph, and the mutual reachability space.
 
-FOLLOWS `cuml-v26.08.00/cpp/src/hdbscan/detail/reachability.cuh`
+Reference: `cuml-v26.08.00/cpp/src/hdbscan/detail/reachability.cuh`
 (cuML `265b9da`) and, for the parts cuML 26.08 has already delegated to
 cuVS, `cuvs/cpp/src/neighbors/detail/reachability.cuh` (cuVS `94c2819`).
 Both files carry the SAME `core_distances` and `compute_knn`, which is
-why one Mojo file stands for both. Followed statement for statement, their
-order.
+why one Mojo file stands for both. Steps run in the reference order.
 
 WHAT IS HERE
   `core_distances`      `reachability.cuh:49-63` (cuVS) / `:42-56` (cuML)

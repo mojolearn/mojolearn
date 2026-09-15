@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The epsilon neighborhood, FUSED: no distance matrix is ever written.
 
-FOLLOWS `raft/spatial/knn/detail/epsilon_neighborhood.cuh` at RAFT `661a3b8`
-(`EpsUnexpL2SqNeighborhood`, `epsUnexpL2SqNeighKernel`,
-`epsUnexpL2SqNeighborhood`), built on their
+Reference: `raft/spatial/knn/detail/epsilon_neighborhood.cuh` (RAFT `661a3b8`):
+`EpsUnexpL2SqNeighborhood`, `epsUnexpL2SqNeighKernel`,
+`epsUnexpL2SqNeighborhood`, built on the
 `raft/linalg/detail/contractions.cuh` policy.
 
 This is what `cuml/cpp/src/dbscan/vertexdeg/algo.cuh:229` actually calls for
@@ -14,8 +14,8 @@ the brute-force arm:
       index_t>(data.adj, data.vd, data.x + start_vertex_id * k, data.x,
                n, m, k, eps2, stream);
 
-WHY THIS FILE EXISTS: THEIRS IS FUSED AND OURS WAS NOT
-------------------------------------------------------
+WHY THIS FILE EXISTS: THE REFERENCE IS FUSED AND THIS TREE'S FIRST VERSION WAS NOT
+-----------------------------------------------------------------------------------
 `EpsUnexpL2SqNeighborhood` is a `Contractions_NT` tile kernel. It accumulates
 `acc[i][j]` in REGISTERS (`epsilon_neighborhood.cuh:41`), tests
 `acc[i][j] <= eps` in its `epilog()` (`:106`), writes the boolean `adj` and
@@ -117,10 +117,10 @@ so the fold is the same pure function of `(k, KBLK)` on every vendor.
 
 DEVIATION BLOCK 30: THE ROW REDUCTION IS A BUTTERFLY, NOT A ROTATE
 ------------------------------------------------------------------
-THEIRS: `raft::logicalWarpReduce<P::AccThCols>(sums[i], raft::add_op())`
+REFERENCE: `raft::logicalWarpReduce<P::AccThCols>(sums[i], raft::add_op())`
 (`:150`) reduces across the 16 threads that share an output row using
 `shfl_xor` inside a width-16 logical warp.
-OURS: `shuffle_xor` at offsets 1, 2, 4, 8. Mojo's `shuffle_idx` has no width
+HERE: `shuffle_xor` at offsets 1, 2, 4, 8. Mojo's `shuffle_idx` has no width
 argument (`archive/reference/PORTING.md`, the `simt_kernel.mojo` note), but `shuffle_xor` needs
 none: XOR with an offset below `AccThCols` only ever flips the low lane bits,
 so it stays inside the same aligned 16-lane group their logical warp is, and
@@ -160,9 +160,9 @@ on 2026-09-01 and this file is one of the reasons:
 
 DEVIATION BLOCK 31: `vd` IS ZEROED BY `enqueue_memset`, NOT `cudaMemsetAsync`
 -----------------------------------------------------------------------------
-THEIRS: `epsUnexpL2SqNeighborhood` opens with
+REFERENCE: `epsUnexpL2SqNeighborhood` opens with
 `cudaMemsetAsync(vd, 0, (m + 1) * sizeof(IdxT), stream)` (`:228`).
-OURS: the caller does it with `ctx.enqueue_memset` on the sub-buffer.
+HERE: the caller does it with `ctx.enqueue_memset` on the sub-buffer.
 REASON: same operation, and MAX has no in-kernel counterpart to hoist it
 into. It is called out because the kernel ACCUMULATES into `vd` and produces
 garbage without it -- the old unfused kernel ASSIGNED, so this is a new

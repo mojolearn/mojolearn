@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cub::BlockScan<BinT, TPB>::InclusiveSum`, and cuML's `pdf_to_cdf` loop.
 
-FOLLOWS `cub/cub/block/block_scan.cuh` and its default algorithm
+Reference: `cub/cub/block/block_scan.cuh` and its default algorithm
 `cub/cub/block/specializations/block_scan_warp_scans.cuh`, over
 `cub/cub/warp/specializations/warp_scan_smem.cuh`, at NVIDIA/cccl
 `d10a88a945caa4ea63dd2a909cf789c6dbe085a4` (cloned read-only into
@@ -39,7 +39,7 @@ one of cuML's four bin STRUCTS. There is nothing to substitute.
     }
 
 Three things in that loop decide the implementation's shape and all three are
-transcribed rather than paraphrased:
+kept exactly:
 
   * the loop bound is `ceildiv(n_bins, TPB) * TPB`, so EVERY thread enters
     EVERY iteration even when its element is past `n_bins`. A collective
@@ -51,7 +51,7 @@ transcribed rather than paraphrased:
     fed into the next scan as a seed. CUB ships a prefix-callback form
     (`BlockScanWarpScans::InclusiveScan` with `BlockPrefixCallbackOp`,
     `block_scan_warp_scans.cuh:486-508`) that would do it inside the
-    collective; cuML does not use it, so this file does not implementation it.
+    collective; cuML does not use it, so this file does not implement it.
 
 ## `BinT` is not a scalar
 
@@ -75,14 +75,14 @@ fields cannot be carried at their width -- that is DEVIATION 101 in
 # DEVIATION 126. THE WARP SCAN TAKES CUB'S OWN `HAS_IDENTITY == false`
 # ARM, UNPADDED, AND SYNCS AT BLOCK SCOPE.
 #
-# THEIRS: `WarpScanSmem` allocates `LOGICAL_WARP_THREADS +
+# REFERENCE: `WarpScanSmem` allocates `LOGICAL_WARP_THREADS +
 # HALF_WARP_THREADS` slots per warp (`warp_scan_smem.cuh:66`) and, when the
 # operator has an identity, preloads the pad with it so `ScanStep` can read
 # `temp_storage[HALF_WARP_THREADS + lane_id - OFFSET]` with NO predicate
 # (`:113-120`, guarded by `HAS_IDENTITY ||`). It also fences with
 # `__syncwarp(member_mask)` between the store and the load (`:111`, `:120`).
 #
-# OURS: `WARP_SIZE` slots per warp, no pad, and CUB's OTHER arm --
+# HERE: `WARP_SIZE` slots per warp, no pad, and CUB's OTHER arm --
 # `lane_id >= OFFSET` -- taken unconditionally; the fence is `barrier()`,
 # Mojo's `__syncthreads`, because Mojo 1.0 exposes no lane-scoped fence and
 # this repository does not invent one.
@@ -92,7 +92,7 @@ fields cannot be carried at their width -- that is DEVIATION 101 in
 #     DEVIATION. CUB selects between the two arms with
 #     `cuda::has_identity_element_v<ScanOp, T>` (`:186`), which is FALSE
 #     for a user-defined `BinT` under `cuda::std::plus<>`. So the arm this
-#     file transcribes is the arm CUB ITSELF COMPILES for every one of the
+#     file implements is the arm CUB ITSELF COMPILES for every one of the
 #     four bins. The padded arm is reachable only for built-in scalars,
 #     which cuML never scans here.
 #   * THREADGROUP MEMORY SAVED: `TPB / 2` elements, the pad CUB carries.
@@ -295,7 +295,7 @@ def pdf_to_cdf[
     n_bins: Int32,
 ) -> T:
     """`ML::DT::pdf_to_cdf<BinT, IdxT, TPB>`,
-    `builder_kernels_impl.cuh:259-283`, transcribed line for line.
+    `builder_kernels_impl.cuh:259-283`, the same loop line for line.
 
     "For every threadblock, converts a pdf-histogram to a cdf-histogram
     inplace using inclusive block-sum-scan." Returns their

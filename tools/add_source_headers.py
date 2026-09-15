@@ -68,7 +68,7 @@ def wants_header(path):
 # LANES THAT MIRROR AN UPSTREAM WITHOUT HAVING A `impl/` SUBDIRECTORY.
 #
 # Found 2026-08-31, and it was the reason the first proportion table was
-# wrong: `gbdt/` IS the CatBoost mirror and `ensemble/` mirrors cuML, and
+# wrong: `gbdt/` references CatBoost and `ensemble/` references cuML, and
 # neither has ever had a `impl/` directory, so a header rule keyed on the
 # directory gave 191 files (89,766 lines, the most plainly derived code in
 # the repository) NO provenance marker at all while 310 files under

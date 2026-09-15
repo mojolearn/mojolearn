@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What the worker can be asked to do, and the tag it dispatches on.
 
-FOLLOWS `catboost/cuda/cuda_lib/task.h` at CatBoost `54a8143a`, plus the two
+Reference: `catboost/cuda/cuda_lib/task.h` (CatBoost `54a8143a`), plus the two
 command payloads that live in `tasks_impl/request_stream_task.h`.
-Followed statement for statement where it follow statement for statements. See the DEVIATION BLOCK.
+Differences from the reference are listed in the DEVIATION BLOCK.
 
 `ECommandType` is not decoration. `gpu_single_worker.cpp:69-141` is a
 `switch (task->GetCommandType())` with one case per value, and the two cases
@@ -27,7 +27,7 @@ queue holds `THolder<ICommand>`. Mojo 1.0 has NO dynamic trait objects:
 and `AnyTrait` is not a spellable name. So the queue holds a TAGGED UNION,
 `TCommand`, dispatched on `command_type`.
 
-This is closer to their design than it looks, because their worker already
+This is closer to the reference than it looks, because its worker already
 dispatches on the tag rather than on the vtable. The virtual half of
 `ICommand` is `Save` and `Load`, and those exist ONLY to ship a command to
 another host over MPI (`TSerializedCommand`, `serialization/task_factory.h`).
@@ -287,10 +287,10 @@ def request_stream_command() -> TCommand:
 
     Read the answer back out of `stream_id_result` after the worker runs it,
     and read it through a DIRECT `TGpuOneDeviceWorker.run(cmd)`, which takes
-    the command by `mut`. The queue path cannot hand it back: theirs writes
+    the command by `mut`. The queue path cannot hand it back: the reference writes
     into a promise the caller already holds
     (`TRequestStreamCommand::SetStreamId` -> `StreamId.SetValue(id)`,
-    `request_stream_task.h:41-43`), and the promise half of their design is
+    `request_stream_task.h:41-43`), and the promise half of the reference is
     `future/local_promise_future.h`, which is not implemented. See `gbdt/NOT_IMPLEMENTED.tsv`.
     `TCudaManager.request_stream` therefore calls `request_stream_impl`
     straight, which is the same code the case runs.

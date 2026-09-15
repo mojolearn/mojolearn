@@ -3,7 +3,7 @@
 """`TTreeUpdater`: the per-document bin array the FEATURE-PARALLEL searcher
 splits on, and the compressed-bit chain that fills it.
 
-FOLLOWS, in one file because they are one call chain:
+Reference, in one file because they are one call chain:
 
     `catboost/cuda/gpu_data/oblivious_tree_bin_builder.{h,cpp}`
         `IBinarySplitProvider`, `TSplitHelper::Split`,
@@ -21,7 +21,7 @@ FOLLOWS, in one file because they are one call chain:
     `catboost/cuda/cuda_util/compression_helpers_gpu.cpp`
         `CompressedSizeImpl<ui64>` (`:249-254`)
 
-at CatBoost `54a8143a`. Followed statement for statement.
+(CatBoost `54a8143a`).
 
 WHY THIS FILE EXISTS AT ALL, AND WHY `archive/reference/PORTING.md` 91 B IS WRONG ABOUT IT
 ------------------------------------------------------------------------

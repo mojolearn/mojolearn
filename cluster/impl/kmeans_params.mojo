@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """k-means hyper-parameters, with cuVS's names and cuVS's defaults.
 
-FOLLOWS `cuvs::cluster::kmeans::params` (`cpp/include/cuvs/cluster/
-kmeans.hpp:28-121`) at cuVS `94c2819`. Followed statement for statement.
+Reference: `cuvs::cluster::kmeans::params` (`cpp/include/cuvs/cluster/
+kmeans.hpp:28-121`, cuVS `94c2819`).
 
-Every default here is theirs, including the ones that look arbitrary, for the
-same reason `gbdt/options/catboost_options.mojo` keeps CatBoost's: if a
-measurement comes out badly we have to be able to say it is their
-configuration that is slow and not our taste in defaults.
+Every default here matches the reference, including the ones that look arbitrary, for the
+same reason `gbdt/options/catboost_options.mojo` matches CatBoost's: if a
+measurement comes out badly we have to be able to say it is the reference
+configuration that is slow and not a different choice of defaults.
 
 Two of these defaults decide which algorithm actually runs and are worth
 reading before changing:

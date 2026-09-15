@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The FOLD side of the oblivious searcher: N tasks, 2N partitions.
 
-FOLLOWS `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}` at
-CatBoost `54a8143a` -- `TOptimizationTask`, `AddTask`/`SetTarget`,
+Reference: `catboost/cuda/methods/oblivious_tree_structure_searcher.{h,cpp}`
+(CatBoost `54a8143a`), `TOptimizationTask`, `AddTask`/`SetTarget`,
 `WriteFoldBasedInitialBins` (`:338-364`), `WriteSingleTaskInitialBins`
-(`:366-...`) and `ForeachOptimizationPartTask` (`:15-27`). Followed statement for statement.
+(`:366-...`) and `ForeachOptimizationPartTask` (`:15-27`).
 
 **THIS IS RUNG 2, and rung 2 turned out not to be a second searcher.**
 

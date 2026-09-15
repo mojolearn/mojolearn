@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`LogisticLoss`: the sigmoid objective and its derivative, per row.
 
-FOLLOWS `cuml/cpp/src/glm/qn/glm_logistic.cuh` at cuML `00094f7`. Whole
+Reference: `cuml/cpp/src/glm/qn/glm_logistic.cuh` (cuML `00094f7`). Whole
 file: `Lz::log_sigmoid`, `Lz::operator()`, `Dlz::operator()`, `gradNorm`.
 
-THEIR TWO FUNCTORS, copied (`glm_logistic.cuh:33-54`):
+THE REFERENCE'S TWO FUNCTORS (`glm_logistic.cuh:33-54`):
 
     log_sigmoid(x) = x < 0 ?  x - log(1 + exp(x))  :  -log(1 + exp(-x))
     lz(y, z)       = -log_sigmoid((2y - 1) z)

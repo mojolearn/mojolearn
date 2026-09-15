@@ -3,15 +3,15 @@
 """The flat tree node every cuML forest is made of, and the only shape
 inference walks.
 
-MIRRORS `cpp/include/cuml/tree/flatnode.h` at rapidsai/cuml `v26.08.00`
+Reference: `cpp/include/cuml/tree/flatnode.h` at rapidsai/cuml `v26.08.00`
 (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`), checked out read-only at
-`~/CascadeProjects/upstream/cuml-v26.08.00`. Their `include/cuml/tree/`
-prefix drops the same way `cpp/src/` does, so their 66-line file lands
-here.
+`~/CascadeProjects/upstream/cuml-v26.08.00`. The reference's `include/cuml/tree/`
+prefix drops the same way `cpp/src/` does, so the 66-line reference file
+corresponds to this one.
 
-Their whole file is five private fields, one private constructor, seven
+The reference file is five private fields, one private constructor, seven
 accessors, two static factories and an `operator==`. Every one of those
-is transcribed below.
+is implemented below.
 
 Three facts in that file decide what a traversal does, and all three are
 easy to get wrong from memory:
@@ -38,7 +38,7 @@ easy to get wrong from memory:
 
 The comparison direction itself does NOT live in this file. It lives in
 `decisiontree.cuh:379` (`row[n.ColumnId()] <= n.QueryValue()` goes
-LEFT) and is transcribed in `decisiontree.mojo`, beside the walk, where
+LEFT) and is implemented in `decisiontree.mojo`, beside the walk, where
 a reader will actually look for it.
 
 ================= DEVIATION BLOCK (whole file) =================
@@ -73,7 +73,7 @@ meaning; dropping it removes a parameter nobody can pass wrong. The
 same phantom recurs on `TreeMetaDataNode<T, L>` and is recorded again
 at its own site (DEVIATION 118).
 
-(c) THEIR OWN WIDTHS ARE ASYMMETRIC and the asymmetry is transcribed,
+(c) THE REFERENCE WIDTHS ARE ASYMMETRIC and the asymmetry is kept,
 not corrected. `left_child_id` is STORED as `IdxT` (= `int`, 32-bit,
 `flatnode.h:28`), the private constructor RECEIVES it as `int64_t`
 (`flatnode.h:31`) and so narrows on the way in, and `LeftChildId()` /
@@ -136,7 +136,7 @@ struct SparseTreeNode[dtype: DType](ImplicitlyCopyable, Movable):
         Private in their header; see DEVIATION 116a for why it cannot be
         here. `left_child_id` arrives as Int64 and is narrowed to the
         Int32 field, which is their narrowing (`int64_t` parameter into
-        an `IdxT` member), transcribed rather than widened away.
+        an `IdxT` member), kept rather than widened away.
         """
         self._colid = colid
         self._quesval = quesval

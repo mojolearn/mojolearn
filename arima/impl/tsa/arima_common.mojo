@@ -3,15 +3,15 @@
 """`ARIMAOrder` and `ARIMAParams`: the order, and the parameters with their
 pack/unpack.
 
-FOLLOWS `cuml/cpp/include/cuml/tsa/arima_common.h` (`ARIMAOrder` :26-51,
+Reference: `cuml/cpp/include/cuml/tsa/arima_common.h` (`ARIMAOrder` :26-51,
 `ARIMAParams` :53-148) and `cuml/cpp/src/arima/arima_common.cu`
 (`ARIMAParams::pack` / `::unpack`, one thread per series) at cuML 265b9da6
-(v26.08.00). `ARIMAMemory` (:151-295, their arena over one `char*`) is not
-mirrored: every buffer it carves is a `DeviceBuffer` owned by the struct
+(v26.08.00). `ARIMAMemory` (:151-295, the reference's arena over one `char*`) is not
+implemented: every buffer it carves is a `DeviceBuffer` owned by the struct
 that uses it, which is the same set of allocations without the arena.
 
-Their `DataT` is `double` (the Python surface is
-`float64` only, `arima.pyx:326`); ours is Float32 on the device --
+The reference `DataT` is `double` (the Python surface is
+`float64` only, `arima.pyx:326`); this implementation uses Float32 on the device,
 **DEVIATION 670**, stated once here and carried by every file in `arima/`:
 
 =============================================================================

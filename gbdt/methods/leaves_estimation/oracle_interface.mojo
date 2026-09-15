@@ -2,10 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What the Newton walker needs from a leaves-estimation oracle.
 
-FOLLOWS `catboost/cuda/methods/leaves_estimation/oracle_interface.h` at
-CatBoost `54a8143a`, cut to the surface the DIAGONAL pointwise path uses.
-Followed statement for statement where there is code to follow statement for statement; the interface itself
-is a shape.
+Reference: `catboost/cuda/methods/leaves_estimation/oracle_interface.h`
+(CatBoost `54a8143a`), cut to the surface the DIAGONAL pointwise path uses.
+The interface itself is a shape.
 
 WHAT IS DELIBERATELY NOT HERE, so nobody goes looking:
 
