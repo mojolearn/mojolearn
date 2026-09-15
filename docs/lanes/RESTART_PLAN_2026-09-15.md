@@ -60,7 +60,7 @@ old one. It is on `main`; branch names below are on `origin`.
   - Two devices in one process means RunPod `MOJOLEARN_GEMM_LEG_GPU_COUNT=2`.
   - Datasets stage from Cloudflare R2 automatically (`R2 STAGED` in the leg log). Never refetch from the internet.
   - Bake commits with `git rev-parse`; never type a full sha.
-- **CI:** the routine CPU gate now uses three hosted environments with parallel lane shards, one sabotage repeat and caching. See CPU_GATE_RECOVERY_2026-09-15.md for retained coverage and validation.
+- **CI:** routine pushes use three hosted CPU environments for inference/plumbing checks. Full CPU training verification runs weekly, manually and before publication, with parallel shards and caching. See CPU_GATE_RECOVERY_2026-09-15.md for retained coverage and validation.
   - Never cancel an owed run. Andrew approved cancelling ONLY duplicate or superseded runs (the same commit
     twice, or an older push on a branch that has since been re-pushed).
   - Push branches only when ready for a gate. WIP pushes carry `[skip ci]`.
