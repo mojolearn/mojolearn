@@ -40,129 +40,21 @@
 name: CPU identity gate
 
 on:
+  # LIGHT TOUCH (Andrew, Sep 15 2026): this workflow never starts by itself. Every job
+  # is skipped unless the dispatch input confirm is RUN-HEAVY, so a wrong trigger costs nothing.
   workflow_call:
-  schedule:
-    - cron: "17 5 * * 0"
+    inputs:
+      confirm:
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
-  push:
-    branches:
-      - "main"
-      - "lane/cpu-training-phase0"
-      - "lane/cpu-training-*"
-    paths:
-      - "checks/kernel_matrix.mojo"
-      - "checks/hardware_matrix.mojo"
-      - "checks/numerics.mojo"
-      - "bindings/_mojolearn_byte_lm_host.mojo"
-      - "bindings/_mojolearn_forest_host.mojo"
-      - "bindings/_mojolearn_*_host.mojo"
-      - "bindings/build_host_family.sh"
-      - "bindings/build_*_host.sh"
-      - "python/mojolearn/host_surface.py"
-      - "python/mojolearn/_metrics_impl.py"
-      - "python/mojolearn/tests/test_classification_metrics.py"
-      - "python/mojolearn/tests/test_regression_metrics.py"
-      - "gemm/host/gemm_oracle.mojo"
-      - "kde/host/kde_oracle.mojo"
-      - "holtwinters/host/hw_oracle.mojo"
-      - "solver/host/cd_oracle.mojo"
-      - "solver/checks/profile_dot.mojo"
-      - "svm/host/smo_oracle.mojo"
-      - "bindings/host_helpers.mojo"
-      - "bindings/hostptr.mojo"
-      - "core/forest_host_predict.mojo"
-      - "core/forest_host_groves.mojo"
-      - "bindings/forest_host_groves_binding.mojo"
-      - "core/gbdt_host_predict.mojo"
-      - "hierarchy/checks/linkage_oracle.mojo"
-      - "isolation_forest/checks/if_oracle.mojo"
-      - "isolation_forest/impl/rng/xorwow.mojo"
-      - "extratrees/checks/pcg_rng.mojo"
-      - "extratrees/estimator.mojo"
-      - "extratrees/impl/randomforest/randomforest.mojo"
-      - "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
-      - "python/mojolearn/_labels.py"
-      - "python/mojolearn/model_selection.py"
-      - "python/mojolearn/resample.py"
-      - "resample/host/resample_host.mojo"
-      - "resample/checks/index_map.mojo"
-      - "resample/checks/intervals.mojo"
-      - "resample/checks/statistics.mojo"
-      - "metrics/checks/pinned_sum.mojo"
-      - "python/mojolearn/_identity.py"
-      - "training/byte_lm_host.mojo"
-      - "training/byte_lm_host_backward.mojo"
-      - "python/mojolearn/_backend.py"
-      - "python/mojolearn/_buffer.py"
-      - "python/mojolearn/_forest_host.py"
-      - "python/mojolearn/_gbdt_host.py"
-      - "python/mojolearn/_byte_lm_host.py"
-      - "tools/identity_break.py"
-      - "tools/forest_host_gate.py"
-      - "tools/classical_host_gate.py"
-      - "python/mojolearn/_classical_host.py"
-      - "core/classical_host_predict.mojo"
-      - "decomposition/host/pca_oracle.mojo"
-      - "decomposition/host/pca_full_oracle.mojo"
-      - "glm/host/glm_oracle.mojo"
-      - "dbscan/host/dbscan_oracle.mojo"
-      - "cluster/host/kmeans_oracle.mojo"
-      - "metrics/host/metrics_oracle.mojo"
-      - "metrics/host/classification_oracle.mojo"
-      - "spectral/host/spectral_oracle.mojo"
-      - "umap/host/umap_oracle.mojo"
-      - "umap/sparse_graph.mojo"
-      - "umap/graph.mojo"
-      - "umap/curve.mojo"
-      - "umap/params.mojo"
-      - "tsa/checks/kpss_oracle.mojo"
-      - "preprocessing/host/scaler_oracle.mojo"
-      - "glm/host/qn_oracle.mojo"
-      - "ensemble/host/rf_oracle.mojo"
-      - "gaussian_process/host/gpr_oracle.mojo"
-      - "cholesky/host/chol_oracle.mojo"
-      - "gbdt/host/gbdt_oracle.mojo"
-      - "gbdt/host/gbdt_oracle_rmse.mojo"
-      - "gbdt/host/gbdt_oracle_depthwise.mojo"
-      - "gbdt/host/gbdt_oracle_lossguide.mojo"
-      - "gbdt/host/gbdt_oracle_losses.mojo"
-      - "gbdt/host/gbdt_oracle_multiclass.mojo"
-      - "gbdt/gpu_util/kernel/random_gen.mojo"
-      - "gbdt/lapack/linear_system.mojo"
-      - "arima/host/arima_oracle.mojo"
-      - "training/host/mlp_oracle.mojo"
-      - "training/checks/loss_oracle.mojo"
-      - "training/checks/optimizer_oracle.mojo"
-      - "training/host/samba_ops_oracle.mojo"
-      - "embedding/checks/embedding_oracle.mojo"
-      - "gemm/checks/gemm_backward.mojo"
-      - "python/mojolearn/_training_impl.py"
-      - "arima/impl/tsa/arima_common.mojo"
-      - "kernel_methods/host/km_host_oracle.mojo"
-      - "kernel_methods/checks/random_features.mojo"
-      - "mixture/host/gmm_host_oracle.mojo"
-      - "hdbscan/host/hdbscan_host_oracle.mojo"
-      - "hdbscan/impl/detail/condense.mojo"
-      - "hdbscan/impl/detail/extract.mojo"
-      - "hdbscan/impl/detail/utils.mojo"
-      - "hdbscan/impl/detail/stabilities.mojo"
-      - "hdbscan/impl/condensed_hierarchy.mojo"
-      - "hdbscan/checks/hdbscan_sabotage.mojo"
-      - "hdbscan/checks/mutual_reachability_dense.mojo"
-      - "spectral/checks/symmetric_eig_host.mojo"
-      - "core/knn_host_predict.mojo"
-      - "cluster/host/kmeans_oracle.mojo"
-      - "bench/results/classical_host/**"
-      - "tools/cpu_identity_gate_check.py"
-      - "tools/test_cpu_identity_gate.py"
-      - "bench/results/identity_break/2026-09-13_three-columns/**"
-      - "bench/results/identity_break/2026-09-14_46-lanes/**"
-      - "bench/results/identity_break/2026-09-14_47-lanes/**"
-      - "bench/results/identity_break/2026-09-14_136-lanes/**"
-      - "bench/results/identity_break/2026-09-14_166-lanes/**"
-      - "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/**"
-      - "bench/results/forest_host/**"
-      - ".github/workflows/cpu-identity-gate.yml"
+    inputs:
+      confirm:
+        description: "Heavy run on paid or queued runners. Type RUN-HEAVY to really run it; anything else skips every job"
+        required: true
+        default: ""
+        type: string
 
 # Superseded branch runs only. Each main run has its own group.
 concurrency:
@@ -218,6 +110,7 @@ env:
 
 jobs:
   gate:
+    if: inputs.confirm == 'RUN-HEAVY'
     name: ${{ matrix.label }}
     strategy:
       fail-fast: false
@@ -339,9 +232,14 @@ jobs:
           manifest=$MOJOLEARN_HOST_SURFACE
           {
             echo "COVERED_LANES=$(python3 $manifest --covered-lanes)"
-            echo "HOST_FAMILIES=$(python3 $manifest --routed-families)"
-            echo "HOST_BINDINGS=$(python3 $manifest --routed-bindings)"
-            echo "ALL_HOST_BINDINGS=$(python3 $manifest --bindings --sep ,)"
+            if [ "$FULL_CPU_VERIFY" = true ]; then
+              echo "HOST_FAMILIES=$(python3 $manifest --routed-families)"
+              echo "HOST_BINDINGS=$(python3 $manifest --routed-bindings)"
+              echo "ALL_HOST_BINDINGS=$(python3 $manifest --bindings --sep ,)"
+            else
+              echo "HOST_FAMILIES=$(python3 -c 'import runpy; h=runpy.run_path("python/mojolearn/host_surface.py"); print(" ".join(f["family"] for f in h["FAMILIES"] if f["routes"] and f["ships_in_wheel"]))')"
+              echo "ALL_HOST_BINDINGS=$(python3 $manifest --wheel-bindings --sep ,)"
+            fi
             echo "CLASSICAL_RECORDED=$(python3 $manifest --classical-recorded)"
             echo "CLASSICAL_GPU_COLUMNS=$(python3 $manifest --classical-gpu-columns)"
             echo "GPU_COLUMNS=$(python3 $manifest --training-gpu-columns)"
@@ -373,7 +271,7 @@ jobs:
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: python/mojolearn/host/*.so
-          key: host-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.GATE_IMAGE }}-${{ env.MOJOLEARN_TARGET_CPU }}-identical-${{ hashFiles('**/*.mojo', 'bindings/*.sh', 'pixi.lock', 'pixi.toml', 'python/mojolearn/host_surface.py', '.github/workflows/cpu-identity-gate.yml') }}
+          key: host-v2-${{ env.FULL_CPU_VERIFY }}-${{ runner.os }}-${{ runner.arch }}-${{ env.GATE_IMAGE }}-${{ env.MOJOLEARN_TARGET_CPU }}-identical-${{ hashFiles('**/*.mojo', 'bindings/*.sh', 'pixi.lock', 'pixi.toml', 'python/mojolearn/host_surface.py', '.github/workflows/cpu-identity-gate.yml') }}
 
       - name: Build the byte LM host binding (CPU column)
         if: steps.host-cache.outputs.cache-hit != 'true'
@@ -434,7 +332,9 @@ jobs:
           cd python
           python3 -m pytest -q -rs -p no:cacheprovider \
             mojolearn/tests/test_classification_metrics.py \
-            mojolearn/tests/test_regression_metrics.py 2>&1 | tee "$GATE_OUT/pytest_metrics.log"
+            mojolearn/tests/test_regression_metrics.py \
+            mojolearn/tests/test_cpu_inference_boundary.py \
+            mojolearn/tests/test_host_surface.py 2>&1 | tee "$GATE_OUT/pytest_metrics.log"
           if grep -E '[0-9]+ skipped' "$GATE_OUT/pytest_metrics.log"; then
             echo "a metrics test module skipped; the step must run every test" >&2
             exit 1

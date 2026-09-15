@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The dataset view every builder kernel reads through.
 
-MIRRORS `cpp/src/decisiontree/batched-levelalgo/dataset.h` at
+Reference: `cpp/src/decisiontree/batched-levelalgo/dataset.h` at
 rapidsai/cuml `v26.08.00` (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`),
 checked out read-only at `~/CascadeProjects/upstream/cuml-v26.08.00`.
 
-Their whole file is one struct of pointers and strides plus one accessor
+The reference file is one struct of pointers and strides plus one accessor
 (`dataset.h:40-44`):
 
     HDI DataT value(IdxT row, IdxT col) const

@@ -15,8 +15,7 @@ shipped gemm host oracle; the oracles spell the device constructs a bit
 claim rests on (the pinned panel width 32, the pivot comparison, the lower
 triangle subtract, the logdet chain, the lml order, the structural white
 kernel, the clamp spelled as a comparison); the sabotage define reaches the
-distance's feature loop and the binding reads it back; the CPU identity
-gate workflow triggers on both oracles.
+distance's feature loop and the binding reads it back; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): the four lane kernels fit and predict twice
@@ -31,6 +30,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -123,12 +123,8 @@ def test_sabotage_define_moves_the_distance():
     assert "GPR_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("gp"))
 
 
-def test_workflow_triggers_on_the_oracles():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in (GP_ORACLE, CHOL_ORACLE):
-        assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 
-
+@reference_training()
 def test_gaussian_process_fits_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")

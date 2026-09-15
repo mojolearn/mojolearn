@@ -6,7 +6,8 @@ built, plus a runtime check that runs only where the arima host binding is
 built and the package took the CPU-only path.
 
 What the source checks hold: the manifest declares the arima family, routes
-`_mojolearn_arima`, covers the three ARIMA lanes (and not par-arima) and no
+`_mojolearn_arima`, covers the three ARIMA lanes (and par-arima since
+lane/cpu-training-par-classical, 2026-09-15) and no
 longer names ARIMA as having no CPU path; the binding registers the GPU
 binding's fit, predict and forecast names; the oracle imports no GPU module
 and nothing from `arima/` or any other package beyond the
@@ -14,8 +15,7 @@ and nothing from `arima/` or any other package beyond the
 claim rests on (DEVIATION 687's step, the two-rounding Jones association,
 test_invparams' one-rounding association, the perturbation and the reset by
 copy, the refusals by name); the sabotage define reaches the step and the
-binding reads it back; the CPU identity gate workflow triggers on the
-oracle.
+binding reads it back.
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): the three lane orders fit twice on a small draw
@@ -31,6 +31,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -47,14 +48,16 @@ def _read(rel):
 def test_manifest_declares_the_arima_family():
     fam = host_surface.family("arima")
     assert fam["routes"] == "_mojolearn_arima"
-    assert fam["training_lanes"] == LANES
+    assert fam["training_lanes"] == LANES + ("par-arima",)
     assert ORACLE in fam["host_modules"] and (ROOT / ORACLE).is_file()
     assert (ROOT / host_surface.build_shim("arima")).is_file()
     assert (ROOT / host_surface.binding_source("arima")).is_file()
     assert host_surface.routed_modules()["_mojolearn_arima"] == "_mojolearn_arima_host"
     for lane in LANES:
         assert lane in host_surface.covered_lanes(), f"{lane} is not a covered training lane"
-    assert "par-arima" not in host_surface.covered_lanes(), "par-arima must not be declared"
+    # par-arima is declared since lane/cpu-training-par-classical (2026-09-15):
+    # fit_arima's series shards run as host fits through the pool's CPU route.
+    assert "par-arima" in host_surface.covered_lanes(), "par-arima is not a covered training lane"
     assert "ARIMA" not in host_surface.no_cpu_path_sentence(), host_surface.no_cpu_path_sentence()
     assert "seasonal ARIMA" in host_surface.training_sentence()
 
@@ -110,11 +113,8 @@ def test_sabotage_define_moves_the_step():
     assert "ARIMA_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("arima"))
 
 
-def test_workflow_triggers_on_the_oracle():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {ORACLE}"
 
-
+@reference_training()
 def test_arima_fits_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")

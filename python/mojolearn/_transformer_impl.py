@@ -93,6 +93,17 @@ W slots (`TransformerState` says how the buffers are laid out);
 `TransformerBlock.backward(x, grad_output)` is the zero-state prefill
 VJP under the IDENTICAL tier, from the lane's own backward chains.
 
+ON A CPU-ONLY INSTALL (2026-09-15). `_backend._HOST_MODULES` routes
+`_mojolearn_transformer` to `_mojolearn_transformer_host` when that host
+binding is built (`bindings/build_transformer_host.sh`), which exports
+the same four entries under the same address and params contract over
+the lane's host oracles (`transformer/host/transformer_block_host.mojo`),
+so this class runs unchanged there. The `transformer` and
+`transformer-window` lanes of `tools/identity_break.py` are covered CPU
+training lanes (`python/mojolearn/host_surface.py`): the CPU identity
+gate diffs their forward, prefill, step, backward, held-out and batch
+cells against the Apple, NVIDIA and AMD columns.
+
 RUN LEDGER. THIS PATH RAN 2026-09-02, the day the binding first
 compiled (rc 0 on the first attempt, 15 AIR blobs, transformer 7 and
 gemm 8). `python/mojolearn/tests/test_transformer_surface.py` printed
@@ -116,6 +127,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 from ._bufcheck import dtype_name, is_native_f32, probe
 from ._mode import NumericModeMixin
+from . import _ragged
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose, for `_arima_impl.py`'s reason: the read-back must not share a
@@ -682,10 +694,18 @@ class TransformerBlock(NumericModeMixin):
                 )
         return mod
 
-    def forward(self, x, state=None):
+    def forward(self, x, state=None, *, lengths=None):
         """One block call: `(B, L, d_model)` float32 in, the block
         output (both residual adds included) back, any B and L that fit
         the state's capacity.
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
+        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
+        after. Every real position's output is byte for byte the row run
+        alone at its own length (causal attention: contract 7.1, 7.3 and
+        7.4, no arithmetic changes; `_ragged.py` says why) and every padding
+        position's output is exactly `+0.0`, whatever the input held there.
+        Refused with a carried `state`.
 
         `state=None` runs a self-contained prefill from a zero cache
         sized to exactly this call and DISCARDS the final state. Pass a
@@ -695,7 +715,12 @@ class TransformerBlock(NumericModeMixin):
         sequence at once under the IDENTICAL tier (contract section
         7.2's construction; the lane's clause (d) verifies it, and FAST
         deliberately promises none of it)."""
-        return self._call(x, state, step=False)
+        if lengths is None:
+            return self._call(x, state, step=False)
+        what = "TransformerBlock.forward"
+        x = _batch_tokens(x, what, self.d_model, False)
+        return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
+                                      x, state, lengths, "<f4", what)[0]
 
     def step(self, x, state):
         """One decode token: the profile's spelling -- the SAME entry as

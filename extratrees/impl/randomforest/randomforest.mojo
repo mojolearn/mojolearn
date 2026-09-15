@@ -603,7 +603,7 @@ def forest_vote(
 ) raises -> List[Float32]:
     """The averaged per-class (or per-output) prediction for one row.
 
-    `randomforest.cuh:229-242`, transcribed:
+    `randomforest.cuh:229-242`:
 
         std::vector<T> row_prediction(num_outputs);   // zero-initialised
         for (i in trees) predict(..., row_prediction.data(), ...);   // +=
@@ -635,7 +635,7 @@ def forest_vote(
 def predict_class_forest(
     forest: Forest, row: List[Float32], row_offset: Int
 ) raises -> Int:
-    """`randomforest.cuh:243-253`, the majority vote, transcribed including
+    """`randomforest.cuh:243-253`, the majority vote, including
     both of its quirks: `best_prob` starts at `0.0` rather than `-inf`, and the
     comparison is strictly greater while `k` ascends — so an exact tie keeps
     the LOWEST class index, and a row whose averaged scores are all `<= 0`

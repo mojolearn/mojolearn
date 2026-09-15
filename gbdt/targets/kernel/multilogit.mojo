@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MultiClass: the softmax value, its gradient, and one Hessian row.
 
-FOLLOWS `catboost/cuda/targets/kernel/multilogit.cu` at CatBoost `54a8143a`
--- `MultiLogitValAndFirstDerImpl` (`:10-102`), `MultiLogitSecondDerRowImpl`
-(`:104-169`) and their two launchers (`:171-212`). Followed statement for statement. Do not
+Reference: `catboost/cuda/targets/kernel/multilogit.cu` (CatBoost `54a8143a`),
+`MultiLogitValAndFirstDerImpl` (`:10-102`), `MultiLogitSecondDerRowImpl`
+(`:104-169`) and their two launchers (`:171-212`). Do not
 improve.
 
 **The MultiLogit pair and the MultiClassOneVsAll pair are implemented.** Their
@@ -605,7 +605,7 @@ def launch_multilogit_second_der(
 # =========================================================================
 # MultiClassOneVsAll: `numClasses` INDEPENDENT logistic regressions.
 #
-# FOLLOWS `MultiClassOneVsAllValAndFirstDerImpl` (`multilogit.cu:613-673`)
+# Reference: `MultiClassOneVsAllValAndFirstDerImpl` (`multilogit.cu:613-673`)
 # and `MultiClassOneVsAllSecondDerImpl` (`:675-704`).
 #
 # WHERE IT DIFFERS FROM MultiClass, and every line of the difference

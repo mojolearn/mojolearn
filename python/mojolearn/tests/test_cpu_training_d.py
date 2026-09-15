@@ -14,8 +14,7 @@ probe; each new host oracle imports no DeviceContext and names the device
 statements whose spelling carries the bits; the Cholesky door keeps its
 validation while the kernel ridge solve and the mixture's precision Cholesky
 reach the unvalidated factorization, as `potrf_lower` does on the device;
-each family's sabotage define is read where its binding compiles; the CPU
-identity gate workflow triggers on every new host module.
+each family's sabotage define is read where its binding compiles; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
 The runtime checks (skipped, and SAID to be skipped, when a binding is absent
 or a GPU set loaded) fit each estimator twice through the host binding and
@@ -29,6 +28,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -174,12 +174,6 @@ def test_sabotage_define_reaches_each_new_family():
     assert "comptime if HDBH_HOST_SABOTAGE:" in hdb and "slot = slot - 1" in hdb
 
 
-def test_workflow_triggers_on_the_host_modules():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    for fam in ORACLES:
-        for rel in host_surface.family(fam)["host_modules"]:
-            assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
-
 
 def _built(basename):
     if _backend._CPU_ONLY is None:
@@ -196,6 +190,7 @@ def _twice(fit):
     assert a == b, "two host fits returned different bytes"
 
 
+@reference_training()
 def test_estimators_fit_on_the_host_when_built():
     import numpy as np
     rng = np.random.default_rng(0)

@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The pieces every IVF index shares: chunk offsets and the two postprocesses.
 
-FOLLOWS `cuvs/src/neighbors/ivf_common.cuh` (`kOutOfBoundsRecord` :31,
+Reference: `cuvs/src/neighbors/ivf_common.cuh` (`kOutOfBoundsRecord` :31,
 `calc_chunk_indices` :49-77 with its kernel in `ivf_common.cu:22-51`,
 `find_chunk_ix` :94-109, `postprocess_neighbors` :113-165,
-`postprocess_distances` :175-...) at cuVS `6ba2ce2`. Partial, and the
+`postprocess_distances` :175-...) (cuVS `6ba2ce2`). Partial, and the
 partiality is the interesting part.
 
-WHAT THIS FILE'S UPSTREAM IS FOR, AND WHICH HALF SURVIVES
+WHAT THIS FILE'S REFERENCE IS FOR, AND WHICH HALF SURVIVES
 ----------------------------------------------------------
 Their candidate numbering is PROBE-CONCATENATED: for one query, sample `s`
 means "the `s`-th vector of the probed lists laid end to end, in probe

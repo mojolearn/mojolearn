@@ -141,8 +141,8 @@ outside the device profile entirely.
 Inference-shaped dense FP32 only. NOT in this contract: FP16 / BF16 inputs,
 TF32 and any reduced-mantissa accumulation (noted because cuVS's own distance
 GEMM defaults to `CUBLAS_COMPUTE_32F_FAST_TF32`, ten mantissa bits,
-IDENTITY_PATHS row 24, and inheriting their design does not oblige us to
-inherit that); float64 anywhere on device, which Metal does not have;
+IDENTITY_PATHS row 24, and citing cuVS as a reference does not oblige this
+contract to adopt that); float64 anywhere on device, which Metal does not have;
 quantized or integer dot products; backward passes, autograd, optimizers;
 sparse, strided or non-contiguous operands, leading dimensions, sub-views;
 complex numbers; softmax, attention, normalization.
@@ -391,13 +391,13 @@ balanced tree of depth 2 hidden inside one leaf, and it is a different answer.
 If a leaf is too long for one thread to walk, the answer is a SHORTER LEAF,
 which is a change to section 6, to `P`, to the bits, and therefore a v2.
 
-Ascending, and not because ascending is better, because it **mirrors
-upstream**. RAFT's contraction walks `kidx` from 0 to `k` ascending in steps
+Ascending, and not because ascending is better, because it **matches
+the reference**. RAFT's contraction walks `kidx` from 0 to `k` ascending in steps
 of `Kblk` and, inside each, `ki` ascending in steps of `Veclen`, with ONE
 block owning the entire `k` range of its output tile
 (`raft/distance/detail/pairwise_distance_base.cuh:139-149`, `:223-241`). There
-is no split-K and no cross-block combination anywhere in it. `COPY, DO NOT
-IMPROVE` applies to the order as much as to anything else.
+is no split-K and no cross-block combination anywhere in it. This contract
+fixes that order; changing it needs a DEVIATION.
 
 ### 7.2 Across leaves, a FIXED BALANCED TREE, adjacent pairing, odd tail CARRIED
 

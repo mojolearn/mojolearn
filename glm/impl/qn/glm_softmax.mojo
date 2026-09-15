@@ -3,14 +3,14 @@
 """`Softmax`: the multinomial objective, `logSoftmaxKernel` and the `C > 1`
 linear kernels `linearFwd` / `linearBwd` need for it.
 
-FOLLOWS `cuml/cpp/src/glm/qn/glm_softmax.cuh` at cuML `00094f7`
+Reference: `cuml/cpp/src/glm/qn/glm_softmax.cuh` (cuML `00094f7`)
 (`logSoftmaxKernel`, `launchLogsoftmax`, `Softmax::getLossAndDZ`,
 `Softmax::gradNorm = nrmMax`) plus the `C > 1` arms of `glm_base.cuh`'s
 `linearFwd` (`:39-57`) and `linearBwd` (`:63-94`), which `glm_base.mojo`
 implemented for `C = 1` only and now dispatches here for `C > 1`. Do not
 improve.
 
-THEIR LAYOUT, copied. `W` is `C x dims` COLUMN-MAJOR (`SimpleDenseMat<T>
+THE REFERENCE LAYOUT. `W` is `C x dims` COLUMN-MAJOR (`SimpleDenseMat<T>
 W(wFlat.data, C, dims)`, `dense.hpp` default order): weight of class `c`,
 feature `j` at `w[c + C*j]`; the bias column is `j = D`, so `w[C*D + c]`.
 `Z` and `dZ` are `C x N` column-major: `z[c + C*i]` is the logit of class

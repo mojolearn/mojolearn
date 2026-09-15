@@ -13,9 +13,7 @@ estimators host binding registers `pca_fit`, `tsvd_fit`, `ols_fit` and
 GPU module (a host restatement that imports `max.gpu` or `std.gpu` is not
 host only); the sabotage define reaches the PCA oracle, whose reduce is
 the arm that moves every PCA, tSVD, OLS and ridge bit, and the DBSCAN
-oracle's core test; the CPU identity gate workflow triggers on the three
-oracle files; the README's "no CPU path" span no longer names k-NN
-training or DBSCAN.
+oracle's core test; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): the four entries run through the host
@@ -30,6 +28,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -109,11 +108,6 @@ def test_sabotage_define_moves_the_gram_reduce():
     assert "DBSCAN_ORACLE_HOST_SABOTAGE" in binding
 
 
-def test_workflow_triggers_on_the_oracles():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in ORACLES_E:
-        assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
-
 
 def test_readme_no_longer_says_knn_training_has_no_cpu_path():
     sentence = host_surface.no_cpu_path_sentence()
@@ -129,6 +123,7 @@ def test_readme_no_longer_says_knn_training_has_no_cpu_path():
         assert "k-NN" not in m.group(1), f"{rel} still says k-NN training has no CPU path"
 
 
+@reference_training()
 def test_host_fits_run_and_repeat_on_a_cpu_only_install():
     """Runtime, only where it can run. Skipping is stated, never silent."""
     if _backend._CPU_ONLY is None:

@@ -2146,8 +2146,8 @@ def check_fused_policy_dispatch() raises:
     and prove the non-default arms are CORRECT where their selection takes
     them.
 
-    The selection values are pinned against hand-transcribed upstream
-    behavior; the launcher dispatches on the SAME two functions, so a pin
+    The selection values are pinned against the reference selection
+    behavior, worked by hand; the launcher dispatches on the SAME two functions, so a pin
     here is a pin on the arm the bench takes. A policy change nothing
     exercises proves nothing, so the scalar (k=33) and 2-wide (k=34) arms
     are then run for real through the launcher, at a row count that forces

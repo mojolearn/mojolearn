@@ -80,33 +80,26 @@ production (7m 31s) and sabotage execution (3m 46s). The earlier main run
 were still running when these notes were committed; main promotion must wait
 for both. The merge from 590c11c86 changes documentation only.
 
-## Proposed CPU product boundary
+## CPU product boundary
 
-Andrew's intended direction, discussed September 15, is small development
-checks, occasional broad CPU bitwise verification, and public CPU inference.
-Test frequency now follows that direction. Public API and wheel boundaries
-remain unchanged; separating shared training/inference bindings requires
-additional implementation and installed-wheel tests.
-The follow-up work is:
+The inference boundary is implemented in `lane/cpu-training-inference-boundary`.
+Public CPU estimator fitting refuses; the source identity harness and its
+runtime tests explicitly enter a private reference-training context. The
+full 117-lane reference surface remains available. Future wheels and routine
+CI build eight inference/helper families, while full CI builds all 21.
+Training-only families cannot enter a wheel through stale build outputs.
+Mixed inference bindings retain private native helpers used by the verifier;
+the numeric implementation and GPU training API are unchanged.
 
-1. Separate internal CPU training verification builds from public CPU
-   inference operations and wheel exports. Preserve the CPU training code as
-   an oracle; define inference support by actual load/predict/transform/forward
-   capabilities rather than by the existence of a CPU fit implementation.
-2. Further narrow the routine inference screen by affected family if needed.
-   Broad training identity certification has moved off pushes to weekly, manual
-   and pre-publication runs. Shared numerical changes can request a full run.
-3. Test wheel loading, inference identity, batching and clear unsupported
-   operation errors; align documentation and the support manifest with the
-   public boundary.
+The published 0.8.5 macOS and Linux wheels were downloaded and their SHA256
+verified against PyPI metadata. Both contain only the byte-LM host binary and
+publicly export LanguageModelInference and LanguageModelHostTrainer. The
+published trainer remains compatible. The broad CPU training expansion was
+never in those published wheels. This change does not publish a new release.
 
-The actual PyPI 0.8.5 macOS and Linux wheels were downloaded and their SHA256
-verified against PyPI metadata. Both contain only the byte-LM host binary;
-`_HOST_MODULES` is empty. Both publicly export LanguageModelInference and
-LanguageModelHostTrainer. The broader 117-lane CPU training expansion is on
-main and is included by its future wheel configuration, but is not in those
-published wheels. Preserve the already-shipped trainer's compatibility or
-explicitly deprecate it when changing the product boundary.
+See [boundary validation](CPU_INFERENCE_BOUNDARY_2026-09-15.md). Further
+selection by affected inference family is optional follow-up if measured
+routine wall time requires it; no additional broad training gate is added.
 
 ## Immediate promotion requested
 
@@ -116,3 +109,11 @@ running. The cadence changes were checked by parsing every workflow and shell
 step, docs facts, packaging pins/inventory and the gate regression tests.
 Their first hosted routine-inference run remains verification to observe,
 not a result claimed by this document.
+
+## Completed full hosted run
+
+Run [34978769155](https://github.com/mojolearn/mojolearn/actions/runs/34978769155)
+subsequently passed on all three hosts: ARM64 21m23s, macOS 24m29s, x86-64
+31m14s, excluding queues. Production full-fixture execution took 7m31s,
+10m11s and 13m17s respectively. These measurements precede the latest routine
+inference-only cadence and package boundary; they are not routine push times.

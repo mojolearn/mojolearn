@@ -13,8 +13,7 @@ binding's name; the oracle imports no GPU module and reads its fold widths
 from the kernel matrix; the sabotage define reaches the oracle through the
 quantized accumulation (the arm that moves every centroid) and the binding
 reads it back; the oracle spells the device's round seed reassembly (the
-sign-extended low half, measured on the M4); the CPU identity gate workflow
-triggers on the oracle.
+sign-extended low half, measured on the M4).
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): `KMeans.fit` runs through the host binding on
@@ -30,6 +29,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -101,11 +101,6 @@ def test_oracle_spells_the_device_seed_reassembly():
         "the round seed does not pass through the reassembly"
 
 
-def test_workflow_triggers_on_the_oracle():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {ORACLE}"
-    assert f'- "{METRICS_ORACLE}"' in text, f"cpu-identity-gate.yml does not trigger on {METRICS_ORACLE}"
-
 
 def test_manifest_covers_metrics():
     assert "metrics" in host_surface.covered_lanes(), "metrics is not a covered training lane"
@@ -165,10 +160,9 @@ def test_manifest_covers_spectral_and_the_oracle_moved():
     assert "def dense_laplacian_eigenvalues_f64(" in checks
     assert "comptime if SPECTRAL_ORACLE_HOST_SABOTAGE:" in text and "seed + UInt64(1)" in text
     assert "SPECTRAL_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("metrics"))
-    workflow = _read(".github/workflows/cpu-identity-gate.yml")
-    assert f'- "{SPECTRAL_ORACLE}"' in workflow
 
 
+@reference_training()
 def test_spectral_runs_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -192,9 +186,10 @@ def test_manifest_covers_the_scalers():
         assert lane in host_surface.covered_lanes(), f"{lane} is not a covered training lane"
     fam = host_surface.family("preprocessing")
     assert fam["routes"] == "_mojolearn_preprocessing"
-    # The three parameter lanes joined on lane/cpu-training-batch2-declare.
+    # The three parameter lanes joined on lane/cpu-training-batch2-declare,
+    # par-scaler on lane/cpu-training-par-classical.
     assert fam["training_lanes"] == ("standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
-                                     "standard-scaler-no-std", "minmax-scaler-clip")
+                                     "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler")
     assert SCALER_ORACLE in fam["host_modules"] and (ROOT / SCALER_ORACLE).is_file()
     assert (ROOT / "bindings/build_preprocessing_host.sh").is_file()
     assert "_mojolearn_preprocessing" in host_surface.routed_modules()
@@ -208,9 +203,9 @@ def test_manifest_covers_the_scalers():
     assert "comptime if SCALER_ORACLE_HOST_SABOTAGE:" in text
     assert "values[(i + 1) % n]" in text and "ftz(lower) + ftz(identical_mul(" in text
     assert "SCALER_ORACLE_HOST_SABOTAGE" in src
-    assert f'- "{SCALER_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
 
 
+@reference_training()
 def test_scalers_run_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -259,9 +254,9 @@ def test_manifest_covers_logistic():
         assert named in text, f"{named} is not in {QN_ORACLE}"
     assert "comptime if QN_ORACLE_HOST_SABOTAGE:" in text
     assert "QN_ORACLE_HOST_SABOTAGE" in src
-    assert f'- "{QN_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
 
 
+@reference_training()
 def test_logistic_runs_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -285,6 +280,7 @@ def test_logistic_runs_on_the_host_when_built():
     assert l1[0].tobytes() == l1[1].tobytes(), "two host OWL-QN fits returned different coefficients"
 
 
+@reference_training()
 def test_metrics_run_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -309,6 +305,7 @@ def test_metrics_run_on_the_host_when_built():
     assert -0.5 <= ari <= 1.0 and 0.0 <= vm <= 1.0 and 0.0 <= r2 <= 1.0 and -1.0 <= sil <= 1.0
 
 
+@reference_training()
 def test_kmeans_fit_runs_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")

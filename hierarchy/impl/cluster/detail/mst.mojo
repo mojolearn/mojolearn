@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`build_sorted_mst`: the MST, connected, sorted.
 
-FOLLOWS `cuvs/cpp/src/cluster/detail/mst.cuh`, cuVS `94c2819`:
-`build_sorted_mst` (`:276-343`) and the shape of its fix-up loop. The two
+Reference: `build_sorted_mst` (`:276-343`) and the shape of its fix-up loop,
+`cuvs/cpp/src/cluster/detail/mst.cuh` (cuVS `94c2819`). The two
 `connect_knn_graph` overloads (`:74-123`, `:139-249`) and `merge_msts`
 (`:39-59`) are NOT implemented in this rung: on the PAIRWISE connectivity the
 graph is complete, Boruvka's first call returns one component, and the
@@ -11,7 +11,7 @@ loop body is never entered; a call into it raises by name so that a rung-2
 caller finds the gap loudly. `hierarchy/NOT_IMPLEMENTED.tsv` has the row.
 
 `get_n_components` (`cuvs/sparse/neighbors/cross_component_nn.cuh:44-47`
--> `detail/cross_component_nn.cuh`) counts distinct colors; ours copies the
+-> `detail/cross_component_nn.cuh`) counts distinct colors; this implementation copies the
 `m` colors back and counts distinct values on the host. A count is
 order-free and the array is `m` ints.
 """

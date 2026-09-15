@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Isolation Forest: the model, `fit`, `score_samples`, `predict`.
 
-MIRRORS `cpp/include/cuml/ensemble/isolation_forest.hpp` (`IF_params`
+Reference: `cpp/include/cuml/ensemble/isolation_forest.hpp` (`IF_params`
 `:27-34`, `IsolationForestModel` `:38-50`, the `fit` / `score_samples` /
 `predict` entries `:114-200`), `cpp/src/isolation_forest/isolation_forest.cuh`
 (`compute_global_max_nodes_per_tree` `:29-44`, `IsolationForest::

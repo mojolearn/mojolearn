@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Pointer-type tags shared across the control plane.
 
-FOLLOWS `catboost/cuda/cuda_lib/fwd.h` at CatBoost `54a8143a`.
-Followed statement for statement.
+Reference: `catboost/cuda/cuda_lib/fwd.h` (CatBoost `54a8143a`).
 
 `EPtrType` is the tag that decides which of their four `TMemoryCopyKind`
 specialisations a copy resolves to (`cuda_base.h:133-166`). It is also what

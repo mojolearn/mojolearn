@@ -706,7 +706,7 @@ def adam_update_oop_kernel(
     pre-update state where the shadow copy used to put it. The shipped
     kernel loads all four operands before its first store, so the values
     read here are the values it reads. Read the two side by side: every line
-    below names the seam it transcribes, and nothing else is spelled.
+    below names the seam it restates, and nothing else is spelled.
 
     NOT CARRIED, on purpose: the sabotage arms (the byte LM refuses every
     sabotage build in `_require_profile`) and the recorded intermediates

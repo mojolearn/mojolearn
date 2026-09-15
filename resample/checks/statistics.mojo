@@ -4,9 +4,9 @@
 
 NO UPSTREAM. `scipy.stats.bootstrap` and `scipy.stats.permutation_test` take
 the statistic as a CALLABLE and vectorise it over an axis, so there is no
-upstream file holding "their mean kernel" to transcribe. What SciPy defines is
+reference file holding a mean kernel to cite. What SciPy defines is
 the SEMANTICS of each statistic, and the semantics are what is honoured here,
-name for name (`resample/README.md` carries the mapping table). Their designs
+name for name (`resample/README.md` carries the mapping table). SciPy's statistics
 are `numpy` reductions over the last axis: serial, CPU-shaped, and free to
 choose any summation order they like because they ship one backend.
 
@@ -437,7 +437,7 @@ def trim_count(m: Int, proportion: Float32) -> Int:
 
     Their line is `lowercut = int(proportiontocut * nobs)` with a C-style
     truncation towards zero, and `nobs` up to 2^24 keeps the product exact
-    in float32 for the proportions anyone writes down. Transcribed rather
+    in float32 for the proportions anyone writes down. Kept as written rather
     than improved: a rounded cut would silently disagree with every
     published `trim_mean` number.
     """

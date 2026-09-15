@@ -216,8 +216,8 @@ mojolearn = [
     "*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib",
     # DEVIATION 2610: the host (CPU) bindings, loaded by path or through
     # _backend.load_host_module, never by the GPU vendor selector. Every
-    # family python/mojolearn/host_surface.py declares ships since 0.8.6;
-    # build_release_wheel.sh builds and reads back each one.
+    # family marked ships_in_wheel in host_surface.py is built and read back.
+    # Training-only reference families are excluded and rejected by setup.py.
     "host/*.so",
     # THE IDENTITY PAYLOAD (the packaging lane, 2026-09-14). The reference
     # card directory `python -m mojolearn verify` compares against (tracked;
