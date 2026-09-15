@@ -23,8 +23,18 @@ one function with four policy branches). THE CONFIGURATIONS THIS COVERS are
 the lanes' (tools/identity_break.py): `gbdt-depthwise` is 20 trees, depth 6,
 Depthwise, Logloss, Cosine; `gbdt-lossguide` is 20 trees, max_leaves 32,
 Lossguide, Logloss, NewtonL2 (the policy's default score function), depth 6.
-Every other option is at its default and the binding refuses by name what
-is outside (bindings/_mojolearn_gbdt_host.mojo, `_refuse`).
+Since 2026-09-15 (lane/cpu-training-gbdt-losses) also
+`gbdt-lossguide-newtoncosine`: 20 trees, max_leaves 32, Lossguide, Logloss,
+NewtonCosine (the Cosine calcer over the NewtonL2 planes),
+`min_child_hessian` 1 (`child_hessian_below` by bits, a rejected leaf made
+terminal), `min_split_gain` 0.01, `min_data_in_leaf` 8, `feature_fraction`
+0.5 (`sample_tree_folds` over its own TRandom stream, the index repacked per
+tree), `random_strength` 1 (the per-tree `CalcScoreModelLengthMult`, the
+per-tree seed, `compute_target_std_dev` and the per-launch level seed with
+the per-feature normal draw on both scores), the Bernoulli bootstrap at 0.7
+and Gradient leaves at three iterations (`gbdt_oracle_losses.mojo`). Every
+other option is at its default and the binding refuses by name what is
+outside (bindings/_mojolearn_gbdt_host.mojo, `_refuse`).
 
 WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build defaults:
 DEVIATION 1902 ridx-only splits OFF, 2661 group width OFF, 1901 incremental

@@ -69,7 +69,7 @@ def test_manifest_declares_the_gbdt_family():
     for lane in ():
         assert lane not in covered, f"{lane} is declared covered and has no host trainer"
     sentence = host_surface.no_cpu_path_sentence()
-    assert "gradient boosting training other than symmetric" in sentence, sentence
+    assert "gradient boosting training outside its declared lanes" in sentence, sentence
     # The forest host binding stays loaded by path, never routed.
     assert host_surface.family("forest")["routes"] is None
 
@@ -79,10 +79,10 @@ def test_binding_registers_the_gpu_names():
     exports = host_surface.family("gbdt")["exports"]
     for name in ("gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid",
                  "gbdt_vendor", "gbdt_numeric_mode", "gbdt_binary_probabilities",
-                 "gbdt_binary_classes"):
+                 "gbdt_binary_classes", "gbdt_predict_multi"):
         assert f'("{name}")' in src, f"the gbdt host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name} for gbdt"
-    for absent in ("gbdt_predict_multi", "gbdt_fit_ordered_rmse",
+    for absent in ("gbdt_fit_ordered_rmse",
                    "gbdt_fit_two_level_feature_freq", "gbdt_per_round_paths",
                    "gbdt_parallel_available", "pointwise_parallel_available"):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
@@ -93,7 +93,7 @@ def test_every_fit_refusal_names_the_missing_cpu_implementation():
     assert f'"{REFUSAL}"' in src
     for what in ("loss='", "grow_policy code", "use_pointwise_searcher=True",
                  "score_function code", "leaf_estimation_method code",
-                 "bootstrap_type='", '"sample_weight"', '"class_weights"',
+                 "bootstrap_type='", '"sample_weight"', '"class_weights outside',
                  '"cat_features or one_hot_features"', '"eval_set"',
                  "random_strength=", "boost_from_average=True",
                  "feature_fraction=", "an X carrying NaN"):
@@ -122,13 +122,12 @@ def test_nan_modes_and_adapters_are_declared():
         "the class code is strict raw > 0 read from the bits"
     )
     assert '"binary prediction: finite Float32 margins required"' in src
-    assert "if is_rmse or grow_code != 0:" in src, "NaN refused outside the measured fit"
+    assert "if is_rmse or grow_code != 0 or is_pointwise or is_multi:" in src, "NaN refused outside the measured fit"
     kernel = _read("gbdt/binary_prediction.mojo")
     assert "var positive = ftz(identical_sigmoid(ftz(margin)))" in kernel, (
         "the device kernel moved; the host restatement must move with it"
     )
-    sentence = host_surface.no_cpu_path_sentence()
-    assert "either NaN mode, and the classifier and regressor adapters" in sentence, sentence
+    assert "either NaN mode and the classifier and regressor adapters" in fam["display"], fam["display"]
 
 
 def test_oracle_imports_no_gpu_module():

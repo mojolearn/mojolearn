@@ -314,6 +314,26 @@ TRAINING_LANE_NAMES = {
     "gbdt-nan-modes": "gradient boosting with the Min and Max NaN modes",
     "gbdt-adapter-clf": "the gradient boosting classifier",
     "gbdt-adapter-reg": "the gradient boosting regressor",
+    # Same lane, the rest of it: the ten pointwise losses of
+    # gbdt-parametric-losses and the Exact leaves with the Poisson bootstrap
+    # of gbdt-exact-mae train through gbdt/host/gbdt_oracle_losses.mojo (the
+    # pointwise target kernels, the row bootstraps, the Gradient and Newton
+    # walkers and the Exact weighted quantile); gbdt-lossguide-newtoncosine
+    # through gbdt/host/gbdt_oracle_depthwise.mojo with the NewtonCosine
+    # score, the child-Hessian and split-gain thresholds, the leaf size, the
+    # feature sample, the score noise, the Bernoulli bootstrap and Gradient
+    # leaves; gbdt-multiclass and gbdt-onevsall through
+    # gbdt/host/gbdt_oracle_multiclass.mojo (the multilogit and one-vs-all
+    # planes at stat_count 1 + dim, class weights, the blocked Newton step)
+    # and the binding's gbdt_predict_multi. On the M4's CPU column (one core)
+    # the twelve GBDT lanes read all 108 train, 198 infer and model and 108
+    # batch cells IDENTICAL x4 against the 166-lane record, and the sabotage
+    # build DIVERGENT on every one of them.
+    "gbdt-parametric-losses": "gradient boosting with the Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq, Expectile, Tweedie, Huber and CrossEntropy losses",
+    "gbdt-exact-mae": "gradient boosting with Exact leaves and the Poisson bootstrap",
+    "gbdt-lossguide-newtoncosine": "gradient boosting on lossguide trees with the NewtonCosine score and the searcher options",
+    "gbdt-multiclass": "multiclass gradient boosting",
+    "gbdt-onevsall": "one-vs-all gradient boosting",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -341,7 +361,7 @@ TRAINING_LANE_NAMES = {
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
     "the neural blocks",
-    "gradient boosting training other than symmetric trees with the Logloss or RMSE loss (either NaN mode, and the classifier and regressor adapters) and depthwise and lossguide trees with the Logloss loss",
+    "gradient boosting training outside its declared lanes (the ordered RMSE and feature-frequency fits, categorical features, sample weights, eval sets and the pointwise searcher among them)",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -771,12 +791,11 @@ FAMILIES = (
         # Workstream E batch 3 (2026-09-14): the GradientBoosting family's
         # host binding. It routes `_mojolearn_gbdt` on a CPU-only install
         # with the GPU binding's fit, predict, model-dim and sigmoid names;
-        # gbdt_fit refuses by name every value outside the gbdt-symmetric,
-        # gbdt-rmse, gbdt-depthwise, gbdt-lossguide, gbdt-nan-modes and
-        # adapter configurations; the multi-dimensional predict and the
-        # ordered and FeatureFreq fits stay absent. The classifier adapter's
-        # binary probability and class transforms are exported since
-        # 2026-09-15 (lane/cpu-training-gbdt-losses).
+        # gbdt_fit refuses by name every value outside the twelve declared
+        # GBDT configurations; the ordered and FeatureFreq fits stay absent.
+        # The classifier adapter's binary probability and class transforms
+        # and the multi-dimensional predict are exported since 2026-09-15
+        # (lane/cpu-training-gbdt-losses).
         # Not the forest host binding: that one is loaded by path under its
         # own names and takes the model as flat arrays.
         family="gbdt",
@@ -787,21 +806,24 @@ FAMILIES = (
         training_lanes=(
             "gbdt-symmetric", "gbdt-rmse", "gbdt-depthwise", "gbdt-lossguide",
             "gbdt-nan-modes", "gbdt-adapter-clf", "gbdt-adapter-reg",
+            "gbdt-parametric-losses", "gbdt-exact-mae",
+            "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall",
         ),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor"),
-        display="gradient boosting on symmetric trees with the Logloss or RMSE loss (either NaN mode, and the classifier and regressor adapters) and depthwise and lossguide trees with the Logloss loss",
+        display="gradient boosting on symmetric trees with the pointwise and multiclass losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
+            "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
-            "gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid",
-            "gbdt_binary_probabilities", "gbdt_binary_classes",
+            "gbdt_fit", "gbdt_predict", "gbdt_predict_multi", "gbdt_model_dim",
+            "gbdt_sigmoid", "gbdt_binary_probabilities", "gbdt_binary_classes",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

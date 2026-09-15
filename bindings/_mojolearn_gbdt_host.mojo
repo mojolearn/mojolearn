@@ -2,8 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_gbdt` family, GradientBoosting on the
 gbdt-symmetric, gbdt-rmse, gbdt-depthwise and gbdt-lossguide lanes
-(workstream E batch 3, 2026-09-14) and the gbdt-nan-modes, gbdt-adapter-clf
-and gbdt-adapter-reg lanes (lane/cpu-training-gbdt-losses, 2026-09-15; brief
+(workstream E batch 3, 2026-09-14) and the gbdt-nan-modes, gbdt-adapter-clf,
+gbdt-adapter-reg, gbdt-parametric-losses, gbdt-exact-mae,
+gbdt-lossguide-newtoncosine, gbdt-multiclass and gbdt-onevsall lanes
+(lane/cpu-training-gbdt-losses, 2026-09-15: the pointwise losses, the Exact
+leaves and the row bootstraps through `gbdt/host/gbdt_oracle_losses.mojo`,
+the Lossguide searcher options through `gbdt/host/gbdt_oracle_depthwise.mojo`,
+MultiClass and MultiClassOneVsAll through
+`gbdt/host/gbdt_oracle_multiclass.mojo`; brief
 docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 gbdt and the batch
 3 sections). `loss="RMSE"` fits through
 `gbdt/host/gbdt_oracle_rmse.mojo::gbdt_rmse_host_fit`.
@@ -29,10 +35,10 @@ model text in, as `bindings/_mojolearn_gbdt.mojo:410-450`), `gbdt_sigmoid`
 (its body), `gbdt_binary_probabilities` and `gbdt_binary_classes` (the
 classifier adapter's transforms, `bindings/_mojolearn_gbdt.mojo:107-130`
 over `gbdt/binary_prediction.mojo`'s kernel, restated per element),
-`gbdt_vendor` answering "cpu" and `gbdt_numeric_mode`.
+`gbdt_predict_multi` (a multi-dimensional model's raw, softmax and sigmoid
+columns), `gbdt_vendor` answering "cpu" and `gbdt_numeric_mode`.
 
-ABSENT, and so refused BY NAME through `_HostBinding`: `gbdt_predict_multi`
-(a multi-dimensional model), `gbdt_fit_ordered_rmse`,
+ABSENT, and so refused BY NAME through `_HostBinding`: `gbdt_fit_ordered_rmse`,
 `gbdt_fit_two_level_feature_freq`, `gbdt_per_round_paths` and the two
 `*_parallel_available` probes.
 
@@ -188,14 +194,12 @@ def _refuse(what: String) raises:
     cover reads REFUSED and never a hash."""
     raise Error(
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
-        + "; the gbdt host binding trains the gbdt-symmetric, gbdt-rmse,"
-        " gbdt-depthwise, gbdt-lossguide, gbdt-nan-modes, gbdt-adapter-clf"
-        " and gbdt-adapter-reg lanes only (SymmetricTree with Logloss or RMSE"
-        " and Cosine, Depthwise with Logloss and Cosine, Lossguide with"
-        " Logloss and NewtonL2, Newton leaves, no bootstrap, weights,"
-        " categoricals or eval set), see"
-        " gbdt/host/gbdt_oracle.mojo, gbdt/host/gbdt_oracle_rmse.mojo and"
-        " gbdt/host/gbdt_oracle_depthwise.mojo"
+        + "; the gbdt host binding trains the twelve declared GBDT lanes"
+        " only (SymmetricTree with Cosine and the Logloss, RMSE, pointwise"
+        " and multiclass losses, Depthwise with Logloss and Cosine,"
+        " Lossguide with Logloss and NewtonL2 or NewtonCosine; no sample"
+        " weights, categoricals, eval set or pointwise searcher), see"
+        " gbdt/host/gbdt_oracle.mojo and the gbdt/host oracles beside it"
     )
 
 
