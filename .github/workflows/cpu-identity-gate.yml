@@ -111,6 +111,7 @@ on:
       - "gbdt/host/gbdt_oracle_lossguide.mojo"
       - "gbdt/host/gbdt_oracle_ordered.mojo"
       - "gbdt/host/gbdt_oracle_feature_freq.mojo"
+      - "gbdt/host/gbdt_oracle_pointwise.mojo"
       - "arima/host/arima_oracle.mojo"
       - "training/host/mlp_oracle.mojo"
       - "training/checks/loss_oracle.mojo"
@@ -556,7 +557,8 @@ jobs:
       # adding 1.0 to the searcher's leaf regularizer, in
       # gbdt_oracle_ordered by adding 1.0 to the ordered Newton Hessian
       # regularizer, in gbdt_oracle_feature_freq by adding 1.0 to the leaf
-      # value's l2, in arima_oracle by
+      # value's l2, in gbdt_oracle_pointwise by adding 1.0 to the weighted
+      # Newton walker's Hessian regularizer, in arima_oracle by
       # doubling the finite-difference step, and in umap_oracle by keying
       # every negative draw one epoch late);
       # each further phase 1

@@ -332,6 +332,17 @@ TRAINING_LANE_NAMES = {
     # the gate ran, and the sabotage build DIVERGENT on every cell.
     "gbdt-ordered-rmse": "ordered boosting with the RMSE loss (OrderedRMSE)",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
+    # The same lane branch: the pointwise searcher with L2 scores, the
+    # Bayesian bootstrap, boost from average on Logloss, row weights and an
+    # eval set with the Iter detector and best-model truncation trains
+    # through gbdt/host/gbdt_oracle_pointwise.mojo (the ordered oracle's
+    # single-task structure search with the plain L2 scorer, the weighted
+    # Newton walker, the bootstrap draws and the test arm restated on the
+    # host) inside gbdt_fit's use_pointwise_searcher arm, which refuses every
+    # other value of those options by name. IDENTICAL x4 on all 9 train, 18
+    # infer and model and 9 batch cells on the M4's CPU column (one core)
+    # before the gate ran, and the sabotage build DIVERGENT on every cell.
+    "gbdt-pointwise-l2-bayesian-eval": "gradient boosting with the pointwise searcher, L2 scores, the Bayesian bootstrap and an eval set",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -359,7 +370,7 @@ TRAINING_LANE_NAMES = {
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
     "the neural blocks",
-    "gradient boosting training other than symmetric trees with the Logloss or RMSE loss, depthwise and lossguide trees with the Logloss loss, OrderedRMSE and the two-level FeatureFreq estimator",
+    "gradient boosting training other than symmetric trees with the Logloss or RMSE loss, depthwise and lossguide trees with the Logloss loss, the pointwise searcher outside L2 scores with the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -817,15 +828,17 @@ FAMILIES = (
         training_lanes=(
             "gbdt-symmetric", "gbdt-rmse", "gbdt-depthwise", "gbdt-lossguide",
             "gbdt-ordered-rmse", "gbdt-feature-freq",
+            "gbdt-pointwise-l2-bayesian-eval",
         ),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GradientBoosting", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq"),
-        display="gradient boosting on symmetric trees with the Logloss or RMSE loss, depthwise and lossguide trees with the Logloss loss, OrderedRMSE and the two-level FeatureFreq estimator",
+        display="gradient boosting on symmetric trees with the Logloss or RMSE loss, depthwise and lossguide trees with the Logloss loss, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
             "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
+            "gbdt/host/gbdt_oracle_pointwise.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(

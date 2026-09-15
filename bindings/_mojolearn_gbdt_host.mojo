@@ -94,6 +94,7 @@ from gbdt.host.gbdt_oracle_depthwise import (
 from gbdt.options.data_processing_options import nan_mode_from_name
 from gbdt.host.gbdt_oracle_feature_freq import gbdt_feature_freq_host_fit
 from gbdt.host.gbdt_oracle_ordered import gbdt_ordered_rmse_host_fit
+from gbdt.host.gbdt_oracle_pointwise import gbdt_pointwise_host_fit
 
 
 #: `SCORE_FUNCTION_COSINE` and `LEAF_ESTIMATION_NEWTON`
@@ -101,6 +102,8 @@ from gbdt.host.gbdt_oracle_ordered import gbdt_ordered_rmse_host_fit
 #: sends in slots 10 and 17.
 comptime GBDT_HOST_SCORE_COSINE = 1
 comptime GBDT_HOST_LEAF_NEWTON = 1
+#: `SCORE_FUNCTION_L2` (`gbdt/options/catboost_options.mojo:135`).
+comptime GBDT_HOST_SCORE_L2 = 6
 #: `DEFAULT_TARGET_BORDER` (`gbdt/options/loss_description.mojo:72`).
 comptime GBDT_HOST_DEFAULT_BORDER = Float32(0.5)
 #: The deepest tree the host binding grows; the model text reader refuses
@@ -169,6 +172,183 @@ def _refuse(what: String) raises:
         " gbdt/host/gbdt_oracle.mojo, gbdt/host/gbdt_oracle_rmse.mojo and"
         " gbdt/host/gbdt_oracle_depthwise.mojo"
     )
+
+
+def _refuse_pointwise(what: String) raises:
+    """The pointwise arm's by-name refusal, with the gate's sentence."""
+    raise Error(
+        "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
+        + " under use_pointwise_searcher=True; the gbdt host binding trains"
+        " the gbdt-pointwise-l2-bayesian-eval lane only on this arm"
+        " (SymmetricTree, Logloss, L2 scores, the Bayesian bootstrap,"
+        " boost_from_average=True, sample_weight, an eval set with the Iter"
+        " detector, Newton leaves), see gbdt/host/gbdt_oracle_pointwise.mojo"
+    )
+
+
+def _gbdt_fit_pointwise_arm(
+    x_address: Int,
+    y_address: Int,
+    w_address: Int,
+    ex_address: Int,
+    ey_address: Int,
+    params: PythonObject,
+    strs: PythonObject,
+) raises -> PythonObject:
+    """`gbdt_fit` with `use_pointwise_searcher=True`: the slots were checked
+    by the caller; this reads them again, refuses by name every value the
+    pointwise oracle does not restate, applies `train`'s own raises on the
+    rest, and fits through `gbdt_pointwise_host_fit`."""
+    var n_class_weights = Int(py=params[34])
+    var fixed_and_weights = 35 + n_class_weights
+    var min_split_gain = Float64(-1)
+    if len(params) >= fixed_and_weights + 1:
+        min_split_gain = Float64(py=params[fixed_and_weights])
+    var min_child_hessian = Float64(-1)
+    if len(params) >= fixed_and_weights + 2:
+        min_child_hessian = Float64(py=params[fixed_and_weights + 1])
+    var feature_fraction = Float64(1)
+    if len(params) == fixed_and_weights + 3:
+        feature_fraction = Float64(py=params[fixed_and_weights + 2])
+    var n_rows = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_weights = Int(py=params[2])
+    var n_flags = Int(py=params[3])
+    var border_count = Int(py=params[4])
+    var n_estimators = Int(py=params[5])
+    var max_depth = Int(py=params[6])
+    var learning_rate = Float32(Float64(py=params[7]))
+    var l2_leaf_reg = Float32(Float64(py=params[8]))
+    var random_seed = UInt64(Int(py=params[9]))
+    var score_function = Int(py=params[10])
+    var loss = String(py=strs[0])
+    var loss_border = Float32(Float64(py=params[15]))
+    var leaf_iterations = Int(py=params[16])
+    var leaf_method = Int(py=params[17])
+    var bagging_temperature = Float32(Float64(py=params[18]))
+    var subsample = Float32(Float64(py=params[19]))
+    var bootstrap_type = String(py=strs[1])
+    var n_eval_rows = Int(py=params[20])
+    var od_type = String(py=strs[2])
+    var od_pvalue = Float64(py=params[21])
+    var od_wait = Int(py=params[22])
+    var use_best_model = Int(py=params[23])
+    var best_model_min_trees = Int(py=params[24])
+    var nan_mode_name = String(py=strs[3])
+    var random_strength = Float32(Float64(py=params[25]))
+    var border_build_max_samples = Int(py=params[27])
+    var boost_from_average = Int(py=params[30])
+    var grow_code = Int(py=params[31])
+    var max_leaves = Int(py=params[32])
+    var min_data_in_leaf = Int(py=params[33])
+
+    if loss != String("Logloss"):
+        _refuse_pointwise("loss='" + loss + "'")
+    if grow_code != 0:
+        _refuse_pointwise("grow_policy code " + String(grow_code))
+    if score_function != GBDT_HOST_SCORE_L2:
+        _refuse_pointwise("score_function code " + String(score_function) + " (only L2)")
+    if leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON:
+        _refuse_pointwise("leaf_estimation_method code " + String(leaf_method) + " (only Newton)")
+    if bootstrap_type != String("Bayesian"):
+        _refuse_pointwise("bootstrap_type='" + bootstrap_type + "' (only Bayesian)")
+    if n_weights == 0:
+        _refuse_pointwise("a fit without sample_weight")
+    if n_class_weights != 0:
+        _refuse_pointwise("class_weights")
+    if n_flags != 0:
+        _refuse_pointwise("cat_features or one_hot_features")
+    if n_eval_rows == 0:
+        _refuse_pointwise("a fit without eval_set")
+    if od_type != String("Iter") or od_pvalue >= 0.0 or od_wait < 0:
+        _refuse_pointwise("the overfitting detector other than od_type='Iter' with od_wait")
+    if random_strength != Float32(0.0):
+        _refuse_pointwise("random_strength=" + String(random_strength))
+    if boost_from_average != 1:
+        _refuse_pointwise("boost_from_average other than True")
+    if feature_fraction != 1.0:
+        _refuse_pointwise("feature_fraction=" + String(feature_fraction))
+    if border_count < 1 or border_count > 255:
+        _refuse_pointwise("border_count=" + String(border_count) + " (1 to 255)")
+    if max_depth < 1 or max_depth > GBDT_HOST_MAX_DEPTH:
+        _refuse_pointwise("max_depth=" + String(max_depth) + " (1 to 16)")
+    # `train`'s own raises (`gbdt/train.mojo:944-1760`)
+    if min_split_gain >= 0:
+        raise Error("min_split_gain requires Depthwise or Lossguide")
+    if min_child_hessian >= 0:
+        raise Error("min_child_hessian requires Depthwise or Lossguide")
+    if min_data_in_leaf != 1:
+        raise Error(
+            "min_data_in_leaf=" + String(min_data_in_leaf) + " does nothing"
+            " under grow_policy=SymmetricTree"
+        )
+    if max_leaves >= 0 and max_leaves != (1 << max_depth):
+        raise Error("max_leaves option works only with lossguide tree growing (catboost_options.cpp:998)")
+    if subsample >= Float32(0.0):
+        raise Error(
+            "Error: default bootstrap type (bayesian) doesn't support"
+            " 'subsample' option"
+        )
+    if use_best_model != -1 and use_best_model != 0 and use_best_model != 1:
+        raise Error("use_best_model must be -1 (unset), 0 or 1, got " + String(use_best_model))
+    if best_model_min_trees < 1:
+        raise Error("best_model_min_trees must be at least 1, got " + String(best_model_min_trees))
+    var nan_mode = nan_mode_from_name(nan_mode_name)
+    var iterations = GBDT_LOGLOSS_NEWTON_ITERATIONS
+    if leaf_iterations >= 0:
+        iterations = leaf_iterations
+    var border = GBDT_HOST_DEFAULT_BORDER
+    if loss_border >= Float32(0.0):
+        border = loss_border
+
+    var has_nan = False
+    var text = String("")
+    var losses = List[Float64]()
+    var test_losses = List[Float64]()
+    var best_iteration = 0
+    var stopped_early = False
+    with GILReleased(Python()):
+        var x = read_f32(x_address, n_rows * n_features)
+        var ex = read_f32(ex_address, n_eval_rows * n_features)
+        for i in range(len(x)):
+            if x[i] != x[i]:
+                has_nan = True
+                break
+        for i in range(len(ex)):
+            if ex[i] != ex[i]:
+                has_nan = True
+                break
+        if not has_nan:
+            var y = read_f32(y_address, n_rows)
+            var w = read_f32(w_address, n_rows)
+            var ey = read_f32(ey_address, n_eval_rows)
+            var fit = gbdt_pointwise_host_fit(
+                x, y, w, n_rows, n_features, ex, ey, n_eval_rows,
+                border_count, border_build_max_samples, n_estimators,
+                max_depth, learning_rate, l2_leaf_reg, random_seed, nan_mode,
+                border, iterations, bagging_temperature, od_wait,
+                use_best_model, best_model_min_trees,
+            )
+            text = fit.text
+            losses = fit.losses.copy()
+            test_losses = fit.test_losses.copy()
+            best_iteration = fit.best_iteration
+            stopped_early = fit.stopped_early
+    if has_nan:
+        _refuse_pointwise("an X carrying NaN")
+    var learn = Python.list()
+    for i in range(len(losses)):
+        learn.append(PythonObject(losses[i]))
+    var test = Python.list()
+    for i in range(len(test_losses)):
+        test.append(PythonObject(test_losses[i]))
+    var out = Python.list()
+    out.append(PythonObject(text))
+    out.append(PythonObject(best_iteration))
+    out.append(PythonObject(stopped_early))
+    out.append(learn)
+    out.append(test)
+    return out
 
 
 def gbdt_fit_binding(
@@ -297,7 +477,12 @@ def gbdt_fit_binding(
     if is_rmse and grow_code != 0:
         _refuse("loss='RMSE' under grow_policy code " + String(grow_code) + " (Depthwise or Lossguide)")
     if use_pointwise:
-        _refuse("use_pointwise_searcher=True")
+        # the gbdt-pointwise-l2-bayesian-eval lane, its own arm and refusals
+        # (`_gbdt_fit_pointwise_arm`, gbdt/host/gbdt_oracle_pointwise.mojo)
+        return _gbdt_fit_pointwise_arm(
+            Int(py=x_addr), Int(py=y_addr), Int(py=weights_addr),
+            Int(py=eval_x_addr), Int(py=eval_y_addr), params, strs,
+        )
     # the score function each covered lane runs: Cosine under SymmetricTree
     # and Depthwise, NewtonL2 under Lossguide (the policy defaults)
     if grow_code == GBDT_HOST_GROW_LOSSGUIDE:

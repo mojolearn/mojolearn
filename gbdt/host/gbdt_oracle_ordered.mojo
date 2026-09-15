@@ -389,7 +389,13 @@ def _ordered_tree_structure(
     word_offset_of: List[Int],
     shift_of: List[UInt32],
     mask_of: List[UInt32],
+    plain_l2: Bool = False,
 ) raises -> List[_OrdSplit]:
+    """The doc-parallel oblivious searcher's level loop. `fold_count > 1`
+    with `plain_l2` False is the ordered fold arm (the dynamic cosine
+    scorer); `fold_count == 1` with `plain_l2` True is the single-task arm
+    the pointwise lane runs (`find_optimal_split_single_fold_kernel` with
+    `TL2ScoreCalcer` at meta exponent 1, `pointwise_scores.mojo:809-950`)."""
     var doc_count = len(doc_ids)
     var max_parts = 1 << (fold_bits + max_depth)
     var stripe = 1 << Int(ceil(log2(Float32(fold_count))))
@@ -551,6 +557,32 @@ def _ordered_tree_structure(
                         if i + tid >= hist_line:
                             break
                         var b = i + tid
+                        if plain_l2:
+                            # `TL2ScoreCalcer`: Score = 0, per leaf both
+                            # sides' `(-sum * sum) / (weight + lambda)` when
+                            # the weight exceeds 1e-20, no normalization
+                            var l2score = Float32(0.0)
+                            for leaf in range(part_count):
+                                var pw = s.part_stats[3 * leaf]
+                                var psum = s.part_stats[3 * leaf + 1]
+                                var hb = 2 * b + hist_line * leaf * 2
+                                var wl = hp.hist[hb]
+                                var sl = hp.hist[hb + 1]
+                                var wr = max(pw - wl, Float32(0.0))
+                                var sr = psum - sl
+                                if wl > Float32(1e-20):
+                                    l2score += (-sl * sl) / (wl + l2)
+                                if wr > Float32(1e-20):
+                                    l2score += (-sr * sr) / (wr + l2)
+                            l2score *= Float32(1.0)
+                            var l2gain = l2score - score_before
+                            l2gain *= Float32(1.0)
+                            if l2gain < th_gain:
+                                th_score = l2score
+                                th_gain = l2gain
+                                th_index = b
+                            i += GBDT_ORD_SCORE_BLOCK * blocks
+                            continue
                         var score = Float32(0.0)
                         var denum_sqr = Float32(1e-20)
                         var current = 2 * b

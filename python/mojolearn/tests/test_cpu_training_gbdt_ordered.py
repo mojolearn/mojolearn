@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPU training for the gbdt-ordered-rmse and gbdt-feature-freq lanes
-(lane/cpu-training-gbdt-ordered, 2026-09-15), checked from SOURCE so it runs
+"""CPU training for the gbdt-ordered-rmse, gbdt-feature-freq and
+gbdt-pointwise-l2-bayesian-eval lanes (lane/cpu-training-gbdt-ordered,
+2026-09-15), checked from SOURCE so it runs
 on a box with nothing built, plus a runtime check that runs only where the
 gbdt host binding is built and the package took the CPU-only path.
 
@@ -41,6 +42,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 ORDERED = "gbdt/host/gbdt_oracle_ordered.mojo"
 FEATURE_FREQ = "gbdt/host/gbdt_oracle_feature_freq.mojo"
+POINTWISE = "gbdt/host/gbdt_oracle_pointwise.mojo"
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 REUSED_HOST_MODULES = (
     "checks/fixed_point.mojo",
@@ -50,6 +52,8 @@ REUSED_HOST_MODULES = (
     "gbdt/grid_creator/binarization.mojo",
     "gbdt/gpu_data/compressed_index_builder.mojo",
     "gbdt/gpu_data/feature_blocks.mojo",
+    "gbdt/gpu_util/kernel/random_gen.mojo",
+    "gbdt/overfitting_detector/overfitting_detector.mojo",
 )
 
 
@@ -59,10 +63,10 @@ def _read(rel):
 
 def test_manifest_covers_both_lanes():
     fam = host_surface.family("gbdt")
-    for lane in ("gbdt-ordered-rmse", "gbdt-feature-freq"):
+    for lane in ("gbdt-ordered-rmse", "gbdt-feature-freq", "gbdt-pointwise-l2-bayesian-eval"):
         assert lane in fam["training_lanes"], lane
         assert lane in host_surface.covered_lanes(), lane
-    for rel in (ORDERED, FEATURE_FREQ):
+    for rel in (ORDERED, FEATURE_FREQ, POINTWISE):
         assert rel in fam["host_modules"] and (ROOT / rel).is_file(), rel
     for name in ("gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq"):
         assert name in fam["exports"], name
@@ -84,7 +88,7 @@ def test_binding_registers_and_refuses_weights_by_name():
 
 
 def test_oracles_import_no_gpu_module():
-    for rel in (ORDERED, FEATURE_FREQ):
+    for rel in (ORDERED, FEATURE_FREQ, POINTWISE):
         text = _read(rel)
         assert not GPU_IMPORTS.search(text), f"{rel} imports a GPU module"
         assert "DeviceContext" not in "".join(re.findall(r"^\s*from .*$", text, re.M)), rel
@@ -122,15 +126,35 @@ def test_feature_freq_oracle_spells_the_bit_carrying_constructs():
     assert "if blocks[b].policy == POLICY_BINARY:" in text
 
 
+def test_pointwise_oracle_spells_the_bit_carrying_constructs():
+    text = _read(POINTWISE)
+    assert "var tmp = -identical_log(draw[0] + Float32(1e-20))" in text, "the Bayesian draw"
+    assert "bw = identical_pow(tmp, bagging_temperature)" in text
+    assert "i += boot_blocks * GBDT_PW_BOOT_BLOCK" in text, "the bootstrap stride"
+    assert "var starting_approx = -portable_log64(1.0 / best_probability - 1.0)" in text
+    assert "var best_probability = Float64(Float32(target_sum / summary_weight))" in text
+    assert "1, 0, scale, l2_leaf_reg, feat_offset, feat_shift, feat_mask,\n            True," in text, (
+        "the single-task arm with the plain L2 scorer")
+    assert "cursor[row] = identical_mul_add(estimated[leaf], learning_rate, cursor[row])" in text
+    assert "if detector.is_need_stop():" in text and "model_leaves.resize(" in text
+    ordered = _read(ORDERED)
+    assert "l2score += (-sl * sl) / (wl + l2)" in ordered, "TL2ScoreCalcer's leaf score"
+    src = _read(host_surface.binding_source("gbdt"))
+    assert "return _gbdt_fit_pointwise_arm(" in src
+    for what in ('"a fit without sample_weight"', '"a fit without eval_set"',
+                 "(only L2)", "(only Bayesian)", '"boost_from_average other than True"'):
+        assert what in src, f"no by-name refusal for {what}"
+
+
 def test_sabotage_reaches_both_oracles():
-    for rel in (ORDERED, FEATURE_FREQ):
+    for rel in (ORDERED, FEATURE_FREQ, POINTWISE):
         text = _read(rel)
         assert "comptime if GBDT_ORACLE_HOST_SABOTAGE:" in text, rel
 
 
 def test_workflow_triggers_on_both_oracles():
     text = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in (ORDERED, FEATURE_FREQ):
+    for rel in (ORDERED, FEATURE_FREQ, POINTWISE):
         assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 
 
@@ -183,6 +207,26 @@ def test_ordered_and_feature_freq_fit_on_the_host_when_built():
         assert "no CPU implementation of" in str(exc), str(exc)
     else:
         raise AssertionError("a weighted FeatureFreq fit did not refuse on the host binding")
+
+    # the pointwise eval arm, and its by-name refusal without weights
+    yc = (x[:, 0] > 0).astype(np.int32)
+    xe = rng.standard_normal((300, 6)).astype(np.float32)
+    ye = (xe[:, 0] > 0).astype(np.int32)
+    wts = rng.uniform(0.5, 1.5, 1200).astype(np.float32)
+    kw = dict(n_estimators=4, max_depth=3, loss="Logloss", score_function="L2",
+              use_pointwise_searcher=True, bootstrap_type="Bayesian", bagging_temperature=0.5,
+              boost_from_average=True, od_type="Iter", od_wait=2, use_best_model=True)
+    outs = []
+    for _ in range(2):
+        g = mojolearn.GradientBoosting(**kw).fit(x, yc, sample_weight=wts, eval_set=(xe, ye))
+        outs.append((g.model_, np.asarray(g.predict(x)).tobytes()))
+    assert outs[0] == outs[1], "two pointwise host fits returned different bytes"
+    try:
+        mojolearn.GradientBoosting(**kw).fit(x, yc, eval_set=(xe, ye))
+    except Exception as exc:
+        assert "no CPU implementation of" in str(exc), str(exc)
+    else:
+        raise AssertionError("an unweighted pointwise fit did not refuse on the host binding")
 
 
 if __name__ == "__main__":
