@@ -6,6 +6,15 @@ old one. It is on `main`; branch names below are on `origin`.
 
 **Andrew's instruction at the time of writing: do NOT start new lanes; let each lane below finish.**
 
+
+
+## 00. OVERRIDES EVERYTHING BELOW: GPU records only for PyPI releases (Andrew, Sep 15 ~10:30 ET)
+- Between releases, rent NO GPU boxes: no RunPod, DigitalOcean or Hot Aisle legs for any lane.
+- Prove on the Apple M4 locally (Metal vs host CPU, one core) and against GPU columns already in the repo.
+- Write anything that needs NVIDIA or AMD bits as OWED to the next release record.
+- At a PyPI release, take ONE record: 1 AMD, 1 NVIDIA, 1 Apple column. No second AMD model, no extra NVIDIA architecture, no two-device columns, no full re-record unless Andrew asks.
+- The box and leg rules in section 3 apply only to that release record.
+
 ## 0. First ten minutes for the new orchestrator session
 
 1. Read this whole file. Then read `docs/lanes/FANOUT_RULES_2026-09-15.md`. Every lane agent must also
@@ -94,7 +103,7 @@ Status is as of 2026-09-15 09:20 ET. Each lane was told to push WIP with `[skip 
 `docs/lanes/LANE_STATUS_<branch with dashes>.md` on its branch. **Read that file first if it exists; it
 supersedes the status line here.**
 
-### L1. record2: the next full identity record
+### L1. record2: the next full identity record (STOPPED Sep 15 ~10:30 ET by Andrew's release-only rule: finish in-flight legs, commit partial, do not switch the gate; do NOT restart)
 - **Branch:** `lane/identity-record-next`. No commits yet at writing. Legs were running from worktrees
   `wt-legs-R` and `wt-apple-R`; leg dirs `bench/results/e1g/2026-09-15_*-rec2-*` there are untracked. The
   lane was told to copy them to `~/mojolearn-evidence/record2/`.

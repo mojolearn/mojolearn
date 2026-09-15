@@ -1,5 +1,13 @@
 # Fan-out rules, Sep 14 2026 evening (read fully before doing anything)
 
+## 00. OVERRIDES EVERYTHING BELOW: GPU records only for PyPI releases (Andrew, Sep 15 ~10:30 ET)
+- Between releases, rent NO GPU boxes: no RunPod, DigitalOcean or Hot Aisle legs for any lane.
+- Prove on the Apple M4 locally (Metal vs host CPU, one core) and against GPU columns already in the repo.
+- Write anything that needs NVIDIA or AMD bits as OWED to the next release record.
+- At a PyPI release, take ONE record: 1 AMD, 1 NVIDIA, 1 Apple column. No second AMD model, no extra NVIDIA architecture, no two-device columns, no full re-record unless Andrew asks.
+- The box and leg rules in section 3 apply only to that release record.
+
+
 ## 0. Round 2 updates (Sep 14 ~20:45 ET)
 - Main has moved a lot since launch: GBDT and ARIMA CPU training, IVFIndex and Embedding exposed, and multi-GPU drivers for forest pool, GaussianMixture, resampling, HDBSCAN, Cholesky, KernelRidge, Nystroem and RBFSampler. Always fetch first.
 - tools/identity_break.py no longer has a single owner. Anyone may add lanes. Merge origin/main right before every push, and keep both sides of lane-list conflicts.
