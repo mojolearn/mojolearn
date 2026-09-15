@@ -42,8 +42,13 @@ class Skipped(Exception):
     pass
 
 
+#: True inside `main` (the module run), where a skip is reported by this file
+#: rather than by pytest, even when pytest is importable.
+_MODULE_RUN = False
+
+
 def _skip(why):
-    if pytest is not None:
+    if pytest is not None and not _MODULE_RUN:
         pytest.skip(why)
     raise Skipped(why)
 
@@ -346,6 +351,8 @@ _NO_TOK = ("test_user_supplied_gpt2_files", "test_refuses_no_vocabulary_by_name"
 
 
 def main(argv=None):
+    global _MODULE_RUN
+    _MODULE_RUN = True
     out = sys.stdout
     try:
         tok = GPT2Tokenizer._synthetic()
