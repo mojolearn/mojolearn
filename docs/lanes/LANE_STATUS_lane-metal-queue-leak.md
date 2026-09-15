@@ -97,7 +97,8 @@ process alive); 654 to 692 at 18:27, of which `VTDecoderXPCService` held 632 to
 
 ## Phase 2 protocol, for a session with none of this context
 
-Run these in order on the clean GPU. Everything is macOS specific. `$REPO` is
+Run these in order on a quiet GPU, meaning no other Metal job is running. A
+reboot is not required, here or anywhere below. Everything is macOS specific. `$REPO` is
 the shared checkout `/Users/andrewhendel/CascadeProjects/mojolearn`; never
 build, commit or switch branches there. Work in a worktree of this branch,
 `lane/metal-queue-leak`. One GPU job at a time: wrap every GPU command in
@@ -105,9 +106,11 @@ build, commit or switch branches there. Work in a worktree of this branch,
 or, if that helper is gone, run one `nice -n 19` process at a time after
 `pgrep -fl mojo` shows no other GPU job.
 
-**Step 0, fresh boot floor.** `ioclasscount AGXCommandQueue`, with no GPU job
-running. Expect roughly 35 to 40. Write it down; every later number is a delta
-from it.
+**Step 0, floor (optional, no reboot required).** `ioclasscount AGXCommandQueue`
+with no GPU job running. Expect roughly 35 to 41. Write it down; every later
+number is a delta from it. A reboot is NOT a precondition for any step here:
+queues are released when their process exits, so the floor returns on its own
+once no accumulating process is alive.
 
 **Step 1, health check (do this first, it is also the 20x regression test).**
 
