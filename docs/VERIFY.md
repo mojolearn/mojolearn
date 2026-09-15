@@ -1,17 +1,163 @@
-# Verify an IDENTICAL build
+# Verify the identity claims on your own machine
 
-`verify` runs one pinned k-means fixture, captures its ordered identity-trace
-card, and compares it with a reference card shipped in the installation.
+mojolearn claims three things under the IDENTICAL tier: the same fit gives
+the same bits on Apple, NVIDIA, AMD and CPU; a row's answer does not depend
+on which other rows were in the call (batch invariance); and a model trained
+on a GPU predicts the same bits wherever it is loaded. One command checks
+all three on the machine you installed on.
+
+```sh
+pip install mojolearn
+python -m mojolearn verify --all
+```
+
+No repository, no dataset, no network and no scikit-learn is needed. The
+command selects the IDENTICAL tier itself when `MOJOLEARN_NUMERIC_MODE` is
+unset; a tier you set explicitly is respected, and a FAST process is refused
+(exit 3).
+
+## What `verify --all` runs
+
+The lanes of `tools/identity_break.py`, the harness every committed record
+was written with. The wheel carries a byte copy of it
+(`mojolearn/_identity_break.py`), and the command imports it and calls its
+own fixtures, lanes and hash functions, so a hash printed here is the hash
+the harness would record on the same machine.
+`python/mojolearn/tests/test_verify_all.py` runs both on one machine and
+requires equal values.
+
+- **Fixtures** are generated from fixed seeds inside the package: nine kinds
+  (base, ties, hashed, wide, denormal, denormal_ftz, dupes, odd, negative),
+  20,000 rows by 16 columns (odd: 12,345 by 17), plus held-out rows from a
+  second seed. Their hashes are checked against the record before any fit;
+  a machine that draws different bytes stops with exit 4 rather than
+  reporting divergences that are not arithmetic.
+- **On a GPU install** every lane runs (one per public estimator, plus one
+  per constructor value that selects a different numeric path, the linalg
+  and metrics functions, and the multi-GPU drivers on one device).
+- **On a CPU-only install** the public CPU reference lanes run
+  (`host_surface.public_reference_lanes()`: gemm-pinned, kde, ols, ridge,
+  knn, svc, pca, cholesky), fitted inside the verifier's reference scope.
+- **Portable models** run on every install: small models trained on a GPU
+  and saved, shipped in `mojolearn/verify_reference/models/`. Their file
+  bytes must equal the recorded model hash, and the loaded model's answers
+  on the held-out rows, whole, row by row and split, must equal the recorded
+  GPU answers.
+
+Every cell (a lane on a fixture) has four parts:
+
+| part | question |
+|---|---|
+| train | does the fit read back the recorded bits? |
+| infer | does the fitted model answer held-out rows with the recorded bits? |
+| model | are the saved file's bytes the recorded bytes, and does the reloaded file answer like the model in memory? |
+| batch | are the held-out answers the same whole, one row at a time, in an uneven split and by prefix, and equal to the recorded bits? |
+
+Each part reads one state.
+
+| state | meaning |
+|---|---|
+| IDENTICAL | equal to the reference hash |
+| DIVERGENT | different from it, or this machine disagreed with itself between repeats, or batch invariance failed here |
+| OWED | no committed record carries this part yet, or the record's own columns disagree at one commit; not a pass |
+| REFUSED | the lane or probe raised; the sentence is printed (for example a function with no CPU implementation, refused by name) |
+| N/A | the estimator has no such output (a transductive clusterer has no held-out answer) |
+
+The command prints a table per family and a verdict.
+
+## Flags
+
+| flag | effect |
+|---|---|
+| `--all` | every lane this install runs, on every fixture |
+| `--quick` | one lane per family on the base fixture |
+| `--full` | the same as `--all`, spelled out |
+| `--lanes a,b` | only these lanes |
+| `--fixtures a,b` | only these fixtures |
+| `--repeats N` | fits per cell (default 1); two or more also catch a cell that moves on this machine |
+| `--no-models` | skip the portable models |
+| `--json` | one JSON report on stdout, progress on stderr |
+| `--reference-table PATH` | compare against another table |
+
+## Exit codes
+
+| exit | meaning |
+|---|---|
+| 0 | `VERIFIED`: no part DIVERGENT and at least one IDENTICAL (OWED and REFUSED parts are counted, not passed) |
+| 1 | `MISMATCH`: at least one part DIVERGENT |
+| 2 | invalid usage |
+| 3 | refused: the process loaded a tier other than IDENTICAL |
+| 4 | cannot run: the import raised, the fixtures differ, or every judged part refused |
+| 5 | no reference: no table in this install, or every part OWED |
+
+## What a local run proves, and what it does not
+
+A VERIFIED result says that this build, on this device, reproduced the
+committed records' bits on every IDENTICAL part it ran. Because each
+reference hash was recorded on other vendors' hardware (the report names
+which), an IDENTICAL part on your machine joins those columns: your machine
+and the recorded Apple, NVIDIA, AMD and CPU columns give the same bits there.
+
+It does not re-measure the other vendors, cover inputs other than the
+fixtures, cover lanes added after the table was generated (they read OWED),
+or say anything about speed. OWED parts are claims no record backs yet. A
+CPU-only install checks the CPU reference lanes and the portable models,
+not GPU training.
+
+## Sharing a report
+
+```sh
+python -m mojolearn verify --all --json > mojolearn-verify.json
+```
+
+The report carries the mojolearn version, the commit witness of the build,
+the numeric mode, the vendor and device, the CPU model, the platform, Python
+and numpy versions, the sha256 of every loaded binding, the table's sha256,
+and for every cell part its value, its state and the reference columns it
+was compared with (record directory, vendor label and commit). Attach it to
+an issue as is.
+
+## Regenerating the reference table (maintainers)
+
+The table is `python/mojolearn/verify_reference/table.json`, generated from
+the committed columns under `bench/results/identity_break/`; no hash in it is
+typed. After a release record lands:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify --all \
+  --emit-reference python/mojolearn/verify_reference/table.json
+```
+
+It admits a column only when it is identical mode, names a commit, ran the
+default fixture size on one device, is not a sabotage, partial, probe or
+smoke run, and its fixture hashes equal the current harness's. Per cell part
+and device class the newest commit wins; a class that differs at an older
+commit is kept as superseded, and classes that differ at the same commit
+leave the part without a reference. `--records DIR` names other record
+directories.
+
+The portable models are saved on a GPU install and kept only when their file
+bytes equal the table's model reference, so a shipped file is byte for byte
+the file every recorded vendor wrote:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify \
+  --emit-models python/mojolearn/verify_reference/models
+```
+
+## The pinned k-means card
+
+`verify` without `--all` runs one pinned k-means fixture, captures its
+ordered identity-trace card, and compares it with a reference card shipped
+in the installation.
 
 ```sh
 MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify
 ```
 
-Use `--json` for automation, `--all` to list every divergent stage, and
-`--keep` to retain a matching generated card. `python -m mojolearn env` shows
-which binaries and mode the process selected without running the GPU.
-
-## Interpreting the result
+Use `--json` for automation, `--all-stages` to list every divergent stage,
+and `--keep` to retain a matching generated card. `python -m mojolearn env`
+shows which binaries and mode the process selected without running the GPU.
 
 | Exit | Meaning |
 |---|---|
@@ -22,11 +168,10 @@ which binaries and mode the process selected without running the GPU.
 | 4 | Could not run or judge: for example no GPU, missing binary, failed fit, or missing comparator. |
 | 5 | No usable reference card is installed. |
 
-A green local result proves only that this build and device reproduced this
-reference fixture at its recorded checkpoints. It does not certify arbitrary
-inputs, untraced work, another device, or the whole library. Cross-vendor
-certification additionally requires completed hardware legs and provenance;
-see [the support matrix](../SUPPORT_MATRIX.md).
+A green card result proves only that this build and device reproduced this
+reference fixture at its recorded checkpoints. Cross-vendor certification
+additionally requires completed hardware legs and provenance; see
+[the support matrix](../SUPPORT_MATRIX.md).
 
 The fixture uses exactly representable FP32 inputs and exercises the pinned
 k-means accumulation path. Check its input hashes without a GPU:
@@ -39,9 +184,9 @@ The repository uses `tools/identity_trace_diff.py` as its one card comparator.
 It aligns stage tags before comparing dtype, element count, and raw-bit hash,
 so structural and numerical divergences remain distinguishable.
 
-## Maintainer reference workflow
+### Maintainer card workflow
 
-Never replace a reference from one machine alone.
+Never replace a reference card from one machine alone.
 
 On the producing device:
 

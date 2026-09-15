@@ -345,6 +345,23 @@ nominations in a public issue, and the succession steps for a sole maintainer
 steps, rotate credentials, publish open blockers) are written down. The code
 is Apache-2.0.
 
+### Check the claims on your machine
+
+```sh
+pip install mojolearn
+python -m mojolearn verify --all        # or --quick, one lane per family
+```
+
+This runs the identity lanes the committed records were written with, on
+fixtures generated inside the package, and compares every train, infer,
+saved-model and batch part with the reference hashes the Apple, NVIDIA, AMD
+and CPU records carry, shipped in the wheel. On a CPU-only install it runs
+the CPU reference lanes and loads small GPU-trained models, which must
+answer with the recorded GPU bits. Each part reads IDENTICAL, DIVERGENT,
+OWED (no record yet) or REFUSED; `--json` writes a report to share.
+[docs/VERIFY.md](docs/VERIFY.md) says what a local run proves and what it
+does not.
+
 You can verify a certificate without trusting the maintainer. On any
 supported GPU, `MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify`
 runs a pinned fixture, captures its stage-level identity card and compares it

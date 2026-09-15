@@ -10,6 +10,18 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- New `python -m mojolearn verify --all` (`--quick`, `--full`, `--lanes`, `--fixtures`,
+  `--repeats`, `--json`): runs the identity_break lanes from the installed package (the
+  wheel's byte copy of `tools/identity_break.py`, fixtures generated from its seeds) and
+  compares every train, infer, model and batch part with
+  `mojolearn/verify_reference/table.json`, a table generated from the committed records
+  with each hash's record directory and commit, plus small GPU-trained saved models whose
+  bytes and loaded answers must equal the recorded ones. Parts read IDENTICAL, DIVERGENT,
+  OWED or REFUSED; exit codes are `verify`'s. On a CPU-only install it runs the public CPU
+  reference lanes and the portable models. The card verifier's list-every-stage flag is now
+  `--all-stages`. Maintainers regenerate the table with `verify --all --emit-reference` and
+  the models with `verify --emit-models` (docs/VERIFY.md).
+
 - Public CPU inference for saved ARIMA models, UMAP embeddings and the whitened full-SVD PCA.
   `ARIMA.save`/`load` and `UMAP.save`/`load` are new; `mojolearn.host_model(path)`, or the
   classes on a CPU-only install, predict (in sample and out of sample), forecast and read the
@@ -92,10 +104,12 @@ Linux legs are OWED before this heading reads published.
   binding and the GBDT host binding as run lengths, and every loss this implementation trains
   refuses it BY NAME there, because no querywise loss is implemented yet. `subgroup_id` and `pairs`
   are refused by name in Python. A fit without them sends the same parameter layout as before.
-- Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
-  namely the byte LM's, the forest's, the tokenizer's and the twelve routed families (core,
-  linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp, arima), fifteen in
-  all. 0.8.5 carried the byte LM's alone. The
+- The host (CPU) bindings `python/mojolearn/host_surface.py` marks `ships_in_wheel` ship in
+  both wheels under `mojolearn/host/`: ten families, byte_lm, forest, tokenizer, neural, core,
+  linalg, estimators, metrics, svm and forecast. The other seventeen families the manifest
+  declares (preprocessing, tsa, solver, trees, rf, gp, kernel_methods, mixture, hdbscan, gbdt,
+  training, resample, mamba, arima, embedding, ivf, transformer) are source reference builds
+  for the verifier and do not ship. 0.8.5 carried the byte LM's alone. The
   list is read from `python/mojolearn/host_surface.py` by the two wheel builders, the Linux
   packer, both smokes and the Linux admission; `packaging/check_ext_lists.py` (and its
   `--host` mode, which needs no built binary) fails any of them that carries a host list of

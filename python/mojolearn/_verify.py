@@ -1127,7 +1127,7 @@ def cmd_verify(args):
     # human path prints it verbatim, because the first diverging stage is
     # the whole value of a mismatch.
     argv = [ref_path, card, "--labels", "REFERENCE,THIS", "--no-verify-dumps"]
-    if args.all:
+    if getattr(args, "all_stages", False):
         argv.append("--all")
     if args.json:
         import io
