@@ -284,10 +284,18 @@ def build_arm(library, loss, device, data):
 
     elif library == "xgboost":
         import xgboost
+        # XGBoost REFUSES a qid that is not sorted non-decreasing
+        # (`data.cc:622`), and Istella-S numbers its queries in neither file
+        # in ascending order (the test split opens at qid 032047). Ours and
+        # CatBoost ask only that a query's rows be CONSECUTIVE. So each query
+        # is relabeled by its order of appearance: the same partition of the
+        # same rows in the same order, with names XGBoost accepts. No row
+        # moves, so no arm trains on different data.
+        qid_x = np.repeat(np.arange(sizes.size, dtype=np.uint32), sizes)
 
         def fit(n):
             m = xgboost.XGBRanker(n_estimators=n, **params)
-            m.fit(x, y, qid=qid)
+            m.fit(x, y, qid=qid_x)
             return m
 
         def predict(m):
