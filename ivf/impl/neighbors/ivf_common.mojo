@@ -41,6 +41,7 @@ on every machine, so their `cub::BlockScan` and this loop are the same
 function and there is nothing for `IDENTICAL` to pin.
 """
 
+from checks.numerics import ftz, identical_sqrt
 from cluster.impl.kmeans_params import (
     METRIC_L2_EXPANDED,
     METRIC_L2_SQRT_EXPANDED,
@@ -156,27 +157,49 @@ def postprocess_distances_is_identity(metric: Int) raises -> Bool:
     `ivf_common.cuh:175-...` switches on the metric and, for `L2Expanded`
     at `scaling_factor == 1.0` with `in == out` and no type change, does
     NOTHING -- `needs_cast` is false, `needs_copy` is false, and the
-    `scaling_factor != 1.0` arm is not taken. Their `search_impl` only
-    calls it at all on the `!manage_local_topk` path (`:295-298`), which is
-    the `k > warpsort::kMaxCapacity` path this implementation does not have.
+    `scaling_factor != 1.0` arm is not taken. **DEVIATION 1791.** For
+    `L2SqrtExpanded` it maps `raft::sqrt_op` over the distances
+    (`:206-221`). It raises rather than returning `False` for anything
+    else, because a `False` here would be read as "the root arm ran" and no
+    other arm exists in this tree.
 
-    So on the two metrics this implementation carries it is the identity, and this
-    function says so with the citation rather than a comment nobody
-    reads. **DEVIATION 1791.** It raises rather than returning `False` for
-    anything else, because a `False` here would be read as "some other arm
-    ran" and no other arm exists in this tree.
-
-    The square root that `L2SqrtExpanded` wants is NOT theirs to do here:
-    it is applied at the distance seam, inside
-    `neighbors/checks/pinned_distance_tile.mojo` under `IDENTICAL` and
-    `core/expand_distances.mojo` under `FAST`, through `identical_sqrt`
-    (DEVIATION 550). That is where the k-NN lane put it and this lane calls
-    those kernels rather than re-spelling either.
+    CORRECTED 2026-09-14. This used to answer `True` for both metrics and
+    say the root was taken at the distance seam, inside the pinned tile
+    (and `core/expand_distances.mojo` under `FAST`), where the k-NN lane
+    takes it. That placement roots every candidate BEFORE selection, which
+    their IVF search does not do: the coarse step is squared
+    (`ivf_flat_search.cuh:110-162`) and the scan roots a distance only as
+    its local top-k stores it (`interleaved_scan_impl.cuh:204`,
+    `tag_post_process_sqrt`). It also sat next to the defect that made
+    L2SqrtExpanded return zeros: the norms were rooted as well. The search
+    now scores and selects on squared distances under both metrics and
+    calls `postprocess_distances` on the `k` it kept.
     """
-    if metric == METRIC_L2_EXPANDED or metric == METRIC_L2_SQRT_EXPANDED:
+    if metric == METRIC_L2_EXPANDED:
         return True
+    if metric == METRIC_L2_SQRT_EXPANDED:
+        return False
     raise Error(
         "postprocess_distances: metric "
         + String(metric)
         + " is not one this implementation carries; there is no arm to run."
     )
+
+
+def postprocess_distances(mut dist: List[Float32], metric: Int) raises:
+    """`ivf_common.cuh:206-221`'s `L2SqrtExpanded` arm, `raft::sqrt_op` over
+    every selected distance, in place.
+
+    On the host, over the `k` distances already downloaded, because the
+    selection and the order are fixed by then and the root is elementwise:
+    no position, block width or device reaches it. The root is
+    `identical_sqrt` (IDENTITY_PATHS row 10, DEVIATION 550), the same
+    correctly rounded function the pinned tile calls under `IDENTICAL`, so
+    the value is the one the tile's `is_sqrt` arm would have written for
+    that cell. The squared distances are already clamped at zero by the
+    tile, so there is no negative input. A no-op on `L2Expanded`.
+    """
+    if postprocess_distances_is_identity(metric):
+        return
+    for i in range(len(dist)):
+        dist[i] = ftz(identical_sqrt(dist[i]))

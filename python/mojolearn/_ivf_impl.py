@@ -15,19 +15,23 @@ one device call under one identity card (policy 3); the index does not
 cross, so the harness's model column is `n/a:no-save`. `n_probes` has no
 default (policy 1) and `n_probes > n_lists` raises on the Mojo host rather
 than clamping (policy 2). `metric='sqeuclidean'` is cuVS's `L2Expanded`
-(squared distances) and `'euclidean'` its `L2SqrtExpanded`; the set and
-the order are the same either way (policy 4).
+(squared distances) and `'euclidean'` its `L2SqrtExpanded`. On one index
+the ids and their order are the same under both and the distances differ by
+the root; a build under each metric trains the k-means quantizer on a
+different reduction, so at `n_probes < n_lists` the answers can differ
+(policy 4, corrected 2026-09-14).
 
-`metric='euclidean'` (L2SqrtExpanded) IS REFUSED AT THIS DOOR. Found
-2026-09-14 while writing `tests/test_ivf_surface.py`: on the Apple M4 a
-search under L2SqrtExpanded with every list probed returned distances of
-exactly 0.0 for all 32 queries and ids that are not the nearest rows, while
-L2Expanded on the same fit returned brute force's neighbor sets.
-`ivf/checks/ivf_check.mojo` never searches under L2SqrtExpanded (it only
-parses the name), so the path is ungated. Both halves pass `take_sqrt` to
-`compute_row_norms` and then to the pinned distance tile, a likely double
-root; that is a reading, not a diagnosis. `ivf/NOT_IMPLEMENTED.tsv` carries
-the row until a check searches the metric on three columns.
+`metric='euclidean'` (L2SqrtExpanded) WAS REFUSED AT THIS DOOR from its
+exposure until the fix on 2026-09-14 (fix/ivf-l2sqrt). On the Apple M4 it
+returned 0.0 for every distance and ids that were not the nearest rows. The
+cause: the build and the search filled the row-norm launch's sqrt flag from
+`metric_is_sqrt(metric)`, so every norm was rooted and the expanded distance
+`||q|| + ||y|| - 2 q.y` clamped to zero. The norms are squared under both
+metrics now, the coarse step and the candidates are scored and selected
+squared, and the root is taken over the `k` selected distances
+(`ivf/impl/neighbors/ivf_common.mojo::postprocess_distances`), which is
+where cuVS takes it. `ivf/checks/ivf_check.mojo::check_l2_sqrt_is_the_root_of_l2`
+searches the metric; the identity_break lane is `ivf-euclidean`.
 """
 from . import _backend
 from ._buffer import addr, addr_ro, as_f32_c, empty
@@ -37,13 +41,14 @@ _MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
 
 METRIC_L2_EXPANDED = 0
 METRIC_L2_SQRT_EXPANDED = 1
-_METRICS = {"sqeuclidean": METRIC_L2_EXPANDED, "l2_expanded": METRIC_L2_EXPANDED}
-_SQRT_NAMES = ("euclidean", "l2_sqrt_expanded", "l2")
-_SQRT_REFUSAL = (
-    "mojolearn IVFIndex: metric='euclidean' (L2SqrtExpanded) is REFUSED. On the Apple M4 "
-    "its search returned all-zero distances and wrong ids (2026-09-14) and no check searches "
-    "that metric; use 'sqeuclidean' and take the root of the distances. See _ivf_impl.py"
-)
+_METRICS = {
+    "sqeuclidean": METRIC_L2_EXPANDED,
+    "l2_expanded": METRIC_L2_EXPANDED,
+    "euclidean": METRIC_L2_SQRT_EXPANDED,
+    "l2_sqrt_expanded": METRIC_L2_SQRT_EXPANDED,
+    "l2": METRIC_L2_SQRT_EXPANDED,
+}
+_METRIC_CODES = (METRIC_L2_EXPANDED, METRIC_L2_SQRT_EXPANDED)
 
 class IVFIndex(NumericModeMixin):
     """cuVS `ivf_flat` build plus search in one call.
@@ -102,15 +107,12 @@ class IVFIndex(NumericModeMixin):
             v = getattr(self, name)
             if isinstance(v, bool) or not isinstance(v, int):
                 raise TypeError(f"mojolearn IVFIndex: {name} must be an int, got {type(v).__name__}")
-        if (isinstance(self.metric, str) and self.metric in _SQRT_NAMES) or (
-                not isinstance(self.metric, (str, bool)) and self.metric == METRIC_L2_SQRT_EXPANDED):
-            raise ValueError(_SQRT_REFUSAL)
         if isinstance(self.metric, str):
             if self.metric not in _METRICS:
                 raise ValueError(f"mojolearn IVFIndex: metric must be one of {sorted(_METRICS)}, got {self.metric!r}")
             metric = _METRICS[self.metric]
-        elif isinstance(self.metric, bool) or self.metric != METRIC_L2_EXPANDED:
-            raise ValueError(f"mojolearn IVFIndex: the one metric code is {METRIC_L2_EXPANDED} (L2Expanded), got {self.metric!r}")
+        elif isinstance(self.metric, bool) or self.metric not in _METRIC_CODES:
+            raise ValueError(f"mojolearn IVFIndex: the metric codes are {METRIC_L2_EXPANDED} (L2Expanded) and {METRIC_L2_SQRT_EXPANDED} (L2SqrtExpanded), got {self.metric!r}")
         else:
             metric = int(self.metric)
         n, k = self.X_fit_.shape[0], int(self.n_neighbors)

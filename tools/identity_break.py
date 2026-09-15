@@ -126,14 +126,14 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whole-batch answer (one ulp) and stamps `batch_sabotage: true`
             in the JSON.
 
-THE LANES, 172 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
+THE LANES, 173 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
 tokenizer the same day when those two got their doors, 16 `par-*` lanes that
 evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `ivf-euclidean` when its metric stopped being refused). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -187,6 +187,8 @@ sampler, a solver, a metric, a reduction).
       par-forest-pool par-gmm par-resample par-hdbscan
     2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
       ivf embedding
+    2026-09-14 night (fix/ivf-l2sqrt, metric='euclidean' no longer refused)
+      ivf-euclidean
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -2224,6 +2226,21 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
 
 
+@lane("ivf-euclidean")
+def _(ml, X, yc, yr, Xh=None):
+    """IVFIndex with metric='euclidean' (cuVS L2SqrtExpanded), the `ivf`
+    lane's shape otherwise. A different quantizer (k-means under the rooted
+    reduction, so a different inertia and possibly a different iteration
+    count) and the root of the k selected squared distances
+    (ivf_common.mojo::postprocess_distances). Refused at the door until
+    2026-09-14: every norm was rooted and the search returned zeros
+    (fix/ivf-l2sqrt, ivf_check's check_l2_sqrt_is_the_root_of_l2)."""
+    m = ml.IVFIndex(n_lists=16, n_probes=4, n_neighbors=8, metric="euclidean", random_state=3).fit(X[:4096])
+    d, i = m.search(X[4096:4160])
+    return _fit(dict(dist=_h(d), idx=_h(i), cand=_h(m.n_candidates_)),
+                m, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
+
+
 @lane("embedding")
 def _(ml, X, yc, yr, Xh=None):
     """Embedding (python/mojolearn/embedding.py), profile
@@ -3466,7 +3483,7 @@ def _batch_embedding(ml, e, Xh):
     return [_BatchRows("forward", idx, lambda r: (np.asarray(e.forward(np.ascontiguousarray(idh[r[:, 0]]))),))]
 
 
-_batch_decl(_batch_ivf, "ivf")
+_batch_decl(_batch_ivf, "ivf", "ivf-euclidean")
 _batch_decl(_batch_embedding, "embedding")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
 _batch_decl(_batch_training_primitives, "training-primitives")

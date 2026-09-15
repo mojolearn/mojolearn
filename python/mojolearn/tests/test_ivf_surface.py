@@ -50,12 +50,37 @@ def arm_search(rep):
         rep.report_only("SEARCH", same, "two builds and searches")
 
 
+def arm_euclidean(rep):
+    """metric='euclidean' (L2SqrtExpanded), refused at the door until
+    fix/ivf-l2sqrt (2026-09-14): on the M4 it returned 0.0 for every distance
+    and ids that were not the nearest rows. With every list probed the answer
+    does not depend on the quantizer, so it must be the squared metric's ids
+    and the root of its distances."""
+    x, q = _data()
+    sd, si = (np.asarray(a) for a in IVFIndex(n_lists=8, n_probes=8, n_neighbors=5, random_state=1).fit(x).search(q))
+    m = IVFIndex(n_lists=8, n_probes=8, n_neighbors=5, metric="euclidean", random_state=1).fit(x)
+    ed, ei = (np.asarray(a) for a in m.search(q))
+    rep.check("EUCLIDEAN", ed.shape == (32, 5) and ed.dtype == np.float32 and ei.dtype == np.int32, "distances float32 and indices int32 (m, k)", (ed.shape, ed.dtype, ei.dtype))
+    rep.check("EUCLIDEAN", int(np.count_nonzero(ed == 0.0)) == 0, "no distance is 0.0 (the rooted-norm defect returned all zeros)", int(np.count_nonzero(ed == 0.0)))
+    brute_d2 = ((q[:, None, :].astype(np.float64) - x[None, :, :]) ** 2).sum(-1)
+    brute = np.argsort(brute_d2, axis=1, kind="stable")[:, :5]
+    rep.check("EUCLIDEAN", np.array_equal(np.sort(ei, axis=1), np.sort(brute.astype(np.int32), axis=1)), "probing every list returns brute force's neighbor sets")
+    rep.check("EUCLIDEAN", np.allclose(ed, np.sqrt(np.take_along_axis(brute_d2, ei.astype(np.int64), 1)), rtol=1e-4, atol=1e-4), "distances are Euclidean (float64 reference, 1e-4)")
+    rep.check("EUCLIDEAN", np.all(np.diff(ed, axis=1) >= 0), "distances ascend along each query")
+    root = np.sqrt(sd)
+    same = np.array_equal(ei, si) and np.array_equal(ed.view(np.uint32), root.view(np.uint32))
+    if mode() == "identical":
+        rep.check("EUCLIDEAN", same, "ids equal the sqeuclidean search's and every distance is the correctly rounded root of its distance, bit for bit")
+    else:
+        rep.report_only("EUCLIDEAN", same, "ids and rooted distances against the sqeuclidean search")
+    rep.check("EUCLIDEAN", IVFIndex(n_lists=8, n_probes=2, n_neighbors=5, metric=1, random_state=1).fit(x).search(q)[0].shape == (32, 5), "metric code 1 (L2SqrtExpanded) accepted")
+
+
 def arm_refusals(rep):
     x, q = _data()
     rep.raises("REFUSE", ValueError, "metric", "metric='cosine' by name", IVFIndex(n_lists=4, n_probes=1, metric="cosine").fit(x).search, q)
     rep.raises("REFUSE", ValueError, "metric code", "an unknown integer metric code", IVFIndex(n_lists=4, n_probes=1, metric=7).fit(x).search, q)
-    rep.raises("REFUSE", ValueError, "L2SqrtExpanded", "metric='euclidean' refused by name (all-zero distances on the M4, 2026-09-14)", IVFIndex(n_lists=4, n_probes=1, metric="euclidean").fit(x).search, q)
-    rep.raises("REFUSE", ValueError, "L2SqrtExpanded", "metric code 1 refused by name", IVFIndex(n_lists=4, n_probes=1, metric=1).fit(x).search, q)
+    rep.raises("REFUSE", ValueError, "metric codes", "metric code 2 (neither L2 code)", IVFIndex(n_lists=4, n_probes=1, metric=2).fit(x).search, q)
     rep.raises("REFUSE", TypeError, "n_lists", "n_lists as a float", IVFIndex(n_lists=4.0, n_probes=1).fit(x).search, q)
     rep.raises("REFUSE", ValueError, "call fit", "search before fit", IVFIndex(n_lists=4, n_probes=1).search, q)
     rep.raises("REFUSE", ValueError, "features", "queries with another width", IVFIndex(n_lists=4, n_probes=1).fit(x).search, q[:, :4])
@@ -71,7 +96,7 @@ def arm_provenance(rep):
 def main(out=sys.stdout):
     bind_or_exit("_mojolearn_ivf", "build_ivf.sh")
     rep = Report("test_ivf_surface")
-    return run("test_ivf_surface", [("SEARCH", arm_search), ("REFUSE", arm_refusals), ("PROVENANCE", arm_provenance)], rep, out)
+    return run("test_ivf_surface", [("SEARCH", arm_search), ("EUCLIDEAN", arm_euclidean), ("REFUSE", arm_refusals), ("PROVENANCE", arm_provenance)], rep, out)
 
 
 if __name__ == "__main__":

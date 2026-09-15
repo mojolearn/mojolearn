@@ -203,6 +203,22 @@ struct OracleSearchResult(Movable):
     var n_candidates: List[Int32]
 
 
+def _oracle_root(squared: Float32, is_sqrt: Bool) -> Float32:
+    """The root of a SELECTED squared distance, when the metric wants one.
+
+    Both oracles below score and select on the squared distance under
+    either metric and root only what they return, which is where cuVS's
+    IVF search takes it (`interleaved_scan_impl.cuh:204`'s store-time
+    `post_process`, then `ivf_common.cuh:206-221`). Rooting every cell
+    before the selection, as `oracle_expanded_distance(..., True)` does,
+    is the brute-force k-NN placement and orders two squared values that
+    root to one float by index instead of by the square.
+    """
+    if is_sqrt:
+        return ftz(identical_sqrt(squared))
+    return squared
+
+
 def oracle_brute_force(
     index: List[Float32],
     n_index: Int,
@@ -228,13 +244,13 @@ def oracle_brute_force(
         for j in range(n_index):
             row.append(
                 oracle_expanded_distance(
-                    queries, q, index, j, d, qn[q], yn[j], is_sqrt
+                    queries, q, index, j, d, qn[q], yn[j], False
                 )
             )
             ids.append(UInt32(j))
         var sel = oracle_select_k(row, ids, k)
         for s in range(k):
-            out_d.append(row[Int(sel[s])])
+            out_d.append(_oracle_root(row[Int(sel[s])], is_sqrt))
             out_i.append(ids[Int(sel[s])])
         counts.append(Int32(n_index))
     return OracleSearchResult(out_d^, out_i^, counts^)
@@ -282,7 +298,7 @@ def oracle_ivf_search(
         for l in range(n_lists):
             crow.append(
                 oracle_expanded_distance(
-                    queries, q, centers, l, d, qn[q], cn[l], is_sqrt
+                    queries, q, centers, l, d, qn[q], cn[l], False
                 )
             )
             cids.append(UInt32(l))
@@ -348,13 +364,13 @@ def oracle_ivf_search(
             var s = Int(order[c])
             crow2.append(
                 oracle_expanded_distance(
-                    queries, q, list_data, s, d, qn[q], ln[s], is_sqrt
+                    queries, q, list_data, s, d, qn[q], ln[s], False
                 )
             )
             cid2.append(list_indices[s])
         var sel = oracle_select_k(crow2, cid2, k)
         for i in range(k):
-            out_d.append(crow2[Int(sel[i])])
+            out_d.append(_oracle_root(crow2[Int(sel[i])], is_sqrt))
             out_i.append(cid2[Int(sel[i])])
 
     return OracleSearchResult(out_d^, out_i^, counts^)

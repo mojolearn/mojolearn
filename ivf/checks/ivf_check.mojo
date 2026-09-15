@@ -62,6 +62,16 @@ CHECKS, in the order `main` runs them
                                               inside a batch
   check_card_is_emitted                       the sixteen stages, and two
                                               runs record-identical
+  check_l2_sqrt_is_the_root_of_l2             L2SqrtExpanded, SEARCHED: the
+                                              build's centre norms squared,
+                                              the same index searched under
+                                              both metrics giving the same
+                                              ids and the root of the
+                                              squared distances, brute force
+                                              at n_probe == n_lists, the
+                                              oracle at n_probe < n_lists,
+                                              and its own card
+                                              (ivf_check.sqrt.card.*)
 
 SABOTAGES: `ivf/checks/sabotage_layout.mojo` carries five arms and
 `hierarchy/checks/sabotage_tile.mojo::sabotage_distance_tile_kernel` is
@@ -77,13 +87,13 @@ from std.memory import bitcast
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cluster.impl.detail.kmeans_common import metric_is_sqrt
 from cluster.impl.kmeans import predict
 from cluster.impl.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
     KMeansParams,
     METRIC_COSINE_EXPANDED,
     METRIC_L2_EXPANDED,
+    METRIC_L2_SQRT_EXPANDED,
 )
 from core.identity_trace import IdentityTrace, first_divergence, read_trace_lines
 from ivf.checks.ivf_fixture import (
@@ -152,7 +162,13 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_search import (
     ivf_flat_search_traced,
     sort_slots_by_distance_then_index,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_sqrt,
+    numeric_mode_name,
+)
 from neighbors.estimator import knn_search
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 from neighbors.impl.matrix.detail.select_radix import SELECT_BLOCK
@@ -252,7 +268,7 @@ def _plant_index(
     var dc = upload_f32(ctx, centers)
     var dn = ctx.enqueue_create_buffer[DType.float32](n_lists)
     ctx.synchronize()
-    compute_row_norms(ctx, dc, dn, n_lists, dim, metric_is_sqrt(metric))
+    compute_row_norms(ctx, dc, dn, n_lists, dim)
     ctx.synchronize()
     var norms = download_f32(ctx, dn, n_lists)
     _ = dc^
@@ -1167,7 +1183,7 @@ def _device_assignment(
     var dn = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var dmin = ctx.enqueue_create_buffer[DType.float32](n_rows)
     ctx.synchronize()
-    compute_row_norms(ctx, dx, dn, n_rows, dim, False)
+    compute_row_norms(ctx, dx, dn, n_rows, dim)
     ctx.synchronize()
     predict(ctx, dx, dn, dc, dl, dmin, kp, n_rows, dim)
     ctx.synchronize()
@@ -1757,6 +1773,261 @@ def check_card_is_emitted() raises:
 
 
 # =====================================================================
+# L2SqrtExpanded, SEARCHED (2026-09-14)
+# =====================================================================
+
+
+def _root_of(squared: Float32) -> Float32:
+    """The contract's root of one squared distance: `identical_sqrt`
+    (IDENTITY_PATHS row 10, DEVIATION 550), flushed, as
+    `ivf_common.mojo::postprocess_distances` and the pinned tile apply it."""
+    return ftz(identical_sqrt(squared))
+
+
+def _compare_rooted(
+    what: String,
+    got: IvfSearchResult,
+    want_squared_d: List[Float32],
+    want_i: List[UInt32],
+    n_slots: Int,
+) -> String:
+    """Every slot: the index equal and the distance the ROOT of the squared
+    reference, bit for bit. Returns "" or the first differing slot, with
+    the number of differing slots in front."""
+    var moved = 0
+    var first = String("")
+    for i in range(n_slots):
+        var want_d = _root_of(want_squared_d[i])
+        if not _same_bits(got.distances[i], want_d) or (
+            got.indices[i] != want_i[i]
+        ):
+            moved += 1
+            if first == "":
+                first = (
+                    "slot " + String(i) + " L2SqrtExpanded ("
+                    + _hex32(got.distances[i]) + ", "
+                    + String(got.indices[i]) + ") vs root of the squared ("
+                    + _hex32(want_d) + ", " + String(want_i[i]) + ")"
+                )
+    if moved == 0:
+        return String("")
+    return (
+        what + ": " + String(moved) + " of " + String(n_slots)
+        + " slots differ; first: " + first
+    )
+
+
+def check_l2_sqrt_is_the_root_of_l2() raises:
+    """`L2SqrtExpanded` is `L2Expanded` with the selected distances rooted.
+
+    WRITTEN BECAUSE NOTHING SEARCHED THE METRIC. `check_ivf_refusals` only
+    parses the name, and through the Python door on the Apple M4 the metric
+    returned 0.0 for every distance and ids that were not the nearest rows:
+    every norm was rooted (`metric_is_sqrt` fed to the norm launch), so the
+    expanded distance was `||q|| + ||y|| - 2 q.y`, clamped to zero.
+
+    WHAT IT ASSERTS, under `IDENTICAL` (a REPORT under `FAST`, for
+    `check_nprobe_equals_nlists_is_brute_force`'s reasons: the matmul's
+    per-shape k-split and the selector's arrival-order ties):
+
+      (a) the index built under L2SqrtExpanded carries SQUARED centre norms,
+          equal to `oracle_row_norms(centers, take_sqrt=False)`;
+      (b) ONE index (built under L2Expanded) searched under both metrics at
+          n_probes = 2 and n_probes = n_lists: the same ids, the same
+          candidate counts, and every distance the root of the squared
+          one. Same index, so the quantizer cannot hide a difference;
+      (c) the L2SqrtExpanded-BUILT index at n_probe == n_lists against the
+          tiled brute force (squared) with its distances rooted, which is
+          what the Python door's every-list case must return whatever the
+          quantizer did;
+      (d) the L2SqrtExpanded-built index at n_probes = 3 against
+          `oracle_ivf_search(..., is_sqrt=True)`;
+      (e) a card of one L2SqrtExpanded build + search written twice
+          (`ivf_check.sqrt.card.a` / `.b`), record-identical, and its
+          `ivf.out_dist` stage present. It is a separate file so the
+          L2Expanded card `check_card_is_emitted` writes is untouched.
+
+    Each of (b), (c) and (d) FAILS on the rooted-norm code: the distances
+    come back 0.0 and the ids move.
+    """
+    var ctx = DeviceContext()
+    var x = ivf_index_fixture(N_ROWS, DIM, 3)
+    var q = ivf_query_fixture(x, N_ROWS, N_QUERIES, DIM, 3)
+    var failures = List[String]()
+
+    # (a) the build's centre norms are squared.
+    var rt = _build_index(
+        ctx, x, N_ROWS, DIM, N_LISTS, UInt64(7), METRIC_L2_SQRT_EXPANDED
+    )
+    var cn = oracle_row_norms(rt.centers, N_LISTS, DIM, False)
+    var norm_moved = 0
+    for l in range(N_LISTS):
+        if not _same_bits(rt.center_norms[l], cn[l]):
+            norm_moved += 1
+    if norm_moved != 0:
+        failures.append(
+            "(a) " + String(norm_moved) + " of " + String(N_LISTS)
+            + " centre norms of the L2SqrtExpanded build are not the squared"
+            " oracle norms"
+        )
+
+    # (b) one index, both metrics.
+    var sq = _build_index(ctx, x, N_ROWS, DIM, N_LISTS, UInt64(7))
+    var sq_as_rt = IvfFlatIndex(
+        sq.n_lists,
+        sq.dim,
+        sq.n_rows,
+        METRIC_L2_SQRT_EXPANDED,
+        sq.centers.copy(),
+        sq.center_norms.copy(),
+        sq.list_offsets.copy(),
+        sq.list_indices.copy(),
+        sq.list_data.copy(),
+        sq.labels.copy(),
+    )
+    var probe_list: List[Int] = [2, N_LISTS]
+    for pi in range(len(probe_list)):
+        var n_probes = probe_list[pi]
+        var got_sq = _search(ctx, sq, q, N_QUERIES, K, n_probes)
+        var got_rt = _search(ctx, sq_as_rt, q, N_QUERIES, K, n_probes)
+        var msg = _compare_rooted(
+            "(b) one index, n_probes=" + String(n_probes),
+            got_rt, got_sq.distances, got_sq.indices, N_QUERIES * K,
+        )
+        if msg != "":
+            failures.append(msg)
+        for qi in range(N_QUERIES):
+            if got_rt.n_candidates[qi] != got_sq.n_candidates[qi]:
+                failures.append(
+                    "(b) n_probes=" + String(n_probes) + " query "
+                    + String(qi) + " candidate count "
+                    + String(got_rt.n_candidates[qi]) + " vs "
+                    + String(got_sq.n_candidates[qi])
+                )
+                break
+
+    # (c) the L2SqrtExpanded build, every list probed, against brute force.
+    var got_all = _search(ctx, rt, q, N_QUERIES, K, N_LISTS)
+    var brute = _knn_reference(ctx, x, N_ROWS, q, N_QUERIES, DIM, K)
+    var msg_c = _compare_rooted(
+        "(c) L2SqrtExpanded build at n_probe == n_lists vs tiled brute force",
+        got_all, brute.distances, brute.indices, N_QUERIES * K,
+    )
+    if msg_c != "":
+        failures.append(msg_c)
+
+    # (d) the L2SqrtExpanded build against the oracle at n_probes = 3. The
+    # oracle roots what it returns, so it is compared bit for bit directly.
+    var got_3 = _search(ctx, rt, q, N_QUERIES, K, 3)
+    var want_3 = oracle_ivf_search(
+        rt.centers, N_LISTS, rt.list_offsets, rt.list_indices, rt.list_data,
+        N_ROWS, q, N_QUERIES, DIM, K, 3, True,
+    )
+    var moved_3 = 0
+    var first_3 = String("")
+    var zero_d = 0
+    for i in range(N_QUERIES * K):
+        if got_3.distances[i] == Float32(0.0):
+            zero_d += 1
+        if not _same_bits(got_3.distances[i], want_3.distances[i]) or (
+            got_3.indices[i] != want_3.indices[i]
+        ):
+            moved_3 += 1
+            if first_3 == "":
+                first_3 = (
+                    "slot " + String(i) + " device ("
+                    + _hex32(got_3.distances[i]) + ", "
+                    + String(got_3.indices[i]) + ") oracle ("
+                    + _hex32(want_3.distances[i]) + ", "
+                    + String(want_3.indices[i]) + ")"
+                )
+    if moved_3 != 0:
+        failures.append(
+            "(d) n_probes=3 vs oracle_ivf_search(is_sqrt=True): "
+            + String(moved_3) + " of " + String(N_QUERIES * K)
+            + " slots differ; first: " + first_3
+        )
+
+    # (e) the card, a structural assertion in both modes.
+    var paths: List[String] = [
+        String(SCRATCH) + "/ivf_check.sqrt.card.a",
+        String(SCRATCH) + "/ivf_check.sqrt.card.b",
+    ]
+    var cx = ivf_index_fixture(64, DIM, 53)
+    var cq = ivf_query_fixture(cx, 64, 8, DIM, 53)
+    var params = IvfFlatIndexParams.default()
+    params.n_lists = 4
+    params.kmeans_n_iters = 10
+    params.kmeans_trainset_fraction = Float64(1.0)
+    params.metric = METRIC_L2_SQRT_EXPANDED
+    params.seed = UInt64(59)
+    var csp = IvfFlatSearchParams(2)
+    for ci in range(2):
+        var trace = IdentityTrace.to_path(paths[ci])
+        var cindex = ivf_flat_build(ctx, trace, params, cx, 64, DIM)
+        _ = ivf_flat_search_traced(ctx, trace, cindex, csp, cq, 8, 4)
+        _ = cindex^
+    var div = first_divergence(paths[0], paths[1])
+    if div != "":
+        raise Error(
+            "check_l2_sqrt_is_the_root_of_l2: two runs of one L2SqrtExpanded"
+            " build+search produced different cards. First divergence: " + div
+        )
+    var lines = read_trace_lines(paths[0])
+    var has_out = False
+    for i in range(len(lines)):
+        if lines[i].find("\tivf.out_dist\t") >= 0:
+            has_out = True
+    if not has_out:
+        raise Error(
+            "check_l2_sqrt_is_the_root_of_l2: the L2SqrtExpanded card has no"
+            " ivf.out_dist stage"
+        )
+
+    comptime if IDENTICAL:
+        if len(failures) != 0:
+            var joined = String("")
+            for i in range(len(failures)):
+                joined += "\n  " + failures[i]
+            raise Error(
+                "check_l2_sqrt_is_the_root_of_l2 FAILED ("
+                + String(zero_d) + " of " + String(N_QUERIES * K)
+                + " distances at n_probes=3 are exactly 0.0):" + joined
+            )
+        print(
+            "check_l2_sqrt_is_the_root_of_l2 OK [IDENTICAL]: centre norms"
+            " squared; one index under both metrics at n_probes 2 and "
+            + String(N_LISTS)
+            + " gives the same ids and the root of every squared distance; the"
+            " L2SqrtExpanded build matches the rooted tiled brute force at"
+            " n_probe == n_lists and oracle_ivf_search(is_sqrt=True) at"
+            " n_probes 3, "
+            + String(N_QUERIES * K)
+            + " slots each; card "
+            + String(len(lines))
+            + " records, two runs record-identical"
+        )
+    else:
+        print(
+            "check_l2_sqrt_is_the_root_of_l2 REPORT [" + _mode_name() + "]: "
+            + String(len(failures))
+            + " of the IDENTICAL assertions differ (a REPORT here: the FAST"
+            " matmul's per-shape k-split and the selector's arrival-order"
+            " ties); card "
+            + String(len(lines))
+            + " records, two runs record-identical"
+        )
+        for i in range(len(failures)):
+            print("  " + failures[i])
+
+    _ = rt^
+    _ = sq^
+    _ = sq_as_rt^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+
+
+# =====================================================================
 # THE REMAINING SABOTAGE ARMS
 # =====================================================================
 
@@ -1867,5 +2138,6 @@ def main() raises:
     check_recall_is_reported()
     check_launch_invariance()
     check_card_is_emitted()
+    check_l2_sqrt_is_the_root_of_l2()
     check_ivf_sabotages()
     print("ivf_check mode=" + _mode_name() + " ALL OK")
