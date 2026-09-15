@@ -5,8 +5,43 @@ import sys
 import traceback
 
 
+_forest_snapshot = None
+
+
 def execute(request):
+    global _forest_snapshot
     operation, state, args = request
+    if operation == 'forest_prepare':
+        from .parallel_ensemble import _admit_forest_predictor
+        _admit_forest_predictor(state)
+        if _forest_snapshot is not None:
+            raise RuntimeError('forest worker already owns a prepared snapshot')
+        binding = state._bind()
+        capability = getattr(binding, 'forest_pool_available', None)
+        if not callable(capability) or capability() != 1:
+            raise ImportError('rebuild RF/ET binding for pooled forest inference')
+        state._prepare_resident_forest(binding)
+        _forest_snapshot = state
+        return dict(n_features=int(state.n_features_in_), outputs=int(state._num_outputs),
+                    trees=int(state._n_trees), classes=getattr(state, 'classes_', None))
+    if operation == 'forest_predict':
+        if _forest_snapshot is None:
+            raise RuntimeError('forest worker has no prepared snapshot')
+        method, X = args
+        if method not in ('predict', 'predict_proba'):
+            raise ValueError('unsupported pooled forest prediction method')
+        function = getattr(_forest_snapshot, method, None)
+        if not callable(function):
+            raise ValueError('prepared forest does not support ' + method)
+        return function(X)
+    if operation == 'forest_release':
+        model, _forest_snapshot = _forest_snapshot, None
+        if model is not None:
+            resident = getattr(model, '_resident_forest', None)
+            if resident is not None:
+                resident._finalizer()
+                model._resident_forest = None
+        return True
     if operation in ('mlp_update', 'samba_update'):
         import os
         if int(os.environ.get('MOJOLEARN_OPTIMIZER_DEVICE_COUNT', '1')) > 1:
@@ -117,6 +152,38 @@ def execute(request):
             if not callable(getattr(binding, 'qr_parallel_available', None)) or binding.qr_parallel_available() != 1:
                 raise ImportError('rebuild estimators binding for parallel QR panels')
         state.fit(X, y, **kwargs)
+        return state
+    if operation in ('gmm_fit', 'gmm_predict'):
+        native = state._extension()
+        if (not callable(getattr(native, 'gmm_parallel_available', None))
+                or native.gmm_parallel_available() != 1):
+            raise ImportError('rebuild mixture binding for row-sharded GaussianMixture E-steps')
+        if operation == 'gmm_fit':
+            state.fit(*args)
+            return state
+        method, X = args
+        if method not in ('score_samples', 'predict_proba', 'predict'):
+            raise ValueError('invalid GaussianMixture prediction operation')
+        return getattr(state, method)(X)
+    if operation == 'resample':
+        from . import resample
+        native = resample._extension('identical')
+        if (not callable(getattr(native, 'resample_ranges_parallel_available', None))
+                or native.resample_ranges_parallel_available() != 1):
+            raise ImportError('rebuild resample binding for distributed replicate ranges')
+        name, kwargs = args
+        if name not in ('bootstrap', 'permutation_test', 'monte_carlo_integrate'):
+            raise ValueError('invalid resample operation')
+        return getattr(resample, name)(numeric_mode='identical', **kwargs)
+    if operation == 'hdbscan_fit':
+        from .hdbscan import HDBSCAN
+        if type(state) is not HDBSCAN:
+            raise TypeError('requires mojolearn.HDBSCAN')
+        native = state._extension()
+        if (not callable(getattr(native, 'hdbscan_rows_parallel_available', None))
+                or native.hdbscan_rows_parallel_available() != 1):
+            raise ImportError('rebuild HDBSCAN binding for distributed neighbor and distance rows')
+        state.fit(*args)
         return state
     if operation in ('km_fit', 'km_apply'):
         import os
@@ -259,12 +326,19 @@ def main():
             request = pickle.load(sys.stdin.buffer)
         except EOFError:
             break
+        response = None
         try:
-            response = (True, execute(request))
-        except Exception:
-            response = (False, traceback.format_exc())
-        pickle.dump(response, channel, protocol=5)
-        channel.flush()
+            try:
+                response = (True, execute(request))
+            except Exception:
+                response = (False, traceback.format_exc())
+            pickle.dump(response, channel, protocol=5)
+            channel.flush()
+        finally:
+            # Persistent state belongs only to explicit operation caches.
+            # Idle workers must not retain complete neural RPC snapshots.
+            request = None
+            response = None
 
 
 if __name__ == '__main__':

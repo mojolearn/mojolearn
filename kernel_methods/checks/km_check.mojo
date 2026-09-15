@@ -2879,6 +2879,7 @@ def check_km_sabotages() raises:
     arm_kernel.append(KM_KERNEL_RBF)
 
     var n_moved = 0
+    var n_fast_inert_by_column = 0
     for a in range(len(must_fail)):
         var sab = must_fail[a]
         var kern = arm_kernel[a]
@@ -2912,6 +2913,33 @@ def check_km_sabotages() raises:
         comptime if not _IDENTICAL_MODE:
             if sab == KMSAB_STD_TRANSCENDENTAL:
                 expect_inert = True
+        # KMSAB_POLY_VIA_POW MAY BE INERT UNDER FAST, BY COLUMN. Under FAST
+        # `identical_pow` is `x**p`, the vendor's pow, not `portable_powf`,
+        # so the arm's NaN-on-a-negative-base argument (DEVIATION 1663) is
+        # an IDENTICAL-mode argument only. Measured at 171752af4: the H100
+        # (sm_90a) and the MI300X (gfx942) FAST builds moved no bit on any
+        # of the five fixtures at the polynomial kernel, their pow returning
+        # the repeated product at the integral degree; the M4 FAST run at
+        # 834ba18dc moved it. RECORDED, not asserted, under FAST on a column
+        # where it does not move; asserted under IDENTICAL on every column.
+        var column_dependent_fast = False
+        comptime if not _IDENTICAL_MODE:
+            if sab == KMSAB_POLY_VIA_POW:
+                column_dependent_fast = True
+        if moved_on < 0 and column_dependent_fast:
+            n_fast_inert_by_column += 1
+            print(
+                "  RECORDED  "
+                + km_sabotage_name(sab)
+                + " ("
+                + km_kernel_name(kern)
+                + "): 0 cells moved on all "
+                + String(inert_on)
+                + " fixtures. ALLOWED under FAST, where identical_pow is the"
+                " vendor pow and this column's pow returns the repeated"
+                " product at an integral degree. Asserted under IDENTICAL."
+            )
+            continue
         if moved_on < 0 and expect_inert:
             print(
                 "  RECORDED  "
@@ -3060,7 +3088,7 @@ def check_km_sabotages() raises:
     # defined to do.
     var floor_moved = 11
     comptime if not _IDENTICAL_MODE:
-        floor_moved = 10
+        floor_moved = 10 - n_fast_inert_by_column
     if n_moved < floor_moved:
         raise Error(
             "check_km_sabotages FAILED: only "
@@ -3069,7 +3097,8 @@ def check_km_sabotages() raises:
             + String(floor_moved)
             + "; the suite claims 13 arms of which 2 are classified REPORT"
             " in both modes and one more (STD_TRANSCENDENTAL) is expected"
-            " inert under FAST only"
+            " inert under FAST only, and POLY_VIA_POW may be inert under"
+            " FAST on a column whose pow is exact at an integral degree"
         )
     print(
         "check_km_sabotages OK"

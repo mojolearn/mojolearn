@@ -6,6 +6,13 @@ Function lanes in the metrics lane's style: no estimator, the probe is
 n/a:function, and the hashed things are the distributions and the host
 scalars. The samples are fixture columns, so `ties` hands the sorts
 repeated keys and `denormal` hands the folds subnormals.
+
+SUPERSEDED BY THE MERGED LANES (2026-09-14 night). As drafted below, both
+bodies exceed a comptime limit and refuse by name on every vendor: the
+sorted bootstrap statistics at 2048 x 4096 cells (RESAMPLE_MAX_SORT_CELLS is
+1 << 22) and the permutation test at a pooled 4096 (PERM_MAX_POOLED is 1024).
+tools/identity_break.py runs quantile and trimmed_mean at 1024 replicates and
+the permutation test at 512 per group; read the lanes there, not here.
 """
 
 

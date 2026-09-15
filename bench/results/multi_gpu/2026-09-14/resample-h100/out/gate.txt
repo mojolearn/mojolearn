@@ -1,0 +1,14 @@
+started=2026-09-14T22:25:49Z commit=b9f219a9e7c5aeca9d572d59f72e750dde3ba80f
+vendor=nvidia arch=sm_90a gpus=2 nproc=224
+pixi-warm exit=0 seconds=0
+build-resample exit=0 seconds=14
+build-base exit=0 seconds=38
+native exit=0 seconds=16
+native-sabotage exit=1 seconds=15
+public exit=0 seconds=109
+check-resample exit=0 seconds=18
+native: 67 PASS lines; last: PASS resample parallel gate
+native-sabotage (must FAIL): 0 PASS lines; /root/mojolearn/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1|
+public: PASS 36 resample configurations and 5 refusals
+check-resample: 16 pass-like lines; tail: check_resample_sabotages RECORDED [IDENTICAL]: RSAB_BATCH_DEPENDENT moved 32/32 indices (check_batch_invariance and check_prefix_stability both FAIL as required); RSAB_MAP_IGNORES_POSITION collapsed all 32 positions to one index (check_index_map_is_positional's separation clause FAILS as required); RSAB_LOW_HALF_SUBSEQUENCE moved 256/256 on n=200; RSAB_REVERSED_POSITIONS RECORDED at 0/256 under IDENTICAL, EXPECTED: the pinned halving fold is reversal-invariant because reversal maps its pair set to itself and float addition is commutative. The arm IS reached -- under FAST the same call moves 179/256. RSAB_REVERSED_POSITIONS moved 0/256 on n=200; RSAB_FOLD_DESCENDING moved 0/256 on n=200; RSAB_FOLD_DESCENDING on n=600 (3 chunks) moved 56/256 -- at n=200 it is one chunk and EXPECTED INERT; RSAB_SKIP_REJECTION RECORDED, not asserted: moved 0/256 at n=200 and 0/256 at n=8. BOTH ZEROS ARE EXPECTED. n=8 is a power of two so 2^32 mod n == 0 and Lemire never rejects; n=200 gives 2^32 mod n == 96, a rejection rate of 2.2e-08, and this driver takes 51200 draws for 0.0011 expected rejections. One expected rejection needs 44.7 million draws, and since 2^32 mod n < n the rate is under n/2^32 for EVERY n, so no sample size reaches this branch by sampling. A direct probe of the rejection zone is owed; RSAB_STD_SQRT moved 54/256 (Apple: 0 expected, its sqrt is correctly rounded; NVIDIA: expected to bite, 176,577 of 2^20 normals are 1 ulp off, IDENTITY_PATHS row 10); RSAB_NO_CANON_NAN: the uncanonicalised degenerate pearson is none reached (Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD 0xffc00000 -- three payloads for one IEEE answer, DEVIATION 1696); RSAB_PERM_KEY_ONLY broke the bijection in 64/64 replicates (check_permutation_separable FAILS as required)|resample_check mode=IDENTICAL ALL OK|
+finished=2026-09-14T22:29:05Z

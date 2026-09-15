@@ -297,6 +297,115 @@ def fit_dbscan(estimator, X, *, devices=(0,), sample_weight=None):
     return estimator
 
 
+def _admit_gaussian_mixture(estimator):
+    from .mixture import GaussianMixture
+    if type(estimator) is not GaussianMixture:
+        raise TypeError('requires mojolearn.GaussianMixture')
+    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
+        raise ValueError('parallel GaussianMixture requires IDENTICAL numeric mode')
+
+
+def fit_gaussian_mixture(estimator, X, *, devices=(0,)):
+    """Row-shard every E-step; retain the root M-step, Cholesky and convergence test.
+
+    Whole sample rows run the original E-step on their owners and are copied
+    back into their original positions; the mean log likelihood is folded on
+    the root over the complete gathered rows. The KMeans initialization uses
+    its row-tile assignment driver. Full data, responsibilities and the M-step
+    still have to fit on the root GPU. covariance_type other than 'full' and
+    the refused knobs are refused by the estimator itself, by name.
+    """
+    _admit_gaussian_mixture(estimator)
+    X, _ = as_f32_c(X, ndim=2, name='X')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('gmm_fit', estimator, (X,))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
+
+
+def predict_gaussian_mixture(estimator, X, *, devices=(0,), method='predict'):
+    """Row-shard the scoring E-step of a fitted GaussianMixture.
+
+    method is 'predict', 'predict_proba' or 'score_samples'; the original
+    per-row argmax and host exponential are unchanged.
+    """
+    _admit_gaussian_mixture(estimator)
+    if method not in ('score_samples', 'predict_proba', 'predict'):
+        raise ValueError('method must be predict, predict_proba or score_samples')
+    if not hasattr(estimator, 'weights_'):
+        raise ValueError('GaussianMixture is not fitted')
+    X, _ = as_f32_c(X, ndim=2, name='X')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        return pool.map([('gmm_predict', estimator, (method, X))])[0]
+    finally:
+        pool.close()
+
+
+def _resample_parallel(name, devices, kwargs):
+    if kwargs.get('numeric_mode') not in (None, 'identical'):
+        raise ValueError('parallel resampling requires IDENTICAL numeric mode')
+    kwargs = {k: v for k, v in kwargs.items() if k != 'numeric_mode'}
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        return pool.map([('resample', None, (name, kwargs))])[0]
+    finally:
+        pool.close()
+
+
+def bootstrap(data, *, devices=(0,), **kwargs):
+    """`mojolearn.resample.bootstrap` with global replicate ranges on the GPUs.
+
+    Replicate r is a pure function of (seed, r, data) (the r_first handle), so
+    owners compute contiguous ranges of global replicate IDs and the root
+    assembles the distribution in order, then sorts it and computes the point
+    estimate, interval and standard error exactly as one device does.
+    """
+    return _resample_parallel('bootstrap', devices, dict(kwargs, data=data))
+
+
+def permutation_test(x, y, *, devices=(0,), **kwargs):
+    """`mojolearn.resample.permutation_test` with global permutation ranges."""
+    return _resample_parallel('permutation_test', devices, dict(kwargs, x=x, y=y))
+
+
+def monte_carlo_integrate(integrand, lower, upper, n_samples, *, devices=(0,), **kwargs):
+    """`mojolearn.resample.monte_carlo_integrate` with whole sample chunks.
+
+    Owners draw global sample IDs from aligned PINNED_SUM_W chunks; the root
+    folds the chunk partials in order and forms the integral as one device does.
+    """
+    return _resample_parallel('monte_carlo_integrate', devices,
+                              dict(kwargs, integrand=integrand, lower=lower, upper=upper, n_samples=n_samples))
+
+
+def fit_hdbscan(estimator, X, *, devices=(0,)):
+    """HDBSCAN with distributed core-distance k-NN rows and dense distance rows.
+
+    The k-NN query rows use the neighbors row driver and the m x m pairwise
+    distance matrix uses the hierarchy row driver, each with its original
+    per-row arithmetic and byte gather. The mutual reachability cells, the
+    Boruvka MST, the dendrogram, the condensed hierarchy and cluster selection
+    stay on the root in their original order.
+    """
+    from .hdbscan import HDBSCAN
+    if type(estimator) is not HDBSCAN:
+        raise TypeError('fit_hdbscan requires mojolearn.HDBSCAN')
+    if getattr(estimator, 'numeric_mode', None) not in (None, 'identical'):
+        raise ValueError('parallel HDBSCAN requires IDENTICAL numeric mode')
+    X, _ = as_f32_c(X, ndim=2, name='X')
+    pool = DevicePool(devices, cooperative=True)
+    try:
+        result = pool.map([('hdbscan_fit', estimator, (X,))])[0]
+    finally:
+        pool.close()
+    estimator.__dict__ = result.__dict__.copy()
+    return estimator
+
+
 def _admit_cholesky(estimator):
     from ._cholesky_impl import Cholesky
     if type(estimator) is not Cholesky:

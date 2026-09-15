@@ -35,6 +35,8 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
 from std.math import ceildiv
+from std.os import getenv
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
@@ -45,7 +47,14 @@ from metrics.checks.pinned_sum import (
     host_fold_partials,
     host_tree_sum,
 )
-from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_div,
+    identical_mul,
+    identical_sqrt,
+)
 from resample.checks.index_map import (
     RESAMPLE_KIND_BOOTSTRAP,
     RESAMPLE_KIND_MONTE_CARLO,
@@ -678,6 +687,267 @@ def _sort_segments(
 # ===========================================================================
 
 
+def resample_device_count() raises -> Int:
+    """MOJOLEARN_RESAMPLE_DEVICE_COUNT: replicate or sample ranges on owners."""
+    var value = String(getenv("MOJOLEARN_RESAMPLE_DEVICE_COUNT"))
+    if value == "":
+        return 1
+    var count = Int(value)
+    if count < 1 or count > 64:
+        raise Error("resample device count must be in [1, 64]")
+    if count > 1 and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("multi-GPU resampling requires IDENTICAL numeric mode")
+    return count
+
+
+def _owner_offset(rank: Int) -> Int:
+    """Check-only arm: later owners compute their range one position late."""
+    comptime if is_defined["MOJOLEARN_RESAMPLE_PARALLEL_SABOTAGE"]():
+        if rank > 0:
+            return 1
+    return 0
+
+
+def _bootstrap_theta(
+    ctx: DeviceContext,
+    mut theta: DeviceBuffer[DType.float32],
+    mut dx: DeviceBuffer[DType.float32],
+    key: UInt64,
+    r_first: Int,
+    n_resamples: Int,
+    n: Int,
+    n_features: Int,
+    statistic: Int,
+    q_or_prop: Float32,
+    tpb: Int,
+    map_tpb: Int,
+) raises:
+    """Replicates `[r_first, r_first + n_resamples)` into `theta`. Every
+    replicate is a pure function of its global index and the sample
+    (DEVIATION 1690(b), the r_first batch-invariance handle)."""
+    if stat_needs_sort(statistic):
+        var cells = n_resamples * n
+        var vals = ctx.enqueue_create_buffer[DType.float32](cells)
+        var svals = ctx.enqueue_create_buffer[DType.float32](cells)
+        ctx.synchronize()
+        ctx.enqueue_function[materialize_resample_kernel](
+            vals.unsafe_ptr(),
+            dx.unsafe_ptr(),
+            key_lo(key),
+            key_hi(key),
+            Int32(r_first),
+            Int32(n_resamples),
+            Int32(n),
+            Int32(n),
+            Int32(n_features),
+            Int32(0),
+            grid_dim=(ceildiv(cells, map_tpb), 1, 1),
+            block_dim=(map_tpb, 1, 1),
+        )
+        _ = vals.unsafe_ptr()
+        _ = dx.unsafe_ptr()
+        ctx.synchronize()
+        _sort_segments(ctx, vals, svals, n_resamples, n)
+        if tpb == 256:
+            _launch_order_stat_at[256](
+                ctx, theta, svals, n_resamples, n, q_or_prop, statistic
+            )
+        elif tpb == 128:
+            _launch_order_stat_at[128](
+                ctx, theta, svals, n_resamples, n, q_or_prop, statistic
+            )
+        elif tpb == 64:
+            _launch_order_stat_at[64](
+                ctx, theta, svals, n_resamples, n, q_or_prop, statistic
+            )
+        else:
+            raise Error(
+                "bootstrap: threads-per-block must be 64, 128 or 256; got "
+                + String(tpb)
+            )
+        ctx.synchronize()
+        _ = vals^
+        _ = svals^
+    else:
+        _launch_bootstrap_stat(
+            ctx,
+            theta,
+            dx,
+            key,
+            r_first,
+            n_resamples,
+            n,
+            n,
+            n_features,
+            statistic,
+            tpb,
+        )
+        ctx.synchronize()
+
+
+def _bootstrap_theta_owners(
+    ctx: DeviceContext,
+    mut theta: DeviceBuffer[DType.float32],
+    x: List[Float32],
+    key: UInt64,
+    r_first: Int,
+    n_resamples: Int,
+    n: Int,
+    n_features: Int,
+    statistic: Int,
+    q_or_prop: Float32,
+    tpb: Int,
+    map_tpb: Int,
+    count: Int,
+) raises:
+    """Contiguous global replicate ranges on owners, bytes copied into place."""
+    var active = min(count, n_resamples)
+    ctx.synchronize()
+    for rank in range(active):
+        var begin = n_resamples * rank // active
+        var rows = n_resamples * (rank + 1) // active - begin
+        var owner = DeviceContext(device_id=rank)
+        var ox = _upload(owner, x)
+        var ot = owner.enqueue_create_buffer[DType.float32](rows)
+        owner.synchronize()
+        _bootstrap_theta(
+            owner, ot, ox, key, r_first + begin + _owner_offset(rank), rows,
+            n, n_features, statistic, q_or_prop, tpb, map_tpb,
+        )
+        owner.synchronize()
+        var view = theta.create_sub_buffer[DType.float32](begin, rows)
+        ot.enqueue_copy_to(view)
+        owner.synchronize()
+        ctx.synchronize()
+        _ = view^
+        _ = ox^
+        _ = ot^
+        _ = owner^
+    ctx.synchronize()
+
+
+def _perm_null_owners(
+    ctx: DeviceContext,
+    mut null_buf: DeviceBuffer[DType.float32],
+    pooled: List[Float32],
+    key: UInt64,
+    r_first: Int,
+    n_resamples: Int,
+    n_pooled: Int,
+    n_x: Int,
+    statistic: Int,
+    tpb: Int,
+    count: Int,
+) raises:
+    """Contiguous global permutation ranges on owners, bytes copied into place."""
+    var active = min(count, n_resamples)
+    ctx.synchronize()
+    for rank in range(active):
+        var begin = n_resamples * rank // active
+        var rows = n_resamples * (rank + 1) // active - begin
+        var owner = DeviceContext(device_id=rank)
+        var op = _upload(owner, pooled)
+        var on = owner.enqueue_create_buffer[DType.float32](rows)
+        owner.synchronize()
+        _launch_perm_stat(
+            owner, on, op, key, r_first + begin + _owner_offset(rank), rows,
+            n_pooled, n_x, statistic, tpb,
+        )
+        owner.synchronize()
+        var view = null_buf.create_sub_buffer[DType.float32](begin, rows)
+        on.enqueue_copy_to(view)
+        owner.synchronize()
+        ctx.synchronize()
+        _ = view^
+        _ = op^
+        _ = on^
+        _ = owner^
+    ctx.synchronize()
+
+
+def _mc_partials[
+    f_id: Int
+](
+    ctx: DeviceContext,
+    mut partials: DeviceBuffer[DType.float32],
+    mut dlower: DeviceBuffer[DType.float32],
+    mut dspan: DeviceBuffer[DType.float32],
+    key: UInt64,
+    i_first: Int,
+    n_samples: Int,
+    n_chunks: Int,
+    blocks: Int,
+    tpb: Int,
+) raises:
+    if tpb == 256:
+        _launch_mc_at[f_id, 256](
+            ctx, partials, dlower, dspan, key, i_first, n_samples, n_chunks, blocks
+        )
+    elif tpb == 128:
+        _launch_mc_at[f_id, 128](
+            ctx, partials, dlower, dspan, key, i_first, n_samples, n_chunks, blocks
+        )
+    elif tpb == 64:
+        _launch_mc_at[f_id, 64](
+            ctx, partials, dlower, dspan, key, i_first, n_samples, n_chunks, blocks
+        )
+    else:
+        raise Error(
+            "monte_carlo_integrate: threads-per-block must be 64, 128 or 256;"
+            " got " + String(tpb)
+        )
+
+def _mc_partials_owners[
+    f_id: Int
+](
+    ctx: DeviceContext,
+    mut partials: DeviceBuffer[DType.float32],
+    lower: List[Float32],
+    span: List[Float32],
+    key: UInt64,
+    i_first: Int,
+    n_samples: Int,
+    n_chunks: Int,
+    tpb: Int,
+    count: Int,
+) raises:
+    """Whole PINNED_SUM_W chunks on owners. An owner starting at global chunk
+    c0 draws from `i_first + c0 * PINNED_SUM_W`, so its chunk j is global
+    chunk c0 + j with the same values and the same pinned fold; the root folds
+    all partials in chunk order."""
+    var active = min(count, n_chunks)
+    ctx.synchronize()
+    for rank in range(active):
+        var c0 = n_chunks * rank // active
+        var c1 = n_chunks * (rank + 1) // active
+        var first_sample = c0 * PINNED_SUM_W
+        var last_sample = c1 * PINNED_SUM_W
+        if last_sample > n_samples:
+            last_sample = n_samples
+        var chunks = c1 - c0
+        var owner = DeviceContext(device_id=rank)
+        var ol = _upload(owner, lower)
+        var ospan = _upload(owner, span)
+        var opart = owner.enqueue_create_buffer[DType.float32](chunks)
+        owner.synchronize()
+        _mc_partials[f_id](
+            owner, opart, ol, ospan, key,
+            i_first + first_sample + _owner_offset(rank),
+            last_sample - first_sample, chunks, chunks, tpb,
+        )
+        owner.synchronize()
+        var view = partials.create_sub_buffer[DType.float32](c0, chunks)
+        opart.enqueue_copy_to(view)
+        owner.synchronize()
+        ctx.synchronize()
+        _ = view^
+        _ = ol^
+        _ = ospan^
+        _ = opart^
+        _ = owner^
+    ctx.synchronize()
+
+
 def bootstrap_host(
     x: List[Float32],
     n: Int,
@@ -833,65 +1103,17 @@ def bootstrap_host(
     ctx.synchronize()
     trace.record_device(ctx, "resample.index_map", idx_buf, win_r * win_i)
 
-    if stat_needs_sort(statistic):
-        var cells = n_resamples * n
-        var vals = ctx.enqueue_create_buffer[DType.float32](cells)
-        var svals = ctx.enqueue_create_buffer[DType.float32](cells)
-        ctx.synchronize()
-        ctx.enqueue_function[materialize_resample_kernel](
-            vals.unsafe_ptr(),
-            dx.unsafe_ptr(),
-            key_lo(key),
-            key_hi(key),
-            Int32(r_first),
-            Int32(n_resamples),
-            Int32(n),
-            Int32(n),
-            Int32(n_features),
-            Int32(0),
-            grid_dim=(ceildiv(cells, map_tpb), 1, 1),
-            block_dim=(map_tpb, 1, 1),
+    var owners = resample_device_count()
+    if owners > 1 and n_resamples > 1:
+        _bootstrap_theta_owners(
+            ctx, theta, x, key, r_first, n_resamples, n, n_features,
+            statistic, q_or_prop, tpb, map_tpb, owners,
         )
-        _ = vals.unsafe_ptr()
-        _ = dx.unsafe_ptr()
-        ctx.synchronize()
-        _sort_segments(ctx, vals, svals, n_resamples, n)
-        if tpb == 256:
-            _launch_order_stat_at[256](
-                ctx, theta, svals, n_resamples, n, q_or_prop, statistic
-            )
-        elif tpb == 128:
-            _launch_order_stat_at[128](
-                ctx, theta, svals, n_resamples, n, q_or_prop, statistic
-            )
-        elif tpb == 64:
-            _launch_order_stat_at[64](
-                ctx, theta, svals, n_resamples, n, q_or_prop, statistic
-            )
-        else:
-            raise Error(
-                "bootstrap: threads-per-block must be 64, 128 or 256; got "
-                + String(tpb)
-            )
-        ctx.synchronize()
-        _ = vals^
-        _ = svals^
     else:
-        _launch_bootstrap_stat(
-            ctx,
-            theta,
-            dx,
-            key,
-            r_first,
-            n_resamples,
-            n,
-            n,
-            n_features,
-            statistic,
-            tpb,
+        _bootstrap_theta(
+            ctx, theta, dx, key, r_first, n_resamples, n, n_features,
+            statistic, q_or_prop, tpb, map_tpb,
         )
-        ctx.synchronize()
-
     trace.record_device(ctx, "resample.theta", theta, n_resamples)
     var dist = _download_f32(ctx, theta, n_resamples)
 
@@ -1047,18 +1269,25 @@ def permutation_test_host(
     var dpool = _upload(ctx, pooled)
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
-    _launch_perm_stat(
-        ctx,
-        null_buf,
-        dpool,
-        key,
-        r_first,
-        n_resamples,
-        n_pooled,
-        n_x,
-        statistic,
-        tpb,
-    )
+    var owners = resample_device_count()
+    if owners > 1 and n_resamples > 1:
+        _perm_null_owners(
+            ctx, null_buf, pooled, key, r_first, n_resamples, n_pooled, n_x,
+            statistic, tpb, owners,
+        )
+    else:
+        _launch_perm_stat(
+            ctx,
+            null_buf,
+            dpool,
+            key,
+            r_first,
+            n_resamples,
+            n_pooled,
+            n_x,
+            statistic,
+            tpb,
+        )
     ctx.synchronize()
     trace.record_device(ctx, "resample.null", null_buf, n_resamples)
     var null_dist = _download_f32(ctx, null_buf, n_resamples)
@@ -1237,22 +1466,16 @@ def monte_carlo_integrate_host[
     ctx.synchronize()
 
     var blocks = grid_blocks if grid_blocks > 0 else n_chunks
-    if tpb == 256:
-        _launch_mc_at[f_id, 256](
-            ctx, partials, dlower, dspan, key, i_first, n_samples, n_chunks, blocks
-        )
-    elif tpb == 128:
-        _launch_mc_at[f_id, 128](
-            ctx, partials, dlower, dspan, key, i_first, n_samples, n_chunks, blocks
-        )
-    elif tpb == 64:
-        _launch_mc_at[f_id, 64](
-            ctx, partials, dlower, dspan, key, i_first, n_samples, n_chunks, blocks
+    var owners = resample_device_count()
+    if owners > 1 and n_chunks > 1:
+        _mc_partials_owners[f_id](
+            ctx, partials, lower, span, key, i_first, n_samples, n_chunks, tpb,
+            owners,
         )
     else:
-        raise Error(
-            "monte_carlo_integrate: threads-per-block must be 64, 128 or 256;"
-            " got " + String(tpb)
+        _mc_partials[f_id](
+            ctx, partials, dlower, dspan, key, i_first, n_samples, n_chunks,
+            blocks, tpb,
         )
     ctx.synchronize()
 

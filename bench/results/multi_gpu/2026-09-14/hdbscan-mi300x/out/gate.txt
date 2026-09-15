@@ -1,0 +1,15 @@
+started=2026-09-14T22:56:01Z commit=55ec5f1087ad3f446f65c01f04f4789cb9b9d81a
+vendor=amd arch=gfx942 gpus=2 nproc=192
+pixi-warm exit=0 seconds=1
+build-hdbscan exit=0 seconds=30
+build-base exit=0 seconds=38
+public exit=0 seconds=26
+build-hdbscan-sabotage exit=0 seconds=27
+public-sabotage exit=1 seconds=3
+graph-rows exit=0 seconds=28
+check-hdbscan exit=0 seconds=40
+public: PASS 5 HDBSCAN configurations and 3 refusals
+public-sabotage (must FAIL): 0 PASS lines; 
+graph-rows tail: PASS graph raw distance and selection bits 65 3|PASS graph raw distance and selection bits 65 129|
+check-hdbscan tail: check_hdbscan_sabotages RECORDED [IDENTICAL]: HDB_SAB_SKIP_GUARDS -- the run still raised, from a guard this arm does not skip: hierarchy.pairwise_distances: 2 of 9216 distance cells are NaN (a non-finite input row, or two rows whose squared norms overflow Float32 so the expanded identity is inf - inf); refused by name (DEVIATION 623, IDENTITY_PATHS row 39): a computed NaN's payload is the vendor's and cannot sit in a recorded stage. FACT 2 (IDENTITY_PATHS row 39): Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD 0xffc00000. That is the byte DEVIATION 1607 keeps out of hdbscan.core_dists and hdbscan.mr.dists|hdbscan_check mode=IDENTICAL ALL OK|
+finished=2026-09-14T22:58:44Z

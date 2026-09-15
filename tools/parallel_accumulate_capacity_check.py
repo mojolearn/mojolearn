@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cloud-only accumulation working set exceeding one 80GB GPU."""
+"""Cloud-only accumulation working set exceeding one selected GPU."""
 import argparse
 import hashlib
 import json
@@ -13,10 +13,13 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--cloud', action='store_true', required=True)
     p.add_argument('--devices', type=int, choices=(1,2), required=True)
+    p.add_argument('--columns', type=int, default=1_500_000_001)
     p.add_argument('--report', type=Path, required=True)
     args = p.parse_args()
     if not os.environ.get('RUNPOD_POD_ID'):
         raise SystemExit('RunPod required; no local execution')
+    if not 1 <= args.columns <= 2_147_483_647:
+        raise SystemExit('columns must fit the positive native Int32 range')
     # Avoid host THP compaction dominating this GPU-capacity fixture on a
     # fragmented cloud NUMA host. NumPy reads this at import; GPU arithmetic
     # and allocation sizes are unchanged.
@@ -25,7 +28,7 @@ def main():
     from mojolearn._training_impl import _load
     binding = _load('identical')
     assert binding.accumulate_parallel_available() == 1
-    n, steps, period = 1_500_000_001, 16, 4093
+    n, steps, period = args.columns, 16, 4093
     # A prime repeat period detects column offsets/strides across ownership
     # boundaries. The arithmetic oracle is the original GPU tree on one period.
     rng = np.random.default_rng(351904)
