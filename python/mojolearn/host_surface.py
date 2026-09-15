@@ -1997,7 +1997,14 @@ def public_reference_lanes():
     Full CPU training verification uses source bindings and covered_lanes().
     These probes need only public inference dependencies, including linalg.
     """
-    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky"]
+    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky"] + list(PUBLIC_HOST_ONLY_LANES)
+
+
+#: Public reference lanes that are not CPU training lanes, {lane: family}: a
+#: shipped host family with no GPU path to cover (2026-09-15). The tokenizer
+#: lane loads the synthetic vocabulary the harness trains itself, so it needs
+#: no vocabulary file on the install.
+PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
 
 
 def training_gpu_column_record():

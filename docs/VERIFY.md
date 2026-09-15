@@ -37,7 +37,9 @@ requires equal values.
   and metrics functions, and the multi-GPU drivers on one device).
 - **On a CPU-only install** the public CPU reference lanes run
   (`host_surface.public_reference_lanes()`: gemm-pinned, kde, ols, ridge,
-  knn, svc, pca, cholesky), fitted inside the verifier's reference scope.
+  knn, svc, pca, cholesky, and tokenizer, which loads the synthetic
+  vocabulary mojolearn trains itself), fitted inside the verifier's
+  reference scope.
 - **Portable models** run on every install: small models trained on a GPU
   and saved, shipped in `mojolearn/verify_reference/models/` (a random
   forest, a symmetric boosting model, a linear regression and a PCA, 179 KB
