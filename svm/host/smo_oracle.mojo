@@ -70,11 +70,12 @@ from gemm.host.gemm_oracle import (
     leaf_count,
     leaf_end,
 )
-from checks.numerics import ftz, identical_exp, identical_mul_add
+from checks.numerics import ftz, identical_exp, identical_mul, identical_mul_add
 from svm.impl.smosolver import fold_order_for, hash_f32_list
 from svm.impl.svm_parameter import (
     EPSILON_SVR,
     KERNEL_LINEAR,
+    KERNEL_POLYNOMIAL,
     KERNEL_RBF,
     KernelParams,
     SvmParameter,
@@ -90,6 +91,10 @@ from svm.impl.svm_parameter import (
 #: against the GPU columns. Passed by the host build scripts only; a host
 #: binding that carries it says so through `<prefix>_sabotage()` and is
 #: refused outside the gate (`python/mojolearn/_backend.py::load_host_module`).
+#: Since lane/inference-svm (2026-09-15) the same define also adds half a
+#: unit to the fitted intercept (`smo_oracle_fit`) and to every decision
+#: value (`smo_oracle_decision`): the leaf order cannot move an integer-grid
+#: fixture such as `ties`, and a saved model's file and predictions must.
 comptime SMO_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 comptime ORACLE_WS_SIZE = 1024
@@ -118,6 +123,16 @@ def _mad[dt: DType](a: Scalar[dt], b: Scalar[dt], c: Scalar[dt]) -> Scalar[dt]:
         )
     else:
         return a * b + c
+
+
+@always_inline
+def _mul[dt: DType](a: Scalar[dt], b: Scalar[dt]) -> Scalar[dt]:
+    comptime if dt == DType.float32:
+        return rebind[Scalar[dt]](
+            identical_mul(rebind[Float32](a), rebind[Float32](b))
+        )
+    else:
+        return a * b
 
 
 @always_inline
@@ -240,6 +255,23 @@ def _kernel_cell[
     var dot = _dot[dt](xa, ia, xb, ib, na, nb, k)
     if kp.kernel == KERNEL_LINEAR:
         return dot
+    if kp.kernel == KERNEL_POLYNOMIAL:
+        # `polynomial_epilogue_kernel` (kernel_methods, DEVIATION 1663):
+        # t = ftz(fma(gain, ftz(dot), offset)); acc = 1; acc = ftz(acc * t),
+        # `degree` times, ascending.
+        var t = _flush[dt](
+            _mad[dt](Scalar[dt](kp.gamma), _flush[dt](dot), Scalar[dt](kp.coef0))
+        )
+        var acc = Scalar[dt](1)
+        for _ in range(kp.degree):
+            acc = _flush[dt](_mul[dt](acc, t))
+        comptime if SMO_ORACLE_HOST_SABOTAGE:
+            # THE POLYNOMIAL SABOTAGE ARM: half a unit added to every kernel
+            # cell. Wrong on purpose; the leaf-order arm in _dot cannot move
+            # an integer-grid fixture, whose dot products are exact in
+            # either order.
+            acc = _flush[dt](acc + Scalar[dt](0.5))
+        return acc
     var gain = Scalar[dt](kp.gamma)
     var s = _flush[dt](
         _flush[dt](_flush[dt](norm_a[ia]) + _flush[dt](norm_b[ib]))
@@ -796,6 +828,12 @@ def smo_oracle_fit[
             if nu == 0 or nl == 0:
                 raise Error("Incorrect training: cannot calculate the constant (oracle)")
             res.b = _flush[dt](-_flush[dt](b_up + b_low) / Scalar[dt](2))
+    comptime if SMO_ORACLE_HOST_SABOTAGE:
+        # THE INTERCEPT SABOTAGE ARM (lane/inference-svm, 2026-09-15): half a
+        # unit added to the fitted intercept. Wrong on purpose; on an
+        # integer-grid fixture the leaf-order arm leaves every fit byte in
+        # place, so a saved model's file would not move without it.
+        res.b = _flush[dt](res.b + Scalar[dt](0.5))
     res.alpha = alpha^
     res.f = f^
     res.n_iter = n_iter
@@ -867,6 +905,13 @@ def smo_oracle_decision[
         for j in range(ns):
             var kij = _kernel_cell[dt](kp, xq, norm_q, i, sv_rows, norm_sv, j, nq, ns, k)
             acc = _flush[dt](_mad[dt](kij, res.dual_coefs[j], acc))
+        comptime if SMO_ORACLE_HOST_SABOTAGE:
+            # THE DECISION SABOTAGE ARM (lane/inference-svm, 2026-09-15): half
+            # a unit added to every decision value. Wrong on purpose; the
+            # leaf-order arm in _dot cannot move an integer-grid fixture, so
+            # without this a saved linear or rbf model could predict the same
+            # bytes on the sabotage build.
+            acc = _flush[dt](acc + Scalar[dt](0.5))
         out.append(_flush[dt](acc + res.b))
     return out^
 

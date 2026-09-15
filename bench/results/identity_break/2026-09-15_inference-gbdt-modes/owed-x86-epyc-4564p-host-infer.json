@@ -1,0 +1,16 @@
+{
+ "columns": [
+  "apple-m4",
+  "nvidia-h100-sm_90a",
+  "amd-mi325x-gfx942",
+  "cpu-amd-epyc-4564p-16-core-processor"
+ ],
+ "require_columns": 4,
+ "lanes": [
+  "gbdt-categorical-ctr",
+  "gbdt-feature-freq",
+  "gbdt-ordered-rmse",
+  "gbdt-pointwise-l2-bayesian-eval"
+ ],
+ "owed": []
+}

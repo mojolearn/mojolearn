@@ -162,6 +162,15 @@ LANES = {
     'kernel-ridge': ('KernelRidge', lambda e, X: (e.predict(X[:64, :4]),), {}),
     'nystroem': ('Nystroem', lambda e, X: (e.transform(X[:64, :4]),), {}),
     'rbf-sampler': ('RBFSampler', lambda e, X: (e.transform(X),), {}),
+    # lane/inference-svm (2026-09-15): SVC's linear and polynomial kernels
+    # through the svc format, and SVR (rbf and linear) through its own. Each
+    # probe is its identity_break lane's infer probe.
+    'svc-linear': ('SVC', lambda e, X: (e.decision_function(X), e.predict(X)),
+                   {'predict': lambda e, X: e.predict(X)}),
+    'svc-poly': ('SVC', lambda e, X: (e.decision_function(X), e.predict(X)),
+                 {'predict': lambda e, X: e.predict(X)}),
+    'svr': ('SVR', lambda e, X: (e.predict(X),), {}),
+    'svr-linear': ('SVR', lambda e, X: (e.predict(X),), {}),
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'logistic': 'predict_proba', 'pca': 'transform',
@@ -179,7 +188,9 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'standard-scaler-no-std': 'transform', 'minmax-scaler': 'transform',
                'minmax-scaler-clip': 'transform', 'lasso': 'predict', 'elasticnet': 'predict',
                'elasticnet-l2end-no-intercept': 'predict', 'kernel-ridge': 'predict',
-               'nystroem': 'transform', 'rbf-sampler': 'transform'}
+               'nystroem': 'transform', 'rbf-sampler': 'transform',
+               'svc-linear': 'decision_function', 'svc-poly': 'decision_function',
+               'svr': 'predict', 'svr-linear': 'predict'}
 
 
 def _fit_logistic_multiclass(ml, X, yc, yr, Xh=None):

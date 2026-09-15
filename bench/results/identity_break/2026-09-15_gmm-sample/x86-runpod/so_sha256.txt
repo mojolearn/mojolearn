@@ -1,0 +1,2 @@
+fdcf9dbbedd713e8845774f6eb37c3e96c138d3191326f849a7c20cf43fcd538  python/mojolearn/host/_mojolearn_mixture_host.so
+f6885cd7de75d33e5179d33efce27451deff25ae66c2dea243893b589d6cdf84  python/mojolearn/host-sabotage/_mojolearn_mixture_host.so

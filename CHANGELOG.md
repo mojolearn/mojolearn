@@ -10,6 +10,35 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- New `python -m mojolearn verify --all` (`--quick`, `--full`, `--lanes`, `--fixtures`,
+  `--repeats`, `--json`): runs the identity_break lanes from the installed package (the
+  wheel's byte copy of `tools/identity_break.py`, fixtures generated from its seeds) and
+  compares every train, infer, model and batch part with
+  `mojolearn/verify_reference/table.json`, a table generated from the committed records
+  with each hash's record directory and commit, plus small GPU-trained saved models whose
+  bytes and loaded answers must equal the recorded ones. Parts read IDENTICAL, DIVERGENT,
+  OWED or REFUSED; exit codes are `verify`'s. On a CPU-only install it runs the public CPU
+  reference lanes and the portable models. The card verifier's list-every-stage flag is now
+  `--all-stages`. Maintainers regenerate the table with `verify --all --emit-reference` and
+  the models with `verify --emit-models` (docs/VERIFY.md).
+- New `GaussianProcessClassifier`, scikit-learn's Laplace approximation (`_gpc.py`) with
+  `optimizer=None`: binary fits by the posterior-mode Newton loop, one-vs-rest past two classes,
+  `predict`, `predict_proba`, `latent_mean_and_variance`, `log_marginal_likelihood_value_`, `save` and
+  `load`. The loop stops by the reference's rule read on an identical float32 likelihood, so its
+  iteration count (`n_iter_`) is the same on every column (DEVIATION 2830, closing DEVIATION 1766);
+  the float32 orders are pinned (DEVIATION 2831); the probability runs in float64 through a new
+  portable float64 erf (DEVIATION 2832); the one-vs-rest composition is DEVIATION 2833.
+  `optimizer`, `n_restarts_optimizer`, `warm_start`, `copy_X_train=False`, `random_state`,
+  `multi_class='one_vs_one'` and `n_jobs` are refused by name. The device path is
+  `gaussian_process/classifier.mojo`, the CPU host restatement `gaussian_process/host/gpc_oracle.mojo`
+  in the gp host family; fit on a CPU-only install stays internal, and a saved classifier predicts on
+  the CPU through `GaussianProcessClassifier.load` or `mojolearn.host_model`. New identity lanes
+  `gpc` and `gpc-multiclass` with batch declarations. Apple M4: the Metal column STABLE on all 18
+  train, 18 infer, 18 model and 18 batch cells, and the Metal fit and prediction equal to the host
+  binding's bit for bit; the gp regressor's cells unchanged, IDENTICAL x4 against the 166-lane
+  record. Against scikit-learn 1.9.0 on the lanes' fixtures: every label agrees, the largest
+  probability difference is 1.6e-4 (the `wide` fixture) and at most 1.1e-5 elsewhere. The NVIDIA and
+  AMD columns are owed to the release record.
 - New `KMeans.transform` and `KMeans.fit_transform`, with cuML's `KMeans.transform` as the
   reference: the distance from every row to every fitted center under the model's `metric`
   (squared for the default `'euclidean'`, cuVS `L2Expanded`; the root for
@@ -30,6 +59,17 @@ Linux legs are OWED before this heading reads published.
   internal reference context, as every other CPU fit does. Apple M4 CPU column against the
   committed Apple, NVIDIA and AMD columns; the model cells of the new save formats are owed to
   the release record.
+- New `GaussianMixture.sample(n_samples)`, with scikit-learn's `BaseMixture.sample` as the
+  reference: `(X, y)` with the component counts a multinomial draw over `weights_` and the
+  rows grouped by component ascending. Every draw is position-mapped Philox keyed by
+  `random_state` (DEVIATION 2791), the normals are RAFT's Box-Muller with the pinned seams,
+  and each row is the forward substitution through the fitted `precisions_cholesky_`
+  (DEVIATION 2792), so one model and one `random_state` give the same bits on every vendor;
+  they are not scikit-learn's bits. `X` is float32 and `y` int32. On the GPU mixture binding
+  and the internal mixture host binding; public CPU exposure from a saved model is left to
+  the neighbors and density inference lane. New `gmm-sample` and `gmm-random-init-sample`
+  identity lanes, so the gmm lanes' recorded cells do not move. Apple M4 Metal and CPU
+  columns only; the NVIDIA and AMD cells are owed to the release record.
 
 - CPU inference from saved models for StandardScaler, MinMaxScaler, Lasso, ElasticNet,
   KernelRidge (linear and rbf kernels), Nystroem (linear and rbf) and RBFSampler: each
@@ -41,6 +81,16 @@ Linux legs are OWED before this heading reads published.
   grow from 12 to 29, adding the ols, ridge and logistic option variants. On a CPU-only
   install `StandardScaler.fit`, `MinMaxScaler.fit`, `Lasso.fit` and `ElasticNet.fit` now
   refuse by name outside the internal reference scope, as every other estimator fit does.
+- CPU inference from saved SVM models for `SVC(kernel='linear')`, `SVC(kernel='poly')`,
+  `SVR` and `SVR(kernel='linear')`: `SVR` gains `save` and `load` (format
+  `mojolearn-svr-1`), and `mojolearn.host_model(path)`, or the classes on a CPU-only
+  install, answer `decision_function` and `predict` through the shipped svm host binding's
+  `svc_predict` and `svr_predict`. No entry was added to that binding. The svm family's
+  saved-model lanes grow from one (`svc`) to five. The svm host sabotage build gains an
+  intercept arm in the fit and a decision arm in predict, so on an integer-grid fixture
+  such as `ties` a saved model's file and its predictions now move there too. Apple M4 Metal recording checked on an x86 CPU against the committed Apple,
+  NVIDIA and AMD columns; the SVR model cells and every `svc-poly` GPU cell are owed to the
+  release record.
 - Public CPU `Cholesky` inference. On a CPU-only install `Cholesky().fit(A)` factors a given
   matrix and `solve` answers from it, and `Cholesky.save` / `Cholesky.load` (or
   `mojolearn.host_model`, which returns a `HostCholesky`) carry a factor from a GPU box to a
@@ -68,6 +118,20 @@ Linux legs are OWED before this heading reads published.
   reads IDENTICAL (nine fixtures each), and a `-D MOJOLEARN_HOST_SABOTAGE=1` build of the new
   binding reads DIVERGENT on all 27 infer and 27 batch cells with every train cell unchanged.
   Training on the CPU stays internal to the verifier.
+- `SVC(kernel='poly', degree, gamma, coef0)`, which was refused by name. The SVM Gram matrix is
+  the identical linear GEMM followed by the kernel_methods polynomial epilogue (one fused
+  multiply-add, then an ascending repeated product, DEVIATION 1663), so a negative base is
+  legal; `degree` is an integer in [0, 32] and `coef0` any finite float. The svm host binding
+  and its oracle carry the same arm, both bindings take `degree` and `coef0` in the fit and
+  predict parameter lists, and saved poly models record `coef0`. New `svc-poly` identity lane
+  (train, infer, model and batch). SVR still refuses 'poly'. Apple M4 Metal and CPU columns
+  only; NVIDIA and AMD columns are owed to the release record.
+- `GaussianProcessRegressor(normalize_y=True)`, which was refused. It follows the scikit-learn
+  reference: y is centered and scaled by StandardScaler's pinned Float32 folds before the fit
+  (a zero standard deviation scales by one), and the predictive mean and std are scaled back
+  with one correctly rounded binary32 operation each on the host. New `gp-normalize-y`
+  identity lane. Apple M4 Metal and CPU columns only; NVIDIA and AMD columns are owed to the
+  release record.
 - `score(X, y, sample_weight=...)` on `GradientBoostingClassifier`, `GradientBoostingRegressor`,
   the random forests and the Extra Trees, and `sample_weight` on `metrics.accuracy_score` and
   `metrics.r2_score`, all of which refused weights. They follow scikit-learn's reference definitions of weighted
@@ -129,10 +193,12 @@ Linux legs are OWED before this heading reads published.
   `max_pairs` subsample and PairLogitPairwise are not implemented. New identity lane
   `gbdt-pair-logit` with a batch part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed
   to the release record.
-- Every host (CPU) binding the manifest declares ships in both wheels under `mojolearn/host/`,
-  namely the byte LM's, the forest's, the tokenizer's and the twelve routed families (core,
-  linalg, estimators, metrics, preprocessing, tsa, solver, svm, trees, rf, gp, arima), fifteen in
-  all. 0.8.5 carried the byte LM's alone. The
+- The host (CPU) bindings `python/mojolearn/host_surface.py` marks `ships_in_wheel` ship in
+  both wheels under `mojolearn/host/`: ten families, byte_lm, forest, tokenizer, neural, core,
+  linalg, estimators, metrics, svm and forecast. The other seventeen families the manifest
+  declares (preprocessing, tsa, solver, trees, rf, gp, kernel_methods, mixture, hdbscan, gbdt,
+  training, resample, mamba, arima, embedding, ivf, transformer) are source reference builds
+  for the verifier and do not ship. 0.8.5 carried the byte LM's alone. The
   list is read from `python/mojolearn/host_surface.py` by the two wheel builders, the Linux
   packer, both smokes and the Linux admission; `packaging/check_ext_lists.py` (and its
   `--host` mode, which needs no built binary) fails any of them that carries a host list of

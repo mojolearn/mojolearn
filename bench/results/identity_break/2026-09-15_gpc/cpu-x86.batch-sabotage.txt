@@ -1,0 +1,53 @@
+573 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38d140000000, nodemask=2)
+573 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32c100000000, nodemask=1)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=a3357cd9857cd79035f25d0c5147dbe592309252 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_core_host', '_mojolearn_gp_host']
+# MOJOLEARN_IDENTITY_BATCH_SABOTAGE is ON: every whole-batch evaluation is perturbed by one low-bit flip; every batch cell with a hash MUST read BATCH_MOVED. This JSON is not evidence.
+# identity_break  mode=identical  2026-09-15 17:30:32  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gp                     | ea70c56b99a74791 | c92496318cb78403 | f01c58a79fb1af27 | ca779c84b786d493 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | fba9e6f4ea05af2c | cbdbd1248c92a3f8 | 40fd2f479f775ec4 |
+| gp infer               | 1e032c58b3e9cd14 | 22b0b528124de8d0 | 6eec04108625b28e | 890cda1ff831faab | 353cd97119d0e754 | 353cd97119d0e754 | 52e6b306c452f16c | 9e3f1cf6c455f0fa | b2713d53a58fa4c9 |
+| gp batch               | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      |
+| gpc                    | 8b68b996d36775e7 | c49b12da8e54b073 | 8df82eb703a3d9a8 | 0660ecee79edde49 | 9b41ad56958c3286 | 9b41ad56958c3286 | 8b68b996d36775e7 | 2390c88bdb274c27 | e159f0086dea6ea3 |
+| gpc infer              | fc0b4c2f28c2e079 | ede5baa0c8969b06 | 9da411da0b1e3037 | 209675fda33ccf51 | cd21375d6187b126 | cd21375d6187b126 | fc0b4c2f28c2e079 | 1af8d13ad9045833 | b7e320a5c79c2f12 |
+| gpc model              | 81b8bb9e635d8e83 | 7b9bf869ad365c26 | f4c2aca55d9362f2 | a3ba1f8be78a6a1e | 1ed2aed7cb4ce5f2 | b91daefb85705ccd | 81b8bb9e635d8e83 | d5a786c8bdd995bf | 42456472e82844f7 |
+| gpc batch              | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      |
+| gpc-multiclass         | 03d42b186d3d23de | 1de9790fa6022bd1 | 181acf0aafcb8d7f | 6ef9cd023801b550 | e2879b5eb341003a | e2879b5eb341003a | 03d42b186d3d23de | 12702bc35db689d4 | eba4fef6bf4f1391 |
+| gpc-multiclass infer   | 84db38aa85e9efe3 | 5f34edf8c694f013 | ea81a2c3a726ff07 | b3674a9463aa4f92 | fb65a74653a8c928 | fb65a74653a8c928 | 84db38aa85e9efe3 | f57fd8a7a5d1e719 | d35fed113ef73176 |
+| gpc-multiclass model   | a7da75ab43e33d59 | 3b3ac4079026dcdb | ad095c88a27ebcc8 | bde361487f19df87 | 6a06c6e9e1b52fbd | ec9bd2135d89a38a | a7da75ab43e33d59 | e09bd84a508af322 | dec1293907b2b18f |
+| gpc-multiclass batch   | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      |
+
+cells=27 stable=27 moved=0 refused=0
+infer: stable=27
+model: stable=18 n/a=9
+batch: batch_moved=27
+n/a: gp model n/a:no-save
+BATCH_MOVED gp/base: BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x3f0444c1 vs alone 0x3f0444c0
+BATCH_MOVED gp/ties: BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x3ff119f9 vs alone 0x3ff119f8
+BATCH_MOVED gp/hashed: BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0xbeca23d9 vs alone 0xbeca23d8
+BATCH_MOVED gp/wide: BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x43d5f801 vs alone 0x43d5f800
+BATCH_MOVED gp/denormal: BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x3fc0a581 vs alone 0x3fc0a580
+BATCH_MOVED gp/denormal_ftz: BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x3fc0a581 vs alone 0x3fc0a580
+BATCH_MOVED gp/dupes: BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0xbf5178c1 vs alone 0xbf5178c0
+BATCH_MOVED gp/odd: BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0x408952f5 vs alone 0x408952f4
+BATCH_MOVED gp/negative: BATCH_MOVED:predict(return_std=True):row 0 of 64 alone:output 0 element 0: whole 0xc09bad73 vs alone 0xc09bad72
+BATCH_MOVED gpc/base: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc/ties: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000000 vs alone 0x0000000000000001
+BATCH_MOVED gpc/hashed: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000000 vs alone 0x0000000000000001
+BATCH_MOVED gpc/wide: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc/denormal: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc/denormal_ftz: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc/dupes: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc/odd: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc/negative: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc-multiclass/base: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc-multiclass/ties: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000003 vs alone 0x0000000000000002
+BATCH_MOVED gpc-multiclass/hashed: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000003 vs alone 0x0000000000000002
+BATCH_MOVED gpc-multiclass/wide: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc-multiclass/denormal: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc-multiclass/denormal_ftz: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc-multiclass/dupes: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc-multiclass/odd: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc-multiclass/negative: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+wrote /root/leg_out/cpu-x86.batch-sabotage.json

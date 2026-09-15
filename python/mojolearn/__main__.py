@@ -56,6 +56,21 @@ import sys
 from . import _conformance
 from . import _identity
 from . import _verify
+from . import _verify_all
+
+
+def _wants_suite(args):
+    """`verify` runs the identity suite (`_verify_all.py`) when any of its
+    flags is given, else the pinned k-means card as before."""
+    return bool(getattr(args, "all", False) or getattr(args, "quick", False)
+                or getattr(args, "full", False) or getattr(args, "lanes", "")
+                or getattr(args, "emit_models", None))
+
+
+def _verify_dispatch(args):
+    if _wants_suite(args):
+        return _verify_all.cmd_verify_all(args)
+    return _verify.cmd_verify(args)
 
 
 def build_parser():
@@ -88,8 +103,46 @@ def build_parser():
     v.add_argument("--json", action="store_true",
                    help="emit one JSON object instead of the human report")
     v.add_argument("--all", action="store_true",
-                   help="on a mismatch, list every diverging stage rather "
-                        "than only the first")
+                   help="check every identity cell this install can run: the "
+                        "identity_break lanes (every lane on a GPU install, the "
+                        "public CPU reference lanes on a CPU-only one) plus the "
+                        "portable GPU-trained models, each cell part compared "
+                        "with the reference table shipped in the wheel "
+                        "(docs/VERIFY.md, python/mojolearn/_verify_all.py)")
+    v.add_argument("--quick", action="store_true",
+                   help="implies --all: one lane per family on the base "
+                        "fixture")
+    v.add_argument("--full", action="store_true",
+                   help="implies --all: every lane on every fixture (the "
+                        "default depth of --all)")
+    v.add_argument("--lanes", default="",
+                   help="implies --all: only these comma separated lanes")
+    v.add_argument("--fixtures", default="",
+                   help="with --all: only these comma separated fixtures")
+    v.add_argument("--repeats", type=int, default=1,
+                   help="with --all: fits per cell; two or more also catch a "
+                        "cell that moves on this box (default %(default)s)")
+    v.add_argument("--no-models", dest="no_models", action="store_true",
+                   help="with --all: skip the portable models")
+    v.add_argument("--reference-table", dest="reference_table", metavar="PATH",
+                   default=None,
+                   help="with --all: compare against this table instead of "
+                        "the one shipped in the wheel")
+    v.add_argument("--records", action="append", metavar="DIR", default=None,
+                   help="MAINTAINER PATH, with --all --emit-reference: the "
+                        "identity_break record directories or JSONs to build "
+                        "the table from (default: the checkout's "
+                        "bench/results/identity_break)")
+    v.add_argument("--emit-models", dest="emit_models", metavar="DIR",
+                   default=None,
+                   help="MAINTAINER PATH, GPU install: save the portable "
+                        "models and their manifest to DIR, keeping only "
+                        "models whose file bytes equal the table's model "
+                        "reference")
+    v.add_argument("--all-stages", dest="all_stages", action="store_true",
+                   help="without --all: on a mismatch of the pinned k-means "
+                        "card, list every diverging stage rather than only "
+                        "the first")
     v.add_argument("--keep", action="store_true",
                    help="keep the card this run produced even when it "
                         "matched (a mismatched card is always kept)")
@@ -107,7 +160,7 @@ def build_parser():
                         "if given), and compare it against PEER_CARD with "
                         "the one comparator. Exit 0 = the pair is ready for "
                         "install-reference.")
-    v.set_defaults(func=_verify.cmd_verify)
+    v.set_defaults(func=_verify_dispatch)
 
     i = sub.add_parser(
         "install-reference",
@@ -277,6 +330,9 @@ def build_parser():
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
+    # kept so `verify --all` with no numeric mode chosen can run itself again
+    # under the identical tier with the same arguments
+    args.argv = list(sys.argv[1:] if argv is None else argv)
     if getattr(args, "func", None) is None:
         # NO DEFAULT SUBCOMMAND. `python -m mojolearn` with no argument must
         # not quietly run the check: a bare invocation that fits on a GPU is
