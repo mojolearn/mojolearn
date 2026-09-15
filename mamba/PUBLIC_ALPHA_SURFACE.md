@@ -8,6 +8,7 @@ All implemented **public** block entrypoints are already exported. `mojolearn` a
 |---|---|---|
 | `forward(x)` | Zero-state prefill, FP32 `[B,L,d_model]` | FAST, DETERMINISTIC, IDENTICAL |
 | `forward(x, state)` | Prefill/continuation with explicit caller-owned state | Same forward modes |
+| `forward(x, lengths=...)` | Ragged right-padded zero-state prefill (2026-09-15): real positions equal each row alone, padding outputs `+0.0`; refused with a state (`python/mojolearn/_ragged.py`) | Same forward modes; the equality is an IDENTICAL claim |
 | `step(x, state)` | One-token decode, state updated in place | Same forward modes |
 | `backward(x, dy)` | Recomputed zero-state prefill VJP; `dy` matches `x`; named FP32 gradients | IDENTICAL only |
 

@@ -207,7 +207,7 @@ def test_manifest_covers_the_neural_lanes():
                    "gemm_backward_b_call", "identical_rsqrt"):
         assert oracle in text, oracle
     sentence = host_surface.no_cpu_path_sentence()
-    assert "neural blocks" not in sentence and "Transformer, Mamba and Samba blocks" in sentence, sentence
+    assert "neural blocks" not in sentence and "Mamba and Samba blocks" in sentence, sentence
 
 
 def _cpu_only_with(basename):

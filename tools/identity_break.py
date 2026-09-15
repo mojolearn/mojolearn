@@ -85,8 +85,8 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             also asked every prefix LENGTH 1, 7 and L-1 against the whole
             length, and the forecasters the horizons 1, 7 and H-1 against H
             (their batch of series is a different fit, so their part is
-            length only). No sequence API takes padding or a ragged batch,
-            so a sequence is compared alone against same-length peers. The
+            length only). A sequence is compared alone against same-length
+            peers here; right-padded ragged batches are the `ragged` part. The
             value is one hash of the whole-batch outputs when every
             comparison is the same bytes, else `BATCH_MOVED:<call>:<where>:
             <first output and element, both values in hex>` at the first
@@ -114,10 +114,11 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             declarations sit outside the lane bodies (`BATCH`), so no train,
             infer or model hash moves. IT TESTS the host call path's batch
             splitting through the bindings, on ONE box. IT DOES NOT TEST
-            serving-scale B (checks/batch_invariance_check.mojo, B in
-            {1, 17, 64}), padding or ragged batches, the backward pass, or
-            any cross-vendor statement, which comes from `--diff` over
-            records. THE SABOTAGE turns every hashed batch cell BATCH_MOVED,
+            serving-scale B, padding or ragged batches, or the backward
+            pass; since 2026-09-15 those are the opt-in parts `batchscale`,
+            `ragged` and `batchgrad` below. No part here makes a
+            cross-vendor statement; that comes from `--diff` over records.
+            THE SABOTAGE turns every hashed batch cell BATCH_MOVED,
             and a run where it does not is a broken part
 
                 MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1 MOJOLEARN_NUMERIC_MODE=identical \\
@@ -194,6 +195,81 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
 
                 MOJOLEARN_IDENTITY_RLPAIR_SABOTAGE=1 MOJOLEARN_NUMERIC_MODE=identical \\
                   python3 tools/identity_break.py --lanes mamba1 --fixtures base --repeats 1
+
+THREE OPT-IN PARTS (2026-09-15), each its own JSON keys (`<part>`,
+`<part>_verdict`, `<part>_error`, `<part>_notes`, `<part>_protocol`,
+`<part>_sabotage`) and its own `summary (<part>):` line of `--diff`,
+printed only where a column carries it. A run that does not pass the flag
+writes none of the keys, so every record and gate grep before them reads
+exactly as it did. The verdicts are the batch part's: STABLE, MOVED,
+BATCH_MOVED (a failure under IDENTICAL only), N/A, REFUSED.
+
+    batchgrad   `--batch-grad`. THE BACKWARD PASS. Two questions, and the
+            contracts decide which one each gradient is asked.
+            A PER-ROW gradient (the sequence blocks' `backward(x, g)["x"]`,
+            `cross_entropy` dlogits under reduction='sum' with the divisor
+            fixed at the whole batch's N, `linear_backward`'s da and
+            `rms_norm_backward`'s dx) reads one row, so it is asked exactly
+            as the batch part asks a forward: every row alone and the split
+            1, 7, rest (loss contract 7.1; the block contracts' row
+            independence). A gradient SUMMED over rows (every weight
+            gradient) cannot equal a row alone by definition; its question
+            is ACCUMULATION, and optimizer contract clause 9.2 says exactly
+            when accumulation is bit exact: A equal row pieces of T tokens
+            with `contract_leaf_size(T / A) == contract_leaf_size(T)`, T a
+            multiple of the leaf, A dividing P and a power of two, combined
+            by the balanced tree. So the part asks A in {2, 4, 8} at T = 512,
+            asks `training.accumulation_is_aligned(T, A)`, combines aligned
+            pieces with `training.accumulate_grads(pieces, tokens=T)` and
+            holds every CLAIMED tensor to the whole batch byte for byte; A = 8
+            (refused at T = 512) is the negative control, combined with no
+            alignment claim and recorded as how many claimed tensors moved;
+            the uneven split 1, 7, rest is recorded n/a with clause 9.2's
+            reason (A = 3, not a power of two, pieces not subtrees). CLAIMED
+            means the tensor's token contraction is the v1 GEMM at k' = T,
+            read from each backward's source (`GRAD_CLAIMED`): all nine
+            transformer weights; Mamba-1 all but A_log; Mamba-2 the two
+            projections, both norms and D, not conv1d, dt_bias or A_log
+            (serial folds in mamba2_ssd_backward.mojo); Mamba-3 all nine;
+            `linear_backward` and `rms_norm_backward` dweight; for
+            `SambaStack.loss_and_grads(num_items=T)` only the LM head and
+            final norm, because clause 9.3 claims those two and reports the
+            rest. A tensor that is not claimed is REPORTED: whether it moved
+            at an aligned split is in the hash and in `batchgrad_notes`,
+            never a failure. The embedding's CARRY (embedding contract 7.4,
+            bit exact at EVERY split) is asked at 1, 7, rest and in pieces of
+            16. n/a reasons: mean-reduction (SmallMLPTrainer), mean-reduction-
+            fixed-batch (the byte LM trainers), optimizer-step, driver-lane
+            (par-*), no-backward (every estimator without a gradient call;
+            no classical estimator on the public surface has a gradient or a
+            partial_fit, and the scalers' partial_fit raises by name).
+            SABOTAGE `MOJOLEARN_IDENTITY_BATCHGRAD_SABOTAGE=1` flips one bit of
+            every whole-batch gradient (every hashed cell must read
+            BATCH_MOVED); `=serial` replaces condition 5's tree with a running
+            pair sum, which the contract says is inert at A <= 2, so a cell
+            that moves at A = 4 is condition 5 seen biting (recorded).
+    batchscale  `--batch-scale`. SERVING-SCALE B. A whole call of 1024 rows
+            and sub-batches of B in {1, 17, 64, 256} at its start, middle and
+            end, every sub-batch row equal to its row of the whole; for the
+            causal sequence models also B = 2 at L = 1024 against every
+            prefix in {1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511,
+            512, 513, 1023} (the Mamba-3 chunk 64, the GEMM leaf 128, the
+            Mamba-2 chunk 256). Lanes: the sequence blocks, the byte LM lanes
+            (the long length loads the lane's parameters into the default
+            shape with `length=1024`), Samba, and the classical serving set
+            knn, rf-clf, rf-reg, gbdt-symmetric, gbdt-rmse, ols, ridge,
+            logistic, pca. Inputs past a fixture's size wrap around it. The
+            batch part's sabotage switch sabotages this part too.
+    ragged  `--ragged`. PADDED AND RAGGED BATCHES, through the `lengths=`
+            argument the causal sequence models take since 2026-09-15
+            (python/mojolearn/_ragged.py: TransformerBlock, Mamba1/2/3Block
+            and SambaStack `forward`, the byte LM `logits` and `next_bytes`).
+            Rows of lengths (16, 1, 7, 9, 16, 3, 12, 15) at L = 16 and
+            (300, 1, 65, 129, 257, 128) at L = 300, the padding filled with
+            NaN (floats) or vocab + 7 (ids). Every row's real positions must
+            equal the row run alone at its own length, and every padding
+            output must be exactly +0.0; next_bytes must equal the row alone.
+            The batch part's sabotage switch sabotages this part too.
 
 THE LANES, 178 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
@@ -3444,7 +3520,7 @@ def _eval_batch_prefix(call, sabotage, digest):
                 flipped[0] ^= 1
                 full[hit] = np.frombuffer(bytes(flipped), dtype=o.dtype).reshape(o.shape)
                 break
-    for p in _prefix_lengths(call.full):
+    for p in (getattr(call, "lengths", None) or _prefix_lengths(call.full)):
         part = [np.asarray(o) for o in call.fn(p)]
         for k, (F, P) in enumerate(zip(full, part)):
             want = np.ascontiguousarray(np.take(F, np.arange(p), axis=call.axis))
@@ -3893,6 +3969,680 @@ def _batch_par_cholesky(ml, e, Xh):
 
 
 _batch_decl(_batch_par_cholesky, "par-cholesky")
+
+
+# ---------------------------------------------------------------- the batchgrad part (2026-09-15)
+# See `batchgrad` in the module docstring. The backward twin of the batch
+# part, opt-in (`--batch-grad`), declared OUTSIDE the lane bodies like BATCH
+# so no train, infer, model or batch hash moves because of it. A declaration
+# is an `n/a:<reason>` string or a function `(ml, est, Xh) -> [call, ...]`
+# whose calls are _BatchRows (a per-row gradient: every split is claimed),
+# _GradAccum (a gradient summed over rows: only clause 9.2's aligned splits
+# are claimed) or _GradCarry (the embedding carry: every split is claimed).
+
+#: the batchgrad sabotage: `1` (or `bit`) flips one bit of every whole-batch
+#: gradient, so every hashed cell MUST read BATCH_MOVED; `serial` replaces
+#: clause 9.2 condition 5's balanced tree with a running pair sum, which the
+#: contract says is inert at A <= 2 and fixture-dependent at A = 4, so its
+#: result is recorded and not required
+BATCHGRAD_SABOTAGE_ENV = "MOJOLEARN_IDENTITY_BATCHGRAD_SABOTAGE"
+
+#: the microbatch counts asked of every accumulated gradient; the ones clause
+#: 9.2 refuses at the call's token count are recorded n/a with that reason
+GRAD_ACCUM_SPLITS = (2, 4, 8)
+
+#: the reason the batch part's uneven split (1, 7, rest) is never asked of an
+#: accumulated gradient, from training/IDENTICAL_OPTIMIZER_CONTRACT.md
+GRAD_UNEVEN_SPLIT_NA = ("n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, "
+                        "A = 3 is not a power of two (condition 4) and the pieces are not complete "
+                        "subtrees (condition 3))")
+
+BATCHGRAD = {}
+
+
+def _batchgrad_decl(spec, *names):
+    for n in names:
+        if n in BATCHGRAD:
+            raise RuntimeError(f"identity_break: lane {n!r} has two batchgrad declarations")
+        BATCHGRAD[n] = spec
+
+
+class _GradAccum:
+    """One gradient that is a SUM over the rows of a call (a weight
+    gradient). `fn(a, b)` returns `{name: array}` for rows [a, b) of the
+    call's input; `n` rows of `tokens_per_row` tokens make the call's token
+    count T. The harness computes the whole-batch gradient, then for every A
+    in GRAD_ACCUM_SPLITS asks `training.accumulation_is_aligned(T, A)`; an
+    aligned split is computed as A equal row pieces combined by
+    `training.accumulate_grads(pieces, tokens=T)` (the balanced tree,
+    condition 5) and every tensor in `claimed` must equal the whole batch
+    byte for byte. A tensor NOT in `claimed` is REPORTED: its contraction is
+    not the v1 GEMM over the token count (a serial fold, the run-sorted
+    embedding fold), so clause 9.2 does not reach it; whether it moved is
+    part of the hash (the same arithmetic on every vendor gives the same
+    pattern) and never a failure. A split the clause refuses is the negative
+    control: it is combined with `tokens=None` (the tree with no alignment
+    claim) and the number of claimed tensors that MOVED is recorded, not
+    required. `why` names the source that sorts the tensors."""
+
+    def __init__(self, label, n, tokens_per_row, fn, claimed, why):
+        self.label, self.n, self.tokens_per_row, self.fn = label, int(n), int(tokens_per_row), fn
+        self.claimed, self.why = frozenset(claimed), why
+
+
+class _GradCarry:
+    """One gradient accumulated by CARRY (embedding contract 7.4: the second
+    microbatch's fold continues from the first's stored accumulator, bit
+    exact at EVERY split, no alignment condition). `fresh(a, b)` is the
+    gradient of positions [a, b) from +0.0 and `carry(a, b, g)` continues
+    `g`. Asked at the batch part's uneven split and at a split every
+    `BATCH_ALONE` positions."""
+
+    def __init__(self, label, n, fresh, carry):
+        self.label, self.n, self.fresh, self.carry = label, int(n), fresh, carry
+
+
+def _as_named(out):
+    return {k: np.ascontiguousarray(np.asarray(v)) for k, v in out.items()}
+
+
+def _flip_first_float(a):
+    a = np.ascontiguousarray(a)
+    raw = bytearray(a.tobytes())
+    if raw:
+        raw[0] ^= 1
+    return np.frombuffer(bytes(raw), dtype=a.dtype).reshape(a.shape)
+
+
+def _first_diff(a, b):
+    ab, bb = a.tobytes(), b.tobytes()
+    if a.shape != b.shape or a.dtype != b.dtype:
+        return f"whole {a.dtype.str}{list(a.shape)} vs {b.dtype.str}{list(b.shape)}"
+    size = a.dtype.itemsize
+    e = next(j for j in range(len(ab)) if ab[j] != bb[j]) // size
+    return f"element {e}: whole {_elem_hex(ab, size, e)} vs {_elem_hex(bb, size, e)}"
+
+
+def _eval_grad_accum(ml, call, sabotage, digest, notes):
+    T = ml.training
+    whole = _as_named(call.fn(0, call.n))
+    names = sorted(whole)
+    unknown = sorted(call.claimed - set(names))
+    if unknown:
+        raise ValueError(f"{call.label}: claimed tensors {unknown} are not in the gradient {names}")
+    if sabotage in ("1", "bit"):
+        hit = next((k for k in names if k in call.claimed), names[0])
+        whole[hit] = _flip_first_float(whole[hit])
+    tokens = call.n * call.tokens_per_row
+    reported, asked = [], []
+    notes.append(f"{call.label}: {GRAD_UNEVEN_SPLIT_NA}")
+    for a in GRAD_ACCUM_SPLITS:
+        if call.n % a:
+            notes.append(f"{call.label}: A={a} n/a:{call.n} rows are not divisible into {a} equal pieces")
+            continue
+        aligned = bool(T.accumulation_is_aligned(tokens, a))
+        rows = call.n // a
+        pieces = [_as_named(call.fn(j * rows, (j + 1) * rows)) for j in range(a)]
+        for j, p in enumerate(pieces):
+            if sorted(p) != names:
+                raise ValueError(f"{call.label}: piece {j} of A={a} has tensors {sorted(p)}, whole has {names}")
+        if sabotage == "serial" and aligned:
+            acc = [pieces[0][k] for k in names]
+            for p in pieces[1:]:
+                acc = T.accumulate_grads([acc, [p[k] for k in names]], tokens=None)
+            comb = acc
+        else:
+            comb = T.accumulate_grads([[p[k] for k in names] for p in pieces], tokens=tokens if aligned else None)
+        comb = dict(zip(names, (np.ascontiguousarray(np.asarray(c)) for c in comb)))
+        moved = [k for k in names if comb[k].tobytes() != whole[k].tobytes()]
+        if not aligned:
+            n_claimed = sum(k in call.claimed for k in moved)
+            notes.append(f"{call.label}: A={a} n/a:clause 9.2 refuses T={tokens} at A={a}; negative control "
+                         f"(tokens=None): {n_claimed} of {len(call.claimed)} claimed tensors moved")
+            asked.append(f"A{a}:refused:{n_claimed}")
+            continue
+        asked.append(f"A{a}:aligned")
+        for k in moved:
+            if k in call.claimed:
+                return (f"BATCH_MOVED:{call.label}:A={a} of T={tokens} (clause 9.2 aligned) tensor {k} "
+                        f"{_first_diff(whole[k], comb[k])}")
+            reported.append(f"A{a}:{k}")
+    if reported:
+        notes.append(f"{call.label}: REPORTED (not claimed; {call.why}) moved at aligned splits: {reported}")
+    digest.update(f"accum:{call.label}:{call.n}x{call.tokens_per_row}:{','.join(asked)}:"
+                  f"claimed={','.join(sorted(call.claimed))}:reported-moved={','.join(reported)}".encode())
+    for k in names:
+        digest.update(f"{k}{whole[k].dtype.str}{whole[k].shape}".encode())
+        digest.update(whole[k].tobytes())
+    return None
+
+
+def _eval_grad_carry(ml, call, sabotage, digest, notes):
+    whole = np.ascontiguousarray(np.asarray(call.fresh(0, call.n)))
+    if sabotage in ("1", "bit"):
+        whole = _flip_first_float(whole)
+    splits = [_split_bounds(call.n), list(range(0, call.n, BATCH_ALONE)) + [call.n]]
+    for bounds in splits:
+        g = None
+        for a, b in zip(bounds, bounds[1:]):
+            g = call.fresh(a, b) if g is None else call.carry(a, b, g)
+        g = np.ascontiguousarray(np.asarray(g))
+        if g.tobytes() != whole.tobytes():
+            name = ",".join(str(b - a) for a, b in zip(bounds, bounds[1:]))
+            if len(bounds) > 5:
+                name = f"{len(bounds) - 1} pieces of {BATCH_ALONE}"
+            return f"BATCH_MOVED:{call.label}:carry over split {name} {_first_diff(whole, g)}"
+    digest.update(f"carry:{call.label}:{call.n}".encode())
+    digest.update(f"{whole.dtype.str}{whole.shape}".encode())
+    digest.update(whole.tobytes())
+    return None
+
+
+def _grad_rows(label, x, g, fn):
+    """A per-row gradient over rows of (x, g): the rows are index rows, so a
+    chunk is handed exactly its rows' bytes of both operands."""
+    idx = np.arange(x.shape[0], dtype=np.int64).reshape(-1, 1)
+    take = lambda a, r: np.ascontiguousarray(a[r[:, 0]])
+    return _BatchRows(label, idx, lambda r: (np.asarray(fn(take(x, r), take(g, r))),))
+
+
+#: the batchgrad slab for the sequence blocks: 8 sequences of 64 tokens, so
+#: T = 512 and clause 9.2 admits A = 2 and A = 4 and refuses A = 8
+GRAD_SEQ_BATCH, GRAD_SEQ_LEN = 8, 64
+
+#: the tensors whose token contraction IS the v1 GEMM at k' = the token
+#: count, per block, read from the public backward's source on 2026-09-15.
+#: Transformer: every weight gradient, the seven projections through
+#: `_route_b` and both RMSNorm weights as `ones . dprod` (DEVIATION 1410),
+#: transformer/checks/transformer_backward.mojo. Mamba-1: the four
+#: projections' dB and the RED_* reductions (`mamba_backward_reduce_into`,
+#: OP_NN at (1, W, M)), NOT `A_log` ("T4 dA over t: t DESCENDING ... NOT
+#: routed", "T5 parameter fold over b", mamba/checks/mamba_backward.mojo),
+#: modeling_mamba_prefill_backward.mojo. Mamba-2: the two projections and
+#: the block norm, gated norm and D reductions, NOT conv1d.weight,
+#: conv1d.bias, dt_bias or A_log, which mamba/impl/ops/mamba2_ssd_backward.mojo
+#: folds serially over every (row, position) in one thread per channel
+#: (`mamba2_conv_backward_kernel`, `mamba2_dt_backward_kernel`,
+#: `mamba2_da_product_backward_kernel`). Mamba-3: every weight gradient (the
+#: two projections and the seven RED3_* reductions),
+#: mamba/impl/modules/mamba3_prefill_backward.mojo.
+GRAD_CLAIMED = {
+    "transformer": ("input_layernorm.weight", "post_attention_layernorm.weight", "q_proj.weight", "k_proj.weight",
+                    "v_proj.weight", "o_proj.weight", "gate_proj.weight", "up_proj.weight", "down_proj.weight"),
+    "mamba1": ("norm.weight", "in_proj.weight", "conv1d.weight", "conv1d.bias", "x_proj.weight", "dt_proj.weight",
+               "dt_proj.bias", "D", "out_proj.weight"),
+    "mamba2": ("block_norm.weight", "in_proj.weight", "D", "norm.weight", "out_proj.weight"),
+    "mamba3": ("block_norm.weight", "in_proj.weight", "dt_bias", "B_norm.weight", "C_norm.weight", "B_bias",
+               "C_bias", "D", "out_proj.weight"),
+}
+
+
+def _batchgrad_block(kind):
+    def spec(ml, blk, Xh):
+        dm = blk.d_model
+        x = _seq(Xh, GRAD_SEQ_BATCH, GRAD_SEQ_LEN, dm)
+        g = _seq(Xh, GRAD_SEQ_BATCH, GRAD_SEQ_LEN, dm, skip=GRAD_SEQ_BATCH * GRAD_SEQ_LEN * dm)
+        piece = lambda a, b: {k: v for k, v in blk.backward(np.ascontiguousarray(x[a:b]),
+                                                              np.ascontiguousarray(g[a:b])).items() if k != "x"}
+        return [_grad_rows("backward x (per row)", x, g, lambda xr, gr: blk.backward(xr, gr)["x"]),
+                _GradAccum("backward weights", GRAD_SEQ_BATCH, GRAD_SEQ_LEN, piece, GRAD_CLAIMED[kind],
+                           "a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED")]
+    return spec
+
+
+_batchgrad_decl(_batchgrad_block("transformer"), "transformer", "transformer-window")
+_batchgrad_decl(_batchgrad_block("mamba1"), "mamba1")
+_batchgrad_decl(_batchgrad_block("mamba2"), "mamba2", "mamba2-dtlimit")
+_batchgrad_decl(_batchgrad_block("mamba3"), "mamba3")
+
+
+def _batchgrad_samba(ml, st, Xh):
+    """`SambaStack.loss_and_grads(..., num_items=count)`, the call
+    `train_step` accumulates: T = 8 x 64 = 512 target tokens, each piece
+    divided by the whole step's count, combined by the clause 9.2 tree.
+    Clause 9.3 CLAIMS the LM head and final-norm weight gradients and says
+    the embedding's run-sorted fold and the Mamba-3 block's per-head
+    reductions are reported, not claimed; this part follows that text
+    exactly (test_samba_surface.py arm STACK-ACCUM asserts the same two). A
+    dropout stack draws its mask from a fixed stream at each piece's token
+    offset, as `train_step` does."""
+    ids = _ids(Xh, GRAD_SEQ_BATCH, GRAD_SEQ_LEN + 1, vocab=st.config.vocab)
+    inputs, targets = np.ascontiguousarray(ids[:, :-1]), np.ascontiguousarray(ids[:, 1:])
+    count = int(targets.size)
+    stream = 7 if st.config.dropout > 0.0 else None
+
+    def piece(a, b):
+        _, grads = st.loss_and_grads(np.ascontiguousarray(inputs[a:b]), np.ascontiguousarray(targets[a:b]),
+                                     num_items=count, dropout_stream=stream, token_offset=a * GRAD_SEQ_LEN)
+        return dict(zip(st.names, grads))
+    claimed = [n for n in ("lm_head.weight", "norm_f.weight") if n in st.names]
+    return [_GradAccum("loss_and_grads(num_items=T)", GRAD_SEQ_BATCH, GRAD_SEQ_LEN, piece, claimed,
+                       "optimizer contract clause 9.3 claims only the LM head and final-norm weights")]
+
+
+_batchgrad_decl(_batchgrad_samba, "samba", "samba-untied-dropout-accum")
+
+
+def _batchgrad_cross_entropy(ml, e, Xh):
+    """dlogits under reduction='sum' with the divisor fixed at the whole
+    batch's N (`num_items`), so a row's gradient is its slice of the whole
+    one: loss contract 7.1, L14-L16 read one row and never N (only L12, the
+    scalar loss, reads N, and it is not asked). Three kernels: plain, label
+    smoothing above zero (a different kernel, 6.2(c)) and an ignore_index
+    that masks rows (7.3)."""
+    T = ml.training
+    logits = _hw((64, 16), "ce:logits", -2.0, 2.0)
+    t = (_ids(Xh, 1, 64).reshape(64) % 16).astype(np.int32)
+    tm = t.copy(); tm[::4] = 0
+    grad = lambda lg, tg, **kw: T.cross_entropy(lg, tg[:, 0].astype(np.int32), reduction="sum", num_items=64,
+                                                 return_grad=True, **kw)[1]
+    return [_grad_rows("dlogits sum/num_items=64", logits, t.reshape(-1, 1), grad),
+            _grad_rows("dlogits label_smoothing=0.1", logits, t.reshape(-1, 1),
+                       lambda lg, tg: grad(lg, tg, label_smoothing=0.1)),
+            _grad_rows("dlogits ignore_index=0", logits, tm.reshape(-1, 1),
+                       lambda lg, tg: grad(lg, tg, ignore_index=0))]
+
+
+_batchgrad_decl(_batchgrad_cross_entropy, "cross-entropy-arms")
+
+
+def _batchgrad_training_primitives(ml, e, Xh):
+    """linear_backward and rms_norm_backward over M = 512 rows: the input
+    gradients per row, the weight gradients accumulated. Both weight
+    gradients are the v1 GEMM at k' = M (`linear_backward`'s docstring names
+    the clause 9.2 contraction; `rms_norm_backward` runs
+    training/samba_ops.mojo::samba_rms_norm_backward_host, the transformer's
+    `bwd_rms_norm`, `ones . dprod`), so both are claimed. embedding_backward
+    is the run-sorted fold, which clause 9.3 reports and does not claim."""
+    T = ml.training
+    V, D, M, K = 64, 32, 512, 16
+    x = np.ascontiguousarray(_seq(Xh, 1, M, D).reshape(M, D))
+    dy = np.ascontiguousarray(_seq(Xh, 1, M, D, skip=M * D).reshape(M, D))
+    dc = _hw((M, K), "prim:grad:dc", -1.0, 1.0)
+    w_lin = _hw((K, D), "prim:lin", -0.25, 0.25)
+    gam = np.ascontiguousarray(np.abs(_hw((D,), "prim:rms", 0.5, 1.5)))
+    ids = (_ids(Xh, 1, M).reshape(M) % V).astype(np.int32)
+    lin = lambda a, b: dict(zip(("da", "dweight"), T.linear_backward(dc[a:b], x[a:b], w_lin)))
+    rms = lambda a, b: dict(zip(("dx", "dweight"), T.rms_norm_backward(dy[a:b], x[a:b], gam, 1e-5)))
+    return [_grad_rows("linear_backward da (per row)", dc, x, lambda d_, xr: T.linear_backward(d_, xr, w_lin)[0]),
+            _GradAccum("linear_backward dweight", M, 1, lambda a, b: {"dweight": lin(a, b)["dweight"]},
+                       ("dweight",), "-"),
+            _grad_rows("rms_norm_backward dx (per row)", dy, x, lambda d_, xr: T.rms_norm_backward(d_, xr, gam, 1e-5)[0]),
+            _GradAccum("rms_norm_backward dweight", M, 1, lambda a, b: {"dweight": rms(a, b)["dweight"]},
+                       ("dweight",), "-"),
+            _GradAccum("embedding_backward", M, 1,
+                       lambda a, b: {"dweight": T.embedding_backward(dy[a:b], ids[a:b], V)}, (),
+                       "the run-sorted ascending fold, reported by clause 9.3")]
+
+
+_batchgrad_decl(_batchgrad_training_primitives, "training-primitives")
+
+
+def _batchgrad_embedding(ml, e, Xh):
+    """Embedding.backward's carry (contract 7.4, bit exact at every split),
+    T = 512 held-out ids with the lane's padding_idx and plan."""
+    n, d = 512, e.embedding_dim
+    ids = (_ids(Xh, 1, n).reshape(n) % e.num_embeddings).astype(np.int32)
+    dy = np.ascontiguousarray(_seq(Xh, 1, n, d).reshape(n, d))
+    return [_GradCarry("backward carry", n, lambda a, b: e.backward(ids[a:b], dy[a:b]),
+                       lambda a, b, g: e.backward(ids[a:b], dy[a:b], grad=g))]
+
+
+_batchgrad_decl(_batchgrad_embedding, "embedding", "embedding-sort")
+
+# The lanes that train and are NOT asked, each with the reason from its own
+# source. Every other lane has no gradient call on its public surface.
+_batchgrad_decl("n/a:mean-reduction (SmallMLPTrainer.loss_and_grads is mean cross-entropy over the call's own "
+                "rows, _mlp_impl.py::_gradient; a row alone or a piece carries a different divisor by definition)",
+                "mlp", "par-mlp")
+_batchgrad_decl("n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the "
+                "profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile)",
+                "byte-lm", "byte-lm-resident", "byte-lm-host-train")
+_batchgrad_decl("n/a:optimizer-step (no gradient is computed; accumulate_grads is asked by the block, samba "
+                "and primitive lanes)", "optim-sgd", "optim-adam-clip")
+_batchgrad_decl("n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the "
+                "twin lane carries the batchgrad part)", "par-samba", "par-samba-clip", "par-byte-lm",
+                "par-byte-lm-model-pool", "par-byte-lm-offload")
+
+#: every undeclared lane: its public surface has no backward, gradient or
+#: partial_fit (the scalers' partial_fit raises NotImplementedError by name)
+BATCHGRAD_DEFAULT = "n/a:no-backward"
+
+
+# ---------------------------------------------------------------- the batchscale part (2026-09-15)
+# See `batchscale` in the module docstring. Opt-in (`--batch-scale`). The
+# batch part asks at most 16 rows alone and a split of 1, 7 and the rest;
+# checks/batch_invariance_check.mojo asks the blocks at B in {1, 17, 64}.
+# This part asks the PUBLIC surface at serving sizes: a whole call of
+# SCALE_WHOLE rows, and sub-batches of SCALE_BATCHES rows at the start, the
+# middle and the end of it, every row of every sub-batch equal to its row
+# of the whole call; and the causal sequence models at a long length,
+# every prefix in SCALE_PREFIXES equal to the first positions of the whole.
+
+SCALE_BATCHES = (1, 17, 64, 256)
+SCALE_WHOLE = 1024
+SCALE_LONG_L = 1024
+#: 64 is the Mamba-3 chunk, 128 the v1 GEMM leaf, 256 the Mamba-2 chunk
+SCALE_PREFIXES = (1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511, 512, 513, 1023)
+
+BATCHSCALE = {}
+
+
+def _batchscale_decl(spec, *names):
+    for n in names:
+        if n in BATCHSCALE:
+            raise RuntimeError(f"identity_break: lane {n!r} has two batchscale declarations")
+        BATCHSCALE[n] = spec
+
+
+class _ScaleRows:
+    """One row-wise call asked at serving sizes. `fn(R[a:b])` returns a
+    tuple of outputs whose axis 0 is the rows, as for _BatchRows."""
+
+    def __init__(self, label, R, fn):
+        self.label, self.R, self.fn = label, np.ascontiguousarray(R), fn
+
+
+def _eval_scale_rows(call, sabotage, digest):
+    n = call.R.shape[0]
+    whole = _as_rows(call.fn(call.R), n, f"{call.label} whole B={n}")
+    if sabotage:
+        _sabotage_rows(whole)
+    for b in SCALE_BATCHES:
+        if b > n:
+            continue
+        for a in sorted({0, (n - b) // 2, n - b}):
+            got = _as_rows(call.fn(np.ascontiguousarray(call.R[a:a + b])), b, f"{call.label} B={b} at {a}")
+            for i in range(b):
+                m = _row_mismatch(whole[a + i], got[i], f"B={b} starting at row {a}")
+                if m:
+                    return f"BATCH_MOVED:{call.label}:row {a + i} of {n} in B={b} starting at row {a}:{m}"
+    digest.update(f"scale:{call.label}:{n}:{','.join(map(str, SCALE_BATCHES))}".encode())
+    for r in whole:
+        for dt, shape, raw in r:
+            digest.update(f"{dt}{shape}".encode())
+            digest.update(raw)
+    return None
+
+
+def _tiled(X, shape):
+    """`shape` float32 values from the fixture, row-major and wrapped (the
+    serving sizes ask for more values than some fixtures hold; the fixture
+    lengths do not divide the row sizes, so wrapped rows are not copies)."""
+    return np.ascontiguousarray(np.resize(np.ascontiguousarray(X).reshape(-1), int(np.prod(shape))).reshape(shape))
+
+
+def _tiled_ids(X, b, l, vocab=256):
+    raw = np.frombuffer(np.ascontiguousarray(X).tobytes(), dtype=np.uint8)
+    return np.ascontiguousarray((np.resize(raw, b * l).astype(np.int32) % vocab).reshape(b, l))
+
+
+def _scale_prefix(label, full, fn):
+    call = _BatchPrefix(label, full, fn, axis=1)
+    call.lengths = [p for p in SCALE_PREFIXES if p < full]
+    return call
+
+
+def _batchscale_block(ml, blk, Xh):
+    dm = blk.d_model
+    x = _tiled(Xh, (SCALE_WHOLE, SEQ_LEN, dm))
+    xl = _tiled(Xh[::-1], (2, SCALE_LONG_L, dm))
+    return [_ScaleRows(f"forward L={SEQ_LEN}", x, lambda r: (np.asarray(blk.forward(r)),)),
+            _scale_prefix(f"forward B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
+                          lambda p: (np.asarray(blk.forward(np.ascontiguousarray(xl[:, :p, :]))),))]
+
+
+_batchscale_decl(_batchscale_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "transformer",
+                 "transformer-window")
+
+
+def _long_byte_lm(ml, e):
+    """The lane's model at length SCALE_LONG_L. Every byte LM lane runs the
+    default shape, and its registry does not depend on the length (RoPE, no
+    position table), so the same flat parameters load into the default
+    config with only `length` changed."""
+    shape = ml.ByteLanguageModelConfig(length=SCALE_LONG_L)
+    if isinstance(e, ml.LanguageModelInference):
+        return ml.LanguageModelInference(e._parameters, shape=shape, threaded=e._threaded, threads=e._threads)
+    return ml.SmallByteLanguageModelTrainer(np.asarray(e.parameters_),
+                                            data_schedule={"dataset": "identity_break", "order": "sequential"},
+                                            shape=shape)
+
+
+def _batchscale_byte_lm(ml, e, Xh):
+    shape = ml.ByteLanguageModelConfig()
+    ids = _tiled_ids(Xh, SCALE_WHOLE, shape.length)
+    long_m = _long_byte_lm(ml, e)
+    idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L)
+    return [_ScaleRows(f"logits L={shape.length}", ids, lambda r: (np.asarray(e.logits(r)),)),
+            _scale_prefix(f"logits B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
+                          lambda p: (np.asarray(long_m.logits(np.ascontiguousarray(idl[:, :p]))),))]
+
+
+_batchscale_decl(_batchscale_byte_lm, "byte-lm", "byte-lm-resident", "byte-lm-host-infer",
+                 "byte-lm-host-infer-threaded")
+
+
+def _batchscale_samba(ml, st, Xh):
+    ids = _tiled_ids(Xh, SCALE_WHOLE, SEQ_LEN, st.config.vocab)
+    idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L, st.config.vocab)
+    return [_ScaleRows(f"forward L={SEQ_LEN}", ids, lambda r: (np.asarray(st.forward(r)),)),
+            _scale_prefix(f"forward B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
+                          lambda p: (np.asarray(st.forward(np.ascontiguousarray(idl[:, :p]))),))]
+
+
+_batchscale_decl(_batchscale_samba, "samba", "samba-untied-dropout-accum")
+
+
+def _scale_calls(*methods, sl=slice(None), prep=None):
+    def spec(ml, e, Xh):
+        R = (Xh if prep is None else prep(Xh))[sl][:SCALE_WHOLE]
+        return [_ScaleRows(m, R, (lambda m: lambda r: (getattr(e, m)(r),))(m)) for m in methods]
+    return spec
+
+
+def _batchscale_kneighbors(ml, e, Xh):
+    return [_ScaleRows("kneighbors", Xh[:SCALE_WHOLE], lambda r: tuple(e.kneighbors(r)))]
+
+
+# The representative classical set the gap named: neighbors, forests, GBDT
+# predict, linear models and a decomposition.
+_batchscale_decl(_batchscale_kneighbors, "knn")
+_batchscale_decl(_scale_calls("predict", "predict_proba"), "rf-clf", "gbdt-symmetric")
+_batchscale_decl(_scale_calls("predict"), "rf-reg", "gbdt-rmse", "ols", "ridge")
+_batchscale_decl(_scale_calls("predict_proba"), "logistic")
+_batchscale_decl(_scale_calls("transform"), "pca")
+
+BATCHSCALE_DEFAULT = "n/a:not-in-the-serving-set"
+
+
+# ---------------------------------------------------------------- the ragged part (2026-09-15)
+# See `ragged` in the module docstring. Opt-in (`--ragged`). The causal
+# sequence models take `lengths=` since 2026-09-15 (python/mojolearn/_ragged.py):
+# a right-padded batch whose real positions must equal each row alone at its
+# own length and whose padding outputs must be exactly +0.0. The padding
+# INPUT is filled with junk (NaN for the float blocks, out-of-vocabulary ids
+# for the token models) so a padding value that reached any real position,
+# or any refusal, is seen.
+
+#: row lengths of the short ragged batch (L = SEQ_LEN) and of the long one;
+#: the long lengths straddle the Mamba-3 chunk (64), the v1 GEMM leaf (128)
+#: and the Mamba-2 chunk (256)
+RAGGED_LENGTHS = (16, 1, 7, 9, 16, 3, 12, 15)
+RAGGED_LONG_LENGTHS = (300, 1, 65, 129, 257, 128)
+
+RAGGED = {}
+
+
+def _ragged_decl(spec, *names):
+    for n in names:
+        if n in RAGGED:
+            raise RuntimeError(f"identity_break: lane {n!r} has two ragged declarations")
+        RAGGED[n] = spec
+
+
+class _RaggedCall:
+    """One ragged call. `x` is (B, L, ...) with junk at the padding
+    positions, `padded(x, lengths)` returns a tuple of outputs whose axis 0
+    is the rows, and `alone(x_row)` the same outputs for one row cut to its
+    length. `axes[k]` is output k's length axis (1), or None for a per-row
+    output (next_bytes) compared whole."""
+
+    def __init__(self, label, x, lengths, padded, alone, axes=(1,)):
+        self.label, self.x, self.lengths = label, np.ascontiguousarray(x), tuple(lengths)
+        self.padded, self.alone, self.axes = padded, alone, tuple(axes)
+
+
+def _eval_ragged(call, sabotage, digest):
+    outs = [np.array(np.asarray(o), copy=True) for o in call.padded(call.x, call.lengths)]
+    if len(outs) != len(call.axes):
+        raise ValueError(f"{call.label}: {len(outs)} outputs, {len(call.axes)} axes declared")
+    if sabotage:
+        outs[0] = _flip_first_float(outs[0])
+    for i, n in enumerate(call.lengths):
+        alone = [np.asarray(o) for o in call.alone(np.ascontiguousarray(call.x[i:i + 1, :n]))]
+        for k, (O, A, ax) in enumerate(zip(outs, alone, call.axes)):
+            A = np.ascontiguousarray(A)
+            want = np.ascontiguousarray(O[i:i + 1] if ax is None else O[i:i + 1, :n])
+            where = f"BATCH_MOVED:{call.label}:row {i} (length {n} of {call.x.shape[1]}) output {k}"
+            if want.shape != A.shape or want.dtype != A.dtype:
+                return f"{where}: padded {want.dtype.str}{list(want.shape)} vs alone {A.dtype.str}{list(A.shape)}"
+            if want.tobytes() != A.tobytes():
+                return f"{where} real positions: {_first_diff(want, A).replace('whole', 'padded', 1).replace(' vs ', ' vs alone ', 1)}"
+            if ax is not None:
+                pad = np.ascontiguousarray(O[i, n:])
+                if pad.tobytes() != bytes(pad.nbytes):
+                    first = next(j for j, c in enumerate(pad.tobytes()) if c) // pad.dtype.itemsize
+                    return f"{where}: padding output element {first} is not +0.0"
+    digest.update(f"ragged:{call.label}:{list(call.x.shape)}:{call.lengths}".encode())
+    for o in outs:
+        o = np.ascontiguousarray(o)
+        digest.update(f"{o.dtype.str}{o.shape}".encode())
+        digest.update(o.tobytes())
+    return None
+
+
+def _junk_float(x, lengths):
+    x = np.array(x, dtype=np.float32, copy=True)
+    for i, n in enumerate(lengths):
+        x[i, n:] = np.float32("nan")
+    return x
+
+
+def _junk_ids(ids, lengths, vocab):
+    ids = np.array(ids, dtype=np.int32, copy=True)
+    for i, n in enumerate(lengths):
+        ids[i, n:] = vocab + 7
+    return ids
+
+
+def _ragged_block(ml, blk, Xh):
+    dm = blk.d_model
+    L2 = max(RAGGED_LONG_LENGTHS)
+    x = _junk_float(_seq(Xh, len(RAGGED_LENGTHS), SEQ_LEN, dm), RAGGED_LENGTHS)
+    xl = _junk_float(_tiled(Xh, (len(RAGGED_LONG_LENGTHS), L2, dm)), RAGGED_LONG_LENGTHS)
+    fwd = lambda a, lens: (np.asarray(blk.forward(a, lengths=lens)),)
+    one = lambda r: (np.asarray(blk.forward(r)),)
+    return [_RaggedCall(f"forward(lengths) L={SEQ_LEN}", x, RAGGED_LENGTHS, fwd, one),
+            _RaggedCall(f"forward(lengths) L={L2}", xl, RAGGED_LONG_LENGTHS, fwd, one)]
+
+
+_ragged_decl(_ragged_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "transformer", "transformer-window")
+
+
+def _ragged_byte_lm(ml, e, Xh):
+    shape = ml.ByteLanguageModelConfig()
+    lens = tuple(min(n * 2, shape.length) for n in RAGGED_LENGTHS)
+    ids = _junk_ids(_ids(Xh, len(lens), shape.length), lens, shape.vocab_size)
+    both = lambda a, ls: (np.asarray(e.logits(a, lengths=ls)), np.asarray(e.next_bytes(a, lengths=ls), dtype=np.int64))
+    one = lambda r: (np.asarray(e.logits(r)), np.asarray(e.next_bytes(r), dtype=np.int64))
+    calls = [_RaggedCall(f"logits, next_bytes(lengths) L={shape.length}", ids, lens, both, one, axes=(1, None))]
+    long_m = _long_byte_lm(ml, e)
+    L2 = max(RAGGED_LONG_LENGTHS)
+    idl = _junk_ids(_tiled_ids(Xh, len(RAGGED_LONG_LENGTHS), L2), RAGGED_LONG_LENGTHS, shape.vocab_size)
+    calls.append(_RaggedCall(f"logits(lengths) L={L2}", idl, RAGGED_LONG_LENGTHS,
+                             lambda a, ls: (np.asarray(long_m.logits(a, lengths=ls)),),
+                             lambda r: (np.asarray(long_m.logits(r)),)))
+    return calls
+
+
+_ragged_decl(_ragged_byte_lm, "byte-lm", "byte-lm-resident", "byte-lm-host-infer", "byte-lm-host-infer-threaded")
+
+
+def _ragged_samba(ml, st, Xh):
+    v = st.config.vocab
+    ids = _junk_ids(_ids(Xh, len(RAGGED_LENGTHS), SEQ_LEN, v), RAGGED_LENGTHS, v)
+    L2 = max(RAGGED_LONG_LENGTHS)
+    idl = _junk_ids(_tiled_ids(Xh, len(RAGGED_LONG_LENGTHS), L2, v), RAGGED_LONG_LENGTHS, v)
+    fwd = lambda a, ls: (np.asarray(st.forward(a, lengths=ls)),)
+    one = lambda r: (np.asarray(st.forward(r)),)
+    return [_RaggedCall(f"forward(lengths) L={SEQ_LEN}", ids, RAGGED_LENGTHS, fwd, one),
+            _RaggedCall(f"forward(lengths) L={L2}", idl, RAGGED_LONG_LENGTHS, fwd, one)]
+
+
+_ragged_decl(_ragged_samba, "samba", "samba-untied-dropout-accum")
+_ragged_decl("n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+             "par-samba", "par-samba-clip", "par-byte-lm", "par-byte-lm-model-pool", "par-byte-lm-offload")
+
+RAGGED_DEFAULT = "n/a:no-sequence-axis"
+
+
+# ---------------------------------------------------------------- the opt-in parts, one runner
+
+#: part name -> (declarations, default, CLI flag, sabotage env)
+EXTRA_PARTS = {
+    "batchgrad": (BATCHGRAD, BATCHGRAD_DEFAULT, "batch_grad", BATCHGRAD_SABOTAGE_ENV),
+    "batchscale": (BATCHSCALE, BATCHSCALE_DEFAULT, "batch_scale", BATCH_SABOTAGE_ENV),
+    "ragged": (RAGGED, RAGGED_DEFAULT, "ragged", BATCH_SABOTAGE_ENV),
+}
+
+
+def _part_protocol(part, alone):
+    if part == "batchgrad":
+        return dict(rows=dict(alone=alone, split=list(BATCH_SPLIT) + ["n"]), accum_splits=list(GRAD_ACCUM_SPLITS),
+                    uneven_split=GRAD_UNEVEN_SPLIT_NA, carry_splits=[list(BATCH_SPLIT) + ["n"], f"every {alone}"],
+                    seq=[GRAD_SEQ_BATCH, GRAD_SEQ_LEN])
+    if part == "batchscale":
+        return dict(batches=list(SCALE_BATCHES), whole=SCALE_WHOLE, long_l=SCALE_LONG_L,
+                    prefixes=list(SCALE_PREFIXES))
+    return dict(lengths=list(RAGGED_LENGTHS), long_lengths=list(RAGGED_LONG_LENGTHS), padding="nan/vocab+7")
+
+
+def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
+    """One opt-in part of ONE fit: (value, error, notes), the value as in
+    _probe_batch. `sabotage` is the part's env value, '' when off."""
+    table, default = EXTRA_PARTS[part][0], EXTRA_PARTS[part][1]
+    spec = table.get(name, default)
+    notes = []
+    if isinstance(spec, str):
+        return spec, None, notes
+    flip = sabotage not in ("", "0", "serial")
+    try:
+        calls = spec(ml, fit.est, Xh)
+        digest = hashlib.sha256()
+        for call in calls:
+            if isinstance(call, _BatchRows):
+                moved = _eval_batch_rows(call, alone, flip, digest)
+            elif isinstance(call, _BatchPrefix):
+                moved = _eval_batch_prefix(call, flip, digest)
+            elif isinstance(call, _GradAccum):
+                moved = _eval_grad_accum(ml, call, sabotage, digest, notes)
+            elif isinstance(call, _GradCarry):
+                moved = _eval_grad_carry(ml, call, sabotage, digest, notes)
+            elif isinstance(call, _ScaleRows):
+                moved = _eval_scale_rows(call, flip, digest)
+            elif isinstance(call, _RaggedCall):
+                moved = _eval_ragged(call, flip, digest)
+            else:
+                raise TypeError(f"{part}: unknown call type {type(call).__name__}")
+            if moved:
+                return moved[:400], None, notes
+        return digest.hexdigest()[:16], None, notes
+    except Exception as exc:
+        return None, f"{part}: {type(exc).__name__}: {exc}", notes
+    finally:
+        while _BATCH_CLOSE:
+            _BATCH_CLOSE.pop()()
 
 
 # ---------------------------------------------------------------- rlpair (2026-09-15)
@@ -4527,6 +5277,17 @@ def _run_reference(args):
     undeclared = [n for n in lanes if n not in BATCH]
     if undeclared and not args.no_batch:
         print(f"# WARNING: no batch declaration for {undeclared}; their batch part reads n/a:UNDECLARED")
+    # the opt-in parts (2026-09-15): absent from the JSON unless asked, so a
+    # record that never asked diffs as it always did
+    extra = [part for part, (_, _, flag, _) in EXTRA_PARTS.items() if getattr(args, flag)]
+    extra_sabotage = {part: os.environ.get(EXTRA_PARTS[part][3], "").strip().lower() for part in extra}
+    extra_sabotage = {k: ("" if v == "0" else v) for k, v in extra_sabotage.items()}
+    for part in extra:
+        if extra_sabotage[part]:
+            print(f"# {EXTRA_PARTS[part][3]}={extra_sabotage[part]} is ON for the {part} part: "
+                  + ("the tree is replaced by a running pair sum (recorded, not required to move)"
+                     if extra_sabotage[part] == "serial" else
+                     "every hashed cell MUST read BATCH_MOVED") + ". This JSON is not evidence.")
 
     def dump(complete):
         record = dict(mode=mode, repeats=args.repeats, platform=platform.platform(),
@@ -4536,6 +5297,9 @@ def _run_reference(args):
                       skipped=sorted(skip), batch_protocol=batch_protocol,
                       batch_sabotage=batch_sabotage, rlpair_protocol=rlpair_protocol,
                       rlpair_sabotage=rlpair_sabotage)
+        for part in extra:
+            record[f"{part}_protocol"] = _part_protocol(part, args.batch_alone)
+            record[f"{part}_sabotage"] = extra_sabotage[part] or False
         if host is not None:
             record["host"] = host
         # every binding this process loaded, hashed, so the column is tied
@@ -4563,11 +5327,13 @@ def _run_reference(args):
     na = {}
     for name in lanes:
         row, row_infer, row_model, row_batch, row_rl = [], [], [], [], []
+        row_extra = {}
         for f in fixtures:
             X, yc, yr = data[f]
             hs, parts, err = [], [], None
             infers, models, reloads, errs2 = [], [], [], []
             batches, errs3 = [], []
+            extras = {part: dict(values=[], errors=[], notes=None) for part in extra}
             rls, errs4, rl_sides = [], [], None
             for repeat in range(args.repeats):
                 try:
@@ -4600,6 +5366,16 @@ def _run_reference(args):
                     errs3.append(err3[:300])
                     if args.verbose:
                         print(err3)
+                for part in extra:
+                    val, errp, notes = _probe_part(part, p, name, ml, held[f].copy(), args.batch_alone,
+                                                   extra_sabotage[part])
+                    extras[part]["values"].append(val)
+                    if errp:
+                        extras[part]["errors"].append(errp[:300])
+                        if args.verbose:
+                            print(errp)
+                    if extras[part]["notes"] is None:
+                        extras[part]["notes"] = notes
                 # the rlpair part last, on the lanes that declare it; a lane
                 # that does not carries no rlpair key at all
                 if name in RLPAIR:
@@ -4653,14 +5429,27 @@ def _run_reference(args):
                     na.setdefault(f"{name} model", models[0])
                 if bv == "N/A":
                     na.setdefault(f"{name} batch", batches[0])
+                for part in extra:
+                    vals = extras[part]["values"]
+                    pv = _batch_column_verdict(vals)
+                    cell.update({part: vals, f"{part}_verdict": pv})
+                    if extras[part]["errors"]:
+                        cell[f"{part}_error"] = extras[part]["errors"][0]
+                    if extras[part]["notes"]:
+                        cell[f"{part}_notes"] = extras[part]["notes"]
+                    row_extra.setdefault(part, []).append("BATCH_MOVED" if pv == "BATCH_MOVED" else _shown(pv, vals))
+                    if pv == "N/A":
+                        na.setdefault(f"{name} {part}", vals[0])
             else:
                 row_infer.append("REFUSED"); row_model.append("REFUSED"); row_batch.append("REFUSED")
+                for part in extra:
+                    row_extra.setdefault(part, []).append("REFUSED")
                 if name in RLPAIR:
                     row_rl.append("REFUSED")
             cells[f"{name}/{f}"] = cell
             row.append(f"{shown:<16}")
         print(f"| {name:<{W}} | " + " | ".join(row) + " |", flush=True)
-        for label, r in (("infer", row_infer), ("model", row_model), ("batch", row_batch), ("rlpair", row_rl)):
+        for label, r in (("infer", row_infer), ("model", row_model), ("batch", row_batch), ("rlpair", row_rl)) + tuple(row_extra.items()):
             if any(not s.startswith("n/a") for s in r):
                 print(f"| {name + ' ' + label:<{W}} | " + " | ".join(f"{s:<16}" for s in r) + " |", flush=True)
         if args.json:
@@ -4682,7 +5471,7 @@ def _run_reference(args):
     print()
     print(f"cells={len(cells)} stable={len(cells)-len(refused)-len(moved)} "
           f"moved={len(moved)} refused={len(refused)}")
-    for col in ("infer", "model", "batch", "rlpair"):
+    for col in ("infer", "model", "batch", "rlpair") + tuple(extra):
         vs = [v.get(f"{col}_verdict") for v in cells.values() if v.get(f"{col}_verdict")]
         if col == "rlpair" and not vs:
             continue
@@ -4712,6 +5501,24 @@ def _run_reference(args):
         print(f"{'BATCH_MOVED' if batch_fails else 'BATCH_MOVED (' + mode + ', recorded, not a failure)'} {k}: {first}")
     for k, e in refused3.items():
         print(f"REFUSED {k}: {e}")
+    extra_fail = False
+    for part in extra:
+        for k, c in cells.items():
+            pv = c.get(f"{part}_verdict")
+            if pv == "MOVED":
+                print(f"MOVED   {k}: {part}={c[part]}")
+                extra_fail = True
+            elif pv == "BATCH_MOVED":
+                first = next(b for b in c[part] if b and b.startswith("BATCH_MOVED"))
+                fails = mode == "identical"
+                extra_fail = extra_fail or fails
+                print(f"{'BATCH_MOVED' if fails else 'BATCH_MOVED (' + mode + ', recorded, not a failure)'} "
+                      f"{k} {part}: {first}")
+            if c.get(f"{part}_error"):
+                print(f"REFUSED {k} {part}: {c[f'{part}_error']}")
+            for note in c.get(f"{part}_notes") or []:
+                if "REPORTED" in note:
+                    print(f"REPORTED {k} {part}: {note}")
     for k in moved4:
         print(f"MOVED   {k}: rlpair={cells[k]['rlpair']}")
     # RLPAIR_MOVED is a defect under IDENTICAL only, as BATCH_MOVED is
@@ -4724,7 +5531,7 @@ def _run_reference(args):
     if args.json:
         dump(True)
         print(f"wrote {args.json}")
-    return 1 if (moved or moved2 or moved3 or batch_fails or moved4 or rl_fails) else 0
+    return 1 if (moved or moved2 or moved3 or batch_fails or moved4 or rl_fails or extra_fail) else 0
 
 
 def _diff_column(cols, k, col):
@@ -4832,6 +5639,10 @@ def diff(paths, require_columns=0, require_lanes=None):
         if j.get("batch_sabotage"):
             print(f"NOTE: column {n} ran with {BATCH_SABOTAGE_ENV} ON; its batch cells are a sabotage "
                   "run and must read BATCH_MOVED, they are not evidence")
+        for part in EXTRA_PARTS:
+            if j.get(f"{part}_sabotage"):
+                print(f"NOTE: column {n} ran the {part} part with sabotage {j[f'{part}_sabotage']!r}; "
+                      "its cells are not evidence")
         if j.get("rlpair_sabotage"):
             print(f"NOTE: column {n} ran with {RLPAIR_SABOTAGE_ENV} ON; its rlpair cells are a sabotage "
                   "run and must read RLPAIR_MOVED, they are not evidence")
@@ -4925,14 +5736,19 @@ def diff(paths, require_columns=0, require_lanes=None):
     # until 2026-09-14 evening the batch branch merged the two into one
     # `summary (infer/model/batch):` line, which no committed gate grep matches.
     rows = []
+    # the opt-in parts (2026-09-15) are their own groups and print only where
+    # a column carries them, so a diff of records that never asked reads as
+    # it always did
     # A THIRD LINE, `summary (rlpair):` (2026-09-15), over the lanes that
     # declare the rlpair part (RLPAIR) or whose cells carry it; the other
     # lanes have no rlpair question and are not counted at all.
-    uncarried = {"infer/model": 0, "batch": 0, "rlpair": 0}
-    counts2 = {"infer/model": {}, "batch": {}, "rlpair": {}}
+    extra_cols = tuple(part for part in EXTRA_PARTS
+                       if any(f"{part}_verdict" in c for _, j in cols for c in j["cells"].values()))
+    uncarried = {"infer/model": 0, "batch": 0, "rlpair": 0, **{part: 0 for part in extra_cols}}
+    counts2 = {"infer/model": {}, "batch": {}, "rlpair": {}, **{part: {} for part in extra_cols}}
     for k in keys:
-        for col in ("infer", "model", "batch", "rlpair"):
-            group = col if col in ("batch", "rlpair") else "infer/model"
+        for col in ("infer", "model", "batch", "rlpair") + extra_cols:
+            group = col if col in extra_cols or col in ("batch", "rlpair") else "infer/model"
             carried = any(f"{col}_verdict" in (j["cells"].get(k) or {}) for _, j in cols)
             if not carried:
                 if col != "rlpair" or k.split("/")[0] in RLPAIR:
@@ -4952,12 +5768,12 @@ def diff(paths, require_columns=0, require_lanes=None):
         for k, col, verdict, shown in rows:
             print(f"| {k:<28} | {col:<6} | {verdict:<12} | " + " | ".join(f"{s:<16}" for s in shown) + " |")
         print()
-    for group in ("infer/model", "batch", "rlpair"):
+    for group in ("infer/model", "batch", "rlpair") + extra_cols:
         c2 = counts2[group]
         if uncarried[group]:
             c2["NOT-COMPARED"] = c2.get("NOT-COMPARED", 0) + uncarried[group]
             print(f"{group}: {uncarried[group]} column cells not compared (no JSON here carries them; "
-                  f"they predate the {group + ' part' if group != 'infer/model' else 'columns'})")
+                  f"they predate the {'columns' if group == 'infer/model' else group + ' part'})")
         print(f"summary ({group}): " + ", ".join(f"{k}={v}" for k, v in sorted(c2.items())))
     if require_columns:
         if require_columns > len(cols):
@@ -4977,7 +5793,8 @@ def diff(paths, require_columns=0, require_lanes=None):
 
 #: the keys every part of one column must agree on before --merge joins them
 MERGE_SAME = ("vendor", "commit", "mode", "repeats", "heldout_seed", "fixtures", "heldout",
-              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage")
+              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage") + tuple(
+    f"{part}_{k}" for part in EXTRA_PARTS for k in ("protocol", "sabotage"))
 
 
 def _build_digests(j):
@@ -5021,7 +5838,7 @@ def merge(paths, out, allow_separate_builds=False):
         for k in MERGE_SAME:
             if json.dumps(j.get(k), sort_keys=True) != json.dumps(first.get(k), sort_keys=True):
                 raise SystemExit(f"REFUSING --merge: {p} differs from {parts[0][0]} on {k!r}")
-        if j.get("batch_sabotage"):
+        if j.get("batch_sabotage") or any(j.get(f"{part}_sabotage") for part in EXTRA_PARTS):
             raise SystemExit(f"REFUSING --merge: {p} is a batch sabotage run")
         if j.get("rlpair_sabotage"):
             raise SystemExit(f"REFUSING --merge: {p} is an rlpair sabotage run")
@@ -5084,6 +5901,12 @@ def main():
                          "prefixes are fixed, and the part's hash does not depend on N")
     ap.add_argument("--no-batch", action="store_true",
                     help="skip the batch part; its cells record n/a:skipped (--no-batch)")
+    ap.add_argument("--batch-grad", action="store_true",
+                    help="add the batchgrad part: per-row gradients and clause 9.2 aligned accumulation")
+    ap.add_argument("--batch-scale", action="store_true",
+                    help="add the batchscale part: B in {1, 17, 64, 256} inside B = 1024, and long-L prefixes")
+    ap.add_argument("--ragged", action="store_true",
+                    help="add the ragged part: lengths= right-padded batches against each row alone")
     ap.add_argument("--no-rlpair", action="store_true",
                     help="skip the rlpair part; the lanes that declare it record n/a:skipped (--no-rlpair)")
     ap.add_argument("--verbose", action="store_true")

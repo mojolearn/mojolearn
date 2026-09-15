@@ -1,0 +1,60 @@
+NOTE: --lanes scopes this diff to 6 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column apple-m4 ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+NOTE: column apple-m4 ran the batchgrad part with sabotage '1'; its cells are not evidence
+NOTE: column apple-m4 ran the batchscale part with sabotage '1'; its cells are not evidence
+NOTE: column apple-m4 ran the ragged part with sabotage '1'; its cells are not evidence
+| lane/fixture                 | verdict    | apple-m4         | apple-m4         |
+|------------------------------|------------|------------------|------------------|
+| byte-lm/base                 | IDENTICAL x2 | f9a8d760f503f795 | f9a8d760f503f795 |
+| embedding/base               | IDENTICAL x2 | bcc23cf76ecd9bd0 | bcc23cf76ecd9bd0 |
+| mamba2/base                  | IDENTICAL x2 | 5b05a3ecbd70248e | 5b05a3ecbd70248e |
+| pca/base                     | IDENTICAL x2 | 426e098860cb885e | 426e098860cb885e |
+| samba/base                   | IDENTICAL x2 | 037e7701daa7fc7c | 037e7701daa7fc7c |
+| transformer/base             | IDENTICAL x2 | 295d4e62d4c78b14 | 295d4e62d4c78b14 |
+
+summary: IDENTICAL=6
+
+| lane/fixture                 | column | verdict      | apple-m4         | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|
+| byte-lm/base                 | infer  | IDENTICAL x2 | 220885cbd8d2f82f | 220885cbd8d2f82f |
+| byte-lm/base                 | model  | IDENTICAL x2 | b1d65b99997911c5 | b1d65b99997911c5 |
+| byte-lm/base                 | batch  | BATCH_MOVED  | c44734e41960ea7d | BATCH_MOVED      |
+| byte-lm/base                 | batchgrad | N/A          | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) | n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile) |
+| byte-lm/base                 | batchscale | BATCH_MOVED  | d5797719799d871d | BATCH_MOVED      |
+| byte-lm/base                 | ragged | BATCH_MOVED  | f230913e438ed170 | BATCH_MOVED      |
+| embedding/base               | infer  | IDENTICAL x2 | 9532e67b65b07c0b | 9532e67b65b07c0b |
+| embedding/base               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| embedding/base               | batch  | BATCH_MOVED  | aed4235f48398286 | BATCH_MOVED      |
+| embedding/base               | batchgrad | BATCH_MOVED  | ecc0aacf5059c13e | BATCH_MOVED      |
+| embedding/base               | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| embedding/base               | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| mamba2/base                  | infer  | IDENTICAL x2 | b0084ee171c0720f | b0084ee171c0720f |
+| mamba2/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba2/base                  | batch  | BATCH_MOVED  | d21a83ab6b3ce297 | BATCH_MOVED      |
+| mamba2/base                  | batchgrad | BATCH_MOVED  | 99cad63be0fb7239 | BATCH_MOVED      |
+| mamba2/base                  | batchscale | BATCH_MOVED  | f5c6c5c02917a956 | BATCH_MOVED      |
+| mamba2/base                  | ragged | BATCH_MOVED  | f1f44805dc9171e8 | BATCH_MOVED      |
+| pca/base                     | infer  | IDENTICAL x2 | 5ec98c317c9314a6 | 5ec98c317c9314a6 |
+| pca/base                     | model  | IDENTICAL x2 | b41a408ef6ffb8c9 | b41a408ef6ffb8c9 |
+| pca/base                     | batch  | BATCH_MOVED  | 65941b218439dea2 | BATCH_MOVED      |
+| pca/base                     | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| pca/base                     | batchscale | BATCH_MOVED  | 2c48ab81b2b0946e | BATCH_MOVED      |
+| pca/base                     | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| samba/base                   | infer  | IDENTICAL x2 | 77db10c414ebd846 | 77db10c414ebd846 |
+| samba/base                   | model  | IDENTICAL x2 | 674582804fcf1a50 | 674582804fcf1a50 |
+| samba/base                   | batch  | BATCH_MOVED  | aacbe0585755bc0f | BATCH_MOVED      |
+| samba/base                   | batchgrad | BATCH_MOVED  | 6eafd29a27e3b376 | BATCH_MOVED      |
+| samba/base                   | batchscale | BATCH_MOVED  | 0872a6f17bb82169 | BATCH_MOVED      |
+| samba/base                   | ragged | BATCH_MOVED  | eb391546ac70ae0c | BATCH_MOVED      |
+| transformer/base             | infer  | IDENTICAL x2 | d658bafd272776e1 | d658bafd272776e1 |
+| transformer/base             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| transformer/base             | batch  | BATCH_MOVED  | 321df8136b576084 | BATCH_MOVED      |
+| transformer/base             | batchgrad | BATCH_MOVED  | 5185ee1be0a72be5 | BATCH_MOVED      |
+| transformer/base             | batchscale | BATCH_MOVED  | dd733dfdaf480743 | BATCH_MOVED      |
+| transformer/base             | ragged | BATCH_MOVED  | bb97a92d33f296c6 | BATCH_MOVED      |
+
+summary (infer/model): IDENTICAL=9, N/A=3
+summary (batch): BATCH_MOVED=6
+summary (batchgrad): BATCH_MOVED=4, N/A=2
+summary (batchscale): BATCH_MOVED=5, N/A=1
+summary (ragged): BATCH_MOVED=4, N/A=2

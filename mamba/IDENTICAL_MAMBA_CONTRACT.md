@@ -202,6 +202,20 @@ that fails a gate. `mamba/checks/mamba_check.mojo` is the gate file;
 FAST-mode arms of (a) are RECORDED, not asserted, where they are
 vendor-shaped (the metrics lane's leg-11 lesson).
 
+### Ragged, right-padded batches (2026-09-15)
+
+`forward(x, lengths=...)` on the Python block takes rows real at positions
+`[0, lengths[i])` and padded after. No arithmetic changes: the scan is
+causal, so a real position never reads a later one, and clause (c) makes a
+row's bits independent of its batch, so each real position equals the row
+run alone at its own length. The surface (`python/mojolearn/_ragged.py`)
+replaces the padding inputs with `+0.0` before the ordinary call and the
+padding outputs with `+0.0` after it; the second copy is measured INERT on
+this block, which maps an all-zero token to `+0.0` already. Forward only
+(the weight gradients contract over all `B*L` tokens, which padding
+changes) and refused with a carried state. The gate is the `ragged` part of
+tools/identity_break.py and python/mojolearn/tests/test_ragged_lengths.py.
+
 ## 9. Not claimed
 
 No chunked or tree scan (MAX's serial-over-L shape only; the cub
