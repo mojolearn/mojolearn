@@ -229,7 +229,12 @@ def test_inference_routes_ship_and_carry_no_fit():
     `_backend` reads the table from the manifest."""
     from mojolearn import _backend
     routes = host_surface.inference_routes()
-    assert routes == {"_mojolearn_arima": "_mojolearn_forecast_host"}
+    assert routes == {
+        "_mojolearn_arima": "_mojolearn_forecast_host",
+        # lane/inference-embedding-ivf-cholesky (2026-09-15)
+        "_mojolearn_ivf": "_mojolearn_ivf_search_host",
+        "_mojolearn_embedding": "_mojolearn_embedding_infer_host",
+    }
     assert _backend._HOST_INFERENCE_MODULES == routes
     shipped = set(host_surface.wheel_bindings())
     for route, binding in routes.items():
@@ -274,6 +279,7 @@ def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
             "_mojolearn_neural_host"} <= shipped
     assert set(host_surface.wheel_families()) == {
         "byte_lm", "forest", "tokenizer", "neural", "core", "linalg", "estimators", "metrics", "svm", "forecast",
+        "embedding_infer", "ivf_search",
     }
     assert len(host_surface.families()) > len(host_surface.wheel_families())
     assert host_surface.training_gpu_column_record() == host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 2)[1]

@@ -1600,6 +1600,37 @@ FAMILIES = (
         ships_in_wheel=False,
     ),
     dict(
+        # lane/inference-embedding-ivf-cholesky (2026-09-15): public CPU
+        # lookup in a saved embedding table, with no backward in the binary.
+        # The reference embedding family above carries the backward fold and
+        # stays out of the wheels; this binding registers embedding_forward
+        # from the same source (bindings/embedding_host_forward.mojo) and
+        # ships. It serves `_mojolearn_embedding` on a CPU-only install when
+        # the reference binding is not built.
+        family="embedding_infer",
+        binding="_mojolearn_embedding_infer_host",
+        routes=None,
+        serves=("_mojolearn_embedding",),
+        loaded_by="_backend._HOST_INFERENCE_MODULES and python/mojolearn/_classical_host.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("embedding",),
+        forest_kinds=(),
+        classes=("Embedding",),
+        display="Embedding lookup in a saved table",
+        host_modules=(
+            "embedding/host/embedding_host.mojo", "bindings/embedding_host_forward.mojo",
+            "embedding/checks/embedding_oracle.mojo",
+        ),
+        exports=(
+            "embedding_infer_host_numeric_mode", "embedding_infer_host_vendor",
+            "embedding_infer_host_column", "embedding_infer_host_sabotage",
+            "embedding_vendor", "embedding_numeric_mode", "embedding_forward",
+        ),
+        gate="tools/classical_host_gate.py and tools/identity_break.py",
+        ships_in_wheel=True,
+    ),
+    dict(
         # lane/cpu-training-embedding-ivf (2026-09-15): IVFIndex's host
         # binding. It routes `_mojolearn_ivf` on a CPU-only install with the
         # GPU binding's whole surface (ivf_flat_build_and_search and the two
@@ -1627,10 +1658,42 @@ FAMILIES = (
         exports=(
             "ivf_host_numeric_mode", "ivf_host_vendor", "ivf_host_column",
             "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
-            "ivf_flat_build_and_search",
+            "ivf_flat_build_and_search", "ivf_flat_build", "ivf_flat_search",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
+    ),
+    dict(
+        # lane/inference-embedding-ivf-cholesky (2026-09-15): public CPU
+        # search over a saved, GPU-built IVF-Flat index, with no build in the
+        # binary. The reference ivf family above carries the k-means
+        # quantizer fit and stays out of the wheels; this binding registers
+        # ivf_flat_search from the same source (bindings/ivf_host_search.mojo)
+        # and ships. It serves `_mojolearn_ivf` on a CPU-only install when the
+        # reference binding is not built.
+        family="ivf_search",
+        binding="_mojolearn_ivf_search_host",
+        routes=None,
+        serves=("_mojolearn_ivf",),
+        loaded_by="_backend._HOST_INFERENCE_MODULES and python/mojolearn/_classical_host.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("ivf", "ivf-euclidean"),
+        forest_kinds=(),
+        classes=("IVFIndex",),
+        display="IVF-Flat search over a saved index",
+        host_modules=(
+            "ivf/host/ivf_host.mojo", "bindings/ivf_host_search.mojo",
+            "bindings/ivf_index_arrays.mojo",
+            "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo",
+        ),
+        exports=(
+            "ivf_search_host_numeric_mode", "ivf_search_host_vendor",
+            "ivf_search_host_column", "ivf_search_host_sabotage",
+            "ivf_vendor", "ivf_numeric_mode", "ivf_flat_search",
+        ),
+        gate="tools/classical_host_gate.py and tools/identity_break.py",
+        ships_in_wheel=True,
     ),
     dict(
         # lane/inference-forecast-umap-pca (2026-09-15): public CPU inference
