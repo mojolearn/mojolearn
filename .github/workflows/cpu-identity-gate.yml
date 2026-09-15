@@ -112,6 +112,7 @@ on:
       - "bench/results/identity_break/2026-09-14_46-lanes/**"
       - "bench/results/identity_break/2026-09-14_47-lanes/**"
       - "bench/results/identity_break/2026-09-14_136-lanes/**"
+      - "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/**"
       - "bench/results/forest_host/**"
       - ".github/workflows/cpu-identity-gate.yml"
 
@@ -418,6 +419,31 @@ jobs:
           fi
           grep -F 'REQUIRE FAIL gemm-pinned/base train' "$GATE_OUT/diff_gpu4_control.txt"
           echo "control OK: --require-columns 4 refused three columns"
+
+      # The kmeans lanes after the kmeans-sqrt fix (DEVIATIONS 2715 and 2716,
+      # bench/results/identity_break/2026-09-14_kmeans-sqrt-fix): the three fixed
+      # columns diff IDENTICAL on all 72 cells, and the unfixed columns of the
+      # same boxes must still read the one NVIDIA inertia cell DIVERGENT, so the
+      # record cannot pass by carrying identical files.
+      - name: identity_break --diff over the kmeans-sqrt fix record (fixed IDENTICAL, unfixed DIVERGENT)
+        if: always()
+        run: |
+          R=bench/results/identity_break/2026-09-14_kmeans-sqrt-fix
+          st=0
+          python3 tools/identity_break.py --diff $R/apple-m4.json $R/nvidia-h100-sm_90a.json \
+            $R/amd-mi325x-gfx942.json --require-columns 3 > "$GATE_OUT/diff_kmsqrt_fixed.txt" 2>&1 || st=$?
+          cat "$GATE_OUT/diff_kmsqrt_fixed.txt"
+          [ "$st" = 0 ] || { echo "fixed kmeans columns: --diff exited $st" >&2; exit 1; }
+          grep -F 'summary: IDENTICAL=72' "$GATE_OUT/diff_kmsqrt_fixed.txt"
+          grep -F 'require-columns 3 over' "$GATE_OUT/diff_kmsqrt_fixed.txt" | grep -F ': OK'
+          st=0
+          python3 tools/identity_break.py --diff $R/unfixed/apple-m4.json $R/unfixed/nvidia-h100-sm_90a.json \
+            $R/unfixed/amd-mi325x-gfx942.json $R/unfixed/nvidia-rtx-4090-sm_89.json --require-columns 4 \
+            > "$GATE_OUT/diff_kmsqrt_unfixed.txt" 2>&1 || st=$?
+          cat "$GATE_OUT/diff_kmsqrt_unfixed.txt"
+          grep -F 'summary: DIVERGENT=1, IDENTICAL=8' "$GATE_OUT/diff_kmsqrt_unfixed.txt"
+          grep -E '^\| kmeans-sqrt/wide +\| DIVERGENT +\| parts differ: inertia; agree: centers,labels,scales' "$GATE_OUT/diff_kmsqrt_unfixed.txt"
+          [ "$st" = 1 ] || { echo "unfixed kmeans-sqrt columns: expected --diff to exit 1, got $st" >&2; exit 1; }
 
       # THE FOURTH COLUMN, THE PLUMBING SMOKE. Two lanes, one fixture, one
       # repeat, on this CPU, through the CPU-only package. Every cell must
