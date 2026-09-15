@@ -46,6 +46,12 @@ monte-carlo, par-resample, optim-sgd, optim-adam-clip.
   ONE-COLUMN=3; with the record's three columns: summary IDENTICAL=72,
   ONE-COLUMN=3, summary (batch) IDENTICAL=18, N/A=54, ONE-COLUMN=3. Sabotage:
   21 of 21 Metal and 18 of 18 CPU BATCH_MOVED.
+- Second merge head (f591d0341, origin/main with KMeans.predict, which
+  changed cluster.py and the core host binding), fixture base, core rebuilt:
+  the six Metal and six CPU batch hashes equal the earlier ones (par-resample
+  Metal equal too); record diff summary IDENTICAL=72, ONE-COLUMN=1, summary
+  (batch) IDENTICAL=6, N/A=66, ONE-COLUMN=1; sabotage 7 of 7 Metal and 6 of 6
+  CPU BATCH_MOVED.
 - docs_facts --check and wheel_ci.py pins . pass. The gate's one pinned batch
   summary diffs the committed GPU JSONs, which this lane does not change.
 
