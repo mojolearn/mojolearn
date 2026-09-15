@@ -15,7 +15,10 @@ a commit, ran the default fixture size on one device, is not a sabotage run
 (by its JSON flags and by its file name), is not a partial or an unfixed
 before-picture, and its fixture hashes equal the ones this harness generates
 now. A column whose fixtures differ hashed different input bytes, so its
-cells say nothing about the current lanes.
+cells say nothing about the current lanes. The same holds per lane for the
+harness's `LANE_REVISIONS` (a lane whose input changed, 2026-09-15): a column
+whose revision of that lane is not the harness's contributes no cell there,
+so the cell reads OWED until a record at the new revision is committed.
 
 WHICH HASH WINS. Lanes change: a fix moves a hash and only some vendors are
 re-recorded before the next release record. So per cell, part and device
@@ -294,9 +297,13 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None):
         records.append(rec)
         key = (rec["commit_time"], rec["dir"], rec["file"])
         kept = 0
+        revs = getattr(harness, "LANE_REVISIONS", {})
+        have_revs = j.get("lane_revisions") or {}
         for cell_key, cell in j["cells"].items():
             lane, _, fixture = cell_key.partition("/")
             if lane not in lanes or fixture not in want_fix or not isinstance(cell, dict):
+                continue
+            if lane in revs and have_revs.get(lane) != revs[lane]:
                 continue
             for part in PARTS:
                 value = _part_value(cell, part)

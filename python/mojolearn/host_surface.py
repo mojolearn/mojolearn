@@ -866,6 +866,10 @@ FAMILIES = (
         # define reverses gpt2_encode's ids). Covering it needs the gate to
         # build the tokenizer binding with its own define into the sabotage
         # set; until then test_tokenizer_surface.py is its gate.
+        # mojolearn ships no vocabulary (2026-09-15): the lane loads the
+        # synthetic one (python/mojolearn/_tokenizer_synthetic.py) at
+        # identity_break's LANE_REVISIONS["tokenizer"], so the records above
+        # hashed older input and its cells are owed to the next record.
         # gpt2_encode_batch (lane/inference-tokenizer-neural, 2026-09-15)
         # has its own negative control, -D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1,
         # which the lane's batch part reads BATCH_MOVED.
@@ -873,7 +877,7 @@ FAMILIES = (
         inference_lanes=(),
         forest_kinds=(),
         classes=("GPT2Tokenizer",),
-        display="the GPT-2 byte-level BPE tokenizer",
+        display="the byte-level BPE tokenizer (GPT-2 format, user-supplied vocabulary)",
         host_modules=(
             "tokenizer/encoding.mojo", "tokenizer/impl/bpe.mojo",
             "tokenizer/impl/pretokenize.mojo", "tokenizer/impl/ranks.mojo",

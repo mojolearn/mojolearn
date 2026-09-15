@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The GPT-2 rank table: `tokenizer/data/gpt2_ranks.tsv` as a byte-keyed
-lookup, plus the id -> bytes table `decode` reads.
+"""The rank table: a caller-supplied rank file as a byte-keyed lookup, plus
+the id -> bytes table `decode` reads. mojolearn ships no vocabulary.
 
 THE FILE is `rank<TAB>hex_of_token_bytes`, one line per rank, ascending from
-0, 50256 lines. Hex because a token's bytes are a slice of UTF-8 and need not
-be valid UTF-8 alone -- id 188 is the single byte 0x00 and id 35496 is 128
-bytes long. `<|endoftext|>` is NOT in the file; it is id 50256 and
+0. Hex because a token's bytes are a slice of UTF-8 and need not be valid
+UTF-8 alone (a single byte 0x00, or half of a multi-byte character).
+`<|endoftext|>` is NOT in the file; it is the id after the last rank and
 `encoding.mojo` owns it.
 
 WHY A HAND-ROLLED TABLE AND NOT `Dict[String, Int]`. The keys are RAW BYTE
@@ -20,9 +20,9 @@ addressing over a flat byte arena needs neither: the key is
 probe allocates nothing.
 
 Load is one pass: append the bytes to the arena, record offset and length per
-id, insert the id into the bucket array. Ranks ARE ids for GPT-2 -- the rank
-of a merge and the id of the merged token are the same number -- so one table
-serves the merge loop and the encoder.
+id, insert the id into the bucket array. Ranks ARE ids in this format -- the
+rank of a merge and the id of the merged token are the same number -- so one
+table serves the merge loop and the encoder.
 """
 
 comptime FNV_OFFSET64: UInt64 = 14695981039346656037
@@ -87,7 +87,7 @@ struct RankTable(Copyable, Movable):
             var other = self.buckets[slot] - 1
             if self._equals(other, self.arena, start, count):
                 raise Error(
-                    "gpt2_ranks.tsv: token bytes appear twice, at rank "
+                    "rank table: token bytes appear twice, at rank "
                     + String(other)
                     + " and rank "
                     + String(id)
@@ -137,14 +137,14 @@ def _hex_digit(b: UInt8) raises -> Int:
         return v - 97 + 10
     if v >= 65 and v <= 70:  # 'A'..'F'
         return v - 65 + 10
-    raise Error("gpt2_ranks.tsv: bad hex digit: " + String(v))
+    raise Error("rank table: bad hex digit: " + String(v))
 
 
 def load_rank_table(path: String) raises -> RankTable:
     """One pass over the file. Every check here is a REFUSAL, not a repair:
     a rank out of order, an odd hex field, an empty token or a duplicate key
-    means the table is not the table the fixture was produced against, and
-    continuing would produce a mismatch report that blames the merge loop.
+    means the table is not a well-formed rank table, and continuing would
+    produce a mismatch report that blames the merge loop.
     """
     var text: String
     with open(path, "r") as f:

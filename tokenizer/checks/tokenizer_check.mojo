@@ -1,11 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""THE GATE: our GPT-2 encoder against tiktoken 0.14.0, id for id.
+"""THE GATE: the Mojo encoder against a second, independent Python encoder of
+the same algorithm, id for id, over a vocabulary mojolearn trains itself.
 
     pixi run check-tokenizer
 
-`checks/fixtures/gpt2_reference.json` holds 43 cases recorded from tiktoken
-0.14.0's `gpt2` encoding. For every case this asserts:
+MOJOLEARN SHIPS NO VOCABULARY (2026-09-15). The task first writes
+`build/tokenizer_synthetic/ranks.tsv` and `cases.json` with
+`python/mojolearn/_tokenizer_synthetic.py`: a deterministic synthetic
+byte-level BPE vocabulary (256 byte tokens plus trained merges) and cases
+whose ids come from that module's pure Python encoder. For every case this
+asserts:
 
     * EXACT id-sequence equality. Same length, same ids, same order. There is
       no tolerance to loosen and no case to skip -- a tokenizer that is
@@ -23,9 +28,9 @@ plus the table and pattern preconditions that make the comparison meaningful:
                                     implement. A fixture regenerated from a
                                     different pattern fails HERE rather than
                                     silently redefining the target
-    check_tables                    50256 ranks, ascending, all 256 single
-                                    bytes present, n_vocab 50257 with
-                                    `<|endoftext|>`
+    check_tables                    the fixture's rank count, all 256
+                                    single bytes present, `<|endoftext|>`
+                                    after the last rank
     check_byte_unicode_bijection    256 distinct codepoints, both directions,
                                     the three fixed runs and the 68 remapped
                                     bytes at U+0100..U+0143
@@ -37,18 +42,16 @@ plus the table and pattern preconditions that make the comparison meaningful:
 
 NOT a claim about vendors. Nothing in `tokenizer/` touches a device or a
 float, so there is nothing to be identical about across GPUs; this gate is
-about agreeing with the reference implementation, which is the property that
-can actually be wrong.
+about the algorithm being the one stated, which is the property that can
+actually be wrong.
 """
 
 from tokenizer.checks.json_lite import JsonFixture, load_fixture
 from tokenizer.encoding import (
     GPT2_ENDOFTEXT,
-    GPT2_ENDOFTEXT_ID,
-    GPT2_N_VOCAB,
     GPT2_PAT_STR,
     Gpt2Tokenizer,
-    load_gpt2_tokenizer,
+    load_gpt2_tokenizer_from,
     string_bytes,
 )
 from tokenizer.impl.byte_unicode import (
@@ -58,7 +61,8 @@ from tokenizer.impl.byte_unicode import (
 )
 from tokenizer.impl.pretokenize import pretokenize
 
-comptime FIXTURE = "tokenizer/checks/fixtures/gpt2_reference.json"
+comptime FIXTURE = "build/tokenizer_synthetic/cases.json"
+comptime RANKS = "build/tokenizer_synthetic/ranks.tsv"
 
 
 def _ids_string(ids: List[Int]) -> String:
@@ -84,7 +88,7 @@ def _bytes_hex(data: List[UInt8]) -> String:
 def _split_string(
     tok: Gpt2Tokenizer, data: List[UInt8]
 ) raises -> String:
-    """The pre-token split, each piece in GPT-2's printable spelling between
+    """The pre-token split, each piece in the format's printable spelling between
     pipes. This is the first thing to read when ids disagree."""
     var bounds = pretokenize(data, tok.classes)
     var s = String("")
@@ -101,36 +105,28 @@ def check_pattern_matches_fixture(fx: JsonFixture) raises -> Int:
         print("  fixture: " + fx.pat_str)
         print("  ours   : " + String(GPT2_PAT_STR))
         return 1
-    if fx.n_vocab != GPT2_N_VOCAB:
-        print(
-            "FAIL n_vocab: fixture says",
-            fx.n_vocab,
-            "and encoding.mojo says",
-            GPT2_N_VOCAB,
-        )
-        return 1
     print(
-        "  pattern and n_vocab agree with the fixture ("
+        "  pattern agrees with the fixture ("
         + fx.encoding
-        + ", tiktoken "
-        + fx.tiktoken_version
+        + ", written by "
+        + fx.generator
         + ")"
     )
     return 0
 
 
-def check_tables(tok: Gpt2Tokenizer) raises -> Int:
+def check_tables(tok: Gpt2Tokenizer, fx: JsonFixture) raises -> Int:
     var bad = 0
-    if tok.ranks.n_tokens() != GPT2_N_VOCAB - 1:
+    if tok.ranks.n_tokens() != fx.n_vocab - 1:
         print(
             "FAIL ranks: table holds",
             tok.ranks.n_tokens(),
-            "tokens, expected",
-            GPT2_N_VOCAB - 1,
+            "tokens, the fixture says",
+            fx.n_vocab - 1,
         )
         bad += 1
-    if tok.n_vocab() != GPT2_N_VOCAB:
-        print("FAIL n_vocab:", tok.n_vocab())
+    if tok.n_vocab() != fx.n_vocab or tok.eot_id() != fx.n_vocab - 1:
+        print("FAIL n_vocab:", tok.n_vocab(), "eot", tok.eot_id())
         bad += 1
 
     # Every single byte has to be a token or the merge loop can dead-end.
@@ -146,7 +142,7 @@ def check_tables(tok: Gpt2Tokenizer) raises -> Int:
         bad += 1
 
     # A rank probe has to answer -1 rather than 0 for an absent key: rank 0 is
-    # a real token ('!'), so a table that returned 0 for "not found" would
+    # a real token, so a table that returned 0 for "not found" would
     # merge everything into it.
     var absent = string_bytes(String("\xff\xfe\xfd\xfc"))
     if tok.ranks.rank(absent, 0, 4) >= 0:
@@ -161,7 +157,7 @@ def check_tables(tok: Gpt2Tokenizer) raises -> Int:
             + " with "
             + String(GPT2_ENDOFTEXT)
             + " = "
-            + String(GPT2_ENDOFTEXT_ID)
+            + String(tok.eot_id())
         )
         print("  " + tok.classes.source_header)
     return bad
@@ -220,8 +216,7 @@ def check_byte_unicode_bijection() raises -> Int:
         print("FAIL bijection: remapped", next_expected - 256, "bytes, not 68")
         bad += 1
 
-    # Space is 0x20, so it is remapped, and its spelling is U+0120 -- the
-    # 'Ġ' that every published GPT-2 vocabulary file shows.
+    # Space is 0x20, so it is remapped, and its spelling is U+0120 ('Ġ').
     var sp = string_bytes(String(" a"))
     var spelled = spell_bytes(sp, 0, 2)
     if spelled != "Ġa":
@@ -294,8 +289,8 @@ def check_pattern_reach(tok: Gpt2Tokenizer) raises -> Int:
     # The special token under both flag values, from the same input.
     var as_text = tok.encode(String(GPT2_ENDOFTEXT), False)
     var as_special = tok.encode(String(GPT2_ENDOFTEXT), True)
-    if len(as_special) != 1 or as_special[0] != GPT2_ENDOFTEXT_ID:
-        print("FAIL reach: allowed special did not give one id 50256")
+    if len(as_special) != 1 or as_special[0] != tok.eot_id():
+        print("FAIL reach: allowed special did not give the one eot id")
         bad += 1
     if len(as_text) < 2:
         print("FAIL reach: disallowed special collapsed to one token anyway")
@@ -308,7 +303,7 @@ def check_pattern_reach(tok: Gpt2Tokenizer) raises -> Int:
     )
     var seen_eot = 0
     for k in range(len(mixed)):
-        if mixed[k] == GPT2_ENDOFTEXT_ID:
+        if mixed[k] == tok.eot_id():
             seen_eot += 1
     if seen_eot != 1 or len(mixed) < 3:
         print("FAIL reach: interior special token gave " + _ids_string(mixed))
@@ -323,13 +318,13 @@ def check_pattern_reach(tok: Gpt2Tokenizer) raises -> Int:
 
 
 def main() raises:
-    print("tokenizer_check: GPT-2 byte-level BPE against " + String(FIXTURE))
-    var tok = load_gpt2_tokenizer()
+    print("tokenizer_check: byte-level BPE against " + String(FIXTURE))
+    var tok = load_gpt2_tokenizer_from(String(RANKS))
     var fx = load_fixture(String(FIXTURE))
 
     var bad = 0
     bad += check_pattern_matches_fixture(fx)
-    bad += check_tables(tok)
+    bad += check_tables(tok, fx)
     bad += check_byte_unicode_bijection()
     bad += check_pattern_reach(tok)
 
@@ -337,10 +332,8 @@ def main() raises:
     var n_roundtrip_wrong = 0
     for ci in range(len(fx.cases)):
         var fxcase = fx.cases[ci].copy()
-        # `endoftext_as_special` is the one case recorded with the special
-        # token ALLOWED; every other case, `<|endoftext|>` included, is
-        # recorded as ordinary text.
-        var allow = fxcase.name == "endoftext_as_special"
+        # Each case carries the flag it was encoded with.
+        var allow = fxcase.allow_endoftext
         var got = tok.encode_bytes(fxcase.text, allow)
 
         var same = len(got) == len(fxcase.ids)
@@ -418,8 +411,8 @@ def main() raises:
                 "NOTE "
                 + fxcase.name
                 + ": the fixture records roundtrip_ok false and ours round"
-                " trips; the fixture is the reference, so this is a fixture"
-                " question, not a pass"
+                " trips; the Python encoder disagrees with itself, so this is"
+                " a fixture question, not a pass"
             )
 
     print(
@@ -438,7 +431,7 @@ def main() raises:
         raise Error(
             "tokenizer_check: "
             + String(bad)
-            + " failures. Exact equality with tiktoken 0.14.0 is the whole"
+            + " failures. Exact equality with the second encoder is the whole"
             " point of this gate: fix the tokenizer, do not loosen the"
             " assertion."
         )

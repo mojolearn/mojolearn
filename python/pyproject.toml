@@ -57,7 +57,7 @@ keywords = [
 # and 3.11 are NOT claimed because they were not run, and a floor is a
 # promise". Both sentences are now false and are deleted rather than softened.
 # Measured 2026-08-24: python3.10 through python3.14 are ALL present on this
-# machine (/opt/homebrew/bin), and packaging/macos/verify_wheel.sh:37 loops
+# machine, and packaging/macos/verify_wheel.sh:37 loops
 # over all five by name. The paragraph thirty lines below always said the
 # oldest verified numpy was 1.26.4 "on python3.10, running the full smoke
 # fit", so the two halves of this file already disagreed.
