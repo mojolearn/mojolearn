@@ -724,6 +724,39 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
     dict(
+        # lane/inference-tokenizer-neural, 2026-09-15. The INFERENCE half of
+        # the training and transformer families (which stay source reference
+        # builds): the small MLP's logits and the TransformerBlock stateless
+        # prefill, forward only, loaded by path and shipped. No optimizer,
+        # loss, backward or decode export, so none of that is compiled in.
+        # The mlp, transformer and transformer-window lanes' held-out and
+        # batch cells run through MLPInference and TransformerBlockInference
+        # on a CPU column; their training rows stay the training and
+        # transformer families' covered lanes.
+        family="neural",
+        binding="_mojolearn_neural_host",
+        routes=None,
+        loaded_by="python/mojolearn/neural_inference.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("MLPInference", "TransformerBlockInference"),
+        display="the small MLP's logits and the Transformer block's stateless forward (inference only)",
+        host_modules=(
+            "training/host/mlp_oracle.mojo",
+            "transformer/host/transformer_block_host.mojo",
+            "transformer/checks/transformer_oracle.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
+            "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
+        ),
+        gate="python/mojolearn/tests/test_neural_inference.py and tools/identity_break.py (mlp, transformer, transformer-window)",
+        ships_in_wheel=True,
+    ),
+    dict(
         family="core",
         binding="_mojolearn_core_host",
         routes="_mojolearn",

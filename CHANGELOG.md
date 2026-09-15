@@ -26,6 +26,17 @@ Linux legs are OWED before this heading reads published.
   are unchanged against the three committed GPU columns. A new
   `-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1` build must read BATCH_MOVED. Apple M4 CPU
   column only; the GPU columns' batch cells are owed to the release record.
+- New public CPU neural inference from GPU-trained weights: `MLPInference` (the small
+  8-16-3 MLP's `predict_logits`, from `SmallMLPTrainer.save_checkpoint` files or the four
+  weights) and `TransformerBlockInference` (`TransformerBlock.forward` from a zero state,
+  full causal or sliding window, ragged `lengths` included). Both run on a new shipped host
+  binding, `_mojolearn_neural_host`, that exports forward entries only (no optimizer, loss,
+  backward or decode step is compiled in). On a CPU column the `mlp`, `transformer` and
+  `transformer-window` identity lanes now ask their held-out and batch cells through these
+  classes: against the three committed GPU columns every train, infer, model and batch cell
+  reads IDENTICAL (nine fixtures each), and a `-D MOJOLEARN_HOST_SABOTAGE=1` build of the new
+  binding reads DIVERGENT on all 27 infer and 27 batch cells with every train cell unchanged.
+  Training on the CPU stays internal to the verifier.
 - `score(X, y, sample_weight=...)` on `GradientBoostingClassifier`, `GradientBoostingRegressor`,
   the random forests and the Extra Trees, and `sample_weight` on `metrics.accuracy_score` and
   `metrics.r2_score`, all of which refused weights. They follow scikit-learn's reference definitions of weighted

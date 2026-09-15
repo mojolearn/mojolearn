@@ -1,0 +1,7 @@
+504 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70e340000000, nodemask=1)
+readback vendor() = cpu
+readback vendor_how() = no GPU binary set loaded; the CPU bindings under mojolearn/host/ only (DEVIATION 2615; built: _mojolearn_core_host, _mojolearn_estimators_host)
+readback host_families_built = ['_mojolearn_core_host', '_mojolearn_estimators_host']
+readback _mojolearn_core_host: column=cpu detected_column=(no read-back) numeric_mode=1 vendor=cpu
+readback _mojolearn_estimators_host: column=cpu detected_column=(no read-back) numeric_mode=1 vendor=cpu
+readback verdict OK
