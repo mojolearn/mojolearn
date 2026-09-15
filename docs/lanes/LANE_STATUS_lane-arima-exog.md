@@ -54,7 +54,18 @@ OWED:
 2. The CPU column, both sabotage columns and the owed check (one CPU pod).
 3. The NVIDIA column (one small pod). No AMD box this lane.
 4. statsmodels agreement (runs on the CPU pod; the script is committed).
-5. DONE: the recording is in `FORECAST_RECORDED`.
+5. DONE: the recording is in `FORECAST_RECORDED`, and that entry is backed by
+   what the test actually asserts. `test_recordings_and_columns_exist`
+   (`python/mojolearn/tests/test_host_surface.py`) asserts ONE thing about
+   every name in `CLASSICAL_RECORDED + FORECAST_RECORDED +
+   INFERENCE_ONLY_RECORDED + SEARCH_LOOKUP_RECORDED + CLASSICAL_GPU_COLUMNS`:
+   `(ROOT / rel).exists()`. It says nothing about GPU columns. GPU columns are
+   a DIFFERENT test, `test_training_gpu_columns_exist`, over
+   `TRAINING_GPU_COLUMNS`, which this lane does not touch. The directory is
+   committed and holds 18 fixtures whose `expected.json` all parse, so the
+   registration does not outrun its evidence. If that assertion ever grows a
+   GPU-column requirement, this entry must come out until the NVIDIA and AMD
+   columns land.
 
 ## Resume, exactly
 
@@ -116,6 +127,13 @@ the H100 to match the record's `nvidia-h100-sm_90a` column):
 
 Evidence goes in `bench/results/identity_break/2026-09-15_arima-exog/`
 (README.md is there with the verdict table; fill the OWED rows).
+
+## The CPU pod
+
+Results live OUTSIDE /private/tmp, under `~/mojolearn-evidence/arima-exog-cpu/`,
+and the pod is DELETED and the delete verified (`teardown.txt`). The NVIDIA and
+AMD cells of these two lanes are OWED to the next release record; no NVIDIA pod
+was rented for this lane.
 
 ## Merge
 
