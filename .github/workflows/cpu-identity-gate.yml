@@ -56,6 +56,9 @@ on:
       - "bindings/build_host_family.sh"
       - "bindings/build_*_host.sh"
       - "python/mojolearn/host_surface.py"
+      - "python/mojolearn/_metrics_impl.py"
+      - "python/mojolearn/tests/test_classification_metrics.py"
+      - "python/mojolearn/tests/test_regression_metrics.py"
       - "gemm/host/gemm_oracle.mojo"
       - "kde/host/kde_oracle.mojo"
       - "holtwinters/host/hw_oracle.mojo"
@@ -347,6 +350,27 @@ jobs:
           for b in ${ALL_HOST_BINDINGS//,/ }; do bindings="$bindings --binding $b"; done
           python3 tools/cpu_identity_gate_check.py readback $bindings 2>&1 \
             | tee "$GATE_OUT/readback.log"
+
+      # The metrics Python layer's ABI and refusal tests, on the CPU-only
+      # install this job just built. They plant a fake `_mojolearn_metrics`
+      # and send every other lookup to the real resolver, so the finiteness
+      # check runs through the core host binding's `all_finite_f32`. No other
+      # push-triggered job builds the core and metrics host bindings, and
+      # python-tests.yml is dispatch only and has no scikit-learn, which the
+      # classification module needs as its reference (it SKIPS without it,
+      # so a skip fails this step).
+      - name: Metrics Python tests (CPU-only install)
+        run: |
+          set -o pipefail
+          python3 -m pip install --quiet pytest scikit-learn
+          cd python
+          python3 -m pytest -q -rs -p no:cacheprovider \
+            mojolearn/tests/test_classification_metrics.py \
+            mojolearn/tests/test_regression_metrics.py 2>&1 | tee "$GATE_OUT/pytest_metrics.log"
+          if grep -E '[0-9]+ skipped' "$GATE_OUT/pytest_metrics.log"; then
+            echo "a metrics test module skipped; the step must run every test" >&2
+            exit 1
+          fi
 
       # The fixture directories split by what expected.json says. Only
       # RECORDED ones are compared here; the OWED ones are the forest host
