@@ -26,7 +26,7 @@ Linux legs are OWED before this heading reads published.
   train, 18 infer, 18 model and 18 batch cells, and the Metal fit and prediction equal to the host
   binding's bit for bit; the gp regressor's cells unchanged, IDENTICAL x4 against the 166-lane
   record. Against scikit-learn 1.9.0 on the lanes' fixtures: every label agrees, the largest
-  probability difference is 1.6e-4 (the `wide` fixture) and below 1e-5 elsewhere. The NVIDIA and
+  probability difference is 1.6e-4 (the `wide` fixture) and at most 1.1e-5 elsewhere. The NVIDIA and
   AMD columns are owed to the release record.
 - New `KMeans.transform` and `KMeans.fit_transform`, with cuML's `KMeans.transform` as the
   reference: the distance from every row to every fitted center under the model's `metric`
