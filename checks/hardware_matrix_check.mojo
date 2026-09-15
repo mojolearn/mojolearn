@@ -57,6 +57,11 @@ from checks.kernel_matrix import (
     COLUMN_NVIDIA,
     COLUMN_QUALCOMM,
     COLUMN_SPEC_BASELINE,
+    COLUMN_TPU,
+    COLUMN_TRAINIUM,
+    CAP_ABSENT,
+    CAP_PRESENT,
+    CAP_UNAUDITED,
     HIST_SMEM_SHARED2_I32,
     HIST_SMEM_WARP_PRIVATE_F32,
     IDENTITY_FLOOR_BLOCK,
@@ -66,6 +71,12 @@ from checks.kernel_matrix import (
     K_LIB_SELECT_WARPSORT,
     PINNED_REPLICATION_LANES,
     TARGET_COLUMN,
+    column_arithmetic_refusal_reason,
+    column_fma_instruction,
+    column_float32_division,
+    column_float_bits_readable,
+    column_int32_exact,
+    column_is_buildable,
     column_max_block_size,
     column_meets_identity_floor,
     column_name,
@@ -416,8 +427,16 @@ def check_hardware_matrix() raises:
     # guaranteed minimum (16 KB, 128 invocations), which is half our floor's
     # memory and a quarter of its block. A day when it passes is a day
     # somebody lowered the floor.
+    #
+    # The TPU and Trainium columns (2026-09-14) are the second and third
+    # named exceptions, and they are refused for a DIFFERENT reason than the
+    # baseline. Their memory and block rows answer the identical reading
+    # and would admit them; the vendors' own documentation names no fused
+    # multiply-add (both) and no binary32 division (Trainium), and no atomic
+    # add (both). Section 6 pins that the reason a user reads is the
+    # arithmetic. The floor did not move for them.
     for c in range(COLUMN_COUNT):
-        if c == COLUMN_SPEC_BASELINE:
+        if c == COLUMN_SPEC_BASELINE or c == COLUMN_TPU or c == COLUMN_TRAINIUM:
             continue
         if not column_meets_identity_floor(c):
             raise Error(
@@ -445,6 +464,89 @@ def check_hardware_matrix() raises:
             " gives no reason; a refusal a user cannot act on is a support"
             " thread, not a guard"
         )
+
+    # ---- 6. CONTRACT PRIMITIVES, and the columns they refuse ------------
+    #
+    # Every column Mojo builds for names all four primitives IDENTICAL is
+    # made of. A change here is a change to what the contract stands on.
+    for c in range(COLUMN_COUNT):
+        if not column_is_buildable(c):
+            continue
+        if (
+            column_fma_instruction(c) != CAP_PRESENT
+            or column_float32_division(c) != CAP_PRESENT
+            or column_int32_exact(c) != CAP_PRESENT
+            or column_float_bits_readable(c) != CAP_PRESENT
+        ):
+            raise Error(
+                "check_hardware_matrix FAIL: buildable column "
+                + column_name(c)
+                + " no longer names every contract primitive"
+            )
+    # The declared GPU columns were not audited for primitives; UNAUDITED is
+    # never a refusal, so their admission is exactly what it was.
+    for c in range(COLUMN_COUNT):
+        if c != COLUMN_QUALCOMM and c != COLUMN_INTEL and c != COLUMN_SPEC_BASELINE:
+            continue
+        if column_arithmetic_refusal_reason(c).byte_length() != 0:
+            raise Error(
+                "check_hardware_matrix FAIL: "
+                + column_name(c)
+                + " is refused on arithmetic it was never audited for"
+            )
+    # TPU and Trainium. The memory and block rows would admit them, so the
+    # reason a user reads is the arithmetic. (Their atomics row is False too;
+    # see `column_has_threadgroup_int_atomics` for why that clause is owed a
+    # restatement on a sequential grid rather than read as the verdict.)
+    for c in range(COLUMN_COUNT):
+        if c != COLUMN_TPU and c != COLUMN_TRAINIUM:
+            continue
+        if column_is_buildable(c):
+            raise Error(
+                "check_hardware_matrix FAIL: "
+                + column_name(c)
+                + " claims Mojo emits code for it"
+            )
+        if (
+            column_shared_limit(c) < IDENTITY_FLOOR_SHARED_BYTES
+            or column_max_block_size(c) < IDENTITY_FLOOR_BLOCK
+        ):
+            raise Error(
+                "check_hardware_matrix FAIL: "
+                + column_name(c)
+                + "'s memory or block row misses the floor; both answer the"
+                " identical reading"
+            )
+        if column_meets_identity_floor(c):
+            raise Error(
+                "check_hardware_matrix FAIL: "
+                + column_name(c)
+                + " MEETS the identity floor with no documented fused"
+                " multiply-add instruction"
+            )
+        # REACH: the arithmetic refusal branch ran and says why.
+        var why = identity_refusal_reason(c)
+        if why != column_arithmetic_refusal_reason(c) or why.byte_length() == 0:
+            raise Error(
+                "check_hardware_matrix FAIL: "
+                + column_name(c)
+                + " is refused without its arithmetic reason: "
+                + why
+            )
+    _pin("tpu fma", column_fma_instruction(COLUMN_TPU), CAP_ABSENT)
+    _pin("tpu division", column_float32_division(COLUMN_TPU), CAP_PRESENT)
+    _pin("tpu int32", column_int32_exact(COLUMN_TPU), CAP_PRESENT)
+    _pin("tpu float bits", column_float_bits_readable(COLUMN_TPU), CAP_UNAUDITED)
+    _pin("trainium fma", column_fma_instruction(COLUMN_TRAINIUM), CAP_ABSENT)
+    _pin(
+        "trainium division", column_float32_division(COLUMN_TRAINIUM), CAP_ABSENT
+    )
+    _pin("trainium int32", column_int32_exact(COLUMN_TRAINIUM), CAP_PRESENT)
+    _pin(
+        "trainium float bits",
+        column_float_bits_readable(COLUMN_TRAINIUM),
+        CAP_UNAUDITED,
+    )
 
     # The vendor-forced flush: `qualcomm` and the baseline have no core
     # float atomic, so they take fixed point in BOTH modes. This is the
@@ -474,6 +576,10 @@ def check_hardware_matrix() raises:
             " CatBoost's float atomic"
         )
 
+    var admitted = 0
+    for c in range(COLUMN_COUNT):
+        if c != COLUMN_BIT_IDENTICAL and column_meets_identity_floor(c):
+            admitted += 1
     print(
         "check_hardware_matrix OK: apple column = the old constants"
         " bit-for-bit (10 cores, 3072 threads/core, 32 KB wall, occupancy"
@@ -486,10 +592,12 @@ def check_hardware_matrix() raises:
         " build column "
         + column_name(TARGET_COLUMN)
         + "; identity floor frozen at profile 1 (32 KB / 32 lanes / block"
-        " 512): all "
-        + String(COLUMN_COUNT - 2)
-        + " vendor columns meet it, the portable baseline is REFUSED, apple/nvidia/amd smem modes unchanged"
-        " by the budget rewrite"
+        " 512): "
+        + String(admitted)
+        + " vendor columns meet it, the portable baseline is REFUSED on"
+        " memory, tpu and trainium are REFUSED on arithmetic (no documented"
+        " fused multiply-add; trainium also no division), apple/nvidia/amd"
+        " smem modes unchanged by the budget rewrite"
     )
 
 

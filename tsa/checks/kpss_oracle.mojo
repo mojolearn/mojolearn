@@ -24,6 +24,8 @@ pinned_block_sum`'s IDENTICAL arm and is gated in the kmeans lane
 than imported from a lane that owns a different directory.
 """
 
+from std.sys.compile import is_defined
+
 from core.column_stats import STATS_TPB
 from checks.numerics import ftz, identical_mul_add
 from tsa.impl.timeSeries.arima_helpers import prepare_data_host
@@ -33,6 +35,15 @@ from tsa.impl.timeSeries.stationarity import (
     kpss_s2B_coefficients,
     kpss_stat_from_sums,
 )
+
+
+#: THE CPU IDENTITY GATE'S NEGATIVE CONTROL (lane/cpu-training-batch3,
+#: 2026-09-14). Since that lane `kpss_host_f32` is also what the tsa host
+#: binding's `kpss_test` computes on a CPU-only install, and a host build
+#: with `-D MOJOLEARN_HOST_SABOTAGE=1` walks every strided partial of
+#: `series_sum_host` DESCENDING, so the kpss lane must read DIVERGENT. No
+#: check build passes the define; `tsa_host_sabotage` reads it back.
+comptime KPSS_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
 def pinned_fold_host(partials: List[Float32]) -> Float32:
@@ -69,14 +80,21 @@ def series_sum_host[
     var partials = List[Float32]()
     for tid in range(STATS_TPB):
         var acc = Float32(0.0)
+        var chain = List[Int]()
         var t = tid
         while t < n:
-            var x = ftz(data[base + t])
+            chain.append(t)
+            t += STATS_TPB
+        for c in range(len(chain)):
+            var at = chain[c]
+            comptime if KPSS_ORACLE_HOST_SABOTAGE:
+                # THE SABOTAGE ARM: the same chain, DESCENDING.
+                at = chain[len(chain) - 1 - c]
+            var x = ftz(data[base + at])
             comptime if square:
                 acc = ftz(identical_mul_add(x, x, acc))
             else:
                 acc = ftz(acc + x)
-            t += STATS_TPB
         partials.append(acc)
     var s0 = ftz(pinned_fold_host(partials))
     return ftz(s0 * scale)
