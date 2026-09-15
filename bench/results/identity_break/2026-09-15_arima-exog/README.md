@@ -41,12 +41,26 @@ OWED, filled as each step lands. Every claim below is a file in this directory.
 
 | file | verdict |
 |---|---|
-| `metal_test.txt` | `test_arima_exog.py` on the M4's Metal set: the fit, the forecast pair, the refusals, save and load |
-| `apple-m4-metal.json`, `diff.*` | the two new lanes on the base fixture, and the three existing ARIMA lanes on the base fixture against the 166-lane apple-m4 column |
-| `classical_host_record_metal.txt` | `classical_host_gate.py record` of the two lanes into `bench/results/classical_host/2026-09-15-apple-m4-arima-exog` |
+| `metal/metal.new-base.json` | the two new lanes on the base fixture, Metal, at 20e786447: `cells=2 stable=2 moved=0 refused=0`, and infer, model and batch stable on both. `reload` equals `infer`, so a saved model reloads and predicts the same bytes |
+| `metal/diff.old-base.txt` | THE EXISTING LANES ARE UNCHANGED: arima, arima-011 and arima-seasonal-c on the base fixture against the three GPU columns of the 166-lane record read `IDENTICAL x4` on train, infer and batch (`summary: IDENTICAL=27`, `(batch): IDENTICAL=27`). The three `model` rows read ONE-COLUMN because the record's columns predate `ARIMA.save` (`n/a:no-save` there, a hash here), which is the saved-model lane's shape and not this lane's doing |
+| `metal/diff.new-base.txt` | the new lanes against the same three columns: ONE-COLUMN on every cell, because the record predates the lanes and the GPU columns read `(not run)`. `--require-columns 4` FAILS here by design and the tool says why: OWED needs a CPU column to hash the cell ("not OWED: no CPU column hashes it"). The OWED verdict is taken on the pod, where the CPU column exists |
+| `classical_host_record_metal.txt` | `classical_host_gate.py record` of the two lanes into `bench/results/classical_host/2026-09-15-apple-m4-arima-exog`, all nine fixtures |
 | `x86-runpod/` | the CPU column, the sabotage column, the exog-only sabotage column, the owed check, the saved-model gate, the installed test wheel |
 | `statsmodels_agreement.{txt,json}` | agreement with statsmodels `SARIMAX` on the coefficients and the forecasts, REPORTED, not tuned to (`statsmodels_agreement.py`) |
 | `nvidia/` | the H100 column of the two new lanes |
+
+## What has run so far (2026-09-15, at 20e786447)
+
+- Both host bindings and the Metal binding compile with the exogenous arms. The shipped
+  forecast host binding grows from 298,536 to 315,256 bytes.
+- `test_arima_exog.py`: 7 source checks and the runtime check pass on the M4's Metal set
+  (8 passed), and the runtime check passes again on a staged CPU-only package against the
+  reference arima host binding (the fit) and the shipped forecast host binding (the
+  prediction), which is where `mojolearn.host_model` is exercised.
+- TWO DEFECTS THE RUNTIME CHECK FOUND, both fixed and both invisible to a source read: the
+  saved-model format registry `_FORMATS` did not carry `mojolearn-arima-2`, so `host_model`
+  refused a saved exog model on the one install that needs it; and `HostARIMA._HOST_ARRAYS`
+  did not name `_exog`, so `model_sha256` did not cover the regressors.
 
 ## Owed
 
