@@ -60,10 +60,6 @@ def hdbscan_rows_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
 
-def hdbscan_parallel_available() raises -> PythonObject:
-    return PythonObject(1)
-
-
 def _hdbscan_fit_run(
     xp: MutPointer[Float32, MutUntrackedOrigin],
     lp: MutPointer[Int32, MutUntrackedOrigin],
@@ -186,7 +182,6 @@ def hdbscan_fit_binding(
 def PyInit__mojolearn_hdbscan() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_hdbscan")
-        m.def_function[hdbscan_parallel_available]("hdbscan_parallel_available")
         m.def_function[hdbscan_rows_parallel_available]("hdbscan_rows_parallel_available")
         m.def_function[hdbscan_vendor_binding]("hdbscan_vendor")
         m.def_function[hdbscan_numeric_mode_binding]("hdbscan_numeric_mode")

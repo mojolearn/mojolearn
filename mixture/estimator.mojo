@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host-visible `GaussianMixture` surface, and the EM loop that drives it.
 
-**NOT YET WIRED** into `bindings/_mojolearn_estimators.mojo` or
-`python/mojolearn/` -- those directories are not this lane's.
-`mixture/README.md`'s WHAT THE ORCHESTRATOR MUST WIRE names the tasks; this
-file is the entry a binding should reach, shaped like
+Wired since 2026-09-14: `bindings/_mojolearn_mixture.mojo` (built by
+`bindings/build_mixture.sh`) calls this file, and
+`python/mojolearn/mixture.py` exposes it as `mojolearn.GaussianMixture`.
+This file is the entry that binding reaches, shaped like
 `kde/estimator.mojo::kde_score_samples_host` and
 `cholesky/estimator.mojo::cholesky_factor_host`.
 

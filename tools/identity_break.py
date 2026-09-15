@@ -126,14 +126,14 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whole-batch answer (one ulp) and stamps `batch_sabotage: true`
             in the JSON.
 
-THE LANES, 172 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
+THE LANES, 176 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
 tokenizer the same day when those two got their doors, 16 `par-*` lanes that
 evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`, then `par-cholesky`, `par-kernel-ridge`, `par-nystroem` and `par-rbf-sampler` on 2026-09-15). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -185,6 +185,8 @@ sampler, a solver, a metric, a reduction).
                par-byte-lm-offload par-samba-clip
     2026-09-14 night (drivers added by the multigpu lane; devices=_par_devices())
       par-forest-pool par-gmm par-resample par-hdbscan
+    2026-09-15 (the Cholesky and kernel-method drivers; devices=_par_devices())
+      par-cholesky par-kernel-ridge par-nystroem par-rbf-sampler
     2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
       ivf embedding
 
@@ -2983,6 +2985,88 @@ def _(ml, X, yc, yr, Xh=None):
                 par, "n/a:transductive")
 
 
+# ---------------------------------------------------------------- lanes (2026-09-15, the kernel-method and Cholesky drivers)
+# fit_cholesky / solve_cholesky, fit_kernel_method / apply_kernel_method and
+# transform_rbf_sampler. The shapes sit ABOVE 1 MiB on purpose: a 600 x 600
+# float32 factor is 1.44 MiB, the size at which the device-to-device column
+# solve read wrong columns on two MI300X
+# (bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/). Same rules as
+# the par-* lanes above.
+
+@lane("par-cholesky")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_cholesky and solve_cholesky on a 600 x 600 Cauchy-kernel SPD
+    matrix with three right-hand sides (whole trailing-update rows and whole
+    right-hand-side columns on _par_devices()), held to the plain fit's
+    factor and solve."""
+    from mojolearn.parallel_classical import fit_cholesky, solve_cholesky
+    dev = _par_devices()
+    A = _cauchy_spd(X[:600, :4])
+    par = fit_cholesky(ml.Cholesky(), A, devices=dev)
+    plain = ml.Cholesky().fit(A)
+    assert par.info_ == 0, "par-cholesky lane: the Cauchy matrix did not factor (info=%d)" % par.info_
+    _same_bytes("fit_cholesky L_", par.L_, "plain L_", plain.L_)
+    B = np.ascontiguousarray(np.stack([yr[:600], yr[600:1200], yr[1200:1800]], 1).astype(np.float32))
+    x = solve_cholesky(par, B, devices=dev)
+    _same_bytes("solve_cholesky", x, "plain solve", plain.solve(B))
+    return _fit(dict(L=_h(par.L_), logdet=_h(np.float64(par.logdet_)), info=_h(np.int64(par.info_)),
+                     nb=_h(np.int64(par.nb_)), jitter=_h(np.float32(par.jitter_)), solve=_h(x)),
+                par, lambda e: (solve_cholesky(e, np.ascontiguousarray(Xh[:600, :3]), devices=_par_devices()),))
+
+
+@lane("par-kernel-ridge")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_kernel_method and apply_kernel_method on a KernelRidge at the rbf
+    kernel over 600 rows with two targets (kernel rows through the SVM seam,
+    factor rows and target columns through the Cholesky driver), held to the
+    plain fit's dual coefficients and predictions."""
+    from mojolearn.parallel_classical import fit_kernel_method, apply_kernel_method
+    dev = _par_devices()
+    kw = dict(alpha=0.1, kernel="rbf", gamma=0.5)
+    Y = np.ascontiguousarray(np.stack([yr[:600], yr[600:1200]], 1).astype(np.float32))
+    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)
+    plain = ml.KernelRidge(**kw).fit(X[:600, :4], Y)
+    _same_bytes("fit_kernel_method dual_coef_", par.dual_coef_, "plain dual_coef_", plain.dual_coef_)
+    pred = apply_kernel_method(par, X[600:856, :4], devices=dev)
+    _same_bytes("apply_kernel_method predict", pred, "plain predict", plain.predict(X[600:856, :4]))
+    return _fit(dict(dual=_h(par.dual_coef_), info=_h(np.int64(par.info_)), predict=_h(pred)),
+                par, lambda e: (apply_kernel_method(e, Xh[:64, :4], devices=_par_devices()),))
+
+
+@lane("par-nystroem")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_kernel_method and apply_kernel_method on a Nystroem at the rbf
+    kernel with 32 components of 600 rows (kernel rows on _par_devices(),
+    the Jacobi eigensolver on the root), held to the plain fit's model
+    arrays and transform."""
+    from mojolearn.parallel_classical import fit_kernel_method, apply_kernel_method
+    dev = _par_devices()
+    kw = dict(kernel="rbf", gamma=0.5, n_components=32, random_state=7)
+    par = fit_kernel_method(ml.Nystroem(**kw), X[:600, :4], devices=dev)
+    plain = ml.Nystroem(**kw).fit(X[:600, :4])
+    _same_bytes("fit_kernel_method components_", par.components_, "plain components_", plain.components_)
+    _same_bytes("fit_kernel_method normalization_", par.normalization_, "plain normalization_", plain.normalization_)
+    out = apply_kernel_method(par, X[600:1624, :4], devices=dev)
+    _same_bytes("apply_kernel_method transform", out, "plain transform", plain.transform(X[600:1624, :4]))
+    return _fit(dict(components=_h(par.components_), indices=_h(par.component_indices_),
+                     normalization=_h(par.normalization_), eigenvalues=_h(par.eigenvalues_),
+                     eigenvectors=_h(par.eigenvectors_), sweeps=_h(np.int64(par.sweeps_)), transform=_h(out)),
+                par, lambda e: (apply_kernel_method(e, Xh[:64, :4], devices=_par_devices()),))
+
+
+@lane("par-rbf-sampler")
+def _(ml, X, yc, yr, Xh=None):
+    """transform_rbf_sampler with 1024 random Fourier features over 1000
+    rows in shards of 300 rows (each shard's output 1.17 MiB) on
+    _par_devices(), held to the one-call transform."""
+    from mojolearn.parallel_classical import transform_rbf_sampler
+    m = ml.RBFSampler(gamma=0.5, n_components=1024, random_state=1).fit(X)
+    out = transform_rbf_sampler(m, X[:1000], devices=_par_devices(), rows_per_shard=300)
+    _same_bytes("transform_rbf_sampler", out, "plain transform", m.transform(X[:1000]))
+    return _fit(dict(weights=_h(m.random_weights_), offset=_h(m.random_offset_), transform=_h(out)),
+                m, lambda e: (transform_rbf_sampler(e, Xh[:256], devices=_par_devices(), rows_per_shard=100),))
+
+
 # ---------------------------------------------------------------- the batch part (2026-09-14)
 # See the `batch` part in the module docstring. A declaration per lane, kept
 # OUT of the lane bodies so no train, infer or model hash can move because
@@ -3572,6 +3656,17 @@ _batch_decl(_rows_calls("predict", "predict_proba"), "par-forest-pool")
 _batch_decl(_rows_calls("score_samples", "predict", sl=(slice(0, 64), slice(0, 4))), "par-gmm")
 _batch_decl("n/a:function", "par-resample")
 _batch_decl("n/a:transductive", "par-hdbscan")
+_batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "par-kernel-ridge")
+_batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "par-nystroem")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "par-rbf-sampler")
+def _batch_par_cholesky(ml, e, Xh):
+    """_batch_cholesky at the par-cholesky lane's 600-row factor."""
+    B = np.ascontiguousarray(Xh[:600, :2])
+    return [_BatchRows("solve (right-hand sides)", B.T,
+                       lambda r: (np.asarray(e.solve(np.ascontiguousarray(r.T))).reshape(B.shape[0], -1).T,))]
+
+
+_batch_decl(_batch_par_cholesky, "par-cholesky")
 
 
 # ---------------------------------------------------------------- run / diff

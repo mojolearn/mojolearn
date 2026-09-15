@@ -58,10 +58,6 @@ def embedding_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def embedding_parallel_available() raises -> PythonObject:
-    return PythonObject(1)
-
-
 def _upload_f32(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
@@ -294,9 +290,6 @@ def embedding_backward_binding(
 def PyInit__mojolearn_embedding() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_embedding")
-        m.def_function[embedding_parallel_available](
-            "embedding_parallel_available"
-        )
         m.def_function[embedding_vendor_binding]("embedding_vendor")
         m.def_function[embedding_numeric_mode_binding]("embedding_numeric_mode")
         m.def_function[embedding_forward_binding]("embedding_forward")
