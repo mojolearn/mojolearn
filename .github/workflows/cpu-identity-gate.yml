@@ -166,6 +166,8 @@ on:
       - "ivf/impl/neighbors/ivf_common.mojo"
       - "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo"
       - "python/mojolearn/_ivf_impl.py"
+      - "python/mojolearn/_byte_lm_trainer_host.py"
+      - "python/mojolearn/_byte_lm_impl.py"
       - "bench/results/forest_host/**"
       - ".github/workflows/cpu-identity-gate.yml"
 

@@ -86,6 +86,21 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
 - `LanguageModelHostTrainer` is exported from `mojolearn/__init__.py` as of
   `31af2404`. What it promises is this profile and this shape, and a binding
   built before the training entry existed is refused at construction by name.
+- The GPU trainer class on a CPU-only install (2026-09-15,
+  lane/cpu-training-embedding-ivf). `SmallByteLanguageModelTrainer` and its
+  alias `LanguageModelTrainer`, stateless or `resident=True`, run through
+  `python/mojolearn/_byte_lm_trainer_host.py`, which serves the GPU binding's
+  single-device entries (the step, evaluation, logits and the resident session)
+  over this binding's step, loss and reference-path logits and holds no
+  arithmetic; the multi-GPU entries are absent and refuse by name. The
+  `byte-lm` and `byte-lm-resident` identity_break lanes (three AdamW steps at
+  weight decay 0.01, the exported gradient, the logits, the checkpoint bytes
+  and the batch part) read IDENTICAL x4 on all 72 train, infer, model and batch
+  cells against the 166-lane record's Apple M4, NVIDIA H100 and AMD MI325X
+  columns on the M4's CPU column (one core), and a build with
+  `-D MOJOLEARN_HOST_SABOTAGE=1` (the host GEMM oracle's descending leaf)
+  reads DIVERGENT on all 72. Before that change `byte_lm_host_sabotage` did
+  not report that arm, and such a build loaded outside the gate reading clean.
 
 ## The free-running run
 
@@ -349,7 +364,7 @@ byte LM's. Each also builds from source through
 
 <!--fact:host_surface_table-->| family | binding under `mojolearn/host/` | routes (CPU-only install) | trains on a CPU (identity_break lanes) | predicts on a CPU from a saved model | gate | in a wheel |
 |---|---|---|---|---|---|---|
-| byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | no | LanguageModelInference, LanguageModelHostTrainer | .github/workflows/byte-lm-cpu-gate.yml | yes |
+| byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | byte-lm, byte-lm-resident | LanguageModelInference, LanguageModelHostTrainer, SmallByteLanguageModelTrainer | .github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | forest | `_mojolearn_forest_host.so` | loaded by path | no | RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor, GradientBoosting (rf_classifier, rf_regressor, et_classifier, et_regressor, gbdt_symmetric, gbdt_depthwise, gbdt_lossguide, gbdt_rmse) | tools/forest_host_gate.py (.github/workflows/forest-host-gate.yml) | yes |
 | tokenizer | `_mojolearn_tokenizer_host.so` | loaded by path | no | GPT2Tokenizer | pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py | yes |
 | core | `_mojolearn_core_host.so` | `_mojolearn` | knn, knn-clf, knn-reg, kmeans, kmeans-random, kmeans-array, kmeans-weighted, knn-sqeuclidean, knn-clf-distance, knn-reg-distance, knn-manhattan, knn-chebyshev, knn-cosine, knn-minkowski-p3, knn-rbc, radius, radius-manhattan, radius-chebyshev, radius-minkowski-p3, kmeans-sqrt, kmeans-classic-pp, kmeans-cosine | NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor, KMeans, RadiusNeighbors (knn, knn-clf, knn-reg) | tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |

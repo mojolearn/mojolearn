@@ -506,6 +506,25 @@ TRAINING_LANE_NAMES = {
     # own host binding, under both L2 metrics.
     "ivf": "the IVF-Flat index",
     "ivf-euclidean": "the IVF-Flat index under euclidean distance",
+    # The GPU byte LM trainer's lanes (same branch): SmallByteLanguageModelTrainer,
+    # stateless and on its resident session, whose single-device entries a
+    # CPU-only install serves from the byte LM host binding's step, loss and
+    # logits (ADAPTED_MODULES below). Both lanes are in the 166-lane record.
+    "byte-lm": "the byte LM trainer",
+    "byte-lm-resident": "the byte LM trainer on its resident session",
+}
+
+#: GPU binding families a CPU-only install serves through a Python adapter
+#: over a host binding loaded by path, rather than through a routed host
+#: binding exporting the GPU names (lane/cpu-training-embedding-ivf,
+#: 2026-09-15). `_backend.binding(name)` returns `<module>.binding()` when
+#: the family's host binding is built, and the installed stub refuses by
+#: name when it is not. The byte LM trainer's GPU binding carries a resident
+#: session ABI and multi-GPU entries a Mojo host binding would have to
+#: restate as state; the adapter holds the session's bookkeeping and the
+#: CPU byte LM binding's step, loss and logits hold all of the arithmetic.
+ADAPTED_MODULES = {
+    "_mojolearn_byte_lm": dict(family="byte_lm", module="_byte_lm_trainer_host"),
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -530,10 +549,16 @@ FAMILIES = (
         routes=None,
         loaded_by="python/mojolearn/_byte_lm_host.py",
         sabotage_define="MOJOLEARN_BYTE_LM_HOST_SABOTAGE",
-        training_lanes=(),
+        # lane/cpu-training-embedding-ivf (2026-09-15): the GPU trainer's two
+        # lanes, through python/mojolearn/_byte_lm_trainer_host.py
+        # (ADAPTED_MODULES). Loaded through _backend.load_host_module for
+        # them, so the CPU identity gate's sabotage set (built with
+        # MOJOLEARN_HOST_SABOTAGE, gemm_oracle's descending leaf) reaches
+        # them, and byte_lm_host_sabotage reports that arm too.
+        training_lanes=("byte-lm", "byte-lm-resident"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LanguageModelInference", "LanguageModelHostTrainer"),
+        classes=("LanguageModelInference", "LanguageModelHostTrainer", "SmallByteLanguageModelTrainer"),
         display="the byte LM forward pass and one training step",
         host_modules=(
             "training/byte_lm_host.mojo",
@@ -548,7 +573,7 @@ FAMILIES = (
             "byte_lm_host_train_step", "all_finite_f32", "all_finite_f64",
             "cast_f64_to_f32",
         ),
-        gate=".github/workflows/byte-lm-cpu-gate.yml",
+        gate=".github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
     ),
     dict(
@@ -1461,6 +1486,7 @@ def as_dict():
         wheel_bindings=wheel_bindings(),
         forest_recorded_root=FOREST_RECORDED_ROOT,
         no_cpu_path=list(NO_CPU_PATH),
+        adapted_modules={k: dict(v) for k, v in ADAPTED_MODULES.items()},
     )
 
 
