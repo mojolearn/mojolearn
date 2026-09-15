@@ -63,23 +63,16 @@ not a number to quietly raise**; the way to express a larger ridge under
 IDENTICAL is to apply the pinned one more than once and record how many
 times, and the way to change the value is a v2 of the Cholesky profile.
 
-HYPERPARAMETER OPTIMIZATION IS NOT IMPLEMENTED
------------------------------------------------
-**DEVIATION 1761.** `optimizer` accepts the single value `"none"`, which is
-this file's spelling of scikit-learn's `optimizer=None` (`_gpr.py:299`:
-`if self.optimizer is not None and self.kernel_.n_dims > 0`). Everything
-else, `"fmin_l_bfgs_b"` (sklearn's DEFAULT) included, is refused by name.
-
-The reason is not effort. An optimizer's ITERATION COUNT is data dependent,
-so the convergence test is itself part of the arithmetic: two vendors that
-agree bit for bit on every single L-BFGS step still diverge if the test that
-stops the loop is not itself identical, because one takes 41 steps and the
-other 42 and the answers are two different models. Making that test
-identical means pinning the line search, the gradient's own fold, the
-scaling of `theta`, and the tolerance comparison, and it means a gate that
-can tell a converged run from a lucky one. None of that is written, so the
-honest state is a refusal with the closure condition named, not a loop that
-usually agrees.
+HYPERPARAMETER OPTIMIZATION LIVES OUTSIDE THIS ONE-SHOT FIT
+-----------------------------------------------------------
+`gpr_fit_host` still accepts only `optimizer="none"` (DEVIATION 1761's
+refusal, kept at this entry): it fits the kernel it is handed. The optimizer
+(2026-09-15) evaluates `gpr_lml_grad_host` below at each candidate kernel
+(DEVIATION 2880: the likelihood, and its gradient through the identical
+Cholesky and one pinned fold) and runs its state machine in
+`python/mojolearn/_gp_optimizer.py` (DEVIATION 2881), whose every stop rule
+reads those bits alone, so the iteration count is the same on every column.
+The Python surface then calls this fit once with the optimized kernel.
 
 A CALLER THAT KEEPS ITS MATRICES ON THE DEVICE should call
 `gaussian_process/checks/kernels.mojo::gp_kernel_matrix` and the Cholesky

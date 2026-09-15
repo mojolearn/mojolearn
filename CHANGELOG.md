@@ -10,6 +10,18 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- Gaussian process kernel hyperparameter optimization (lane/gp-optimizer, for 0.8.7).
+  `GaussianProcessRegressor(optimizer="fmin_l_bfgs_b", n_restarts_optimizer=k, random_state=s)`
+  maximizes the log marginal likelihood as scikit-learn does, with the same bits on every
+  column rather than SciPy's bits. The kernels gain scikit-learn's `*_bounds` arguments ("fixed"
+  included), `theta`, `bounds` and `n_dims`; `log_marginal_likelihood(theta, eval_gradient)`
+  now answers at any theta. DEVIATION 2880: dK/dtheta for every node kind on the device and in
+  the CPU verifier, K^-1 by the identical Cholesky solve, one pinned float32 trace fold.
+  DEVIATION 2881: a projected L-BFGS in Python float64 (10 pairs, Armijo backtracking on the
+  projected path, pgtol, ftol and a 200 step cap), restarts from Philox keyed by `random_state`,
+  the best likelihood winning and ties going to the first run. `optimizer=None` stays the default,
+  so every recorded gp cell is unchanged; a callable optimizer is refused by name. New identity
+  lanes `gp-optimize` and `gp-optimize-restarts`. The classifier's optimizer is still refused.
 - Public CPU inference from a saved Holt-Winters model (lane/inference-holtwinters, for 0.8.7).
   `ExponentialSmoothing` gains `save` and `load` (format `mojolearn-holtwinters-1`) and
   `predict(start, end)`, the in-sample one-step predictions (NaN before `2 * seasonal_periods`,

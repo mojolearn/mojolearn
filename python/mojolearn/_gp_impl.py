@@ -418,15 +418,20 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   (DEVIATION 1637). THE DEFAULT IS 2**-20,
                                   NOT sklearn's 1e-10 -- see DEVIATION 1772
                                   below
-        optimizer       honored   only None (also spelled 'none'). sklearn's
-                                  default 'fmin_l_bfgs_b' is REFUSED: an
-                                  optimizer's iteration count is data
-                                  dependent, so the convergence test is part
-                                  of the arithmetic and nothing identical
-                                  exists to run (DEVIATION 1761). The fitted
-                                  kernel_ is therefore the kernel you passed
-        n_restarts_     refused   anything but 0; it exists to serve the
-          optimizer               refused optimizer
+        optimizer       honored   None (also 'none'), THE DEFAULT HERE, fits
+                                  the kernel passed; 'fmin_l_bfgs_b' maximizes
+                                  the log marginal likelihood over the free
+                                  hyperparameters with the identical gradient
+                                  (DEVIATION 2880) and a projected L-BFGS
+                                  whose every rule is pinned (DEVIATION 2881,
+                                  _gp_optimizer.py). scikit-learn's default is
+                                  'fmin_l_bfgs_b'; None stays the default so a
+                                  fit that ran before runs the same bits. A
+                                  callable is refused by name
+        n_restarts_     honored   extra runs from log-uniform starts within the
+          optimizer               bounds, drawn from Philox keyed by
+                                  random_state (DEVIATION 2881); the best
+                                  likelihood wins, a tie goes to the first run
         normalize_y     honored   scikit-learn's `_gpr.py:275-285`: y is
                                   centered and scaled by its mean and
                                   standard deviation before the fit, and
@@ -449,9 +454,12 @@ class GaussianProcessRegressor(NumericModeMixin):
         n_targets       refused   anything but None; it shapes sample_y's
                                   draws from the unfitted prior, and that
                                   arm is not implemented
-        random_state    refused   anything but None; fit and predict draw
-                                  no random numbers, and sample_y takes its
-                                  own random_state argument (DEVIATION 2793)
+        random_state    honored   None or an int in [0, 2**64); it keys the
+                                  restart draws and must be an int when
+                                  n_restarts_optimizer > 0 (scikit-learn's
+                                  global NumPy generator has no identical
+                                  counterpart). sample_y takes its own
+                                  random_state argument (DEVIATION 2793)
         sparse X        refused   dense row-major float32 only
                                   (_buffer.py::as_f32_c)
         2-D y           refused   by name; multi-target GP fits are not
@@ -507,8 +515,9 @@ class GaussianProcessRegressor(NumericModeMixin):
     X_train_ : Array (n_train, n_features) float32
     y_train_ : Array (n_train,) float32
     kernel_ : Kernel
-        The FITTED kernel, and it is the kernel you passed: there is no
-        optimizer to clone-and-move it (DEVIATION 1761).
+        The FITTED kernel: the kernel you passed under optimizer=None, else
+        a copy with the optimized float32 hyperparameters whose `theta` is
+        the optimizer's own (DEVIATION 2880).
     L_ : Array (n_train, n_train) float32
         Lower Cholesky factor of `K + alpha I`.
     alpha_ : Array (n_train,) float32
