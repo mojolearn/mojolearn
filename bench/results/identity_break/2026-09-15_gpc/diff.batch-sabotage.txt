@@ -1,0 +1,87 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 1 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gp_host'] commit=a3357cd9857cd79035f25d0c5147dbe592309252
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gp_host'] commit=a3357cd9857cd79035f25d0c5147dbe592309252
+NOTE: column cpu-amd-epyc-7713-64-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+| lane/fixture                 | verdict    | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|------------|------------------|------------------|
+| gpc-multiclass/base          | IDENTICAL x2 | 03d42b186d3d23de | 03d42b186d3d23de |
+| gpc-multiclass/denormal      | IDENTICAL x2 | e2879b5eb341003a | e2879b5eb341003a |
+| gpc-multiclass/denormal_ftz  | IDENTICAL x2 | e2879b5eb341003a | e2879b5eb341003a |
+| gpc-multiclass/dupes         | IDENTICAL x2 | 03d42b186d3d23de | 03d42b186d3d23de |
+| gpc-multiclass/hashed        | IDENTICAL x2 | 181acf0aafcb8d7f | 181acf0aafcb8d7f |
+| gpc-multiclass/negative      | IDENTICAL x2 | eba4fef6bf4f1391 | eba4fef6bf4f1391 |
+| gpc-multiclass/odd           | IDENTICAL x2 | 12702bc35db689d4 | 12702bc35db689d4 |
+| gpc-multiclass/ties          | IDENTICAL x2 | 1de9790fa6022bd1 | 1de9790fa6022bd1 |
+| gpc-multiclass/wide          | IDENTICAL x2 | 6ef9cd023801b550 | 6ef9cd023801b550 |
+| gpc/base                     | IDENTICAL x2 | 8b68b996d36775e7 | 8b68b996d36775e7 |
+| gpc/denormal                 | IDENTICAL x2 | 9b41ad56958c3286 | 9b41ad56958c3286 |
+| gpc/denormal_ftz             | IDENTICAL x2 | 9b41ad56958c3286 | 9b41ad56958c3286 |
+| gpc/dupes                    | IDENTICAL x2 | 8b68b996d36775e7 | 8b68b996d36775e7 |
+| gpc/hashed                   | IDENTICAL x2 | 8df82eb703a3d9a8 | 8df82eb703a3d9a8 |
+| gpc/negative                 | IDENTICAL x2 | e159f0086dea6ea3 | e159f0086dea6ea3 |
+| gpc/odd                      | IDENTICAL x2 | 2390c88bdb274c27 | 2390c88bdb274c27 |
+| gpc/ties                     | IDENTICAL x2 | c49b12da8e54b073 | c49b12da8e54b073 |
+| gpc/wide                     | IDENTICAL x2 | 0660ecee79edde49 | 0660ecee79edde49 |
+
+summary: IDENTICAL=18
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| gpc-multiclass/base          | infer  | IDENTICAL x2 | 84db38aa85e9efe3 | 84db38aa85e9efe3 |
+| gpc-multiclass/base          | model  | IDENTICAL x2 | a7da75ab43e33d59 | a7da75ab43e33d59 |
+| gpc-multiclass/base          | batch  | BATCH_MOVED  | 772762bf3af9d5ab | BATCH_MOVED      |
+| gpc-multiclass/denormal      | infer  | IDENTICAL x2 | fb65a74653a8c928 | fb65a74653a8c928 |
+| gpc-multiclass/denormal      | model  | IDENTICAL x2 | 6a06c6e9e1b52fbd | 6a06c6e9e1b52fbd |
+| gpc-multiclass/denormal      | batch  | BATCH_MOVED  | 0b6b909883561caf | BATCH_MOVED      |
+| gpc-multiclass/denormal_ftz  | infer  | IDENTICAL x2 | fb65a74653a8c928 | fb65a74653a8c928 |
+| gpc-multiclass/denormal_ftz  | model  | IDENTICAL x2 | ec9bd2135d89a38a | ec9bd2135d89a38a |
+| gpc-multiclass/denormal_ftz  | batch  | BATCH_MOVED  | 0b6b909883561caf | BATCH_MOVED      |
+| gpc-multiclass/dupes         | infer  | IDENTICAL x2 | 84db38aa85e9efe3 | 84db38aa85e9efe3 |
+| gpc-multiclass/dupes         | model  | IDENTICAL x2 | a7da75ab43e33d59 | a7da75ab43e33d59 |
+| gpc-multiclass/dupes         | batch  | BATCH_MOVED  | 772762bf3af9d5ab | BATCH_MOVED      |
+| gpc-multiclass/hashed        | infer  | IDENTICAL x2 | ea81a2c3a726ff07 | ea81a2c3a726ff07 |
+| gpc-multiclass/hashed        | model  | IDENTICAL x2 | ad095c88a27ebcc8 | ad095c88a27ebcc8 |
+| gpc-multiclass/hashed        | batch  | BATCH_MOVED  | 29ed3923c985a394 | BATCH_MOVED      |
+| gpc-multiclass/negative      | infer  | IDENTICAL x2 | d35fed113ef73176 | d35fed113ef73176 |
+| gpc-multiclass/negative      | model  | IDENTICAL x2 | dec1293907b2b18f | dec1293907b2b18f |
+| gpc-multiclass/negative      | batch  | BATCH_MOVED  | 5fc9640b35c5fd5d | BATCH_MOVED      |
+| gpc-multiclass/odd           | infer  | IDENTICAL x2 | f57fd8a7a5d1e719 | f57fd8a7a5d1e719 |
+| gpc-multiclass/odd           | model  | IDENTICAL x2 | e09bd84a508af322 | e09bd84a508af322 |
+| gpc-multiclass/odd           | batch  | BATCH_MOVED  | b117ad2778d35fd5 | BATCH_MOVED      |
+| gpc-multiclass/ties          | infer  | IDENTICAL x2 | 5f34edf8c694f013 | 5f34edf8c694f013 |
+| gpc-multiclass/ties          | model  | IDENTICAL x2 | 3b3ac4079026dcdb | 3b3ac4079026dcdb |
+| gpc-multiclass/ties          | batch  | BATCH_MOVED  | f212e023f26bc35c | BATCH_MOVED      |
+| gpc-multiclass/wide          | infer  | IDENTICAL x2 | b3674a9463aa4f92 | b3674a9463aa4f92 |
+| gpc-multiclass/wide          | model  | IDENTICAL x2 | bde361487f19df87 | bde361487f19df87 |
+| gpc-multiclass/wide          | batch  | BATCH_MOVED  | 7ad6723007e8de0c | BATCH_MOVED      |
+| gpc/base                     | infer  | IDENTICAL x2 | fc0b4c2f28c2e079 | fc0b4c2f28c2e079 |
+| gpc/base                     | model  | IDENTICAL x2 | 81b8bb9e635d8e83 | 81b8bb9e635d8e83 |
+| gpc/base                     | batch  | BATCH_MOVED  | b46f1f9043e091a8 | BATCH_MOVED      |
+| gpc/denormal                 | infer  | IDENTICAL x2 | cd21375d6187b126 | cd21375d6187b126 |
+| gpc/denormal                 | model  | IDENTICAL x2 | 1ed2aed7cb4ce5f2 | 1ed2aed7cb4ce5f2 |
+| gpc/denormal                 | batch  | BATCH_MOVED  | ba78f499f85cae98 | BATCH_MOVED      |
+| gpc/denormal_ftz             | infer  | IDENTICAL x2 | cd21375d6187b126 | cd21375d6187b126 |
+| gpc/denormal_ftz             | model  | IDENTICAL x2 | b91daefb85705ccd | b91daefb85705ccd |
+| gpc/denormal_ftz             | batch  | BATCH_MOVED  | ba78f499f85cae98 | BATCH_MOVED      |
+| gpc/dupes                    | infer  | IDENTICAL x2 | fc0b4c2f28c2e079 | fc0b4c2f28c2e079 |
+| gpc/dupes                    | model  | IDENTICAL x2 | 81b8bb9e635d8e83 | 81b8bb9e635d8e83 |
+| gpc/dupes                    | batch  | BATCH_MOVED  | b46f1f9043e091a8 | BATCH_MOVED      |
+| gpc/hashed                   | infer  | IDENTICAL x2 | 9da411da0b1e3037 | 9da411da0b1e3037 |
+| gpc/hashed                   | model  | IDENTICAL x2 | f4c2aca55d9362f2 | f4c2aca55d9362f2 |
+| gpc/hashed                   | batch  | BATCH_MOVED  | 0419fbbe5d340ea4 | BATCH_MOVED      |
+| gpc/negative                 | infer  | IDENTICAL x2 | b7e320a5c79c2f12 | b7e320a5c79c2f12 |
+| gpc/negative                 | model  | IDENTICAL x2 | 42456472e82844f7 | 42456472e82844f7 |
+| gpc/negative                 | batch  | BATCH_MOVED  | c2f1bdf1ba2a74f9 | BATCH_MOVED      |
+| gpc/odd                      | infer  | IDENTICAL x2 | 1af8d13ad9045833 | 1af8d13ad9045833 |
+| gpc/odd                      | model  | IDENTICAL x2 | d5a786c8bdd995bf | d5a786c8bdd995bf |
+| gpc/odd                      | batch  | BATCH_MOVED  | 1d0177239abe0a3c | BATCH_MOVED      |
+| gpc/ties                     | infer  | IDENTICAL x2 | ede5baa0c8969b06 | ede5baa0c8969b06 |
+| gpc/ties                     | model  | IDENTICAL x2 | 7b9bf869ad365c26 | 7b9bf869ad365c26 |
+| gpc/ties                     | batch  | BATCH_MOVED  | c5069c7b59de4ee1 | BATCH_MOVED      |
+| gpc/wide                     | infer  | IDENTICAL x2 | 209675fda33ccf51 | 209675fda33ccf51 |
+| gpc/wide                     | model  | IDENTICAL x2 | a3ba1f8be78a6a1e | a3ba1f8be78a6a1e |
+| gpc/wide                     | batch  | BATCH_MOVED  | e8e16299ce5b249c | BATCH_MOVED      |
+
+summary (infer/model): IDENTICAL=36
+summary (batch): BATCH_MOVED=18
+summary (rlpair): 

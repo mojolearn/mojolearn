@@ -327,8 +327,9 @@ class GaussianProcessRegressor(NumericModeMixin):
     reason plus a normal stream inside a reproducibility claim
     (`gaussian_process/estimator.mojo::gpr_sample_y_host` carries the
     closure condition). GP CLASSIFICATION is a different algorithm (a
-    Laplace approximation with a data-dependent Newton iteration) and is
-    not here at all (DEVIATION 1766).
+    Laplace approximation with a Newton iteration) and lives in
+    `_gpc_impl.py` as `GaussianProcessClassifier` (DEVIATION 2830 closes
+    DEVIATION 1766).
 
     CROSS-VENDOR STANDING: the IDENTICAL card is byte-identical Apple M4
     against AMD MI325X on every shipped-path line (the 8-line divergence

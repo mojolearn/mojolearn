@@ -1,0 +1,7 @@
+608 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x528740000000, nodemask=1)
+PASS test_binary_and_multiclass_fit_predict
+PASS test_bindings_and_manifest_carry_the_entries
+PASS test_classification_is_no_longer_not_implemented
+PASS test_constructor_refuses_by_name
+PASS test_degenerate_classes
+PASS test_repeat_batch_save_load_and_host_model

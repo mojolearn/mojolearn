@@ -21,6 +21,24 @@ Linux legs are OWED before this heading reads published.
   reference lanes and the portable models. The card verifier's list-every-stage flag is now
   `--all-stages`. Maintainers regenerate the table with `verify --all --emit-reference` and
   the models with `verify --emit-models` (docs/VERIFY.md).
+- New `GaussianProcessClassifier`, scikit-learn's Laplace approximation (`_gpc.py`) with
+  `optimizer=None`: binary fits by the posterior-mode Newton loop, one-vs-rest past two classes,
+  `predict`, `predict_proba`, `latent_mean_and_variance`, `log_marginal_likelihood_value_`, `save` and
+  `load`. The loop stops by the reference's rule read on an identical float32 likelihood, so its
+  iteration count (`n_iter_`) is the same on every column (DEVIATION 2830, closing DEVIATION 1766);
+  the float32 orders are pinned (DEVIATION 2831); the probability runs in float64 through a new
+  portable float64 erf (DEVIATION 2832); the one-vs-rest composition is DEVIATION 2833.
+  `optimizer`, `n_restarts_optimizer`, `warm_start`, `copy_X_train=False`, `random_state`,
+  `multi_class='one_vs_one'` and `n_jobs` are refused by name. The device path is
+  `gaussian_process/classifier.mojo`, the CPU host restatement `gaussian_process/host/gpc_oracle.mojo`
+  in the gp host family; fit on a CPU-only install stays internal, and a saved classifier predicts on
+  the CPU through `GaussianProcessClassifier.load` or `mojolearn.host_model`. New identity lanes
+  `gpc` and `gpc-multiclass` with batch declarations. Apple M4: the Metal column STABLE on all 18
+  train, 18 infer, 18 model and 18 batch cells, and the Metal fit and prediction equal to the host
+  binding's bit for bit; the gp regressor's cells unchanged, IDENTICAL x4 against the 166-lane
+  record. Against scikit-learn 1.9.0 on the lanes' fixtures: every label agrees, the largest
+  probability difference is 1.6e-4 (the `wide` fixture) and at most 1.1e-5 elsewhere. The NVIDIA and
+  AMD columns are owed to the release record.
 - New `KMeans.transform` and `KMeans.fit_transform`, with cuML's `KMeans.transform` as the
   reference: the distance from every row to every fitted center under the model's `metric`
   (squared for the default `'euclidean'`, cuVS `L2Expanded`; the root for

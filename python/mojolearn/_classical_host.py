@@ -53,6 +53,7 @@ import hashlib
 from . import _backend, _serialize
 from ._arima_impl import ARIMA, _ARIMA_FORMAT
 from ._cholesky_impl import _CHOLESKY_FORMAT, HostCholesky
+from ._gpc_impl import _GPC_FORMAT, HostGaussianProcessClassifier
 from ._solver_impl import ElasticNet, Lasso, _CD_FORMAT
 from ._svm_impl import SVC, SVR, _SVC_FORMAT, _SVR_FORMAT
 from ._umap_impl import UMAP, _UMAP_FORMAT
@@ -362,6 +363,9 @@ _FORMATS = {
     # A saved Cholesky factor (lane/inference-embedding-ivf-cholesky,
     # 2026-09-15): `HostCholesky` solves on `_mojolearn_linalg_host`.
     _CHOLESKY_FORMAT: {"Cholesky": HostCholesky},
+    # A saved GaussianProcessClassifier (lane/gaussian-process-classifier,
+    # 2026-09-15): predicts on `_mojolearn_gp_host`.
+    _GPC_FORMAT: {"GaussianProcessClassifier": HostGaussianProcessClassifier},
 }
 CLASSICAL_FORMATS = tuple(_FORMATS)
 
