@@ -163,7 +163,8 @@ from . import tokenizer
 from .tokenizer import GPT2Tokenizer
 # Public neural inference on the CPU from GPU-trained weights (2026-09-15),
 # host/_mojolearn_neural_host.so resolved on first use.
-from .neural_inference import MLPInference, TransformerBlockInference
+from .neural_inference import (MLPInference, TransformerBlockInference, Mamba1BlockInference,
+                               Mamba2BlockInference, Mamba3BlockInference, SambaInference)
 
 # Workstream D, 2026-09-14: the door-less families of the claim-surface
 # census (docs/lanes/BRIEF_claim_surface_census_2026-09-14.md section 4)
@@ -332,6 +333,10 @@ __all__ = [
     "GPT2Tokenizer",
     "MLPInference",
     "TransformerBlockInference",
+    "Mamba1BlockInference",
+    "Mamba2BlockInference",
+    "Mamba3BlockInference",
+    "SambaInference",
     "IsolationForest",
     "KMeans",
     "KNeighborsClassifier",

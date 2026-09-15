@@ -834,19 +834,30 @@ FAMILIES = (
         training_lanes=(),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("MLPInference", "TransformerBlockInference"),
-        display="the small MLP's logits and the Transformer block's stateless forward (inference only)",
+        # lane/inference-neural-forward, 2026-09-15: the Mamba-1, Mamba-2
+        # and Mamba-3 zero-state forwards and the Samba stack's embedding,
+        # final norm and head joined, forward only; the mamba family stays a
+        # source reference build.
+        classes=("MLPInference", "TransformerBlockInference", "Mamba1BlockInference",
+                 "Mamba2BlockInference", "Mamba3BlockInference", "SambaInference"),
+        display="the small MLP's logits, the Transformer and Mamba blocks' zero-state forward and the Samba stack's logits (inference only)",
         host_modules=(
             "training/host/mlp_oracle.mojo",
+            "training/host/samba_ops_oracle.mojo",
             "transformer/host/transformer_block_host.mojo",
             "transformer/checks/transformer_oracle.mojo",
+            "mamba/checks/mamba_oracle.mojo",
+            "mamba/checks/mamba2_oracle.mojo",
+            "mamba/checks/mamba3_oracle.mojo",
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
             "neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
             "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
+            "mamba1_forward_fresh", "mamba2_forward_fresh", "mamba3_forward_fresh",
+            "embedding_forward", "rms_norm_forward", "linear_forward",
         ),
-        gate="python/mojolearn/tests/test_neural_inference.py and tools/identity_break.py (mlp, transformer, transformer-window)",
+        gate="python/mojolearn/tests/test_neural_inference.py and tools/identity_break.py (mlp, transformer, transformer-window, mamba1, mamba2, mamba3, mamba2-dtlimit, samba, samba-untied-dropout-accum)",
         ships_in_wheel=True,
     ),
     dict(

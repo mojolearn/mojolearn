@@ -3508,8 +3508,43 @@ def _neural_inference(ml, lane_name, est):
             path = os.path.join(d, "mlp.json")
             est.save_checkpoint(path)
             return ml.MLPInference.from_checkpoint(path)
+    # lane/inference-neural-forward (2026-09-15): the Mamba blocks from their
+    # named weights, the Samba stack from its saved checkpoint and the byte LM
+    # from its exported checkpoint, each through its public inference class.
+    if lane_name in ("mamba1", "mamba2", "mamba3", "mamba2-dtlimit"):
+        cls = dict(mamba1=ml.Mamba1BlockInference, mamba3=ml.Mamba3BlockInference).get(
+            lane_name, ml.Mamba2BlockInference)
+        kw = dict(dt_limit=est.dt_limit) if cls is ml.Mamba2BlockInference else {}
+        return cls(dict(zip(est._W_NAMES, est._w)), **kw)
+    if lane_name in ("samba", "samba-untied-dropout-accum"):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "samba.ckpt")
+            est.save_checkpoint(path)
+            return ml.SambaInference.from_checkpoint(path)
+    if lane_name in ("byte-lm", "byte-lm-resident"):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "byte_lm.json")
+            est.export_checkpoint(path)
+            return ml.LanguageModelInference.from_checkpoint(path)
     return ml.TransformerBlockInference(dict(zip(est._W_NAMES, est._w)), n_heads=est.n_heads,
                                         n_kv_heads=est.n_kv_heads, head_dim=est.head_dim, window=est.window)
+
+
+#: The lanes whose infer, reload and batch cells ask the public CPU inference
+#: class on a CPU column through `_public_est` (lane/inference-neural-forward).
+#: mlp, transformer and transformer-window wrap theirs in the lane bodies and
+#: batch declarations above, so they are named only for the opt-in parts.
+NEURAL_PUBLIC_LANES = ("mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "samba",
+                       "samba-untied-dropout-accum", "byte-lm", "byte-lm-resident")
+NEURAL_PUBLIC_PART_LANES = NEURAL_PUBLIC_LANES + ("transformer", "transformer-window")
+
+
+def _public_est(name, est, lanes=NEURAL_PUBLIC_LANES):
+    """`est`, or on a CPU column the public inference class built from it
+    for a lane in `lanes`. GPU columns are unchanged."""
+    if name not in lanes or est is None:
+        return est
+    return _neural_inference(sys.modules["mojolearn"], name, est)
 
 
 # ---------------------------------------------------------------- the batch part (2026-09-14)
@@ -3747,7 +3782,7 @@ def _probe_batch(fit, name, ml, Xh, alone, sabotage):
     if isinstance(spec, str):
         return spec, None
     try:
-        calls = spec(ml, fit.est, Xh)
+        calls = spec(ml, _public_est(name, fit.est), Xh)
         digest = hashlib.sha256()
         for call in calls:
             if isinstance(call, _BatchRows):
@@ -5064,7 +5099,7 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
         return spec, None, notes
     flip = sabotage not in ("", "0", "serial")
     try:
-        calls = spec(ml, fit.est, Xh)
+        calls = spec(ml, _public_est(name, fit.est, NEURAL_PUBLIC_PART_LANES), Xh)
         digest = hashlib.sha256()
         for call in calls:
             if isinstance(call, _BatchRows):
@@ -5604,7 +5639,7 @@ def _probe_fit(fit, name):
     if not callable(fit.probe):
         return fit.probe, "n/a:no-save", None, None
     try:
-        infer = _h(*fit.probe(fit.est))
+        infer = _h(*fit.probe(_public_est(name, fit.est)))
     except Exception as exc:
         return None, None, None, f"infer: {type(exc).__name__}: {exc}"
     if not _has_save_load(fit.est):
@@ -5622,7 +5657,7 @@ def _probe_fit(fit, name):
                 return infer, "n/a:save-not-implemented", None, None
             model = _hfile(path)
             back = getattr(type(fit.est), load)(path)
-            reload = _h(*fit.probe(back))
+            reload = _h(*fit.probe(_public_est(name, back)))
     except Exception as exc:
         return infer, None, None, f"model: {type(exc).__name__}: {exc}"
     return infer, model, reload, None
