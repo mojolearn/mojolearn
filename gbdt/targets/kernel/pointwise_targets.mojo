@@ -224,6 +224,12 @@ comptime OBJECTIVE_QUERY_RMSE = 14
 #: it reaches neither kernel in this file.
 comptime OBJECTIVE_PAIR_LOGIT = 15
 
+#: `YetiRank`, the third querywise target (`TQuerywiseTargetsImpl`'s
+#: `InitYetiRank` arm, `targets/querywise_targets_impl.h:313-321`). Its
+#: derivatives come from sampled permutations per query and live in
+#: `gbdt/targets/kernel/yeti_rank.mojo`; it reaches neither kernel in this file.
+comptime OBJECTIVE_YETI_RANK = 16
+
 #: `NumErrors` is in their kernel switch (`pointwise_targets.cu:497-501`)
 #: and is deliberately NOT here: `TPointwiseTargetsImpl::Init`
 #: (`pointwise_target_impl.h:259-299`) has no `NumErrors` case, so its
@@ -273,11 +279,13 @@ def objective_from_name(name: String) raises -> Int:
         return OBJECTIVE_QUERY_RMSE
     if name == "PairLogit":
         return OBJECTIVE_PAIR_LOGIT
+    if name == "YetiRank":
+        return OBJECTIVE_YETI_RANK
     raise Error(
         "unknown loss '" + name + "': this implementation trains RMSE, Logloss,"
         " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
         " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll,"
-        " QueryRMSE and PairLogit"
+        " QueryRMSE, PairLogit and YetiRank"
     )
 
 
@@ -315,6 +323,8 @@ def objective_name(objective: Int) -> String:
         return String("QueryRMSE")
     if objective == OBJECTIVE_PAIR_LOGIT:
         return String("PairLogit")
+    if objective == OBJECTIVE_YETI_RANK:
+        return String("YetiRank")
     return String("<unknown>")
 
 

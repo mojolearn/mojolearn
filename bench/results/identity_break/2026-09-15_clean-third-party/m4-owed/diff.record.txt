@@ -1,0 +1,81 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 1 lane(s); 165 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_tokenizer_host'] commit=40e41063c3dbffcfe9865e7ce81d34a4482309d6
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| tokenizer/base               | OWED x1    | (not run)        | (not run)        | (not run)        | 08b10bbc6f4b565b |
+| tokenizer/denormal           | OWED x1    | (not run)        | (not run)        | (not run)        | c55a5605e8de64b8 |
+| tokenizer/denormal_ftz       | OWED x1    | (not run)        | (not run)        | (not run)        | 8b9f4a27b574806e |
+| tokenizer/dupes              | OWED x1    | (not run)        | (not run)        | (not run)        | 46adf25a7982a9a6 |
+| tokenizer/hashed             | OWED x1    | (not run)        | (not run)        | (not run)        | e61f50aae6c6dbd9 |
+| tokenizer/negative           | OWED x1    | (not run)        | (not run)        | (not run)        | cd7e602ad066e3d5 |
+| tokenizer/odd                | OWED x1    | (not run)        | (not run)        | (not run)        | 08b10bbc6f4b565b |
+| tokenizer/ties               | OWED x1    | (not run)        | (not run)        | (not run)        | 94eb3bf4446a414a |
+| tokenizer/wide               | OWED x1    | (not run)        | (not run)        | (not run)        | 30fd2b8c5fdcf9e1 |
+
+summary: OWED=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| tokenizer/base               | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1939b74da0333639 |
+| tokenizer/base               | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/base               | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 6e235476cc31241f |
+| tokenizer/denormal           | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | e881084e86e9c718 |
+| tokenizer/denormal           | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/denormal           | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 52a4b46c6638283e |
+| tokenizer/denormal_ftz       | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0ce2094be5609967 |
+| tokenizer/denormal_ftz       | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/denormal_ftz       | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | ed742c6961610923 |
+| tokenizer/dupes              | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 5315d2de648bc57b |
+| tokenizer/dupes              | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/dupes              | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | b3db5e08a72d5afc |
+| tokenizer/hashed             | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 471b06ab4e24044f |
+| tokenizer/hashed             | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/hashed             | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 0a2474e3f79bd1c9 |
+| tokenizer/negative           | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 2188bf1646406ed2 |
+| tokenizer/negative           | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/negative           | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | b680bde5e6e8d3c8 |
+| tokenizer/odd                | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1939b74da0333639 |
+| tokenizer/odd                | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/odd                | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 428ccb5ef4e44ab4 |
+| tokenizer/ties               | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 3b5edfe0d355b03e |
+| tokenizer/ties               | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/ties               | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 48f42ce5bfd939ae |
+| tokenizer/wide               | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | c4af8e403d8a4ff5 |
+| tokenizer/wide               | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/wide               | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 023683c8a469bd0b |
+
+summary (infer/model): N/A=9, OWED=9
+summary (batch): OWED=9
+summary (rlpair): 
+require-columns 4 over ['tokenizer']: OK (27 OWED)
+OWED tokenizer/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/denormal_ftz batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/hashed batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/negative batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED tokenizer/wide batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+summary (owed): OWED=27; the next release record owes exactly these cell parts; wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/ctp/ev2/owed.json

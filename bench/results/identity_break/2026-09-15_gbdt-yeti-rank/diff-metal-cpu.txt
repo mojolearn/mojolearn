@@ -1,0 +1,26 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=b58caf9fb1724ee0a334ad8491d4ecad5e09f691
+| lane/fixture                 | verdict    | apple-m4         | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| gbdt-yeti-rank/base          | IDENTICAL x2 | c6915a79b84d2f69 | c6915a79b84d2f69 |
+| gbdt-yeti-rank/odd           | IDENTICAL x2 | 7a0387ee1d5122e2 | 7a0387ee1d5122e2 |
+| gbdt-yeti-rank/ties          | IDENTICAL x2 | 2806db8fa590f37a | 2806db8fa590f37a |
+
+summary: IDENTICAL=3
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| gbdt-yeti-rank/base          | infer  | IDENTICAL x2 | 09302e69a820d4d2 | 09302e69a820d4d2 |
+| gbdt-yeti-rank/base          | model  | IDENTICAL x2 | 61b246f4d443ada8 | 61b246f4d443ada8 |
+| gbdt-yeti-rank/base          | batch  | IDENTICAL x2 | 1d4efc6c8dd79d17 | 1d4efc6c8dd79d17 |
+| gbdt-yeti-rank/odd           | infer  | IDENTICAL x2 | 4f27a4e93e0b10ae | 4f27a4e93e0b10ae |
+| gbdt-yeti-rank/odd           | model  | IDENTICAL x2 | 6b0f6c184a2f7a1c | 6b0f6c184a2f7a1c |
+| gbdt-yeti-rank/odd           | batch  | IDENTICAL x2 | 4b907129f7e6a11d | 4b907129f7e6a11d |
+| gbdt-yeti-rank/ties          | infer  | IDENTICAL x2 | b9ffe828b9fbd29b | b9ffe828b9fbd29b |
+| gbdt-yeti-rank/ties          | model  | IDENTICAL x2 | 829d963be374fd19 | 829d963be374fd19 |
+| gbdt-yeti-rank/ties          | batch  | IDENTICAL x2 | eacc647f6bcc57aa | eacc647f6bcc57aa |
+
+summary (infer/model): IDENTICAL=6
+summary (batch): IDENTICAL=3
+summary (rlpair): 
+require-columns 2 over ['gbdt-yeti-rank']: OK

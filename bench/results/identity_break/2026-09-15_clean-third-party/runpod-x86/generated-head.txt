@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# GENERATED at build time by tokenizer/tools/gen_unicode_categories.py from
+# Python's unicodedata. Not tracked, do not edit.
+
+comptime UNICODE_TABLE_VERSION = "16.0.0"
+comptime UNICODE_TABLE_SHA256 = "ad4e106533e0f7efb20eb3f0bd7931e21ebf638415b525918e81d3abc104a339"
+comptime UNICODE_TABLE_TEXT = "# unicodedata 16.0.0\nL\t0041\t005A\nL\t0061\t007A\nL\t00AA\t00AA\nL\t00B5\t00B5\nL\t00BA\t00BA\nL\t00C0\t00D6\nL\t00D8\t00F6\nL\t00F8\t02C1\nL\t02C6\t02D1\nL\t02E0\t02E

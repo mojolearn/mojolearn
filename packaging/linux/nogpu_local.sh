@@ -61,8 +61,9 @@ done
 # is read out of the library rather than retyped here.
 for tok in $(python3 -c "
 import sys; sys.path.insert(0, '$REPO/python')
-import importlib.util as u
-s = u.spec_from_file_location('_b', '$REPO/python/mojolearn/_backend.py'); m = u.module_from_spec(s); s.loader.exec_module(m)
+import importlib.util as u, types
+p = types.ModuleType('_bp'); p.__path__ = ['$REPO/python/mojolearn']; sys.modules['_bp'] = p
+s = u.spec_from_file_location('_bp._backend', '$REPO/python/mojolearn/_backend.py'); m = u.module_from_spec(s); sys.modules[s.name] = m; s.loader.exec_module(m)
 for v, spec in m._PROBE.items(): print(' '.join(spec['paths']), ' '.join(spec['libs']))"); do
   grep -qF "$tok" "$OUT" || { echo "FAIL: the refusal never names $tok"; FAIL=1; }
 done

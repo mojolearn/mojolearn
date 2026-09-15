@@ -160,9 +160,7 @@ run, once an administrator provides these concrete services and limits:
 Any future self-hosted runner groups must restrict access to trusted workflows
 at the administrator level. A `runs-on` line in this workflow cannot prevent a
 fork from proposing a different workflow that requests another runner.
-GitHub documents the separation of untrusted PR execution from privileged
-events in its [secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use)
-and [workflow event reference](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
+Untrusted pull request code must never run in a privileged workflow event.
 
 Maintainers can run the admission negative controls locally with
 `python3 -m unittest discover -s tools -p test_external_contribution_gate.py`.

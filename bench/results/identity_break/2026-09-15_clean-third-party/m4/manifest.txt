@@ -1,0 +1,1 @@
+test_tokenizer_manifest: GREEN. 8 source checks; no binding was loaded.
