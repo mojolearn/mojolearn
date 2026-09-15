@@ -49,6 +49,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from std.math import isfinite
+from std.memory import bitcast
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from bindings.holtwinters_host_predict import (
@@ -215,6 +216,19 @@ def holtwinters_fit_binding(
             sp[batch_size + b] = fitted.alpha[b]
             sp[2 * batch_size + b] = fitted.beta[b]
             sp[3 * batch_size + b] = fitted.gamma[b]
+        comptime if HW_ORACLE_HOST_SABOTAGE:
+            # THE FITTED-STATE ARM (lane/inference-holtwinters, 2026-09-15):
+            # the split SSE multiply-add leaves the fitted bytes unchanged on
+            # some fixtures (denormal, denormal_ftz, wide), so a saved model's
+            # file could not move under the negative control. Every finite
+            # component and per-series float also has its lowest bit flipped,
+            # a value perturbation, so every saved file moves.
+            for i in range(3 * components_len):
+                if isfinite(cp[i]):
+                    cp[i] = bitcast[DType.float32](bitcast[DType.uint32](cp[i]) ^ UInt32(1))
+            for i in range(4 * batch_size):
+                if isfinite(sp[i]):
+                    sp[i] = bitcast[DType.float32](bitcast[DType.uint32](sp[i]) ^ UInt32(1))
             fp[b] = Int32(fitted.niter[b])
             fp[batch_size + b] = Int32(fitted.criterion[b])
     return PythonObject(components_len)
