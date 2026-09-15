@@ -38,6 +38,15 @@ Linux legs are OWED before this heading reads published.
   (bench/results/identity_break/2026-09-15_inference-iforest-gmm-hdbscan). The NVIDIA and AMD
   recordings, and a CPU identity gate workflow that builds the inference-only families, are
   owed.
+- New `KMeans.transform` and `KMeans.fit_transform`, with cuML's `KMeans.transform` as the
+  reference: the distance from every row to every fitted center under the model's `metric`
+  (squared for the default `'euclidean'`, cuVS `L2Expanded`; the root for
+  `'l2_sqrt_expanded'`), float32 `(n_samples, n_clusters)`. Each cell is the fused
+  assignment kernel's cell, so the distance at `predict`'s label is the row minimum bit for
+  bit. On the GPU binding and the CPU core host binding; cosine refuses by name as its fit
+  does. The seven fitting k-means lanes add `transform` to their infer and batch cells.
+  Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the release
+  record.
 - Public CPU inference for saved ARIMA models, UMAP embeddings and the whitened full-SVD PCA.
   `ARIMA.save`/`load` and `UMAP.save`/`load` are new; `mojolearn.host_model(path)`, or the
   classes on a CPU-only install, predict (in sample and out of sample), forecast and read the
@@ -49,6 +58,17 @@ Linux legs are OWED before this heading reads published.
   internal reference context, as every other CPU fit does. Apple M4 CPU column against the
   committed Apple, NVIDIA and AMD columns; the model cells of the new save formats are owed to
   the release record.
+- New `GaussianMixture.sample(n_samples)`, with scikit-learn's `BaseMixture.sample` as the
+  reference: `(X, y)` with the component counts a multinomial draw over `weights_` and the
+  rows grouped by component ascending. Every draw is position-mapped Philox keyed by
+  `random_state` (DEVIATION 2791), the normals are RAFT's Box-Muller with the pinned seams,
+  and each row is the forward substitution through the fitted `precisions_cholesky_`
+  (DEVIATION 2792), so one model and one `random_state` give the same bits on every vendor;
+  they are not scikit-learn's bits. `X` is float32 and `y` int32. On the GPU mixture binding
+  and the internal mixture host binding; public CPU exposure from a saved model is left to
+  the neighbors and density inference lane. New `gmm-sample` and `gmm-random-init-sample`
+  identity lanes, so the gmm lanes' recorded cells do not move. Apple M4 Metal and CPU
+  columns only; the NVIDIA and AMD cells are owed to the release record.
 
 - CPU inference from saved models for StandardScaler, MinMaxScaler, Lasso, ElasticNet,
   KernelRidge (linear and rbf kernels), Nystroem (linear and rbf) and RBFSampler: each
@@ -112,8 +132,15 @@ Linux legs are OWED before this heading reads published.
   `hdbscan-leaf` lanes still match. Those lanes and `par-hdbscan` now carry infer and batch
   cells instead of `n/a:transductive`, with the batch and host sabotage builds required to
   move them. Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the
-  release record. `membership_vector` and `all_points_membership_vectors` are not
-  implemented and refuse by name.
+  release record.
+- New `mojolearn.hdbscan.membership_vector(clusterer, points_to_predict, batch_size=4096)` and
+  `all_points_membership_vectors(clusterer, batch_size=4096)`, cuML's soft clustering: for each
+  point and each selected cluster, the probability of membership. They need
+  `HDBSCAN(prediction_data=True)` and refuse by name without it. cuML computes four of the steps in
+  float64, which an Apple GPU cannot run; here every step is float32 with pinned seams on the GPU
+  binding and the CPU host binding, and rows where cuML overflows to NaN (duplicated points) are
+  finite (DEVIATION 1616). The `hdbscan` and `hdbscan-leaf` identity lanes hash both calls in their
+  infer cells, and their batch part asks `membership_vector` alone and split.
 - `GradientBoosting.fit` takes `group_id`, CatBoost's Pool argument: one string or integer id per
   row (an integer compares by its decimal spelling, as their Pool hashes it), each group's rows
   consecutive or the fit raises "group Ids are not consecutive". The grouping crosses into the GPU

@@ -60,7 +60,8 @@ from ._solver_impl import ElasticNet, Lasso, _CD_FORMAT
 from ._svm_impl import SVC, _SVC_FORMAT
 from ._umap_impl import UMAP, _UMAP_FORMAT
 from .decomposition import PCA, TruncatedSVD, _PCA_FORMAT, _TSVD_FORMAT
-from .density import KernelDensity, _KDE_FORMAT
+from ._hierarchy_impl import AgglomerativeClustering, _AGGLOMERATIVE_FORMAT
+from .density import DBSCAN, KernelDensity, _DBSCAN_FORMAT, _KDE_FORMAT
 from .hdbscan import HDBSCAN, _HDBSCAN_FORMAT
 from .mixture import GaussianMixture, _GMM_FORMAT
 from .kernel_methods import (
@@ -222,6 +223,19 @@ class HostIsolationForest(_HostBound, IsolationForest):
     _HOST_ARRAYS = ("_x",)
 
 
+class HostDBSCAN(_HostBound, DBSCAN):
+    """`DBSCAN.predict` from a saved `prediction_data=True` model through
+    `_mojolearn_estimators_host.labeled_reference_predict`
+    (lane/inference-transductive-predict, 2026-09-15, DEVIATION 2740)."""
+    _HOST_ARRAYS = ("components_", "core_sample_indices_", "_core_labels")
+
+
+class HostAgglomerativeClustering(_HostBound, AgglomerativeClustering):
+    """`AgglomerativeClustering.predict` from a saved model through the
+    estimators host binding; the fit's solver family does not ship."""
+    _HOST_ARRAYS = ("_fit_X", "labels_")
+
+
 class HostGaussianMixture(_HostBound, GaussianMixture):
     """score_samples, predict_proba, predict, score, bic and aic of a saved
     GaussianMixture through the inference-only mixture binding."""
@@ -365,6 +379,8 @@ _FORMATS = {
     _IFOREST_FORMAT: {"IsolationForest": HostIsolationForest},
     _GMM_FORMAT: {"GaussianMixture": HostGaussianMixture},
     _HDBSCAN_FORMAT: {"HDBSCAN": HostHDBSCAN},
+    _DBSCAN_FORMAT: {"DBSCAN": HostDBSCAN},
+    _AGGLOMERATIVE_FORMAT: {"AgglomerativeClustering": HostAgglomerativeClustering},
     _KNN_FORMAT: {
         "NearestNeighbors": HostNearestNeighbors,
         "KNeighborsClassifier": HostKNeighborsClassifier,

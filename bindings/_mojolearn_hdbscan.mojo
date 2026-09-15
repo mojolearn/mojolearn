@@ -31,7 +31,9 @@ from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from hdbscan.estimator import (
+    hdbscan_all_points_membership_vectors_host,
     hdbscan_approximate_predict_host,
+    hdbscan_membership_vector_host,
     hdbscan_fit_host_output,
 )
 from hdbscan.impl.prediction_data import generate_prediction_data
@@ -393,6 +395,179 @@ def hdbscan_approximate_predict_binding(
     return PythonObject(nq)
 
 
+def _soft_shape_refusal(where: String, vals: List[Int]) raises:
+    """Every count the soft clustering calls take must be positive (m at
+    least 2), else a refusal naming them."""
+    var ok = vals[0] >= 2
+    for i in range(1, len(vals)):
+        if vals[i] < 1:
+            ok = False
+    if not ok:
+        var s = String(where) + ": shape refused by name ("
+        for i in range(len(vals)):
+            if i > 0:
+                s += ", "
+            s += String(vals[i])
+        raise Error(s + ")")
+
+
+def _hdbscan_membership_run(
+    x: List[Float32], m: Int, d: Int, core: List[Float32], labels: List[Int32],
+    parents: List[Int32], lambdas: List[Float32], n_edges: Int,
+    n_clusters: Int, deaths: List[Float32], selected: List[Int32],
+    iic: List[Int32], ex_idx: List[Int32], offsets: List[Int32],
+    q: List[Float32], nq: Int, min_samples: Int,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    var ctx = DeviceContext()
+    hdbscan_membership_vector_host(
+        ctx, x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
+        deaths, selected, iic, ex_idx, offsets, q, nq, min_samples, out_ptr,
+    )
+    ctx.synchronize()
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+
+
+def hdbscan_membership_vector_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`membership_vector(clusterer, points_to_predict)` (cuML
+    `hdbscan.pyx:1180`, `soft_clustering.cuh:501-627`, DEVIATION 1616).
+    Returns the query count.
+
+    `addrs`: 0 x_train (m * d float32), 1 core_distances (m float32), 2
+    labels (m int32), 3 condensed parents (n_edges int32), 4 condensed
+    lambdas (n_edges float32), 5 deaths (n_clusters float32), 6
+    selected_clusters (n_selected int32), 7 index_into_children (n_edges + 1
+    int32), 8 exemplar_idx (n_exemplars int32), 9 exemplar_label_offsets
+    (n_selected + 1 int32), 10 points_to_predict (nq * d float32), 11
+    membership_out (nq * n_selected float32, WRITTEN).
+    `params`: 0 m, 1 d, 2 n_edges, 3 n_clusters (condensed), 4 n_selected,
+    5 n_exemplars, 6 nq, 7 min_samples (the estimator's).
+    """
+    if len(addrs) != 12:
+        raise Error(
+            "hdbscan_membership_vector: addrs must contain 12 addresses, got "
+            + String(len(addrs))
+        )
+    if len(params) != 8:
+        raise Error(
+            "hdbscan_membership_vector: params must contain 8 values (m, d,"
+            " n_edges, n_clusters, n_selected, n_exemplars, nq, min_samples),"
+            " got " + String(len(params))
+        )
+    var m = Int(py=params[0])
+    var d = Int(py=params[1])
+    var n_edges = Int(py=params[2])
+    var n_clusters = Int(py=params[3])
+    var n_selected = Int(py=params[4])
+    var n_ex = Int(py=params[5])
+    var nq = Int(py=params[6])
+    var min_samples = Int(py=params[7])
+    _soft_shape_refusal(
+        "hdbscan_membership_vector",
+        [m, d, n_edges, n_clusters, n_selected, n_ex, nq],
+    )
+    var x = read_f32(Int(py=addrs[0]), m * d)
+    var core = read_f32(Int(py=addrs[1]), m)
+    var labels = read_i32(Int(py=addrs[2]), m)
+    var parents = read_i32(Int(py=addrs[3]), n_edges)
+    var lambdas = read_f32(Int(py=addrs[4]), n_edges)
+    var deaths = read_f32(Int(py=addrs[5]), n_clusters)
+    var selected = read_i32(Int(py=addrs[6]), n_selected)
+    var iic = read_i32(Int(py=addrs[7]), n_edges + 1)
+    var ex_idx = read_i32(Int(py=addrs[8]), n_ex)
+    var offsets = read_i32(Int(py=addrs[9]), n_selected + 1)
+    var q = read_f32(Int(py=addrs[10]), nq * d)
+    var out = _f32_ptr(Int(py=addrs[11]))
+    with GILReleased(Python()):
+        _hdbscan_membership_run(
+            x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
+            deaths, selected, iic, ex_idx, offsets, q, nq, min_samples, out,
+        )
+    return PythonObject(nq)
+
+
+def _hdbscan_all_points_run(
+    x: List[Float32], m: Int, d: Int, parents: List[Int32],
+    lambdas: List[Float32], n_edges: Int, n_clusters: Int,
+    deaths: List[Float32], selected: List[Int32], iic: List[Int32],
+    ex_idx: List[Int32], offsets: List[Int32], row0: Int, count: Int,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    var ctx = DeviceContext()
+    hdbscan_all_points_membership_vectors_host(
+        ctx, x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
+        iic, ex_idx, offsets, row0, count, out_ptr,
+    )
+    ctx.synchronize()
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+
+
+def hdbscan_all_points_membership_vectors_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`all_points_membership_vectors(clusterer)` (cuML `hdbscan.pyx:1114`,
+    `soft_clustering.cuh:385-482`, DEVIATION 1616) for training rows `row0
+    .. row0 + count - 1`. Returns `count`.
+
+    `addrs`: 0 x_train (m * d float32), 1 condensed parents (n_edges
+    int32), 2 condensed lambdas (n_edges float32), 3 deaths (n_clusters
+    float32), 4 selected_clusters (n_selected int32), 5 index_into_children
+    (n_edges + 1 int32), 6 exemplar_idx (n_exemplars int32), 7
+    exemplar_label_offsets (n_selected + 1 int32), 8 membership_out (count
+    * n_selected float32, WRITTEN).
+    `params`: 0 m, 1 d, 2 n_edges, 3 n_clusters, 4 n_selected, 5
+    n_exemplars, 6 row0, 7 count.
+    """
+    if len(addrs) != 9:
+        raise Error(
+            "hdbscan_all_points_membership_vectors: addrs must contain 9"
+            " addresses, got " + String(len(addrs))
+        )
+    if len(params) != 8:
+        raise Error(
+            "hdbscan_all_points_membership_vectors: params must contain 8"
+            " values (m, d, n_edges, n_clusters, n_selected, n_exemplars,"
+            " row0, count), got " + String(len(params))
+        )
+    var m = Int(py=params[0])
+    var d = Int(py=params[1])
+    var n_edges = Int(py=params[2])
+    var n_clusters = Int(py=params[3])
+    var n_selected = Int(py=params[4])
+    var n_ex = Int(py=params[5])
+    var row0 = Int(py=params[6])
+    var count = Int(py=params[7])
+    _soft_shape_refusal(
+        "hdbscan_all_points_membership_vectors",
+        [m, d, n_edges, n_clusters, n_selected, n_ex, count],
+    )
+    if row0 < 0 or row0 + count > m:
+        raise Error(
+            "hdbscan_all_points_membership_vectors: rows " + String(row0)
+            + " + " + String(count) + " exceed m=" + String(m)
+            + "; refused by name"
+        )
+    var x = read_f32(Int(py=addrs[0]), m * d)
+    var parents = read_i32(Int(py=addrs[1]), n_edges)
+    var lambdas = read_f32(Int(py=addrs[2]), n_edges)
+    var deaths = read_f32(Int(py=addrs[3]), n_clusters)
+    var selected = read_i32(Int(py=addrs[4]), n_selected)
+    var iic = read_i32(Int(py=addrs[5]), n_edges + 1)
+    var ex_idx = read_i32(Int(py=addrs[6]), n_ex)
+    var offsets = read_i32(Int(py=addrs[7]), n_selected + 1)
+    var out = _f32_ptr(Int(py=addrs[8]))
+    with GILReleased(Python()):
+        _hdbscan_all_points_run(
+            x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
+            iic, ex_idx, offsets, row0, count, out,
+        )
+    return PythonObject(count)
+
+
 @export
 def PyInit__mojolearn_hdbscan() abi("C") -> PythonObject:
     try:
@@ -403,6 +578,8 @@ def PyInit__mojolearn_hdbscan() abi("C") -> PythonObject:
         m.def_function[hdbscan_fit_binding]("hdbscan_fit")
         m.def_function[hdbscan_generate_prediction_data_binding]("hdbscan_generate_prediction_data")
         m.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
+        m.def_function[hdbscan_membership_vector_binding]("hdbscan_membership_vector")
+        m.def_function[hdbscan_all_points_membership_vectors_binding]("hdbscan_all_points_membership_vectors")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_hdbscan: ", e))

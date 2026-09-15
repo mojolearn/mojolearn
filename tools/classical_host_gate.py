@@ -79,9 +79,14 @@ def _radius_probe(e, X):
 
 def _approximate_predict(e, X):
     """identity_break's hdbscan infer probe: approximate_predict's labels and
-    probabilities on the held-out rows' first four columns."""
-    from mojolearn.hdbscan import approximate_predict
-    return tuple(approximate_predict(e, X[:, :4]))
+    probabilities on the held-out rows' first four columns, then
+    membership_vector on the same rows and all_points_membership_vectors
+    (the probe since HDBSCAN's soft clustering, 2026-09-15)."""
+    from mojolearn.hdbscan import (
+        all_points_membership_vectors, approximate_predict, membership_vector,
+    )
+    return tuple(approximate_predict(e, X[:, :4])) + (
+        membership_vector(e, X[:, :4]), all_points_membership_vectors(e))
 
 
 #: The surfaces every ARIMA lane adds beside its identity probe.
@@ -176,12 +181,17 @@ LANES = {
              'predict_proba': lambda e, X: e.predict_proba(X[:64, :4])}),
     'gmm-random-init': ('GaussianMixture', lambda e, X: (e.score_samples(X[:64, :4]),),
                         {'predict': lambda e, X: e.predict(X[:64, :4])}),
-    # HDBSCAN (same lane): approximate_predict's labels and probabilities on
-    # the first 256 held-out rows of four columns, as both lanes ask.
+    # HDBSCAN (same lane): approximate_predict's labels and probabilities,
+    # membership_vector on the first 256 held-out rows of four columns and
+    # all_points_membership_vectors, the tuple both lanes hash.
     'hdbscan': ('HDBSCAN', lambda e, X: _approximate_predict(e, X),
-               {'probabilities': lambda e, X: _approximate_predict(e, X)[1]}),
+               {'probabilities': lambda e, X: _approximate_predict(e, X)[1],
+                'membership_vector': lambda e, X: _approximate_predict(e, X)[2],
+                'all_points_membership_vectors': lambda e, X: _approximate_predict(e, X)[3]}),
     'hdbscan-leaf': ('HDBSCAN', lambda e, X: _approximate_predict(e, X),
-                    {'probabilities': lambda e, X: _approximate_predict(e, X)[1]}),
+                    {'probabilities': lambda e, X: _approximate_predict(e, X)[1],
+                     'membership_vector': lambda e, X: _approximate_predict(e, X)[2],
+                     'all_points_membership_vectors': lambda e, X: _approximate_predict(e, X)[3]}),
     # lane/inference-forecast-umap-pca (2026-09-15). pca-full-whiten is the
     # dense SVD fit with the whitened pair. umap probes identity_break's
     # batch of 64 held-out rows in one call: the transform's answer depends

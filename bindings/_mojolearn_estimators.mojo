@@ -20,6 +20,7 @@ from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
 
+from core.labeled_reference_predict import labeled_reference_predict
 from dbscan.estimator import dbscan_fit
 from kde.estimator import kde_score_samples_host_ptr
 from decomposition.estimator import (
@@ -90,6 +91,81 @@ def dbscan_fit_binding(
     what an unweighted fit passes. The array must be `n_rows` contiguous
     float32, which `density.py` guarantees with `as_f32_c`.
     """
+    return _dbscan_fit_run(x_addr, labels_addr, weight_addr, 0, params)
+
+
+def dbscan_fit_core_binding(
+    x_addr: PythonObject,
+    labels_addr: PythonObject,
+    weight_addr: PythonObject,
+    core_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`dbscan_fit` with the fit's core mask read back, for
+    `DBSCAN(prediction_data=True)` (lane/inference-transductive-predict,
+    2026-09-15). The params list is `dbscan_fit`'s; `core_addr` receives
+    `n_rows` uint8, 1 where the fit's core test held. The mask is a COPY of
+    the device buffer the fit computed (`dbscan_fit_impl_weighted`'s
+    `out_core_addr`); the labels and the pass count are the same call's."""
+    var ca = Int(py=core_addr)
+    if ca == 0:
+        raise Error("dbscan_fit_core: core_addr must be an array address, got 0")
+    return _dbscan_fit_run(x_addr, labels_addr, weight_addr, ca, params)
+
+
+def labeled_reference_predict_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """Out-of-sample labels for DBSCAN and AgglomerativeClustering
+    (`core/labeled_reference_predict.mojo`; the rule is stated in
+    `core/labeled_reference_host_predict.mojo`). DEVIATION 2740: new
+    capability, neither cuML nor scikit-learn has it.
+
+    `addrs`, in this exact order (mirrored in `python/mojolearn/density.py`
+    and `python/mojolearn/_hierarchy_impl.py`): refs (float32 n_refs x
+    n_features), keys (int32 n_refs), ref_labels (int32 n_refs), queries
+    (float32 n_queries x n_features), out_labels (int32 n_queries), out_refs
+    (int32 n_queries). `params`: n_refs, n_queries, n_features, metric (0 L2,
+    1 L1), eps (float, read only when has_thresh), has_thresh (0/1).
+    Returns 0."""
+    if len(addrs) != 6:
+        raise Error(
+            "labeled_reference_predict: addrs must contain 6 addresses, got "
+            + String(len(addrs))
+        )
+    if len(params) != 6:
+        raise Error(
+            "labeled_reference_predict: params must contain 6 values, got "
+            + String(len(params))
+        )
+    var rp = _f32_ptr(Int(py=addrs[0]))
+    var kp = _i32_ptr(Int(py=addrs[1]))
+    var lp = _i32_ptr(Int(py=addrs[2]))
+    var qp = _f32_ptr(Int(py=addrs[3]))
+    var olp = _i32_ptr(Int(py=addrs[4]))
+    var orp = _i32_ptr(Int(py=addrs[5]))
+    var n_refs = Int(py=params[0])
+    var n_queries = Int(py=params[1])
+    var n_features = Int(py=params[2])
+    var metric = Int(py=params[3])
+    var eps = Float64(py=params[4])
+    var has_thresh = Int(py=params[5]) != 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        labeled_reference_predict(
+            ctx, rp, n_refs, kp, lp, qp, n_queries, n_features, metric, eps,
+            has_thresh, olp, orp,
+        )
+    return PythonObject(0)
+
+
+def _dbscan_fit_run(
+    x_addr: PythonObject,
+    labels_addr: PythonObject,
+    weight_addr: PythonObject,
+    core_address: Int,
+    params: PythonObject,
+) raises -> PythonObject:
     if len(params) != 8:
         raise Error(
             "dbscan_fit: params must contain 8 values, got "
@@ -111,7 +187,7 @@ def dbscan_fit_binding(
         var ctx = DeviceContext()
         passes = dbscan_fit(
             ctx, xp, nr, nf, eps, min_samples, lp, budget, max_iter,
-            eps_nn_method, metric, wa,
+            eps_nn_method, metric, wa, core_address,
         )
     return PythonObject(passes)
 
@@ -633,6 +709,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[estimators_vendor_binding]("estimators_vendor")
         m.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
         m.def_function[dbscan_fit_binding]("dbscan_fit")
+        m.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
+        m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[pca_fit_binding]("pca_fit")
         m.def_function[pca_fit_full_binding]("pca_fit_full")

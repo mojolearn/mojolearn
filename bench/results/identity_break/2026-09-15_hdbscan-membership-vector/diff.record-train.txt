@@ -1,0 +1,144 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 164 other lane(s) the JSONs carry are not compared
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    apple-m4: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    apple-m4: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-h100-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    amd-mi325x-gfx942: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    apple-m4: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    nvidia-h100-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    amd-mi325x-gfx942: {'X': '32ea0bbed60b8e6c'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    apple-m4: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| hdbscan-leaf/base            | IDENTICAL x4 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 |
+| hdbscan-leaf/denormal        | IDENTICAL x3 | 57af5a3a1beacf86 | 57af5a3a1beacf86 | 57af5a3a1beacf86 | (not run)        |
+| hdbscan-leaf/denormal_ftz    | IDENTICAL x3 | 57af5a3a1beacf86 | 57af5a3a1beacf86 | 57af5a3a1beacf86 | (not run)        |
+| hdbscan-leaf/dupes           | IDENTICAL x4 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 | a69a1f87d6fad7d2 |
+| hdbscan-leaf/hashed          | IDENTICAL x3 | 64fcf2a2e2865507 | 64fcf2a2e2865507 | 64fcf2a2e2865507 | (not run)        |
+| hdbscan-leaf/negative        | IDENTICAL x3 | e9884a042ba66eaf | e9884a042ba66eaf | e9884a042ba66eaf | (not run)        |
+| hdbscan-leaf/odd             | IDENTICAL x3 | 0405325c41006545 | 0405325c41006545 | 0405325c41006545 | (not run)        |
+| hdbscan-leaf/ties            | IDENTICAL x4 | 41045554964e4bd8 | 41045554964e4bd8 | 41045554964e4bd8 | 41045554964e4bd8 |
+| hdbscan-leaf/wide            | IDENTICAL x3 | a6a58691c101031c | a6a58691c101031c | a6a58691c101031c | (not run)        |
+| hdbscan/base                 | IDENTICAL x4 | 1032d54b827b0e0c | 1032d54b827b0e0c | 1032d54b827b0e0c | 1032d54b827b0e0c |
+| hdbscan/denormal             | IDENTICAL x3 | 1327bd033f762039 | 1327bd033f762039 | 1327bd033f762039 | (not run)        |
+| hdbscan/denormal_ftz         | IDENTICAL x3 | 1327bd033f762039 | 1327bd033f762039 | 1327bd033f762039 | (not run)        |
+| hdbscan/dupes                | IDENTICAL x4 | 1032d54b827b0e0c | 1032d54b827b0e0c | 1032d54b827b0e0c | 1032d54b827b0e0c |
+| hdbscan/hashed               | IDENTICAL x3 | d7d82149c701e81d | d7d82149c701e81d | d7d82149c701e81d | (not run)        |
+| hdbscan/negative             | IDENTICAL x3 | 0043e92ac7d32026 | 0043e92ac7d32026 | 0043e92ac7d32026 | (not run)        |
+| hdbscan/odd                  | IDENTICAL x3 | 6433a1e0532ee88b | 6433a1e0532ee88b | 6433a1e0532ee88b | (not run)        |
+| hdbscan/ties                 | IDENTICAL x4 | 444bc82f0a607cfb | 444bc82f0a607cfb | 444bc82f0a607cfb | 444bc82f0a607cfb |
+| hdbscan/wide                 | IDENTICAL x3 | 563fb8c9af1d7175 | 563fb8c9af1d7175 | 563fb8c9af1d7175 | (not run)        |
+
+summary: IDENTICAL=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| hdbscan-leaf/base            | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 2117320835e91e8a |
+| hdbscan-leaf/base            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/base            | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 927cb01ec674a031 |
+| hdbscan-leaf/denormal        | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan-leaf/denormal        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan-leaf/denormal        | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan-leaf/denormal_ftz    | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan-leaf/denormal_ftz    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan-leaf/denormal_ftz    | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan-leaf/dupes           | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 2117320835e91e8a |
+| hdbscan-leaf/dupes           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/dupes           | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 927cb01ec674a031 |
+| hdbscan-leaf/hashed          | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan-leaf/hashed          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan-leaf/hashed          | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan-leaf/negative        | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan-leaf/negative        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan-leaf/negative        | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan-leaf/odd             | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan-leaf/odd             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan-leaf/odd             | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan-leaf/ties            | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 47607746aff5c75c |
+| hdbscan-leaf/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| hdbscan-leaf/ties            | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | bfcae42c42ea55d7 |
+| hdbscan-leaf/wide            | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan-leaf/wide            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan-leaf/wide            | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/base                 | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | cfe5f8df2a406451 |
+| hdbscan/base                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| hdbscan/base                 | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 43c868ddda4bae13 |
+| hdbscan/denormal             | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/denormal             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan/denormal             | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/denormal_ftz         | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/denormal_ftz         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan/denormal_ftz         | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/dupes                | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | cfe5f8df2a406451 |
+| hdbscan/dupes                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| hdbscan/dupes                | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 43c868ddda4bae13 |
+| hdbscan/hashed               | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/hashed               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan/hashed               | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/negative             | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/negative             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan/negative             | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/odd                  | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/odd                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan/odd                  | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/ties                 | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 6ec7f68f0f81ae9b |
+| hdbscan/ties                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| hdbscan/ties                 | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a5c1950592d1d992 |
+| hdbscan/wide                 | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| hdbscan/wide                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| hdbscan/wide                 | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+
+summary (infer/model): N/A=30, ONE-COLUMN=6
+summary (batch): N/A=12, ONE-COLUMN=6
+summary (rlpair): 

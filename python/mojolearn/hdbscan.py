@@ -26,9 +26,15 @@ module function `approximate_predict(clusterer, points_to_predict)`
 probability of new points under the fitted clustering. Without
 `prediction_data=True` it refuses by name, as cuML's `_check_clusterer`
 does (`hdbscan.pyx:1104-1108`). There is still no `predict` method and no
-model to save. `membership_vector` and `all_points_membership_vectors`
-(`hdbscan.pyx:1180`, `:1114`) are NOT IMPLEMENTED and refuse by name
-(`hdbscan/NOT_IMPLEMENTED.tsv`).
+model to save.
+
+SOFT CLUSTERING (2026-09-15). `membership_vector(clusterer,
+points_to_predict, batch_size)` and `all_points_membership_vectors(clusterer,
+batch_size)` (`hdbscan.pyx:1180`, `:1114`, `soft_clustering.cuh:385-627`)
+need the same prediction data and refuse by name without it. They compute in
+float32 with pinned seams on every column (DEVIATION 1616,
+`hdbscan/impl/detail/soft_clustering.mojo`), where cuML promotes four seams
+to float64.
 
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
@@ -54,15 +60,18 @@ _METRICS = {"euclidean": METRIC_L2_SQRT_EXPANDED, "l2": METRIC_L2_SQRT_EXPANDED}
 #: The model file (the neighbors and density inference lane, 2026-09-15):
 #: what `approximate_predict` reads and nothing else. `raw_data` `<f4`
 #: (n, d) as fitted, `core_distances` `<f4`, `labels` `<i4`, the prediction
-#: data's `lambdas` `<f4`, `deaths` `<f4`, `selected_clusters` `<i4` and
-#: `index_into_children` `<i4`, `ints` `<i8` [n_features_in_, n_clusters_,
-#: n_outliers_, n_boruvka_rounds_, n_condensed_clusters_, n_edges,
-#: min_cluster_size, min_samples (-1 for None), max_cluster_size,
-#: allow_single_cluster], `reals` `<f8` [alpha, cluster_selection_epsilon],
+#: data's `parents` `<i4`, `lambdas` `<f4`, `deaths` `<f4`,
+#: `selected_clusters` `<i4`, `index_into_children` `<i4`, `exemplar_idx` `<i4`
+#: and `exemplar_label_offsets` `<i4` (the last three and `parents` are what
+#: membership_vector and all_points_membership_vectors read), `ints` `<i8`
+#: [n_features_in_, n_clusters_, n_outliers_, n_boruvka_rounds_,
+#: n_condensed_clusters_, n_edges, min_cluster_size, min_samples (-1 for
+#: None), max_cluster_size, allow_single_cluster, n_exemplars], `reals` `<f8`
+#: [alpha, cluster_selection_epsilon],
 #: `metric` and `cluster_selection_method` as text. A model fitted without
 #: prediction_data=True has nothing to save and is refused by name.
-_HDBSCAN_FORMAT = "mojolearn-hdbscan-1"
-_HDBSCAN_INTS = 10
+_HDBSCAN_FORMAT = "mojolearn-hdbscan-2"
+_HDBSCAN_INTS = 11
 _SELECTION = {"eom": SELECTION_EOM, "leaf": SELECTION_LEAF}
 
 
@@ -290,15 +299,18 @@ class HDBSCAN(NumericModeMixin):
             "raw_data": self._raw_data,
             "core_distances": self.core_distances_,
             "labels": self.labels_,
+            "parents": pd["parents"],
             "lambdas": pd["lambdas"],
             "deaths": pd["deaths"],
             "selected_clusters": pd["selected_clusters"][:max(n_sel, 1)],
             "index_into_children": pd["index_into_children"],
+            "exemplar_idx": pd["exemplar_idx"],
+            "exemplar_label_offsets": pd["exemplar_label_offsets"],
             "ints": Array.from_list([
                 int(self.n_features_in_), n_sel, int(self.n_outliers_), int(self.n_boruvka_rounds_),
                 int(self.n_condensed_clusters_), int(pd["n_edges"]), int(self.min_cluster_size),
                 -1 if self.min_samples is None else int(self.min_samples), int(self.max_cluster_size),
-                1 if self.allow_single_cluster else 0,
+                1 if self.allow_single_cluster else 0, int(pd["n_exemplars"]),
             ], "<i8"),
             "reals": Array.from_list([float(self.alpha), float(self.cluster_selection_epsilon)], "<f8"),
         })
@@ -315,7 +327,7 @@ class HDBSCAN(NumericModeMixin):
         if ints.size != _HDBSCAN_INTS or reals.size != 2:
             raise ValueError(f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, "
                              f"{_HDBSCAN_INTS} and 2 are needed")
-        (d, n_sel, n_out, n_rounds, n_cond, n_edges, mcs, ms, maxcs, single) = (
+        (d, n_sel, n_out, n_rounds, n_cond, n_edges, mcs, ms, maxcs, single, n_ex) = (
             int(ints[i]) for i in range(_HDBSCAN_INTS))
         obj = cls(min_cluster_size=mcs, min_samples=None if ms == -1 else ms,
                   cluster_selection_epsilon=float(reals[1]), max_cluster_size=maxcs,
@@ -327,9 +339,10 @@ class HDBSCAN(NumericModeMixin):
         if raw.ndim != 2 or raw.shape[1] != d or raw.shape[0] < 2:
             raise ValueError(f"mojolearn: {path!r} raw_data has shape {tuple(raw.shape)}, ints say {d} features")
         n = int(raw.shape[0])
-        want = dict(core_distances=("<f4", n), labels=("<i4", n), lambdas=("<f4", n_edges),
-                    deaths=("<f4", n_cond), selected_clusters=("<i4", max(n_sel, 1)),
-                    index_into_children=("<i4", n_edges + 1))
+        want = dict(core_distances=("<f4", n), labels=("<i4", n), parents=("<i4", n_edges),
+                    lambdas=("<f4", n_edges), deaths=("<f4", n_cond),
+                    selected_clusters=("<i4", max(n_sel, 1)), index_into_children=("<i4", n_edges + 1),
+                    exemplar_idx=("<i4", max(n_ex, 1)), exemplar_label_offsets=("<i4", n_sel + 1))
         got = {}
         for name, (dtype, size) in want.items():
             a = _serialize.exact(arrays, name, dtype)
@@ -344,9 +357,12 @@ class HDBSCAN(NumericModeMixin):
         obj.n_boruvka_rounds_ = n_rounds
         obj.n_condensed_clusters_ = n_cond
         obj._raw_data = raw
-        obj._prediction_data = dict(n_edges=n_edges, n_condensed=n_cond, lambdas=got["lambdas"],
+        obj._prediction_data = dict(n_edges=n_edges, n_condensed=n_cond, n_exemplars=n_ex,
+                                    parents=got["parents"], lambdas=got["lambdas"],
                                     deaths=got["deaths"], selected_clusters=got["selected_clusters"],
-                                    index_into_children=got["index_into_children"])
+                                    index_into_children=got["index_into_children"],
+                                    exemplar_idx=got["exemplar_idx"],
+                                    exemplar_label_offsets=got["exemplar_label_offsets"])
         return obj
 
 
@@ -418,26 +434,116 @@ def approximate_predict(clusterer, points_to_predict):
     return labels, probs
 
 
+def _check_batch_size(batch_size, where):
+    """cuML's `batch_size must be > 0` (`hdbscan.pyx:1147`, `:1230`)."""
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int):
+        raise TypeError(f"mojolearn {where}: batch_size must be an int, got {type(batch_size).__name__}")
+    if batch_size <= 0:
+        raise ValueError(f"mojolearn {where}: batch_size must be > 0, got {batch_size}")
+
+
+def _soft_tree_addrs(pd):
+    """parents, lambdas, deaths, selected_clusters, index_into_children,
+    exemplar_idx, exemplar_label_offsets: the order both soft bindings read."""
+    return [addr_ro(pd["parents"], name="tree parents"), addr_ro(pd["lambdas"], name="tree lambdas"),
+            addr_ro(pd["deaths"], name="deaths"), addr_ro(pd["selected_clusters"], name="selected_clusters"),
+            addr_ro(pd["index_into_children"], name="index_into_children"),
+            addr_ro(pd["exemplar_idx"], name="exemplar_idx"),
+            addr_ro(pd["exemplar_label_offsets"], name="exemplar_label_offsets")]
+
+
 def membership_vector(clusterer, points_to_predict, batch_size=4096):
-    """cuML `membership_vector` (`hdbscan.pyx:1180`). NOT IMPLEMENTED."""
-    _check_clusterer(clusterer, "membership_vector")
-    raise NotImplementedError(
-        "mojolearn membership_vector: NOT IMPLEMENTED. cuML's "
-        "Predict::membership_vector (soft_clustering.cuh:501-627) computes in "
-        "float64 at four seams (1.0 / val, exp(-(v + 1e-8) / m), pow(m, 2) * "
-        "pow(d, 0.5), max(l, death) + 1e-8), which an Apple GPU cannot run, and "
-        "needs the device exp seam; hdbscan/NOT_IMPLEMENTED.tsv names the rung"
-    )
+    """Soft cluster membership of new points, cuML's `membership_vector`
+    (`hdbscan.pyx:1180`, `soft_clustering.cuh:501-627`).
+
+    Row `i` gives, for each selected cluster `j`, the probability that point
+    `i` is a member of cluster `j`: the distance to the cluster's exemplars
+    and the merge height in the condensed tree, combined, normalized, and
+    scaled by the probability that the point is in some cluster, so a row
+    sums to at most 1 and a point far from every cluster has a row near 0.
+
+    Computed in float32 on every column (DEVIATION 1616,
+    `hdbscan/impl/detail/soft_clustering.mojo`): cuML computes four seams
+    in float64, and where cuML's row overflows to NaN (duplicated points)
+    this row is finite.
+
+    batch_size bounds how many points one call computes; each row is
+    independent of the others, so it does not change a single byte.
+
+    Returns
+    -------
+    membership_vectors : Array (n_samples, n_clusters_) float32
+    """
+    pd = _check_clusterer(clusterer, "membership_vector")
+    _check_batch_size(batch_size, "membership_vector")
+    q, _ = as_f32_c(points_to_predict, ndim=2, name="points_to_predict")
+    nq, d = q.shape
+    if d != clusterer.n_features_in_:
+        raise ValueError(
+            f"mojolearn membership_vector: points_to_predict has {d} features, "
+            f"the clusterer was fit on {clusterer.n_features_in_}"
+        )
+    n_sel = clusterer.n_clusters_
+    out = empty((nq, n_sel), "<f4")
+    if n_sel == 0 or nq == 0:
+        return out
+    # cuML: `clusterer.min_samples or clusterer.min_cluster_size` (hdbscan.pyx:1238)
+    min_samples = clusterer.min_samples or clusterer.min_cluster_size
+    m = int(clusterer._raw_data.shape[0])
+    tree = _soft_tree_addrs(pd)
+    ext = clusterer._extension()
+    q_addr = addr_ro(q, name="points_to_predict")
+    o_addr = addr(out, name="membership_vectors")
+    for s in range(0, nq, batch_size):
+        cnt = min(batch_size, nq - s)
+        ext.hdbscan_membership_vector(
+            # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_membership_vector_binding.
+            [addr_ro(clusterer._raw_data, name="training data"),
+             addr_ro(clusterer.core_distances_, name="core_distances_"),
+             addr_ro(clusterer.labels_, name="labels_")] + tree
+            + [q_addr + s * d * 4, o_addr + s * n_sel * 4],
+            # m, d, n_edges, n_clusters (condensed), n_selected, n_exemplars, nq, min_samples
+            [m, d, pd["n_edges"], pd["n_condensed"], n_sel, pd["n_exemplars"], cnt, int(min_samples)],
+        )
+    return out
 
 
 def all_points_membership_vectors(clusterer, batch_size=4096):
-    """cuML `all_points_membership_vectors` (`hdbscan.pyx:1114`). NOT IMPLEMENTED."""
-    _check_clusterer(clusterer, "all_points_membership_vectors")
-    raise NotImplementedError(
-        "mojolearn all_points_membership_vectors: NOT IMPLEMENTED, for "
-        "membership_vector's reasons (soft_clustering.cuh:385-482); "
-        "hdbscan/NOT_IMPLEMENTED.tsv names the rung"
-    )
+    """Soft cluster membership of every training point, cuML's
+    `all_points_membership_vectors` (`hdbscan.pyx:1114`,
+    `soft_clustering.cuh:385-482`), using that the points are already in
+    the condensed tree. Float32 on every column (DEVIATION 1616).
+
+    batch_size bounds how many training rows one call computes; the rows are
+    independent, so it does not change a single byte.
+
+    Returns
+    -------
+    membership_vectors : Array (n_samples, n_clusters_) float32
+        With no cluster the shape is (n_samples, 0). cuML returns a 1-D
+        zero vector of length n_samples there, which does not have the
+        documented shape; that is not reproduced.
+    """
+    pd = _check_clusterer(clusterer, "all_points_membership_vectors")
+    _check_batch_size(batch_size, "all_points_membership_vectors")
+    x = clusterer._raw_data
+    m, d = x.shape
+    n_sel = clusterer.n_clusters_
+    out = empty((m, n_sel), "<f4")
+    if n_sel == 0:
+        return out
+    tree = _soft_tree_addrs(pd)
+    ext = clusterer._extension()
+    o_addr = addr(out, name="membership_vectors")
+    for s in range(0, m, batch_size):
+        cnt = min(batch_size, m - s)
+        ext.hdbscan_all_points_membership_vectors(
+            # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_all_points_membership_vectors_binding.
+            [addr_ro(x, name="training data")] + tree + [o_addr + s * n_sel * 4],
+            # m, d, n_edges, n_clusters (condensed), n_selected, n_exemplars, row0, count
+            [int(m), int(d), pd["n_edges"], pd["n_condensed"], n_sel, pd["n_exemplars"], s, cnt],
+        )
+    return out
 
 
 __all__ = ["HDBSCAN", "approximate_predict", "membership_vector", "all_points_membership_vectors"]

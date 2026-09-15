@@ -276,6 +276,119 @@ def prediction_neighborhood(min_samples: Int, n_rows: Int) raises -> Int:
     return k
 
 
+def refuse_soft_clustering_inputs(
+    parents: List[Int32],
+    lambdas: List[Float32],
+    pd: PredictionData,
+    m: Int,
+    where: String,
+) raises:
+    """The fitted state `membership_vector` and
+    `all_points_membership_vectors` read, checked before any kernel reads
+    it through an index (`hdbscan/impl/detail/soft_clustering.mojo`). The
+    arrays arrive from Python, so every index a kernel follows is in range,
+    every selected cluster has an exemplar (their `reduction_op` would
+    return FLT_MAX for an empty range, `soft_clustering.cuh:111-115`), and
+    every cluster's parent is a smaller id, which is what makes the merge
+    height walk (`kernels/soft_clustering.cuh:34-44`) reach the root.
+    Refused by name."""
+    from std.math import isfinite
+
+    var nl = pd.n_leaves
+    var ne = pd.n_edges
+    var nc = pd.n_clusters
+    var ns = pd.n_selected_clusters
+    var nx = pd.n_exemplars
+    if (
+        nl != m
+        or nc < 1
+        or ne != nl + nc - 1
+        or len(parents) < ne
+        or len(lambdas) < ne
+        or len(pd.index_into_children) < ne + 1
+        or len(pd.deaths) < nc
+    ):
+        raise Error(
+            where + ": the condensed tree does not have one edge per point and"
+            " per non-root cluster (n_leaves=" + String(nl) + ", n_edges="
+            + String(ne) + ", n_clusters=" + String(nc) + ", n_rows="
+            + String(m) + "); refused by name"
+        )
+    if (
+        ns < 1
+        or len(pd.selected_clusters) < ns
+        or len(pd.exemplar_label_offsets) < ns + 1
+        or nx < ns
+        or len(pd.exemplar_idx) < nx
+    ):
+        raise Error(
+            where + ": the prediction data has " + String(ns)
+            + " selected clusters and " + String(nx)
+            + " exemplars; refused by name"
+        )
+    if Int(pd.exemplar_label_offsets[0]) != 0 or Int(
+        pd.exemplar_label_offsets[ns]
+    ) != nx:
+        raise Error(
+            where + ": exemplar_label_offsets does not span the exemplars;"
+            " refused by name"
+        )
+    for c in range(ns):
+        if pd.exemplar_label_offsets[c + 1] <= pd.exemplar_label_offsets[c]:
+            raise Error(
+                where + ": selected cluster " + String(c)
+                + " has no exemplar; refused by name"
+            )
+        var s = Int(pd.selected_clusters[c])
+        if s < nl or s >= nl + nc:
+            raise Error(
+                where + ": selected cluster " + String(c) + " is node "
+                + String(s) + ", outside the condensed clusters; refused by"
+                " name"
+            )
+    for j in range(nx):
+        var r = Int(pd.exemplar_idx[j])
+        if r < 0 or r >= m:
+            raise Error(
+                where + ": exemplar " + String(j) + " is row " + String(r)
+                + ", outside the training rows; refused by name"
+            )
+    for e in range(ne):
+        var p = Int(parents[e])
+        if p < nl or p >= nl + nc:
+            raise Error(
+                where + ": parent " + String(p) + " at edge " + String(e)
+                + " is outside the condensed clusters; refused by name"
+            )
+        if not isfinite(lambdas[e]):
+            raise Error(
+                where + ": condensed lambda " + String(e) + " is not finite;"
+                " refused by name (DEVIATION 1607)"
+            )
+    for c in range(nc):
+        if not isfinite(pd.deaths[c]):
+            raise Error(
+                where + ": death " + String(c) + " is not finite; refused by"
+                " name (DEVIATION 1607)"
+            )
+    for x in range(ne + 1):
+        if x == nl:
+            continue
+        var e = Int(pd.index_into_children[x])
+        if e < 0 or e >= ne:
+            raise Error(
+                where + ": index_into_children[" + String(x) + "] = "
+                + String(e) + " is outside the edges; refused by name"
+            )
+        if x > nl and Int(parents[e]) >= x:
+            raise Error(
+                where + ": cluster " + String(x) + " has parent "
+                + String(Int(parents[e]))
+                + ", not a smaller id, so the merge height walk would not"
+                " reach the root; refused by name"
+            )
+
+
 def refuse_nonfinite_queries(q: List[Float32], n_q: Int, d: Int) raises:
     """DEVIATION 1607 at the query boundary: a NaN or infinite query cell
     would carry the vendor's NaN payload into a distance. Refused by name."""

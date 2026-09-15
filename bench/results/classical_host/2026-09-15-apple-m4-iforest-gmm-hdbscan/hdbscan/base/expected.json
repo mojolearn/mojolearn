@@ -1,5 +1,5 @@
 {
-  "commit": "07dbbadc42191393d33408e6e8aa74ec2ee90a56",
+  "commit": "cd20fc0b10b1a9a6ee7db3b3438a1d51de159932",
   "estimator": "HDBSCAN",
   "gpu_arch": null,
   "host": {
@@ -11,9 +11,17 @@
   },
   "kind": "base",
   "lane": "hdbscan",
-  "model_sha256": "a2e0a25fe5cde3f81b460f86e2bac8ffee25fee51416c92d63f1447c68612b1c",
+  "model_sha256": "886b0c2a69e8f5b9bf8a77a3c830e74b27efdb56873bf074790d175855cf6a4c",
   "numeric_mode": "identical",
   "predictions": {
+    "all_points_membership_vectors": {
+      "dtype": "<f4",
+      "sha256": "c9ae3e1c1a18e0caa61d207e2d4ea715a08e634539c7c2520d166273bb170026",
+      "shape": [
+        6000,
+        2
+      ]
+    },
     "approximate_predict_labels": {
       "dtype": "<i4",
       "sha256": "b0e339c5a805e1d3fd473c9f70278e8d1c490e9a47904648f0f2b345bccd1d34",
@@ -21,7 +29,15 @@
         256
       ]
     },
-    "identity_hash": "a104cfe065750353",
+    "identity_hash": "cfe5f8df2a406451",
+    "membership_vector": {
+      "dtype": "<f4",
+      "sha256": "6878654dc03333a7a7a8ffac7f42fbc1efa68ac835e9c3fda95c188cd2c8165e",
+      "shape": [
+        256,
+        2
+      ]
+    },
     "probabilities": {
       "dtype": "<f4",
       "sha256": "11b10cd0b4b042a59d4e864b31171052f7c93f0addc736f84213f8fb61048001",
@@ -29,9 +45,9 @@
         256
       ]
     },
-    "seconds": 0.021085
+    "seconds": 0.233482
   },
-  "recorded_at": "2026-09-15T13:05:04-0400",
+  "recorded_at": "2026-09-15T13:26:22-0400",
   "reload_equal": true,
   "status": "RECORDED",
   "vendor": "metal",

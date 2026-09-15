@@ -39,7 +39,11 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from bindings.hdbscan_host_predict import hdbscan_approximate_predict_binding
+from bindings.hdbscan_host_predict import (
+    hdbscan_all_points_membership_vectors_binding,
+    hdbscan_approximate_predict_binding,
+    hdbscan_membership_vector_binding,
+)
 from hdbscan.host.hdbscan_host_oracle import (
     HDBH_HOST_SABOTAGE,
     HDBH_PREDICT_SABOTAGE,
@@ -244,6 +248,8 @@ def PyInit__mojolearn_hdbscan_host() abi("C") -> PythonObject:
         module.def_function[hdbscan_generate_prediction_data_binding]("hdbscan_generate_prediction_data")
         module.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
         module.def_function[hdbscan_host_predict_sabotage_binding]("hdbscan_host_predict_sabotage")
+        module.def_function[hdbscan_membership_vector_binding]("hdbscan_membership_vector")
+        module.def_function[hdbscan_all_points_membership_vectors_binding]("hdbscan_all_points_membership_vectors")
         return module.finalize()
     except e:
         abort(String("failed to create _mojolearn_hdbscan_host: ", e))

@@ -1,0 +1,6 @@
+diff.metal-vs-record-train exit=0
+diff.cpu-vs-record-owed exit=0
+diff.metal-vs-cpu exit=0
+diff.cpu-vs-predict-sabotage exit=1
+diff.metal-vs-batch-sabotage exit=1
+diff.cpu-vs-batch-sabotage exit=1

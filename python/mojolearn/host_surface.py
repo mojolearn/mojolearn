@@ -599,6 +599,17 @@ TRAINING_LANE_NAMES = {
     # The sliding window is the same oracles' window argument.
     "transformer": "the Transformer block",
     "transformer-window": "the sliding-window Transformer block",
+    # The Samba stack lanes (lane/cpu-training-samba, 2026-09-15). SambaStack
+    # is Python over the training, mamba and transformer bindings; the one
+    # operation it reached with no host entry was the neural RNG (the
+    # initializers and dropout), now the training host binding's neural_rng
+    # over core/philox_neural.mojo written out by tools/mamba_host_gen.py. On
+    # the M4, one core, shared machine: all 18 train, 36 infer and model and
+    # 18 batch cells IDENTICAL x4 against the 166-lane record before the gate
+    # ran, the MOJOLEARN_HOST_SABOTAGE set DIVERGENT on every one, and a
+    # throwaway dropout-mask arm DIVERGENT on samba-untied-dropout-accum only.
+    "samba": "the Samba stack",
+    "samba-untied-dropout-accum": "the Samba stack with untied embeddings, dropout, accumulation, clipping and a cosine schedule",
     # The byte LM host lanes (lane/cpu-training-host-only-lanes, 2026-09-15).
     # Host code on every box, so the 166-lane record's three columns are the
     # host CPUs of the Apple M4, the H100 box and the MI325X box, IDENTICAL x3
@@ -686,7 +697,6 @@ ADAPTED_MODULES = {
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "the Samba blocks",
     "gradient boosting training outside its declared lanes (CTR categorical features, and sample weights, eval sets and the pointwise searcher outside the gbdt-pointwise-l2-bayesian-eval configuration, among them)",
 )
 
@@ -886,7 +896,7 @@ FAMILIES = (
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
-            "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict",
+            "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "knn_classify_neighbors", "knn_regress_neighbors",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
@@ -960,13 +970,21 @@ FAMILIES = (
             "LinearRegression", "Ridge", "TruncatedSVD", "LogisticRegression",
             "PCA", "KernelDensity", "DBSCAN", "StandardScaler", "MinMaxScaler",
             "Lasso", "ElasticNet", "KernelRidge", "Nystroem", "RBFSampler",
+            "AgglomerativeClustering",
         ),
         display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density on every kernel, metric and weighting, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
+        # lane/inference-transductive-predict (2026-09-15): `dbscan_fit_core`
+        # (the fit's core mask for DBSCAN(prediction_data=True)) and
+        # `labeled_reference_predict`, the out-of-sample labels of DBSCAN
+        # and AgglomerativeClustering (DEVIATION 2740). The agglomerative FIT
+        # stays in the solver family, which does not ship; its predict entry
+        # is here so a saved model predicts from the inference wheel.
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
             "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
             "decomposition/host/pca_full_oracle.mojo",
+            "core/labeled_reference_host_predict.mojo",
             "preprocessing/host/scaler_oracle.mojo",
             "kernel_methods/host/km_host_oracle.mojo",
             "kernel_methods/checks/random_features.mojo",
@@ -978,6 +996,7 @@ FAMILIES = (
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
             "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
+            "dbscan_fit_core", "labeled_reference_predict",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             "qn_decision_function", "qn_sigmoid", "qn_softmax",
@@ -1323,7 +1342,7 @@ FAMILIES = (
             "mixture_host_column", "mixture_host_sabotage",
             "mixture_vendor", "mixture_numeric_mode", "gmm_fit",
             "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
-            "gmm_score_bic_aic",
+            "gmm_score_bic_aic", "gmm_sample",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
@@ -1393,17 +1412,19 @@ FAMILIES = (
             "hdbscan_host_column", "hdbscan_host_sabotage",
             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
             "hdbscan_generate_prediction_data", "hdbscan_approximate_predict",
-            "hdbscan_host_predict_sabotage",
+            "hdbscan_host_predict_sabotage", "hdbscan_membership_vector",
+            "hdbscan_all_points_membership_vectors",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
     ),
     dict(
         # The neighbors and density inference lane (2026-09-15): the
-        # INFERENCE-ONLY hdbscan binding a wheel ships, approximate_predict
-        # from a saved model (bindings/hdbscan_host_predict.mojo, the same
-        # function the reference binding registers) and no fit, prediction
-        # data generation or tree code. Loaded like mixture_infer.
+        # INFERENCE-ONLY hdbscan binding a wheel ships, approximate_predict,
+        # membership_vector and all_points_membership_vectors from a saved
+        # model (bindings/hdbscan_host_predict.mojo, the same functions the
+        # reference binding registers) and no fit, prediction data
+        # generation or tree building. Loaded like mixture_infer.
         family="hdbscan_infer",
         binding="_mojolearn_hdbscan_infer_host",
         routes=None,
@@ -1412,8 +1433,11 @@ FAMILIES = (
         training_lanes=(),
         inference_lanes=("hdbscan", "hdbscan-leaf"),
         forest_kinds=(),
-        classes=("hdbscan.approximate_predict",),
-        display="HDBSCAN's approximate_predict",
+        classes=(
+            "hdbscan.approximate_predict", "hdbscan.membership_vector",
+            "hdbscan.all_points_membership_vectors",
+        ),
+        display="HDBSCAN's approximate_predict, membership_vector and all_points_membership_vectors",
         host_modules=(
             "bindings/hdbscan_host_predict.mojo",
             "hdbscan/host/hdbscan_host_oracle.mojo",
@@ -1422,6 +1446,7 @@ FAMILIES = (
             "hdbscan_infer_host_numeric_mode", "hdbscan_infer_host_vendor",
             "hdbscan_infer_host_column", "hdbscan_infer_host_sabotage",
             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_approximate_predict",
+            "hdbscan_membership_vector", "hdbscan_all_points_membership_vectors",
         ),
         gate="tools/classical_host_gate.py",
         ships_in_wheel=True,
@@ -1490,27 +1515,36 @@ FAMILIES = (
         # optimizers and cross_entropy on their own) run unchanged;
         # lane/cpu-training-misc batch 3 (2026-09-15) adds clip_grad_norm,
         # accumulate, accumulation_is_aligned and the embedding, RMSNorm and
-        # linear forward and backward. The Samba operations, the neural RNG
-        # and the multi-GPU probes stay absent and refuse by name.
+        # linear forward and backward; lane/cpu-training-samba (2026-09-15)
+        # adds neural_rng (core/philox_neural.mojo's kernel as
+        # tools/mamba_host_gen.py writes it out for the host), the last
+        # operation SambaStack reaches that was missing, so the samba lanes
+        # train on the CPU through this family with the mamba and
+        # transformer families' blocks. The multi-GPU probes stay absent and
+        # refuse by name.
         family="training",
         binding="_mojolearn_training_host",
         routes="_mojolearn_training",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "par-mlp"),
+        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "par-mlp",
+                        "samba", "samba-untied-dropout-accum"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
             "SmallMLPTrainer", "SGD", "Adam", "AdamW", "cross_entropy", "clip_grad_norm_",
             "accumulate_grads", "embedding_forward", "embedding_backward", "rms_norm_forward",
-            "rms_norm_backward", "linear_forward", "linear_backward",
+            "rms_norm_backward", "linear_forward", "linear_backward", "training.Generator",
+            "SambaConfig", "SambaStack",
         ),
-        display="the small MLP trainer, the optimizers, the gradient clip, the cross-entropy loss and the training primitives",
+        display="the small MLP trainer, the optimizers, the gradient clip, the cross-entropy loss, the training primitives, the neural random stream and the Samba stack",
         host_modules=(
             "training/host/mlp_oracle.mojo",
             "training/checks/loss_oracle.mojo",
             "training/checks/optimizer_oracle.mojo",
             "training/host/samba_ops_oracle.mojo",
+            "mamba/host/gen/philox_neural.mojo",
+            "mamba/host/gen/philox.mojo",
             "embedding/checks/embedding_oracle.mojo",
             "gemm/host/gemm_oracle.mojo",
         ),
@@ -1522,6 +1556,7 @@ FAMILIES = (
             "clip_grad_norm", "accumulate", "accumulation_is_aligned",
             "embedding_forward", "embedding_backward", "rms_norm_forward",
             "rms_norm_backward", "linear_forward", "linear_backward",
+            "neural_rng",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,

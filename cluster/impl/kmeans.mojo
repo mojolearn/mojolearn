@@ -16,8 +16,10 @@ The entry points, and which of them exist here:
     predict       IMPLEMENTED
     fit_predict   IMPLEMENTED (theirs is fit then predict, and so is this)
     cluster_cost  IMPLEMENTED
-    transform     NOT IMPLEMENTED, it materializes the full n x k distance matrix
-                  and nothing in the fit path calls it
+    transform     IMPLEMENTED 2026-09-15 beside the estimator,
+                  `cluster/estimator.mojo::kmeans_transform` and
+                  `detail/kmeans_transform.mojo`: the n x k matrix, each cell
+                  the fused kernel's cell
 
 **`fit_predict` deserves one sentence because it looks redundant and is not.**
 The fit already computed an assignment on its last iteration, so returning it
