@@ -60,5 +60,21 @@ Seen to fail first: against the BASE Metal binding the two refusal cases fail wi
 binding refusing the longer tail, which is what shows the group sizes reach the binding and
 that the new binding is the one refusing.
 
+## At the merge of origin/main (1d1e2e917)
+
+Main's changes to the GBDT paths since 0affb7c75 were documentation wording, and its
+identity_break.py grew new parts; both bindings were rebuilt at the merge (sha256 `_mojolearn_gbdt.so`
+d02b8c4eaa124a47, `_mojolearn_gbdt_host.so` f4fef0067e2efa2c) and the same 16 lanes rerun:
+
+| diff | train | infer/model | batch |
+|---|---|---|---|
+| `diff-metal-stage1-vs-merge.txt` | IDENTICAL=48 | IDENTICAL=90, N/A=6 | IDENTICAL=48 |
+| `diff-cpu-stage1-vs-merge.txt` | IDENTICAL=36, REFUSED=12 | IDENTICAL=66, N/A=6, NOT-COMPARED=24 | IDENTICAL=36, NOT-COMPARED=12 |
+| `diff-metal-cpu-merge.txt` | IDENTICAL=36, ONE-COLUMN=12 | IDENTICAL=66, N/A=6, ONE-COLUMN=24 | IDENTICAL=36, ONE-COLUMN=12 |
+
+test_gbdt_group_id, test_gbdt_search_option_guards, test_gbdt_input_safety and
+test_host_surface: 228 passed on the Metal route; test_gbdt_group_id 15 passed on the CPU
+route. docs_facts --check and wheel_ci pins pass.
+
 Not run here: NVIDIA and AMD columns (owed to the next release record, Andrew's Sep 15
 rule), and fixtures other than base, ties and odd.
