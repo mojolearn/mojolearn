@@ -306,8 +306,13 @@ class HostRadiusNeighbors(_HostBound, RadiusNeighbors):
 
 class HostARIMA(_HostBound, ARIMA):
     """A saved ARIMA model on the forecast inference binding, which exports
-    `arima_predict` and `arima_forecast` and no `arima_fit`."""
-    _HOST_ARRAYS = ("_y", "params_")
+    `arima_predict` and `arima_forecast` and no `arima_fit`.
+
+    `_exog` is the fit's exogenous regressors, which a `mojolearn-arima-2`
+    file carries and prediction reads (lane/arima-exog, 2026-09-15). It is
+    `None` for a model fit without them, and `model_sha256` skips a `None`,
+    so every `mojolearn-arima-1` model hashes exactly as it did."""
+    _HOST_ARRAYS = ("_y", "params_", "_exog")
 
 
 class HostExponentialSmoothing(_HostBound, ExponentialSmoothing):
