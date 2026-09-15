@@ -23,6 +23,7 @@ design -- that is the pin -- and `hw_eval.mojo`'s header names it.
 from std.math import fma, sqrt
 from std.sys.compile import is_defined
 
+from holtwinters.host.hw_predict import hw_forecast_from_state
 from holtwinters.impl.internal.hw_decompose import host_filter, host_r1qt
 from holtwinters.impl.internal.hw_optim import (
     HW_DEC_ALPHA_HI,
@@ -602,24 +603,12 @@ def oracle_fit[dt: DType](
 
 def oracle_forecast[dt: DType](fit: HWOracleFit[dt], h: Int) -> List[Scalar[dt]]:
     """`HoltWintersForecastHelper`: from the last fitted row of level and
-    trend and the last `frequency` rows of season; `h x batch`, time-major."""
-    var bs = fit.batch_size
-    var f = fit.frequency
-    var n_minus = fit.n - f
-    var lt_shift = (n_minus - 1) * bs
-    var s_shift = (n_minus - f) * bs
-    var out = _zeros[dt](h * bs)
-    for s in range(bs):
-        var level = fit.level[lt_shift + s]
-        var trend = fit.trend[lt_shift + s]
-        for i in range(h):
-            var season = fit.season[s_shift + s + (i % f) * bs]
-            var lt = _f[dt](_mad[dt](trend, Scalar[dt](i + 1), level))
-            if fit.additive:
-                out[s + i * bs] = _f[dt](lt + season)
-            else:
-                out[s + i * bs] = _f[dt](lt * season)
-    return out^
+    trend and the last `frequency` rows of season; `h x batch`, time-major.
+    The body is `hw_predict.mojo::hw_forecast_from_state`, the one spelling
+    the host bindings' forecast shares (lane/inference-holtwinters)."""
+    return hw_forecast_from_state[dt](
+        fit.level, fit.trend, fit.season, fit.n, fit.batch_size, fit.frequency, fit.additive, h
+    )
 
 
 def oracle_sse_at[dt: DType](

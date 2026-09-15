@@ -21,10 +21,21 @@ this family with `routes=None` and `serves=("_mojolearn_arima",)`:
 the reference binding is not built, and `mojolearn.host_model` binds it for
 a saved ARIMA model on any machine.
 
+Since lane/inference-holtwinters (2026-09-15) it also serves saved
+Holt-Winters models: `holtwinters_forecast` and `holtwinters_predict` (the
+in-sample one-step predictions) and `tsa_vendor`, from
+`bindings/holtwinters_host_predict.mojo`, the source the reference
+`bindings/_mojolearn_tsa_host.mojo` registers them from, over
+`holtwinters/host/hw_predict.mojo`. `holtwinters_fit` is absent, and so is
+every name of the decomposition, the BFGS and its line search. The manifest's
+`serves` routes `_mojolearn_tsa` here when the reference tsa binding is not
+built; `kpss_test` then refuses by name.
+
 The sabotage arm (`forecast_host_sabotage`) is
-`arima/host/arima_oracle.mojo::ARIMA_ORACLE_PREDICT_SABOTAGE`: under
-`-D MOJOLEARN_HOST_SABOTAGE=1` every finite predicted value has its lowest
-bit flipped, so the saved-model gate must read a mismatch.
+`arima/host/arima_oracle.mojo::ARIMA_ORACLE_PREDICT_SABOTAGE` and
+`bindings/holtwinters_host_predict.mojo::HW_PREDICT_SABOTAGE`: under
+`-D MOJOLEARN_HOST_SABOTAGE=1` every finite predicted or forecast value has
+its lowest bit flipped, so the saved-model gate must read a mismatch.
 """
 from std.os import abort
 from std.python import Python, PythonObject
@@ -40,6 +51,11 @@ from arima.host.arima_oracle import ARIMA_ORACLE_PREDICT_SABOTAGE
 from bindings.arima_host_predict import (
     arima_forecast_binding,
     arima_predict_binding,
+)
+from bindings.holtwinters_host_predict import (
+    HW_PREDICT_SABOTAGE,
+    holtwinters_forecast_binding,
+    holtwinters_predict_binding,
 )
 
 
@@ -66,12 +82,19 @@ def forecast_host_column_binding() raises -> PythonObject:
 
 def forecast_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary flips the lowest bit of every prediction on
-    purpose (MOJOLEARN_HOST_SABOTAGE or MOJOLEARN_ARIMA_PREDICT_SABOTAGE)."""
-    return PythonObject(ARIMA_ORACLE_PREDICT_SABOTAGE)
+    purpose (MOJOLEARN_HOST_SABOTAGE, MOJOLEARN_ARIMA_PREDICT_SABOTAGE or
+    MOJOLEARN_HW_PREDICT_SABOTAGE)."""
+    return PythonObject(ARIMA_ORACLE_PREDICT_SABOTAGE or HW_PREDICT_SABOTAGE)
 
 
 def arima_vendor_binding() raises -> PythonObject:
     """"cpu", as every host binding answers."""
+    return PythonObject(String("cpu"))
+
+
+def tsa_vendor_binding() raises -> PythonObject:
+    """"cpu": the `_mojolearn_tsa` route's vendor read-back when this binding
+    serves a saved Holt-Winters model."""
     return PythonObject(String("cpu"))
 
 
@@ -93,6 +116,9 @@ def PyInit__mojolearn_forecast_host() abi("C") -> PythonObject:
         module.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
         module.def_function[arima_predict_binding]("arima_predict")
         module.def_function[arima_forecast_binding]("arima_forecast")
+        module.def_function[tsa_vendor_binding]("tsa_vendor")
+        module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
+        module.def_function[holtwinters_predict_binding]("holtwinters_predict")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_forecast_host: ", error))

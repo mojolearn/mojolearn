@@ -96,6 +96,34 @@ _ARIMA_EXTRAS = {
     'params': lambda e, X: e.params_,
     'sigma2': lambda e, X: e.sigma2_,
 }
+
+
+def _hw_forecast_pair(e):
+    """identity_break's Holt-Winters infer probe: forecast(H) through both
+    return paths, the flat buffer and the `index=0` strided read, held to the
+    same bytes (`_same_bytes`), so its hash is that column's cell."""
+    ib = identity_tool()
+    h = ib.FORECAST_HORIZON
+    return ib._same_bytes("forecast(h)", e.forecast(h), "forecast(h, index=0)", e.forecast(h, index=0))
+
+
+#: The surfaces every Holt-Winters lane adds beside its identity probe
+#: (lane/inference-holtwinters, 2026-09-15): the in-sample one-step
+#: predictions, a prediction straddling the end of the series, and the fitted
+#: state a loaded model answers.
+_HW_EXTRAS = {
+    'predict_in_sample': lambda e, X: e.predict(0, e.n),
+    'predict_straddle': lambda e, X: e.predict(e.n - 16, e.n + 16),
+    'level': lambda e, X: e.level_,
+    'trend': lambda e, X: e.trend_,
+    'season': lambda e, X: e.season_,
+    'alpha': lambda e, X: e.alpha_,
+    'beta': lambda e, X: e.beta_,
+    'gamma': lambda e, X: e.gamma_,
+    'sse': lambda e, X: e.sse_,
+}
+
+
 def _ivf_probe(e, Q):
     """identity_break's ivf infer probe: `search` then `n_candidates_`."""
     d, i = e.search(Q)
@@ -260,6 +288,10 @@ LANES = {
         _ARIMA_EXTRAS, ma=lambda e, X: e.ma_)),
     'arima-seasonal-c': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
         _ARIMA_EXTRAS, ar=lambda e, X: e.ar_, sar=lambda e, X: e.sar_, mu=lambda e, X: e.mu_)),
+    # lane/inference-holtwinters (2026-09-15): the saved Holt-Winters models,
+    # additive and multiplicative, through the forecast inference binding.
+    'holtwinters': ('ExponentialSmoothing', lambda e, X: _hw_forecast_pair(e), _HW_EXTRAS),
+    'holtwinters-multiplicative': ('ExponentialSmoothing', lambda e, X: _hw_forecast_pair(e), _HW_EXTRAS),
     # lane/inference-linear-svm (2026-09-15): the option variants of ols,
     # ridge and logistic through the formats above, and the scalers,
     # coordinate descent and the kernel methods through formats of their
@@ -328,6 +360,7 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'knn-reg': 'predict', 'logistic-multiclass': 'predict_proba',
                'pca-full-whiten': 'transform', 'umap': 'transform',
                'arima': 'forecast', 'arima-011': 'forecast', 'arima-seasonal-c': 'forecast',
+               'holtwinters': 'forecast', 'holtwinters-multiplicative': 'forecast',
                'ols-no-intercept': 'predict', 'ols-weighted': 'predict',
                'ridge-no-intercept': 'predict', 'logistic-l1': 'predict_proba',
                'logistic-elasticnet': 'predict_proba',

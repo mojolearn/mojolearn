@@ -187,6 +187,9 @@ CLASSICAL_RECORDED = (
 #: match, the sabotage host set must differ on every lane).
 FORECAST_RECORDED = (
     "bench/results/classical_host/2026-09-15-apple-m4-arima",
+    # lane/inference-holtwinters (2026-09-15): holtwinters and
+    # holtwinters-multiplicative, recorded on the M4's Metal set.
+    "bench/results/classical_host/2026-09-15-apple-m4-holtwinters",
 )
 
 #: The iforest, GMM and HDBSCAN saved-model recordings (the neighbors and
@@ -1191,11 +1194,12 @@ FAMILIES = (
         forest_kinds=(),
         classes=("ExponentialSmoothing", "kpss_test"),
         display="Holt-Winters",
-        host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo"),
+        host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo",
+                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo"),
         exports=(
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
             "tsa_host_sabotage", "tsa_vendor", "holtwinters_fit",
-            "holtwinters_forecast", "kpss_test",
+            "holtwinters_forecast", "holtwinters_predict", "kpss_test",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
@@ -1917,23 +1921,30 @@ FAMILIES = (
         # `routes` is None because `_mojolearn_arima` routes to the reference
         # binding when it is built; `serves` names the route this binding
         # takes when it is not (`_backend._HOST_INFERENCE_MODULES`), which is
-        # an installed CPU-only wheel.
+        # an installed CPU-only wheel. lane/inference-holtwinters (2026-09-15)
+        # adds saved Holt-Winters models the same way: holtwinters_forecast
+        # and holtwinters_predict from bindings/holtwinters_host_predict.mojo,
+        # the source the reference tsa binding registers them from, and the
+        # `_mojolearn_tsa` route when that binding is not built.
         family="forecast",
         binding="_mojolearn_forecast_host",
         routes=None,
-        serves=("_mojolearn_arima",),
+        serves=("_mojolearn_arima", "_mojolearn_tsa"),
         loaded_by="_backend._HOST_INFERENCE_MODULES and python/mojolearn/_classical_host.py",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(),
-        inference_lanes=("arima", "arima-011", "arima-seasonal-c"),
+        inference_lanes=("arima", "arima-011", "arima-seasonal-c", "holtwinters", "holtwinters-multiplicative"),
         forest_kinds=(),
-        classes=("ARIMA",),
-        display="batched ARIMA prediction, in sample and out of sample, and forecasts",
-        host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict.mojo"),
+        classes=("ARIMA", "ExponentialSmoothing"),
+        display=("batched ARIMA prediction, in sample and out of sample, and forecasts, and Holt-Winters"
+                 " forecasts and in-sample one-step predictions, additive and multiplicative"),
+        host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict.mojo",
+                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo"),
         exports=(
             "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
-            "arima_predict", "arima_forecast",
+            "arima_predict", "arima_forecast", "tsa_vendor", "holtwinters_forecast",
+            "holtwinters_predict",
         ),
         gate="tools/classical_host_gate.py and tools/identity_break.py",
         ships_in_wheel=True,

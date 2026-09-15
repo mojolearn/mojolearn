@@ -50,13 +50,17 @@ Since lane/inference-forecast-umap-pca (2026-09-15) also saved ARIMA models
 attributes) through `mojolearn/host/_mojolearn_forecast_host.so`, the
 inference binding that carries no fit, and saved UMAP embeddings
 (`transform`, whose answer depends on the query batch by the transform's
-contract) through `mojolearn/host/_mojolearn_metrics_host.so`.
+contract) through `mojolearn/host/_mojolearn_metrics_host.so`. Since
+lane/inference-holtwinters (2026-09-15) also saved Holt-Winters models
+(`forecast`, `predict` and the fitted state) through the same forecast
+binding.
 """
 import hashlib
 
 from . import _backend, _serialize
 from ._iforest_impl import IsolationForest, _IFOREST_FORMAT
 from ._arima_impl import ARIMA, _ARIMA_FORMAT
+from ._tsa_impl import ExponentialSmoothing, _HW_FORMAT
 from ._cholesky_impl import _CHOLESKY_FORMAT, HostCholesky
 from ._ivf_impl import IVFIndex, _IVF_FORMAT
 from .embedding import Embedding, _EMBEDDING_FORMAT
@@ -102,6 +106,7 @@ _HOST_BASENAMES = {
     "_mojolearn_hdbscan": "_mojolearn_hdbscan_infer_host",
     "_mojolearn_gp": "_mojolearn_gp_infer_host",
     "_mojolearn_arima": "_mojolearn_forecast_host",
+    "_mojolearn_tsa": "_mojolearn_forecast_host",
     "_mojolearn_ivf": "_mojolearn_ivf_search_host",
     "_mojolearn_embedding": "_mojolearn_embedding_infer_host",
     "_mojolearn_metrics": "_mojolearn_metrics_host",
@@ -304,6 +309,13 @@ class HostARIMA(_HostBound, ARIMA):
     _HOST_ARRAYS = ("_y", "params_")
 
 
+class HostExponentialSmoothing(_HostBound, ExponentialSmoothing):
+    """A saved Holt-Winters model on the forecast inference binding, which
+    exports `holtwinters_forecast` and `holtwinters_predict` and no
+    `holtwinters_fit` (lane/inference-holtwinters, 2026-09-15)."""
+    _HOST_ARRAYS = ("_comps",)
+
+
 class HostUMAP(_HostBound, UMAP):
     """A saved UMAP embedding on the metrics host binding. `transform`
     answers the GPU's bytes for the same query batch; the answer for a row
@@ -399,6 +411,7 @@ class HostEmbedding(_HostBound, Embedding):
 #: member names another class is refused by that class's own `load`.
 _FORMATS = {
     _ARIMA_FORMAT: {"ARIMA": HostARIMA},
+    _HW_FORMAT: {"ExponentialSmoothing": HostExponentialSmoothing},
     _UMAP_FORMAT: {"UMAP": HostUMAP},
     _SCALER_FORMAT: {"StandardScaler": HostStandardScaler, "MinMaxScaler": HostMinMaxScaler},
     _CD_FORMAT: {"ElasticNet": HostElasticNet, "Lasso": HostLasso},

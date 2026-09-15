@@ -63,11 +63,14 @@ def test_exponential_smoothing_fit_is_not_a_backdoor(monkeypatch):
 def test_saved_model_inference_classes_are_host_bound():
     """The saved ARIMA and UMAP host classes are inference-only: their fits
     refuse on any machine outside the reference context."""
-    from mojolearn._classical_host import HostARIMA, HostUMAP
+    from mojolearn._classical_host import HostARIMA, HostExponentialSmoothing, HostUMAP
     with pytest.raises(NotImplementedError):
         HostARIMA().fit([[0.0, 1.0, 2.0, 3.0]])
     with pytest.raises(NotImplementedError):
         HostUMAP().fit([[0.0], [1.0]])
+    # lane/inference-holtwinters (2026-09-15): a saved Holt-Winters model.
+    with pytest.raises(NotImplementedError):
+        HostExponentialSmoothing([1.0 + (i % 12) for i in range(48)], seasonal_periods=12).fit()
 
 
 def test_byte_lm_published_trainer_remains_exported():

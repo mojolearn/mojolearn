@@ -130,6 +130,10 @@ _FIT_NAMES = {
     "mixture_infer": ("gmmh_fit", "gmm_fit", "gmmh_m_step", "gmmh_initial_resp"),
     "hdbscan_infer": ("hdbh_fit", "hdbscan_fit", "generate_prediction_data"),
     "gp_infer": ("gpr_host_fit", "gpr_fit", "gpc_host_fit", "gpc_fit", "chol_host_potrf", "cholesky_factor"),
+    # lane/inference-holtwinters (2026-09-15): the Holt-Winters fit, its
+    # decomposition and BFGS, and the ARIMA fit.
+    "forecast": ("holtwinters_fit", "oracle_fit", "holtwinters_validate_params", "host_r1qt",
+                 "arima_fit", "oracle_eval"),
 }
 
 
@@ -263,6 +267,8 @@ def test_inference_routes_ship_and_carry_no_fit():
     routes = host_surface.inference_routes()
     assert routes == {
         "_mojolearn_arima": "_mojolearn_forecast_host",
+        # lane/inference-holtwinters (2026-09-15)
+        "_mojolearn_tsa": "_mojolearn_forecast_host",
         # lane/inference-embedding-ivf-cholesky (2026-09-15)
         "_mojolearn_ivf": "_mojolearn_ivf_search_host",
         "_mojolearn_embedding": "_mojolearn_embedding_infer_host",
@@ -277,9 +283,16 @@ def test_inference_routes_ship_and_carry_no_fit():
         name = binding[len("_mojolearn_"):-len("_host")]
         exported = _exports_in_source(name)
         assert not [e for e in exported if e.endswith("_fit")], f"{binding} registers a fit: {exported}"
-        ref_exports = set(host_surface.family(reference[len("_mojolearn_"):-len("_host")])["exports"])
+        # One inference binding may serve several routes (forecast serves
+        # ARIMA and Holt-Winters): every name it registers is a name of one
+        # of the reference bindings of the routes it serves.
+        ref_exports = set()
+        for other, b in routes.items():
+            if b == binding:
+                ref = host_surface.routed_modules()[other]
+                ref_exports |= set(host_surface.family(ref[len("_mojolearn_"):-len("_host")])["exports"])
         served = [e for e in exported if not e.startswith(name + "_host_")]
-        assert set(served) <= ref_exports, f"{binding} registers names its reference binding does not"
+        assert set(served) <= ref_exports, f"{binding} registers names its reference bindings do not"
 
 
 def test_workflow_reads_the_manifest_not_literals():

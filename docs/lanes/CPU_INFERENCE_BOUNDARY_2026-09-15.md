@@ -120,3 +120,16 @@ change. Earlier full hosted run 34978769155 passed on all three CPU hosts.
 - Holt-Winters saved-model inference waits for the line search change to its fit, which moves
   its fitted parameters and hashes.
 - Evidence: bench/results/identity_break/2026-09-15_inference-forecast-umap-pca/README.md.
+
+## Holt-Winters saved-model inference (lane/inference-holtwinters, 2026-09-15)
+
+- The line search change it waited for merged (e31994918, DEVIATION 2717) and moved no cell of the
+  identity_break fixtures. Saved Holt-Winters models (`ExponentialSmoothing.save`/`load`, format
+  `mojolearn-holtwinters-1`) forecast and predict in sample on a CPU with no GPU through the
+  shipped forecast family, which now also registers `holtwinters_forecast` and
+  `holtwinters_predict` from `bindings/holtwinters_host_predict.mojo` and serves the
+  `_mojolearn_tsa` route when the reference tsa binding is not built. The arithmetic,
+  `holtwinters/host/hw_predict.mojo`, imports only `checks/numerics.mojo`.
+- The in-sample prediction is NaN before `2 * seasonal_periods`: those steps read the
+  decomposition's start state, which neither the GPU fit nor the saved file keeps.
+- Evidence: bench/results/identity_break/2026-09-15_inference-holtwinters/README.md.

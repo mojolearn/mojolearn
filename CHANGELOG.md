@@ -10,6 +10,18 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- Public CPU inference from a saved Holt-Winters model (lane/inference-holtwinters, for 0.8.7).
+  `ExponentialSmoothing` gains `save` and `load` (format `mojolearn-holtwinters-1`) and
+  `predict(start, end)`, the in-sample one-step predictions (NaN before `2 * seasonal_periods`,
+  whose prediction reads the decomposition's start state the fit does not keep) and the forecast
+  beyond `n`, so `predict(n, n + h)` is `forecast(h)` byte for byte. The shipped forecast host
+  binding now registers `holtwinters_forecast` and `holtwinters_predict` from
+  `bindings/holtwinters_host_predict.mojo` over `holtwinters/host/hw_predict.mojo`, and no fit,
+  decomposition or line search; it serves the `_mojolearn_tsa` route on a CPU-only install and
+  `mojolearn.host_model` binds a saved model to it on any machine. The reference tsa host
+  binding registers both from the same source, and `hw_oracle.mojo::oracle_forecast` forecasts
+  through the same body. Evidence: bench/results/identity_break/2026-09-15_inference-holtwinters.
+
 - Public CPU inference from a saved model for `GaussianProcessRegressor` (every kernel the fit
   accepts, `normalize_y` included), `GaussianProcessClassifier` (binary and one-vs-rest) and
   `GaussianMixture.sample` (lane/inference-neighbors-density). `GaussianProcessRegressor` gains

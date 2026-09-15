@@ -398,7 +398,7 @@ byte LM's. Each also builds from source through
 | embedding_infer | `_mojolearn_embedding_infer_host.so` | `_mojolearn_embedding` when its reference binding is not built | no | Embedding (embedding) | tools/classical_host_gate.py and tools/identity_break.py | yes |
 | ivf | `_mojolearn_ivf_host.so` | `_mojolearn_ivf` | ivf, ivf-euclidean, ivf-extend | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_ivf_host.sh` |
 | ivf_search | `_mojolearn_ivf_search_host.so` | `_mojolearn_ivf` when its reference binding is not built | no | IVFIndex (ivf, ivf-euclidean, ivf-extend) | tools/classical_host_gate.py and tools/identity_break.py | yes |
-| forecast | `_mojolearn_forecast_host.so` | `_mojolearn_arima` when its reference binding is not built | no | ARIMA (arima, arima-011, arima-seasonal-c) | tools/classical_host_gate.py and tools/identity_break.py | yes |
+| forecast | `_mojolearn_forecast_host.so` | `_mojolearn_arima`, `_mojolearn_tsa` when its reference binding is not built | no | ARIMA, ExponentialSmoothing (arima, arima-011, arima-seasonal-c, holtwinters, holtwinters-multiplicative) | tools/classical_host_gate.py and tools/identity_break.py | yes |
 | transformer | `_mojolearn_transformer_host.so` | `_mojolearn_transformer` | transformer, transformer-window | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_transformer_host.sh` |<!--/fact-->
 
 ## The import question, measured
