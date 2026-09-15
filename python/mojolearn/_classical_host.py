@@ -59,7 +59,7 @@ import hashlib
 
 from . import _backend, _serialize
 from ._iforest_impl import IsolationForest, _IFOREST_FORMAT
-from ._arima_impl import ARIMA, _ARIMA_FORMAT
+from ._arima_impl import ARIMA, _ARIMA_FORMAT, _ARIMA_FORMAT_EXOG
 from ._tsa_impl import ExponentialSmoothing, _HW_FORMAT
 from ._cholesky_impl import _CHOLESKY_FORMAT, HostCholesky
 from ._ivf_impl import IVFIndex, _IVF_FORMAT
@@ -425,6 +425,9 @@ class HostEmbedding(_HostBound, Embedding):
 #: member names another class is refused by that class's own `load`.
 _FORMATS = {
     _ARIMA_FORMAT: {"ARIMA": HostARIMA},
+    # lane/arima-exog (2026-09-15): the same host class serves a model fitted
+    # WITH regressors; `ARIMA.load` reads either tag and the file says which.
+    _ARIMA_FORMAT_EXOG: {"ARIMA": HostARIMA},
     _HW_FORMAT: {"ExponentialSmoothing": HostExponentialSmoothing},
     _UMAP_FORMAT: {"UMAP": HostUMAP},
     _SPECTRAL_FORMAT: {"SpectralClustering": HostSpectralClustering},
