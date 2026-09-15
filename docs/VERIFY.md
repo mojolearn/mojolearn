@@ -82,6 +82,24 @@ The command prints a table per family and a verdict.
 | `--json` | one JSON report on stdout, progress on stderr |
 | `--reference-table PATH` | compare against another table |
 
+## How long it takes
+
+The fixtures are the harness's own sizes (20,000 rows), which the records
+were written at; they are not reduced for this command, because a smaller
+fixture would hash different bytes.
+
+| install | `--quick` | `--full` |
+|---|---|---|
+| CPU-only, Apple M4, one core | 2 s | 7 s (8 lanes, 9 fixtures, 4 models) |
+| CPU-only, x86 Linux (AMD EPYC, 8 vCPU) | 2 s | 6 to 12 s |
+| Metal, Apple M4 | 12 s (26 lanes, base fixture) | more than an hour (about 180 lanes x 9 fixtures) |
+
+On a GPU install `--full` holds the GPU for the whole run: spectral
+clustering, HDBSCAN, the byte-level language model and the multi-class
+boosting lanes take 40 to 140 s each on the M4. On a shared GPU run it in
+pieces, `--lanes a,b,...` a group at a time, or check one area with
+`--lanes` and `--fixtures base`. `--quick` is the few-seconds check.
+
 ## Exit codes
 
 | exit | meaning |
