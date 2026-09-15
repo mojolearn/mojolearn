@@ -1,0 +1,16 @@
+started=2026-09-15T01:02:51Z commit=e520c8f49d6330ba832dfefcb552805cc733644d
+vendor=amd arch=gfx942
+build: built python/mojolearn/identical/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+build_rf: built python/mojolearn/identical/_mojolearn_rf.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+build_trees: built python/mojolearn/identical/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+build_mixture: built python/mojolearn/identical/_mojolearn_mixture.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+build_resample: built python/mojolearn/identical/_mojolearn_resample.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+build_hdbscan: built python/mojolearn/identical/_mojolearn_hdbscan.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)
+builds: 6 identical bindings
+one exit=0 finished=01:07:57Z
+two exit=0
+diff exit=0
+summary: IDENTICAL=81
+summary (infer/model): IDENTICAL=72, N/A=90
+summary (batch): IDENTICAL=45, N/A=36
+finished=2026-09-15T01:30:40Z

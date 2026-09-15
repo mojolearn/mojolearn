@@ -810,8 +810,15 @@ and the Cholesky driver; `transform_rbf_sampler` splits query rows across
 one-device workers. Designs: [cholesky.md](cholesky.md) and
 [kernel_methods.md](kernel_methods.md). The column solve is staged through host
 memory: its device-to-device form diverged on two MI300X for factors above
-1 MiB, in the columns owned by device 1, with the cause not identified
-(`bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/`). Final receipts on
+1 MiB, in the columns owned by device 1
+(`bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/`), because a
+kernel on those SR-IOV MI300X can read the target memory's previous contents
+after the copy and a drain of both contexts, a platform behavior two H100s
+never show (`bench/results/multi_gpu/2026-09-15/peer-copy-mi300x/`). The same
+audit found the byte-LM replica pools reading wrong on two MI300X at 2.1
+million parameters; their cross-device copies are now staged through host
+memory on AMD by `core/multi_gpu.mojo::transfer_bytes`
+(`bench/results/multi_gpu/2026-09-15/transport-audit/`). Final receipts on
 two H100s and two MI300X at one commit
 (`bench/results/multi_gpu/2026-09-15/kernel-methods-cholesky-final/`) pass the
 native and public gates, fail under sabotage builds, and are equal across the

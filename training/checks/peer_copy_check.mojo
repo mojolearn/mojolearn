@@ -13,7 +13,20 @@ MI300X for n >= 513 (bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/),
 rebuilt here outside the estimator so one variant at a time can be moved
 toward the host-staged form. Every variant's forward substitution is compared
 bit for bit with the one-device forward substitution of the same factor and
-right-hand sides. The variants are named in `variant_name`.
+right-hand sides. The variants are named in `variant_name`. On two RunPod
+MI300X, `l_first` at n=513 fails in almost every run and the host-staged,
+waited, read-back and chunked variants never do; two H100s never fail
+(bench/results/multi_gpu/2026-09-15/peer-copy-mi300x/).
+
+Part 3 (PEERRACE). Bare copies into targets in several states, each read by a
+device-1 kernel at once. No case has failed on either vendor, which is why
+the repro is PEERSOLVE and not a bare copy.
+
+MOJOLEARN_PEERCOPY_SKIP_BARE=1 skips part 1, MOJOLEARN_PEERCOPY_SKIP_SOLVE=1
+the single PEERSOLVE pass, MOJOLEARN_PEERCOPY_TRIALS sets the PEERRACE trials
+(and half as many PEERSOLVE-REPEAT rounds), and
+MOJOLEARN_PEERCOPY_ENABLE_PEER=1 calls max.driver.enable_all_peer_access()
+first (run the binary under `pixi run` so the Python import resolves).
 """
 from std.os import getenv, setenv
 from std.python import Python

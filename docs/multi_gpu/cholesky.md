@@ -41,7 +41,12 @@ positions after each stage. The factor, the columns and the results move
 through host memory and each owner's own context, not device to device: the
 device-to-device form diverged on two MI300X for every factor above 1 MiB, in
 the columns owned by device 1 (`bench/results/multi_gpu/2026-09-14/
-cholesky-mi300x-diag/`); the cause is not identified. The `chol.solve.forward` and `chol.solve.back`
+cholesky-mi300x-diag/`). The cause is a platform behavior, not this code: on
+those SR-IOV MI300X a kernel on the target device, launched after the copy and
+`synchronize()` on both contexts, can read the previous contents of the
+target memory (`bench/results/multi_gpu/2026-09-15/peer-copy-mi300x/`; the
+repro is `training/checks/peer_copy_check.mojo`, PEERSOLVE `l_first` at
+n=513). Two H100s never show it. The `chol.solve.forward` and `chol.solve.back`
 card stages are recorded on the root after each gather, so a traced
 multi-device solve writes the same card.
 
