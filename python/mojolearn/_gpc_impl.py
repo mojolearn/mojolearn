@@ -297,7 +297,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         l_out = empty((n_rows * n_rows,), "<f4")
         pi = empty((n_rows,), "<f4")
         wsr = empty((n_rows,), "<f4")
-        # lml, n_iter, nb -- in that order.
+        # lml, n_iter, nb, in that order.
         scalars = empty((3,), "<f8")
         # Every array addressed below is bound to a local of this frame.
         n_iter = ext.gpc_fit(

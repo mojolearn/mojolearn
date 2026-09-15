@@ -783,7 +783,7 @@ def _gpc_fit_run(
     for i in range(n_train):
         pp.unsafe_store(i, fit.pi[i])
         wp.unsafe_store(i, fit.wsr[i])
-    # lml, n_iter, nb -- each widens to float64 exactly.
+    # lml, n_iter, nb, in that order; each widens to float64 exactly.
     sp.unsafe_store(0, Float64(fit.lml))
     sp.unsafe_store(1, Float64(fit.n_iter))
     sp.unsafe_store(2, Float64(fit.nb))
