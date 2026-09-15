@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/root/mojolearn/python/mojolearn/tests/test_cpu_training_gp.py", line 167, in <module>
+    globals()[name]()
+    ~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/tests/test_cpu_training_gp.py", line 82, in test_binding_registers_the_gpu_names
+    assert sentence in src and sentence in gpu, sentence
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: addrs must contain 12 addresses

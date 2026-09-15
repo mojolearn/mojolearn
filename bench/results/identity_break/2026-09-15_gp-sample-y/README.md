@@ -102,6 +102,42 @@ The macOS log showed no GPU reset, hang or fault entry in that window. These
 runs are kept as a record and are not evidence for or against any cell. A
 Metal rerun of the seven lanes at the merge, on a healthy device, is owed.
 
+## Confirmation after the third merge (`x86-runpod-merge3/`)
+
+Main advanced again while this lane was pushing, with
+lane/inference-neighbors-density's saved-model CPU inference for the
+Gaussian process. The merge is b5f80106d. Its one conflict was in the gp host
+binding: main moved the predict entries into `bindings/gp_host_predict.mojo`,
+so the old copies were dropped and `gpr_sample_y_binding` was kept. Main
+changed no GPU binding and no Metal arithmetic, so the Metal column above
+stands for this merge.
+
+The confirming CPU pod was `2bk1un0lx0xjwh`, deleted and verified gone,
+114 s, $0.0089.
+
+- All six builds (gp, preprocessing and core, production and sabotage)
+  return 0.
+- The CPU column reads 63 of 63 STABLE with 0 moved and 0 refused, infer 63,
+  and batch 45 with 18 n/a.
+- Against the committed CPU column (607d79794) and against the Metal column,
+  it reads IDENTICAL=63 train, 63 infer and 45 batch. The 63 model parts read
+  ONE-COLUMN: main's new save and load give the GP a model part that the
+  older columns do not carry. That is new coverage, not a moved value.
+- With the 166-lane record, `--require-columns 4` is OK. It reads
+  IDENTICAL=36 on the recorded gp cells and OWED=126: the 63 parts above plus
+  the 63 new model parts.
+- `owed_check.txt` reads "owed verdict OK (126 of 126 owed cell part(s)
+  moved, 0 failure(s))". The new lanes read DIVERGENT=18 train and 36 infer
+  and model under host sabotage.
+- test_gp_sample_y is GREEN with 18 checks and test_gp_normalize_y passes.
+
+test_cpu_training_gp failed on this pod, and it fails on origin/main too.
+Main's gp host binding has lacked the `gpr_predict` contract sentences since
+the predict entries moved, and main's test file is byte for byte the merged
+tree's. This lane changes the test to read `bindings/gp_host_predict.mojo`
+with the binding. It then passes 6 on the M4, where it had failed on the
+unfixed tree.
+
 ## Owed
 
 - The NVIDIA and AMD cells of `gp-sample-y` and `gp-sample-y-normalize`, to
