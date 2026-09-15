@@ -74,6 +74,8 @@ on:
       - "extratrees/impl/randomforest/randomforest.mojo"
       - "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
       - "python/mojolearn/_labels.py"
+      - "python/mojolearn/model_selection.py"
+      - "python/mojolearn/_identity.py"
       - "training/byte_lm_host.mojo"
       - "training/byte_lm_host_backward.mojo"
       - "python/mojolearn/_backend.py"
@@ -291,9 +293,12 @@ jobs:
             echo "CLASSICAL_RECORDED=$(python3 $manifest --classical-recorded)"
             echo "CLASSICAL_GPU_COLUMNS=$(python3 $manifest --classical-gpu-columns)"
             echo "GPU_COLUMNS=$(python3 $manifest --training-gpu-columns)"
+            echo "RECORD_COVERED_LANES=$(python3 $manifest --record-covered-lanes)"
+            echo "FIX_COVERED_LANES=$(python3 $manifest --fix-covered-lanes)"
+            echo "FIX_COLUMNS=$(python3 $manifest --training-fix-columns)"
           } | tee -a "$GITHUB_ENV" | tee "$GATE_OUT/manifest.txt"
           python3 $manifest --json > "$GATE_OUT/host_surface.json"
-          for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns); do
+          for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns) $(python3 $manifest --training-fix-columns); do
             [ -e "$d" ] || { echo "manifest names $d, which is not in this checkout: the record lags the surface" >&2; exit 1; }
           done
 
@@ -496,7 +501,11 @@ jobs:
             --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_smoke_check.log"
 
       # THE FOURTH COLUMN, THE COVERED LANES. Every fixture, two repeats, then
-      # the four-way diff with --require-columns 4 on exactly those lanes.
+      # the four-way diff with --require-columns 4 on exactly those lanes:
+      # RECORD_COVERED_LANES against GPU_COLUMNS, and FIX_COVERED_LANES (the
+      # covered lanes whose record cells predate a fix on every column,
+      # kmeans-sqrt) against FIX_COLUMNS, the same boxes after the fix
+      # (python/mojolearn/host_surface.py, TRAINING_FIX_LANES).
       # Empty COVERED_LANES runs nothing and says so; that is a statement about
       # phase 1, not a pass.
       - name: The CPU column, covered lanes (every fixture)
@@ -514,7 +523,11 @@ jobs:
             --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" \
             --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_column_check.log"
           python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
-            --require-columns 4 --lanes "$COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
+            --require-columns 4 --lanes "$RECORD_COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
+          if [ -n "$FIX_COVERED_LANES" ]; then
+            python3 tools/identity_break.py --diff $FIX_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
+              --require-columns 4 --lanes "$FIX_COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns_fix.txt"
+          fi
 
       # The covered lanes' negative control (brief section 3.4). A gate that
       # cannot fail proves nothing, so the whole host set is built again with
@@ -584,11 +597,19 @@ jobs:
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
             --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
           if python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
-               --require-columns 4 --lanes "$COVERED_LANES" > "$GATE_OUT/diff_four_columns_sab.txt" 2>&1; then
+               --require-columns 4 --lanes "$RECORD_COVERED_LANES" > "$GATE_OUT/diff_four_columns_sab.txt" 2>&1; then
             echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the GPU columns" >&2
             exit 1
           fi
           grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_sab.txt"
+          if [ -n "$FIX_COVERED_LANES" ]; then
+            if python3 tools/identity_break.py --diff $FIX_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
+                 --require-columns 4 --lanes "$FIX_COVERED_LANES" > "$GATE_OUT/diff_four_columns_fix_sab.txt" 2>&1; then
+              echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the fix columns on $FIX_COVERED_LANES" >&2
+              exit 1
+            fi
+            grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_fix_sab.txt"
+          fi
           echo "sabotage caught on the covered lanes"
 
       # The same sabotage host set (built by the step above into host-sab)

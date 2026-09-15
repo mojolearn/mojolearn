@@ -98,6 +98,7 @@ from bindings.host_helpers import (
     column_mean_f64_binding,
     gather_f64_binding,
     gather_i64_binding,
+    gather_rows_bytes_binding,
     scale_rows_f32_binding,
 )
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
@@ -997,6 +998,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[all_finite_f64_binding]("all_finite_f64")
         module.def_function[gather_i64_binding]("gather_i64")
         module.def_function[gather_f64_binding]("gather_f64")
+        module.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         module.def_function[column_mean_f64_binding]("column_mean_f64")
