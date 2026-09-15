@@ -147,38 +147,37 @@ lock directory `/tmp/mojolearn-metal-slot` does not survive the restart, which i
 
 ## Linux wheel packed, audited and in R2 (2026-09-15 19:12)
 
-Packed from the three db9047b9f sets and proofs with  at release tip
-76d6e8a8a (, , ,
-, ).
+Packed from the three db9047b9f sets and proofs with `--profile release-linux3` at release tip
+76d6e8a8a. Logs in `~/mojolearn-evidence/release-0.8.6/linux-wheel/`: `pack.log`, `audit.log`,
+`strip.log`, `content-audit-both.txt`.
 
--  packed: 15 of 15 host bindings carried once,
-  byte-identical across the three legs; payload  db9047b9f, 
+- `dist/mojolearn-0.8.6-py3-none-linux_x86_64.whl` packed: 15 of 15 host bindings carried once,
+  byte-identical across the three legs; payload `source_commit` db9047b9f, `post_record_files`
   empty, 87 extensions, identity COMMIT witness db9047b9f.
-- : auditwheel repaired to manylinux_2_35_x86_64, PASSED,  entries 0.
-- : 214 files unchanged, receipt .
-- **Final Linux wheel** ,
-  sha256 , 70,862,796 bytes,
+- `audit.sh`: auditwheel repaired to manylinux_2_35_x86_64, PASSED, `mojolearn.libs` entries 0.
+- `strip_wheel_dir_entries.py`: 214 files unchanged, receipt `dist/final/dir-entry-strip.json`.
+- **Final Linux wheel** `dist/final/mojolearn-0.8.6-py3-none-manylinux_2_35_x86_64.whl`,
+  sha256 `7cab1aa3cfcde2f82123ce465410cc1b2d7d971dc4f46cc11084fb78b5cd7ecf`, 70,862,796 bytes,
   214 members, 15 host bindings, 4 identity column files.
 - Content audit PASSED on the final Linux wheel and the macOS wheel: NOTICE byte-equal to the
   release branch NOTICE with no "used under license", no GPT-2 table, fixture or vocabulary,
-  no vendored environment,  imports and declares its bindings.
-- In R2 at  (uploaded in 7 s,
-  round-trip sha256 matched). Record legs fetch it with a presigned GET minted by
-  .
+  no vendored environment, `host_surface.py` imports and declares its bindings.
+- In R2 at `releases/0.8.6/mojolearn-0.8.6-py3-none-manylinux_2_35_x86_64.whl` (uploaded in 7 s
+  at about 10 MB/s, round-trip sha256 matched). Record legs fetch it with a presigned GET minted
+  by `scripts/make_record_body.sh`, whose key and sha256 are in `linux-wheel/r2-key.txt` and
+  `linux-wheel/r2-sha256.txt`.
 
 ## Pending steps, in order
 
 1. DONE: byte compare of the 15 host bindings across the three Linux sets at db9047b9f
    (checklist 2b), 15 of 15 identical.
 2. DONE: all three Linux sets are home; no rental is owed before packing.
-3. Pack on the Mac: `packaging/linux/pack_wheel.py --profile release-linux3` with the three
-   sets and proofs, then `packaging/linux/audit.sh` (Docker Desktop must be running) and
-   `tools/strip_wheel_dir_entries.py`.
-4. `tools/release_wheel_content_audit.py <linux wheel> <macos wheel>`: NOTICE equals the
-   release branch NOTICE (copyright, Apache line, Modular trademark sentence, Modular
-   components section, no "used under license"), no GPT-2 data, no vendored environment,
-   `host_surface.py` imports.
-5. Put the Linux wheel in R2 (`tools/dataset_store.sh presign-put`, measured 2.3 MB/s).
+3. DONE: packed with `pack_wheel.py --profile release-linux3`, repaired by
+   `packaging/linux/audit.sh` (Docker) and stripped by `tools/strip_wheel_dir_entries.py`
+   (see the section above).
+4. DONE for both wheels with `tools/release_wheel_content_audit.py`; rerun it on the FINAL
+   wheels after the record repack, since the record changes package data in both.
+5. DONE: the final Linux wheel is in R2 (see the section above).
 6. Record legs from the installed Linux wheel, AMD first, then NVIDIA (one device each,
    one identity process per GPU, 60-minute cap per leg, parts merged with
    `identity_break.py --merge`): body template `scripts/record_body.template.sh`, filled by
