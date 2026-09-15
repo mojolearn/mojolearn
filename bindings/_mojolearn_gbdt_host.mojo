@@ -92,6 +92,7 @@ from gbdt.host.gbdt_oracle_losses import (
     GBDT_OBJ_EXPECTILE,
     GBDT_OBJ_HUBER,
     GBDT_OBJ_LOGLINQUANTILE,
+    GBDT_OBJ_LOGLOSS,
     GBDT_OBJ_LQ,
     GBDT_OBJ_MAE,
     GBDT_OBJ_MAPE,
@@ -107,6 +108,7 @@ from gbdt.host.gbdt_oracle_rmse import (
 )
 from gbdt.host.gbdt_oracle_depthwise import (
     GBDT_HOST_GROW_LOSSGUIDE,
+    GBDT_HOST_SCORE_NEWTON_COSINE,
     GBDT_HOST_SCORE_NEWTON_L2,
     GbdtHostTreeParams,
     gbdt_host_fit_non_symmetric,
@@ -308,7 +310,7 @@ def _resolve_pointwise_loss(
         boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
     return GbdtHostLoss(
         objective, kernel_alpha, estimator_alpha, method, iterations,
-        boot_kind, boot_param,
+        boot_kind, boot_param, Float32(0.5),
     )
 
 
@@ -446,26 +448,32 @@ def gbdt_fit_binding(
         _refuse("use_pointwise_searcher=True")
     # the score function each covered lane runs: Cosine under SymmetricTree
     # and Depthwise, NewtonL2 under Lossguide (the policy defaults)
+    # and NewtonCosine under Lossguide (gbdt-lossguide-newtoncosine), where
+    # the searcher knobs of that lane are restated as well
+    var lossguide_knobs = grow_code == GBDT_HOST_GROW_LOSSGUIDE and loss == String("Logloss")
     if grow_code == GBDT_HOST_GROW_LOSSGUIDE:
-        if score_function != GBDT_HOST_SCORE_NEWTON_L2:
-            _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2)")
+        if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
+            _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2 and NewtonCosine)")
     elif score_function != GBDT_HOST_SCORE_COSINE:
         _refuse("score_function code " + String(score_function) + " (only Cosine)")
-    if grow_code != 0:
+    if grow_code == 1:
         if min_split_gain >= 0:
-            _refuse("min_split_gain=" + String(min_split_gain))
+            _refuse("min_split_gain=" + String(min_split_gain) + " under Depthwise")
         if min_child_hessian >= 0:
-            _refuse("min_child_hessian=" + String(min_child_hessian))
+            _refuse("min_child_hessian=" + String(min_child_hessian) + " under Depthwise")
         if min_data_in_leaf != 1:
-            _refuse("min_data_in_leaf=" + String(min_data_in_leaf) + " under Depthwise or Lossguide")
-    if not is_pointwise and leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON:
-        _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton)")
+            _refuse("min_data_in_leaf=" + String(min_data_in_leaf) + " under Depthwise")
+    var leaf_gradient_ok = lossguide_knobs and leaf_method == GBDT_LEAF_GRADIENT
+    if not is_pointwise and leaf_method != -1 and leaf_method != GBDT_HOST_LEAF_NEWTON and not leaf_gradient_ok:
+        _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton, or Gradient under Lossguide)")
     if is_pointwise and leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (Gradient, Newton or Exact)")
     if bootstrap_type != String("") and bootstrap_type != String("No"):
-        if not is_pointwise or (
-            bootstrap_type != String("Poisson") and bootstrap_type != String("Bernoulli")
-        ):
+        var pw_boot = is_pointwise and (
+            bootstrap_type == String("Poisson") or bootstrap_type == String("Bernoulli")
+        )
+        var lg_boot = lossguide_knobs and bootstrap_type == String("Bernoulli")
+        if not pw_boot and not lg_boot:
             _refuse("bootstrap_type='" + bootstrap_type + "' under loss='" + loss + "'")
     if n_weights != 0:
         _refuse("sample_weight")
@@ -477,12 +485,14 @@ def gbdt_fit_binding(
         _refuse("eval_set")
     if od_type.byte_length() > 0 or od_pvalue >= 0.0 or od_wait >= 0:
         _refuse("the overfitting detector (od_type, od_pvalue, od_wait)")
-    if random_strength != Float32(0.0):
-        _refuse("random_strength=" + String(random_strength))
+    if random_strength != Float32(0.0) and not lossguide_knobs:
+        _refuse("random_strength=" + String(random_strength) + " outside Lossguide with Logloss")
     if boost_from_average == 1 and not is_rmse:
         _refuse("boost_from_average=True")
-    if feature_fraction != 1.0:
-        _refuse("feature_fraction=" + String(feature_fraction))
+    if feature_fraction != 1.0 and not lossguide_knobs:
+        _refuse("feature_fraction=" + String(feature_fraction) + " outside Lossguide with Logloss")
+    if not (feature_fraction > 0.0) or feature_fraction > 1.0:
+        raise Error("feature_fraction must be finite and in (0, 1]")
     if border_count < 1 or border_count > 255:
         _refuse("border_count=" + String(border_count) + " (1 to 255)")
     if max_depth < 0 or max_depth > GBDT_HOST_MAX_DEPTH:
@@ -498,15 +508,23 @@ def gbdt_fit_binding(
             "min_child_hessian must be -1 (disabled) or finite nonnegative"
             " and <= Float32.MAX_FINITE"
         )
-    if min_child_hessian >= 0:
+    if min_child_hessian >= 0 and grow_code == 0:
         raise Error("min_child_hessian requires Depthwise or Lossguide")
+    if min_child_hessian >= 0 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE and score_function != GBDT_HOST_SCORE_NEWTON_L2:
+        raise Error("min_child_hessian requires NewtonL2 or NewtonCosine; first-order scores store weights, not Hessians")
+    # `child_hessian_threshold`'s round-up (`child_hessian.mojo:17-25`)
+    var child_hessian = Float32(-1.0)
+    if min_child_hessian >= 0:
+        child_hessian = Float32(min_child_hessian)
+        if Float64(child_hessian) < min_child_hessian:
+            child_hessian = bitcast[DType.float32](bitcast[DType.uint32](child_hessian) + UInt32(1))
     if not isfinite(min_split_gain) or (
         min_split_gain < 0 and min_split_gain != -1
     ):
         raise Error("min_split_gain must be -1 (disabled) or finite and nonnegative")
-    if min_split_gain >= 0:
+    if min_split_gain >= 0 and grow_code == 0:
         raise Error("min_split_gain requires Depthwise or Lossguide")
-    if min_data_in_leaf != 1:
+    if min_data_in_leaf != 1 and grow_code == 0:
         raise Error(
             "min_data_in_leaf=" + String(min_data_in_leaf) + " does nothing"
             " under grow_policy=SymmetricTree: CatBoost guards its leaf-size"
@@ -591,7 +609,25 @@ def gbdt_fit_binding(
         border_count, border_build_max_samples, n_estimators, max_depth,
         learning_rate, l2_leaf_reg, random_seed, nan_mode, border, iterations,
     )
-    var pw_loss = GbdtHostLoss(-1, Float32(0), Float32(0), -1, -1, -1, Float32(0))
+    var pw_loss = GbdtHostLoss(-1, Float32(0), Float32(0), -1, -1, -1, Float32(0), border)
+    # the non-symmetric fit's estimator and bootstrap: Logloss, Newton at the
+    # resolved count or Gradient at 40 unless overridden
+    # (`catboost_options.mojo:1304-1308`), Bernoulli at `subsample` or 0.66
+    var ns_method = GBDT_LEAF_NEWTON
+    var ns_iterations = iterations
+    if leaf_method == GBDT_LEAF_GRADIENT:
+        ns_method = GBDT_LEAF_GRADIENT
+        ns_iterations = leaf_iterations if leaf_iterations >= 0 else 40
+    var ns_boot = -1
+    var ns_boot_param = Float32(0.0)
+    if bootstrap_type == String("Bernoulli"):
+        ns_boot = GBDT_BOOT_BERNOULLI
+        var subsample = Float32(Float64(py=params[19]))
+        ns_boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    var ns_loss = GbdtHostLoss(
+        GBDT_OBJ_LOGLOSS, border, Float32(0.5), ns_method, ns_iterations,
+        ns_boot, ns_boot_param, border,
+    )
     if is_pointwise:
         pw_loss = _resolve_pointwise_loss(
             pw_objective, loss,
@@ -653,7 +689,8 @@ def gbdt_fit_binding(
             # Depthwise and Lossguide: gbdt/host/gbdt_oracle_depthwise.mojo
             var tp = GbdtHostTreeParams(
                 p, grow_code, ns_max_leaves, Float64(min_data_in_leaf),
-                score_function,
+                score_function, child_hessian, min_split_gain,
+                random_strength, feature_fraction, ns_loss,
             )
             var ns_model = gbdt_host_fit_non_symmetric(x, y, n_rows, n_features, tp)
             text = gbdt_host_ns_model_text(ns_model)

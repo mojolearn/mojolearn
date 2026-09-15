@@ -158,6 +158,8 @@ struct GbdtHostLoss(ImplicitlyCopyable, Movable):
     var iterations: Int
     var bootstrap_kind: Int
     var bootstrap_param: Float32
+    #: Logloss's target border (`GetLogLossBorder`); unread by the others
+    var border: Float32
 
 
 # ===========================================================================
@@ -291,16 +293,19 @@ struct _LossRow(ImplicitlyCopyable, Movable):
 
 def _loss_row(objective: Int, t: Float32, p: Float32, alpha: Float32) -> _LossRow:
     """One in-range thread of the kernel the objective reaches, unit weight:
-    `pointwise_target_kernel` (`:553-663`) or, for CrossEntropy,
-    `cross_entropy_kernel[has_border=False]` (`:947-1054`)."""
+    `pointwise_target_kernel` (`:553-663`) or, for CrossEntropy and Logloss,
+    `cross_entropy_kernel[has_border]` (`:947-1054`; `alpha` carries
+    Logloss's border)."""
     var weight = Float32(1.0)
-    if objective == GBDT_OBJ_CROSSENTROPY:
+    if objective == GBDT_OBJ_CROSSENTROPY or objective == GBDT_OBJ_LOGLOSS:
         var exp_val = identical_exp(p)
         var prob = Float32(1.0)
         if isfinite(exp_val):
             prob = exp_val / (Float32(1.0) + exp_val)
         prob = max(min(prob, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
         var c = t
+        if objective == GBDT_OBJ_LOGLOSS:
+            c = Float32(1.0) if t > alpha else Float32(0.0)
         var direction = ftz(c - prob)
         var scale = ftz(prob * (Float32(1.0) - prob))
         var log_exp_val_plus_one = p

@@ -105,8 +105,12 @@ and therefore every later tree's structure and every prediction move.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the two lanes is the measurement.
 """
+from std.math import exp, log, sqrt
+from std.memory import bitcast
+
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
@@ -135,6 +139,14 @@ from gbdt.host.gbdt_oracle import (
     gbdt_f64_token,
     gbdt_host_grid,
 )
+from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
+from gbdt.host.gbdt_oracle_losses import (
+    GBDT_LEAF_NEWTON,
+    GbdtHostLoss,
+    _bootstrap_pass,
+    _estimate_leaves_for_loss,
+    gbdt_bootstrap_seeds,
+)
 from gbdt.host.gbdt_oracle_lossguide import (
     add_leaf_l2,
     logloss_search_pass_newton,
@@ -158,6 +170,7 @@ comptime GBDT_HOST_GROW_LOSSGUIDE = 2
 #: (`catboost_options.mojo:130-131`).
 comptime GBDT_HOST_SCORE_COSINE_NS = 1
 comptime GBDT_HOST_SCORE_NEWTON_L2 = 2
+comptime GBDT_HOST_SCORE_NEWTON_COSINE = 3
 #: `LEAFWISE_SCORE_BLOCK_SIZE` (`kernel/compute_scores.mojo:342`).
 comptime GBDT_LEAFWISE_BLOCK = 256
 #: `ESplitValue` (`gbdt/methods/helpers.mojo:110-111`).
@@ -177,6 +190,16 @@ struct GbdtHostTreeParams(ImplicitlyCopyable, Movable):
     var max_leaves: Int
     var min_leaf_size: Float64
     var score_function: Int
+    #: `child_hessian_threshold` (`gbdt/options/child_hessian.mojo:8-25`),
+    #: -1 disabled
+    var min_child_hessian: Float32
+    #: `min_split_gain`, -1 disabled
+    var min_split_gain: Float64
+    #: the user's `random_strength` (the fit multiplies it per tree)
+    var random_strength: Float32
+    var feature_fraction: Float64
+    #: the leaf estimator and the bootstrap (`gbdt_oracle_losses.mojo`)
+    var loss: GbdtHostLoss
 
 
 @fieldwise_init
@@ -263,11 +286,18 @@ def _leafwise_gain(
     bin_feature_id: Int,
     lambda_l2: Float32,
     cosine: Bool,
+    min_child_hessian: Float32,
+    score_std_dev: Float32,
+    level_seed: UInt64,
+    feature_id: Int,
+    mut rejected: Bool,
 ) -> Float32:
     """One candidate of `_leafwise_scan_part` (`compute_scores.mojo:396-494`)
-    at stat count 2, no noise, no multiclass, `min_child_hessian` disabled,
-    feature weight 1.0: the calcer over (left, right) and over the parent,
-    the Cosine normalization, the zero-part rule, the gain."""
+    at stat count 2, no multiclass, feature weight 1.0: the child-Hessian
+    rejection (`rejected`, the candidate is not scored), the calcer over
+    (left, right) and over the parent, the Cosine normalization, the noise
+    draw per feature (`advance_seed_k(seed + feature, 4)`, one normal, the
+    pinned mul-add on both scores), the zero-part rule, the gain."""
     var score = Float32(0.0)
     var denum_sqr = Float32(1e-10)
     var score_b = Float32(0.0)
@@ -276,6 +306,15 @@ def _leafwise_gain(
     var part_weight = part_stats[leaf * 2]
     var weight_left = max(hist[leaf_base + bin_feature_id], Float32(0.0))
     var weight_right = ftz(max(part_weight - weight_left, Float32(0.0)))
+    rejected = False
+    if min_child_hessian >= Float32(0.0):
+        # `child_hessian_below` (`compute_scores.mojo:36-42`), by bits
+        var th = bitcast[DType.uint32](min_child_hessian) & UInt32(0x7FFFFFFF)
+        if (bitcast[DType.uint32](weight_left) & UInt32(0x7FFFFFFF)) < th or (
+            bitcast[DType.uint32](weight_right) & UInt32(0x7FFFFFFF)
+        ) < th:
+            rejected = True
+            return Float32(0.0)
     var to_zero_part_split = (
         weight_left < Float32(1e-20) or weight_right < Float32(1e-20)
     )
@@ -301,6 +340,12 @@ def _leafwise_gain(
             score_before = ftz(score_b / identical_sqrt(denum_sqr_b))
         else:
             score_before = -GBDT_FLOAT32_MAX
+        if score_std_dev != Float32(0.0):
+            var seed = advance_seed_k(level_seed + UInt64(feature_id), 4)
+            var draw = next_normal_f(seed)
+            var neg_draw = -draw[0]
+            final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
+            score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
     if to_zero_part_split:
         final_score = -GBDT_FLOAT32_MAX
         score_before = -GBDT_FLOAT32_MAX
@@ -335,6 +380,9 @@ def _score_leaf(
     leaf: Int,
     lambda_l2: Float32,
     cosine: Bool,
+    min_child_hessian: Float32,
+    score_std_dev: Float32,
+    level_seed: UInt64,
     argmax_blocks: Int,
     bf_feature: List[Int],
     bf_bin: List[Int],
@@ -362,9 +410,14 @@ def _score_leaf(
         for bf in range(hist_cells):
             if (bf // GBDT_LEAFWISE_BLOCK) % argmax_blocks != bx:
                 continue
+            var rejected = False
             var gain = _leafwise_gain(
-                hist, hist_cells, part_stats, leaf, bf, lambda_l2, cosine
+                hist, hist_cells, part_stats, leaf, bf, lambda_l2, cosine,
+                min_child_hessian, score_std_dev, level_seed, bf_feature[bf],
+                rejected,
             )
+            if rejected:
+                continue
             if gain > blk_gain:
                 blk_gain = gain
                 blk_bin = bf
@@ -396,6 +449,59 @@ def _score_leaf(
 # ===========================================================================
 
 
+def _target_std_dev(stats: List[Float32], n_rows: Int) -> Float64:
+    """`compute_target_std_dev` (`greedy_search_helper.mojo:224-280`) over
+    `compute_target_variance_kernel` (`compute_scores.mojo:274-318`) at stat
+    count 2: `min(4 * 32, ceil(n / 512))` blocks of 512 threads striding the
+    rows, the flushed per-thread accumulations of rows with weight above
+    1e-15, the per-block halving folds stored flushed, the three-lane fold,
+    then `sqrt(sum2 / (weight + 1e-100))` in double."""
+    comptime B = 512
+    var n_blocks = (n_rows + B - 1) // B
+    if 4 * 32 < n_blocks:
+        n_blocks = 4 * 32
+    if n_blocks < 1:
+        n_blocks = 1
+    var stride = n_blocks * B
+    var partials = List[Float32](length=3 * n_blocks, fill=Float32(0.0))
+    for b in range(n_blocks):
+        var s0 = List[Float32](length=B, fill=Float32(0.0))
+        var s1 = List[Float32](length=B, fill=Float32(0.0))
+        var s2 = List[Float32](length=B, fill=Float32(0.0))
+        for tid in range(B):
+            var weighted_sum = Float32(0.0)
+            var weighted_sum2 = Float32(0.0)
+            var total_weight = Float32(0.0)
+            var i = B * b + tid
+            while i < n_rows:
+                var w = stats[i]
+                if w > Float32(1e-15):
+                    var wt = stats[n_rows + i]
+                    weighted_sum = ftz(weighted_sum + wt)
+                    weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(wt * wt) / w))
+                    total_weight = ftz(total_weight + w)
+                i += stride
+            s0[tid] = weighted_sum
+            s1[tid] = weighted_sum2
+            s2[tid] = total_weight
+        partials[3 * b] = ftz(_halving_fold_512(s0))
+        partials[3 * b + 1] = ftz(_halving_fold_512(s1))
+        partials[3 * b + 2] = ftz(_halving_fold_512(s2))
+    var l2 = _deterministic_sum_lanes(partials, 3, n_blocks)
+    var sum2 = Float64(l2[1])
+    var weight = Float64(l2[2])
+    return sqrt(sum2 / (weight + 1e-100))
+
+
+def _halving_fold_512(mut slab: List[Float32]) -> Float32:
+    var step = len(slab) // 2
+    while step > 0:
+        for t in range(step):
+            slab[t] = slab[t] + slab[t + step]
+        step //= 2
+    return slab[0]
+
+
 def _is_terminal_leaf(
     leaf: _NsLeaf, min_leaf_size: Float64, max_depth: Int
 ) -> Bool:
@@ -417,12 +523,26 @@ def _grow_non_symmetric_tree(
     bf_feature: List[Int],
     bf_bin: List[Int],
     params: GbdtHostTreeParams,
+    random_strength: Float32,
+    tree_seed: UInt64,
 ) raises -> _NsTree:
     """`fit_non_symmetric_tree` (see the module docstring, stage 3). `stats`
     arrives in document order and leaves permuted by the splits, as the
     device plane does; the caller rewrites it before the next tree."""
     var lossguide = params.policy == GBDT_HOST_GROW_LOSSGUIDE
-    var cosine = params.score_function == GBDT_HOST_SCORE_COSINE_NS
+    var cosine = (
+        params.score_function == GBDT_HOST_SCORE_COSINE_NS
+        or params.score_function == GBDT_HOST_SCORE_NEWTON_COSINE
+    )
+    # `level_rand = TRandom(random_seed)` (`:1152`) and `CreateInitialSubsets`'
+    # ScoreStdDev (`:1179-1187`): the strength times `compute_target_std_dev`
+    # over the (bootstrapped) planes in document order
+    var level_rand = TRandom(tree_seed)
+    var score_std_dev = Float32(0.0)
+    if random_strength != Float32(0.0):
+        score_std_dev = Float32(
+            Float64(random_strength) * _target_std_dev(stats, n_rows)
+        )
     var max_leaves = params.max_leaves
     var max_depth = params.base.max_depth
     var lambda_l2 = params.base.l2_leaf_reg
@@ -560,11 +680,21 @@ def _grow_non_symmetric_tree(
                     + " leaves; their CB_ENSURE allows at most 2"
                     " (greedy_search_helper.cpp:511)"
                 )
+            # `Random.NextUniformL()`, one draw per launch (`:1656`)
+            var level_seed = level_rand.next_uniform_l()
+            var noise = score_std_dev if cosine else Float32(0.0)
             for i in range(len(visit)):
                 _score_leaf(
                     hist, hist_cells, part_stats, visit[i], lambda_l2, cosine,
+                    params.min_child_hessian, noise, level_seed,
                     argmax_blocks, bf_feature, bf_bin, layout, leaves[visit[i]],
                 )
+            # a rejected leaf cannot become eligible later in this tree
+            # (`:2001-2004`)
+            if params.min_child_hessian >= Float32(0.0):
+                for i in range(len(visit)):
+                    if not leaves[visit[i]].best_defined:
+                        leaves[visit[i]].is_terminal = True
 
         # ---- SelectLeavesToSplit (`:2034-2045`) ----
         var to_split = List[Int]()
@@ -579,6 +709,13 @@ def _grow_non_symmetric_tree(
             for i in range(len(leaves)):
                 if leaves[i].best_defined and leaves[i].best_gain < Float32(0.0):
                     to_split.append(i)
+        # the opt-in split-gain threshold (`:2050-2056`)
+        if params.min_split_gain >= 0.0:
+            var accepted = List[Int]()
+            for k in range(len(to_split)):
+                if Float64(-leaves[to_split[k]].best_gain) > params.min_split_gain:
+                    accepted.append(to_split[k])
+            to_split = accepted^
 
         if len(to_split) > 0:
             # ---- MakeSplit's multi-leaf arm (`:2058-2346`) ----
@@ -851,6 +988,32 @@ def _non_symmetric_bins(
 # ===========================================================================
 
 
+def _sample_tree_folds(
+    folds: List[Int], fraction: Float64, mut random: TRandom
+) raises -> List[Int]:
+    """`sample_tree_folds` (`gbdt/gpu_data/feature_sampling.mojo:31-54`),
+    restated because that module defines a kernel: the eligible features,
+    `max(1, Int(eligible * fraction + 0.5))`, the partial Fisher-Yates over
+    `TRandom.uniform`, the full-length fold vector."""
+    if not (fraction > 0.0) or fraction > 1.0:
+        raise Error("feature_fraction must be finite and in (0, 1]")
+    var eligible = List[Int]()
+    for f in range(len(folds)):
+        if folds[f] > 0:
+            eligible.append(f)
+    var count = max(1, Int(Float64(len(eligible)) * fraction + 0.5))
+    if count >= len(eligible):
+        return folds.copy()
+    var result = List[Int](length=len(folds), fill=0)
+    for i in range(count):
+        var j = i + Int(random.uniform(UInt64(len(eligible) - i)))
+        var selected = eligible[j]
+        eligible[j] = eligible[i]
+        eligible[i] = selected
+        result[selected] = folds[selected]
+    return result^
+
+
 def gbdt_host_fit_non_symmetric(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -872,9 +1035,12 @@ def gbdt_host_fit_non_symmetric(
         raise Error("gbdt_host_fit_non_symmetric is Depthwise or Lossguide")
     if params.max_leaves < 2:
         raise Error("max_leaves must be at least 2, got " + String(params.max_leaves))
-    var newton = params.score_function == GBDT_HOST_SCORE_NEWTON_L2
+    var newton = (
+        params.score_function == GBDT_HOST_SCORE_NEWTON_L2
+        or params.score_function == GBDT_HOST_SCORE_NEWTON_COSINE
+    )
     if not newton and params.score_function != GBDT_HOST_SCORE_COSINE_NS:
-        raise Error("the non-symmetric host fit restates Cosine and NewtonL2 only")
+        raise Error("the non-symmetric host fit restates Cosine, NewtonL2 and NewtonCosine only")
     var base = params.base
 
     var grid = gbdt_host_grid(
@@ -912,6 +1078,19 @@ def gbdt_host_fit_non_symmetric(
     var fv_part = List[Float32](length=mse_blocks, fill=Float32(0.0))
     var mag_part = List[Float32](length=2 * mse_blocks, fill=Float32(0.0))
 
+    var bootstrap_on = params.loss.bootstrap_kind >= 0
+    var seeds = List[UInt64]()
+    if bootstrap_on:
+        seeds = gbdt_bootstrap_seeds(base.random_seed)
+    # `noise_rand = TRandom(random_seed)` (`doc_parallel_boosting.mojo:
+    # 1339`), one draw per tree; the feature stream (`:1418-1421`)
+    var noise_rand = TRandom(base.random_seed)
+    var feature_random = TRandom(base.random_seed ^ UInt64(0x4645415455524553))
+    # the Newton walker the four covered Logloss lanes were measured on
+    var plain_newton = (
+        params.loss.method == GBDT_LEAF_NEWTON and not bootstrap_on
+    )
+
     var losses = List[Float64]()
     var tree_node_offsets = List[Int]()
     tree_node_offsets.append(0)
@@ -925,6 +1104,45 @@ def gbdt_host_fit_non_symmetric(
     var model_weights = List[Float64]()
 
     for iteration in range(base.n_estimators):
+        # ---- the per-tree feature sample (`doc_parallel_boosting.mojo:
+        # 1462-1480`, `gbdt/gpu_data/feature_sampling.mojo:31-54`) and the
+        # projected index ----
+        var t_layout = layout.copy()
+        var t_blocks = blocks.copy()
+        var t_cindex = cindex.copy()
+        var t_bf_feature = bf_feature.copy()
+        var t_bf_bin = bf_bin.copy()
+        if params.feature_fraction < 1.0:
+            var tree_folds = _sample_tree_folds(
+                grid.fold_counts, params.feature_fraction, feature_random
+            )
+            t_layout = build_layout(tree_folds, one_hot)
+            t_blocks = blocks_for(t_layout, n_rows)
+            for b in range(len(t_blocks)):
+                if t_blocks[b].policy == POLICY_BINARY:
+                    raise Error(
+                        "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a"
+                        " sampled feature with exactly one border"
+                    )
+            t_cindex = List[UInt32](length=n_rows * t_layout.columns, fill=UInt32(0))
+            for f in range(n_features):
+                if tree_folds[f] <= 0:
+                    continue
+                ref src = layout.features[f]
+                ref dstf = t_layout.features[f]
+                for r in range(n_rows):
+                    var value = (cindex[Int(src.offset) * n_rows + r] >> src.shift) & src.mask
+                    t_cindex[Int(dstf.offset) * n_rows + r] = (
+                        t_cindex[Int(dstf.offset) * n_rows + r] | (value << dstf.shift)
+                    )
+            t_bf_feature = List[Int](length=t_layout.hist_cells, fill=0)
+            t_bf_bin = List[Int](length=t_layout.hist_cells, fill=0)
+            for f in range(n_features):
+                ref lf = t_layout.features[f]
+                for b in range(Int(lf.folds)):
+                    t_bf_feature[Int(lf.first_fold_index) + b] = f
+                    t_bf_bin[Int(lf.first_fold_index) + b] = b
+
         # ---- the gradients, the learn loss and the magnitudes ----
         if newton:
             logloss_search_pass_newton(y, cursor, n_rows, border, stats, fv_part, mag_part)
@@ -932,6 +1150,23 @@ def gbdt_host_fit_non_symmetric(
             _logloss_search_pass(y, cursor, n_rows, border, stats, fv_part, mag_part)
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
+        # `calc_score_model_length_mult` (`random_score_helper.mojo:
+        # 219-243`) and the per-tree seed, drawn every tree
+        var noise_mult = Float64(0.0)
+        if params.random_strength != Float32(0.0):
+            var model_exp_length = log(Float64(n_rows))
+            var model_left = exp(
+                model_exp_length - Float64(iteration) * Float64(base.learning_rate)
+            )
+            noise_mult = model_left / (1.0 + model_left)
+        var tree_seed = noise_rand.next_uniform_l()
+        if bootstrap_on:
+            var bm = _bootstrap_pass(
+                params.loss.bootstrap_kind, seeds, stats, n_rows,
+                params.loss.bootstrap_param,
+            )
+            mags[0] = bm[0]
+            mags[1] = bm[1]
         # the host scale (`greedy_search_helper_depthwise.mojo:1079-1089`)
         var mag = Float64(mags[0])
         if mag < 0.0:
@@ -944,8 +1179,9 @@ def gbdt_host_fit_non_symmetric(
         var fixed_scale = Float32(choose_scale(mag, n_rows))
 
         var tree = _grow_non_symmetric_tree(
-            n_rows, n_features, layout, blocks, cindex, stats, fixed_scale,
-            bf_feature, bf_bin, params,
+            n_rows, n_features, t_layout, t_blocks, t_cindex, stats, fixed_scale,
+            t_bf_feature, t_bf_bin, params,
+            Float32(noise_mult * Float64(params.random_strength)), tree_seed,
         )
         var n_bins = len(tree.node_feature) + 1
 
@@ -971,10 +1207,17 @@ def gbdt_host_fit_non_symmetric(
             fill[bins[r]] += 1
 
         # ---- the estimation task and `AppendModels` ----
-        var estimated = _estimate_leaves(
-            y, cursor, row_index, offsets, sizes, n_rows, border,
-            base.l2_leaf_reg, base.leaf_estimation_iterations,
-        )
+        var estimated: List[Float32]
+        if plain_newton:
+            estimated = _estimate_leaves(
+                y, cursor, row_index, offsets, sizes, n_rows, border,
+                base.l2_leaf_reg, base.leaf_estimation_iterations,
+            )
+        else:
+            estimated = _estimate_leaves_for_loss(
+                params.loss, y, cursor, row_index, offsets, sizes, n_rows,
+                base.l2_leaf_reg,
+            )
         if len(estimated) != n_bins:
             raise Error(
                 "the estimator returned " + String(len(estimated))
