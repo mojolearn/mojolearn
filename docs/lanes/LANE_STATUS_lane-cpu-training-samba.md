@@ -31,6 +31,20 @@ Updated 2026-09-15 by the cpusamba agent (launched as cpumamba13, re-pointed to 
   read DIVERGENT=18 train, 36 infer/model, 18 batch. docs_facts --check and wheel_ci pins pass.
   The old gate run 34975751193 ran the pre-routine workflow.
 
+- Merge rule (Andrew, Sep 15 afternoon): merge on CPU evidence at the head, CI informational. origin/main merged
+  through 43180f5b1 (docs, the host_surface.py training-family lane list with par-mlp kept beside samba, and
+  mamba/host/gen/ regenerated after the removal of porting references; main carries the same regeneration as
+  1a8a1d197); the gate-trigger test is deleted, following main 319a74899.
+- Evidence at a19535d37 on one RunPod CPU pod (tools/runpod_cpu_leg.sh, AMD EPYC 9654, 8 vCPU; pod v5u4dbkojk2el9
+  deleted and verified gone, GET 404, billed 483 s, $0.0322): core, training, mamba and transformer host bindings
+  built production and with -D MOJOLEARN_HOST_SABOTAGE=1; identity_break --lanes samba,samba-untied-dropout-accum
+  diffed on the Mac against the 166-lane record with --require-columns 4: production IDENTICAL=18 train,
+  IDENTICAL=36 infer/model, IDENTICAL=18 batch, require-columns 4 OK; sabotage DIVERGENT=18 train, 36 infer/model,
+  18 batch. pytest on the pod: test_cpu_inference_boundary 10, test_cpu_training_samba 6, test_cpu_training_mamba 7,
+  test_cpu_training_transformer 8 passed; test_host_surface 113 passed and 2 failed and test_cpu_training_misc 13
+  passed and 1 failed, the three that check the committed records exist (bench/results is not shipped to the pod),
+  and those three pass on the Mac. docs_facts --check, wheel_ci pins and inventory, mamba_host_gen --check pass.
+
 ## Running
 
 - Nothing. Pushed with [skip ci]; the routine push gate on this branch runs after lane/cpu-training-transformer
