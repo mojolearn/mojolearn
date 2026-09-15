@@ -1,0 +1,4 @@
+CatBoost 1.2.10 CPU YetiRank vs our fit: final NDCG and DCG only
+base: NDCG ours 0.956819404 reference 0.967912373 diff -1.109e-02; DCG ours 7.22739082 reference 7.33475 diff -1.074e-01
+odd: NDCG ours 0.957565603 reference 0.968994671 diff -1.143e-02; DCG ours 7.23216854 reference 7.33731752 diff -1.051e-01
+ties: NDCG ours 0.99526113 reference 0.996828765 diff -1.568e-03; DCG ours 12.6471162 reference 12.6644142 diff -1.730e-02

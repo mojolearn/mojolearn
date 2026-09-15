@@ -67,11 +67,33 @@ The two failures are `test_host_surface`'s checks that the recordings and GPU co
 names exist in the tree: the pod leg ships no `bench/results`, so they cannot pass there. The same
 module passes on the M4 with the tree present (144 passed).
 
+## The CatBoost CPU reference (quality only)
+
+CatBoost 1.2.10 CPU YetiRank, one thread, every option equal to our 20-tree fit (permutations 10,
+decay 0.85, l2 0, Newton at one iteration, Cosine, 128 borders, seed 0, no bootstrap), against our
+fit through the CPU binding, both on one RunPod pod (ww4v9j24fh94i2, 75 s billed, $0.0050; DELETE
+204, then GET 404). The reference's CPU YetiRank samples its permutations with its own generator
+(`private/libs/algo/yetirank_helpers.cpp`) and neither side has a loss value, so only final NDCG and
+DCG (type Base, all positions) are compared; nothing was tuned (`yeti_rank_reference.py`,
+`compare-catboost.txt`).
+
+| fixture | our NDCG | reference NDCG | diff | our DCG | reference DCG | diff |
+|---|---|---|---|---|---|---|
+| base | 0.956819404 | 0.967912373 | -1.109e-02 | 7.22739082 | 7.33475 | -1.074e-01 |
+| odd | 0.957565603 | 0.968994671 | -1.143e-02 | 7.23216854 | 7.33731752 | -1.051e-01 |
+| ties | 0.99526113 | 0.996828765 | -1.568e-03 | 12.6471162 | 12.6644142 | -1.730e-02 |
+
+Our fit ranks about 1.1 NDCG points below the reference's CPU learner on base and odd, and 0.16 on
+ties. Not measured here: how much of that is the reference CPU's different sampler and pair
+construction, and how much is anything in this implementation; the GPU learner this implementation
+follows cannot run on this Mac.
+
+Our fit on the M4's Metal (binding 5cbca71bbfd72ebd, alone under the exclusive Metal slot) gives the
+same final NDCG and DCG as the x86 CPU values above, equal as float64 on base, ties and odd
+(`ours-reference-metal.json` against `ours-reference-x86-64.json`). `test_gbdt_yeti_rank` on the Metal
+route: 4 passed (`pytest-metal.log`); on the CPU route it passed on the x86 pod.
+
 ## Not run here
 
-The run was stopped, on the coordinator's instruction to reduce load on the shared Mac, after the
-verdicts above and before these steps, which are owed: the Metal and CPU test routes for
-`test_gbdt_yeti_rank`, and the CatBoost CPU quality comparison (`yeti_rank_reference.py`: final NDCG
-and DCG only, because the reference's CPU YetiRank samples with its own generator and neither side
-has a loss value). NVIDIA and AMD columns are owed to the next release record, as are PFound and the
-fixtures other than base, ties and odd.
+NVIDIA and AMD columns are owed to the next release record, as are PFound (the reference's score
+metric for YetiRank) and the fixtures other than base, ties and odd.
