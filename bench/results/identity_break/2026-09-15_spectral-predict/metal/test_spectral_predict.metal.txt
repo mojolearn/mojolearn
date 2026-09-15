@@ -1,0 +1,41 @@
+  ok    NN         prediction_data=True fits the same labels_ and embedding_ bytes as the default
+  ok    NN         the default fit stores no prediction data
+  ok    NN         prediction data shapes: eigenvalues (k,), eigenvectors (n, k), diag (n,), centroids (n_clusters, k)
+  ok    NN         every 1 + theta clears the DEVIATION 2860 threshold
+  ok    NN         the fixture fits three clusters
+  ok    NN         predict returns int32 (n,), the extended embedding float32 (n, k)
+  ok    NN         labels in range, embedding finite
+  ok    NN         [REPORT, not asserted] predict(X_train) == labels_ on 0.9917 of the training rows (not promised): MOVED
+  ok    NN         [REPORT, not asserted] training-row embedding max |extension - embedding_| = 2.003e-02 (not promised): MOVED
+  ok    NN         predict equals _predict_embedding's labels
+  ok    NN         a query equal to a training row alone gives the batch's label
+  ok    NN         [REPORT, not asserted] a query equal to training row 5 predicts its fitted label: same
+  ok    NN         far-away queries get a label in range and a finite embedding
+  ok    NN         a float64 query returns the float32 query's labels
+  ok    NN         rows alone and reversed query order give the batch's bytes
+  ok    NN         duplicated rows (distance-0 k-NN ties): rows alone give the batch's labels
+  ok    NN         a row and its duplicate predict the same label
+  ok    NN         [REPORT, not asserted] duplicated rows: predict(X_train) == labels_ on 1.0000: same
+  ok    NN         save and load predict the same bytes; the file holds no embedding_
+  ok    NN         a used column with 1 + theta = 0 is refused by name
+  ok    NN         predict without prediction data refused by name
+  ok    NN         save without prediction data refused by name
+  ok    NN         predict before fit refused by name
+  ok    NN         a query with the wrong feature count
+  ok    NN         a NaN query refused by name
+  ok    NN         prediction_data must be a bool
+  ok    NN         affinity='rbf' is refused at construction
+  ok    NN         an unsupported affinity refused by name at predict
+  ok    PRE        prediction_data=True fits the same labels_ and embedding_ bytes
+  ok    PRE        predict on (n_new, n_train)
+  ok    PRE        [REPORT, not asserted] predict(A_train) == labels_ on 1.0000 of the training rows (not promised): same
+  ok    PRE        a row with no affinity to any training row (degree 0, the zero-to-one rule) gets a label in range
+  ok    PRE        rows alone give the batch's labels
+  ok    PRE        save and load predict the same bytes
+  ok    PRE        an affinity with the wrong training width refused by name
+  ok    PRE        a negative affinity refused by name
+  ok    PRE        a non-finite affinity refused by name
+  ok    HOST       [REPORT, not asserted] host binding not loadable (mojolearn: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-spectral-predict/python/mojolearn/host/_mojolearn_metrics_host.so is not built. Build it with bindings/build_metrics_host.sh); set MOJOLEARN_HOST_DIR: MOVED
+  ok    PROVENANCE SpectralClustering exported
+
+test_spectral_predict: GREEN under numeric_mode=identical, 39 checks. One box, one vendor; no bit is claimed for any other.

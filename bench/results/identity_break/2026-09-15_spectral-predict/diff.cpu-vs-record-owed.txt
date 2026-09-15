@@ -1,0 +1,141 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 164 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_metrics_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host'] commit=0a6957015651d05a9dff94668ac843b8202a3c23
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| spectral-precomputed/base    | IDENTICAL x4 | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf |
+| spectral-precomputed/denormal | IDENTICAL x4 | 134d1fdd8654374a | 134d1fdd8654374a | 134d1fdd8654374a | 134d1fdd8654374a |
+| spectral-precomputed/denormal_ftz | IDENTICAL x4 | 134d1fdd8654374a | 134d1fdd8654374a | 134d1fdd8654374a | 134d1fdd8654374a |
+| spectral-precomputed/dupes   | IDENTICAL x4 | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf |
+| spectral-precomputed/hashed  | IDENTICAL x4 | fafd67318e66c8e9 | fafd67318e66c8e9 | fafd67318e66c8e9 | fafd67318e66c8e9 |
+| spectral-precomputed/negative | IDENTICAL x4 | 6231ccf8fca2283f | 6231ccf8fca2283f | 6231ccf8fca2283f | 6231ccf8fca2283f |
+| spectral-precomputed/odd     | IDENTICAL x4 | bbe40df82c9e623a | bbe40df82c9e623a | bbe40df82c9e623a | bbe40df82c9e623a |
+| spectral-precomputed/ties    | IDENTICAL x4 | 32ed236da838cb22 | 32ed236da838cb22 | 32ed236da838cb22 | 32ed236da838cb22 |
+| spectral-precomputed/wide    | IDENTICAL x4 | ebeb9c5c4008a66d | ebeb9c5c4008a66d | ebeb9c5c4008a66d | ebeb9c5c4008a66d |
+| spectral/base                | IDENTICAL x4 | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb |
+| spectral/denormal            | IDENTICAL x4 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 |
+| spectral/denormal_ftz        | IDENTICAL x4 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 | 4544b0d64dd6ad84 |
+| spectral/dupes               | IDENTICAL x4 | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb |
+| spectral/hashed              | IDENTICAL x4 | 2bd3b69e87fa6b9b | 2bd3b69e87fa6b9b | 2bd3b69e87fa6b9b | 2bd3b69e87fa6b9b |
+| spectral/negative            | IDENTICAL x4 | de29c53c40a728c5 | de29c53c40a728c5 | de29c53c40a728c5 | de29c53c40a728c5 |
+| spectral/odd                 | IDENTICAL x4 | a48b941d2c585a12 | a48b941d2c585a12 | a48b941d2c585a12 | a48b941d2c585a12 |
+| spectral/ties                | IDENTICAL x4 | f160e7dc7c262f73 | f160e7dc7c262f73 | f160e7dc7c262f73 | f160e7dc7c262f73 |
+| spectral/wide                | IDENTICAL x4 | d1857f998728ef34 | d1857f998728ef34 | d1857f998728ef34 | d1857f998728ef34 |
+
+summary: IDENTICAL=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| spectral-precomputed/base    | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | bb2835f47f32e74d |
+| spectral-precomputed/base    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6b04b89cfa623e45 |
+| spectral-precomputed/base    | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 403839d9afb03ede |
+| spectral-precomputed/denormal | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 7cd8401e0437ce89 |
+| spectral-precomputed/denormal | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0df4233607620b15 |
+| spectral-precomputed/denormal | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 600fc84e875132a6 |
+| spectral-precomputed/denormal_ftz | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 7cd8401e0437ce89 |
+| spectral-precomputed/denormal_ftz | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0df4233607620b15 |
+| spectral-precomputed/denormal_ftz | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 600fc84e875132a6 |
+| spectral-precomputed/dupes   | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | bb2835f47f32e74d |
+| spectral-precomputed/dupes   | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6b04b89cfa623e45 |
+| spectral-precomputed/dupes   | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 403839d9afb03ede |
+| spectral-precomputed/hashed  | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 3aed3a887e2b0c41 |
+| spectral-precomputed/hashed  | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 57673edfae833da5 |
+| spectral-precomputed/hashed  | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | f37e31ace943997d |
+| spectral-precomputed/negative | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 423f584e1c5cce33 |
+| spectral-precomputed/negative | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8ff2c152fc6fba9f |
+| spectral-precomputed/negative | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 43d927a591f2c6fa |
+| spectral-precomputed/odd     | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | dce8f63e8bca9703 |
+| spectral-precomputed/odd     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | c9fda73cee1e07c0 |
+| spectral-precomputed/odd     | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | b7fdd3972dd692b3 |
+| spectral-precomputed/ties    | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 77b660ca4b2a42e2 |
+| spectral-precomputed/ties    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | ea7aeb5dfe06471c |
+| spectral-precomputed/ties    | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | eba1461e59f20122 |
+| spectral-precomputed/wide    | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | c0ba56eeb5dcea34 |
+| spectral-precomputed/wide    | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 710be55734b0c960 |
+| spectral-precomputed/wide    | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 73a372dffb458803 |
+| spectral/base                | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 252d693ce8954a7e |
+| spectral/base                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1b89aeaedeac5981 |
+| spectral/base                | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 68d103065457bdaa |
+| spectral/denormal            | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 41cfed914e997e4a |
+| spectral/denormal            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 63a598141f3cbf85 |
+| spectral/denormal            | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | af103996c2ce50c5 |
+| spectral/denormal_ftz        | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 41cfed914e997e4a |
+| spectral/denormal_ftz        | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | edb811cffe7ef57f |
+| spectral/denormal_ftz        | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | af103996c2ce50c5 |
+| spectral/dupes               | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 252d693ce8954a7e |
+| spectral/dupes               | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1b89aeaedeac5981 |
+| spectral/dupes               | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 68d103065457bdaa |
+| spectral/hashed              | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 8e4d2de3f42d1571 |
+| spectral/hashed              | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 92c66bfb60b1f212 |
+| spectral/hashed              | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 0ea88ebb9dcaef81 |
+| spectral/negative            | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 6d78adfd2ea1b751 |
+| spectral/negative            | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | a3950cc8f5d8617d |
+| spectral/negative            | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 0898daabc88de8ea |
+| spectral/odd                 | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | e828522cfb3e88df |
+| spectral/odd                 | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 4aed479c8b8737e9 |
+| spectral/odd                 | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | dbd0ad4d046044c7 |
+| spectral/ties                | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | b2fb7d1e31bef33f |
+| spectral/ties                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | d2c3cfca89b27058 |
+| spectral/ties                | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 006f4a6b2b116959 |
+| spectral/wide                | infer  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | c5f9020b366690e4 |
+| spectral/wide                | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | f3a75e6620142ae2 |
+| spectral/wide                | batch  | OWED x1      | n/a:transductive | n/a:transductive | n/a:transductive | 5153cbc0fd4c4cb0 |
+
+summary (infer/model): OWED=36
+summary (batch): OWED=18
+summary (rlpair): 
+require-columns 4 over ['spectral', 'spectral-precomputed']: OK (54 OWED)
+OWED spectral-precomputed/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/denormal_ftz batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/hashed batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/negative batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral-precomputed/wide batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/denormal_ftz batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/hashed batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/negative batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+OWED spectral/wide batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9754-128-core-processor)
+summary (owed): OWED=54; the next release record owes exactly these cell parts; wrote /root/leg_out/owed.json

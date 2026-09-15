@@ -1,0 +1,128 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 165 other lane(s) the JSONs carry are not compared
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    apple-m4: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    nvidia-h100-sm_90a: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    amd-mi325x-gfx942: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    apple-m4: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    apple-m4: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    apple-m4: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-h100-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    amd-mi325x-gfx942: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    apple-m4: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    nvidia-h100-sm_90a: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    amd-mi325x-gfx942: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    apple-m4: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    nvidia-h100-sm_90a: {'X': 'e4b16c115962dfcd'}
+    amd-mi325x-gfx942: {'X': 'e4b16c115962dfcd'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    nvidia-h100-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    amd-mi325x-gfx942: {'X': '32ea0bbed60b8e6c'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd1ba686494256660'}
+    nvidia-h100-sm_90a: {'X': 'd1ba686494256660'}
+    amd-mi325x-gfx942: {'X': 'd1ba686494256660'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    apple-m4: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| par-graph-spectral/base      | IDENTICAL x4 | 818df233c7e16c40 | 818df233c7e16c40 | 818df233c7e16c40 | 818df233c7e16c40 |
+| par-graph-spectral/denormal  | IDENTICAL x3 | f39c1218d8a74f8b | f39c1218d8a74f8b | f39c1218d8a74f8b | (not run)        |
+| par-graph-spectral/denormal_ftz | IDENTICAL x3 | f39c1218d8a74f8b | f39c1218d8a74f8b | f39c1218d8a74f8b | (not run)        |
+| par-graph-spectral/dupes     | IDENTICAL x3 | 818df233c7e16c40 | 818df233c7e16c40 | 818df233c7e16c40 | (not run)        |
+| par-graph-spectral/hashed    | IDENTICAL x3 | bd86f78a854d5280 | bd86f78a854d5280 | bd86f78a854d5280 | (not run)        |
+| par-graph-spectral/negative  | IDENTICAL x3 | 1dd3478716bce917 | 1dd3478716bce917 | 1dd3478716bce917 | (not run)        |
+| par-graph-spectral/odd       | IDENTICAL x3 | d12243334f847bd4 | d12243334f847bd4 | d12243334f847bd4 | (not run)        |
+| par-graph-spectral/ties      | IDENTICAL x3 | e8aa4ab1fc17b228 | e8aa4ab1fc17b228 | e8aa4ab1fc17b228 | (not run)        |
+| par-graph-spectral/wide      | IDENTICAL x3 | 01f7dd9ac7c3fe00 | 01f7dd9ac7c3fe00 | 01f7dd9ac7c3fe00 | (not run)        |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| par-graph-spectral/base      | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | n/a:transductive |
+| par-graph-spectral/base      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| par-graph-spectral/base      | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | n/a:transductive (the par-graph-spectral lane fits without prediction_data; SpectralClustering.predict is the spectral lane's) |
+| par-graph-spectral/denormal  | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/denormal  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-graph-spectral/denormal  | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/denormal_ftz | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-graph-spectral/denormal_ftz | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/dupes     | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/dupes     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-graph-spectral/dupes     | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/hashed    | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/hashed    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-graph-spectral/hashed    | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/negative  | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/negative  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-graph-spectral/negative  | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/odd       | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/odd       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-graph-spectral/odd       | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/ties      | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/ties      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-graph-spectral/ties      | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/wide      | infer  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+| par-graph-spectral/wide      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| par-graph-spectral/wide      | batch  | N/A          | n/a:transductive | n/a:transductive | n/a:transductive | (not run)        |
+
+summary (infer/model): N/A=18
+summary (batch): N/A=9
+summary (rlpair): 

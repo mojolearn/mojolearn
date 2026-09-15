@@ -1,0 +1,53 @@
+{
+ "host_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/sp-bins/b3sab/host",
+ "sabotage": true,
+ "spectral-precomputed/base": {
+  "changed_labels": null,
+  "embedding": "580f699e7a728764",
+  "hist": [
+   72,
+   75,
+   77,
+   32
+  ],
+  "labels": "ad3c5a53d7b86043",
+  "labels_equal_recorded": false
+ },
+ "spectral-precomputed/ties": {
+  "changed_labels": null,
+  "embedding": "864061194e8d6c40",
+  "hist": [
+   55,
+   69,
+   52,
+   80
+  ],
+  "labels": "8a82663fbe369244",
+  "labels_equal_recorded": false
+ },
+ "spectral/base": {
+  "changed_labels": null,
+  "embedding": "8d45252239775772",
+  "hist": [
+   54,
+   66,
+   82,
+   54
+  ],
+  "labels": "382fdb13e219d730",
+  "labels_equal_recorded": false
+ },
+ "spectral/ties": {
+  "changed_labels": null,
+  "embedding": "0fc618aa055d1987",
+  "hist": [
+   47,
+   71,
+   70,
+   68
+  ],
+  "labels": "cb12e43804cff74e",
+  "labels_equal_recorded": false
+ },
+ "tag": "b3sab"
+}

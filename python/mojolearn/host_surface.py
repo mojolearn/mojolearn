@@ -837,12 +837,17 @@ FAMILIES = (
             "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
         display="random forests, Extra Trees and eight gradient boosting variants",
-        host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo"),
+        # lane/inference-gbdt-ctr-tables (2026-09-15): the CTR and tensor CTR
+        # step of a saved GBDT model, reusing expand_raw_columns and the
+        # tensor apply module the GPU predict calls
+        host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo",
+                      "core/gbdt_host_ctr.mojo", "gbdt/models/tensor_ctr_apply.mojo"),
         exports=(
             "forest_host_numeric_mode", "forest_host_vendor", "forest_host_column",
             "forest_host_sabotage", "forest_host_rf_predict_proba",
             "forest_host_rf_predict_reg", "forest_host_et_predict",
             "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid",
+            "forest_host_gbdt_expand_ctr", "forest_host_gbdt_ctr_sabotage",
             "all_finite_f32", "all_finite_f64", "cast_f64_to_f32",
             "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
         ),
@@ -1131,6 +1136,7 @@ FAMILIES = (
             "metrics/host/metrics_oracle.mojo",
             "metrics/host/classification_oracle.mojo",
             "spectral/host/spectral_oracle.mojo",
+            "spectral/host/spectral_predict_host.mojo",
             "cluster/host/kmeans_oracle.mojo",
             "core/knn_host_predict.mojo",
             "umap/host/umap_oracle.mojo",
@@ -1146,6 +1152,11 @@ FAMILIES = (
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
             "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
+            # lane/spectral-predict (2026-09-15): the fit entries that keep
+            # the prediction data and SpectralClustering.predict (DEVIATION
+            # 2860), so a saved model predicts from the inference wheel.
+            "spectral_fit_predict_dataset_state", "spectral_fit_predict_graph_state",
+            "spectral_predict",
             "umap_fit_transform", "umap_transform", "umap_numeric_mode",
             "rand_score", "mean_squared_error", "mean_absolute_error",
             "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",

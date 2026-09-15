@@ -1,105 +1,129 @@
-# SpectralClustering.predict: design and blockers (2026-09-15)
+# SpectralClustering.predict: design, blockers and results (2026-09-15)
 
-Lane `lane/inference-transductive-predict`. Stages 1 and 2 (DBSCAN and
-AgglomerativeClustering `predict`, DEVIATION 2740) shipped. Stage 3 did not.
-`SpectralClustering.predict` still raises `NotImplementedError`. This note
-records the design that would make it identical on Apple, NVIDIA, AMD and the
-CPU host binding, and why it was not shipped half done.
+Lane `lane/spectral-predict`, DEVIATION 2860. Stages 1 and 2 of
+`lane/inference-transductive-predict` shipped DBSCAN and
+AgglomerativeClustering `predict` (DEVIATION 2740). This note first recorded
+why `SpectralClustering.predict` was not shipped with them. It now records the
+design that shipped and how each blocker was resolved. The evidence is in
+`bench/results/identity_break/2026-09-15_spectral-predict/`.
 
-## What the fit computes today (read at merge 21c244b51)
+## The method
 
-`spectral/impl/cluster/detail/spectral.mojo::fit_predict_dataset`:
+This is the Nystrom out-of-sample extension. The reference is Bengio,
+Paiement, Vincent, Delalleau, Le Roux and Ouimet, "Out-of-Sample Extensions
+for LLE, Isomap, MDS, Eigenmaps, and Spectral Clustering" (NIPS 2003),
+section 3. Fowlkes, Belongie, Chung and Malik, "Spectral Grouping Using the
+Nystrom Method" (TPAMI 2004), use the same step for spectral grouping.
 
-1. `create_connectivity_graph`: identical k-NN of the data against itself
-   (`knn_search`, L2SqrtExpanded, `n_neighbors` including the row itself),
-   edges `(i, j, 1.0)`, then `coo_symmetrize` (`0.5 * (a + b)`), sort, and
-   drop zeros. So `W_ij` is 1.0, 0.5 or 0.
-2. `create_laplacian`: the normalized Laplacian `I - D^-1/2 W D^-1/2`, negated,
-   with `diagonal` (the degree scaling) written to a device buffer.
-3. `compute_eigenpairs`: thick-restart Lanczos (`which = LA`) gives the Ritz
-   values and unit eigenvectors, then `divide_rows_kernel` divides by
-   `diagonal` and a reversed gather produces `embedding_`.
-4. `kmeans_fit_predict` on `embedding_` (k-means++, `n_init`, the fit's seed).
-   The `centroids` buffer is freed at the end of `fit_predict_graph`.
+For the fit's normalized affinity with eigenpairs `(mu_k, u_k)`, a new row
+`x` gets
 
-The binding returns `labels_` and `embedding_` only.
+    e_k(x) = (1 / mu_k) * sum_i Ktilde(x, x_i) u_k[i] / sqrt(d(x))
+    Ktilde(x, x_i) = K(x, x_i) / (sqrt(d(x)) * sqrt(d_i))
+    d(x) = sum_i K(x, x_i)
 
-## The design
+- `mu_k = 1 + theta_k`, where `theta_k` is the Ritz value of the negated
+  normalized Laplacian the fit solves.
+- `u_k` is the fit's unit Ritz vector before its degree division.
+- `sqrt(d_i)` is the fit's `diagonal` (the square root of the degree, with
+  zeros set to one).
+- The final division by `sqrt(d(x))` is the fit's own row scaling
+  (`divide_rows_kernel`).
 
-A new row `q` gets a label in three steps. All of them are float32 on the
-identical primitives, so the whole path can be made identical.
+The row is then assigned by the fit's own final k-means pass
+(`kmeans_predict`, `METRIC_L2_EXPANDED`) against the fit's centroids. Ties go
+to the lowest centroid index.
 
-1. **Affinity.** Take the identical k-NN of `q` against the training rows
-   (`knn_search`, the same arithmetic and `(distance, index)` order as the fit)
-   at `k = n_neighbors`. Set `a_qi = 0.5` for each neighbor. That is the value
-   a one-directional edge takes after `coo_symmetrize`, since a new row has no
-   reverse edges. The degree is `d_q = sum_i a_qi`, a fixed-order fold over k
-   slots.
-2. **Nystrom extension.** For each embedding column `c` with Ritz value
-   `theta_c` of the negated Laplacian, the normalized adjacency eigenvalue is
-   `lambda_c = 1 + theta_c`. Then
-   `u_c(q) = identical_div(sum_i identical_div(a_qi, sqrt(d_q) * diag_i) * u_c(i), lambda_c)`
-   with the sum folded over the k neighbor slots in slot order, and
-   `embedding_c(q) = identical_div(u_c(q), sqrt(d_q))`, which matches step 3
-   of the fit.
-3. **Assignment.** Run the fit's own final k-means assignment
-   (`row_norm_kernel`, then `cluster/impl/kmeans.mojo::predict`, as
-   `KMeans.predict` does) against the fit's centroids. Ties go to the lowest
-   centroid index, which is k-means' rule.
+The rule is stated once, in `spectral/host/spectral_predict_host.mojo` (the
+CPU spelling). The device spelling is `spectral/impl/spectral_predict.mojo`.
 
-The precomputed arm would take a caller-given `(n_queries, n_train)` affinity
-in place of step 1.
+## The blockers, resolved
 
-## Why it is not shipped: the blockers
+1. **The fit discarded what predict needs.** `SpectralClustering(
+   prediction_data=True)` calls new `_state` binding entries, which reach
+   `_keep` variants of `compute_eigenpairs`, `transform_graph`,
+   `fit_predict_graph` and `fit_predict_dataset` on the device, and of the
+   host oracle's three fit entries. They copy out:
+   - the Ritz values and the undivided Ritz vectors, reordered into embedding
+     column order (a gather);
+   - the downloaded `diagonal`;
+   - the downloaded centroids.
 
-1. **The fit does not keep what predict needs.** Predict needs the Ritz
-   values, the unit eigenvectors before the division, `diagonal` and the
-   k-means centroids. None of them leaves `fit_predict_graph`. Two changes are
-   needed:
-   - Four outputs on the GPU path: `spectral/impl/cluster/detail/spectral.mojo`,
-     `spectral/impl/preprocessing/detail/spectral_embedding.mojo`,
-     `spectral/estimator.mojo` and `bindings/_mojolearn_metrics.mojo`.
-   - The same four on the host restatement: `spectral/host/spectral_oracle.mojo`
-     and `bindings/_mojolearn_metrics_host.mojo`.
+   No value is recomputed. The old entries call the `_keep` variants with
+   `keep = False`. The train cells are proven unchanged in the evidence
+   directory.
+2. **Affinity of a new row.** The kernel is the fit's own:
+   - **`nearest_neighbors`.** The fit's identical k-NN of the query against
+     the training rows at `n_neighbors`. Each neighbor gets `0.5`, which is
+     the fit's symmetrization `0.5 * (a + b)` of an edge with no reverse edge.
+     The query's row is restricted to its own edges, and the training degrees
+     are unchanged.
+   - **`precomputed`.** The caller passes the `(n_new, n_train)` affinity.
 
-   Each must be proven not to move `spectral`, `spectral-precomputed` or
-   `par-graph-spectral` train cells on three committed columns. Recomputing
-   `u(i) = embedding(i) * diag_i` in place of storing it is not exact, because
-   a multiply does not undo a division.
-2. **The affinity rule for a new row is an invented choice, not a derived
-   one.** The fit's graph is symmetric and its degrees count reverse edges. A
-   new row has none, so `0.5` per neighbor versus `1.0`, and whether the
-   training degrees should change, are rules this library would have to
-   declare as a DEVIATION. Its consequence is also unmeasured: how often the
-   out-of-sample label agrees with a refit on the augmented data.
-3. **No self-consistency guarantee exists.** Predict on a training row does
-   not reproduce `embedding_` or `labels_`. The fit's graph symmetrization
-   differs from the query's one-directional affinity. The eigen-equation also
-   holds only to the Lanczos tolerance (`eigen_tol`). So the documented
-   property would be a measured agreement rate, not a guarantee. The brief
-   asks for the rule to be documented where it does not guarantee, and that
-   needs a measurement this lane did not take.
-4. **A small `lambda_c` divides.** A column whose normalized adjacency
-   eigenvalue is near 0 amplifies the query projection. With `drop_first =
-   false` and the smallest Laplacian eigenvalues kept, `lambda_c` is near 1 for
-   the retained columns on connected graphs. That is not true for every input
-   (bipartite-like graphs reach `lambda = -1`), so the rule needs a by-name
-   refusal threshold, which is another declared constant.
-5. **Nothing in the repo is reusable as the Nystrom step.**
-   `kernel_methods/`'s `Nystroem` is an RBF kernel approximation, a basis and
-   an SVD of the basis kernel. It is not a spectral out-of-sample extension,
-   so steps 1 and 2 would be new kernels on the device and on the host, each
-   with its own sabotage arm.
+   (`rbf` is refused at construction, as it always was.) Every fold (the
+   degree, each projection) runs over the training rows in ascending index,
+   seeded `+0.0`, through `ftz`, `identical_mul_add`, `identical_div`,
+   `identical_mul` and `identical_sqrt`, one query at a time.
+3. **Near-zero eigenvalues.** The clustering fit drops nothing
+   (`drop_first = false`), so predict drops nothing either. The trivial
+   column's `mu` is near 1. A used column with `|mu_k| < 1e-3`
+   (`SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE`), or a NaN, is refused by name on
+   both bindings, with the column and its value in the message.
+4. **Training rows.** The extension reproduces `embedding_` only in exact
+   arithmetic and only for the fit's own affinity. Asked as a query, a
+   training row sees itself at `0.5` where the fit's graph had `1.0`, and it
+   has no reverse edges. The Lanczos pairs also hold only to `eigen_tol`. The
+   agreement rate is measured, not promised; see Results.
 
-## Estimated work to ship it
+## Results
 
-- The fit outputs (blocker 1) on both stacks, plus the train-cell proof on the
-  three committed columns.
-- Two new kernels (affinity fold and projection) on the device and on the
-  host.
-- The k-means predict call on the extended embedding.
-- Python `predict`, `save` and `load`, and host subclasses.
-- identity_break infer and batch parts for `spectral` and `par-graph-spectral`
-  (`spectral-precomputed` needs the cross-affinity input).
-- A measured agreement rate on training rows, recorded as the documented
-  property.
+### Training-row agreement
+
+This is `predict(X_train) == labels_` on the identity lanes' own fits. It was
+measured on the x86 CPU reference at 7e072251b (RunPod CPU pod); the fit and
+predict arithmetic did not change after that commit.
+
+- `spectral` is `X[:2000, :4]`, 9 fixtures.
+- `spectral-precomputed` is the `_affinity` of `X[:1000, :4]`, predicted on
+  that same matrix.
+- In the `1 + theta` column, the first value is the trivial column's.
+
+| fixture | spectral | spectral-precomputed | spectral `1 + theta` |
+|---|---|---|---|
+| base | 1965/2000 (0.9825) | 998/1000 (0.998) | 1.0, 0.967, 0.965, 0.964 |
+| ties | 1972/2000 (0.9860) | 996/1000 (0.996) | 1.0, 0.977, 0.973, 0.972 |
+| hashed | 1964/2000 (0.9820) | 999/1000 (0.999) | 1.0, 0.979, 0.978, 0.976 |
+| wide | 1986/2000 (0.9930) | 997/1000 (0.997) | 1.0, 0.999, 0.996, 0.992 |
+| denormal | 1997/2000 (0.9985) | 1000/1000 (1.000) | 1.0, 1.0, 1.0, 1.0 |
+| denormal_ftz | 1997/2000 (0.9985) | 1000/1000 (1.000) | 1.0, 1.0, 1.0, 1.0 |
+| dupes | 1965/2000 (0.9825) | 998/1000 (0.998) | 1.0, 0.967, 0.965, 0.964 |
+| odd | 1966/2000 (0.9830) | 1000/1000 (1.000) | 1.0, 0.967, 0.966, 0.964 |
+| negative | 1961/2000 (0.9805) | 998/1000 (0.998) | 1.0, 0.979, 0.977, 0.973 |
+
+- **Totals.** `spectral` agrees on 17773 of 18000 training rows (0.9874).
+  `spectral-precomputed` agrees on 8986 of 9000 (0.9984).
+- **Embedding gap.** The largest `|extension - embedding_|` on training rows
+  is 1.5e-3 to 2.2e-3 (`spectral`) and 3e-4 to 1.1e-2 (precomputed).
+- **Threshold margin.** The smallest `|1 + theta|` on any lane is 0.43
+  (precomputed), far above the 1e-3 threshold.
+
+### Identity, sabotage and the wheel
+
+- **CPU.** Nine fixtures on x86: train IDENTICAL x4 against the 166-lane
+  Apple, NVIDIA and AMD columns. The 54 new infer, model and batch parts are
+  OWED.
+- **Metal.** Base and ties:
+  - train IDENTICAL x4 against the record;
+  - Metal against CPU IDENTICAL on train, infer, model and batch;
+  - `par-graph-spectral` base IDENTICAL x4.
+- **Host sabotage.** The predict-only arm negates embedding column 1. It moves
+  every infer and batch cell (18 and 18). An earlier arm on column 0 was
+  inert, because the trivial column is constant after the degree division.
+- **Batch sabotage.** BATCH_MOVED on both lanes on CPU and on Metal.
+- **The installed test wheel** reproduces four saved models through
+  `host_model` and `load`.
+- **A Metal defect found and fixed.** Predict first handed `knn_search`
+  memory backed by Mojo `List`s and segfaulted; it now stages through runtime
+  host buffers.
+
+Details: `bench/results/identity_break/2026-09-15_spectral-predict/README.md`.

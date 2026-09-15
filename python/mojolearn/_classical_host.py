@@ -68,6 +68,7 @@ from ._gpc_impl import _GPC_FORMAT, HostGaussianProcessClassifier
 from ._solver_impl import ElasticNet, Lasso, _CD_FORMAT
 from ._svm_impl import SVC, SVR, _SVC_FORMAT, _SVR_FORMAT
 from ._umap_impl import UMAP, _UMAP_FORMAT
+from ._spectral_impl import SpectralClustering, _SPECTRAL_FORMAT
 from .decomposition import PCA, TruncatedSVD, _PCA_FORMAT, _TSVD_FORMAT
 from ._hierarchy_impl import AgglomerativeClustering, _AGGLOMERATIVE_FORMAT
 from .density import DBSCAN, KernelDensity, _DBSCAN_FORMAT, _KDE_FORMAT
@@ -323,6 +324,14 @@ class HostUMAP(_HostBound, UMAP):
     _HOST_ARRAYS = ("_transform_training", "_transform_embedding")
 
 
+class HostSpectralClustering(_HostBound, SpectralClustering):
+    """`SpectralClustering.predict` from a saved `prediction_data=True`
+    model through `_mojolearn_metrics_host.spectral_predict`, which runs no
+    fit (lane/spectral-predict, 2026-09-15, DEVIATION 2860)."""
+    _BINDING = "_mojolearn_metrics"
+    _HOST_ARRAYS = ("_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X", "labels_")
+
+
 class _HostScaler(_HostBound):
     """The scalers ask for their binding through `_binding(mode)` with the
     fitted mode; the host answers the estimators host binding for an
@@ -413,6 +422,7 @@ _FORMATS = {
     _ARIMA_FORMAT: {"ARIMA": HostARIMA},
     _HW_FORMAT: {"ExponentialSmoothing": HostExponentialSmoothing},
     _UMAP_FORMAT: {"UMAP": HostUMAP},
+    _SPECTRAL_FORMAT: {"SpectralClustering": HostSpectralClustering},
     _SCALER_FORMAT: {"StandardScaler": HostStandardScaler, "MinMaxScaler": HostMinMaxScaler},
     _CD_FORMAT: {"ElasticNet": HostElasticNet, "Lasso": HostLasso},
     _KERNEL_RIDGE_FORMAT: {"KernelRidge": HostKernelRidge},

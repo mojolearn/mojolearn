@@ -61,6 +61,10 @@ from spectral.checks.symmetric_eig_host import (
     hsqrt,
     symmetric_eig_host,
 )
+from spectral.host.spectral_predict_host import (
+    SpectralPredictionState,
+    spectral_keep_embedding_order,
+)
 from spectral.impl.sparse.coo import CooGraph
 from spectral.impl.sparse.op.coo_ops import (
     coo_remove_scalar,
@@ -292,6 +296,9 @@ struct OracleResult[dt: DType](Movable):
     var restarts: Int
     var converged: Bool
     var v0: List[Scalar[Self.dt]]
+    var diag: List[Scalar[Self.dt]]
+    """The Laplacian's `diag` (sqrt degree, zeros to one) when normalized,
+    kept for `SpectralClustering(prediction_data=True)`."""
 
     def __init__(out self):
         self.step_alpha = List[Scalar[Self.dt]]()
@@ -306,6 +313,7 @@ struct OracleResult[dt: DType](Movable):
         self.restarts = 0
         self.converged = False
         self.v0 = List[Scalar[Self.dt]]()
+        self.diag = List[Scalar[Self.dt]]()
 
 
 def _clamp[dt: DType](value: Scalar[dt], thr: Scalar[dt]) -> Scalar[dt]:
@@ -586,6 +594,7 @@ def oracle_embedding[
         ncv = ncv_hi
     var L = host_laplacian[dt](g, norm_laplacian)
     var res = OracleResult[dt]()
+    res.diag = L.diag.copy()
     var v0_32 = lanczos_v0(seed, n)
     var v0 = List[Scalar[dt]]()
     for i in range(n):
@@ -761,7 +770,29 @@ def host_spectral_fit_predict_graph(
     mut labels: List[Int32],
     mut embedding_out: List[Float32],
 ) raises -> Int:
-    """`fit_predict_graph` (module comment above). Returns `n_out`."""
+    """`host_spectral_fit_predict_graph_keep` keeping nothing."""
+    var state = SpectralPredictionState()
+    return host_spectral_fit_predict_graph_keep(
+        graph, n_clusters, n_components, n_init, eigen_tol, seed, labels,
+        embedding_out, state, False,
+    )
+
+
+def host_spectral_fit_predict_graph_keep(
+    graph: CooGraph,
+    n_clusters: Int,
+    n_components: Int,
+    n_init: Int,
+    eigen_tol: Float32,
+    seed: UInt64,
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+) raises -> Int:
+    """`fit_predict_graph_keep` (module comment above). Returns `n_out`.
+    With `keep`, `state` receives copies of the Ritz values, the undivided
+    Ritz vectors, `diag` and the final centroids (lane/spectral-predict)."""
     var n_samples = graph.n
     if n_clusters < 1 or n_clusters > n_samples:
         raise Error(
@@ -772,6 +803,9 @@ def host_spectral_fit_predict_graph(
         graph, n_components, True, False, eigen_tol, seed
     )
     var n_out = res.n_out
+    if keep:
+        spectral_keep_embedding_order(res.ritz, res.ritz_vectors, n_components, n_samples, state)
+        state.diag = res.diag.copy()
     embedding_out.clear()
     for i in range(len(res.embedding)):
         embedding_out.append(res.embedding[i])
@@ -793,6 +827,8 @@ def host_spectral_fit_predict_graph(
         METRIC_L2_EXPANDED, Float64(0.0), Float32(sum_scale),
         Float32(weight_scale), trace, String("spectral."),
     )
+    if keep:
+        state.centroids = centroids.copy()
     # kmeans::fit_predict's fresh assignment, with the row norms
     # spectral.mojo computes (take_sqrt 0, the L2 expanded metric)
     var x_norm = host_row_norms(embedding_out, n_samples, n_features, False)
@@ -821,6 +857,29 @@ def host_spectral_fit_predict_dataset(
     mut labels: List[Int32],
     mut embedding_out: List[Float32],
 ) raises -> Int:
+    """`host_spectral_fit_predict_dataset_keep` keeping nothing."""
+    var state = SpectralPredictionState()
+    return host_spectral_fit_predict_dataset_keep(
+        dataset, n_samples, n_features, n_clusters, n_components, n_init,
+        n_neighbors, eigen_tol, seed, labels, embedding_out, state, False,
+    )
+
+
+def host_spectral_fit_predict_dataset_keep(
+    dataset: List[Float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    n_components: Int,
+    n_init: Int,
+    n_neighbors: Int,
+    eigen_tol: Float32,
+    seed: UInt64,
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+) raises -> Int:
     """`spectral_fit_predict_dataset_host`, `spectral/estimator.mojo`, then
     `fit_predict_dataset` (module comment above). Returns `n_out`."""
     if n_samples <= 0 or n_features <= 0:
@@ -837,9 +896,9 @@ def host_spectral_fit_predict_dataset(
     var graph = host_create_connectivity_graph(
         dataset, n_samples, n_features, n_neighbors
     )
-    return host_spectral_fit_predict_graph(
+    return host_spectral_fit_predict_graph_keep(
         graph, n_clusters, n_components, n_init, eigen_tol, seed, labels,
-        embedding_out,
+        embedding_out, state, keep,
     )
 
 
@@ -856,6 +915,30 @@ def host_spectral_fit_predict_coo(
     seed: UInt64,
     mut labels: List[Int32],
     mut embedding_out: List[Float32],
+) raises -> Int:
+    """`host_spectral_fit_predict_coo_keep` keeping nothing."""
+    var state = SpectralPredictionState()
+    return host_spectral_fit_predict_coo_keep(
+        rows, cols, vals, n_samples, n_clusters, n_components, n_init,
+        n_neighbors, eigen_tol, seed, labels, embedding_out, state, False,
+    )
+
+
+def host_spectral_fit_predict_coo_keep(
+    rows: List[Int32],
+    cols: List[Int32],
+    vals: List[Float32],
+    n_samples: Int,
+    n_clusters: Int,
+    n_components: Int,
+    n_init: Int,
+    n_neighbors: Int,
+    eigen_tol: Float32,
+    seed: UInt64,
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
 ) raises -> Int:
     """`spectral_fit_predict_graph_host`, `spectral/estimator.mojo:189`, then
     `fit_predict_graph` (the spectral-precomputed lane, 2026-09-14): the
@@ -945,7 +1028,7 @@ def host_spectral_fit_predict_coo(
     var c_copy = cols.copy()
     var v_copy = vals.copy()
     var graph = CooGraph(n_samples, r_copy^, c_copy^, v_copy^)
-    return host_spectral_fit_predict_graph(
+    return host_spectral_fit_predict_graph_keep(
         graph, n_clusters, n_components, n_init, eigen_tol, seed, labels,
-        embedding_out,
+        embedding_out, state, keep,
     )

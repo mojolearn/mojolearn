@@ -71,7 +71,15 @@ from bindings.hostptr import i32_ptr
 from spectral.host.spectral_oracle import (
     SPECTRAL_ORACLE_HOST_SABOTAGE,
     host_spectral_fit_predict_coo,
+    host_spectral_fit_predict_coo_keep,
     host_spectral_fit_predict_dataset,
+    host_spectral_fit_predict_dataset_keep,
+)
+from spectral.host.spectral_predict_host import (
+    SPECTRAL_PREDICT_HOST_SABOTAGE,
+    SpectralPredictionState,
+    host_spectral_predict,
+    spectral_predict_check_state,
 )
 from umap.host.umap_oracle import (
     UMAP_ORACLE_HOST_SABOTAGE,
@@ -190,11 +198,13 @@ def metrics_host_sabotage_binding() raises -> PythonObject:
     one value, a perturbed value read by accuracy, the adjusted Rand index,
     entropy, mutual information, r2 and the silhouette
     (`metrics/host/metrics_oracle.mojo`, THE NEGATIVE CONTROL), and the spectral
-    recluster seeded one draw off, and every UMAP negative draw keyed one
-    epoch late; refused outside the gate as one set."""
+    recluster seeded one draw off, every UMAP negative draw keyed one
+    epoch late, and spectral predict's first non-trivial embedding column negated (also
+    alone under -D MOJOLEARN_SPECTRAL_PREDICT_SABOTAGE=1); refused outside
+    the gate as one set."""
     return PythonObject(
         METRICS_ORACLE_HOST_SABOTAGE or SPECTRAL_ORACLE_HOST_SABOTAGE
-        or UMAP_ORACLE_HOST_SABOTAGE
+        or UMAP_ORACLE_HOST_SABOTAGE or SPECTRAL_PREDICT_HOST_SABOTAGE
     )
 
 
@@ -608,6 +618,154 @@ def spectral_fit_predict_graph_binding(
         for i in range(len(embedding)):
             ep.unsafe_store(i, embedding[i])
     return PythonObject(n_out)
+
+
+# lane/spectral-predict (2026-09-15, DEVIATION 2860): the GPU binding's
+# spectral_fit_predict_dataset_state, spectral_fit_predict_graph_state and
+# spectral_predict, same names, address contracts and params lists.
+
+
+def _write_spectral_state(
+    state: SpectralPredictionState,
+    addrs: PythonObject,
+    first: Int,
+    n_samples: Int,
+    n_components: Int,
+    n_clusters: Int,
+) raises:
+    spectral_predict_check_state(state, n_samples, n_components, n_clusters)
+    var ev = f32_ptr(_index(addrs[first]))
+    var evec = f32_ptr(_index(addrs[first + 1]))
+    var dg = f32_ptr(_index(addrs[first + 2]))
+    var cent = f32_ptr(_index(addrs[first + 3]))
+    for i in range(len(state.eigenvalues)):
+        ev.unsafe_store(i, state.eigenvalues[i])
+    for i in range(len(state.eigenvectors)):
+        evec.unsafe_store(i, state.eigenvectors[i])
+    for i in range(len(state.diag)):
+        dg.unsafe_store(i, state.diag[i])
+    for i in range(len(state.centroids)):
+        cent.unsafe_store(i, state.centroids[i])
+
+
+def spectral_fit_predict_dataset_state_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """The GPU binding's `spectral_fit_predict_dataset_state` on the host.
+    `addrs`: x, labels, embedding, eigenvalues, eigenvectors, diag,
+    centroids; `params` the eight of `spectral_fit_predict_dataset`."""
+    if len(addrs) != 7:
+        raise Error("spectral_fit_predict_dataset_state: addrs must contain 7 addresses, got " + String(len(addrs)))
+    _want(String("spectral_fit_predict_dataset_state"), params, 8)
+    var n_samples = _index(params[0])
+    var n_features = _index(params[1])
+    var n_clusters = _index(params[2])
+    var n_components = _index(params[3])
+    var n_init = _index(params[4])
+    var n_neighbors = _index(params[5])
+    var eigen_tol = Float32(Float64(py=params[6]))
+    var seed = UInt64(_index(params[7]))
+    var x = read_f32(_index(addrs[0]), n_samples * n_features)
+    var lp = i32_ptr(_index(addrs[1]))
+    var ep = f32_ptr(_index(addrs[2]))
+    var labels = List[Int32]()
+    var embedding = List[Float32]()
+    var state = SpectralPredictionState()
+    var n_out = 0
+    with GILReleased(Python()):
+        n_out = host_spectral_fit_predict_dataset_keep(
+            x, n_samples, n_features, n_clusters, n_components, n_init,
+            n_neighbors, eigen_tol, seed, labels, embedding, state, True,
+        )
+    _guard_spectral_outputs(labels, embedding, n_samples, n_components)
+    _write_spectral_state(state, addrs, 3, n_samples, n_components, n_clusters)
+    for i in range(n_samples):
+        lp.unsafe_store(i, labels[i])
+    for i in range(len(embedding)):
+        ep.unsafe_store(i, embedding[i])
+    return PythonObject(n_out)
+
+
+def spectral_fit_predict_graph_state_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """The GPU binding's `spectral_fit_predict_graph_state` on the host.
+    `addrs`: rows, cols, vals, labels, embedding, eigenvalues, eigenvectors,
+    diag, centroids; `params` the eight of `spectral_fit_predict_graph`."""
+    if len(addrs) != 9:
+        raise Error("spectral_fit_predict_graph_state: addrs must contain 9 addresses, got " + String(len(addrs)))
+    _want(String("spectral_fit_predict_graph_state"), params, 8)
+    var n_samples = _index(params[0])
+    var nnz = _index(params[1])
+    var n_clusters = _index(params[2])
+    var n_components = _index(params[3])
+    var n_init = _index(params[4])
+    var n_neighbors = _index(params[5])
+    var eigen_tol = Float32(Float64(py=params[6]))
+    var seed = UInt64(_index(params[7]))
+    var rows = read_i32(_index(addrs[0]), max(0, nnz))
+    var cols = read_i32(_index(addrs[1]), max(0, nnz))
+    var vals = read_f32(_index(addrs[2]), max(0, nnz))
+    var lp = i32_ptr(_index(addrs[3]))
+    var ep = f32_ptr(_index(addrs[4]))
+    var labels = List[Int32]()
+    var embedding = List[Float32]()
+    var state = SpectralPredictionState()
+    var n_out = 0
+    with GILReleased(Python()):
+        n_out = host_spectral_fit_predict_coo_keep(
+            rows, cols, vals, n_samples, n_clusters, n_components, n_init,
+            n_neighbors, eigen_tol, seed, labels, embedding, state, True,
+        )
+    _guard_spectral_outputs(labels, embedding, n_samples, n_components)
+    _write_spectral_state(state, addrs, 5, n_samples, n_components, n_clusters)
+    for i in range(n_samples):
+        lp.unsafe_store(i, labels[i])
+    for i in range(len(embedding)):
+        ep.unsafe_store(i, embedding[i])
+    return PythonObject(n_out)
+
+
+def spectral_predict_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """The GPU binding's `spectral_predict` on the host by
+    `host_spectral_predict` (no fit code on this path). `addrs`: input,
+    training rows (0 for precomputed), eigenvalues, eigenvectors, diag,
+    centroids, out labels, out embedding. `params`: n_train, n_queries,
+    n_features, n_components, n_clusters, n_neighbors, affinity. Returns 0."""
+    if len(addrs) != 8:
+        raise Error("spectral_predict: addrs must contain 8 addresses, got " + String(len(addrs)))
+    _want(String("spectral_predict"), params, 7)
+    var n_train = _index(params[0])
+    var n_queries = _index(params[1])
+    var n_features = _index(params[2])
+    var k = _index(params[3])
+    var n_clusters = _index(params[4])
+    var n_neighbors = _index(params[5])
+    var affinity = _index(params[6])
+    var width = n_train if affinity == 1 else n_features
+    var input = read_f32(_index(addrs[0]), max(0, n_queries * width))
+    var train_x = List[Float32]()
+    if affinity == 0:
+        train_x = read_f32(_index(addrs[1]), max(0, n_train * n_features))
+    var state = SpectralPredictionState()
+    state.eigenvalues = read_f32(_index(addrs[2]), max(0, k))
+    state.eigenvectors = read_f32(_index(addrs[3]), max(0, n_train * k))
+    state.diag = read_f32(_index(addrs[4]), max(0, n_train))
+    state.centroids = read_f32(_index(addrs[5]), max(0, n_clusters * k))
+    var olp = i32_ptr(_index(addrs[6]))
+    var oep = f32_ptr(_index(addrs[7]))
+    with GILReleased(Python()):
+        var out = host_spectral_predict(
+            input, train_x, n_train, n_queries, n_features, k, n_clusters,
+            n_neighbors, affinity, state,
+        )
+        for i in range(n_queries):
+            olp.unsafe_store(i, out.labels[i])
+        for i in range(n_queries * k):
+            oep.unsafe_store(i, out.embedding[i])
+    return PythonObject(0)
 
 
 # ===========================================================================
@@ -1030,6 +1188,9 @@ def PyInit__mojolearn_metrics_host() abi("C") -> PythonObject:
         module.def_function[trustworthiness_binding]("trustworthiness")
         module.def_function[spectral_fit_predict_dataset_binding]("spectral_fit_predict_dataset")
         module.def_function[spectral_fit_predict_graph_binding]("spectral_fit_predict_graph")
+        module.def_function[spectral_fit_predict_dataset_state_binding]("spectral_fit_predict_dataset_state")
+        module.def_function[spectral_fit_predict_graph_state_binding]("spectral_fit_predict_graph_state")
+        module.def_function[spectral_predict_binding]("spectral_predict")
         module.def_function[umap_fit_transform_binding]("umap_fit_transform")
         module.def_function[umap_transform_binding]("umap_transform")
         module.def_function[metrics_numeric_mode_binding]("umap_numeric_mode")

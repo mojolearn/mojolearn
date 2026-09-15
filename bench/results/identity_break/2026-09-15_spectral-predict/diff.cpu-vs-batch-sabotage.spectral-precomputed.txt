@@ -1,0 +1,99 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 1 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_metrics_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host'] commit=0a6957015651d05a9dff94668ac843b8202a3c23
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_metrics_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host'] commit=0a6957015651d05a9dff94668ac843b8202a3c23
+NOTE: column cpu-amd-epyc-9754-128-core-processor ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-9754-128-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-9754-128-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-9754-128-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-9754-128-core-processor | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|------------|------------------|------------------|
+| spectral-precomputed/base    | IDENTICAL x2 | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf |
+| spectral-precomputed/denormal | ONE-COLUMN | 134d1fdd8654374a | (not run)        |
+| spectral-precomputed/denormal_ftz | ONE-COLUMN | 134d1fdd8654374a | (not run)        |
+| spectral-precomputed/dupes   | ONE-COLUMN | 8df6d51dbff9ddaf | (not run)        |
+| spectral-precomputed/hashed  | ONE-COLUMN | fafd67318e66c8e9 | (not run)        |
+| spectral-precomputed/negative | ONE-COLUMN | 6231ccf8fca2283f | (not run)        |
+| spectral-precomputed/odd     | ONE-COLUMN | bbe40df82c9e623a | (not run)        |
+| spectral-precomputed/ties    | ONE-COLUMN | 32ed236da838cb22 | (not run)        |
+| spectral-precomputed/wide    | ONE-COLUMN | ebeb9c5c4008a66d | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=8
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9754-128-core-processor | cpu-amd-epyc-9754-128-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| spectral-precomputed/base    | infer  | IDENTICAL x2 | bb2835f47f32e74d | bb2835f47f32e74d |
+| spectral-precomputed/base    | model  | IDENTICAL x2 | 6b04b89cfa623e45 | 6b04b89cfa623e45 |
+| spectral-precomputed/base    | batch  | BATCH_MOVED  | 403839d9afb03ede | BATCH_MOVED      |
+| spectral-precomputed/denormal | infer  | ONE-COLUMN   | 7cd8401e0437ce89 | (not run)        |
+| spectral-precomputed/denormal | model  | ONE-COLUMN   | 0df4233607620b15 | (not run)        |
+| spectral-precomputed/denormal | batch  | ONE-COLUMN   | 600fc84e875132a6 | (not run)        |
+| spectral-precomputed/denormal_ftz | infer  | ONE-COLUMN   | 7cd8401e0437ce89 | (not run)        |
+| spectral-precomputed/denormal_ftz | model  | ONE-COLUMN   | 0df4233607620b15 | (not run)        |
+| spectral-precomputed/denormal_ftz | batch  | ONE-COLUMN   | 600fc84e875132a6 | (not run)        |
+| spectral-precomputed/dupes   | infer  | ONE-COLUMN   | bb2835f47f32e74d | (not run)        |
+| spectral-precomputed/dupes   | model  | ONE-COLUMN   | 6b04b89cfa623e45 | (not run)        |
+| spectral-precomputed/dupes   | batch  | ONE-COLUMN   | 403839d9afb03ede | (not run)        |
+| spectral-precomputed/hashed  | infer  | ONE-COLUMN   | 3aed3a887e2b0c41 | (not run)        |
+| spectral-precomputed/hashed  | model  | ONE-COLUMN   | 57673edfae833da5 | (not run)        |
+| spectral-precomputed/hashed  | batch  | ONE-COLUMN   | f37e31ace943997d | (not run)        |
+| spectral-precomputed/negative | infer  | ONE-COLUMN   | 423f584e1c5cce33 | (not run)        |
+| spectral-precomputed/negative | model  | ONE-COLUMN   | 8ff2c152fc6fba9f | (not run)        |
+| spectral-precomputed/negative | batch  | ONE-COLUMN   | 43d927a591f2c6fa | (not run)        |
+| spectral-precomputed/odd     | infer  | ONE-COLUMN   | dce8f63e8bca9703 | (not run)        |
+| spectral-precomputed/odd     | model  | ONE-COLUMN   | c9fda73cee1e07c0 | (not run)        |
+| spectral-precomputed/odd     | batch  | ONE-COLUMN   | b7fdd3972dd692b3 | (not run)        |
+| spectral-precomputed/ties    | infer  | ONE-COLUMN   | 77b660ca4b2a42e2 | (not run)        |
+| spectral-precomputed/ties    | model  | ONE-COLUMN   | ea7aeb5dfe06471c | (not run)        |
+| spectral-precomputed/ties    | batch  | ONE-COLUMN   | eba1461e59f20122 | (not run)        |
+| spectral-precomputed/wide    | infer  | ONE-COLUMN   | c0ba56eeb5dcea34 | (not run)        |
+| spectral-precomputed/wide    | model  | ONE-COLUMN   | 710be55734b0c960 | (not run)        |
+| spectral-precomputed/wide    | batch  | ONE-COLUMN   | 73a372dffb458803 | (not run)        |
+
+summary (infer/model): IDENTICAL=2, ONE-COLUMN=16
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=8
+summary (rlpair): 

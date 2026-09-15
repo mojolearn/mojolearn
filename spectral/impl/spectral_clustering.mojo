@@ -18,10 +18,11 @@ README's HAND-OFF.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
+from spectral.host.spectral_predict_host import SpectralPredictionState
 from spectral.impl.cluster.detail.spectral import (
     SpectralClusteringParams,
-    fit_predict_dataset,
-    fit_predict_graph,
+    fit_predict_dataset_keep,
+    fit_predict_graph_keep,
 )
 from spectral.impl.sparse.coo import CooGraph
 
@@ -64,8 +65,26 @@ def fit_predict(
     mut trace: IdentityTrace,
 ) raises:
     """`fit_predict(handle, config, dataset, labels)` (`:35-41`)."""
-    fit_predict_dataset(
-        ctx, to_cuvs(config), dataset, n_samples, n_features, labels, embedding_out, trace
+    var state = SpectralPredictionState()
+    fit_predict_keep(ctx, config, dataset, n_samples, n_features, labels, embedding_out, state, False, trace)
+
+
+def fit_predict_keep(
+    ctx: DeviceContext,
+    config: MLSpectralClusteringParams,
+    dataset: List[Float32],
+    n_samples: Int,
+    n_features: Int,
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+) raises:
+    """`fit_predict`, with `state` receiving the prediction data when `keep`
+    (lane/spectral-predict, 2026-09-15)."""
+    fit_predict_dataset_keep(
+        ctx, to_cuvs(config), dataset, n_samples, n_features, labels, embedding_out, state, keep, trace
     )
 
 
@@ -79,4 +98,19 @@ def fit_predict_connectivity(
 ) raises:
     """`fit_predict(handle, config, connectivity_graph, labels)` (`:43-49`)
     and the `(rows, cols, vals)` form (`:51-64`)."""
-    fit_predict_graph(ctx, to_cuvs(config), connectivity_graph, labels, embedding_out, trace)
+    var state = SpectralPredictionState()
+    fit_predict_connectivity_keep(ctx, config, connectivity_graph, labels, embedding_out, state, False, trace)
+
+
+def fit_predict_connectivity_keep(
+    ctx: DeviceContext,
+    config: MLSpectralClusteringParams,
+    connectivity_graph: CooGraph,
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+) raises:
+    """`fit_predict_connectivity`, keeping the prediction data when `keep`."""
+    fit_predict_graph_keep(ctx, to_cuvs(config), connectivity_graph, labels, embedding_out, state, keep, trace)

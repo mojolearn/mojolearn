@@ -1,0 +1,57 @@
+{
+ "fixture": "denormal_ftz",
+ "mojolearn": "/root/mojolearn/python/mojolearn",
+ "spectral": {
+  "agree": 1997,
+  "embedding_max_abs_gap": 0.0001660590060055256,
+  "fitted_labels_hist": [
+   547,
+   627,
+   467,
+   359
+  ],
+  "heldout_embedding": "a83549701216be47",
+  "heldout_labels": "b5f312f04c7b28d2",
+  "heldout_labels_hist": [
+   63,
+   81,
+   68,
+   44
+  ],
+  "mu": [
+   1.0,
+   0.9999910593032837,
+   0.999965250492096,
+   0.9999216794967651
+  ],
+  "n": 2000,
+  "rate": 0.9985
+ },
+ "spectral-precomputed": {
+  "agree": 1000,
+  "embedding_max_abs_gap": 0.005590870976448059,
+  "fitted_labels_hist": [
+   914,
+   15,
+   66,
+   5
+  ],
+  "heldout_embedding": "b4c88e3d82086a2e",
+  "heldout_labels": "a8eb3613683dd7e5",
+  "heldout_labels_hist": [
+   238,
+   4,
+   13,
+   1
+  ],
+  "mu": [
+   1.0,
+   0.7877464890480042,
+   0.6275509595870972,
+   0.5299789309501648
+  ],
+  "n": 1000,
+  "rate": 1.0
+ },
+ "vendor": "cpu"
+}

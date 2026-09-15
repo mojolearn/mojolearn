@@ -1,0 +1,59 @@
+{
+ "fixture": "base",
+ "mojolearn": "/root/mojolearn/python/mojolearn",
+ "spectral": {
+  "agree": 1965,
+  "embedding_max_abs_gap": 0.001514399889856577,
+  "fitted_labels_hist": [
+   423,
+   545,
+   604,
+   428
+  ],
+  "heldout_embedding": "897afd29c97ea8be",
+  "heldout_labels": "e64a89420ae38567",
+  "heldout_labels_hist": [
+   64,
+   58,
+   78,
+   56
+  ],
+  "model": "1b89aeaedeac5981",
+  "mu": [
+   1.0,
+   0.9667782783508301,
+   0.9649053812026978,
+   0.9641252160072327
+  ],
+  "n": 2000,
+  "rate": 0.9825
+ },
+ "spectral-precomputed": {
+  "agree": 998,
+  "embedding_max_abs_gap": 0.004578729160130024,
+  "fitted_labels_hist": [
+   326,
+   280,
+   294,
+   100
+  ],
+  "heldout_embedding": "61007a7ddea7a735",
+  "heldout_labels": "c5945e7607858bcc",
+  "heldout_labels_hist": [
+   76,
+   67,
+   88,
+   25
+  ],
+  "model": "6b04b89cfa623e45",
+  "mu": [
+   1.0,
+   0.4713844656944275,
+   0.4526047706604004,
+   0.4331395626068115
+  ],
+  "n": 1000,
+  "rate": 0.998
+ },
+ "vendor": "cpu"
+}

@@ -1,0 +1,55 @@
+{
+ "all_equal": true,
+ "calls": {
+  "spectral-precomputed/base/host_model": {
+   "embedding": "61007a7ddea7a735",
+   "equal": true,
+   "labels": "c5945e7607858bcc",
+   "type": "HostSpectralClustering"
+  },
+  "spectral-precomputed/base/load": {
+   "embedding": "61007a7ddea7a735",
+   "equal": true,
+   "labels": "c5945e7607858bcc",
+   "type": "SpectralClustering"
+  },
+  "spectral-precomputed/ties/host_model": {
+   "embedding": "97a83ebeb2b0293a",
+   "equal": true,
+   "labels": "3dd67f29cb517b13",
+   "type": "HostSpectralClustering"
+  },
+  "spectral-precomputed/ties/load": {
+   "embedding": "97a83ebeb2b0293a",
+   "equal": true,
+   "labels": "3dd67f29cb517b13",
+   "type": "SpectralClustering"
+  },
+  "spectral/base/host_model": {
+   "embedding": "897afd29c97ea8be",
+   "equal": true,
+   "labels": "e64a89420ae38567",
+   "type": "HostSpectralClustering"
+  },
+  "spectral/base/load": {
+   "embedding": "897afd29c97ea8be",
+   "equal": true,
+   "labels": "e64a89420ae38567",
+   "type": "SpectralClustering"
+  },
+  "spectral/ties/host_model": {
+   "embedding": "617cab2ecf4e9aad",
+   "equal": true,
+   "labels": "96b3464cdcc76265",
+   "type": "HostSpectralClustering"
+  },
+  "spectral/ties/load": {
+   "embedding": "617cab2ecf4e9aad",
+   "equal": true,
+   "labels": "96b3464cdcc76265",
+   "type": "SpectralClustering"
+  }
+ },
+ "mojolearn": "/tmp/target/mojolearn",
+ "vendor": "cpu"
+}

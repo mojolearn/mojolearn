@@ -54,6 +54,10 @@ from core.identity_trace import IdentityTrace
 from checks.numerics import ftz
 from neighbors.estimator import knn_search
 from spectral.checks.device_io import download_f32, upload_f32
+from spectral.host.spectral_predict_host import (
+    SpectralPredictionState,
+    spectral_keep_embedding_order,
+)
 from spectral.impl.sparse.coo import CooGraph
 from spectral.impl.sparse.linalg.detail.laplacian import (
     DeviceCoo,
@@ -234,10 +238,43 @@ def compute_eigenpairs(
     scratch_pad: Int = 0,
     scratch_poison: Float32 = 0.0,
 ) raises -> Int:
+    """`compute_eigenpairs_keep` keeping nothing."""
+    var state = SpectralPredictionState()
+    return compute_eigenpairs_keep(
+        ctx, params, n_samples, laplacian, diagonal, embedding, state, False,
+        trace, lanczos_tpb, scratch_pad, scratch_poison,
+    )
+
+
+def compute_eigenpairs_keep(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    n_samples: Int,
+    mut laplacian: DeviceCoo,
+    mut diagonal: DeviceBuffer[DType.float32],
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+    lanczos_tpb: Int = LANCZOS_TPB,
+    scratch_pad: Int = 0,
+    scratch_poison: Float32 = 0.0,
+) raises -> Int:
     """`compute_eigenpairs` (`:54-116`). `embedding` comes back `n_samples x
     n_out` row-major with `n_out = n_components - 1` when `drop_first`.
-    Returns `n_out`."""
+    Returns `n_out`.
+
+    With `keep` (lane/spectral-predict, 2026-09-15, for
+    `SpectralClustering(prediction_data=True)`), `state` receives COPIES of
+    the Ritz values, the Ritz vectors before the division and the diagonal,
+    in embedding column order (`spectral_keep_embedding_order`). Nothing is
+    recomputed and nothing recorded moves."""
     var k = params.n_components
+    if keep and (params.drop_first or not params.norm_laplacian):
+        raise Error(
+            "spectral: prediction data is kept for the clustering embedding only"
+            " (norm_laplacian true, drop_first false)"
+        )
     # `max_iterations = 10 * n_samples` (:64), the RAFT_EXPECTS (:65-66),
     # `ncv = min(n - n_components, max(2k + 1, 20))` (:67) and
     # `tolerance = config.tolerance` (:68) ALL MATCH THE REFERENCE EXACTLY, checked
@@ -281,6 +318,9 @@ def compute_eigenpairs(
     )
     trace.record_list_f32("spectral.ritz", eigenvalues)
     trace.record_list_f32("spectral.ritz.vectors", eigenvectors)
+    if keep:
+        spectral_keep_embedding_order(eigenvalues, eigenvectors, k, n_samples, state)
+        state.diag = download_f32(ctx, diagonal, n_samples)
     # eigenvectors /= diagonal (norm_laplacian)  (:80-87)
     if params.norm_laplacian:
         var d_vecs = upload_f32(ctx, eigenvectors)
@@ -318,6 +358,27 @@ def transform_graph(
     scratch_pad: Int = 0,
     scratch_poison: Float32 = 0.0,
 ) raises -> Int:
+    """`transform_graph_keep` keeping nothing."""
+    var state = SpectralPredictionState()
+    return transform_graph_keep(
+        ctx, params, connectivity_graph, embedding, state, False, trace,
+        laplacian_tpb, lanczos_tpb, scratch_pad, scratch_poison,
+    )
+
+
+def transform_graph_keep(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    connectivity_graph: CooGraph,
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+    laplacian_tpb: Int = LAPLACIAN_TPB,
+    lanczos_tpb: Int = LANCZOS_TPB,
+    scratch_pad: Int = 0,
+    scratch_poison: Float32 = 0.0,
+) raises -> Int:
     """`transform` on a COO (`:118-131`): `create_laplacian` then
     `compute_eigenpairs`. The values of the graph are validated first
     (finite, non-negative: a negative affinity makes `sqrt(degree)` a NaN in
@@ -345,8 +406,9 @@ def transform_graph(
     trace.record_device[DType.float32](ctx, "spectral.L.vals", lap.vals, lap.nnz)
     if params.norm_laplacian:
         trace.record_device[DType.float32](ctx, "spectral.diag", diagonal, n)
-    var n_out = compute_eigenpairs(
-        ctx, params, n, lap, diagonal, embedding, trace, lanczos_tpb, scratch_pad, scratch_poison
+    var n_out = compute_eigenpairs_keep(
+        ctx, params, n, lap, diagonal, embedding, state, keep, trace, lanczos_tpb,
+        scratch_pad, scratch_poison,
     )
     _ = diagonal^
     _ = lap^

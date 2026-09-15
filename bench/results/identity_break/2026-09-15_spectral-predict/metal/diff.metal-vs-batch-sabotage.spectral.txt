@@ -1,0 +1,27 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 1 other lane(s) the JSONs carry are not compared
+NOTE: column apple-m4 ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    apple-m4: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd1ba686494256660'}
+    apple-m4: None
+| lane/fixture                 | verdict    | apple-m4         | apple-m4         |
+|------------------------------|------------|------------------|------------------|
+| spectral/base                | IDENTICAL x2 | 7dd80ac8f13fc9eb | 7dd80ac8f13fc9eb |
+| spectral/ties                | ONE-COLUMN | f160e7dc7c262f73 | (not run)        |
+
+summary: IDENTICAL=1, ONE-COLUMN=1
+
+| lane/fixture                 | column | verdict      | apple-m4         | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|
+| spectral/base                | infer  | IDENTICAL x2 | 252d693ce8954a7e | 252d693ce8954a7e |
+| spectral/base                | model  | IDENTICAL x2 | 1b89aeaedeac5981 | 1b89aeaedeac5981 |
+| spectral/base                | batch  | BATCH_MOVED  | 68d103065457bdaa | BATCH_MOVED      |
+| spectral/ties                | infer  | ONE-COLUMN   | b2fb7d1e31bef33f | (not run)        |
+| spectral/ties                | model  | ONE-COLUMN   | d2c3cfca89b27058 | (not run)        |
+| spectral/ties                | batch  | ONE-COLUMN   | 006f4a6b2b116959 | (not run)        |
+
+summary (infer/model): IDENTICAL=2, ONE-COLUMN=2
+summary (batch): BATCH_MOVED=1, ONE-COLUMN=1
+summary (rlpair): 

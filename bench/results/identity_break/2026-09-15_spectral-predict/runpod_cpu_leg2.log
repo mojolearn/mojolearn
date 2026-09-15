@@ -1,0 +1,24 @@
+[16:49:45 cpu-leg] pre-flight: pods on this account
+[16:49:47 cpu-leg] dead-man ARMED before the create: pid 49023, fires in 6600s, keyed by mojolearn-cpu-spectral-predict-20260915-204943
+[16:49:47 cpu-leg] creating mojolearn-cpu-spectral-predict-20260915-204943. THE BILL STARTS HERE.
+[16:49:48 cpu-leg] pod yd8cwq7gw73vue created. COST $0.24/hr
+[16:50:24 cpu-leg] ssh up (-p 36290 root@157.157.221.29) after 37s; cost $0.24/hr
+[16:50:24 cpu-leg] arming the ON-POD watchdog (90 minutes)
+[16:50:31 cpu-leg] staging the source (18427809 bytes)
+[16:50:57 cpu-leg] CACHE PLAN pixi:pixi=hit env:default=hit env:test=hit env:pkg=miss
+[16:51:03 cpu-leg] BINCACHE STAGED partition=none/runpod-cpu-runpod-base-1.3.1-ubuntu2204 leg=20260915T205101Z-c97931b3 entries=65
+[16:51:07 cpu-leg] starting the box pipeline (env, build, command, cache upload)
+[16:51:30 cpu-leg]   box: env_start
+[16:51:30 cpu-leg]   box: env_end
+[16:51:30 cpu-leg]   box: build_start
+[16:51:52 cpu-leg]   box: build_end
+[16:51:52 cpu-leg]   box: run_start
+[16:53:19 cpu-leg]   box: run_end
+[16:53:19 cpu-leg]   box: upload_start
+[16:53:19 cpu-leg]   box: upload_end
+[16:53:19 cpu-leg] fetching $LEG_OUT
+[16:53:22 cpu-leg] command exit: 0   results: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/sp-pod2
+== teardown (exit 0) ==
+  VERIFIED: yd8cwq7gw73vue is gone (GET pod HTTP 404; not in the pod listing)
+  teardown (DELETE to verified gone)               2 s
+  billed (POST to verified gone)                   219 s

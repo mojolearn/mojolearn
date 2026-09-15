@@ -1379,7 +1379,7 @@ excluded={".git", ".pixi", ".venv", "__pycache__", "results", "dist", "archive",
 for line in sys.stdin:
     name=line.rstrip("\n"); p=pathlib.PurePosixPath(name)
     if any(d in excluded or d.startswith(".") for d in p.parts[:-1]): continue
-    native=name.endswith(".mojo") or (name.startswith(("bindings/", "packaging/linux/", "python/mojolearn/")) and name.endswith((".py", ".sh")))
+    native=name.endswith(".mojo") or (name.startswith(("bindings/", "packaging/linux/", "python/mojolearn/", "tokenizer/tools/")) and name.endswith((".py", ".sh")))
     tooling=name.startswith("tools/") and name.endswith((".py", ".sh"))
     metadata=name in {".gitattributes", "pixi.toml", "pixi.lock", "python/pyproject.toml", "python/mojolearn_diagnostics.py", "python/mojolearn/ALPHA_API.md", "README.md", "CITATION.cff", "LICENSE", "NOTICE"}
     if native or tooling or metadata:

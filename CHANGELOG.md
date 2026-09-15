@@ -21,7 +21,34 @@ Linux legs are OWED before this heading reads published.
   `mojolearn.host_model` binds a saved model to it on any machine. The reference tsa host
   binding registers both from the same source, and `hw_oracle.mojo::oracle_forecast` forecasts
   through the same body. Evidence: bench/results/identity_break/2026-09-15_inference-holtwinters.
-
+- New `SpectralClustering(prediction_data=True)`, `SpectralClustering.predict`, `save` and `load`
+  (`mojolearn-spectral-1`) (lane/spectral-predict, DEVIATION 2860, new capability that neither cuML
+  nor scikit-learn has).
+  - **Method.** The Nystrom out-of-sample extension of Bengio et al. (NIPS 2003), then the fit's
+    own k-means assignment (ties to the lowest centroid index).
+  - **New row's affinity.** For `nearest_neighbors`: its `n_neighbors` nearest training rows at
+    0.5, the fit's symmetrization of a one-way edge. For `precomputed`: the caller's
+    `(n_new, n_train)` affinity.
+  - **Threshold.** A used column with `|1 + theta| < 1e-3` is refused by name.
+  - **The fit.** It copies the eigenpairs, degree scaling and centroids out; no arithmetic is
+    added, and `prediction_data=False` fits as before.
+  - **Where it runs.** On the GPU binding and the CPU metrics host binding, which ships, so
+    `mojolearn.host_model(path)` predicts on a CPU-only install.
+  - **Not promised.** `predict(X_train) == labels_`; the evidence measures the rate
+    (bench/results/identity_break/2026-09-15_spectral-predict).
+- Public CPU inference from a saved gradient boosting model whose categorical columns are above
+  `one_hot_max_size` (real CTR tables: Borders at three priors and FeatureFreq) or whose
+  `ExperimentalTwoLevelFeatureFreq` tree splits on a combination (tensor CTRs with split history),
+  fitted on a GPU (lane/inference-gbdt-ctr-tables). `mojolearn.host_model(path)` parses the
+  `ctr_table`, `ctr_entry`, `tensor_ctr_registry` and `feature_freq_tensor` records and the shipped
+  forest host binding applies them with the same `expand_raw_columns` and tensor apply body the GPU
+  predict calls (the tensor apply moved to `gbdt/models/tensor_ctr_apply.mojo`, which has no device
+  import). Unseen and seen-once categories take the tables' empty and learned values; a NaN, negative
+  or non-integer categorical value and a CTR type with no apply-time arithmetic are refused by name.
+  No saved-model record changed. On two new identity lanes the x86 CPU predictions from the Metal
+  column's saved models equal the Metal cells (train, infer, model and batch, base, ties and odd), and
+  both the forest and a new CTR sabotage build move every train, infer and batch cell; the NVIDIA and
+  AMD cells are owed (bench/results/identity_break/2026-09-15_gbdt-ctr-tables).
 - Public CPU inference from a saved model for `GaussianProcessRegressor` (every kernel the fit
   accepts, `normalize_y` included), `GaussianProcessClassifier` (binary and one-vs-rest) and
   `GaussianMixture.sample` (lane/inference-neighbors-density). `GaussianProcessRegressor` gains

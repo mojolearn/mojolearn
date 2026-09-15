@@ -1,0 +1,97 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 166 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_forest_host'] commit=02d79d425f1ba2924c3d8edcbfe27b988a39f34f
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-x86-x86_64: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-x86-x86_64: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    amd-mi325x-gfx942: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-x86-x86_64: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-x86-x86_64: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-x86-x86_64: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': 'e4b16c115962dfcd'}
+    amd-mi325x-gfx942: {'X': 'e4b16c115962dfcd'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    cpu-x86-x86_64: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-x86-x86_64   |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr-tables/base | DIVERGENT  | parts differ: predict,proba; agree: - | (not run)        | (not run)        | 72cde7b15ef5f221 |
+| gbdt-categorical-ctr-tables/odd | DIVERGENT  | parts differ: predict,proba; agree: - | (not run)        | (not run)        | 1968fe7962279797 |
+| gbdt-categorical-ctr-tables/ties | DIVERGENT  | parts differ: predict,proba; agree: - | (not run)        | (not run)        | ac535fdcf35626e6 |
+| gbdt-tensor-ctr-tables/base  | DIVERGENT  | parts differ: predict; agree: - | (not run)        | (not run)        | 81ff1ddfff5a6b06 |
+| gbdt-tensor-ctr-tables/odd   | DIVERGENT  | parts differ: predict; agree: - | (not run)        | (not run)        | 069c6d393252a0a6 |
+| gbdt-tensor-ctr-tables/ties  | DIVERGENT  | parts differ: predict; agree: - | (not run)        | (not run)        | c65d72201a6fde9b |
+
+summary: DIVERGENT=6
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-x86-x86_64   |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr-tables/base | infer  | DIVERGENT    | a624d9f200295ebd | (not run)        | (not run)        | 6ca674d84461ffb0 |
+| gbdt-categorical-ctr-tables/base | model  | IDENTICAL x2 | bf3bea6dea6870d5 | (not run)        | (not run)        | bf3bea6dea6870d5 |
+| gbdt-categorical-ctr-tables/base | batch  | DIVERGENT    | d37a90de0b078e27 | (not run)        | (not run)        | 1031a2dfc55c782f |
+| gbdt-categorical-ctr-tables/odd | infer  | DIVERGENT    | d0a5ab298e3f354c | (not run)        | (not run)        | 3767f04f91ad7b5e |
+| gbdt-categorical-ctr-tables/odd | model  | IDENTICAL x2 | d12b8a92dfaf4f57 | (not run)        | (not run)        | d12b8a92dfaf4f57 |
+| gbdt-categorical-ctr-tables/odd | batch  | DIVERGENT    | 8a24ba90ab6fff7f | (not run)        | (not run)        | 004761944c569ee1 |
+| gbdt-categorical-ctr-tables/ties | infer  | DIVERGENT    | ba5bb1e19090253b | (not run)        | (not run)        | ce0017bfa23417e6 |
+| gbdt-categorical-ctr-tables/ties | model  | IDENTICAL x2 | 1a89f2f0c4b4089c | (not run)        | (not run)        | 1a89f2f0c4b4089c |
+| gbdt-categorical-ctr-tables/ties | batch  | DIVERGENT    | da78c16224627804 | (not run)        | (not run)        | 701a4a12b42c58c4 |
+| gbdt-tensor-ctr-tables/base  | infer  | DIVERGENT    | 18c29c1d0b000438 | (not run)        | (not run)        | 36e6f556a3ce2399 |
+| gbdt-tensor-ctr-tables/base  | model  | IDENTICAL x2 | d701b87375180e4b | (not run)        | (not run)        | d701b87375180e4b |
+| gbdt-tensor-ctr-tables/base  | batch  | DIVERGENT    | c14b5f2874153914 | (not run)        | (not run)        | acdd0381685f59cd |
+| gbdt-tensor-ctr-tables/odd   | infer  | DIVERGENT    | b6a857464e3fc541 | (not run)        | (not run)        | 1dd476d8f443121b |
+| gbdt-tensor-ctr-tables/odd   | model  | IDENTICAL x2 | 4148bc1f3f9b7e87 | (not run)        | (not run)        | 4148bc1f3f9b7e87 |
+| gbdt-tensor-ctr-tables/odd   | batch  | DIVERGENT    | 3de632fb4d411bcf | (not run)        | (not run)        | c3f0a65408341852 |
+| gbdt-tensor-ctr-tables/ties  | infer  | DIVERGENT    | 1659c6bbc45fd69d | (not run)        | (not run)        | cff255aadabb8f0c |
+| gbdt-tensor-ctr-tables/ties  | model  | IDENTICAL x2 | 4274b123a863584a | (not run)        | (not run)        | 4274b123a863584a |
+| gbdt-tensor-ctr-tables/ties  | batch  | DIVERGENT    | c648d9eb03bb1455 | (not run)        | (not run)        | c79adc440339285f |
+
+summary (infer/model): DIVERGENT=6, IDENTICAL=6
+summary (batch): DIVERGENT=6
+summary (rlpair): 
