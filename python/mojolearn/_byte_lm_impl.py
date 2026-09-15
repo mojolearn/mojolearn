@@ -2,8 +2,10 @@
 """Public wrapper for a runtime-shaped decoder language model.
 
 This module contains no forward/backward/update arithmetic. All numerical
-work belongs to _mojolearn_byte_lm. No learning, performance, mathematical
-correctness or cross-vendor identity claim follows from this source alone.
+work belongs to _mojolearn_byte_lm, or, on a process that loaded no GPU set,
+to the CPU byte LM binding through `_byte_lm_trainer_host` (2026-09-15). No
+learning, performance, mathematical correctness or cross-vendor identity
+claim follows from this source alone.
 
 NUMPY-FREE (numpy-free-0.7, DEVIATIONS 2428-2432). Inputs are read through
 the buffer protocol (`_buffer.view`): a NumPy array, an `array.array`, a
@@ -250,10 +252,25 @@ def _load(shape=None):
     shape = require_shape(shape)
     _mode()
     binding = _backend.binding(_EXTENSION, 'identical')
+    # On a process that loaded no GPU set, `_backend.binding` serves the
+    # single-device entries from the CPU byte LM binding
+    # (_byte_lm_trainer_host, lane/cpu-training-embedding-ivf, 2026-09-15),
+    # which reads back "cpu"; a box with a GPU never admits that vendor.
+    vendors = ('cuda', 'hip', 'metal')
+    if _backend._CPU_ONLY is not None:
+        from ._byte_lm_trainer_host import is_cpu_trainer_binding
+        if is_cpu_trainer_binding(binding):
+            # Public CPU training is reserved for the internal bitwise
+            # verifier (ee13e0d4b); tools/identity_break.py runs inside
+            # _cpu_reference.reference_training().
+            from ._cpu_reference import require_training
+            require_training(None)
+            vendors = ('cpu',)
     if (int(binding.byte_lm_numeric_mode()) != 1
             or str(binding.byte_lm_profile()) != PROFILE
-            or str(binding.byte_lm_vendor()) not in ('cuda', 'hip', 'metal')):
-        raise RuntimeError('Byte-LM requires the exact native profile, IDENTICAL mode and CUDA/HIP/Metal vendor')
+            or str(binding.byte_lm_vendor()) not in vendors):
+        raise RuntimeError('Byte-LM requires the exact native profile, IDENTICAL mode and CUDA/HIP/Metal vendor '
+                           '(or, on a CPU-only install, the CPU byte LM binding)')
     if not callable(getattr(binding, 'byte_lm_run', None)):
         raise ImportError('Byte-LM binding is missing byte_lm_run; rebuild bindings/build_byte_lm.sh')
     if shape.profile != PROFILE:

@@ -115,12 +115,33 @@ TRAINING_GPU_COLUMNS = (
 #: this list the day TRAINING_GPU_COLUMNS names a record taken after its
 #: fix. `python -m mojolearn identity` diffs against TRAINING_GPU_COLUMNS
 #: alone, so on a CPU-only install it runs `record_covered_lanes()`.
+#:
+#: The same list also carries covered lanes the record does not have at all
+#: (lane/cpu-training-embedding-ivf, 2026-09-15): embedding and
+#: embedding-sort, whose three GPU columns are
+#: bench/results/identity_break/2026-09-15_embedding-sort (Apple M4, H100,
+#: MI325X at ba4a108bb and e2d770ba8), and ivf and ivf-euclidean, whose three
+#: are bench/results/identity_break/2026-09-14_ivf-euclidean (Apple M4, H100,
+#: MI300X at 76a170dcf, after the L2SqrtExpanded fix). `identity_break --diff`
+#: takes every JSON here at once: a column that lacks a lane reads "(not
+#: run)" on its cells and is not counted, so each of these lanes rests on
+#: its own record's three GPU hashes plus the CPU column's, which
+#: `--require-columns 4` demands, and a JSON that carried a lane it should
+#: not would add a fifth hash to the cell rather than hide one. They leave
+#: this list the day TRAINING_GPU_COLUMNS names a record that carries them
+#: (lane/identity-record-next's 178-lane record does).
 TRAINING_FIX_COLUMNS = (
     "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json",
     "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/nvidia-h100-sm_90a.json",
     "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/amd-mi325x-gfx942.json",
+    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.apple-m4.json",
+    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.nvidia-nvidia-h100-80gb-hbm3-sm_90a.json",
+    "bench/results/identity_break/2026-09-15_embedding-sort/identity_break.amd-gfx942.json",
+    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.apple-m4.json",
+    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.nvidia-nvidia-h100-80gb-hbm3-sm_90a.json",
+    "bench/results/identity_break/2026-09-14_ivf-euclidean/identity_break.amd-mi300x-gfx942.json",
 )
-TRAINING_FIX_LANES = ("kmeans-sqrt",)
+TRAINING_FIX_LANES = ("kmeans-sqrt", "embedding", "embedding-sort", "ivf", "ivf-euclidean")
 
 #: The GPU columns the classical INFERENCE gate compares each host identity
 #: hash against (tools/classical_host_gate.py check --gpu-column).
@@ -147,6 +168,18 @@ CLASSICAL_RECORDED = (
     # lanes are owed to the next release record; their infer cells in the
     # 166-lane record are the cross-vendor comparison until then.
     "bench/results/classical_host/2026-09-15-apple-m4-linear-kernel",
+    # lane/inference-forecast-umap-pca (2026-09-15): pca-full-whiten and umap,
+    # recorded on the M4's Metal set; both bind families the gate builds.
+    "bench/results/classical_host/2026-09-15-apple-m4-umap-pca",
+)
+
+#: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
+#: checked with `tools/classical_host_gate.py check` like CLASSICAL_RECORDED
+#: but kept apart from it: they bind `_mojolearn_forecast_host`, a family
+#: with no route, which the CPU identity gate workflow does not build today.
+#: The workflow reading this list is owed to its owner.
+FORECAST_RECORDED = (
+    "bench/results/classical_host/2026-09-15-apple-m4-arima",
 )
 
 #: The forest inference recordings: every directory under this root whose
@@ -597,6 +630,39 @@ TRAINING_LANE_NAMES = {
     # on CPU only at one device, where the GPU binding's range split is the
     # plain path; two devices refuse by name.
     "par-mlp": "the small MLP trained over ordered logical gradient shards",
+    # The Embedding layer and IVFIndex (lane/cpu-training-embedding-ivf,
+    # 2026-09-15). Embedding's gather and fold, both execution plans, the
+    # padding row and the microbatch carry, through
+    # embedding/host/embedding_host.mojo (the device launch restated, not
+    # the contract's oracle) in the embedding family's own host binding.
+    # Their GPU cells are not in the 166-lane record; they are diffed against
+    # TRAINING_EXTRA_RECORDS below.
+    "embedding": "the Embedding layer",
+    "embedding-sort": "the Embedding layer on its sorted execution plan",
+    # IVFIndex's build and search through ivf/host/ivf_host.mojo (the k-means
+    # quantizer through cluster/host/kmeans_oracle.mojo) in the ivf family's
+    # own host binding, under both L2 metrics.
+    "ivf": "the IVF-Flat index",
+    "ivf-euclidean": "the IVF-Flat index under euclidean distance",
+    # The GPU byte LM trainer's lanes (same branch): SmallByteLanguageModelTrainer,
+    # stateless and on its resident session, whose single-device entries a
+    # CPU-only install serves from the byte LM host binding's step, loss and
+    # logits (ADAPTED_MODULES below). Both lanes are in the 166-lane record.
+    "byte-lm": "the byte LM trainer",
+    "byte-lm-resident": "the byte LM trainer on its resident session",
+}
+
+#: GPU binding families a CPU-only install serves through a Python adapter
+#: over a host binding loaded by path, rather than through a routed host
+#: binding exporting the GPU names (lane/cpu-training-embedding-ivf,
+#: 2026-09-15). `_backend.binding(name)` returns `<module>.binding()` when
+#: the family's host binding is built, and the installed stub refuses by
+#: name when it is not. The byte LM trainer's GPU binding carries a resident
+#: session ABI and multi-GPU entries a Mojo host binding would have to
+#: restate as state; the adapter holds the session's bookkeeping and the
+#: CPU byte LM binding's step, loss and logits hold all of the arithmetic.
+ADAPTED_MODULES = {
+    "_mojolearn_byte_lm": dict(family="byte_lm", module="_byte_lm_trainer_host"),
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -604,7 +670,6 @@ TRAINING_LANE_NAMES = {
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
     "the Samba blocks",
-    "the Embedding layer",
     "gradient boosting training outside its declared lanes (CTR categorical features, and sample weights, eval sets and the pointwise searcher outside the gbdt-pointwise-l2-bayesian-eval configuration, among them)",
 )
 
@@ -632,10 +697,17 @@ FAMILIES = (
         # branch); this family's own define moves the two inference lanes
         # and not the training step, which the byte LM CPU gate's
         # wrong-gradient build covers.
-        training_lanes=("byte-lm-host-infer", "byte-lm-host-infer-threaded", "byte-lm-host-train"),
+        # lane/cpu-training-embedding-ivf (2026-09-15): the GPU trainer's two
+        # lanes, through python/mojolearn/_byte_lm_trainer_host.py
+        # (ADAPTED_MODULES). Loaded through _backend.load_host_module for
+        # them, so the CPU identity gate's sabotage set (built with
+        # MOJOLEARN_HOST_SABOTAGE, gemm_oracle's descending leaf) reaches
+        # them, and byte_lm_host_sabotage reports that arm too.
+        training_lanes=("byte-lm-host-infer", "byte-lm-host-infer-threaded", "byte-lm-host-train",
+                        "byte-lm", "byte-lm-resident"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LanguageModelInference", "LanguageModelHostTrainer"),
+        classes=("LanguageModelInference", "LanguageModelHostTrainer", "SmallByteLanguageModelTrainer"),
         display="the byte LM forward pass and one training step",
         host_modules=(
             "training/byte_lm_host.mojo",
@@ -650,7 +722,7 @@ FAMILIES = (
             "byte_lm_host_train_step", "all_finite_f32", "all_finite_f64",
             "cast_f64_to_f32",
         ),
-        gate=".github/workflows/byte-lm-cpu-gate.yml",
+        gate=".github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
     ),
     dict(
@@ -856,7 +928,7 @@ FAMILIES = (
             "logistic-elasticnet", "logistic-unpenalized-no-intercept",
             "standard-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
             "minmax-scaler", "minmax-scaler-clip", "lasso", "elasticnet",
-            "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler",
+            "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler", "pca-full-whiten",
         ),
         forest_kinds=(),
         classes=(
@@ -864,7 +936,7 @@ FAMILIES = (
             "PCA", "KernelDensity", "DBSCAN", "StandardScaler", "MinMaxScaler",
             "Lasso", "ElasticNet", "KernelRidge", "Nystroem", "RBFSampler",
         ),
-        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening, kernel density, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
+        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
@@ -906,7 +978,12 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
                         "metrics-fowlkes-mallows"),
-        inference_lanes=(),
+        # UMAP.transform from a saved embedding (lane/inference-forecast-
+        # umap-pca, 2026-09-15). Its answer depends on the query batch by the
+        # transform's contract, so the claim is the GPU's bytes for the same
+        # batch; `inference_display` says so in the README sentence.
+        inference_lanes=("umap",),
+        inference_display="UMAP transform of a saved embedding (the GPU's bytes for the same query batch; a row's embedding depends on the batch it is asked in)",
         forest_kinds=(),
         classes=(
             "SpectralClustering", "UMAP",
@@ -1433,8 +1510,9 @@ FAMILIES = (
         # Workstream E (lane/cpu-training-arima, 2026-09-14): batched
         # ARIMA's host binding. It routes `_mojolearn_arima` on a CPU-only
         # install with the GPU binding's whole surface (fit, predict,
-        # forecast); p, q or P above 1, any Q, d + D of 2, p + q + k of 0
-        # and an in-sample prediction refuse by name. par-arima is declared
+        # forecast); p, q or P above 1, any Q, d + D of 2 and p + q + k of 0
+        # refuse by name (an in-sample prediction runs since 2026-09-15, and
+        # the forecast family below ships the prediction half). par-arima is declared
         # since lane/cpu-training-par-classical (2026-09-15): fit_arima's
         # series shards run as host fits in their own workers.
         family="arima",
@@ -1455,6 +1533,98 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
+    ),
+    dict(
+        # lane/cpu-training-embedding-ivf (2026-09-15): the Embedding
+        # layer's host binding. It routes `_mojolearn_embedding` on a
+        # CPU-only install with the GPU binding's whole surface
+        # (embedding_forward, embedding_backward and the two read-backs),
+        # the refusals in its words and order.
+        family="embedding",
+        binding="_mojolearn_embedding_host",
+        routes="_mojolearn_embedding",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("embedding", "embedding-sort"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("Embedding",),
+        display="the Embedding layer",
+        host_modules=(
+            "embedding/host/embedding_host.mojo",
+            "embedding/checks/embedding_oracle.mojo",
+        ),
+        exports=(
+            "embedding_host_numeric_mode", "embedding_host_vendor",
+            "embedding_host_column", "embedding_host_sabotage",
+            "embedding_vendor", "embedding_numeric_mode",
+            "embedding_forward", "embedding_backward",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # lane/cpu-training-embedding-ivf (2026-09-15): IVFIndex's host
+        # binding. It routes `_mojolearn_ivf` on a CPU-only install with the
+        # GPU binding's whole surface (ivf_flat_build_and_search and the two
+        # read-backs): the build's k-means quantizer through the k-means
+        # lane's host restatement, the CSR layout and probe merge the device
+        # path already runs on the host, and the pinned distance tile and
+        # the identical top-k restated.
+        family="ivf",
+        binding="_mojolearn_ivf_host",
+        routes="_mojolearn_ivf",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("ivf", "ivf-euclidean"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("IVFIndex",),
+        display="the IVF-Flat index",
+        host_modules=(
+            "ivf/host/ivf_host.mojo",
+            "cluster/host/kmeans_oracle.mojo",
+            "ivf/checks/list_layout.mojo",
+            "ivf/impl/neighbors/ivf_common.mojo",
+            "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo",
+        ),
+        exports=(
+            "ivf_host_numeric_mode", "ivf_host_vendor", "ivf_host_column",
+            "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
+            "ivf_flat_build_and_search",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        # lane/inference-forecast-umap-pca (2026-09-15): public CPU inference
+        # for saved ARIMA models, with no fit in the binary. The reference
+        # arima family above carries the whole fit and stays out of the
+        # wheels; this binding registers arima_predict and arima_forecast
+        # from the same source (bindings/arima_host_predict.mojo) and ships.
+        # `routes` is None because `_mojolearn_arima` routes to the reference
+        # binding when it is built; `serves` names the route this binding
+        # takes when it is not (`_backend._HOST_INFERENCE_MODULES`), which is
+        # an installed CPU-only wheel.
+        family="forecast",
+        binding="_mojolearn_forecast_host",
+        routes=None,
+        serves=("_mojolearn_arima",),
+        loaded_by="_backend._HOST_INFERENCE_MODULES and python/mojolearn/_classical_host.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("arima", "arima-011", "arima-seasonal-c"),
+        forest_kinds=(),
+        classes=("ARIMA",),
+        display="batched ARIMA prediction, in sample and out of sample, and forecasts",
+        host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict.mojo"),
+        exports=(
+            "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
+            "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
+            "arima_predict", "arima_forecast",
+        ),
+        gate="tools/classical_host_gate.py and tools/identity_break.py",
+        ships_in_wheel=True,
     ),
     dict(
         family="transformer",
@@ -1612,6 +1782,22 @@ def inference_lanes():
     return out
 
 
+def inference_routes():
+    """`_MODULES` name -> the inference-only host binding that serves it on
+    a CPU-only install when the route's reference binding is not built (the
+    `serves` key; lane/inference-forecast-umap-pca, 2026-09-15). A route may
+    be served by one such binding, and only a binding that ships."""
+    out = {}
+    for f in FAMILIES:
+        for route in f.get("serves", ()):
+            if route in out:
+                raise RuntimeError(f"host_surface: {route} is served by {out[route]} and {f['binding']}")
+            if not f["ships_in_wheel"]:
+                raise RuntimeError(f"host_surface: {f['binding']} serves {route} but does not ship")
+            out[route] = f["binding"]
+    return out
+
+
 def forest_kinds():
     return list(family("forest")["forest_kinds"])
 
@@ -1628,7 +1814,7 @@ def training_sentence():
 def inference_sentence():
     """The inference list as the README states it, one clause per family
     that serves a saved model."""
-    parts = [f["display"] for f in FAMILIES if f["inference_lanes"] or f["forest_kinds"]]
+    parts = [f.get("inference_display", f["display"]) for f in FAMILIES if f["inference_lanes"] or f["forest_kinds"]]
     return "; ".join(parts)
 
 
@@ -1662,8 +1848,14 @@ def markdown_table():
             predicts = ", ".join(f["classes"])
         else:
             predicts = "no"
+        if f["routes"]:
+            route = "`" + f["routes"] + "`"
+        elif f.get("serves"):
+            route = ", ".join("`" + r + "`" for r in f["serves"]) + " when its reference binding is not built"
+        else:
+            route = "loaded by path"
         rows.append(
-            f"| {f['family']} | `{f['binding']}.so` | {('`' + f['routes'] + '`') if f['routes'] else 'loaded by path'} "
+            f"| {f['family']} | `{f['binding']}.so` | {route} "
             f"| {trains} | {predicts} | {f['gate']} | {'yes' if f['ships_in_wheel'] else 'no, `' + build_shim(f['family']) + '`'} |"
         )
     return "\n".join(rows)
@@ -1675,12 +1867,14 @@ def as_dict():
         builder=BUILDER,
         families=[dict(f) for f in FAMILIES],
         routed=routed_modules(),
+        inference_routes=inference_routes(),
         covered_lanes=covered_lanes(),
         record_covered_lanes=record_covered_lanes(),
         fix_covered_lanes=fix_covered_lanes(),
         inference_lanes=inference_lanes(),
         forest_kinds=forest_kinds(),
         classical_recorded=list(CLASSICAL_RECORDED),
+        forecast_recorded=list(FORECAST_RECORDED),
         classical_gpu_columns=list(CLASSICAL_GPU_COLUMNS),
         training_gpu_columns=list(TRAINING_GPU_COLUMNS),
         training_fix_columns=list(TRAINING_FIX_COLUMNS),
@@ -1689,6 +1883,7 @@ def as_dict():
         wheel_bindings=wheel_bindings(),
         forest_recorded_root=FOREST_RECORDED_ROOT,
         no_cpu_path=list(NO_CPU_PATH),
+        adapted_modules={k: dict(v) for k, v in ADAPTED_MODULES.items()},
     )
 
 
