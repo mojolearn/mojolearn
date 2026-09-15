@@ -1,0 +1,3 @@
+1334c40234eeb8cb53673adb5e01179b0d8fc2a56ae48961b1b66da6cd400b24  python/mojolearn/host/_mojolearn_core_host.so
+5c53cc94da4ff3c1bb4c3e4189d1eaa7d607aa00dc628aa127efd9dcbaa43753  python/mojolearn/host/_mojolearn_gbdt_host.so
+96304268deae6564c887e6218acd676abcabfb182a67cac945c661f5dcc0fc56  python/mojolearn/host-sabotage/_mojolearn_gbdt_host.so
