@@ -66,7 +66,9 @@ with its own banner saying it is unreachable from any identity path here.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+from cholesky.multi_gpu import CholSolveShard, chol_device_count
 
 from core.identity_trace import IdentityTrace
 from cholesky.checks.chol_sabotage import (
@@ -392,5 +394,99 @@ def cho_solve(
     host entry (`cholesky/estimator.mojo`) refuses that case by name, and
     this device-level form trusts its caller exactly as `potrs` does.
     """
+    var owners = chol_device_count()
+    if owners > 1 and nrhs > 1:
+        if sabotage != CHOL_SAB_NONE:
+            raise Error("multi-GPU cho_solve does not execute sabotage probes")
+        _cho_solve_columns(ctx, l, b, n, nrhs, trace, tpb, owners)
+        return
     trsm_lower(ctx, l, b, n, nrhs, trace, "chol.solve.forward", tpb, sabotage)
     trsm_upper(ctx, l, b, n, nrhs, trace, "chol.solve.back", tpb, sabotage)
+
+
+def _cho_solve_columns(
+    ctx: DeviceContext,
+    mut l: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    n: Int,
+    nrhs: Int,
+    mut trace: IdentityTrace,
+    tpb: Int,
+    count: Int,
+) raises:
+    """`cho_solve` with whole right-hand-side columns on owners.
+
+    Each column's forward and back substitutions are the original kernels on
+    its owner; results are copied as bytes into their original columns, and
+    both card stages are recorded on the root after each gather.
+    """
+    if len(l) < n * n or len(b) < n * nrhs:
+        raise Error("multi-GPU cho_solve: a buffer is shorter than its shape")
+    if n > 2147483647 // nrhs:
+        raise Error("multi-GPU cho_solve exceeds signed 32-bit indexing")
+    var active = min(count, nrhs)
+    # HOST STAGED. The factor and the right-hand sides are read back once;
+    # every owner receives its bytes from host memory through its own
+    # context, and every owner's result comes back to host memory before it
+    # is scattered. No device-to-device copy and no root gather kernel is
+    # involved: the device-to-device form diverged on two MI300X for every
+    # factor above 1 MiB (n >= 513) in the columns owned by device 1, and
+    # passed when the owner's copies were read back before the solve
+    # (bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/).
+    var host_l = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+    var host_b = ctx.enqueue_create_host_buffer[DType.float32](n * nrhs)
+    var lv = l.create_sub_buffer[DType.float32](0, n * n)
+    var bv = b.create_sub_buffer[DType.float32](0, n * nrhs)
+    ctx.enqueue_copy(dst_ptr=host_l.unsafe_ptr(), src_buf=lv)
+    ctx.enqueue_copy(dst_ptr=host_b.unsafe_ptr(), src_buf=bv)
+    ctx.synchronize()
+    var shards = List[CholSolveShard]()
+    for rank in range(active):
+        var first = nrhs * rank // active
+        var width = nrhs * (rank + 1) // active - first
+        var source = first
+        comptime if is_defined["MOJOLEARN_CHOLESKY_PARALLEL_SABOTAGE"]():
+            if rank > 0:
+                source = first - 1
+        var device = DeviceContext(device_id=rank)
+        var packed = device.enqueue_create_host_buffer[DType.float32](n * width)
+        device.synchronize()
+        for i in range(n):
+            for c in range(width):
+                packed.unsafe_ptr()[i * width + c] = host_b.unsafe_ptr()[i * nrhs + source + c]
+        var sb = device.enqueue_create_buffer[DType.float32](n * width)
+        var sl = device.enqueue_create_buffer[DType.float32](n * n)
+        device.enqueue_copy(dst_buf=sb, src_ptr=packed.unsafe_ptr())
+        device.enqueue_copy(dst_buf=sl, src_ptr=host_l.unsafe_ptr())
+        device.synchronize()
+        _ = packed^
+        shards.append(CholSolveShard(device^, sl^, sb^, first, width))
+    var quiet = IdentityTrace.disabled()
+    for stage in range(2):
+        for rank in range(active):
+            ref s = shards[rank]
+            if stage == 0:
+                trsm_lower(s.ctx, s.l, s.b, n, s.width, quiet, "chol.solve.forward", tpb)
+            else:
+                trsm_upper(s.ctx, s.l, s.b, n, s.width, quiet, "chol.solve.back", tpb)
+        for rank in range(active):
+            ref s = shards[rank]
+            var result = s.ctx.enqueue_create_host_buffer[DType.float32](n * s.width)
+            s.ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=s.b)
+            s.ctx.synchronize()
+            for i in range(n):
+                for c in range(s.width):
+                    host_b.unsafe_ptr()[i * nrhs + s.first + c] = result.unsafe_ptr()[i * s.width + c]
+            _ = result^
+        ctx.enqueue_copy(dst_buf=bv, src_ptr=host_b.unsafe_ptr())
+        ctx.synchronize()
+        if stage == 0:
+            trace.record_device(ctx, "chol.solve.forward", b, n * nrhs)
+        else:
+            trace.record_device(ctx, "chol.solve.back", b, n * nrhs)
+    _ = shards^
+    _ = lv^
+    _ = bv^
+    _ = host_l^
+    _ = host_b^
+    ctx.synchronize()

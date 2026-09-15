@@ -1,0 +1,98 @@
+{
+  "status": "PASS",
+  "devices": [
+    0,
+    1
+  ],
+  "checks": [
+    {
+      "n": 1,
+      "nrhs": 1,
+      "jitter": null,
+      "info": 0,
+      "nb": 32,
+      "factor_sha256": "a559a7568d3c65c2c11db16470383c7bc1112f4776001c8c13437a3312bd3f2a",
+      "solutions": {
+        "(1,)": "700f7be1018bf33f30ca03e58d34a2ad87e53dfe41f435eb56f2b964790c6ae5",
+        "(1, 1)": "32a919fc5350038b50bac4227edb7e013d4e81a63b5ffafc4fd475451470c414"
+      }
+    },
+    {
+      "n": 33,
+      "nrhs": 3,
+      "jitter": null,
+      "info": 0,
+      "nb": 32,
+      "factor_sha256": "e1a6e8e0fed98191ff42c18680f133319309bc39b8e326972f73b121603db958",
+      "solutions": {
+        "(33,)": "073ebbf7c496066dcb7369fd92b41fbf1606a6e15b1225c2117184439f320a00",
+        "(33, 3)": "a481bc45e87b1ec00b60fb7b9ee0ec2736e53dddb30695a45d235f28386b933f"
+      }
+    },
+    {
+      "n": 64,
+      "nrhs": 1,
+      "jitter": 0.0,
+      "info": 0,
+      "nb": 32,
+      "factor_sha256": "225859bb689a8a98a7a3781933502b8b9cdd4fc4699b14d391e3a055bd5a3bcf",
+      "solutions": {
+        "(64,)": "35f3b3ee2ff9f95b01999aca85456cd8a7e749a826bbf094120bdce9a5158bc9",
+        "(64, 1)": "2f178ac09d94259bf988c57d7e2b7e796110fcc52b710ac8f6f75ab3f430ca33"
+      }
+    },
+    {
+      "n": 130,
+      "nrhs": 5,
+      "jitter": null,
+      "info": 0,
+      "nb": 32,
+      "factor_sha256": "3257632c946baea1b569ebd1ba5f4653aca3db2820d759030ca878890eb2b09a",
+      "solutions": {
+        "(130,)": "40132ba21fab2afa44f6fe85086205cdabbcf737184c44cacd7d1cef5ac0e9af",
+        "(130, 5)": "2ae46888e9a2b4c9573259d8efdc190c902e7cb35c0eee8ae07c3bfcdf3cbbbc"
+      }
+    },
+    {
+      "n": 400,
+      "nrhs": 8,
+      "jitter": 0.0,
+      "info": 0,
+      "nb": 32,
+      "factor_sha256": "4c3c5b668085a2bfa9d8b466ca2d457ac5327edde32f9d74edfec1c581689574",
+      "solutions": {
+        "(400,)": "ce19ab4e85cdc43a7f57e9350ebf75e4d0b44715f412fd980c23d216a4052b88",
+        "(400, 8)": "b72548b5f6c1d9aef6f8569716c9e34bc4b493ae45483ea4128a914c55608fd1"
+      }
+    },
+    {
+      "n": 777,
+      "nrhs": 2,
+      "jitter": null,
+      "info": 0,
+      "nb": 32,
+      "factor_sha256": "a31b7c3e423884849730e79e1acbdf21dfdd5c0d1f352b1da9c18c46e216e3b8",
+      "solutions": {
+        "(777,)": "601d7dadc3193015a7bb0ce80f7267e1d15d7fd038332a39cd380086ea33d393",
+        "(777, 2)": "50c4de106cad7850ae70a5d3c90985f67ed7b36a61b58016b90d08d2ef8eea11"
+      }
+    },
+    {
+      "n": 96,
+      "nrhs": 1,
+      "jitter": 0.0,
+      "info": 49,
+      "nb": 32,
+      "factor_sha256": "4babac58e6744bbb95331866b977a4ff1c311b107c8b0804abecb353fd64065c",
+      "solutions": {}
+    }
+  ],
+  "refusals": [
+    "solve_failed_factor",
+    "wrong_type",
+    "nonidentical",
+    "unfitted_solve",
+    "nonsymmetric"
+  ],
+  "scope": "Cholesky factor with trailing-update rows and solve with right-hand-side columns across devices versus one device; panel order, pivots and root matrix unchanged; no speed claim"
+}

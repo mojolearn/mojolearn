@@ -315,6 +315,7 @@ from cholesky.checks.chol_sabotage import (
     sabotage_trsm_panel_kernel,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_panel_kernel
+from cholesky.multi_gpu import chol_device_count, chol_trailing_rows
 from cholesky.impl.matrix.detail.matrix import (
     copy_vector_from_matrix_diagonal_kernel,
 )
@@ -1133,9 +1134,15 @@ def potrf_lower(
                 # k-split is a per-vendor summation order; DEVIATION 1636.
                 gemm_nt(ctx, g, packed, packed_b, n_trail, n_trail, w)
             else:
-                identical_gemm_into(
-                    ctx, g, packed, packed_b, gws, n_trail, n_trail, w, OP_NT
-                )
+                # Whole output rows across owners when the operation-level
+                # driver is enabled (cholesky/multi_gpu.mojo); same cells.
+                var owners = chol_device_count()
+                if owners > 1 and n_trail > 1:
+                    chol_trailing_rows(ctx, g, packed, n_trail, w, owners)
+                else:
+                    identical_gemm_into(
+                        ctx, g, packed, packed_b, gws, n_trail, n_trail, w, OP_NT
+                    )
 
             var sub_cells = n_trail * n_trail
             ctx.enqueue_function[subtract_lower_kernel](
