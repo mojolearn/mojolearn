@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU training for the par-* lanes whose driver shards in Python
 (lane/cpu-training-par-classical, 2026-09-15): par-scaler, par-arima and
-par-holtwinters.
+par-holtwinters; since lane/cpu-training-par-wave2 (the same day) also the
+query-sharded and reference-sharded neighbor drivers.
 
 Source checks (run on a box with nothing built): the manifest declares each
 lane on the family whose host binding serves its shard fits; the pool's
@@ -29,10 +30,15 @@ from mojolearn import _backend, _parallel_pool, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
 
-LANES = {"par-scaler": "preprocessing", "par-arima": "arima", "par-holtwinters": "tsa"}
+LANES = {"par-scaler": "preprocessing", "par-arima": "arima", "par-holtwinters": "tsa",
+         # wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor drivers
+         "par-queries-knn": "core", "par-queries-radius": "core", "par-queries-kde": "estimators",
+         "par-reference-knn": "core", "par-reference-knn-reg": "core"}
 DRIVERS = {
     "python/mojolearn/parallel_preprocessing.py": ("scaler_fit", "scaler_transform"),
     "python/mojolearn/parallel_classical.py": ("arima_fit", "holtwinters_fit"),
+    "python/mojolearn/parallel_neighbors.py": ("neighbor_query",),
+    "python/mojolearn/parallel_neighbors_reference.py": ("neighbor_reference", "neighbor_vote"),
 }
 
 
