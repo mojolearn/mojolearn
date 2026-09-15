@@ -26,7 +26,16 @@ Linux legs are OWED before this heading reads published.
   are unchanged against the three committed GPU columns. A new
   `-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1` build must read BATCH_MOVED. Apple M4 CPU
   column only; the GPU columns' batch cells are owed to the release record.
-- New `mojolearn.metrics.fowlkes_mallows_score`, mirroring scikit-learn's definition (cuML
+- `score(X, y, sample_weight=...)` on `GradientBoostingClassifier`, `GradientBoostingRegressor`,
+  the random forests and the Extra Trees, and `sample_weight` on `metrics.accuracy_score` and
+  `metrics.r2_score`, all of which refused weights. They follow scikit-learn's reference definitions of weighted
+  accuracy (`np.average(y == y_pred, weights=w)`) and weighted R2 (`force_finite=True`) in
+  Float32 on the pinned-sum path (`metrics/impl/weighted_scores.mojo`); weights are 1-D,
+  finite, non-negative and of positive total. Both metrics bindings export the weighted arms;
+  the new `gbdt-adapter-score-weighted` and `rf-score-weighted` identity lanes cover them, with
+  the metrics host sabotage build required to read DIVERGENT. Apple M4 Metal and CPU columns
+  only; NVIDIA and AMD columns are owed to the release record.
+- New `mojolearn.metrics.fowlkes_mallows_score`, following the scikit-learn reference definition (cuML
   has none): the device integer contingency matrix, exact Int64 pair counts, then
   `sqrt(tk / pk) * sqrt(tk / qk)` in Float64, 0.0 when `tk == 0` (no samples, one sample,
   all singletons). It was a named absence. The metrics GPU binding and the metrics host
