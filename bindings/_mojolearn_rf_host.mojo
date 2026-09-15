@@ -25,10 +25,17 @@ through `_backend._HOST_MODULES` (`"_mojolearn_rf": "_mojolearn_rf_host"`):
 argument of `bindings/_mojolearn_rf.mojo`), `forest_export`,
 `forest_export_legacy`, `forest_export_release`, `rf_predict_proba`,
 `rf_predict_reg`, `rf_vendor` answering "cpu" and `rf_numeric_mode`.
-ABSENT, and so refused BY NAME through `_HostBinding`: the class-weighted
-fit (`rf_classifier_fit_weighted*`), the global tree-ID shard fits
-(`rf_*_fit_shard`, the multi-GPU driver's), and every GPU engine
-(`rf_predict_*_gpu_parallel`, the resident `forest_*` entries).
+ADDED 2026-09-15 (rf-reg-poisson, rf-reg-gamma-ig,
+rf-clf-balanced-parallel): the POISSON, GAMMA and INVERSE_GAUSSIAN criteria
+fit through the oracle; `rf_classifier_fit_weighted` and its `_export` form
+take the per-row class weights (the weighted BOOTSTRAP; weights without a
+bootstrap reach the weighted objective, which the oracle refuses by name);
+and `forest_prepare_gpu`, `forest_predict_resident_reuse_gpu` and
+`forest_release_gpu`, the resident `parallel_groves` entries, predict over
+`core/forest_host_groves.mojo` (`RF_INPUT=True`: the input flushed).
+ABSENT, and so refused BY NAME through `_HostBinding`: the global tree-ID
+shard fits (`rf_*_fit_shard`, the multi-GPU driver's), the non-resident
+`rf_predict_*_gpu_parallel` and the pool and comparison entries.
 
 WHY A FAMILY OF ITS OWN AND NOT THE FOREST HOST BINDING. The batch 3 brief
 named `bindings/_mojolearn_forest_host.mojo` as the home. That binding is
@@ -65,6 +72,11 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.forest_host_predict import rf_host_predict, rf_host_trees
+from bindings.forest_host_groves_binding import (
+    forest_predict_resident_host_binding,
+    forest_prepare_host_binding,
+    forest_release_host_binding,
+)
 from ensemble.host.rf_oracle import (
     RF_ENTROPY,
     RF_GAMMA,
@@ -146,8 +158,7 @@ def rf_numeric_mode_binding() raises -> PythonObject:
 
 def _check_criterion(who: String, criterion: Int, classification: Bool) raises:
     """`bindings/_mojolearn_rf.mojo::_check_criterion` (DEVIATION 407), the
-    same accepted sets; the host fit then refuses by name the three
-    regression criteria it does not restate."""
+    same accepted sets."""
     if classification:
         if criterion == RF_GINI or criterion == RF_ENTROPY:
             return
@@ -259,9 +270,11 @@ def _rf_fit[
     y_addr: PythonObject,
     params: PythonObject,
     criterion: PythonObject,
+    weights_addr: Int = 0,
 ) raises -> PythonObject:
     """`_rf_classifier_fit` / `_rf_regressor_fit` of the GPU binding: the same
-    slot checks in the same words, then the host fit."""
+    slot checks in the same words, then the host fit. `weights_addr` is the
+    weighted classifier's Float32 row weights (0: none)."""
     comptime entry = "rf_classifier_fit" if CLASSIFIER else "rf_regressor_fit"
     if len(params) != N_RF_FIT_PARAMS:
         raise Error(
@@ -282,6 +295,24 @@ def _rf_fit[
     var crit = _index(criterion)
     _check_criterion(entry, crit, CLASSIFIER)
     var p = _params_from(params, crit)
+    # `bindings/_mojolearn_rf.mojo:363-380`: the weights' checks in their
+    # words; all-unit weights fit unweighted.
+    var weights = List[Float32]()
+    if weights_addr != 0:
+        var wp = f32_ptr(weights_addr)
+        var total = Float64(0)
+        var all_unit = True
+        for i in range(n_rows):
+            var w = wp[i]
+            if not (w >= 0 and w <= Float32(3.4028234663852886e38)):
+                raise Error("class weights must be finite and nonnegative")
+            weights.append(w)
+            total += Float64(w)
+            all_unit = all_unit and w == Float32(1)
+        if total <= 0:
+            raise Error("class weights must have positive total")
+        if all_unit:
+            weights = List[Float32]()
     var x_address = _index(x_addr)
     var y_address = _index(y_addr)
     var forest: RfHostForest
@@ -291,7 +322,7 @@ def _rf_fit[
             var y = read_i32(y_address, n_rows)
             forest = rf_host_fit(
                 x^, y, List[Float32](), n_rows, n_cols, n_classes, True, p,
-                Float32(1.0),
+                Float32(1.0), 0, weights,
             )
         else:
             var y = read_f32(y_address, n_rows)
@@ -338,6 +369,31 @@ def rf_classifier_fit_rowmajor_export_binding(
     params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
     return _rf_fit[True, True, True](x_addr, y_addr, params, criterion)
+
+
+def _rf_classifier_fit_weighted[EXPORT: Bool](
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_rf.mojo::rf_classifier_fit_weighted_binding`."""
+    var address = _index(weights_addr)
+    if address == 0:
+        raise Error("weighted RF requires a nonzero Float32 weight pointer")
+    return _rf_fit[True, EXPORT, False](x_addr, y_addr, params, criterion, address)
+
+
+def rf_classifier_fit_weighted_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+) raises -> PythonObject:
+    return _rf_classifier_fit_weighted[False](x_addr, y_addr, params, criterion, weights_addr)
+
+
+def rf_classifier_fit_weighted_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+) raises -> PythonObject:
+    return _rf_classifier_fit_weighted[True](x_addr, y_addr, params, criterion, weights_addr)
 
 
 def rf_regressor_fit_binding(
@@ -501,6 +557,30 @@ def rf_predict_reg_binding(
     )
 
 
+def resident_prepare_binding(
+    offsets_addr: PythonObject, colid_addr: PythonObject,
+    quesval_addr: PythonObject, left_child_addr: PythonObject,
+    leaves_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`forest_prepare_gpu`: the resident parallel_groves snapshot, on the host."""
+    return forest_prepare_host_binding[True](
+        offsets_addr, colid_addr, quesval_addr, left_child_addr, leaves_addr, params
+    )
+
+
+def resident_predict_binding(
+    handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`forest_predict_resident_reuse_gpu`: the grove reduction, on the host."""
+    return forest_predict_resident_host_binding[True](handle, x_addr, out_addr, params)
+
+
+def resident_release_binding(handle: PythonObject) raises -> PythonObject:
+    """`forest_release_gpu`."""
+    return forest_release_host_binding[True](handle)
+
+
 @export
 def PyInit__mojolearn_rf_host() abi("C") -> PythonObject:
     try:
@@ -524,6 +604,11 @@ def PyInit__mojolearn_rf_host() abi("C") -> PythonObject:
         module.def_function[rf_forest_export_release_binding]("forest_export_release")
         module.def_function[rf_predict_proba_binding]("rf_predict_proba")
         module.def_function[rf_predict_reg_binding]("rf_predict_reg")
+        module.def_function[rf_classifier_fit_weighted_binding]("rf_classifier_fit_weighted")
+        module.def_function[rf_classifier_fit_weighted_export_binding]("rf_classifier_fit_weighted_export")
+        module.def_function[resident_prepare_binding]("forest_prepare_gpu")
+        module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")
+        module.def_function[resident_release_binding]("forest_release_gpu")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_rf_host: ", error))

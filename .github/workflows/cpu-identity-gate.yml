@@ -65,6 +65,8 @@ on:
       - "bindings/host_helpers.mojo"
       - "bindings/hostptr.mojo"
       - "core/forest_host_predict.mojo"
+      - "core/forest_host_groves.mojo"
+      - "bindings/forest_host_groves_binding.mojo"
       - "core/gbdt_host_predict.mojo"
       - "hierarchy/checks/linkage_oracle.mojo"
       - "isolation_forest/checks/if_oracle.mojo"
@@ -542,7 +544,7 @@ jobs:
       # pca_full_oracle by folding every QR trailing-column dot product's
       # lanes serially descending, in
       # rf_oracle by drawing every bootstrap row from the next Philox
-      # subsequence, in gpr_oracle by walking the scaled distance's
+      # subsequence and seeding every node's column sample one off, in gpr_oracle by walking the scaled distance's
       # feature axis descending, in gbdt_oracle by adding 1.0 to the
       # Newton leaf walker's Hessian regularizer, in gbdt_oracle_rmse by
       # adding 1.0 to the searcher's leaf regularizer, in arima_oracle by
