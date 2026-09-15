@@ -53,13 +53,22 @@
 name: Python tests
 
 on:
+  # LIGHT TOUCH (Andrew, Sep 15 2026): this workflow never starts by itself. Every job
+  # is skipped unless the dispatch input confirm is RUN-HEAVY, so a wrong trigger costs nothing.
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Heavy run on paid or queued runners. Type RUN-HEAVY to really run it; anything else skips every job"
+        required: true
+        default: ""
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   python-tests:
+    if: inputs.confirm == 'RUN-HEAVY'
     name: pytest suite and the 13 gates
     runs-on: [self-hosted, macos, arm64, metal, real-gpu]
     timeout-minutes: 45

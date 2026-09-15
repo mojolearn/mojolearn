@@ -26,14 +26,21 @@
 name: Forest host gate
 
 on:
-  # No push trigger (Andrew, Sep 15 2026): CI is a light touch. This heavy check runs only by hand,
-  # on its schedule if it has one, or from the release workflow.
+  # LIGHT TOUCH (Andrew, Sep 15 2026): this workflow never starts by itself. Every job
+  # is skipped unless the dispatch input confirm is RUN-HEAVY, so a wrong trigger costs nothing.
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Heavy run on paid or queued runners. Type RUN-HEAVY to really run it; anything else skips every job"
+        required: true
+        default: ""
+        type: string
 
 permissions: {}
 
 jobs:
   gate:
+    if: inputs.confirm == 'RUN-HEAVY'
     name: ${{ matrix.label }}
     strategy:
       fail-fast: false
