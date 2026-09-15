@@ -351,9 +351,9 @@ def gbdt_fit_binding(
             + String(n_class_weights)
         )
     var fixed_and_weights = 35 + n_class_weights
-    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3:
+    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 5:
         raise Error(
-            "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction values ("
+            "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count values ("
             + String(35 + n_class_weights)
             + ") values, got "
             + String(len(params))
@@ -390,8 +390,37 @@ def gbdt_fit_binding(
     if len(params) >= fixed_and_weights + 2:
         min_child_hessian = Float64(py=params[fixed_and_weights + 1])
     var feature_fraction = Float64(1)
-    if len(params) == fixed_and_weights + 3:
+    if len(params) >= fixed_and_weights + 3:
         feature_fraction = Float64(py=params[fixed_and_weights + 2])
+    # the pool's grouping (`bindings/_mojolearn_gbdt.mojo`'s group tail),
+    # checked and refused in the words `gbdt/train.mojo::train` uses, so the
+    # CPU column refuses exactly where the device column does
+    if len(params) == fixed_and_weights + 5:
+        var n_groups = Int(py=params[fixed_and_weights + 4])
+        if n_groups < 1:
+            raise Error(
+                "gbdt_fit: the group tail needs a positive group count, got "
+                + String(n_groups)
+            )
+        var gp = u32_ptr(Int(py=params[fixed_and_weights + 3]))
+        var covered = 0
+        for g in range(n_groups):
+            var size = gp.unsafe_load(g)
+            if size == UInt32(0):
+                raise Error("group_id: group " + String(g) + " has no rows")
+            covered += Int(size)
+        if covered != Int(py=params[0]):
+            raise Error(
+                "group_id: the group sizes cover " + String(covered)
+                + " rows of " + String(Int(py=params[0]))
+            )
+        raise Error(
+            "group_id is read only by the querywise and pairwise losses"
+            " (QueryRMSE, PairLogit, YetiRank, QuerySoftMax,"
+            " QueryCrossEntropy), which this implementation does not train"
+            " yet; loss='" + String(py=strs[0]) + "' does not use it, so it"
+            " is refused by name rather than carried and ignored"
+        )
 
     var border_count = Int(py=params[4])
     var n_estimators = Int(py=params[5])
