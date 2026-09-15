@@ -48,7 +48,10 @@ def _read(rel):
 def test_manifest_declares_the_gp_family():
     fam = host_surface.family("gp")
     assert fam["routes"] == "_mojolearn_gp"
-    assert fam["training_lanes"] == LANES
+    # The cholesky lane joined the family on lane/cpu-training-d-estimators
+    # (ad7a1b933): its door is this binding's cholesky_factor and
+    # cholesky_solve (tests/test_cpu_training_d.py).
+    assert fam["training_lanes"] == LANES + ("cholesky",)
     for module in (GP_ORACLE, CHOL_ORACLE):
         assert module in fam["host_modules"] and (ROOT / module).is_file()
     assert (ROOT / host_surface.build_shim("gp")).is_file()
