@@ -1,0 +1,289 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 4 lane(s); 162 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_forest_host', '_mojolearn_gp_host', '_mojolearn_mixture_host', '_mojolearn_preprocessing_host', '_mojolearn_tokenizer_host'] commit=11c5f2192579b8aceada93096fdfcae37a2726a7
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9654-96-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9654-96-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    nvidia-h100-sm_90a: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    amd-mi325x-gfx942: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-9654-96-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-9654-96-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-9654-96-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-h100-sm_90a: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    amd-mi325x-gfx942: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-9654-96-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    nvidia-h100-sm_90a: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    amd-mi325x-gfx942: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-9654-96-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-9654-96-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '5061056b118d07d0'}
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-9654-96-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-9654-96-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'e4b16c115962dfcd'}
+    nvidia-h100-sm_90a: {'X': 'e4b16c115962dfcd'}
+    amd-mi325x-gfx942: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-9654-96-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '9dc786ade4574aff'}
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-9654-96-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '45b539a3f66ce25d'}
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-9654-96-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    nvidia-h100-sm_90a: {'X': '32ea0bbed60b8e6c'}
+    amd-mi325x-gfx942: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-9654-96-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd1ba686494256660'}
+    nvidia-h100-sm_90a: {'X': 'd1ba686494256660'}
+    amd-mi325x-gfx942: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-9654-96-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-9654-96-core-processor: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gmm-random-init/base         | IDENTICAL x4 | fc8ac51adc1813b2 | fc8ac51adc1813b2 | fc8ac51adc1813b2 | fc8ac51adc1813b2 |
+| gmm-random-init/denormal     | IDENTICAL x3 | 6675c8b44ac323d1 | 6675c8b44ac323d1 | 6675c8b44ac323d1 | (not run)        |
+| gmm-random-init/denormal_ftz | IDENTICAL x3 | 6675c8b44ac323d1 | 6675c8b44ac323d1 | 6675c8b44ac323d1 | (not run)        |
+| gmm-random-init/dupes        | IDENTICAL x3 | fc8ac51adc1813b2 | fc8ac51adc1813b2 | fc8ac51adc1813b2 | (not run)        |
+| gmm-random-init/hashed       | IDENTICAL x3 | 001e55e29fe4ed0a | 001e55e29fe4ed0a | 001e55e29fe4ed0a | (not run)        |
+| gmm-random-init/negative     | IDENTICAL x3 | 6ece5078a619e34c | 6ece5078a619e34c | 6ece5078a619e34c | (not run)        |
+| gmm-random-init/odd          | IDENTICAL x3 | b678139187174269 | b678139187174269 | b678139187174269 | (not run)        |
+| gmm-random-init/ties         | IDENTICAL x3 | 01978ea4fe0c8e33 | 01978ea4fe0c8e33 | 01978ea4fe0c8e33 | (not run)        |
+| gmm-random-init/wide         | IDENTICAL x3 | c98fa8d16772495f | c98fa8d16772495f | c98fa8d16772495f | (not run)        |
+| gmm/base                     | IDENTICAL x4 | bf646caedaf7a508 | bf646caedaf7a508 | bf646caedaf7a508 | bf646caedaf7a508 |
+| gmm/denormal                 | IDENTICAL x3 | c2920674c1f91bb0 | c2920674c1f91bb0 | c2920674c1f91bb0 | (not run)        |
+| gmm/denormal_ftz             | IDENTICAL x3 | c2920674c1f91bb0 | c2920674c1f91bb0 | c2920674c1f91bb0 | (not run)        |
+| gmm/dupes                    | IDENTICAL x3 | bf646caedaf7a508 | bf646caedaf7a508 | bf646caedaf7a508 | (not run)        |
+| gmm/hashed                   | IDENTICAL x3 | 7b7c9bd0a63169a4 | 7b7c9bd0a63169a4 | 7b7c9bd0a63169a4 | (not run)        |
+| gmm/negative                 | IDENTICAL x3 | b365e8080c5dc682 | b365e8080c5dc682 | b365e8080c5dc682 | (not run)        |
+| gmm/odd                      | IDENTICAL x3 | 70e1fb9e39156be1 | 70e1fb9e39156be1 | 70e1fb9e39156be1 | (not run)        |
+| gmm/ties                     | IDENTICAL x3 | 2f07a729352d2581 | 2f07a729352d2581 | 2f07a729352d2581 | (not run)        |
+| gmm/wide                     | IDENTICAL x3 | ab5992362c4f0509 | ab5992362c4f0509 | ab5992362c4f0509 | (not run)        |
+| gp-normalize-y/base          | OWED x1    | (not run)        | (not run)        | (not run)        | 295a3a943bb1e6c1 |
+| gp/base                      | IDENTICAL x4 | ea70c56b99a74791 | ea70c56b99a74791 | ea70c56b99a74791 | ea70c56b99a74791 |
+| gp/denormal                  | IDENTICAL x3 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | (not run)        |
+| gp/denormal_ftz              | IDENTICAL x3 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 | (not run)        |
+| gp/dupes                     | IDENTICAL x3 | fba9e6f4ea05af2c | fba9e6f4ea05af2c | fba9e6f4ea05af2c | (not run)        |
+| gp/hashed                    | IDENTICAL x3 | f01c58a79fb1af27 | f01c58a79fb1af27 | f01c58a79fb1af27 | (not run)        |
+| gp/negative                  | IDENTICAL x3 | 40fd2f479f775ec4 | 40fd2f479f775ec4 | 40fd2f479f775ec4 | (not run)        |
+| gp/odd                       | IDENTICAL x3 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 | (not run)        |
+| gp/ties                      | IDENTICAL x3 | c92496318cb78403 | c92496318cb78403 | c92496318cb78403 | (not run)        |
+| gp/wide                      | IDENTICAL x3 | ca779c84b786d493 | ca779c84b786d493 | ca779c84b786d493 | (not run)        |
+
+summary: IDENTICAL=27, OWED=1
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gmm-random-init/base         | infer  | IDENTICAL x4 | 87226624dfab0f10 | 87226624dfab0f10 | 87226624dfab0f10 | 87226624dfab0f10 |
+| gmm-random-init/base         | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | de637910417c0f6a |
+| gmm-random-init/base         | batch  | IDENTICAL x4 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 |
+| gmm-random-init/denormal     | infer  | IDENTICAL x3 | c9bd6b5bcb2c805a | c9bd6b5bcb2c805a | c9bd6b5bcb2c805a | (not run)        |
+| gmm-random-init/denormal     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-random-init/denormal     | batch  | IDENTICAL x3 | 81f3e8a1665f0f1e | 81f3e8a1665f0f1e | 81f3e8a1665f0f1e | (not run)        |
+| gmm-random-init/denormal_ftz | infer  | IDENTICAL x3 | c9bd6b5bcb2c805a | c9bd6b5bcb2c805a | c9bd6b5bcb2c805a | (not run)        |
+| gmm-random-init/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-random-init/denormal_ftz | batch  | IDENTICAL x3 | 81f3e8a1665f0f1e | 81f3e8a1665f0f1e | 81f3e8a1665f0f1e | (not run)        |
+| gmm-random-init/dupes        | infer  | IDENTICAL x3 | 87226624dfab0f10 | 87226624dfab0f10 | 87226624dfab0f10 | (not run)        |
+| gmm-random-init/dupes        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-random-init/dupes        | batch  | IDENTICAL x3 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | 15233a5b0b86b9b2 | (not run)        |
+| gmm-random-init/hashed       | infer  | IDENTICAL x3 | fd048cfcf886325e | fd048cfcf886325e | fd048cfcf886325e | (not run)        |
+| gmm-random-init/hashed       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-random-init/hashed       | batch  | IDENTICAL x3 | af8df7d628a4f79e | af8df7d628a4f79e | af8df7d628a4f79e | (not run)        |
+| gmm-random-init/negative     | infer  | IDENTICAL x3 | 880fe711ae976fb0 | 880fe711ae976fb0 | 880fe711ae976fb0 | (not run)        |
+| gmm-random-init/negative     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-random-init/negative     | batch  | IDENTICAL x3 | 39ce4e2640511ac8 | 39ce4e2640511ac8 | 39ce4e2640511ac8 | (not run)        |
+| gmm-random-init/odd          | infer  | IDENTICAL x3 | 057c020ccbbda789 | 057c020ccbbda789 | 057c020ccbbda789 | (not run)        |
+| gmm-random-init/odd          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-random-init/odd          | batch  | IDENTICAL x3 | f20bd8076248b527 | f20bd8076248b527 | f20bd8076248b527 | (not run)        |
+| gmm-random-init/ties         | infer  | IDENTICAL x3 | 5c4f620623f43daf | 5c4f620623f43daf | 5c4f620623f43daf | (not run)        |
+| gmm-random-init/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-random-init/ties         | batch  | IDENTICAL x3 | 6f7b606277388c47 | 6f7b606277388c47 | 6f7b606277388c47 | (not run)        |
+| gmm-random-init/wide         | infer  | IDENTICAL x3 | e1b61a11666f5959 | e1b61a11666f5959 | e1b61a11666f5959 | (not run)        |
+| gmm-random-init/wide         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm-random-init/wide         | batch  | IDENTICAL x3 | 03237521921fc9f5 | 03237521921fc9f5 | 03237521921fc9f5 | (not run)        |
+| gmm/base                     | infer  | IDENTICAL x4 | 140095763edf6c53 | 140095763edf6c53 | 140095763edf6c53 | 140095763edf6c53 |
+| gmm/base                     | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | c4a997dc3ae320a2 |
+| gmm/base                     | batch  | IDENTICAL x4 | 599d547e666f29b2 | 599d547e666f29b2 | 599d547e666f29b2 | 599d547e666f29b2 |
+| gmm/denormal                 | infer  | IDENTICAL x3 | 153bd7fcdaf1dc92 | 153bd7fcdaf1dc92 | 153bd7fcdaf1dc92 | (not run)        |
+| gmm/denormal                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm/denormal                 | batch  | IDENTICAL x3 | 366cc287f0ec48ae | 366cc287f0ec48ae | 366cc287f0ec48ae | (not run)        |
+| gmm/denormal_ftz             | infer  | IDENTICAL x3 | 153bd7fcdaf1dc92 | 153bd7fcdaf1dc92 | 153bd7fcdaf1dc92 | (not run)        |
+| gmm/denormal_ftz             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm/denormal_ftz             | batch  | IDENTICAL x3 | 366cc287f0ec48ae | 366cc287f0ec48ae | 366cc287f0ec48ae | (not run)        |
+| gmm/dupes                    | infer  | IDENTICAL x3 | 140095763edf6c53 | 140095763edf6c53 | 140095763edf6c53 | (not run)        |
+| gmm/dupes                    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm/dupes                    | batch  | IDENTICAL x3 | 599d547e666f29b2 | 599d547e666f29b2 | 599d547e666f29b2 | (not run)        |
+| gmm/hashed                   | infer  | IDENTICAL x3 | c69a4ca1b3645069 | c69a4ca1b3645069 | c69a4ca1b3645069 | (not run)        |
+| gmm/hashed                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm/hashed                   | batch  | IDENTICAL x3 | 8b4c33c4db008fff | 8b4c33c4db008fff | 8b4c33c4db008fff | (not run)        |
+| gmm/negative                 | infer  | IDENTICAL x3 | fb2977d6df45480f | fb2977d6df45480f | fb2977d6df45480f | (not run)        |
+| gmm/negative                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm/negative                 | batch  | IDENTICAL x3 | b8aded10ca73bb31 | b8aded10ca73bb31 | b8aded10ca73bb31 | (not run)        |
+| gmm/odd                      | infer  | IDENTICAL x3 | fc5c09b04e8fb4aa | fc5c09b04e8fb4aa | fc5c09b04e8fb4aa | (not run)        |
+| gmm/odd                      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm/odd                      | batch  | IDENTICAL x3 | ae74761cf87024a2 | ae74761cf87024a2 | ae74761cf87024a2 | (not run)        |
+| gmm/ties                     | infer  | IDENTICAL x3 | dbb412e155fd4fb2 | dbb412e155fd4fb2 | dbb412e155fd4fb2 | (not run)        |
+| gmm/ties                     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm/ties                     | batch  | IDENTICAL x3 | 60796a07f79e71e9 | 60796a07f79e71e9 | 60796a07f79e71e9 | (not run)        |
+| gmm/wide                     | infer  | IDENTICAL x3 | cee8ba31b1a4fa20 | cee8ba31b1a4fa20 | cee8ba31b1a4fa20 | (not run)        |
+| gmm/wide                     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gmm/wide                     | batch  | IDENTICAL x3 | cefdfe8321690629 | cefdfe8321690629 | cefdfe8321690629 | (not run)        |
+| gp-normalize-y/base          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 7c5123dc7a512038 |
+| gp-normalize-y/base          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 988bc1c3b51246a4 |
+| gp-normalize-y/base          | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 10f20ff36a173c93 |
+| gp/base                      | infer  | IDENTICAL x4 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 |
+| gp/base                      | model  | OWED x1      | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8f4a54a0bd816175 |
+| gp/base                      | batch  | IDENTICAL x4 | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa |
+| gp/denormal                  | infer  | IDENTICAL x3 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 | (not run)        |
+| gp/denormal                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gp/denormal                  | batch  | IDENTICAL x3 | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a | (not run)        |
+| gp/denormal_ftz              | infer  | IDENTICAL x3 | 353cd97119d0e754 | 353cd97119d0e754 | 353cd97119d0e754 | (not run)        |
+| gp/denormal_ftz              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gp/denormal_ftz              | batch  | IDENTICAL x3 | 9305dbeb22908e4a | 9305dbeb22908e4a | 9305dbeb22908e4a | (not run)        |
+| gp/dupes                     | infer  | IDENTICAL x3 | 52e6b306c452f16c | 52e6b306c452f16c | 52e6b306c452f16c | (not run)        |
+| gp/dupes                     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gp/dupes                     | batch  | IDENTICAL x3 | 3caf5f428c1e5112 | 3caf5f428c1e5112 | 3caf5f428c1e5112 | (not run)        |
+| gp/hashed                    | infer  | IDENTICAL x3 | 6eec04108625b28e | 6eec04108625b28e | 6eec04108625b28e | (not run)        |
+| gp/hashed                    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gp/hashed                    | batch  | IDENTICAL x3 | f18ced6112fb55e8 | f18ced6112fb55e8 | f18ced6112fb55e8 | (not run)        |
+| gp/negative                  | infer  | IDENTICAL x3 | b2713d53a58fa4c9 | b2713d53a58fa4c9 | b2713d53a58fa4c9 | (not run)        |
+| gp/negative                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gp/negative                  | batch  | IDENTICAL x3 | 0284440d2cd65731 | 0284440d2cd65731 | 0284440d2cd65731 | (not run)        |
+| gp/odd                       | infer  | IDENTICAL x3 | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa | (not run)        |
+| gp/odd                       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gp/odd                       | batch  | IDENTICAL x3 | e3e6d237ca783492 | e3e6d237ca783492 | e3e6d237ca783492 | (not run)        |
+| gp/ties                      | infer  | IDENTICAL x3 | 22b0b528124de8d0 | 22b0b528124de8d0 | 22b0b528124de8d0 | (not run)        |
+| gp/ties                      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gp/ties                      | batch  | IDENTICAL x3 | 42c01186900b0c68 | 42c01186900b0c68 | 42c01186900b0c68 | (not run)        |
+| gp/wide                      | infer  | IDENTICAL x3 | 890cda1ff831faab | 890cda1ff831faab | 890cda1ff831faab | (not run)        |
+| gp/wide                      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | (not run)        |
+| gp/wide                      | batch  | IDENTICAL x3 | d3e6783a8a000e56 | d3e6783a8a000e56 | d3e6783a8a000e56 | (not run)        |
+
+summary (infer/model): IDENTICAL=27, N/A=24, OWED=5
+summary (batch): IDENTICAL=27, OWED=1
+summary (rlpair): 
+REQUIRE FAIL gmm-random-init/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm-random-init/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gmm/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+REQUIRE FAIL gp/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9654-96-core-processor has no cell)
+require-columns 4 over ['gmm', 'gmm-random-init', 'gp', 'gp-normalize-y']: 72 short (7 OWED)
+OWED gp-normalize-y/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-normalize-y/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-normalize-y/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-normalize-y/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+summary (owed): OWED=7; the next release record owes exactly these cell parts; wrote /root/leg_out/spot_owed.json

@@ -1,0 +1,5 @@
+pod=03krlhu4sqjw8e
+name=mojolearn-cpu-gaps7-20260915-230634
+terminated_verified=1
+exit=0
+at=2026-09-15T23:10:27Z

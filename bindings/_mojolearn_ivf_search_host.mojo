@@ -19,7 +19,8 @@ family with `routes=None` and `serves=("_mojolearn_ivf",)`.
 The sabotage arm (`ivf_search_host_sabotage`) is
 `ivf/host/ivf_host.mojo::IVF_HOST_SABOTAGE`: under
 `-D MOJOLEARN_HOST_SABOTAGE=1` every candidate distance walks its feature
-axis descending.
+axis descending, and every returned distance has its bits moved
+(`ivf_sabotage_value_flip`), so the integer `ties` fixture moves too.
 """
 from std.os import abort
 from std.python import Python, PythonObject

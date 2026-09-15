@@ -1,0 +1,15 @@
+# vendor=apple-m4 commit=a76c02d27c95b8fcdbca8d29fd159ea34829c6e0 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 19:00:36  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | hashed           |
+|------------------------|------------------|
+| gbdt-categorical-ctr-tables | 3dfceb762e69749f |
+| gbdt-categorical-ctr-tables infer | db7c89907a783122 |
+| gbdt-categorical-ctr-tables model | 14956a34ee65064c |
+| gbdt-categorical-ctr-tables batch | cd07fda7956d86ab |
+
+cells=1 stable=1 moved=0 refused=0
+infer: stable=1
+model: stable=1
+batch: stable=1
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/gaps7/metal/categorical-hashed.json

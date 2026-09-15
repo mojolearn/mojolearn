@@ -190,7 +190,30 @@ from neighbors.impl.ball_cover.common import (
 #: tied boundary, the vote's tie goes to the LAST maximal class, and the
 #: regressor's mean folds its slots descending. The gate must catch each
 #: of them. Read back by `core_host_sabotage`.
+#:
+#: THE VALUE ARMS (lane/ties-sabotage, 2026-09-15). A fold walked in the
+#: other order is EXACT on the integer-grid `ties` fixture, so on that
+#: fixture the order arms above moved no bit of knn-cosine, knn-rbc, radius
+#: or radius-manhattan (the neighbors and density inference lane's sabotage
+#: column and saved-model check). The same build therefore also moves a
+#: VALUE the caller reads: `host_sabotage_value_flip` on every L1, Lp and
+#: cosine cell distance of the brute arm, on every ball cover edge distance
+#: and on every ball cover k-NN distance it reports. Production builds
+#: compile none of it.
 comptime KNN_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+
+@always_inline
+def host_sabotage_value_flip(v: Float32) -> Float32:
+    """The value arm of the sabotage build: a float32 whose bits always
+    differ from `v`'s. A magnitude below the smallest normal (either zero,
+    or a subnormal) becomes the smallest positive normal, which no flush
+    folds back; every other value steps its mantissa by one unit. Compiled
+    only under KNN_HOST_SABOTAGE; the caller guards it."""
+    var bits = bitcast[DType.uint32](v)
+    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
+        return bitcast[DType.float32](UInt32(0x00800000))
+    return bitcast[DType.float32](bits + UInt32(1))
 
 #: `NORM_TPB` of `core/row_norms.mojo`, read through the same accessor.
 #: `K_LIB_ROW_NORM` is a NUMERIC row (`lib_block_bounds_a_float_fold`), so
@@ -316,13 +339,20 @@ def host_metric_cell(
             acc = lp_unexp_core(acc, qv, yv, metric_arg)
         else:
             acc = inner_product_core(acc, qv, yv)
+    var out: Float32
     if metric == DIST_L1:
-        return acc
-    if metric == DIST_LP_UNEXPANDED:
+        out = acc
+    elif metric == DIST_LP_UNEXPANDED:
         # `:67`: `one_over_p` formed once per cell, a pure function of p.
         var one_over_p = ftz(identical_div(Float32(1.0), metric_arg))
-        return lp_unexp_epilog(acc, one_over_p)
-    return cosine_epilog(acc, ftz(qn), ftz(yn))
+        out = lp_unexp_epilog(acc, one_over_p)
+    else:
+        out = cosine_epilog(acc, ftz(qn), ftz(yn))
+    comptime if KNN_HOST_SABOTAGE:
+        # THE VALUE ARM (see KNN_HOST_SABOTAGE): the descending fold above is
+        # exact on integer data, this is not.
+        out = host_sabotage_value_flip(out)
+    return out
 
 
 def host_row_norms(x: List[Float32], n_rows: Int, d: Int) -> List[Float32]:
@@ -801,9 +831,14 @@ def host_rbc_edge_distance(
 ) -> Float32:
     """`rbc_edge_distance_kernel` for one edge."""
     var d2 = host_rbc_cmp_dist(queries, q * d, index, c * d, d, metric, metric_arg)
+    var out = d2
     if return_sqrt:
-        return rbc_true_dist(metric, d2)
-    return d2
+        out = rbc_true_dist(metric, d2)
+    comptime if KNN_HOST_SABOTAGE:
+        # THE VALUE ARM (see KNN_HOST_SABOTAGE), after the root: a one-unit
+        # step on the squared distance can round back through it.
+        out = host_sabotage_value_flip(out)
+    return out
 
 
 def host_rbc_knn_row(
@@ -834,4 +869,8 @@ def host_rbc_knn_row(
             filled += 1
     for o in range(k):
         out_idx[q * k + o] = Int32(best_i[o])
-        out_dist[q * k + o] = rbc_true_dist(metric, best_d[o])
+        var reported = rbc_true_dist(metric, best_d[o])
+        comptime if KNN_HOST_SABOTAGE:
+            # THE VALUE ARM (see KNN_HOST_SABOTAGE), after the root.
+            reported = host_sabotage_value_flip(reported)
+        out_dist[q * k + o] = reported
