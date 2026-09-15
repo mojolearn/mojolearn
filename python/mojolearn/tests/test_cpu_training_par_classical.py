@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU training for the par-* lanes whose driver shards in Python
 (lane/cpu-training-par-classical, 2026-09-15): par-scaler, par-arima and
-par-holtwinters.
+par-holtwinters; since lane/cpu-training-par-wave2 (the same day) also the
+query-sharded and reference-sharded neighbor drivers.
 
 Source checks (run on a box with nothing built): the manifest declares each
 lane on the family whose host binding serves its shard fits; the pool's
@@ -29,10 +30,17 @@ from mojolearn import _backend, _parallel_pool, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
 
-LANES = {"par-scaler": "preprocessing", "par-arima": "arima", "par-holtwinters": "tsa"}
+LANES = {"par-scaler": "preprocessing", "par-arima": "arima", "par-holtwinters": "tsa",
+         # wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor drivers
+         "par-queries-knn": "core", "par-queries-radius": "core", "par-queries-kde": "estimators",
+         "par-reference-knn": "core", "par-reference-knn-reg": "core",
+         "par-forest": "rf", "par-forest-et": "trees"}
 DRIVERS = {
     "python/mojolearn/parallel_preprocessing.py": ("scaler_fit", "scaler_transform"),
     "python/mojolearn/parallel_classical.py": ("arima_fit", "holtwinters_fit"),
+    "python/mojolearn/parallel_neighbors.py": ("neighbor_query",),
+    "python/mojolearn/parallel_neighbors_reference.py": ("neighbor_reference", "neighbor_vote"),
+    "python/mojolearn/parallel_ensemble.py": ("forest_fit",),
 }
 
 
@@ -86,7 +94,7 @@ def test_refusals_come_before_any_worker():
         print("SKIP: a GPU set loaded; the host route is not taken here")
         return
     for cooperative, op, words in ((True, "glm_fit", "cooperative multi-GPU driver glm_fit"),
-                                   (False, "forest_fit", "parallel worker operation forest_fit")):
+                                   (False, "mlp_gradient", "parallel worker operation mlp_gradient")):
         pool = _parallel_pool.DevicePool((0,), cooperative=cooperative)
         try:
             pool.map([(op, None, None)])

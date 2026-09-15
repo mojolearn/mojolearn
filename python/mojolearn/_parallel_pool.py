@@ -20,11 +20,24 @@ from concurrent.futures import ThreadPoolExecutor
 #: worker and its shards are device row tiles, chunks or ranges inside the
 #: GPU binding (`MOJOLEARN_<X>_DEVICE_COUNT`, `*/multi_gpu.mojo`), which a
 #: host binding does not restate, and the other non-cooperative operations
-#: (forest tree ranges, neighbor queries, neural gradients) have no host
-#: route declared yet. The operations run only inside
-#: `_cpu_reference.reference_training()` (the internal verifier); outside it
-#: the worker's fit refuses exactly as a plain CPU fit does.
-CPU_OPERATIONS = frozenset(('scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit'))
+#: (neural gradients among them) have no host route declared yet. The
+#: operations run only inside `_cpu_reference.reference_training()` (the
+#: internal verifier); outside it the worker's fit refuses exactly as a
+#: plain CPU fit does.
+#:
+#: Wave 2 (lane/cpu-training-par-wave2, 2026-09-15) adds the neighbor
+#: drivers, which cut query rows (`ParallelQueries`) or reference rows
+#: (`ReferenceShardedNeighbors`, merged by composite key in Python, then
+#: one vote request on the merged neighbors) in Python, and the forest
+#: driver (`parallel_ensemble.fit_forest`), which cuts global tree ID ranges
+#: in Python, fits each range through the rf and trees host bindings' shard
+#: fits (`rf_*_fit_shard`, `et_*_fit_shard`, the GPU bindings' tree_start
+#: offset restated on the host) and concatenates the trees in ID order.
+CPU_OPERATIONS = frozenset((
+    'scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit',
+    'neighbor_query', 'neighbor_reference', 'neighbor_vote',
+    'forest_fit',
+))
 
 
 def _cpu_refusal(requests, cooperative):

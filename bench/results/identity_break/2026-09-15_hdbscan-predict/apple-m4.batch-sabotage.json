@@ -1,0 +1,239 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "5938bac95560a3c089f7d8328b1b2d405abd1062",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  }
+ },
+ "cells": {
+  "hdbscan/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1032d54b827b0e0c"
+   ],
+   "parts": [
+    {
+     "labels": "e7b66bd11ad740b3",
+     "core": "b3edcc60c96132db",
+     "counts": "1f7bfb1243884fdd"
+    }
+   ],
+   "infer": [
+    "a104cfe065750353"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:approximate_predict:row 0 of 64 alone:output 1 element 0: whole 0x3f800001 vs alone 0x3f800000"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "hdbscan/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "444bc82f0a607cfb"
+   ],
+   "parts": [
+    {
+     "labels": "eb63500b53fb5112",
+     "core": "d0ee5e0b999e8c5a",
+     "counts": "76e3312784f12aef"
+    }
+   ],
+   "infer": [
+    "324146f46faedded"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:approximate_predict:row 0 of 64 alone:output 1 element 0: whole 0x00000001 vs alone 0x00000000"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "hdbscan/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1032d54b827b0e0c"
+   ],
+   "parts": [
+    {
+     "labels": "e7b66bd11ad740b3",
+     "core": "b3edcc60c96132db",
+     "counts": "1f7bfb1243884fdd"
+    }
+   ],
+   "infer": [
+    "a104cfe065750353"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:approximate_predict:row 0 of 64 alone:output 1 element 0: whole 0x3f800001 vs alone 0x3f800000"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "hdbscan-leaf/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a69a1f87d6fad7d2"
+   ],
+   "parts": [
+    {
+     "labels": "fd8dc650472117df",
+     "core": "34e1d2fae8926a88",
+     "counts": "6f87787eab0cc6d6"
+    }
+   ],
+   "infer": [
+    "72404979b3191f8d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:approximate_predict:row 0 of 64 alone:output 1 element 0: whole 0x00000001 vs alone 0x00000000"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "hdbscan-leaf/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "41045554964e4bd8"
+   ],
+   "parts": [
+    {
+     "labels": "2da2043e8227f0b2",
+     "core": "e06e88fa10cb52fa",
+     "counts": "b430c3d87e499574"
+    }
+   ],
+   "infer": [
+    "e796aec36f4eda67"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:approximate_predict:row 0 of 64 alone:output 1 element 0: whole 0x00000001 vs alone 0x00000000"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "hdbscan-leaf/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a69a1f87d6fad7d2"
+   ],
+   "parts": [
+    {
+     "labels": "fd8dc650472117df",
+     "core": "34e1d2fae8926a88",
+     "counts": "6f87787eab0cc6d6"
+    }
+   ],
+   "infer": [
+    "72404979b3191f8d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:approximate_predict:row 0 of 64 alone:output 1 element 0: whole 0x00000001 vs alone 0x00000000"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": true,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-hdbscan-predict/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "58b8e10cd583f45f8e9733c81bb6ce4eae6c618c7a3d80b336e7e380e42917ec",
+    "size": 2721184
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "37e8a9d598c9a791570a447697e288c13e1acc1fd25f04a921753263661fea44",
+    "size": 1906840
+   }
+  ]
+ }
+}

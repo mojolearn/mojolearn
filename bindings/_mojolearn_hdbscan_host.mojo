@@ -32,14 +32,20 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32
+from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from hdbscan.host.hdbscan_host_oracle import HDBH_HOST_SABOTAGE, hdbh_fit
+from hdbscan.host.hdbscan_host_oracle import (
+    HDBH_HOST_SABOTAGE,
+    HDBH_PREDICT_SABOTAGE,
+    hdbh_approximate_predict,
+    hdbh_fit,
+)
+from hdbscan.impl.prediction_data import generate_prediction_data
 
 
 def hdbscan_host_numeric_mode_binding() raises -> PythonObject:
@@ -82,10 +88,11 @@ def hdbscan_fit_binding(
     n_condensed_clusters). `params`: 0 n, 1 d, 2 min_samples,
     3 min_cluster_size, 4 max_cluster_size, 5 alpha, 6 allow_single_cluster,
     7 cluster_selection_method, 8 cluster_selection_epsilon, 9 metric."""
-    if len(addrs) != 4:
+    if len(addrs) != 4 and len(addrs) != 9:
         raise Error(
             "hdbscan_fit: addrs must contain 4 addresses (x, labels_out,"
-            " core_dists_out, info_out), got "
+            " core_dists_out, info_out) or 9 (plus the condensed tree's"
+            " parents, children, lambdas, sizes and inverse_label_map), got "
             + String(len(addrs))
         )
     if len(params) != 10:
@@ -110,6 +117,18 @@ def hdbscan_fit_binding(
     var eps = Float32(Float64(py=params[8]))
     var metric = Int(py=params[9])
     var x = read_f32(Int(py=addrs[0]), max(0, n * d))
+    var want_tree = len(addrs) == 9
+    var tpp = lp
+    var tcp = lp
+    var tlp = cp
+    var tsp = lp
+    var invp = lp
+    if want_tree:
+        tpp = i32_ptr(Int(py=addrs[4]))
+        tcp = i32_ptr(Int(py=addrs[5]))
+        tlp = f32_ptr(Int(py=addrs[6]))
+        tsp = i32_ptr(Int(py=addrs[7]))
+        invp = i32_ptr(Int(py=addrs[8]))
     var n_clusters = 0
     with GILReleased(Python()):
         var out = hdbh_fit(
@@ -123,10 +142,144 @@ def hdbscan_fit_binding(
         ip.unsafe_store(1, Int32(out.n_outliers))
         ip.unsafe_store(2, Int32(out.n_boruvka_rounds))
         ip.unsafe_store(3, Int32(out.n_condensed_clusters))
+        if want_tree:
+            var ne = out.tree.n_edges
+            if ne > 2 * n:
+                raise Error(
+                    "hdbscan_fit: the condensed tree has " + String(ne)
+                    + " edges, more than the 2 * n_rows the caller sized;"
+                    " refused by name"
+                )
+            ip.unsafe_store(4, Int32(ne))
+            for e in range(ne):
+                tpp.unsafe_store(e, out.tree.parents[e])
+                tcp.unsafe_store(e, out.tree.children[e])
+                tlp.unsafe_store(e, out.tree.lambdas[e])
+                tsp.unsafe_store(e, out.tree.sizes[e])
+            for c in range(out.n_clusters):
+                invp.unsafe_store(c, out.inverse_label_map[c])
         n_clusters = out.n_clusters
         _ = out^
     _ = x^
     return PythonObject(n_clusters)
+
+
+def hdbscan_generate_prediction_data_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """The GPU binding's `hdbscan_generate_prediction_data`, the same 11
+    addresses and 4 params, calling the same host function
+    (`hdbscan/impl/prediction_data.mojo`)."""
+    if len(addrs) != 11:
+        raise Error(
+            "hdbscan_generate_prediction_data: addrs must contain 11 addresses,"
+            " got " + String(len(addrs))
+        )
+    if len(params) != 4:
+        raise Error(
+            "hdbscan_generate_prediction_data: params must contain 4 values"
+            " (n_leaves, n_edges, n_clusters, n_selected), got "
+            + String(len(params))
+        )
+    var n_leaves = Int(py=params[0])
+    var n_edges = Int(py=params[1])
+    var n_clusters = Int(py=params[2])
+    var n_selected = Int(py=params[3])
+    if n_leaves < 2 or n_edges < 1 or n_clusters < 1 or n_selected < 0:
+        raise Error(
+            "hdbscan_generate_prediction_data: shape refused by name"
+            " (n_leaves=" + String(n_leaves) + ", n_edges=" + String(n_edges)
+            + ", n_clusters=" + String(n_clusters) + ", n_selected="
+            + String(n_selected) + ")"
+        )
+    var labels = read_i32(Int(py=addrs[0]), n_leaves)
+    var parents = read_i32(Int(py=addrs[1]), n_edges)
+    var children = read_i32(Int(py=addrs[2]), n_edges)
+    var lambdas = read_f32(Int(py=addrs[3]), n_edges)
+    var sizes = read_i32(Int(py=addrs[4]), n_edges)
+    var inv = read_i32(Int(py=addrs[5]), n_selected)
+    var dp = f32_ptr(Int(py=addrs[6]))
+    var sp = i32_ptr(Int(py=addrs[7]))
+    var ep = i32_ptr(Int(py=addrs[8]))
+    var op = i32_ptr(Int(py=addrs[9]))
+    var iicp = i32_ptr(Int(py=addrs[10]))
+    var n_ex = 0
+    with GILReleased(Python()):
+        var pd = generate_prediction_data(
+            parents, children, lambdas, sizes, n_edges, n_leaves, n_clusters,
+            labels, inv, n_selected,
+        )
+        for c in range(n_clusters):
+            dp.unsafe_store(c, pd.deaths[c])
+        for c in range(n_selected):
+            sp.unsafe_store(c, pd.selected_clusters[c])
+            op.unsafe_store(c, pd.exemplar_label_offsets[c])
+        op.unsafe_store(n_selected, pd.exemplar_label_offsets[n_selected])
+        for j in range(pd.n_exemplars):
+            ep.unsafe_store(j, pd.exemplar_idx[j])
+        for e in range(n_edges + 1):
+            iicp.unsafe_store(e, pd.index_into_children[e])
+        n_ex = pd.n_exemplars
+        _ = pd^
+    return PythonObject(n_ex)
+
+
+def hdbscan_host_predict_sabotage_binding() raises -> PythonObject:
+    """Whether this binary flips the lowest bit of every approximate_predict
+    probability on purpose (`HDBH_PREDICT_SABOTAGE`)."""
+    return PythonObject(HDBH_PREDICT_SABOTAGE)
+
+
+def hdbscan_approximate_predict_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """The GPU binding's `hdbscan_approximate_predict`, the same 10
+    addresses and 7 params, through `hdbh_approximate_predict`."""
+    if len(addrs) != 10:
+        raise Error(
+            "hdbscan_approximate_predict: addrs must contain 10 addresses, got "
+            + String(len(addrs))
+        )
+    if len(params) != 7:
+        raise Error(
+            "hdbscan_approximate_predict: params must contain 7 values (m, d,"
+            " n_edges, n_clusters, n_selected, nq, min_samples), got "
+            + String(len(params))
+        )
+    var m = Int(py=params[0])
+    var d = Int(py=params[1])
+    var n_edges = Int(py=params[2])
+    var n_clusters = Int(py=params[3])
+    var n_selected = Int(py=params[4])
+    var nq = Int(py=params[5])
+    var min_samples = Int(py=params[6])
+    if m < 2 or d < 1 or n_edges < 1 or n_clusters < 1 or n_selected < 0 or nq < 1:
+        raise Error(
+            "hdbscan_approximate_predict: shape refused by name (m=" + String(m)
+            + ", d=" + String(d) + ", n_edges=" + String(n_edges)
+            + ", n_clusters=" + String(n_clusters) + ", n_selected="
+            + String(n_selected) + ", nq=" + String(nq) + ")"
+        )
+    var x = read_f32(Int(py=addrs[0]), m * d)
+    var core = read_f32(Int(py=addrs[1]), m)
+    var labels = read_i32(Int(py=addrs[2]), m)
+    var lambdas = read_f32(Int(py=addrs[3]), n_edges)
+    var deaths = read_f32(Int(py=addrs[4]), n_clusters)
+    var selected = read_i32(Int(py=addrs[5]), n_selected)
+    var iic = read_i32(Int(py=addrs[6]), n_edges + 1)
+    var q = read_f32(Int(py=addrs[7]), nq * d)
+    var lo = i32_ptr(Int(py=addrs[8]))
+    var po = f32_ptr(Int(py=addrs[9]))
+    with GILReleased(Python()):
+        var out = hdbh_approximate_predict(
+            x, m, d, core, labels, lambdas, m, deaths, selected, iic, q, nq,
+            min_samples,
+        )
+        for i in range(nq):
+            lo.unsafe_store(i, out.labels[i])
+            po.unsafe_store(i, out.probabilities[i])
+        _ = out^
+    return PythonObject(nq)
 
 
 @export
@@ -140,6 +293,9 @@ def PyInit__mojolearn_hdbscan_host() abi("C") -> PythonObject:
         module.def_function[hdbscan_vendor_binding]("hdbscan_vendor")
         module.def_function[hdbscan_numeric_mode_binding]("hdbscan_numeric_mode")
         module.def_function[hdbscan_fit_binding]("hdbscan_fit")
+        module.def_function[hdbscan_generate_prediction_data_binding]("hdbscan_generate_prediction_data")
+        module.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
+        module.def_function[hdbscan_host_predict_sabotage_binding]("hdbscan_host_predict_sabotage")
         return module.finalize()
     except e:
         abort(String("failed to create _mojolearn_hdbscan_host: ", e))

@@ -1,0 +1,75 @@
+NOTE: --lanes scopes this diff to 5 lane(s); 161 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host'] commit=115eb51ece64e6e18cebd4885b0a00cf03789e99
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| kmeans-array/base            | IDENTICAL x4 | 37ab2f0355ef716a | 37ab2f0355ef716a | 37ab2f0355ef716a | 37ab2f0355ef716a |
+| kmeans-array/odd             | IDENTICAL x4 | 5b347e0f29ddb844 | 5b347e0f29ddb844 | 5b347e0f29ddb844 | 5b347e0f29ddb844 |
+| kmeans-classic-pp/base       | IDENTICAL x4 | e6648c8209c562ac | e6648c8209c562ac | e6648c8209c562ac | e6648c8209c562ac |
+| kmeans-classic-pp/odd        | IDENTICAL x4 | a47bec6025e076d8 | a47bec6025e076d8 | a47bec6025e076d8 | a47bec6025e076d8 |
+| kmeans-random/base           | IDENTICAL x4 | 2bab0cda9f319dbb | 2bab0cda9f319dbb | 2bab0cda9f319dbb | 2bab0cda9f319dbb |
+| kmeans-random/odd            | IDENTICAL x4 | f22e6751eeedc598 | f22e6751eeedc598 | f22e6751eeedc598 | f22e6751eeedc598 |
+| kmeans-weighted/base         | IDENTICAL x4 | 5080fbf55610f54e | 5080fbf55610f54e | 5080fbf55610f54e | 5080fbf55610f54e |
+| kmeans-weighted/odd          | IDENTICAL x4 | fc6107e901e7d7be | fc6107e901e7d7be | fc6107e901e7d7be | fc6107e901e7d7be |
+| kmeans/base                  | DIVERGENT  | parts differ: ?; agree: centers,labels | deadbeefdeadbeef | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+| kmeans/odd                   | IDENTICAL x4 | 43d8a3d3859f4143 | 43d8a3d3859f4143 | 43d8a3d3859f4143 | 43d8a3d3859f4143 |
+
+summary: DIVERGENT=1, IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| kmeans-array/base            | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | b0e1e0e15756eb6c |
+| kmeans-array/base            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/base            | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | c031eae95609c744 |
+| kmeans-array/odd             | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | e23895c420b80215 |
+| kmeans-array/odd             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/odd             | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 6b332575d6403b7d |
+| kmeans-classic-pp/base       | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 9933c62acd4bbde8 |
+| kmeans-classic-pp/base       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/base       | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 2bf16d90cfe65678 |
+| kmeans-classic-pp/odd        | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 70d10d0be6535590 |
+| kmeans-classic-pp/odd        | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/odd        | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 011d067387d7ef5d |
+| kmeans-random/base           | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 456c4915b48a291c |
+| kmeans-random/base           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/base           | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 6b9bf5684fdeeae1 |
+| kmeans-random/odd            | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | c415e79de2c2d102 |
+| kmeans-random/odd            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/odd            | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | bddbcb7ae1fdbba9 |
+| kmeans-weighted/base         | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | b3757aeee5a4565d |
+| kmeans-weighted/base         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/base         | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 23d7741ac2b47c06 |
+| kmeans-weighted/odd          | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | ef7a458b978799ab |
+| kmeans-weighted/odd          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/odd          | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | d8a260999d921bc6 |
+| kmeans/base                  | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | b9a7dd27a045bc21 |
+| kmeans/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/base                  | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | 2dc7903bd0a181f5 |
+| kmeans/odd                   | infer  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | bc82439049a4e870 |
+| kmeans/odd                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/odd                   | batch  | OWED x1      | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   | eb91feb5618b7fe2 |
+
+summary (infer/model): N/A=10, OWED=10
+summary (batch): OWED=10
+summary (rlpair): 
+require-columns 4 over ['kmeans', 'kmeans-array', 'kmeans-classic-pp', 'kmeans-random', 'kmeans-weighted']: OK (20 OWED)
+OWED kmeans-array/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-array/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-array/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-array/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-classic-pp/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-classic-pp/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-classic-pp/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-classic-pp/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-random/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-random/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-random/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-random/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-weighted/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-weighted/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-weighted/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans-weighted/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+OWED kmeans/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-apple-m4)
+summary (owed): OWED=20; the next release record owes exactly these cell parts; wrote ../owed/owed_corrupt.json

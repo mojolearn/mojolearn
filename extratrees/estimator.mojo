@@ -788,6 +788,7 @@ def fit_extra_trees_classifier_host_exact(
     n_features: Int32,
     n_classes: Int32,
     config: ExtraTreesConfig,
+    tree_start: Int = 0,
 ) raises -> FitResult:
     """THE CPU COLUMN'S CLASSIFIER FIT (the CPU training lane, phase 1,
     et-clf, 2026-09-14): `fit_extra_trees_classifier_device` restated on
@@ -815,6 +816,7 @@ def fit_extra_trees_classifier_host_exact(
         Float32(1.0),
         plan.bootstrap,
         plan.n_sampled_rows,
+        tree_start,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
@@ -826,6 +828,7 @@ def fit_extra_trees_regressor_host_exact(
     n_rows: Int32,
     n_features: Int32,
     config: ExtraTreesConfig,
+    tree_start: Int = 0,
 ) raises -> FitResult:
     """THE CPU COLUMN'S REGRESSOR FIT (et-reg, 2026-09-14):
     `fit_extra_trees_regressor_device` restated on the host. The labels
@@ -853,6 +856,7 @@ def fit_extra_trees_regressor_host_exact(
         Float32(1.0 / ql[1]),
         plan.bootstrap,
         plan.n_sampled_rows,
+        tree_start,
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)

@@ -2311,11 +2311,14 @@ def _(ml, X, yc, yr, Xh=None):
     Boruvka MST, single linkage, the condensed tree and the labels.
     Train hashes the labels, the core distances and the four integers the
     fit reports (cluster, outlier, Boruvka round and condensed cluster
-    counts); the integer stages are where a divergence first shows."""
-    m = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
+    counts); the integer stages are where a divergence first shows.
+    The fit keeps prediction_data (2026-09-15), which moves no train byte;
+    infer is approximate_predict's labels and probabilities on 256
+    held-out rows (hdbscan.pyx:1264, predict.cuh:220-262)."""
+    m = ml.HDBSCAN(min_cluster_size=5, prediction_data=True).fit(X[:6000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
-                m, "n/a:transductive")
+                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
 
 
 @lane("hdbscan-leaf")
@@ -2324,10 +2327,11 @@ def _(ml, X, yc, yr, Xh=None):
     min_samples below min_cluster_size and allow_single_cluster, the
     other selection arm and the two knobs that change which condensed
     clusters become labels."""
-    m = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf", allow_single_cluster=True).fit(X[:6000, :4])
+    m = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf", allow_single_cluster=True,
+                   prediction_data=True).fit(X[:6000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
-                m, "n/a:transductive")
+                m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
 
 
 @lane("bootstrap")
@@ -3270,14 +3274,14 @@ def _(ml, X, yc, yr, Xh=None):
     hierarchy row drivers under _par_devices()), held to the plain fit's
     labels and core distances."""
     from mojolearn.parallel_classical import fit_hdbscan
-    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5), X[:6000, :4], devices=_par_devices())
+    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
     plain = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
     _same_bytes("fit_hdbscan labels_", par.labels_, "plain labels_", plain.labels_)
     _same_bytes("fit_hdbscan core_distances_", par.core_distances_, "plain core_distances_", plain.core_distances_)
     return _fit(dict(labels=_h(par.labels_), core=_h(par.core_distances_),
                      counts=_h(np.asarray([par.n_clusters_, par.n_outliers_, par.n_boruvka_rounds_,
                                            par.n_condensed_clusters_], dtype=np.int64))),
-                par, "n/a:transductive")
+                par, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
 
 
 # ---------------------------------------------------------------- lanes (2026-09-15, the kernel-method and Cholesky drivers)
@@ -3684,21 +3688,26 @@ _batch_decl("n/a:fit-refused", "kmeans-cosine")
 #     NotImplementedError; the metrics bindings export spectral_fit_predict_
 #     dataset and _graph only; cuML spectral_clustering.pyx has fit (:263) and
 #     fit_predict (:239) only.
-#   HDBSCAN: cuML HAS held-out calls (hdbscan.pyx approximate_predict :1264,
-#     membership_vector :1180, all_points_membership_vectors :1114) but ours
-#     does not on GPU or CPU: hdbscan.py:180 fit_predict only, _mojolearn_
-#     hdbscan.mojo:188 and _mojolearn_hdbscan_host.mojo:142 export hdbscan_fit
-#     only, deferred at hdbscan/NOT_IMPLEMENTED.tsv:4. Implementing them (with
-#     generate_prediction_data) is what would make these lanes fillable.
+#   HDBSCAN is NOT transductive since 2026-09-15: HDBSCAN(prediction_data=True)
+#     and mojolearn.hdbscan.approximate_predict (cuML hdbscan.pyx:1264,
+#     predict.cuh:220-262) on both bindings, below. membership_vector (:1180)
+#     and all_points_membership_vectors (:1114) are still NOT IMPLEMENTED and
+#     refuse by name (hdbscan/NOT_IMPLEMENTED.tsv), so the part asks
+#     approximate_predict only.
 _batch_decl("n/a:transductive (DBSCAN has no predict on GPU, CPU or cuML; fit and fit_predict only)",
             "dbscan", "dbscan-brute-l1", "dbscan-weighted", "par-dbscan")
 _batch_decl("n/a:transductive (AgglomerativeClustering has no predict on GPU, CPU or cuML; fit and fit_predict only)",
             "agglomerative")
 _batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
             "spectral", "spectral-precomputed")
-_batch_decl("n/a:transductive (HDBSCAN approximate_predict and membership_vector not implemented on GPU or CPU; "
-            "cuML has them; hdbscan/NOT_IMPLEMENTED.tsv:4)",
-            "hdbscan", "hdbscan-leaf")
+
+
+def _batch_hdbscan(ml, e, Xh):
+    """approximate_predict's labels and probabilities, 64 held-out rows."""
+    return [_BatchRows("approximate_predict", Xh[:64, :4], lambda r: tuple(ml.hdbscan.approximate_predict(e, r)))]
+
+
+_batch_decl(_batch_hdbscan, "hdbscan", "hdbscan-leaf")
 
 
 def _batch_kneighbors(ml, e, Xh):
@@ -3839,12 +3848,229 @@ def _batch_gemm_transposed(ml, e, Xh):
 
 _batch_decl(_batch_gemm_pinned, "gemm-pinned")
 _batch_decl(_batch_gemm_transposed, "gemm-transposed")
-_batch_decl("n/a:function", "metrics", "metrics-classification", "cross-val", "bootstrap", "permutation-test",
-            "monte-carlo", "metrics-fowlkes-mallows")
-_batch_decl("n/a:no-batch-axis", "tokenizer")
-_batch_decl("n/a:optimizer-step", "optim-sgd", "optim-adam-clip")
-_batch_decl("n/a:training-step", "byte-lm-host-train")
-_batch_decl("n/a:no-model", "par-byte-lm")
+# The function, tokenizer, optimizer and byte LM trainer lanes
+# (lane/cpu-training-batch-fill-func, 2026-09-15). Each lane was read against
+# its public API for an axis whose elements may not read their neighbors; the
+# ones that have one declare it below, the rest name the missing method.
+
+#: the batch of global replicate, fold or parameter-row indices these parts ask
+BATCH_RANGE_ROWS = 64
+
+
+def _range_rows(label, n, fn, min_batch=1, refusal=None):
+    """A _BatchRows over the global indices [0, n) of a call whose `first`
+    handle addresses a contiguous range (resample's r_first). The harness
+    only ever hands contiguous windows R[a:b], so a window is the call
+    `fn(first=a, count=b - a)`; anything else is refused, not re-indexed."""
+    idx = np.arange(n, dtype=np.int64).reshape(n, 1)
+
+    def call(r):
+        first, count = int(r[0, 0]), int(r.shape[0])
+        if not np.array_equal(r[:, 0], np.arange(first, first + count, dtype=np.int64)):
+            raise ValueError(f"{label}: a range call needs a contiguous window, got {r[:, 0].tolist()}")
+        return fn(first, count)
+    return _BatchRows(label, idx, call, min_batch, refusal)
+
+
+#: bootstrap refuses ONE replicate by name, because its standard error is the
+#: ddof=1 deviation of the distribution (resample/checks/intervals.mojo); its
+#: replicates are asked in windows of two, as the coordinate descent predict is
+BOOTSTRAP_ONE_REFUSAL = "the standard error needs at least 2 resamples"
+
+
+def _batch_resample_inputs(Xh):
+    """The bootstrap and permutation-test lanes' inputs, derived from the
+    held-out rows by the same rules (labels_for's targets): yr's first 4096
+    values, yr paired with column 3, and the two label groups' first 512
+    rows (the lane's fallback when a group is short). Column 3 alone is
+    constant over the first 1024 denormal rows, where pearson refuses by
+    name; the lane's pairing is not."""
+    ych, yrh = labels_for(Xh, HELDOUT_SEED)
+    x = np.ascontiguousarray(yrh[:4096]).astype(np.float32)
+    two = np.ascontiguousarray(np.stack([yrh[:4096], Xh[:4096, 3]], 1).astype(np.float32))
+    a = np.ascontiguousarray(yrh[:4096][ych[:4096] == 0][:512])
+    b = np.ascontiguousarray(yrh[:4096][ych[:4096] == 1][:512])
+    if a.size < 8 or b.size < 8:
+        a, b = np.ascontiguousarray(yrh[:512]), np.ascontiguousarray(yrh[512:1024])
+    return x, two, a, b
+
+
+#: bootstrap statistics asked by the batch part: every STATISTICS arm, the
+#: two sorted ones (quantile, trimmed_mean) and the two paired ones included
+BATCH_BOOTSTRAP_ARMS = (("mean", dict(statistic="mean")), ("std", dict(statistic="std")),
+                        ("quantile", dict(statistic="quantile", q_or_prop=0.25)),
+                        ("trimmed_mean", dict(statistic="trimmed_mean", q_or_prop=0.1)),
+                        ("pearson", dict(statistic="pearson")), ("diff_means", dict(statistic="diff_means")))
+
+
+def _batch_resample(bootstrap, permutation_test, prefix=""):
+    """resample's own batch-invariance handle (python/mojolearn/resample.py
+    module docstring: "replicates [r_first, r_first + n_resamples) of one run
+    are bit-identical to the corresponding slice of a whole run"): replicate
+    r of `distribution` and permutation r of `null_distribution` alone
+    (n_resamples=1, r_first=r) against 64 of them and the split 1, 7, 56.
+    The point estimate, interval, standard error and p-value are reductions
+    over the run and are not asked."""
+    def spec(ml, e, Xh):
+        x, two, a, b = _batch_resample_inputs(Xh)
+        calls = []
+        for name, kw in BATCH_BOOTSTRAP_ARMS:
+            data = two if kw["statistic"] in ("pearson", "diff_means") else x
+            calls.append(_range_rows(
+                f"{prefix}bootstrap {name} distribution", BATCH_RANGE_ROWS,
+                lambda first, count, data=data, kw=kw: (np.asarray(bootstrap(
+                    data, n_resamples=count, r_first=first, random_state=3, **kw).distribution),),
+                min_batch=2, refusal=BOOTSTRAP_ONE_REFUSAL))
+        calls.append(_range_rows(
+            f"{prefix}permutation_test diff_means null_distribution", BATCH_RANGE_ROWS,
+            lambda first, count: (np.asarray(permutation_test(
+                a, b, statistic="diff_means", n_resamples=count, r_first=first, random_state=3).null_distribution),)))
+        return calls
+    return spec
+
+
+def _batch_bootstrap_lane(ml, e, Xh):
+    return _batch_resample(ml.resample.bootstrap, ml.resample.permutation_test)(ml, e, Xh)[:-1]
+
+
+def _batch_permutation_lane(ml, e, Xh):
+    return _batch_resample(ml.resample.bootstrap, ml.resample.permutation_test)(ml, e, Xh)[-1:]
+
+
+def _batch_par_resample(ml, e, Xh):
+    """The parallel driver through the same r_first handle on _par_devices()
+    (parallel_classical.bootstrap: "Replicate r is a pure function of (seed,
+    r, data) (the r_first handle)"); the mean and quantile arms the lane
+    fits, and the permutation null."""
+    from mojolearn import parallel_classical as pc
+    dev = _par_devices()
+    calls = _batch_resample(lambda d, **kw: pc.bootstrap(d, devices=dev, **kw),
+                            lambda a, b, **kw: pc.permutation_test(a, b, devices=dev, **kw),
+                            prefix="parallel ")(ml, e, Xh)
+    return [c for c in calls if " mean " in c.label or " quantile " in c.label or "permutation" in c.label]
+
+
+def _batch_silhouette_chunks(ml, e, Xh):
+    """silhouette_samples' batch is cuML's chunk, not a row subset: a
+    sample's coefficient reads every other row, so rows alone would be a
+    different input. The docstring (_metrics_impl.py::silhouette_score,
+    chunksize) says chunk sizes are "gated to one byte pattern", and both the
+    GPU binding and metrics/host/metrics_oracle.mojo take the chunk. A window
+    [a, b) is therefore the whole sample scored at chunksize = b - a with rows
+    [a, b) read back: row i at chunksize 1 and at 1, 7 and 248 against 256."""
+    X4 = np.ascontiguousarray(Xh[:256, :4]).astype(np.float32)
+    labels = (np.arange(256) % 4).astype(np.int32)
+    idx = np.arange(256, dtype=np.int64).reshape(256, 1)
+
+    def fn(r):
+        a, b = int(r[0, 0]), int(r[-1, 0]) + 1
+        s = np.asarray(ml.metrics.silhouette_samples(X4, labels, chunksize=b - a))
+        return (np.ascontiguousarray(s[a:b]),)
+    return [_BatchRows("silhouette_samples (chunksize = window rows)", idx, fn)]
+
+
+def _batch_cross_val(ml, e, Xh):
+    """cross_val_score's batch is its folds: a fresh clone per fold
+    (model_selection.py, "fitting a fresh clone serially"), so fold k's
+    score may not read the other folds. Three explicit unshuffled folds of
+    768 held-out rows (column 0 the target, columns 1.. the features), passed
+    as the index pairs `cv` accepts; each fold alone against the three."""
+    Xf = np.ascontiguousarray(Xh[:768, 1:]).astype(np.float32)
+    y = np.ascontiguousarray(Xh[:768, 0]).astype(np.float32)
+    rows = np.arange(768)
+    folds = [(np.ascontiguousarray(np.concatenate([rows[:256 * k], rows[256 * (k + 1):]])),
+              np.ascontiguousarray(rows[256 * k:256 * (k + 1)])) for k in range(3)]
+    idx = np.arange(3, dtype=np.int64).reshape(3, 1)
+    return [_BatchRows("cross_val_score (folds)", idx, lambda r: (np.asarray(ml.model_selection.cross_val_score(
+        ml.GradientBoostingRegressor(n_estimators=8, max_depth=4), Xf, y,
+        cv=[folds[int(k)] for k in r[:, 0]]), dtype=np.float64),))]
+
+
+def _batch_optim_rows(label, seed, make, steps):
+    """An optimizer over ONE (64, 8) parameter tensor: rows of the tensor
+    are the batch (the optimizer contract's parameter-count invariance clause
+    is stated for max_norm=None, _training_impl.py::_Optimizer.step, so no
+    call here clips; clip_grad_norm_ and max_norm are a function of every
+    gradient in the registry by contract 3.5 and have no such axis). A
+    window of rows is a fresh optimizer over those rows' parameters, stepped
+    with those rows' gradients; the parameters and both moment buffers after
+    the steps are compared row by row."""
+    P = _hw((BATCH_RANGE_ROWS, 8), f"batch:{seed}:p", -0.5, 0.5)
+    G = [_hw((BATCH_RANGE_ROWS, 8), f"batch:{seed}:g{j}", -1.0, 1.0) for j in range(4)]
+    idx = np.arange(BATCH_RANGE_ROWS, dtype=np.int64).reshape(BATCH_RANGE_ROWS, 1)
+
+    def fn(r):
+        k = r[:, 0]
+        p = np.ascontiguousarray(P[k])
+        o = make(p)
+        steps(o, [np.ascontiguousarray(g[k]) for g in G])
+        n = p.shape[0]
+        return (p, np.asarray(o.exp_avg).reshape(n, 8), np.asarray(o.exp_avg_sq).reshape(n, 8))
+    return _BatchRows(label, idx, fn)
+
+
+def _two_steps(o, g):
+    o.step([g[0]])
+    o.step([g[1]])
+
+
+def _batch_optim_sgd(ml, e, Xh):
+    """The optim-sgd lane's two SGD arms without the clip."""
+    T = ml.training
+    return [_batch_optim_rows("SGD nesterov weight_decay ConstantLR warmup", "sgd-nesterov",
+                              lambda p: T.SGD([p], lr=1e-2, momentum=0.9, dampening=0.0, nesterov=True,
+                                              weight_decay=0.01, lr_schedule=T.ConstantLR(1e-2, warmup_steps=2)),
+                              _two_steps),
+            _batch_optim_rows("SGD dampening", "sgd-dampening",
+                              lambda p: T.SGD([p], lr=1e-2, momentum=0.9, dampening=0.5, nesterov=False),
+                              _two_steps)]
+
+
+def _batch_optim_adam(ml, e, Xh):
+    """The optim-adam-clip lane's Adam and accumulated AdamW arms without
+    the clip (T = 256 at A = 2, the lane's split)."""
+    T = ml.training
+    return [_batch_optim_rows("Adam weight_decay WarmupLinearLR", "adam",
+                              lambda p: T.Adam([p], lr=1e-3, weight_decay=0.01,
+                                               lr_schedule=T.WarmupLinearLR(1e-3, warmup_steps=2, total_steps=8,
+                                                                            min_lr=0.0)),
+                              _two_steps),
+            _batch_optim_rows("AdamW step_accumulated A=2", "adamw0",
+                              lambda p: T.AdamW([p], lr=1e-3, weight_decay=0.0, accumulation_steps=2),
+                              lambda o, g: (o.step_accumulated([[g[0]], [g[1]]], 256),
+                                            o.step_accumulated([[g[2]], [g[3]]], 256)))]
+
+
+_batch_decl("n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and "
+            "silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the "
+            "per-sample silhouette_samples is asked on metrics-classification)", "metrics")
+_batch_decl(_batch_silhouette_chunks, "metrics-classification")
+_batch_decl(_batch_cross_val, "cross-val")
+_batch_decl(_batch_bootstrap_lane, "bootstrap")
+_batch_decl(_batch_permutation_lane, "permutation-test")
+_batch_decl("n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form "
+            "folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; "
+            "no per-sample output exists to compare an i_first range against)", "monte-carlo")
+_batch_decl("n/a:no-batch-api (GPT2Tokenizer has encode_bytes, encode, decode_bytes and decode over ONE stream, "
+            "python/mojolearn/tokenizer.py:143-205, and no list-of-documents entry; byte-level BPE over a "
+            "concatenation is not the concatenation of the pieces' encodings, and decode_bytes returns no "
+            "per-id byte lengths to split its output by)", "tokenizer")
+_batch_decl(_batch_optim_sgd, "optim-sgd")
+_batch_decl(_batch_optim_adam, "optim-adam-clip")
+_batch_decl("n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a "
+            "step, python/mojolearn/_byte_lm_host.py:392-429; one loss and one update from mean cross-entropy "
+            "over ids of the profile's fixed (batch, length + 1), so no output belongs to one sequence; the "
+            "per-sequence logits are asked by byte-lm-host-infer; lane/batch-invariance-2's batchgrad records the "
+            "same reason for this lane and its batchscale and ragged parts do not ask it)", "byte-lm-host-train")
+#: the three multi-GPU byte LM trainers: the same reason, one string
+PAR_BYTE_LM_BATCH_NA = ("n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses "
+                        "have train_step, state_dict, export_gradients and checkpoint only, "
+                        "python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses "
+                        "and one update from the shard-mean gradient, so no output belongs to one sequence, and "
+                        "the shard split is held to the replica trainer by the train column)")
+_batch_decl(PAR_BYTE_LM_BATCH_NA, "par-byte-lm")
+# metrics.fowlkes_mallows_score (lane/cpu-training-small-gaps) keeps the reason main gave it
+_batch_decl("n/a:function", "metrics-fowlkes-mallows")
 
 
 def _batch_cross_entropy(ml, e, Xh):
@@ -3993,14 +4219,14 @@ _batch_decl(_rows_calls("predict", prep=_coded), "par-feature-freq")
 _batch_decl(_rows_calls("predict", "predict_proba"), "par-boosting-pointwise")
 _batch_decl(lambda ml, e, Xh: [_BatchPrefix("forecast", FORECAST_HORIZON, lambda h: (e.forecast(h),), axis=0)],
             "par-holtwinters")
-_batch_decl("n/a:no-model", "par-byte-lm-model-pool", "par-byte-lm-offload")
+_batch_decl(PAR_BYTE_LM_BATCH_NA, "par-byte-lm-model-pool", "par-byte-lm-offload")
 _batch_decl(_rows_calls("predict", "predict_proba"), "par-forest-pool")
 _batch_decl(_rows_calls("score_samples", "predict", sl=(slice(0, 64), slice(0, 4))), "par-gmm")
-_batch_decl("n/a:function", "par-resample")
-# parallel_classical.fit_hdbscan is fit-only; see the hdbscan reason above
-_batch_decl("n/a:transductive (HDBSCAN approximate_predict and membership_vector not implemented on GPU or CPU; "
-            "cuML has them; hdbscan/NOT_IMPLEMENTED.tsv:4)",
-            "par-hdbscan")
+_batch_decl(_batch_par_resample, "par-resample")
+# parallel_classical.fit_hdbscan copies the worker's fitted estimator back, so a
+# prediction_data=True fit carries the prediction data and the root answers
+# approximate_predict; its two-device cells are owed to the release record.
+_batch_decl(_batch_hdbscan, "par-hdbscan")
 _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "par-kernel-ridge")
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "par-nystroem")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "par-rbf-sampler")
@@ -5640,7 +5866,63 @@ def _real_count(verdict):
     return None
 
 
-def diff(paths, require_columns=0, require_lanes=None):
+#: the per-column verdicts that are already a failure on their own; a cell
+#: carrying one is never OWED
+_OWED_BLOCKING = ("MOVED", "RELOAD-MOVED", "REFUSED", "BATCH_MOVED", "RLPAIR_MOVED")
+
+
+def _owed_status(cols, key, col):
+    """Whether a cell part that rests on fewer real hashes than
+    --require-columns demands is OWED rather than short (2026-09-15,
+    lane/cpu-gate-owed-cells). GPU records are taken only at PyPI releases,
+    so a CPU lane can carry a cell part no committed GPU record hashes yet.
+    DERIVED, never hand-listed: the part is OWED only when
+      - every CPU column (a JSON with `host`) hashes it STABLE over at least
+        two repeats, and at least one CPU column is given;
+      - every other column either hashes it or has NO hash for it: the cell
+        is absent (a lane not in that record), the part key is absent, or
+        the part is n/a;
+      - no column REFUSED the cell or the part and none reads MOVED,
+        RELOAD-MOVED, BATCH_MOVED or RLPAIR_MOVED.
+    Agreement among the columns that do hash it is the caller's verdict:
+    DIVERGENT is never short and never OWED. Returns (missing column names,
+    "") when OWED, else ([], the reason it is not)."""
+    missing, cpu_seen = [], False
+    for name, j in cols:
+        c = j["cells"].get(key)
+        is_cpu = bool(j.get("host"))
+        if c is None:
+            if is_cpu:
+                return [], f"CPU column {name} has no cell"
+            missing.append(name); continue
+        if c.get("verdict") == "REFUSED":
+            return [], f"column {name} REFUSED the cell"
+        if col == "train":
+            v, values = c.get("verdict"), c.get("hashes") or []
+        elif f"{col}_verdict" not in c:
+            if is_cpu:
+                return [], f"CPU column {name} carries no {col} part"
+            missing.append(name); continue
+        else:
+            v, values = c[f"{col}_verdict"], c.get(col) or []
+        if v in _OWED_BLOCKING:
+            return [], f"column {name} reads {v}"
+        if v == "N/A":
+            if is_cpu:
+                return [], f"CPU column {name} reads N/A"
+            missing.append(name); continue
+        if is_cpu:
+            cpu_seen = True
+            if v != "STABLE" or len(values) < 2 or len(set(values)) != 1:
+                return [], f"CPU column {name} is not STABLE over two or more repeats ({v}, {len(values)} repeat(s))"
+    if not cpu_seen:
+        return [], "no CPU column hashes it"
+    if not missing:
+        return [], "no column lacks a hash"
+    return missing, ""
+
+
+def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
     cols = []
     for p in paths:
         with open(p) as fh:
@@ -5659,14 +5941,28 @@ def diff(paths, require_columns=0, require_lanes=None):
     if require_columns and require_columns > len(cols):
         print(f"REQUIRE FAIL: --require-columns {require_columns} with {len(cols)} JSONs given")
     required = set(require_lanes) if require_lanes else (set(k.split("/")[0] for k in keys) if require_columns else set())
-    short = []
+    short, owed = [], []
+    if owed_json and not require_columns:
+        raise SystemExit("REFUSING: --owed-json needs --require-columns (OWED is a cell short of that count)")
 
     def require(key, col, verdict):
+        """Records a short cell part and returns the verdict to count and
+        print: `OWED xK` for a part --owed-json admits (K real hashes, all
+        equal), else the verdict unchanged."""
         if not require_columns or key.split("/")[0] not in required:
-            return
+            return verdict
         n = _real_count(verdict)
         if n is not None and n < require_columns:
-            short.append((key, col, verdict, n))
+            why = ""
+            if owed_json and n > 0:
+                missing_cols, why = _owed_status(cols, key, col)
+                if missing_cols:
+                    lane_name, fixture = key.split("/", 1)
+                    owed.append(dict(lane=lane_name, fixture=fixture, part=col, missing=missing_cols,
+                                     present=[nm for nm, _ in cols if nm not in missing_cols], real_hashes=n))
+                    return f"OWED x{n}"
+            short.append((key, col, verdict, n, why))
+        return verdict
 
     fixture_ns = set(((j.get("package") or {}).get("fixture_n", 20000), bool((j.get("package") or {}).get("wide")))
                      for _, j in cols)
@@ -5764,8 +6060,8 @@ def diff(paths, require_columns=0, require_lanes=None):
             agreeing = [pk for pk, pv in per.items() if len(set(pv)) == 1]
             if per:
                 shown[0] = f"parts differ: {','.join(diverging) or '?'}; agree: {','.join(agreeing) or '-'}"
+        verdict = require(k, "train", verdict)
         counts[verdict.split(" ")[0]] = counts.get(verdict.split(" ")[0], 0) + 1
-        require(k, "train", verdict)
         print(f"| {k:<28} | {verdict:<10} | " + " | ".join(f"{s:<16}" for s in shown) + " |")
     print()
     print("summary: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
@@ -5800,9 +6096,9 @@ def diff(paths, require_columns=0, require_lanes=None):
             verdict, shown = _diff_column(cols, k, col)
             if verdict in ("MOVED", "DIVERGENT", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVED"):
                 bad += 1
+            verdict = require(k, col, verdict)
             c2 = counts2[group]
             c2[verdict.split(" ")[0]] = c2.get(verdict.split(" ")[0], 0) + 1
-            require(k, col, verdict)
             rows.append((k, col, verdict, shown))
     print()
     if rows:
@@ -5821,16 +6117,27 @@ def diff(paths, require_columns=0, require_lanes=None):
     if require_columns:
         if require_columns > len(cols):
             bad += 1
-        for key, col, verdict, n in short:
+        for key, col, verdict, n, why in short:
             print(f"REQUIRE FAIL {key} {col}: {verdict} rests on {n} real hash(es), "
                   f"--require-columns {require_columns} demands that many; a column that "
-                  "should cover this lane is refusing, which is not a pass")
+                  "should cover this lane is refusing, which is not a pass"
+                  + (f" (not OWED: {why})" if why else ""))
         missing = sorted(required - set(k.split("/")[0] for k in keys))
         for lane_name in missing:
             print(f"REQUIRE FAIL {lane_name}: no JSON carries a cell for this lane")
         bad += len(short) + len(missing)
         print(f"require-columns {require_columns} over {sorted(required)}: "
-              f"{'OK' if not short and not missing else str(len(short) + len(missing)) + ' short'}")
+              f"{'OK' if not short and not missing else str(len(short) + len(missing)) + ' short'}"
+              + (f" ({len(owed)} OWED)" if owed_json else ""))
+    if owed_json:
+        for o in owed:
+            print(f"OWED {o['lane']}/{o['fixture']} {o['part']}: no hash in {','.join(o['missing'])}; "
+                  f"rests on {o['real_hashes']} ({','.join(o['present'])})")
+        with open(owed_json, "w") as fh:
+            json.dump(dict(columns=names, require_columns=require_columns,
+                           lanes=sorted(required), owed=owed), fh, indent=1)
+        print(f"summary (owed): OWED={len(owed)}; the next release record owes exactly these cell parts; "
+              f"wrote {owed_json}")
     return 1 if bad else 0
 
 
@@ -5959,6 +6266,12 @@ def main():
                     help="with --diff: exit non-zero unless every compared cell of the lanes named by "
                          "--lanes (every lane when --lanes is empty) rests on at least N real hashes; "
                          "--lanes also scopes which cells --diff compares at all")
+    ap.add_argument("--owed-json", default="", metavar="PATH",
+                    help="with --diff --require-columns: a cell part short ONLY because a record has no hash "
+                         "for it (cell absent, part absent or n/a) reads OWED xK instead of failing, when every "
+                         "CPU column hashes it STABLE over two or more repeats, no column refused or moved it, "
+                         "and the columns that hash it agree; the owed cell parts are written to PATH. Their "
+                         "sabotage check is tools/cpu_identity_gate_check.py owed")
     ap.add_argument("--merge", nargs="+", default=None, metavar="JSON",
                     help="join the parts of ONE column (same vendor, commit, fixtures, build) into --json")
     ap.add_argument("--allow-separate-builds", action="store_true",
@@ -5975,7 +6288,7 @@ def main():
             unknown = [n for n in lanes if n not in LANES]
             if unknown:
                 raise SystemExit(f"REFUSING: --lanes names no lane: {unknown}; lanes are {sorted(LANES)}")
-        return diff(args.diff, args.require_columns, lanes)
+        return diff(args.diff, args.require_columns, lanes, args.owed_json or None)
     return run(args)
 
 

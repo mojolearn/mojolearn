@@ -63,6 +63,10 @@ from core.knn_host_predict import KNN_HOST_METRIC_FROM_IS_SQRT, host_knn_search
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE, mr_max3, mr_scale
 from hdbscan.checks.mutual_reachability_dense import refuse_nonfinite_host
 from hdbscan.impl.condensed_hierarchy import CondensedHierarchy
+from hdbscan.impl.prediction_data import (
+    prediction_neighborhood,
+    refuse_nonfinite_queries,
+)
 from hdbscan.impl.detail.condense import _add_edge, _collapse, bfs_from_node
 from hdbscan.impl.detail.extract import do_labelling_on_host
 from hdbscan.impl.detail.stabilities import (
@@ -107,6 +111,109 @@ struct HdbscanHostFit(Movable):
     var n_outliers: Int
     var n_boruvka_rounds: Int
     var n_condensed_clusters: Int
+    var tree: CondensedHierarchy
+    """The condensed tree, kept for `prediction_data=True`
+    (`hdbscan/impl/prediction_data.mojo`). Nothing above reads it."""
+    var inverse_label_map: List[Int32]
+    """final label -> condensed cluster id counted from 0, ascending, as
+    `extract.mojo::extract_clusters` builds it."""
+
+
+@fieldwise_init
+struct HdbscanHostPredict(Movable):
+    var labels: List[Int32]
+    var probabilities: List[Float32]
+
+
+comptime HDBH_PREDICT_SABOTAGE = (
+    HDBH_HOST_SABOTAGE or is_defined["MOJOLEARN_HDBSCAN_PREDICT_SABOTAGE"]()
+)
+"""The prediction pass's negative control. It rides on the family's
+`-D MOJOLEARN_HOST_SABOTAGE=1`, and `-D MOJOLEARN_HDBSCAN_PREDICT_SABOTAGE=1`
+arms it ALONE, so a fit stays correct and only the query pass moves."""
+
+
+def hdbh_approximate_predict(
+    x: List[Float32],
+    m: Int,
+    n: Int,
+    input_core: List[Float32],
+    labels: List[Int32],
+    tree_lambdas: List[Float32],
+    n_leaves: Int,
+    deaths: List[Float32],
+    selected_clusters: List[Int32],
+    index_into_children: List[Int32],
+    queries: List[Float32],
+    nq: Int,
+    min_samples: Int,
+) raises -> HdbscanHostPredict:
+    """`hdbscan/impl/detail/predict.mojo::approximate_predict` (cuML
+    `predict.cuh:220-262`) on the host, restated beside each device line:
+    the k-NN at `(min_samples - 1) * 2` through `host_knn_search`, slot
+    `min_samples - 1` for the query core distance, the strict `>` scan for
+    the nearest mutual reachability neighbor (DEVIATION 1615), `1 / d`, and
+    the label and probability rule of `cluster_probability_kernel`."""
+    if nq < 1:
+        raise Error(
+            "hdbscan.approximate_predict: points_to_predict has no rows;"
+            " refused by name"
+        )
+    refuse_nonfinite_queries(queries, nq, n)
+    var k = prediction_neighborhood(min_samples, m)
+    var dist = List[Float32](length=nq * k, fill=Float32(0.0))
+    var idx = List[UInt32](length=nq * k, fill=UInt32(0))
+    host_knn_search(x, m, queries, nq, n, k, KNN_HOST_METRIC_FROM_IS_SQRT, True, dist, idx)
+    var out_labels = List[Int32](capacity=nq)
+    var out_probs = List[Float32](capacity=nq)
+    var nl = Int32(n_leaves)
+    for q in range(nq):
+        # core_distances_kernel, slot min_samples - 1
+        var pcore = dist[q * k + (min_samples - 1)]
+        # min_mutual_reachability_kernel
+        var best = HDBH_FLOAT32_MAX
+        var best_ind = -1
+        for i in range(k):
+            var mr = pcore
+            var nb = Int(idx[q * k + i])
+            if input_core[nb] > mr:
+                mr = input_core[nb]
+            if dist[q * k + i] > mr:
+                mr = dist[q * k + i]
+            if best > mr:
+                best = mr
+                best_ind = nb
+        # prediction_lambda_kernel
+        var lam = HDBH_FLOAT32_MAX
+        if best > Float32(0.0):
+            lam = identical_div(Float32(1.0), best)
+        # cluster_probability_kernel
+        var cl = labels[best_ind]
+        var got = Int32(-1)
+        if cl >= Int32(0):
+            var sel = selected_clusters[Int(cl)]
+            if sel > nl:
+                if tree_lambdas[Int(index_into_children[Int(sel)])] < lam:
+                    got = cl
+            elif sel == nl:
+                got = cl
+        out_labels.append(got)
+        var prob = Float32(0.0)
+        if got >= Int32(0):
+            var max_lambda = deaths[Int(selected_clusters[Int(cl)] - nl)]
+            if max_lambda > Float32(0.0):
+                var num = max_lambda if max_lambda < lam else lam
+                prob = identical_div(num, max_lambda)
+            else:
+                prob = Float32(1.0)
+        comptime if HDBH_PREDICT_SABOTAGE:
+            # THE SABOTAGE ARM: the lowest bit of every probability. Wrong
+            # on purpose.
+            prob = bitcast[DType.float32](
+                bitcast[DType.uint32](prob) ^ UInt32(1)
+            )
+        out_probs.append(prob)
+    return HdbscanHostPredict(out_labels^, out_probs^)
 
 
 @fieldwise_init
@@ -707,6 +814,12 @@ def hdbh_fit(
             labels.append(Int32(-1))
         if labels[i] == Int32(-1):
             n_outliers += 1
+    var inverse_label_map = List[Int32](capacity=n_selected)
+    for i in range(n_clusters):
+        if is_cluster[i] != Int32(0):
+            inverse_label_map.append(Int32(i))
+    var n_condensed = tree.n_clusters
     return HdbscanHostFit(
-        labels^, core^, n_selected, n_outliers, mst.rounds, tree.n_clusters
+        labels^, core^, n_selected, n_outliers, mst.rounds, n_condensed,
+        tree^, inverse_label_map^,
     )

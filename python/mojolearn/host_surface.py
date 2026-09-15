@@ -524,6 +524,24 @@ TRAINING_LANE_NAMES = {
     "par-scaler": "the column-sharded standard scaler",
     "par-arima": "series-sharded ARIMA",
     "par-holtwinters": "series-sharded Holt-Winters",
+    # Wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor
+    # drivers. ParallelQueries cuts query rows in Python (four shards of 16
+    # rows); ReferenceShardedNeighbors cuts the reference into four shards
+    # of 1024 rows, merges the shard candidates by composite key in Python
+    # and sends one vote request, served on CPU by the core host binding's
+    # knn_classify_neighbors and knn_regress_neighbors.
+    "par-queries-knn": "query-sharded k-NN classification",
+    "par-queries-radius": "query-sharded radius neighbors",
+    "par-queries-kde": "query-sharded kernel density",
+    "par-reference-knn": "reference-sharded k-NN classification",
+    "par-reference-knn-reg": "reference-sharded k-NN regression",
+    # Wave 2, the forest driver: fit_forest cuts 16 trees into four global
+    # tree ID ranges in Python; each range is the rf or trees host
+    # binding's shard fit (rf_classifier_fit_shard, et_regressor_fit_shard),
+    # the GPU bindings' tree_start offset restated on the host, and the
+    # trees concatenate in ID order.
+    "par-forest": "the tree-range-sharded random forest classifier",
+    "par-forest-et": "the tree-range-sharded Extra Trees regressor",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -664,6 +682,8 @@ FAMILIES = (
             "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
             "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
             "kmeans-sqrt", "kmeans-classic-pp", "kmeans-cosine",
+            "par-queries-knn", "par-queries-radius", "par-reference-knn",
+            "par-reference-knn-reg",
         ),
         inference_lanes=("knn", "knn-clf", "knn-reg"),
         forest_kinds=(),
@@ -680,6 +700,7 @@ FAMILIES = (
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict",
+            "knn_classify_neighbors", "knn_regress_neighbors",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
@@ -722,6 +743,7 @@ FAMILIES = (
             "kde-weighted", "ols-no-intercept", "ols-weighted", "ridge-no-intercept",
             "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
             "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
+            "par-queries-kde",
         ),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
@@ -909,7 +931,7 @@ FAMILIES = (
         routes="_mojolearn_trees",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel"),
+        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel", "par-forest-et"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ExtraTreesClassifier", "ExtraTreesRegressor"),
@@ -926,6 +948,7 @@ FAMILIES = (
             "et_regressor_fit", "et_regressor_fit_export",
             "et_regressor_fit_rowmajor", "et_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
+            "et_classifier_fit_shard", "et_regressor_fit_shard",
             "et_predict", "forest_prepare_gpu", "forest_predict_resident_reuse_gpu",
             "forest_release_gpu",
         ),
@@ -946,7 +969,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "rf-clf", "rf-reg", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
-            "rf-reg-poisson", "rf-reg-gamma-ig",
+            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -966,6 +989,7 @@ FAMILIES = (
             "forest_export", "forest_export_legacy", "forest_export_release",
             "rf_predict_proba", "rf_predict_reg",
             "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
+            "rf_classifier_fit_shard", "rf_regressor_fit_shard",
             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
@@ -1103,6 +1127,8 @@ FAMILIES = (
             "hdbscan_host_numeric_mode", "hdbscan_host_vendor",
             "hdbscan_host_column", "hdbscan_host_sabotage",
             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
+            "hdbscan_generate_prediction_data", "hdbscan_approximate_predict",
+            "hdbscan_host_predict_sabotage",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
