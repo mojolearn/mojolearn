@@ -116,6 +116,7 @@ from cluster.host.kmeans_oracle import (
     KMEANS_ORACLE_HOST_SABOTAGE,
     host_kmeans_fit,
     host_kmeans_predict,
+    host_kmeans_transform,
     host_kmeans_validate,
 )
 from core.knn_host_predict import (
@@ -1193,6 +1194,49 @@ def kmeans_predict_binding(
     return PythonObject(ns)
 
 
+def kmeans_transform_binding(
+    x_addr: PythonObject,
+    centroids_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The distance from every row to every centroid on the host, the GPU
+    binding's name, arity and `params` (0 n_samples, 1 n_features,
+    2 n_clusters, 3 metric). Public INFERENCE: it reads a fitted model's
+    centroids and trains nothing. The arithmetic is `host_kmeans_transform`,
+    the GPU kernel's cell statement for statement. The shape and metric
+    refusals are raised BEFORE any address is read."""
+    if len(params) != 4:
+        raise Error(
+            "kmeans_transform: params must hold 4 values, got "
+            + String(len(params))
+        )
+    var x_address = _index(x_addr)
+    var centroids_address = _index(centroids_addr)
+    var op = f32_ptr(_index(out_addr))
+    var ns = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    var mm = _index(params[3])
+    with GILReleased(Python()):
+        if ns < 1 or nf < 1 or nc < 1:
+            raise Error(
+                "kmeans_transform needs n_samples, n_features and n_clusters >= 1: got "
+                + String(ns)
+                + ", "
+                + String(nf)
+                + ", "
+                + String(nc)
+            )
+        var x = read_f32(x_address, ns * nf)
+        var centroids = read_f32(centroids_address, nc * nf)
+        var out = List[Float32](length=ns * nc, fill=Float32(0.0))
+        host_kmeans_transform(x, ns, nf, centroids, nc, mm, out)
+        for i in range(ns * nc):
+            op[i] = out[i]
+    return PythonObject(ns)
+
+
 @export
 def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
     try:
@@ -1210,6 +1254,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[knn_regress_neighbors_binding]("knn_regress_neighbors")
         module.def_function[kmeans_fit_binding]("kmeans_fit")
         module.def_function[kmeans_predict_binding]("kmeans_predict")
+        module.def_function[kmeans_transform_binding]("kmeans_transform")
         module.def_function[radius_neighbors_count_binding]("radius_neighbors_count")
         module.def_function[radius_neighbors_fill_binding]("radius_neighbors_fill")
         module.def_function[rbc_knn_search_binding]("rbc_knn_search")

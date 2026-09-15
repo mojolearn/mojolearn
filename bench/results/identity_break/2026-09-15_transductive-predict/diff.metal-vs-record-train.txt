@@ -1,0 +1,107 @@
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | arm64            |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| agglomerative/base           | IDENTICAL x4 | ad11b976bfbfc20b | ad11b976bfbfc20b | ad11b976bfbfc20b | ad11b976bfbfc20b |
+| agglomerative/denormal       | IDENTICAL x4 | b05982504c7e8646 | b05982504c7e8646 | b05982504c7e8646 | b05982504c7e8646 |
+| agglomerative/dupes          | IDENTICAL x4 | ad11b976bfbfc20b | ad11b976bfbfc20b | ad11b976bfbfc20b | ad11b976bfbfc20b |
+| agglomerative/ties           | IDENTICAL x4 | 7dea8a094150b8a9 | 7dea8a094150b8a9 | 7dea8a094150b8a9 | 7dea8a094150b8a9 |
+| dbscan-brute-l1/base         | IDENTICAL x4 | 0e71495be68d20c8 | 0e71495be68d20c8 | 0e71495be68d20c8 | 0e71495be68d20c8 |
+| dbscan-brute-l1/denormal     | IDENTICAL x4 | 21d5ea1c72f42a78 | 21d5ea1c72f42a78 | 21d5ea1c72f42a78 | 21d5ea1c72f42a78 |
+| dbscan-brute-l1/dupes        | IDENTICAL x4 | 0e71495be68d20c8 | 0e71495be68d20c8 | 0e71495be68d20c8 | 0e71495be68d20c8 |
+| dbscan-brute-l1/ties         | IDENTICAL x4 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 |
+| dbscan-weighted/base         | IDENTICAL x4 | 3aa7f30692765cf2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 |
+| dbscan-weighted/denormal     | IDENTICAL x4 | d3c48a5338826d18 | d3c48a5338826d18 | d3c48a5338826d18 | d3c48a5338826d18 |
+| dbscan-weighted/dupes        | IDENTICAL x4 | 3aa7f30692765cf2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 |
+| dbscan-weighted/ties         | IDENTICAL x4 | 525addc009cffb40 | 525addc009cffb40 | 525addc009cffb40 | 525addc009cffb40 |
+| dbscan/base                  | IDENTICAL x4 | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b |
+| dbscan/denormal              | IDENTICAL x4 | 9c0b3563fc16b652 | 9c0b3563fc16b652 | 9c0b3563fc16b652 | 9c0b3563fc16b652 |
+| dbscan/dupes                 | IDENTICAL x4 | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b |
+| dbscan/ties                  | IDENTICAL x4 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 |
+| par-dbscan/base              | IDENTICAL x4 | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b |
+| par-dbscan/denormal          | IDENTICAL x4 | 9c0b3563fc16b652 | 9c0b3563fc16b652 | 9c0b3563fc16b652 | 9c0b3563fc16b652 |
+| par-dbscan/dupes             | IDENTICAL x4 | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b |
+| par-dbscan/ties              | IDENTICAL x4 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 |
+| par-graph-agglomerative/base | IDENTICAL x4 | 6c9e7daffb48878f | 6c9e7daffb48878f | 6c9e7daffb48878f | 6c9e7daffb48878f |
+| par-graph-agglomerative/denormal | IDENTICAL x4 | 32a85ba63aeea62c | 32a85ba63aeea62c | 32a85ba63aeea62c | 32a85ba63aeea62c |
+| par-graph-agglomerative/dupes | IDENTICAL x4 | 6c9e7daffb48878f | 6c9e7daffb48878f | 6c9e7daffb48878f | 6c9e7daffb48878f |
+| par-graph-agglomerative/ties | IDENTICAL x4 | e0ddbabe3fa9e85c | e0ddbabe3fa9e85c | e0ddbabe3fa9e85c | e0ddbabe3fa9e85c |
+
+summary: IDENTICAL=24
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | arm64            |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| agglomerative/base           | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| agglomerative/base           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 9bb9f86300c44f5f |
+| agglomerative/base           | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| agglomerative/denormal       | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 2b2d3f329eec69f7 |
+| agglomerative/denormal       | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0749a7721feb2709 |
+| agglomerative/denormal       | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a2740d2ed4d74812 |
+| agglomerative/dupes          | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| agglomerative/dupes          | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 9bb9f86300c44f5f |
+| agglomerative/dupes          | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| agglomerative/ties           | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | d161892b4ef55128 |
+| agglomerative/ties           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 64a8cd1101ec17ba |
+| agglomerative/ties           | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| dbscan-brute-l1/base         | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 291d58b2feb4ae4e |
+| dbscan-brute-l1/base         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 619ee7c70d1194cb |
+| dbscan-brute-l1/base         | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | df8d83ccb3f26700 |
+| dbscan-brute-l1/denormal     | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| dbscan-brute-l1/denormal     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8506a36c8f053030 |
+| dbscan-brute-l1/denormal     | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| dbscan-brute-l1/dupes        | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 291d58b2feb4ae4e |
+| dbscan-brute-l1/dupes        | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 619ee7c70d1194cb |
+| dbscan-brute-l1/dupes        | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | df8d83ccb3f26700 |
+| dbscan-brute-l1/ties         | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 63990f64c63d296b |
+| dbscan-brute-l1/ties         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | d68a5069f692910e |
+| dbscan-brute-l1/ties         | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | be9e40c554329827 |
+| dbscan-weighted/base         | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 29d206737766caf0 |
+| dbscan-weighted/base         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0db3aac99393d616 |
+| dbscan-weighted/base         | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | f7e7d24690d3107e |
+| dbscan-weighted/denormal     | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| dbscan-weighted/denormal     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0c1ef67464dfa955 |
+| dbscan-weighted/denormal     | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| dbscan-weighted/dupes        | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 29d206737766caf0 |
+| dbscan-weighted/dupes        | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0db3aac99393d616 |
+| dbscan-weighted/dupes        | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | f7e7d24690d3107e |
+| dbscan-weighted/ties         | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 9c8a2ca10937b6b1 |
+| dbscan-weighted/ties         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | cca8baca73f60bac |
+| dbscan-weighted/ties         | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 1b1361f65f9b5250 |
+| dbscan/base                  | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | e6e720fcb54b180e |
+| dbscan/base                  | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c36812c6260e7ee6 |
+| dbscan/base                  | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | f7e7d24690d3107e |
+| dbscan/denormal              | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| dbscan/denormal              | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | af8f5b102930fc66 |
+| dbscan/denormal              | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| dbscan/dupes                 | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | e6e720fcb54b180e |
+| dbscan/dupes                 | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c36812c6260e7ee6 |
+| dbscan/dupes                 | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | f7e7d24690d3107e |
+| dbscan/ties                  | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 63990f64c63d296b |
+| dbscan/ties                  | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 7c766eb707695149 |
+| dbscan/ties                  | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | be9e40c554329827 |
+| par-dbscan/base              | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | e6e720fcb54b180e |
+| par-dbscan/base              | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c36812c6260e7ee6 |
+| par-dbscan/base              | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | f7e7d24690d3107e |
+| par-dbscan/denormal          | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| par-dbscan/denormal          | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | af8f5b102930fc66 |
+| par-dbscan/denormal          | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| par-dbscan/dupes             | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | e6e720fcb54b180e |
+| par-dbscan/dupes             | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c36812c6260e7ee6 |
+| par-dbscan/dupes             | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | f7e7d24690d3107e |
+| par-dbscan/ties              | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 63990f64c63d296b |
+| par-dbscan/ties              | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 7c766eb707695149 |
+| par-dbscan/ties              | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | be9e40c554329827 |
+| par-graph-agglomerative/base | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| par-graph-agglomerative/base | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 9bb9f86300c44f5f |
+| par-graph-agglomerative/base | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| par-graph-agglomerative/denormal | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 2b2d3f329eec69f7 |
+| par-graph-agglomerative/denormal | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0749a7721feb2709 |
+| par-graph-agglomerative/denormal | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a2740d2ed4d74812 |
+| par-graph-agglomerative/dupes | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | 3a6472714f51d8ab |
+| par-graph-agglomerative/dupes | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 9bb9f86300c44f5f |
+| par-graph-agglomerative/dupes | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+| par-graph-agglomerative/ties | infer  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | d161892b4ef55128 |
+| par-graph-agglomerative/ties | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 64a8cd1101ec17ba |
+| par-graph-agglomerative/ties | batch  | ONE-COLUMN   | n/a:transductive | n/a:transductive | n/a:transductive | a8e67882b424a053 |
+
+summary (infer/model): ONE-COLUMN=48
+summary (batch): ONE-COLUMN=24
+summary (rlpair): 

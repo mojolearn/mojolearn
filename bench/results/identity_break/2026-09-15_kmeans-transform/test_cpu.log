@@ -1,0 +1,56 @@
+  ok    SHAPE      float32, one row per sample, one column per center
+  ok    SHAPE      every distance is finite and non-negative
+  ok    SHAPE      float64 input is cast to the centers' float32, the same distances
+  ok    SHAPE      a Fortran-order input gives the same distances
+  ok    SHAPE      fit_transform is fit then transform
+  ok    MIN        euclidean: transform at labels_ is each row's minimum bit for bit
+  ok    MIN        euclidean: transform at predict(X) is the row minimum
+  ok    MIN        l2_sqrt_expanded: transform at labels_ is each row's minimum bit for bit
+  ok    MIN        l2_sqrt_expanded: transform at predict(X) is the row minimum
+  ok    REFERENCE  euclidean: squared distances equal the float64 reference up to float32 round-off
+  ok    REFERENCE  l2_sqrt_expanded is the correctly rounded root of the euclidean cell, bit for bit
+  ok    EXACT      small integer rows give the exact squared distances
+  ok    HELDOUT    each of the first 16 held-out rows alone is its whole-batch row
+  ok    HELDOUT    the split 1, 7, rest concatenates to the whole batch
+  ok    REFUSE     transform before fit
+  ok    REFUSE     a feature count other than the fit's
+  ok    REFUSE     a 1-D X
+  ok    REFUSE     an empty X
+  ok    REFUSE     metric='cosine' transform is refused BY NAME, as its fit is
+
+test_kmeans_transform: GREEN under numeric_mode=identical, 19 checks. One box, one vendor; no bit is claimed for any other.
+  ok    EQUAL      euclidean on uniform [0, 4): int32, one label per row
+  ok    EQUAL      euclidean on uniform [0, 4): predict(X) is labels_ bit for bit
+  ok    EQUAL      l2_sqrt_expanded on uniform [0, 4): int32, one label per row
+  ok    EQUAL      l2_sqrt_expanded on uniform [0, 4): predict(X) is labels_ bit for bit
+  ok    EQUAL      euclidean on integer grid: int32, one label per row
+  ok    EQUAL      euclidean on integer grid: predict(X) is labels_ bit for bit
+  ok    EQUAL      l2_sqrt_expanded on integer grid: int32, one label per row
+  ok    EQUAL      l2_sqrt_expanded on integer grid: predict(X) is labels_ bit for bit
+  ok    EQUAL      weighted fit: predict(X) is labels_
+  ok    TIES       (0,0) first: equidistant rows take center 0
+  ok    TIES       (0,0) first: rows on a center take that center
+  ok    TIES       (2,0) first: equidistant rows take center 0
+  ok    TIES       (2,0) first: rows on a center take that center
+  ok    DTYPE      float64 input is cast to the centers' float32, the same labels
+  ok    DTYPE      a Fortran-order input gives the same labels
+  ok    DTYPE      a nested list gives the same labels
+  ok    HELDOUT    every held-out label is the float64 argmin up to float32 round-off
+  ok    HELDOUT    each of the first 16 held-out rows alone is its whole-batch label
+  ok    HELDOUT    the split 1, 7, rest concatenates to the whole batch
+  ok    REFUSE     predict before fit
+  ok    REFUSE     a feature count other than the fit's
+  ok    REFUSE     a 1-D X
+  ok    REFUSE     an empty X
+  ok    REFUSE     metric='cosine' predict is refused BY NAME, as its fit is
+  ok    REFUSE     an unknown metric name
+
+test_kmeans_predict: GREEN under numeric_mode=identical, 25 checks. One box, one vendor; no bit is claimed for any other.
+
+  METRIC ARM DID NOT RUN
+    NotImplementedError: mojolearn: public CPU estimators support inference from saved models; fit/training is reserved for the internal bitwise verifier. Train on a supported GPU and load the saved model for CPU inference. The published LanguageModelHostTrainer remains supported.
+
+  OVS ARM DID NOT RUN
+    NotImplementedError: mojolearn: public CPU estimators support inference from saved models; fit/training is reserved for the internal bitwise verifier. Train on a supported GPU and load the saved model for CPU inference. The published LanguageModelHostTrainer remains supported.
+
+test_kmeans_metric_surface: RED. 0 checks failed, 2 arms did not run.

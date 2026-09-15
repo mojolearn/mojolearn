@@ -55,6 +55,11 @@ SHIM = "mamba.host.device_shim"
 #: source path -> generated module basename
 SOURCES = {
     "core/identity_trace.mojo": "identity_trace",
+    # the neural RNG (the Samba stack's initializers and dropout,
+    # lane/cpu-training-samba): the Philox block function and the neural
+    # stream's layout and integer-to-float mapping
+    "core/philox.mojo": "philox",
+    "core/philox_neural.mojo": "philox_neural",
     "gemm/checks/gemm_backward.mojo": "gemm_backward",
     "mamba/impl/ops/selective_scan_interface.mojo": "selective_scan_interface",
     "mamba/impl/modeling/modeling_mamba.mojo": "modeling_mamba",

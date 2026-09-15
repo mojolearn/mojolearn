@@ -117,6 +117,10 @@ from gbdt.targets.kernel.pointwise_targets import (
     launch_approximate,
     launch_approximate_move_eval,
 )
+from gbdt.targets.kernel.query_rmse import (
+    QuerywiseTargetBuffers,
+    launch_query_rmse_with,
+)
 from std.sys.compile import is_defined
 
 # ================= DEVIATION BLOCK 2030 =================
@@ -297,6 +301,12 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: `MOJOLEARN_2030_FUSED_EST_MOVE` AND the loss is single-dim; every
     #: cursor reader outside the move/eval pair flushes it first.
     var pending_shift: Bool
+    #: the QUERYWISE target's grouping and scratch, present only for
+    #: QueryRMSE: their `TPermutationDerCalcer<TTarget, Querywise>`
+    #: (`targets/permutation_der_calcer.h:171-247`) reads the point through
+    #: the inverse of this oracle's bin order and keeps the targets in row
+    #: order, where the pointwise calcer gathers them (`:57-72`).
+    var query: Optional[QuerywiseTargetBuffers]
 
     def point_dim(self) -> Int:
         return self.bin_count * self.single_bin_dim
@@ -389,7 +399,10 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
 
         @parameter
         if FUSED_EST_MOVE_2030:
-            defer_shift = self.cursor_dim == 1 and self.single_bin_dim == 1
+            defer_shift = (
+                self.cursor_dim == 1 and self.single_bin_dim == 1
+                and not self.query.__bool__()
+            )
         if defer_shift:
             self.pending_shift = True
         else:
@@ -461,29 +474,51 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
 
         if self.single_bin_dim == 1:
             self.times.begin(self.ctx)
-            # DEVIATION 2030: a deferred MoveTo is applied INSIDE this
-            # evaluation -- the fused kernel performs the identical
-            # per-row cursor add, stores the identical bytes, and runs
-            # the unchanged evaluation body on the just-stored value.
-            # `pending_shift` clears here because the cursor is current
-            # from this launch on (queue order covers every later
-            # reader). `comptime if`, the house elision: with the flag
-            # off (every shipped build) the fused arm is not compiled
-            # and the else arm is byte-for-byte the old call.
-            comptime if FUSED_EST_MOVE_2030:
-                if self.pending_shift:
-                    launch_approximate_move_eval[True](
-                        self.ctx, self.objective,
-                        self.d_shift, self.d_bins,
-                        self.d_target, self.d_weights, Int32(self.n_rows),
-                        self.d_cursor,
-                        Int32(1) if self.has_weights else Int32(0),
-                        self.alpha, self.border,
-                        self.d_eval_stats, self.d_fv, Int32(1),
-                        self.d_mag_dummy, Int32(0),
-                        blocks,
-                    )
-                    self.pending_shift = False
+            # the QUERYWISE target (QueryRMSE): `ApproximateAt` through the
+            # querywise der calcer (`permutation_der_calcer.h:192-205`),
+            # the point read back to row order through `query.inverse`
+            # and the der/der2 planes written at each row's bin position.
+            if self.query.__bool__():
+                launch_query_rmse_with[True](
+                    self.ctx, self.query.value(), self.d_cursor, True,
+                    self.d_eval_stats, self.d_fv, True,
+                    self.d_mag_dummy, False,
+                )
+            else:
+                # DEVIATION 2030: a deferred MoveTo is applied INSIDE this
+                # evaluation -- the fused kernel performs the identical
+                # per-row cursor add, stores the identical bytes, and runs
+                # the unchanged evaluation body on the just-stored value.
+                # `pending_shift` clears here because the cursor is current
+                # from this launch on (queue order covers every later
+                # reader). `comptime if`, the house elision: with the flag
+                # off (every shipped build) the fused arm is not compiled
+                # and the else arm is byte-for-byte the old call.
+                comptime if FUSED_EST_MOVE_2030:
+                    if self.pending_shift:
+                        launch_approximate_move_eval[True](
+                            self.ctx, self.objective,
+                            self.d_shift, self.d_bins,
+                            self.d_target, self.d_weights, Int32(self.n_rows),
+                            self.d_cursor,
+                            Int32(1) if self.has_weights else Int32(0),
+                            self.alpha, self.border,
+                            self.d_eval_stats, self.d_fv, Int32(1),
+                            self.d_mag_dummy, Int32(0),
+                            blocks,
+                        )
+                        self.pending_shift = False
+                    else:
+                        launch_approximate[True](
+                            self.ctx, self.objective,
+                            self.d_target, self.d_weights, Int32(self.n_rows),
+                            self.d_cursor,
+                            Int32(1) if self.has_weights else Int32(0),
+                            self.alpha, self.border,
+                            self.d_eval_stats, self.d_fv, Int32(1),
+                            self.d_mag_dummy, Int32(0),
+                            blocks,
+                        )
                 else:
                     launch_approximate[True](
                         self.ctx, self.objective,
@@ -495,17 +530,6 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                         self.d_mag_dummy, Int32(0),
                         blocks,
                     )
-            else:
-                launch_approximate[True](
-                    self.ctx, self.objective,
-                    self.d_target, self.d_weights, Int32(self.n_rows),
-                    self.d_cursor,
-                    Int32(1) if self.has_weights else Int32(0),
-                    self.alpha, self.border,
-                    self.d_eval_stats, self.d_fv, Int32(1),
-                    self.d_mag_dummy, Int32(0),
-                    blocks,
-                )
             self.times.end(self.ctx, "est.approx")
             self.times.begin(self.ctx)
             compute_partition_stats(
@@ -984,6 +1008,7 @@ def make_bin_optimized_oracle(
     sm_count: Int,
     estimation_method: Int = LEAF_ESTIMATION_NEWTON,
     num_classes: Int = 0,
+    var query: Optional[QuerywiseTargetBuffers] = None,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -1012,6 +1037,13 @@ def make_bin_optimized_oracle(
             )
         cursor_dim = num_classes
         single_bin_dim = num_classes
+    if query.__bool__() and estimation_method == LEAF_ESTIMATION_EXACT:
+        # `ComputeExactValue`'s querywise arm
+        # (`targets/permutation_der_calcer.h:206-216`), their message
+        raise Error(
+            "Exact leaves estimation method on GPU is not supported for"
+            " non-pointwise target"
+        )
     # one buffer wide enough for both the value pass (`cursor_dim`
     # planes) and the widest Hessian row (`single_bin_dim` columns)
     var multi_planes = single_bin_dim
@@ -1209,4 +1241,5 @@ def make_bin_optimized_oracle(
         max_leaf,
         est_times^,
         False,  # pending_shift (DEVIATION 2030): no deferred move yet
+        query^,
     )

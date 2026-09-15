@@ -1,0 +1,78 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_solver_host'] commit=bd9ef2eee4c4ebeb16112cb647828320b593aedc
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_solver_host'] commit=bd9ef2eee4c4ebeb16112cb647828320b593aedc
+| lane/fixture                 | verdict    | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|------------|------------------|------------------|
+| agglomerative/base           | IDENTICAL x2 | ad11b976bfbfc20b | ad11b976bfbfc20b |
+| agglomerative/denormal       | IDENTICAL x2 | b05982504c7e8646 | b05982504c7e8646 |
+| agglomerative/dupes          | IDENTICAL x2 | ad11b976bfbfc20b | ad11b976bfbfc20b |
+| agglomerative/ties           | IDENTICAL x2 | 7dea8a094150b8a9 | 7dea8a094150b8a9 |
+| dbscan-brute-l1/base         | IDENTICAL x2 | 0e71495be68d20c8 | 0e71495be68d20c8 |
+| dbscan-brute-l1/denormal     | IDENTICAL x2 | 21d5ea1c72f42a78 | 21d5ea1c72f42a78 |
+| dbscan-brute-l1/dupes        | IDENTICAL x2 | 0e71495be68d20c8 | 0e71495be68d20c8 |
+| dbscan-brute-l1/ties         | IDENTICAL x2 | b7535355c1581603 | b7535355c1581603 |
+| dbscan-weighted/base         | IDENTICAL x2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 |
+| dbscan-weighted/denormal     | IDENTICAL x2 | d3c48a5338826d18 | d3c48a5338826d18 |
+| dbscan-weighted/dupes        | IDENTICAL x2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 |
+| dbscan-weighted/ties         | IDENTICAL x2 | 525addc009cffb40 | 525addc009cffb40 |
+| dbscan/base                  | IDENTICAL x2 | 64df251bd00de81b | 64df251bd00de81b |
+| dbscan/denormal              | IDENTICAL x2 | 9c0b3563fc16b652 | 9c0b3563fc16b652 |
+| dbscan/dupes                 | IDENTICAL x2 | 64df251bd00de81b | 64df251bd00de81b |
+| dbscan/ties                  | IDENTICAL x2 | b7535355c1581603 | b7535355c1581603 |
+
+summary: IDENTICAL=16
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| agglomerative/base           | infer  | DIVERGENT    | 3a6472714f51d8ab | dab6c104519fb920 |
+| agglomerative/base           | model  | IDENTICAL x2 | 9bb9f86300c44f5f | 9bb9f86300c44f5f |
+| agglomerative/base           | batch  | DIVERGENT    | a8e67882b424a053 | a2740d2ed4d74812 |
+| agglomerative/denormal       | infer  | DIVERGENT    | 2b2d3f329eec69f7 | 4a045590d03621a7 |
+| agglomerative/denormal       | model  | IDENTICAL x2 | 0749a7721feb2709 | 0749a7721feb2709 |
+| agglomerative/denormal       | batch  | DIVERGENT    | a2740d2ed4d74812 | a8e67882b424a053 |
+| agglomerative/dupes          | infer  | DIVERGENT    | 3a6472714f51d8ab | dab6c104519fb920 |
+| agglomerative/dupes          | model  | IDENTICAL x2 | 9bb9f86300c44f5f | 9bb9f86300c44f5f |
+| agglomerative/dupes          | batch  | DIVERGENT    | a8e67882b424a053 | a2740d2ed4d74812 |
+| agglomerative/ties           | infer  | DIVERGENT    | d161892b4ef55128 | 230d2782729d6f53 |
+| agglomerative/ties           | model  | IDENTICAL x2 | 64a8cd1101ec17ba | 64a8cd1101ec17ba |
+| agglomerative/ties           | batch  | DIVERGENT    | a8e67882b424a053 | a2740d2ed4d74812 |
+| dbscan-brute-l1/base         | infer  | DIVERGENT    | 291d58b2feb4ae4e | dacd4a73f736415a |
+| dbscan-brute-l1/base         | model  | IDENTICAL x2 | 619ee7c70d1194cb | 619ee7c70d1194cb |
+| dbscan-brute-l1/base         | batch  | DIVERGENT    | df8d83ccb3f26700 | b9a386684b11408f |
+| dbscan-brute-l1/denormal     | infer  | DIVERGENT    | 3a6472714f51d8ab | dab6c104519fb920 |
+| dbscan-brute-l1/denormal     | model  | IDENTICAL x2 | 8506a36c8f053030 | 8506a36c8f053030 |
+| dbscan-brute-l1/denormal     | batch  | DIVERGENT    | a8e67882b424a053 | a2740d2ed4d74812 |
+| dbscan-brute-l1/dupes        | infer  | DIVERGENT    | 291d58b2feb4ae4e | dacd4a73f736415a |
+| dbscan-brute-l1/dupes        | model  | IDENTICAL x2 | 619ee7c70d1194cb | 619ee7c70d1194cb |
+| dbscan-brute-l1/dupes        | batch  | DIVERGENT    | df8d83ccb3f26700 | b9a386684b11408f |
+| dbscan-brute-l1/ties         | infer  | DIVERGENT    | 63990f64c63d296b | 8cff211e4ce13f60 |
+| dbscan-brute-l1/ties         | model  | IDENTICAL x2 | d68a5069f692910e | d68a5069f692910e |
+| dbscan-brute-l1/ties         | batch  | DIVERGENT    | be9e40c554329827 | 9bd0689ccdb905bd |
+| dbscan-weighted/base         | infer  | DIVERGENT    | 29d206737766caf0 | 667a03ee6768952d |
+| dbscan-weighted/base         | model  | IDENTICAL x2 | 0db3aac99393d616 | 0db3aac99393d616 |
+| dbscan-weighted/base         | batch  | DIVERGENT    | f7e7d24690d3107e | eaf8c25b605ec157 |
+| dbscan-weighted/denormal     | infer  | DIVERGENT    | 3a6472714f51d8ab | dab6c104519fb920 |
+| dbscan-weighted/denormal     | model  | IDENTICAL x2 | 0c1ef67464dfa955 | 0c1ef67464dfa955 |
+| dbscan-weighted/denormal     | batch  | DIVERGENT    | a8e67882b424a053 | a2740d2ed4d74812 |
+| dbscan-weighted/dupes        | infer  | DIVERGENT    | 29d206737766caf0 | 667a03ee6768952d |
+| dbscan-weighted/dupes        | model  | IDENTICAL x2 | 0db3aac99393d616 | 0db3aac99393d616 |
+| dbscan-weighted/dupes        | batch  | DIVERGENT    | f7e7d24690d3107e | eaf8c25b605ec157 |
+| dbscan-weighted/ties         | infer  | DIVERGENT    | 9c8a2ca10937b6b1 | 02cc6621cd8f584f |
+| dbscan-weighted/ties         | model  | IDENTICAL x2 | cca8baca73f60bac | cca8baca73f60bac |
+| dbscan-weighted/ties         | batch  | DIVERGENT    | 1b1361f65f9b5250 | 2b0c3b37c19bdabf |
+| dbscan/base                  | infer  | DIVERGENT    | e6e720fcb54b180e | 566108915f1ef687 |
+| dbscan/base                  | model  | IDENTICAL x2 | c36812c6260e7ee6 | c36812c6260e7ee6 |
+| dbscan/base                  | batch  | DIVERGENT    | f7e7d24690d3107e | eaf8c25b605ec157 |
+| dbscan/denormal              | infer  | DIVERGENT    | 3a6472714f51d8ab | dab6c104519fb920 |
+| dbscan/denormal              | model  | IDENTICAL x2 | af8f5b102930fc66 | af8f5b102930fc66 |
+| dbscan/denormal              | batch  | DIVERGENT    | a8e67882b424a053 | a2740d2ed4d74812 |
+| dbscan/dupes                 | infer  | DIVERGENT    | e6e720fcb54b180e | 566108915f1ef687 |
+| dbscan/dupes                 | model  | IDENTICAL x2 | c36812c6260e7ee6 | c36812c6260e7ee6 |
+| dbscan/dupes                 | batch  | DIVERGENT    | f7e7d24690d3107e | eaf8c25b605ec157 |
+| dbscan/ties                  | infer  | DIVERGENT    | 63990f64c63d296b | 8cff211e4ce13f60 |
+| dbscan/ties                  | model  | IDENTICAL x2 | 7c766eb707695149 | 7c766eb707695149 |
+| dbscan/ties                  | batch  | DIVERGENT    | be9e40c554329827 | 9bd0689ccdb905bd |
+
+summary (infer/model): DIVERGENT=16, IDENTICAL=16
+summary (batch): DIVERGENT=16
+summary (rlpair): 

@@ -1249,3 +1249,55 @@ def host_kmeans_predict(
         x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
         labels, min_dist,
     )
+
+
+def host_kmeans_transform(
+    x: List[Float32],
+    n: Int,
+    d: Int,
+    centroids: List[Float32],
+    k: Int,
+    metric: Int,
+    mut dist_out: List[Float32],
+) raises:
+    """`kmeans_transform`, `cluster/estimator.mojo`: the metric refused by
+    name as the fit refuses it, `host_kmeans_predict`'s row norms, then every
+    cell of `cluster/impl/detail/kmeans_transform.mojo::
+    kmeans_transform_kernel` statement for statement: `host_assign`'s cell,
+    with the root taken per cell (cuVS `kmeans_transform`,
+    `detail/kmeans.cuh:1178-1219`, through `l2_exp_distance_op`). `out` is
+    row-major `n x k`."""
+    if n < 1 or d < 1 or k < 1:
+        raise Error(
+            "kmeans_transform needs n_samples, n_features and n_clusters >= 1: got "
+            + String(n)
+            + ", "
+            + String(d)
+            + ", "
+            + String(k)
+        )
+    host_validate_params(metric, k, 1e-4, DEFAULT_OVERSAMPLING)
+    var x_norm = host_row_norms(x, n, d, metric == METRIC_COSINE_EXPANDED)
+    var c_norm = host_row_norms(centroids, k, d, metric == METRIC_COSINE_EXPANDED)
+    var is_sqrt = host_metric_is_sqrt(metric)
+    for row in range(n):
+        var xn = x_norm[row]
+        for col in range(k):
+            var acc = Float32(0.0)
+            for p in range(d):
+                acc = ftz(
+                    identical_mul_add(ftz(x[row * d + p]), ftz(centroids[col * d + p]), acc)
+                )
+            var yn = c_norm[col]
+            var dist = ftz(
+                identical_mul_add(
+                    Float32(-2.0), ftz(acc), ftz(ftz(xn) + ftz(yn))
+                )
+            )
+            if dist <= Float32(0.0) or (
+                dist * dist < FUSED_CLAMP_PRECISION and xn == yn
+            ):
+                dist = Float32(0.0)
+            if is_sqrt:
+                dist = identical_sqrt(dist)
+            dist_out[row * k + col] = dist

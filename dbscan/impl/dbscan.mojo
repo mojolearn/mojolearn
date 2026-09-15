@@ -202,8 +202,15 @@ def dbscan_fit_impl_weighted(
     phase_timing: Bool = False,
     metric: Int = DBSCAN_METRIC_L2,
     has_weights: Bool = False,
+    out_core_addr: Int = 0,
 ) raises -> Int:
     """`dbscanFitImpl` (`dbscan.cuh:101`): size the batch, allocate, run.
+
+    `out_core_addr` (lane/inference-transductive-predict, 2026-09-15): when
+    nonzero, the address of `n_rows` host uint8 that receive a COPY of the
+    fit's core mask after the fit returns, for `DBSCAN(prediction_data=
+    True)`. The mask is the buffer `dbscan_fit` already computed; the copy
+    adds no arithmetic and runs after every recorded stage.
 
     Their memory estimate, copied from `dbscan.cuh:157-158` (the
     `max_mbytes_per_batch == 0` guard around it is `:147`):
@@ -268,7 +275,7 @@ def dbscan_fit_impl_weighted(
     )
     ctx.synchronize()
 
-    return dbscan_fit(
+    var passes = dbscan_fit(
         ctx,
         x,
         adj,
@@ -292,3 +299,16 @@ def dbscan_fit_impl_weighted(
         metric,
         has_weights,
     )
+    if out_core_addr != 0:
+        var hc = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=core)
+        ctx.synchronize()
+        var dst = MutPointer[UInt8, MutUntrackedOrigin](
+            unsafe_from_address=out_core_addr
+        )
+        for i in range(n_rows):
+            dst.unsafe_store(i, hc.unsafe_ptr().unsafe_load(i))
+        _ = hc^
+    _ = core^
+    return passes

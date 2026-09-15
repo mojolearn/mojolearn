@@ -1,0 +1,293 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "55016a03cc7c40f6afeb95dbf5c472a116601a9a",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  }
+ },
+ "cells": {
+  "hdbscan/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1032d54b827b0e0c",
+    "1032d54b827b0e0c"
+   ],
+   "parts": [
+    {
+     "labels": "e7b66bd11ad740b3",
+     "core": "b3edcc60c96132db",
+     "counts": "1f7bfb1243884fdd"
+    },
+    {
+     "labels": "e7b66bd11ad740b3",
+     "core": "b3edcc60c96132db",
+     "counts": "1f7bfb1243884fdd"
+    }
+   ],
+   "infer": [
+    "cfe5f8df2a406451",
+    "cfe5f8df2a406451"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "43c868ddda4bae13",
+    "43c868ddda4bae13"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "hdbscan/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "444bc82f0a607cfb",
+    "444bc82f0a607cfb"
+   ],
+   "parts": [
+    {
+     "labels": "eb63500b53fb5112",
+     "core": "d0ee5e0b999e8c5a",
+     "counts": "76e3312784f12aef"
+    },
+    {
+     "labels": "eb63500b53fb5112",
+     "core": "d0ee5e0b999e8c5a",
+     "counts": "76e3312784f12aef"
+    }
+   ],
+   "infer": [
+    "6ec7f68f0f81ae9b",
+    "6ec7f68f0f81ae9b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a5c1950592d1d992",
+    "a5c1950592d1d992"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "hdbscan/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1032d54b827b0e0c",
+    "1032d54b827b0e0c"
+   ],
+   "parts": [
+    {
+     "labels": "e7b66bd11ad740b3",
+     "core": "b3edcc60c96132db",
+     "counts": "1f7bfb1243884fdd"
+    },
+    {
+     "labels": "e7b66bd11ad740b3",
+     "core": "b3edcc60c96132db",
+     "counts": "1f7bfb1243884fdd"
+    }
+   ],
+   "infer": [
+    "cfe5f8df2a406451",
+    "cfe5f8df2a406451"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "43c868ddda4bae13",
+    "43c868ddda4bae13"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "hdbscan-leaf/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a69a1f87d6fad7d2",
+    "a69a1f87d6fad7d2"
+   ],
+   "parts": [
+    {
+     "labels": "fd8dc650472117df",
+     "core": "34e1d2fae8926a88",
+     "counts": "6f87787eab0cc6d6"
+    },
+    {
+     "labels": "fd8dc650472117df",
+     "core": "34e1d2fae8926a88",
+     "counts": "6f87787eab0cc6d6"
+    }
+   ],
+   "infer": [
+    "2117320835e91e8a",
+    "2117320835e91e8a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "927cb01ec674a031",
+    "927cb01ec674a031"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "hdbscan-leaf/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "41045554964e4bd8",
+    "41045554964e4bd8"
+   ],
+   "parts": [
+    {
+     "labels": "2da2043e8227f0b2",
+     "core": "e06e88fa10cb52fa",
+     "counts": "b430c3d87e499574"
+    },
+    {
+     "labels": "2da2043e8227f0b2",
+     "core": "e06e88fa10cb52fa",
+     "counts": "b430c3d87e499574"
+    }
+   ],
+   "infer": [
+    "47607746aff5c75c",
+    "47607746aff5c75c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "bfcae42c42ea55d7",
+    "bfcae42c42ea55d7"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "hdbscan-leaf/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a69a1f87d6fad7d2",
+    "a69a1f87d6fad7d2"
+   ],
+   "parts": [
+    {
+     "labels": "fd8dc650472117df",
+     "core": "34e1d2fae8926a88",
+     "counts": "6f87787eab0cc6d6"
+    },
+    {
+     "labels": "fd8dc650472117df",
+     "core": "34e1d2fae8926a88",
+     "counts": "6f87787eab0cc6d6"
+    }
+   ],
+   "infer": [
+    "2117320835e91e8a",
+    "2117320835e91e8a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "927cb01ec674a031",
+    "927cb01ec674a031"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-hdbscan-soft/python/mojolearn",
+  "numpy": "2.4.4",
+  "python": "3.14.6",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "bfbe0ba1b8322e60ff1864514e2f58863b079d752154ed6536117256c96b1b98",
+    "size": 2597104
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "0b839c9ab0da926df675ca496dfaf428ba8dee93cbcc3df3015a77a5bc602dd7",
+    "size": 2049192
+   }
+  ]
+ }
+}

@@ -1,0 +1,694 @@
+{
+ "columns": [
+  "apple-m4",
+  "nvidia-h100-sm_90a",
+  "amd-mi325x-gfx942",
+  "apple-m4",
+  "cpu-apple-m4"
+ ],
+ "require_columns": 4,
+ "lanes": [
+  "kmeans",
+  "kmeans-array",
+  "kmeans-classic-pp",
+  "kmeans-cosine",
+  "kmeans-random",
+  "kmeans-sqrt",
+  "kmeans-weighted",
+  "par-kmeans"
+ ],
+ "owed": [
+  {
+   "lane": "kmeans-array",
+   "fixture": "base",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-array",
+   "fixture": "base",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-array",
+   "fixture": "denormal",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-array",
+   "fixture": "denormal",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-array",
+   "fixture": "odd",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-array",
+   "fixture": "odd",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-array",
+   "fixture": "ties",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-array",
+   "fixture": "ties",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-classic-pp",
+   "fixture": "base",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-classic-pp",
+   "fixture": "base",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-classic-pp",
+   "fixture": "denormal",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-classic-pp",
+   "fixture": "denormal",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-classic-pp",
+   "fixture": "odd",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-classic-pp",
+   "fixture": "odd",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-classic-pp",
+   "fixture": "ties",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-classic-pp",
+   "fixture": "ties",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-random",
+   "fixture": "base",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-random",
+   "fixture": "base",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-random",
+   "fixture": "denormal",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-random",
+   "fixture": "denormal",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-random",
+   "fixture": "odd",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-random",
+   "fixture": "odd",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-random",
+   "fixture": "ties",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-random",
+   "fixture": "ties",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-sqrt",
+   "fixture": "base",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-sqrt",
+   "fixture": "base",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-sqrt",
+   "fixture": "denormal",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-sqrt",
+   "fixture": "denormal",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-sqrt",
+   "fixture": "odd",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-sqrt",
+   "fixture": "odd",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-sqrt",
+   "fixture": "ties",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-sqrt",
+   "fixture": "ties",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-weighted",
+   "fixture": "base",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-weighted",
+   "fixture": "base",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-weighted",
+   "fixture": "denormal",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-weighted",
+   "fixture": "denormal",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-weighted",
+   "fixture": "odd",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-weighted",
+   "fixture": "odd",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-weighted",
+   "fixture": "ties",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans-weighted",
+   "fixture": "ties",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans",
+   "fixture": "base",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans",
+   "fixture": "base",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans",
+   "fixture": "denormal",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans",
+   "fixture": "denormal",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans",
+   "fixture": "odd",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans",
+   "fixture": "odd",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans",
+   "fixture": "ties",
+   "part": "infer",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  },
+  {
+   "lane": "kmeans",
+   "fixture": "ties",
+   "part": "batch",
+   "missing": [
+    "apple-m4",
+    "nvidia-h100-sm_90a",
+    "amd-mi325x-gfx942"
+   ],
+   "present": [
+    "cpu-apple-m4"
+   ],
+   "real_hashes": 2
+  }
+ ]
+}

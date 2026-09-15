@@ -1,0 +1,158 @@
+{
+ "tool": "tools/hdbscan_soft_cuml_reference.py",
+ "runs": [
+  {
+   "fixture": "blobs",
+   "config": "eom",
+   "params": {
+    "min_cluster_size": 20,
+    "min_samples": 10,
+    "cluster_selection_method": "eom"
+   },
+   "n_rows": 2200,
+   "n_queries": 400,
+   "ours": {
+    "n_clusters": 4,
+    "n_exemplars": 82,
+    "labels_sha256": "9f3f4b2e5111030ce3d797328713a7beb7f26cb86f0bda2fc1c082945ca99b65",
+    "membership_vector_sha256": "b4438bd27a9da5bcce67991da89ec0b5ca688326e64b4f2b9917086e1392a1f3",
+    "all_points_sha256": "c7cd6f2df6679c93e3f73a78d502000010083fea5716f29866a83ef402082414",
+    "membership_nonfinite": 0,
+    "all_points_nonfinite": 0
+   },
+   "cuml": {
+    "n_clusters": 4
+   },
+   "labels_equal": false,
+   "labels_disagree_rows": 1028,
+   "membership_vector": "not compared: the fits disagree"
+  },
+  {
+   "fixture": "blobs",
+   "config": "leaf",
+   "params": {
+    "min_cluster_size": 15,
+    "min_samples": 5,
+    "cluster_selection_method": "leaf"
+   },
+   "n_rows": 2200,
+   "n_queries": 400,
+   "ours": {
+    "n_clusters": 6,
+    "n_exemplars": 96,
+    "labels_sha256": "2e5a8ab424af96788686afe62ac5befbb80bf2548f38eae21fecf17ff8e96ba3",
+    "membership_vector_sha256": "77bb906b58402167fcacafac92fa121cf89c144fed1e0207a5ba39c86b4aa965",
+    "all_points_sha256": "994aaef2f9a786ca607c29c358c639871f9a505310791201f259e71533c12645",
+    "membership_nonfinite": 0,
+    "all_points_nonfinite": 0
+   },
+   "cuml": {
+    "n_clusters": 6
+   },
+   "labels_equal": false,
+   "labels_disagree_rows": 1064,
+   "membership_vector": "not compared: the fits disagree"
+  },
+  {
+   "fixture": "dupes-grid",
+   "config": "eom",
+   "params": {
+    "min_cluster_size": 20,
+    "min_samples": 10,
+    "cluster_selection_method": "eom"
+   },
+   "n_rows": 1200,
+   "n_queries": 200,
+   "ours": {
+    "n_clusters": 4,
+    "n_exemplars": 284,
+    "labels_sha256": "fa3fba3b9f3ed29a748580e73c41611bdba5218c27bd1a8fcf898d8e350f0081",
+    "membership_vector_sha256": "357b0a9c2a2fe145d8835576ce9109dcbcd7747e655019c3959e19b6c6ca0a02",
+    "all_points_sha256": "4eaede9bd300b6c99b901d09b048de6f794e440b66f0fce5aa893eaddf260c0d",
+    "membership_nonfinite": 0,
+    "all_points_nonfinite": 0
+   },
+   "cuml": {
+    "n_clusters": 4
+   },
+   "labels_equal": true,
+   "labels_disagree_rows": 0,
+   "membership_vector": {
+    "shape_ours": [
+     200,
+     4
+    ],
+    "shape_cuml": [
+     200,
+     4
+    ],
+    "cells": 800,
+    "cuml_nonfinite_cells": 0,
+    "cuml_nonfinite_rows": 0,
+    "ours_nonfinite_cells": 0,
+    "bitwise_equal_cells": 112,
+    "max_abs_diff": 0.3034377098083496,
+    "max_rel_diff": 2.6092282066168937e+35,
+    "max_rel_diff_cells_ge_1e-6": 2382.639739879909,
+    "max_ulps": 2.1887792607852128e+42,
+    "median_ulps": 2287329.5,
+    "argmax_differs_rows": 0,
+    "row_sum_max_abs_diff": 0.29289328353479505,
+    "cuml_rows_summing_to_1": 60,
+    "ours_rows_summing_to_1_where_cuml_does": 31
+   },
+   "all_points_membership_vectors": {
+    "shape_ours": [
+     1200,
+     4
+    ],
+    "shape_cuml": [
+     1200,
+     4
+    ],
+    "cells": 4800,
+    "cuml_nonfinite_cells": 0,
+    "cuml_nonfinite_rows": 0,
+    "ours_nonfinite_cells": 0,
+    "bitwise_equal_cells": 284,
+    "max_abs_diff": 0.5098491907119751,
+    "max_rel_diff": 6.608008415044414e+36,
+    "max_rel_diff_cells_ge_1e-6": 0.9251511561789234,
+    "max_ulps": 5.543199225450889e+43,
+    "median_ulps": 807403.5,
+    "argmax_differs_rows": 0,
+    "row_sum_max_abs_diff": 0.2928933184593916,
+    "cuml_rows_summing_to_1": 470,
+    "ours_rows_summing_to_1_where_cuml_does": 284
+   }
+  },
+  {
+   "fixture": "dupes-grid",
+   "config": "leaf",
+   "params": {
+    "min_cluster_size": 15,
+    "min_samples": 5,
+    "cluster_selection_method": "leaf"
+   },
+   "n_rows": 1200,
+   "n_queries": 200,
+   "ours": {
+    "n_clusters": 11,
+    "n_exemplars": 366,
+    "labels_sha256": "c623aa5f9188708434806759515c440b1c487d2b2a3738ef869c5921cfcad8cd",
+    "membership_vector_sha256": "d48a3e115a4728ce32ec05800cd65658388e133bda8da5dcd879631a22e9cd7a",
+    "all_points_sha256": "464f90f1bcd5c4695ec1c7837f66a8b8795e0550a518996e2d97ed1cc9ebfcbe",
+    "membership_nonfinite": 0,
+    "all_points_nonfinite": 0
+   },
+   "cuml": {
+    "n_clusters": 17
+   },
+   "labels_equal": false,
+   "labels_disagree_rows": 764,
+   "membership_vector": "not compared: the fits disagree"
+  }
+ ],
+ "cuml_version": "26.08.00",
+ "mojolearn_numeric_mode": "identical"
+}

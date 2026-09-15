@@ -1,0 +1,7 @@
+ib clean rc=0
+ib sab rc=0
+diff clean rc=0
+diff sab rc=1 (1 expected)
+owed rc=0
+gate clean rc=0
+gate sab rc=0
