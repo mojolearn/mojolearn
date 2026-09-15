@@ -315,6 +315,11 @@ TRAINING_LANE_NAMES = {
     # nine train cells on the M4's CPU column (one core) before the gate ran,
     # and the sabotage build DIVERGENT on all nine.
     "metrics-classification": "the classification, ranking and regression metrics",
+    # The metrics-fowlkes-mallows lane (lane/cpu-training-small-gaps,
+    # 2026-09-15): scikit-learn's fowlkes_mallows_score over the integer
+    # contingency matrix, host_fowlkes_mallows in
+    # metrics/host/metrics_oracle.mojo, exported under the GPU binding's name.
+    "metrics-fowlkes-mallows": "the Fowlkes-Mallows index",
     # The mlp lane (lane/cpu-training-mlp, 2026-09-14): SmallMLPTrainer's
     # step through the training family's host binding (the three MLP
     # operations in training/host/mlp_oracle.mojo, the loss and AdamW over
@@ -542,6 +547,17 @@ TRAINING_LANE_NAMES = {
     "par-scaler": "the column-sharded standard scaler",
     "par-arima": "series-sharded ARIMA",
     "par-holtwinters": "series-sharded Holt-Winters",
+    # Wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor
+    # drivers. ParallelQueries cuts query rows in Python (four shards of 16
+    # rows); ReferenceShardedNeighbors cuts the reference into four shards
+    # of 1024 rows, merges the shard candidates by composite key in Python
+    # and sends one vote request, served on CPU by the core host binding's
+    # knn_classify_neighbors and knn_regress_neighbors.
+    "par-queries-knn": "query-sharded k-NN classification",
+    "par-queries-radius": "query-sharded radius neighbors",
+    "par-queries-kde": "query-sharded kernel density",
+    "par-reference-knn": "reference-sharded k-NN classification",
+    "par-reference-knn-reg": "reference-sharded k-NN regression",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -682,6 +698,8 @@ FAMILIES = (
             "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
             "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
             "kmeans-sqrt", "kmeans-classic-pp", "kmeans-cosine",
+            "par-queries-knn", "par-queries-radius", "par-reference-knn",
+            "par-reference-knn-reg",
         ),
         inference_lanes=("knn", "knn-clf", "knn-reg"),
         forest_kinds=(),
@@ -698,6 +716,7 @@ FAMILIES = (
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict",
+            "knn_classify_neighbors", "knn_regress_neighbors",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
@@ -740,6 +759,7 @@ FAMILIES = (
             "kde-weighted", "ols-no-intercept", "ols-weighted", "ridge-no-intercept",
             "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
             "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
+            "par-queries-kde",
         ),
         inference_lanes=("ols", "ridge", "tsvd", "logistic", "logistic-multiclass", "pca", "pca-whiten", "kde"),
         forest_kinds=(),
@@ -780,7 +800,8 @@ FAMILIES = (
         routes="_mojolearn_metrics",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification"),
+        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
+                        "metrics-fowlkes-mallows"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -795,7 +816,7 @@ FAMILIES = (
             "metrics.confusion_matrix", "metrics.precision_recall_curve",
             "metrics.mean_squared_error", "metrics.mean_absolute_error",
             "metrics.root_mean_squared_error", "metrics.kl_divergence",
-            "metrics.trustworthiness",
+            "metrics.trustworthiness", "metrics.fowlkes_mallows_score",
         ),
         display="the label, classification, ranking, regression, r2, KL, silhouette and trustworthiness metrics, spectral clustering and UMAP",
         host_modules=(
@@ -821,7 +842,7 @@ FAMILIES = (
             "rand_score", "mean_squared_error", "mean_absolute_error",
             "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",
             "log_loss", "confusion_matrix", "precision_recall_fscore",
-            "kl_divergence", "trustworthiness",
+            "kl_divergence", "trustworthiness", "fowlkes_mallows_score",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

@@ -51,6 +51,7 @@ from metrics.impl.accuracy_score import accuracy_score_py
 from metrics.impl.adjusted_rand_index import adjusted_rand_index
 from metrics.impl.completeness_score import completeness_score
 from metrics.impl.entropy import entropy
+from metrics.impl.fowlkes_mallows import fowlkes_mallows_score
 from metrics.impl.homogeneity_score import homogeneity_score
 from metrics.impl.kl_divergence import kl_divergence
 from metrics.impl.mutual_info_score import mutual_info_score
@@ -207,6 +208,29 @@ def mutual_info_score_host(
     var dt = upload_i32(ctx, y_true)
     var dp = upload_i32(ctx, y_pred)
     var out = mutual_info_score(ctx, dt, dp, n, lower, upper)
+    _ = dt^
+    _ = dp^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return out
+
+
+def fowlkes_mallows_score_host(
+    y_true: List[Int32],
+    y_pred: List[Int32],
+    n: Int,
+    lower: Int32,
+    upper: Int32,
+) raises -> Float64:
+    """scikit-learn `fowlkes_mallows_score` (cuML has none) over the device
+    contingency matrix at the SHARED label range, which the Python mirror
+    remaps onto `[0, n_classes - 1]` as it does for mutual information."""
+    _check_pair(y_true, y_pred, n)
+    _check_range(lower, upper)
+    var ctx = DeviceContext()
+    var dt = upload_i32(ctx, y_true)
+    var dp = upload_i32(ctx, y_pred)
+    var out = fowlkes_mallows_score(ctx, dt, dp, n, lower, upper)
     _ = dt^
     _ = dp^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
