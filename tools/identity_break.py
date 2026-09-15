@@ -1807,6 +1807,25 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda est: (est.predict(Xh),))
 
 
+@lane("gbdt-yeti-rank")
+def _(ml, X, yc, yr, Xh=None):
+    """YetiRank (learning to rank, sampled permutations on query groups): 20
+    depth-6 symmetric trees on the gbdt-query-rmse queries and grades, and a
+    second fit of 8 depth-4 trees at random_state=7, so the hash covers the
+    derivative draws' stream as well as the task tables. Unweighted: the host
+    column refuses sample_weight on every loss. YetiRank has no loss value
+    (the target writes 0), so `loss_curve_` is hashed only to pin that.
+    Predict is row-wise, so the held-out probe and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
+    e = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="YetiRank", random_state=7).fit(
+        X, rel, group_id=g)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     seeded_predict=_h(e.predict(X))),
+                m, lambda est: (est.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -4032,7 +4051,7 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
-            "gbdt-query-rmse", "gbdt-pair-logit")
+            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 

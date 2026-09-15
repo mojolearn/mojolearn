@@ -1,0 +1,36 @@
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=3b1b2d6f6f584aee208f7b4ac8de305b4c86608c
+| lane/fixture                 | verdict    | apple-m4         | cpu-apple-m4     | apple-m4         | apple-m4         |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gbdt-pair-logit/base         | IDENTICAL x3 | dd8e7a425b657410 | dd8e7a425b657410 | (not run)        | dd8e7a425b657410 |
+| gbdt-pair-logit/odd          | IDENTICAL x3 | 6b4a46eeb834e2e0 | 6b4a46eeb834e2e0 | (not run)        | 6b4a46eeb834e2e0 |
+| gbdt-pair-logit/ties         | IDENTICAL x3 | 76ffda356c72de21 | 76ffda356c72de21 | (not run)        | 76ffda356c72de21 |
+| gbdt-query-rmse/base         | IDENTICAL x2 | (not run)        | (not run)        | b3f448427d6e764f | b3f448427d6e764f |
+| gbdt-query-rmse/odd          | IDENTICAL x2 | (not run)        | (not run)        | 13b70161e523142f | 13b70161e523142f |
+| gbdt-query-rmse/ties         | IDENTICAL x2 | (not run)        | (not run)        | 40a5b5333f0a32ef | 40a5b5333f0a32ef |
+
+summary: IDENTICAL=6
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-apple-m4     | apple-m4         | apple-m4         |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gbdt-pair-logit/base         | infer  | IDENTICAL x3 | 5ede762eea5fe00c | 5ede762eea5fe00c | (not run)        | 5ede762eea5fe00c |
+| gbdt-pair-logit/base         | model  | IDENTICAL x3 | 8af4d84f9e7c4739 | 8af4d84f9e7c4739 | (not run)        | 8af4d84f9e7c4739 |
+| gbdt-pair-logit/base         | batch  | IDENTICAL x3 | ec33a79bc32b2a59 | ec33a79bc32b2a59 | (not run)        | ec33a79bc32b2a59 |
+| gbdt-pair-logit/odd          | infer  | IDENTICAL x3 | 32022c09b1cf9493 | 32022c09b1cf9493 | (not run)        | 32022c09b1cf9493 |
+| gbdt-pair-logit/odd          | model  | IDENTICAL x3 | 3562b5b666ebb0ad | 3562b5b666ebb0ad | (not run)        | 3562b5b666ebb0ad |
+| gbdt-pair-logit/odd          | batch  | IDENTICAL x3 | 77539de88abb29c6 | 77539de88abb29c6 | (not run)        | 77539de88abb29c6 |
+| gbdt-pair-logit/ties         | infer  | IDENTICAL x3 | 94970681fc447121 | 94970681fc447121 | (not run)        | 94970681fc447121 |
+| gbdt-pair-logit/ties         | model  | IDENTICAL x3 | db15afac90669b08 | db15afac90669b08 | (not run)        | db15afac90669b08 |
+| gbdt-pair-logit/ties         | batch  | IDENTICAL x3 | c8d9043c15c0356d | c8d9043c15c0356d | (not run)        | c8d9043c15c0356d |
+| gbdt-query-rmse/base         | infer  | IDENTICAL x2 | (not run)        | (not run)        | c5dd11cce5027431 | c5dd11cce5027431 |
+| gbdt-query-rmse/base         | model  | IDENTICAL x2 | (not run)        | (not run)        | 773082ee900f4629 | 773082ee900f4629 |
+| gbdt-query-rmse/base         | batch  | IDENTICAL x2 | (not run)        | (not run)        | 2f9ae940636f0782 | 2f9ae940636f0782 |
+| gbdt-query-rmse/odd          | infer  | IDENTICAL x2 | (not run)        | (not run)        | 66a562a9f1518dd7 | 66a562a9f1518dd7 |
+| gbdt-query-rmse/odd          | model  | IDENTICAL x2 | (not run)        | (not run)        | 850fcd0f8a7c5a1a | 850fcd0f8a7c5a1a |
+| gbdt-query-rmse/odd          | batch  | IDENTICAL x2 | (not run)        | (not run)        | 8990d2af358d0692 | 8990d2af358d0692 |
+| gbdt-query-rmse/ties         | infer  | IDENTICAL x2 | (not run)        | (not run)        | 82656b1f96479524 | 82656b1f96479524 |
+| gbdt-query-rmse/ties         | model  | IDENTICAL x2 | (not run)        | (not run)        | a00477457a3f0913 | a00477457a3f0913 |
+| gbdt-query-rmse/ties         | batch  | IDENTICAL x2 | (not run)        | (not run)        | 348dc9138ec69402 | 348dc9138ec69402 |
+
+summary (infer/model): IDENTICAL=12
+summary (batch): IDENTICAL=6
+summary (rlpair): 

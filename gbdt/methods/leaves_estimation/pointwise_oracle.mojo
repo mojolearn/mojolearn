@@ -125,6 +125,11 @@ from gbdt.targets.kernel.pair_logit import (
     PairwiseTargetBuffers,
     launch_pair_logit_with,
 )
+from gbdt.targets.kernel.yeti_rank import (
+    YetiRankTargetBuffers,
+    launch_yeti_rank_with,
+)
+from gbdt.data.permutation import TRandom
 from std.sys.compile import is_defined
 
 # ================= DEVIATION BLOCK 2030 =================
@@ -318,6 +323,14 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: how many value partials an evaluation writes and the host folds: one
     #: per 256 rows, or one per 256 PAIRS for PairLogit
     var fv_blocks: Int
+    #: the YetiRank task table and scratch, present only for YetiRank: the
+    #: querywise der calcer over sampled permutations
+    #: (`gbdt/targets/kernel/yeti_rank.mojo`)
+    var yeti: Optional[YetiRankTargetBuffers]
+    #: this tree's YetiRank draw stream: one `NextUniformL` per evaluation,
+    #: the seed of that call's task streams (`querywise_targets_impl.h:214`;
+    #: the stream is the fit's per-tree draw, see `doc_parallel_boosting.mojo`)
+    var yeti_rng: TRandom
 
     def point_dim(self) -> Int:
         return self.bin_count * self.single_bin_dim
@@ -414,6 +427,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 self.cursor_dim == 1 and self.single_bin_dim == 1
                 and not self.query.__bool__()
                 and not self.pairs.__bool__()
+                and not self.yeti.__bool__()
             )
         if defer_shift:
             self.pending_shift = True
@@ -490,7 +504,16 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # querywise der calcer (`permutation_der_calcer.h:192-205`),
             # the point read back to row order through `query.inverse`
             # and the der/der2 planes written at each row's bin position.
-            if self.pairs.__bool__():
+            if self.yeti.__bool__():
+                # YetiRank: one `NextUniformL` per evaluation seeds the
+                # call's task streams (`querywise_targets_impl.h:213-229`)
+                launch_yeti_rank_with[True](
+                    self.ctx, self.yeti.value(), self.d_cursor, True,
+                    self.yeti_rng.next_uniform_l(),
+                    self.d_eval_stats, self.d_fv, True,
+                    self.d_mag_dummy, False,
+                )
+            elif self.pairs.__bool__():
                 launch_pair_logit_with[True, False](
                     self.ctx, self.pairs.value(), self.d_cursor, True,
                     self.d_eval_stats, self.d_fv, True,
@@ -1028,6 +1051,8 @@ def make_bin_optimized_oracle(
     num_classes: Int = 0,
     var query: Optional[QuerywiseTargetBuffers] = None,
     var pairs: Optional[PairwiseTargetBuffers] = None,
+    var yeti: Optional[YetiRankTargetBuffers] = None,
+    yeti_seed: UInt64 = UInt64(0),
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -1056,7 +1081,7 @@ def make_bin_optimized_oracle(
             )
         cursor_dim = num_classes
         single_bin_dim = num_classes
-    if (query.__bool__() or pairs.__bool__()) and estimation_method == LEAF_ESTIMATION_EXACT:
+    if (query.__bool__() or pairs.__bool__() or yeti.__bool__()) and estimation_method == LEAF_ESTIMATION_EXACT:
         # `ComputeExactValue`'s querywise arm
         # (`targets/permutation_der_calcer.h:206-216`), their message
         raise Error(
@@ -1266,4 +1291,6 @@ def make_bin_optimized_oracle(
         query^,
         pairs^,
         fv_blocks,
+        yeti^,
+        TRandom(yeti_seed),
     )
