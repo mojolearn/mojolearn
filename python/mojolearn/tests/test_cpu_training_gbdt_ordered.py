@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPU training for the gbdt-ordered-rmse, gbdt-feature-freq and
-gbdt-pointwise-l2-bayesian-eval lanes (lane/cpu-training-gbdt-ordered,
+"""CPU training for the gbdt-ordered-rmse, gbdt-feature-freq,
+gbdt-pointwise-l2-bayesian-eval and gbdt-categorical-ctr lanes (lane/cpu-training-gbdt-ordered,
 2026-09-15), checked from SOURCE so it runs
 on a box with nothing built, plus a runtime check that runs only where the
 gbdt host binding is built and the package took the CPU-only path.
@@ -43,6 +43,7 @@ ROOT = Path(__file__).resolve().parents[3]
 ORDERED = "gbdt/host/gbdt_oracle_ordered.mojo"
 FEATURE_FREQ = "gbdt/host/gbdt_oracle_feature_freq.mojo"
 POINTWISE = "gbdt/host/gbdt_oracle_pointwise.mojo"
+ONEHOT = "gbdt/host/gbdt_oracle_onehot.mojo"
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 REUSED_HOST_MODULES = (
     "checks/fixed_point.mojo",
@@ -63,10 +64,10 @@ def _read(rel):
 
 def test_manifest_covers_both_lanes():
     fam = host_surface.family("gbdt")
-    for lane in ("gbdt-ordered-rmse", "gbdt-feature-freq", "gbdt-pointwise-l2-bayesian-eval"):
+    for lane in ("gbdt-ordered-rmse", "gbdt-feature-freq", "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr"):
         assert lane in fam["training_lanes"], lane
         assert lane in host_surface.covered_lanes(), lane
-    for rel in (ORDERED, FEATURE_FREQ, POINTWISE):
+    for rel in (ORDERED, FEATURE_FREQ, POINTWISE, ONEHOT):
         assert rel in fam["host_modules"] and (ROOT / rel).is_file(), rel
     for name in ("gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq"):
         assert name in fam["exports"], name
@@ -88,7 +89,7 @@ def test_binding_registers_and_refuses_weights_by_name():
 
 
 def test_oracles_import_no_gpu_module():
-    for rel in (ORDERED, FEATURE_FREQ, POINTWISE):
+    for rel in (ORDERED, FEATURE_FREQ, POINTWISE, ONEHOT):
         text = _read(rel)
         assert not GPU_IMPORTS.search(text), f"{rel} imports a GPU module"
         assert "DeviceContext" not in "".join(re.findall(r"^\s*from .*$", text, re.M)), rel
@@ -146,6 +147,19 @@ def test_pointwise_oracle_spells_the_bit_carrying_constructs():
         assert what in src, f"no by-name refusal for {what}"
 
 
+def test_one_hot_arm_spells_the_bit_carrying_constructs():
+    text = _read(ONEHOT)
+    assert "comptime GBDT_ONE_HOT_MAX_SIZE = 2" in text, "their GPU one_hot_max_size"
+    assert "if unique_values > GBDT_ONE_HOT_MAX_SIZE:" in text, "the CTR refusal"
+    assert 'line += " split_type take_bin"' in text
+    oracle = _read("gbdt/host/gbdt_oracle.mojo")
+    assert "bs.append(Float32(c) + Float32(0.5))" in oracle, "the one-hot grid"
+    assert "grid.fold_counts[f] = len(bs) + 1 if len(bs) > 0 else 0" in oracle
+    src = _read(host_surface.binding_source("gbdt"))
+    assert "var one_hot = gbdt_resolve_one_hot(flags, x, n_rows, n_features)" in src
+    assert "gbdt_host_model_text_one_hot(model, one_hot)" in src
+
+
 def test_sabotage_reaches_both_oracles():
     for rel in (ORDERED, FEATURE_FREQ, POINTWISE):
         text = _read(rel)
@@ -154,7 +168,7 @@ def test_sabotage_reaches_both_oracles():
 
 def test_workflow_triggers_on_both_oracles():
     text = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in (ORDERED, FEATURE_FREQ, POINTWISE):
+    for rel in (ORDERED, FEATURE_FREQ, POINTWISE, ONEHOT):
         assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 
 
@@ -227,6 +241,21 @@ def test_ordered_and_feature_freq_fit_on_the_host_when_built():
         assert "no CPU implementation of" in str(exc), str(exc)
     else:
         raise AssertionError("an unweighted pointwise fit did not refuse on the host binding")
+
+    # the one-hot categorical arm, and the CTR refusal above one_hot_max_size
+    outs = []
+    for _ in range(2):
+        c = mojolearn.GradientBoosting(n_estimators=3, max_depth=3, loss="Logloss", cat_features=[0],
+                                       one_hot_features=[1]).fit(coded, yc)
+        outs.append((c.model_, np.asarray(c.predict(coded)).tobytes()))
+    assert outs[0] == outs[1], "two one-hot host fits returned different bytes"
+    assert "type cat" in outs[0][0] and "ctr_" not in outs[0][0]
+    try:
+        mojolearn.GradientBoosting(n_estimators=2, max_depth=3, loss="Logloss", cat_features=[1]).fit(coded, yc)
+    except Exception as exc:
+        assert "no CPU implementation of" in str(exc), str(exc)
+    else:
+        raise AssertionError("a CTR categorical fit did not refuse on the host binding")
 
 
 if __name__ == "__main__":

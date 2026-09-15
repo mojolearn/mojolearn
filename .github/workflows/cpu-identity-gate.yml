@@ -112,6 +112,7 @@ on:
       - "gbdt/host/gbdt_oracle_ordered.mojo"
       - "gbdt/host/gbdt_oracle_feature_freq.mojo"
       - "gbdt/host/gbdt_oracle_pointwise.mojo"
+      - "gbdt/host/gbdt_oracle_onehot.mojo"
       - "arima/host/arima_oracle.mojo"
       - "training/host/mlp_oracle.mojo"
       - "training/checks/loss_oracle.mojo"

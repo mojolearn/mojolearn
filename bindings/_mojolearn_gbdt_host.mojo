@@ -95,6 +95,10 @@ from gbdt.options.data_processing_options import nan_mode_from_name
 from gbdt.host.gbdt_oracle_feature_freq import gbdt_feature_freq_host_fit
 from gbdt.host.gbdt_oracle_ordered import gbdt_ordered_rmse_host_fit
 from gbdt.host.gbdt_oracle_pointwise import gbdt_pointwise_host_fit
+from gbdt.host.gbdt_oracle_onehot import (
+    gbdt_host_model_text_one_hot,
+    gbdt_resolve_one_hot,
+)
 
 
 #: `SCORE_FUNCTION_COSINE` and `LEAF_ESTIMATION_NEWTON`
@@ -168,7 +172,8 @@ def _refuse(what: String) raises:
         " gbdt-depthwise and gbdt-lossguide lanes only (SymmetricTree with"
         " Logloss or RMSE and Cosine, Depthwise with Logloss and Cosine,"
         " Lossguide with Logloss and NewtonL2, Newton leaves, no bootstrap,"
-        " weights, categoricals, eval set or NaN), see"
+        " weights, CTR categoricals, eval set or NaN; one-hot categorical"
+        " columns under SymmetricTree with Logloss), see"
         " gbdt/host/gbdt_oracle.mojo, gbdt/host/gbdt_oracle_rmse.mojo and"
         " gbdt/host/gbdt_oracle_depthwise.mojo"
     )
@@ -393,7 +398,7 @@ def gbdt_fit_binding(
     var xp = f32_ptr(Int(py=x_addr))
     var yp = f32_ptr(Int(py=y_addr))
     _ = f32_ptr(Int(py=weights_addr))
-    _ = u32_ptr(Int(py=cat_flags_addr))
+    var cp = u32_ptr(Int(py=cat_flags_addr))
     _ = f32_ptr(Int(py=eval_x_addr))
     _ = f32_ptr(Int(py=eval_y_addr))
 
@@ -505,8 +510,8 @@ def gbdt_fit_binding(
         _refuse("sample_weight")
     if n_class_weights != 0:
         _refuse("class_weights")
-    if n_flags != 0:
-        _refuse("cat_features or one_hot_features")
+    if n_flags != 0 and (is_rmse or grow_code != 0):
+        _refuse("cat_features or one_hot_features outside SymmetricTree with Logloss")
     if n_eval_rows != 0:
         _refuse("eval_set")
     if od_type.byte_length() > 0 or od_pvalue >= 0.0 or od_wait >= 0:
@@ -625,6 +630,9 @@ def gbdt_fit_binding(
         border_count, border_build_max_samples, n_estimators, max_depth,
         learning_rate, l2_leaf_reg, random_seed, nan_mode, border, iterations,
     )
+    var flags = List[UInt32]()
+    for f in range(n_flags):
+        flags.append(cp.unsafe_load(f))
     var x_address = Int(py=x_addr)
     var y_address = Int(py=y_addr)
     _ = xp
@@ -652,6 +660,15 @@ def gbdt_fit_binding(
                 losses = fit.model.losses.copy()
                 best_iteration = fit.model.best_iteration
                 stopped_early = fit.model.stopped_early
+            elif grow_code == 0 and len(flags) != 0:
+                # the one-hot categorical arm (gbdt-categorical-ctr):
+                # gbdt/host/gbdt_oracle_onehot.mojo
+                var one_hot = gbdt_resolve_one_hot(flags, x, n_rows, n_features)
+                var model = gbdt_host_fit(x, y, n_rows, n_features, p, one_hot)
+                text = gbdt_host_model_text_one_hot(model, one_hot)
+                losses = model.losses.copy()
+                best_iteration = model.best_iteration
+                stopped_early = model.stopped_early
             elif grow_code == 0:
                 var model = gbdt_host_fit(x, y, n_rows, n_features, p)
                 text = gbdt_host_model_text(model)

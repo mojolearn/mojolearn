@@ -94,7 +94,7 @@ def test_every_fit_refusal_names_the_missing_cpu_implementation():
     for what in ("loss='", "grow_policy code", "use_pointwise_searcher=True",
                  "score_function code", "leaf_estimation_method code",
                  "bootstrap_type='", '"sample_weight"', '"class_weights"',
-                 '"cat_features or one_hot_features"', '"eval_set"',
+                 '"cat_features or one_hot_features outside SymmetricTree with Logloss"', '"eval_set"',
                  "random_strength=", "boost_from_average=True",
                  "feature_fraction=", "an X carrying NaN"):
         assert f"_refuse(" in src and what in src, f"no by-name refusal for {what}"
