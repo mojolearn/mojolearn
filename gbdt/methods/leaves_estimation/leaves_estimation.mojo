@@ -51,13 +51,16 @@ NOT implemented, and named so nobody assumes otherwise: `leaf_estimation_iterati
 estimation, and exact estimation for MAE and quantile. Those change the VALUE
 a leaf gets and none of them change the tree structure.
 
-NOT IMPLEMENTED, and it is a real one: `MakeZeroAverage`
+NOT IN THIS KERNEL: `MakeZeroAverage`
 (`doc_parallel_leaves_estimator.cpp:25-37`) shifts every leaf by
 `-sum(point) / count` after estimation, so the tree's leaf values average to
 zero. It is a CROSS-LEAF reduction and this kernel is one thread per leaf,
-so it cannot go here; it needs a second pass. CatBoost turns it on only for
-PairLogit and YetiRank (`NeedZeroAverage`, `train_template.h:29-40`), so it
-is off for every objective this implementation can reach.
+so it cannot go here. CatBoost turns it on for PairLogit, PairLogitPairwise,
+YetiRank and YetiRankPairwise (`NeedZeroAverage`, `train_template.h:29-40`).
+Of those this implementation trains PairLogit, and
+`gbdt/methods/doc_parallel_boosting.mojo::_estimate_and_apply` applies the
+shift on the host after the walker; the host oracle
+(`gbdt/host/gbdt_oracle_losses.mojo`) restates it.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx

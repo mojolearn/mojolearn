@@ -825,6 +825,27 @@ def _estimate_and_apply(
             stage_times, trace, leaf_tag,
         )
     not_pd_total += not_pd_blocks
+    # `LeavesEstimationConfig.MakeZeroAverage`
+    # (`doc_parallel_leaves_estimator.cpp:25-37`), on for PairLogit through
+    # `NeedZeroAverage` (`train_template.h:29-40`; the other three losses it
+    # names are not implemented). After the walker and before
+    # `UpdateLeaves`, every leaf moves by minus the unweighted mean of the
+    # estimate over all `BinCount()` leaves, empty ones included, summed in
+    # double in leaf order; `float += double` rounds once, as
+    # `Float32(Float64 + Float64)` does. A shift of every leaf moves every
+    # row by the same amount, so no pairwise loss or ranking metric sees it;
+    # the raw predictions do.
+    if objective == OBJECTIVE_PAIR_LOGIT:
+        var zero_sum = Float64(0.0)
+        var zero_weight = Float64(0.0)
+        for i in range(len(estimated)):
+            zero_sum += Float64(estimated[i])
+            zero_weight += Float64(1.0)
+        var zero_bias = Float64(0.0)
+        if zero_weight > Float64(0.0):
+            zero_bias = -zero_sum / zero_weight
+        for i in range(len(estimated)):
+            estimated[i] = Float32(Float64(estimated[i]) + zero_bias)
     leaf_values.clear()
     for i in range(len(estimated)):
         leaf_values.append(estimated[i])

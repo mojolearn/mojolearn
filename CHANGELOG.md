@@ -202,8 +202,10 @@ Linux legs are OWED before this heading reads published.
   derivatives are summed in one fixed order where the reference sums them in thread arrival order,
   and the search weight plane follows `secondDerAsWeights` as the pointwise target does, where the
   reference's querywise branch has the two arms reversed (so at the default Cosine score the trees
-  can differ from the reference's GPU and follow its CPU weighting). `pairs` without `group_id`, the
-  `max_pairs` subsample and PairLogitPairwise are not implemented. New identity lane
+  can differ from the reference's GPU and follow its CPU weighting). Each tree's leaf values are
+  shifted to average zero after estimation, as the reference's `MakeZeroAverage` does for this loss
+  (a shift no pairwise loss or ranking metric can see, but raw predictions do). `pairs` without
+  `group_id`, the `max_pairs` subsample and PairLogitPairwise are not implemented. New identity lane
   `gbdt-pair-logit` with a batch part. Apple M4 Metal and CPU columns only; NVIDIA and AMD are owed
   to the release record.
 - The host (CPU) bindings `python/mojolearn/host_surface.py` marks `ships_in_wheel` ship in

@@ -1151,6 +1151,20 @@ def gbdt_losses_host_fit(
             loss, y, cursor, row_index, offsets, sizes, n_rows,
             params.l2_leaf_reg, group_sizes, pairs,
         )
+        if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+            # `MakeZeroAverage` (`doc_parallel_leaves_estimator.cpp:25-37`),
+            # restated from `_estimate_and_apply`: minus the unweighted mean
+            # over all `n_live` leaves, summed in double in leaf order.
+            var zero_sum = Float64(0.0)
+            var zero_weight = Float64(0.0)
+            for i in range(len(estimated)):
+                zero_sum += Float64(estimated[i])
+                zero_weight += Float64(1.0)
+            var zero_bias = Float64(0.0)
+            if zero_weight > Float64(0.0):
+                zero_bias = -zero_sum / zero_weight
+            for i in range(len(estimated)):
+                estimated[i] = Float32(Float64(estimated[i]) + zero_bias)
         for leaf in range(n_live):
             for k in range(sizes[leaf]):
                 var row = row_index[offsets[leaf] + k]

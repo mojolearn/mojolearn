@@ -1,0 +1,52 @@
+NOTE: column cpu-x86-64-runpod is a CPU column: cpu_model='AMD EPYC 7702P 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=3b1b2d6f6f584aee208f7b4ac8de305b4c86608c
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    apple-m4: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-x86-64-runpod: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    apple-m4: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-x86-64-runpod: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    apple-m4: {'X': '32ea0bbed60b8e6c'}
+    cpu-x86-64-runpod: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: {'X': 'd1ba686494256660'}
+    apple-m4: {'X': 'd1ba686494256660'}
+    cpu-x86-64-runpod: None
+| lane/fixture                 | verdict    | apple-m4         | apple-m4         | cpu-x86-64-runpod |
+|------------------------------|------------|------------------|------------------|------------------|
+| gbdt-pair-logit/base         | IDENTICAL x2 | 17a73830398a5752 | (not run)        | 17a73830398a5752 |
+| gbdt-pair-logit/odd          | ONE-COLUMN | 1a6dddc3bcd557e7 | (not run)        | (not run)        |
+| gbdt-pair-logit/ties         | ONE-COLUMN | f57375f407f88c26 | (not run)        | (not run)        |
+| gbdt-query-rmse/base         | IDENTICAL x2 | (not run)        | b3f448427d6e764f | b3f448427d6e764f |
+| gbdt-query-rmse/odd          | ONE-COLUMN | (not run)        | 13b70161e523142f | (not run)        |
+| gbdt-query-rmse/ties         | ONE-COLUMN | (not run)        | 40a5b5333f0a32ef | (not run)        |
+
+summary: IDENTICAL=2, ONE-COLUMN=4
+
+| lane/fixture                 | column | verdict      | apple-m4         | apple-m4         | cpu-x86-64-runpod |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| gbdt-pair-logit/base         | infer  | ONE-COLUMN   | 916d4f0f79d1277f | (not run)        | REFUSED          |
+| gbdt-pair-logit/base         | model  | ONE-COLUMN   | cfcb870dc3b7d6fa | (not run)        | REFUSED          |
+| gbdt-pair-logit/base         | batch  | IDENTICAL x2 | c459fa28e16a0794 | (not run)        | c459fa28e16a0794 |
+| gbdt-pair-logit/odd          | infer  | ONE-COLUMN   | ad7b849614270d86 | (not run)        | (not run)        |
+| gbdt-pair-logit/odd          | model  | ONE-COLUMN   | f4bccde2bdc33c91 | (not run)        | (not run)        |
+| gbdt-pair-logit/odd          | batch  | ONE-COLUMN   | b3a226552e3f3ce8 | (not run)        | (not run)        |
+| gbdt-pair-logit/ties         | infer  | ONE-COLUMN   | 09f9cf51864eb743 | (not run)        | (not run)        |
+| gbdt-pair-logit/ties         | model  | ONE-COLUMN   | 11730346a61ad6dd | (not run)        | (not run)        |
+| gbdt-pair-logit/ties         | batch  | ONE-COLUMN   | 748df688cc3a6a55 | (not run)        | (not run)        |
+| gbdt-query-rmse/base         | infer  | ONE-COLUMN   | (not run)        | c5dd11cce5027431 | REFUSED          |
+| gbdt-query-rmse/base         | model  | ONE-COLUMN   | (not run)        | 773082ee900f4629 | REFUSED          |
+| gbdt-query-rmse/base         | batch  | IDENTICAL x2 | (not run)        | 2f9ae940636f0782 | 2f9ae940636f0782 |
+| gbdt-query-rmse/odd          | infer  | ONE-COLUMN   | (not run)        | 66a562a9f1518dd7 | (not run)        |
+| gbdt-query-rmse/odd          | model  | ONE-COLUMN   | (not run)        | 850fcd0f8a7c5a1a | (not run)        |
+| gbdt-query-rmse/odd          | batch  | ONE-COLUMN   | (not run)        | 8990d2af358d0692 | (not run)        |
+| gbdt-query-rmse/ties         | infer  | ONE-COLUMN   | (not run)        | 82656b1f96479524 | (not run)        |
+| gbdt-query-rmse/ties         | model  | ONE-COLUMN   | (not run)        | a00477457a3f0913 | (not run)        |
+| gbdt-query-rmse/ties         | batch  | ONE-COLUMN   | (not run)        | 348dc9138ec69402 | (not run)        |
+
+summary (infer/model): ONE-COLUMN=12
+summary (batch): IDENTICAL=2, ONE-COLUMN=4
+summary (rlpair): 

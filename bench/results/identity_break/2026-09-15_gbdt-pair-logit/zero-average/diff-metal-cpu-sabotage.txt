@@ -1,0 +1,25 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=3b1b2d6f6f584aee208f7b4ac8de305b4c86608c
+| lane/fixture                 | verdict    | apple-m4         | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| gbdt-pair-logit/base         | DIVERGENT  | parts differ: predict,loss_curve,explicit_predict,explicit_loss_curve; agree: - | f22e741bfd13010e |
+| gbdt-pair-logit/odd          | DIVERGENT  | parts differ: predict,loss_curve,explicit_predict,explicit_loss_curve; agree: - | 97e058ca53cee4ca |
+| gbdt-pair-logit/ties         | DIVERGENT  | parts differ: predict,loss_curve,explicit_predict,explicit_loss_curve; agree: - | 610fb53fa23d112e |
+
+summary: DIVERGENT=3
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| gbdt-pair-logit/base         | infer  | DIVERGENT    | 5ede762eea5fe00c | a76e9741f50f78d3 |
+| gbdt-pair-logit/base         | model  | DIVERGENT    | 8af4d84f9e7c4739 | e0d49655c69798cb |
+| gbdt-pair-logit/base         | batch  | DIVERGENT    | ec33a79bc32b2a59 | 2b259b7f34955df5 |
+| gbdt-pair-logit/odd          | infer  | DIVERGENT    | 32022c09b1cf9493 | ae887040c1cd708a |
+| gbdt-pair-logit/odd          | model  | DIVERGENT    | 3562b5b666ebb0ad | 11e7da0221e1cba1 |
+| gbdt-pair-logit/odd          | batch  | DIVERGENT    | 77539de88abb29c6 | 300d6df8fa8c2324 |
+| gbdt-pair-logit/ties         | infer  | DIVERGENT    | 94970681fc447121 | 6cdf538bb43a22d5 |
+| gbdt-pair-logit/ties         | model  | DIVERGENT    | db15afac90669b08 | e937e5e6b76e61fe |
+| gbdt-pair-logit/ties         | batch  | DIVERGENT    | c8d9043c15c0356d | e9b8a441b0c3c5c4 |
+
+summary (infer/model): DIVERGENT=6
+summary (batch): DIVERGENT=3
+summary (rlpair): 

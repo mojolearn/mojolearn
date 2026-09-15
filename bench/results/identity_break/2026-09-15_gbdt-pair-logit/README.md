@@ -73,3 +73,57 @@ produces that difference.
 
 Not run here: NVIDIA and AMD columns (owed to the next release record), and the fixtures other
 than base, ties and odd.
+
+## Post-push confirmation at 3b1b2d6f6 (x86 CPU)
+
+One RunPod CPU pod (0kj3sn5bujyuen, 428 s billed, $0.0285; DELETE 204, then GET 404 and absent
+from the pod listing), host bindings `core` and `gbdt` built for production and, separately, for
+sabotage (`confirm-3b1b2d6f6/`): `gbdt-pair-logit` and `gbdt-query-rmse` IDENTICAL=6,
+(infer/model) 12, (batch) 6 against the committed M4 Metal columns; the sabotage set DIVERGENT on
+every one of those cells; the 16 earlier gbdt lanes IDENTICAL=48, (infer/model) 90 plus 6 N/A,
+(batch) 48; 25 tests passed.
+
+## The zero-average fix (after stage 3)
+
+Stage 3 did not apply the CatBoost reference's `MakeZeroAverage`, which its GPU leaf estimator turns
+on for PairLogit (`NeedZeroAverage`, `train_template.h:29-40`; `doc_parallel_leaves_estimator.cpp:
+25-37`): after estimation every leaf of a tree moves by minus the unweighted mean of the tree's leaf
+values. The shift moves every row by the same amount, so the learn loss, NDCG and DCG above could
+not show it; the first 8 raw predictions differed from CatBoost's by a near-constant amount
+(base -0.0462, spread 2.4e-04; ties +0.5629, spread 1.2e-05). The fix is gated on PairLogit.
+
+`gbdt-pair-logit` hashes move by design. The files above this section are the BEFORE columns
+(binding 4ac24c5987b5d667); `zero-average/` holds the AFTER columns (Metal 5afcefe19ed70a91, host
+fdd94bdd9f3843e8, host sabotage f4ad8b69b393f419). The new hashes have only the M4 columns: NVIDIA
+and AMD are owed to the next release record.
+
+| check | result | file |
+|---|---|---|
+| Metal before vs after | DIVERGENT=3; (infer/model): DIVERGENT=6; (batch): DIVERGENT=3 | `zero-average/diff-before-after-metal.txt` |
+| CPU before vs after | DIVERGENT=3; (infer/model): DIVERGENT=6; (batch): DIVERGENT=3 | `zero-average/diff-before-after-cpu.txt` |
+| after, Metal vs CPU, two repeats each | IDENTICAL=3; (infer/model): IDENTICAL=6; (batch): IDENTICAL=3 | `zero-average/diff-metal-cpu.txt` |
+| after, host sabotage build vs Metal | DIVERGENT=3; (infer/model): DIVERGENT=6; (batch): DIVERGENT=3 | `zero-average/diff-metal-cpu-sabotage.txt` |
+| after, `MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1`, Metal, base | batch_moved=1, exit 1 | `zero-average/apple-m4.batch-sabotage.json` |
+| the 17 earlier gbdt lanes, Metal, against the committed columns | IDENTICAL=51; (infer/model): IDENTICAL=96, N/A=6; (batch): IDENTICAL=51 | `zero-average/diff-earlier-17-metal.txt` |
+| the 17 earlier gbdt lanes, CPU vs Metal | IDENTICAL=51; (infer/model): IDENTICAL=96, N/A=6; (batch): IDENTICAL=51 | `zero-average/diff-earlier-17-metal-cpu.txt` |
+
+Tests with the fix: 156 passed on the Metal route, 25 on the CPU route. Every Metal step of the
+after columns ran alone under the exclusive Metal slot. Two earlier Metal passes overlapped another
+agent's Metal job (started before the slot rule), stalled in `waitUntilCompleted` or refused with
+DEVIATION 2002, and are not used.
+
+The CatBoost 1.2.10 CPU comparison, rerun after the fix (`zero-average/compare-catboost.txt`):
+
+| fixture | learn loss, largest relative diff | final NDCG diff | final DCG diff | first 8 raw predictions, largest diff (spread) |
+|---|---|---|---|---|
+| base | 5.20e-05 | +9.6e-08 | +2.2e-06 | 1.87e-02 (2.3e-04) |
+| odd | 5.93e-05 | -9.9e-08 | -2.2e-06 | 1.74e-02 (2.1e-04) |
+| ties | 3.21e-06 | -2.2e-16 | -5.3e-14 | 4.21e-02 (1.2e-05) |
+
+The raw-prediction gap shrank (base 4.6e-02 to 1.9e-02, ties 5.6e-01 to 4.2e-02) and is still a
+near-constant offset. Our NDCG on base and odd moved by about 1e-07 with the fix while CatBoost's
+did not. Not measured here: the source of the remaining offset and of the 1e-07 NDCG move. The
+reference's zero average lives in its GPU leaf estimator; this comparison runs its CPU learner, and a
+search of `private/libs/algo` (approx_calcer, approx_updater_helpers, greedy_tensor_search,
+tensor_search_helpers) found no leaf mean shift there. That search is not a proof that the CPU
+learner has none.
