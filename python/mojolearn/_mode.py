@@ -83,8 +83,13 @@ class NumericModeMixin:
         super().__init_subclass__(**kw)
         # Guard even passive fits (e.g. k-NN/KDE storing samples). Inherited
         # fit methods retain their guard, including explicit host subclasses
-        # used on a machine that also has a GPU.
-        for method_name in ("fit", "partial_fit", "fit_predict", "fit_transform"):
+        # used on a machine that also has a GPU. `_fit_with_tree_start` is
+        # the forests' shard fit, which `parallel_ensemble.fit_forest`'s
+        # worker calls without `fit`; since the rf and trees host bindings
+        # serve it (lane/cpu-training-par-wave2, 2026-09-15) it is guarded
+        # like `fit`, so a CPU-only install trains a shard only inside
+        # `reference_training()`.
+        for method_name in ("fit", "partial_fit", "fit_predict", "fit_transform", "_fit_with_tree_start"):
             method = cls.__dict__.get(method_name)
             if method is not None:
                 setattr(cls, method_name, _guard_cpu_training(method))
