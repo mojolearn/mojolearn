@@ -98,3 +98,12 @@ Six agents run at once: gbdt, arima, cpudecl, harness, multigpu, legsdocs. Each 
 - What is still owed, with exact commands.
 - False docs found.
 - Money spent (boxes rented, minutes).
+
+## CPU product boundary (September 15 follow-up)
+
+Broad CPU training is an internal reference surface. Keep training-only
+families out of `host_surface.wheel_families()`. New internal runtime tests
+that fit CPU estimators should use the scoped private
+`mojolearn._cpu_reference.reference_training()` context/decorator, as the
+source identity harness does. Ordinary CPU estimator fits refuse; public
+saved-model inference and the already-published byte-LM trainer remain.
