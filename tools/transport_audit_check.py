@@ -5,7 +5,8 @@ On two MI300X a kernel can read a device-to-device copy's target before the
 copy lands (bench/results/multi_gpu/2026-09-15/peer-copy-mi300x/). This asks
 the drivers that the identity_break par lanes only reach at small shapes
 (DBSCAN, the query and reference-sharded neighbors, HDBSCAN, SVM kernel rows,
-coordinate descent, Gaussian process rows, the isolation forest) the same
+coordinate descent, Gaussian process rows, the isolation forest, full PCA's
+TSQR panels, the wide Gram outputs and the Cholesky trailing rows) the same
 question at shapes whose device buffers pass 1 MiB: every output of the
 driver on devices (0,) must equal, byte for byte, its output on (0, 1) in the
 same process. It prints one line per case and exits 1 if any case differs.
@@ -104,9 +105,36 @@ def case_iforest(ml, dev):
     return _mib(X), [score_isolation_forest(m, X, devices=dev, method="score_samples")]
 
 
+def case_pca_full(ml, dev):
+    from mojolearn.parallel_classical import fit_gram_estimator
+    X = _data(40000, 33, 9)
+    m = fit_gram_estimator(ml.PCA(n_components=3, svd_solver="full", numeric_mode="identical"), X, devices=dev)
+    return _mib(X), [m.components_, m.singular_values_, m.transform(X[:256])]
+
+
+def case_gram_wide(ml, dev):
+    from mojolearn.parallel_classical import fit_gram_estimator
+    X = _data(8000, 257, 10)
+    m = fit_gram_estimator(ml.PCA(n_components=3, numeric_mode="identical"), X, devices=dev)
+    return _mib(X), [m.components_, m.explained_variance_]
+
+
+def case_cholesky(ml, dev):
+    from mojolearn.parallel_classical import fit_cholesky, solve_cholesky
+    rng = np.random.default_rng(11)
+    n = 4500
+    M = rng.standard_normal((n, 64)).astype(np.float64)
+    A = np.ascontiguousarray((M @ M.T / 64 + np.eye(n)).astype(np.float32))
+    A = np.ascontiguousarray(np.tril(A) + np.tril(A, -1).T)
+    B = np.ascontiguousarray(rng.standard_normal((n, 3)).astype(np.float32))
+    c = fit_cholesky(ml.Cholesky(), A, devices=dev)
+    return _mib(A), [c.L_, np.int64(c.info_), solve_cholesky(c, B, devices=dev)]
+
+
 CASES = [("dbscan", case_dbscan), ("svm", case_svm), ("queries-knn", case_queries),
          ("reference-knn", case_reference), ("hdbscan", case_hdbscan), ("cd", case_cd),
-         ("gp", case_gp), ("iforest", case_iforest)]
+         ("gp", case_gp), ("iforest", case_iforest), ("pca-full", case_pca_full),
+         ("gram-wide", case_gram_wide), ("cholesky", case_cholesky)]
 
 
 def main():
