@@ -1235,6 +1235,14 @@ def _cpu_only_binding(name, requested):
             "numeric_mode='identical'."
         )
     pkg = __name__.rsplit(".", 1)[0]
+    # A family served by a Python adapter over a host binding loaded by path
+    # (host_surface.ADAPTED_MODULES; the byte LM trainer's single-device
+    # entries over _mojolearn_byte_lm_host, lane/cpu-training-embedding-ivf,
+    # 2026-09-15). Served only when that host binding is built; otherwise the
+    # installed stub refuses by name as before.
+    adapted = host_surface.ADAPTED_MODULES.get(name)
+    if adapted is not None and os.path.exists(host_module_path(host_surface.family(adapted["family"])["binding"])):
+        return importlib.import_module(f"{pkg}.{adapted['module']}").binding()
     module = sys.modules.get(f"{pkg}.{name}")
     if module is None:
         raise ImportError(
