@@ -315,6 +315,11 @@ TRAINING_LANE_NAMES = {
     # nine train cells on the M4's CPU column (one core) before the gate ran,
     # and the sabotage build DIVERGENT on all nine.
     "metrics-classification": "the classification, ranking and regression metrics",
+    # The metrics-fowlkes-mallows lane (lane/cpu-training-small-gaps,
+    # 2026-09-15): scikit-learn's fowlkes_mallows_score over the integer
+    # contingency matrix, host_fowlkes_mallows in
+    # metrics/host/metrics_oracle.mojo, exported under the GPU binding's name.
+    "metrics-fowlkes-mallows": "the Fowlkes-Mallows index",
     # The mlp lane (lane/cpu-training-mlp, 2026-09-14): SmallMLPTrainer's
     # step through the training family's host binding (the three MLP
     # operations in training/host/mlp_oracle.mojo, the loss and AdamW over
@@ -472,6 +477,17 @@ TRAINING_LANE_NAMES = {
     "rf-reg-gamma-ig": "the random forest regressor with the gamma and inverse Gaussian criteria",
     "et-clf-entropy-bestfirst": "the best-first Extra Trees classifier with entropy splits",
     "et-reg-bootstrap-parallel": "the bootstrapped Extra Trees regressor with the parallel groves engine",
+    # The Transformer block lanes (lane/cpu-training-transformer,
+    # 2026-09-15). TransformerBlock's forward (the stateless prefill, the
+    # carried-state prefill and the decode step) and its zero-state prefill
+    # backward run through the lane's own host oracles,
+    # transformer/checks/transformer_oracle.mojo and
+    # transformer_backward_oracle.mojo, composed by
+    # transformer/host/transformer_block_host.mojo, which also converts the KV
+    # cache between the device's packed (or ring) layout and the oracle's.
+    # The sliding window is the same oracles' window argument.
+    "transformer": "the Transformer block",
+    "transformer-window": "the sliding-window Transformer block",
     # The byte LM host lanes (lane/cpu-training-host-only-lanes, 2026-09-15).
     # Host code on every box, so the 166-lane record's three columns are the
     # host CPUs of the Apple M4, the H100 box and the MI325X box, IDENTICAL x3
@@ -512,7 +528,7 @@ TRAINING_LANE_NAMES = {
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "the Transformer, Mamba and Samba blocks",
+    "the Mamba and Samba blocks",
     "the Embedding layer",
     "gradient boosting training outside its declared lanes (the ordered RMSE and feature-frequency fits, categorical features, sample weights, eval sets and the pointwise searcher among them)",
 )
@@ -663,7 +679,7 @@ FAMILIES = (
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
-            "knn_search", "knn_classify", "knn_regress", "kmeans_fit",
+            "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict",
             "knn_classify_neighbors", "knn_regress_neighbors",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
@@ -748,7 +764,8 @@ FAMILIES = (
         routes="_mojolearn_metrics",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification"),
+        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
+                        "metrics-fowlkes-mallows"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -763,7 +780,7 @@ FAMILIES = (
             "metrics.confusion_matrix", "metrics.precision_recall_curve",
             "metrics.mean_squared_error", "metrics.mean_absolute_error",
             "metrics.root_mean_squared_error", "metrics.kl_divergence",
-            "metrics.trustworthiness",
+            "metrics.trustworthiness", "metrics.fowlkes_mallows_score",
         ),
         display="the label, classification, ranking, regression, r2, KL, silhouette and trustworthiness metrics, spectral clustering and UMAP",
         host_modules=(
@@ -789,7 +806,7 @@ FAMILIES = (
             "rand_score", "mean_squared_error", "mean_absolute_error",
             "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",
             "log_loss", "confusion_matrix", "precision_recall_fscore",
-            "kl_divergence", "trustworthiness",
+            "kl_divergence", "trustworthiness", "fowlkes_mallows_score",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -1233,6 +1250,36 @@ FAMILIES = (
             "arima_fit", "arima_predict", "arima_forecast",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=False,
+    ),
+    dict(
+        family="transformer",
+        binding="_mojolearn_transformer_host",
+        routes="_mojolearn_transformer",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("transformer", "transformer-window"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("TransformerBlock",),
+        display="the Transformer block forward, decode step and backward",
+        host_modules=(
+            "transformer/host/transformer_block_host.mojo",
+            "transformer/checks/transformer_oracle.mojo",
+            "transformer/checks/transformer_backward_oracle.mojo",
+            "transformer/checks/transformer_fixture.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "transformer_host_numeric_mode", "transformer_host_vendor",
+            "transformer_host_column", "transformer_host_sabotage",
+            "transformer_vendor", "transformer_numeric_mode",
+            "transformer_forward", "transformer_forward_fresh",
+            "transformer_decode_step", "transformer_backward",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        # Training-only reference family: source builds for internal bitwise
+        # verification, not shipped (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
         ships_in_wheel=False,
     ),
 )

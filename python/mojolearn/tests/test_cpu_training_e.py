@@ -13,9 +13,7 @@ estimators host binding registers `pca_fit`, `tsvd_fit`, `ols_fit` and
 GPU module (a host restatement that imports `max.gpu` or `std.gpu` is not
 host only); the sabotage define reaches the PCA oracle, whose reduce is
 the arm that moves every PCA, tSVD, OLS and ridge bit, and the DBSCAN
-oracle's core test; the CPU identity gate workflow triggers on the three
-oracle files; the README's "no CPU path" span no longer names k-NN
-training or DBSCAN.
+oracle's core test; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): the four entries run through the host
@@ -109,11 +107,6 @@ def test_sabotage_define_moves_the_gram_reduce():
     assert "min_pts = min_samples + 1" in dbscan, "the DBSCAN sabotage arm does not shift the core test"
     assert "DBSCAN_ORACLE_HOST_SABOTAGE" in binding
 
-
-def test_workflow_triggers_on_the_oracles():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    for rel in ORACLES_E:
-        assert f'- "{rel}"' in text, f"cpu-identity-gate.yml does not trigger on {rel}"
 
 
 def test_readme_no_longer_says_knn_training_has_no_cpu_path():

@@ -446,6 +446,20 @@ cross-vendor sentence; only the E-series leg does.
   read as a theorem, not an omission. STEP_UPSTREAM_RECURRENCE and
   RESUME_KERNEL_ASSOC are the arms.
 
+### Ragged, right-padded batches (2026-09-15)
+
+`forward(x, lengths=...)` on the Python block takes rows real at positions
+`[0, lengths[i])` and padded after. No arithmetic changes: the scan is
+causal, so a real position never reads a later one, and clause (c) makes a
+row's bits independent of its batch, so each real position equals the row
+run alone at its own length. The surface (`python/mojolearn/_ragged.py`)
+replaces the padding inputs with `+0.0` before the ordinary call and the
+padding outputs with `+0.0` after it; the second copy is measured INERT on
+this block, which maps an all-zero token to `+0.0` already. Forward only
+(the weight gradients contract over all `B*L` tokens, which padding
+changes) and refused with a carried state. The gate is the `ragged` part of
+tools/identity_break.py and python/mojolearn/tests/test_ragged_lengths.py.
+
 ## 10. Not claimed
 
 - "Bit-identical AI inference" is not claimed; ONE Mamba-3 SISO block is.

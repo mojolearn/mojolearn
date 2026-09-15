@@ -94,7 +94,7 @@ from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
 
-from cluster.estimator import kmeans_fit
+from cluster.estimator import kmeans_fit, kmeans_predict
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.estimator import (
     knn_classifier_predict,
@@ -446,6 +446,38 @@ def kmeans_fit_binding(
     out.append(PythonObject(sum_scale))
     out.append(PythonObject(weight_scale))
     return out
+
+
+def kmeans_predict_binding(
+    x_addr: PythonObject,
+    centroids_addr: PythonObject,
+    out_labels_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The nearest centroid of every row (cuML's `KMeans.predict`). Returns
+    n_samples.
+
+    `params` is, in this exact order: 0 n_samples, 1 n_features,
+    2 n_clusters, 3 metric. `out_labels_addr` is `n_samples` uint32 (the
+    caller's int32 array is the same bytes). The pass is `kmeans_fit`'s
+    final assignment (`cluster/estimator.mojo::kmeans_predict`), so predict
+    on the training rows is `labels_`."""
+    if len(params) != 4:
+        raise Error(
+            "kmeans_predict: params must hold 4 values, got "
+            + String(len(params))
+        )
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=centroids_addr))
+    var lp = _u32_ptr(Int(py=out_labels_addr))
+    var ns = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var mm = Int(py=params[3])
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        kmeans_predict(ctx, xp, ns, nf, nc, cp, lp, mm)
+    return PythonObject(ns)
 
 
 def mojolearn_numeric_mode_binding() raises -> PythonObject:
@@ -1571,6 +1603,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[knn_classify_binding]("knn_classify")
         m.def_function[knn_regress_binding]("knn_regress")
         m.def_function[kmeans_fit_binding]("kmeans_fit")
+        m.def_function[kmeans_predict_binding]("kmeans_predict")
         m.def_function[radius_neighbors_count_binding](
             "radius_neighbors_count"
         )

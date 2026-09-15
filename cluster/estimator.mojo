@@ -112,7 +112,7 @@ from max.algorithm import sync_parallelize
 from max.gpu.host import DeviceContext
 
 from cluster.impl.detail.kmeans_common import centroid_norms_take_sqrt
-from cluster.impl.kmeans import fit_predict
+from cluster.impl.kmeans import fit_predict, predict
 from core.device_zero import enqueue_fill
 from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.impl.kmeans_params import (
@@ -402,3 +402,80 @@ def kmeans_fit(
     return KMeansFitResult(
         result.inertia, result.n_iter, sum_scale, weight_scale
     )
+
+
+def kmeans_predict(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_labels_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    metric: Int = METRIC_L2_EXPANDED,
+) raises:
+    """The nearest centroid of every row: cuML's `KMeans.predict`, which is
+    `_predict_labels_inertia` keeping the labels (`kmeans.pyx:1071-1082`),
+    one cuVS assignment pass (`kmeans_predict`, `detail/kmeans.cuh`).
+
+    THE SAME PASS AS `kmeans_fit`'s FINAL ASSIGNMENT, statement for
+    statement: the row norms from `row_norm_kernel` with the same
+    `centroid_norms_take_sqrt` flag (squared for both L2 metrics, DEVIATION
+    2716), then `cluster/impl/kmeans.mojo::predict`, the call `fit_predict`
+    makes. So on the training rows and the fitted centroids the labels are
+    `labels_` by construction, and the tie rule (the lowest centroid index
+    on an equal distance) is the fused kernel's. The metric is refused by
+    name exactly as the fit refuses it (`KMeansParams.validate`), so cosine
+    predict refuses because cosine fit does. `x_ptr` is `n_samples x
+    n_features` row-major float32, `centroids_ptr` `n_clusters x
+    n_features`; `out_labels_ptr` is written.
+    """
+    if n_samples < 1 or n_features < 1 or n_clusters < 1:
+        raise Error(
+            "kmeans_predict needs n_samples, n_features and n_clusters >= 1: got "
+            + String(n_samples)
+            + ", "
+            + String(n_features)
+            + ", "
+            + String(n_clusters)
+        )
+    var params = KMeansParams.default()
+    params.n_clusters = n_clusters
+    params.metric = metric
+    params.validate()
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
+    var centroids = ctx.enqueue_create_buffer[DType.float32](
+        n_clusters * n_features
+    )
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n_samples)
+    var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=centroids, src_ptr=centroids_ptr)
+    var take_sqrt = Int32(0)
+    if centroid_norms_take_sqrt(metric):
+        take_sqrt = Int32(1)
+    ctx.enqueue_function[row_norm_kernel](
+        x_norm.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(n_features),
+        take_sqrt,
+        grid_dim=(n_samples, 1, 1),
+        block_dim=(NORM_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    predict(
+        ctx,
+        x,
+        x_norm,
+        centroids,
+        labels,
+        min_dist,
+        params,
+        n_samples,
+        n_features,
+    )
+    ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
+    ctx.synchronize()
