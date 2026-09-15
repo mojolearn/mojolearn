@@ -74,7 +74,17 @@ import it.
 
 ## Evidence
 
-(filled in below as runs complete)
+- Apple M4, one core, bindings built from 479a9575e: the four lanes with
+  `MOJOLEARN_IDENTITY_HOST_INFER`, diffed against the 166-lane GPU columns
+  with `--require-columns 4 --owed-json`: train IDENTICAL=36, infer/model
+  IDENTICAL=72, batch IDENTICAL=36, 0 OWED. The infer cells are HostGBDT's
+  predictions on the saved file. Record:
+  `bench/results/identity_break/2026-09-15_inference-gbdt-modes/`.
+- `test_gbdt_host_modes` (7) and `test_host_surface` (110) pass on the M4;
+  the runtime test ran (not skipped) against those bindings.
+- Pending on one RunPod CPU pod: the x86 column, the forest sabotage column
+  (`-D MOJOLEARN_FOREST_HOST_SABOTAGE=1`, must read DIVERGENT) and the
+  installed-wheel check (`tools/inf_gbdt_wheel_models.py`).
 
 ## Not public, and why
 
