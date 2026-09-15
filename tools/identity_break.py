@@ -5625,13 +5625,24 @@ def _probe_fit_host(fit, name):
     if not _has_save_load(fit.est):
         return None, None, None, "infer: host infer asked of an estimator with no save"
     save, load, suffix = _save_load(fit.est)
-    from mojolearn._forest_host import host_model
+    from mojolearn._forest_host import binary_path, host_model
     try:
         with tempfile.TemporaryDirectory(prefix="identity_break_host_") as tmp:
             path = os.path.join(tmp, f"{name}{suffix}")
             getattr(fit.est, save)(path)
             model = _hfile(path)
             try:
+                host = host_model(path)
+                # THE BINARY THAT PREDICTED IS THE ONE NAMED (2026-09-15): host_record
+                # loads MOJOLEARN_HOST_DIR's forest binding under the module name
+                # _forest_host reuses from sys.modules, so a MOJOLEARN_FOREST_HOST_BINARY
+                # pointing elsewhere (a sabotage build) was silently not the one asked,
+                # and a forest sabotage column read IDENTICAL on a RunPod x86 pod.
+                bound = getattr(getattr(host, "_binding", None), "__file__", None)
+                if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
+                        os.path.realpath(bound) != os.path.realpath(binary_path())):
+                    raise RuntimeError(f"the forest binding in this process is {bound}, "
+                                       f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
                 infer = _h(*fit.probe(host_model(path)))
             except Exception as exc:
                 return None, None, None, f"infer (host_model): {type(exc).__name__}: {exc}"
