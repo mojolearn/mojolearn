@@ -471,6 +471,16 @@ TRAINING_LANE_NAMES = {
     "rf-reg-gamma-ig": "the random forest regressor with the gamma and inverse Gaussian criteria",
     "et-clf-entropy-bestfirst": "the best-first Extra Trees classifier with entropy splits",
     "et-reg-bootstrap-parallel": "the bootstrapped Extra Trees regressor with the parallel groves engine",
+    # The byte LM host lanes (lane/cpu-training-host-only-lanes, 2026-09-15).
+    # Host code on every box, so the 166-lane record's three columns are the
+    # host CPUs of the Apple M4, the H100 box and the MI325X box, IDENTICAL x3
+    # on every cell; the CPU column is a fourth CPU. This list is the set the
+    # full CPU column runs, not only fits: two of these are inference, and
+    # LanguageModelHostTrainer is the published CPU trainer the inference
+    # boundary (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md) keeps.
+    "byte-lm-host-infer": "the byte LM forward pass on its reference path (inference)",
+    "byte-lm-host-infer-threaded": "the byte LM forward pass on its threaded path (inference)",
+    "byte-lm-host-train": "the published byte LM host training step",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -496,7 +506,17 @@ FAMILIES = (
         routes=None,
         loaded_by="python/mojolearn/_byte_lm_host.py",
         sabotage_define="MOJOLEARN_BYTE_LM_HOST_SABOTAGE",
-        training_lanes=(),
+        # lane/cpu-training-host-only-lanes (2026-09-15). The CPU identity
+        # gate loads this binding from MOJOLEARN_HOST_DIR too:
+        # identity_break's host_record loads every host binding through
+        # _backend.load_host_module under the module name _byte_lm_host.py
+        # reuses. Its sabotage set (-D MOJOLEARN_HOST_SABOTAGE=1) reads
+        # DIVERGENT on all nine fixtures of each lane (the threaded head
+        # through training/byte_lm_host.mojo's reverse flag since this
+        # branch); this family's own define moves the two inference lanes
+        # and not the training step, which the byte LM CPU gate's
+        # wrong-gradient build covers.
+        training_lanes=("byte-lm-host-infer", "byte-lm-host-infer-threaded", "byte-lm-host-train"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LanguageModelInference", "LanguageModelHostTrainer"),
@@ -557,6 +577,20 @@ FAMILIES = (
         routes=None,
         loaded_by="python/mojolearn/tokenizer.py",
         sabotage_define="MOJOLEARN_TOKENIZER_HOST_SABOTAGE",
+        # REFUSED from the covered lanes (lane/cpu-training-host-only-lanes,
+        # 2026-09-15), though the `tokenizer` lane reads IDENTICAL x4 against
+        # the 166-lane record on the M4 (9 infer and model cells). The full
+        # CPU gate's sabotage step points MOJOLEARN_HOST_DIR at a set built
+        # from byte_lm, forest and the routed families only, so this binding
+        # is absent there: the lane read REFUSED on all nine fixtures
+        # ("_mojolearn_tokenizer_host.so is not built"), and
+        # cpu_identity_gate_check.py fails a covered lane that is not
+        # STABLE. Even built into that set it could not be caught: the
+        # binding holds integers and tables with no float fold, and
+        # MOJOLEARN_HOST_SABOTAGE reaches nothing here (only this family's
+        # define reverses gpt2_encode's ids). Covering it needs the gate to
+        # build the tokenizer binding with its own define into the sabotage
+        # set; until then test_tokenizer_surface.py is its gate.
         training_lanes=(),
         inference_lanes=(),
         forest_kinds=(),

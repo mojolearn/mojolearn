@@ -349,7 +349,7 @@ byte LM's. Each also builds from source through
 
 <!--fact:host_surface_table-->| family | binding under `mojolearn/host/` | routes (CPU-only install) | internal CPU reference lanes | predicts on a CPU from a saved model | gate | in a wheel |
 |---|---|---|---|---|---|---|
-| byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | no | LanguageModelInference, LanguageModelHostTrainer | .github/workflows/byte-lm-cpu-gate.yml | yes |
+| byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train | LanguageModelInference, LanguageModelHostTrainer | .github/workflows/byte-lm-cpu-gate.yml | yes |
 | forest | `_mojolearn_forest_host.so` | loaded by path | no | RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor, GradientBoosting (rf_classifier, rf_regressor, et_classifier, et_regressor, gbdt_symmetric, gbdt_depthwise, gbdt_lossguide, gbdt_rmse) | tools/forest_host_gate.py (.github/workflows/forest-host-gate.yml) | yes |
 | tokenizer | `_mojolearn_tokenizer_host.so` | loaded by path | no | GPT2Tokenizer | pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py | yes |
 | core | `_mojolearn_core_host.so` | `_mojolearn` | knn, knn-clf, knn-reg, kmeans, kmeans-random, kmeans-array, kmeans-weighted, knn-sqeuclidean, knn-clf-distance, knn-reg-distance, knn-manhattan, knn-chebyshev, knn-cosine, knn-minkowski-p3, knn-rbc, radius, radius-manhattan, radius-chebyshev, radius-minkowski-p3, kmeans-sqrt, kmeans-classic-pp, kmeans-cosine | NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor, KMeans, RadiusNeighbors (knn, knn-clf, knn-reg) | tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
