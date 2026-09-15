@@ -355,7 +355,7 @@ byte LM's. Each also builds from source through
 | core | `_mojolearn_core_host.so` | `_mojolearn` | knn, knn-clf, knn-reg, kmeans, kmeans-random, kmeans-array, kmeans-weighted, knn-sqeuclidean, knn-clf-distance, knn-reg-distance, knn-manhattan, knn-chebyshev, knn-cosine, knn-minkowski-p3, knn-rbc, radius, radius-manhattan, radius-chebyshev, radius-minkowski-p3 | NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor, KMeans, RadiusNeighbors (knn, knn-clf, knn-reg) | tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
 | linalg | `_mojolearn_linalg_host.so` | `_mojolearn_linalg` | gemm-pinned, gemm-transposed | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | estimators | `_mojolearn_estimators_host.so` | `_mojolearn_estimators` | kde, pca, pca-whiten, tsvd, ols, ridge, dbscan, logistic, dbscan-brute-l1, kde-tophat-sqeuclidean, kde-epanechnikov-l1, kde-exponential-chebyshev, kde-linear-cosine, kde-cosine-minkowski, kde-weighted, ols-no-intercept, ols-weighted, ridge-no-intercept, logistic-unpenalized-no-intercept, dbscan-weighted, logistic-l1, logistic-elasticnet, logistic-multiclass, pca-full-whiten | LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, KernelDensity, DBSCAN (ols, ridge, tsvd, logistic, logistic-multiclass, pca, pca-whiten, kde) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
-| metrics | `_mojolearn_metrics_host.so` | `_mojolearn_metrics` | metrics, spectral, spectral-precomputed, umap | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| metrics | `_mojolearn_metrics_host.so` | `_mojolearn_metrics` | metrics, spectral, spectral-precomputed, umap, metrics-classification | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | preprocessing | `_mojolearn_preprocessing_host.so` | `_mojolearn_preprocessing` | standard-scaler, minmax-scaler, standard-scaler-no-mean, standard-scaler-no-std, minmax-scaler-clip | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | tsa | `_mojolearn_tsa_host.so` | `_mojolearn_tsa` | holtwinters, holtwinters-multiplicative, kpss | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | solver | `_mojolearn_solver_host.so` | `_mojolearn_solver` | lasso, elasticnet, agglomerative, elasticnet-l2end-no-intercept | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
@@ -364,6 +364,7 @@ byte LM's. Each also builds from source through
 | rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg, rf-clf-entropy-log2-noboot, rf-clf-balanced-parallel, rf-reg-poisson, rf-reg-gamma-ig | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | gp | `_mojolearn_gp_host.so` | `_mojolearn_gp` | gp, gp-matern12, gp-matern32, gp-matern52-ard | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | gbdt | `_mojolearn_gbdt_host.so` | `_mojolearn_gbdt` | gbdt-symmetric, gbdt-rmse, gbdt-depthwise, gbdt-lossguide | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| training | `_mojolearn_training_host.so` | `_mojolearn_training` | mlp | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | arima | `_mojolearn_arima_host.so` | `_mojolearn_arima` | arima, arima-011, arima-seasonal-c | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |<!--/fact-->
 
 ## The import question, measured

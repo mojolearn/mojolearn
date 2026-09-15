@@ -281,6 +281,24 @@ TRAINING_LANE_NAMES = {
     # cells on the M4's CPU column (one core) before the gate ran, and the
     # sabotage build DIVERGENT on all 27.
     "pca-full-whiten": "whitened PCA through the full SVD",
+    # The metrics-classification lane (lane/cpu-training-metrics-classification,
+    # 2026-09-14): precision, recall and F1 under every average, the
+    # zero-division arms, the log loss, the ROC AUC, the confusion matrix, the
+    # precision-recall curve, the three regression errors, the Rand index, the
+    # KL divergence and trustworthiness through
+    # metrics/host/classification_oracle.mojo, exported under the GPU binding's
+    # names from the metrics host binding (the log loss's probability check,
+    # probability_rows_f32, from the core host binding). IDENTICAL x4 on all
+    # nine train cells on the M4's CPU column (one core) before the gate ran,
+    # and the sabotage build DIVERGENT on all nine.
+    "metrics-classification": "the classification, ranking and regression metrics",
+    # The mlp lane (lane/cpu-training-mlp, 2026-09-14): SmallMLPTrainer's
+    # step through the training family's host binding (the three MLP
+    # operations in training/host/mlp_oracle.mojo, the loss and AdamW over
+    # training/checks/loss_oracle.mojo and optimizer_oracle.mojo) and the
+    # linalg host GEMM. IDENTICAL x4 on all 27 train, infer and model cells on
+    # the M4's CPU column (one core) before the gate ran.
+    "mlp": "the small MLP",
     # Workstream E batch 3 (2026-09-14): gradient boosting on its default
     # symmetric tree with the Logloss loss trains through
     # gbdt/host/gbdt_oracle.mojo, the device trainer restated on the host,
@@ -471,7 +489,7 @@ FAMILIES = (
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "argmax_rows_f32",
             "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
-            "scale_rows_f32",
+            "scale_rows_f32", "probability_rows_f32",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -549,7 +567,7 @@ FAMILIES = (
         routes="_mojolearn_metrics",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap"),
+        training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -559,10 +577,17 @@ FAMILIES = (
             "metrics.homogeneity_score", "metrics.completeness_score",
             "metrics.v_measure_score", "metrics.r2_score",
             "metrics.silhouette_score", "metrics.silhouette_samples",
+            "metrics.rand_score", "metrics.precision_score", "metrics.recall_score",
+            "metrics.f1_score", "metrics.log_loss", "metrics.roc_auc_score",
+            "metrics.confusion_matrix", "metrics.precision_recall_curve",
+            "metrics.mean_squared_error", "metrics.mean_absolute_error",
+            "metrics.root_mean_squared_error", "metrics.kl_divergence",
+            "metrics.trustworthiness",
         ),
-        display="the label, r2 and silhouette metrics, spectral clustering and UMAP",
+        display="the label, classification, ranking, regression, r2, KL, silhouette and trustworthiness metrics, spectral clustering and UMAP",
         host_modules=(
             "metrics/host/metrics_oracle.mojo",
+            "metrics/host/classification_oracle.mojo",
             "spectral/host/spectral_oracle.mojo",
             "cluster/host/kmeans_oracle.mojo",
             "core/knn_host_predict.mojo",
@@ -580,6 +605,10 @@ FAMILIES = (
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
             "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
             "umap_fit_transform", "umap_transform", "umap_numeric_mode",
+            "rand_score", "mean_squared_error", "mean_absolute_error",
+            "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",
+            "log_loss", "confusion_matrix", "precision_recall_fscore",
+            "kl_divergence", "trustworthiness",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -807,6 +836,38 @@ FAMILIES = (
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # The mlp lane (lane/cpu-training-mlp, 2026-09-14): the training
+        # family's host binding. It routes `_mojolearn_training` on a
+        # CPU-only install with the GPU binding's optimizer_step, ce_loss and
+        # the three small MLP operations, so SmallMLPTrainer (and the
+        # optimizers and cross_entropy on their own) run unchanged; the clip
+        # on its own, the accumulation, the Samba operations, the neural RNG
+        # and the multi-GPU probes stay absent and refuse by name.
+        family="training",
+        binding="_mojolearn_training_host",
+        routes="_mojolearn_training",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("mlp",),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("SmallMLPTrainer", "SGD", "Adam", "AdamW", "cross_entropy"),
+        display="the small MLP trainer, the optimizers and the cross-entropy loss",
+        host_modules=(
+            "training/host/mlp_oracle.mojo",
+            "training/checks/loss_oracle.mojo",
+            "training/checks/optimizer_oracle.mojo",
+        ),
+        exports=(
+            "training_host_numeric_mode", "training_host_vendor",
+            "training_host_column", "training_host_sabotage",
+            "training_numeric_mode", "training_vendor", "optimizer_step",
+            "ce_loss", "mlp_bias_activation", "mlp_relu_backward", "mlp_sum_rows",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
