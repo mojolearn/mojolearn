@@ -11,8 +11,14 @@
   `bench/results/identity_break/2026-09-15_cpu-transformer/`; scratch copies in `~/mojolearn-evidence/cpu-training-transformer/`.
 - No rented boxes, nothing running remotely.
 
-## Running
-- CPU identity gate run 34969598898 on the branch at 6839b4b12 (Wheel CI 34969598717). Not merged to main yet.
+## Gate result so far
+- CPU identity gate run 34969598898 at 6839b4b12: NOT green. On all seven runners the covered-lanes step passed with
+  `require-columns 4 ... : OK` and all 18 transformer and transformer-window train cells IDENTICAL x4. Apple M1, x86 draw a
+  and draw d finished green (sabotage caught). ARM64 and x86 draws b, c, e were cancelled at the job's 60-minute limit
+  inside the sabotage step, the same cancellation main's own runs 34968255704 and 34956243867 hit. The fix is
+  lane/cpu-training-gate-budget (sharded identity_break), gating as run 34971932337.
+- Not merged to main. Plan: once gate-budget is on origin/main, merge origin/main into this branch, push (the gate
+  queues), and merge to main when that run is green.
 
 ## Next commands (from a worktree on this branch)
 ```
