@@ -304,7 +304,7 @@ sampler, a solver, a metric, a reduction).
                gbdt-multiclass gbdt-onevsall gbdt-parametric-losses
                gbdt-lossguide-newtoncosine gbdt-pointwise-l2-bayesian-eval
                gbdt-exact-mae gbdt-categorical-ctr gbdt-nan-modes gbdt-adapter-clf
-               gbdt-adapter-reg gbdt-query-rmse iforest-tuned (last, with iforest)
+               gbdt-adapter-reg gbdt-query-rmse gbdt-pair-logit iforest-tuned (last, with iforest)
       neural   mamba2-dtlimit transformer-window byte-lm-resident
                byte-lm-host-infer-threaded (the SHIPPED default arm; the
                2026-09-13 lane pins the reference arm) samba-untied-dropout-accum
@@ -756,12 +756,19 @@ class Fit(dict):
     arguments and reads only the dict; that contract is unchanged."""
     est = None
     probe = "n/a:function"
+    #: An `n/a:<reason>` for the model column of a lane whose saved file
+    #: holds only what the lane passed in (lane/inference-embedding-ivf-
+    #: cholesky, 2026-09-15): the Embedding table is the caller's weight, so
+    #: its file hash is not arithmetic and no host sabotage can move it. The
+    #: saved-table lookup is tools/classical_host_gate.py's embedding lane.
+    model_na = None
 
 
-def _fit(parts, est=None, probe="n/a:function"):
+def _fit(parts, est=None, probe="n/a:function", model_na=None):
     f = Fit(parts)
     f.est = est
     f.probe = probe
+    f.model_na = model_na
     return f
 
 
@@ -1749,6 +1756,35 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-pair-logit")
+def _(ml, X, yc, yr, Xh=None):
+    """PairLogit (learning to rank, pairwise derivatives on query groups):
+    20 depth-6 symmetric trees on the gbdt-query-rmse queries and grades with
+    the pairs generated from them, and a second fit of 8 trees given explicit
+    `pairs` and `pairs_weight` (every third generated-style pair of the first
+    40 queries, hashed weights), so both input paths are hashed. Predict is
+    row-wise, so the held-out probe and the batch part apply."""
+    g = _rank_groups(X.shape[0])
+    rel = _relevance(yr)
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="PairLogit").fit(X, rel, group_id=g)
+    pairs = []
+    begin = 0
+    for q in range(40):
+        size = int(np.count_nonzero(g == q))
+        for a in range(begin, begin + size):
+            for b in range(a + 1, begin + size):
+                if rel[a] != rel[b] and (a + b) % 3 == 0:
+                    pairs.append((a, b) if rel[a] > rel[b] else (b, a))
+        begin += size
+    pw = _hw((len(pairs),), "gbdt-pair-logit:pairs_weight", 0.5, 2.0)
+    e = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="PairLogit").fit(
+        X, rel, group_id=g, pairs=pairs, pairs_weight=pw)
+    return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     explicit_predict=_h(e.predict(X)),
+                     explicit_loss_curve=_h(np.asarray(e.loss_curve_, dtype=np.float64))),
+                m, lambda est: (est.predict(Xh),))
+
+
 def _weighted_score_parts(clf, reg, X, yc, yr, tag):
     """score(X, y, sample_weight) on 1024 rows the fit did not see: hashed
     weights on [0.25, 4), the same weights with every seventh zeroed, unit
@@ -2711,7 +2747,7 @@ def _(ml, X, yc, yr, Xh=None):
     dw_nopad = np.asarray(ml.Embedding(V, Dm, weight=w).backward(ids, dy))
     idh = (_ids(Xh, 1, T).reshape(T) % V).astype(np.int32)
     return _fit(dict(fwd=_h(y), dw=_h(dw), dw_nopad=_h(dw_nopad)),
-                e, lambda m: (np.asarray(m.forward(idh)),))
+                e, lambda m: (np.asarray(m.forward(idh)),), model_na="n/a:input-table")
 
 
 @lane("embedding-sort")
@@ -2742,7 +2778,7 @@ def _(ml, X, yc, yr, Xh=None):
                 np.asarray(ml.Embedding(V, Dm, weight=w).backward(ids, dy)))
     idh = (_ids(Xh, 1, T).reshape(T) % V).astype(np.int32)
     return _fit(dict(fwd=_h(y), dw=_h(dw), dw_nopad=_h(dw_nopad)),
-                e, lambda m: (np.asarray(m.forward(idh)),))
+                e, lambda m: (np.asarray(m.forward(idh)),), model_na="n/a:input-table")
 
 
 @lane("kmeans-sqrt")
@@ -3885,7 +3921,7 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
-            "gbdt-query-rmse")
+            "gbdt-query-rmse", "gbdt-pair-logit")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 
@@ -5742,6 +5778,10 @@ def _probe_fit_host(fit, name):
             reload = _h(*fit.probe(getattr(type(fit.est), load)(path)))
     except Exception as exc:
         return None, None, None, f"model: {type(exc).__name__}: {exc}"
+    if fit.model_na:
+        # The same n/a as `_probe_fit` (Fit.model_na): the host answer is
+        # still the infer cell, the file of caller-given bytes is not a cell.
+        return infer, fit.model_na, None, None
     return infer, model, reload, None
 
 
@@ -5759,6 +5799,8 @@ def _probe_fit(fit, name):
         infer = _h(*fit.probe(fit.est))
     except Exception as exc:
         return None, None, None, f"infer: {type(exc).__name__}: {exc}"
+    if fit.model_na:
+        return infer, fit.model_na, None, None
     if not _has_save_load(fit.est):
         return infer, "n/a:no-save", None, None
     save, load, suffix = _save_load(fit.est)

@@ -186,6 +186,17 @@ FORECAST_RECORDED = (
     "bench/results/classical_host/2026-09-15-apple-m4-arima",
 )
 
+#: The saved IVF-Flat index and embedding table recordings
+#: (lane/inference-embedding-ivf-cholesky, 2026-09-15), checked with
+#: `tools/classical_host_gate.py check` like FORECAST_RECORDED and kept apart
+#: from CLASSICAL_RECORDED for the same reason: they bind
+#: `_mojolearn_ivf_search_host` and `_mojolearn_embedding_infer_host`,
+#: families with no route, which the CPU identity gate workflow does not build
+#: today. The workflow reading this list is owed to its owner.
+SEARCH_LOOKUP_RECORDED = (
+    "bench/results/classical_host/2026-09-15-apple-m4-ivf-embedding",
+)
+
 #: The forest inference recordings: every directory under this root whose
 #: expected.json says RECORDED (the workflows sort them at run time).
 FOREST_RECORDED_ROOT = "bench/results/forest_host"
@@ -483,6 +494,12 @@ TRAINING_LANE_NAMES = {
     # with the querywise target restated in gbdt/host/gbdt_oracle_query.mojo,
     # from the same binding.
     "gbdt-query-rmse": "gradient boosting with the QueryRMSE ranking loss on query groups",
+    # lane/gbdt-learning-to-rank stage 3 (2026-09-15): the PairLogit ranking
+    # loss on generated and explicit pairs trains through
+    # gbdt/host/gbdt_oracle_losses.mojo with the pairwise target restated in
+    # gbdt/host/gbdt_oracle_pair.mojo and the pairs of gbdt/data/pairs.mojo,
+    # from the same binding.
+    "gbdt-pair-logit": "gradient boosting with the PairLogit ranking loss on generated and explicit pairs",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -1422,7 +1439,7 @@ FAMILIES = (
             "gbdt-ordered-rmse", "gbdt-feature-freq",
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
-            "gbdt-query-rmse",
+            "gbdt-query-rmse", "gbdt-pair-logit",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1430,14 +1447,15 @@ FAMILIES = (
             "GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor",
             "model_selection.cross_val_score", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="gradient boosting on symmetric trees with the pointwise, multiclass and QueryRMSE losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
+        display="gradient boosting on symmetric trees with the pointwise, multiclass, QueryRMSE and PairLogit losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
             "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
             "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
             "gbdt/host/gbdt_oracle_pointwise.mojo", "gbdt/host/gbdt_oracle_onehot.mojo",
-            "gbdt/host/gbdt_oracle_query.mojo",
+            "gbdt/host/gbdt_oracle_query.mojo", "gbdt/host/gbdt_oracle_pair.mojo",
+            "gbdt/data/pairs.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(
@@ -1634,6 +1652,37 @@ FAMILIES = (
         ships_in_wheel=False,
     ),
     dict(
+        # lane/inference-embedding-ivf-cholesky (2026-09-15): public CPU
+        # lookup in a saved embedding table, with no backward in the binary.
+        # The reference embedding family above carries the backward fold and
+        # stays out of the wheels; this binding registers embedding_forward
+        # from the same source (bindings/embedding_host_forward.mojo) and
+        # ships. It serves `_mojolearn_embedding` on a CPU-only install when
+        # the reference binding is not built.
+        family="embedding_infer",
+        binding="_mojolearn_embedding_infer_host",
+        routes=None,
+        serves=("_mojolearn_embedding",),
+        loaded_by="_backend._HOST_INFERENCE_MODULES and python/mojolearn/_classical_host.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("embedding",),
+        forest_kinds=(),
+        classes=("Embedding",),
+        display="Embedding lookup in a saved table",
+        host_modules=(
+            "embedding/host/embedding_host.mojo", "bindings/embedding_host_forward.mojo",
+            "embedding/checks/embedding_oracle.mojo",
+        ),
+        exports=(
+            "embedding_infer_host_numeric_mode", "embedding_infer_host_vendor",
+            "embedding_infer_host_column", "embedding_infer_host_sabotage",
+            "embedding_vendor", "embedding_numeric_mode", "embedding_forward",
+        ),
+        gate="tools/classical_host_gate.py and tools/identity_break.py",
+        ships_in_wheel=True,
+    ),
+    dict(
         # lane/cpu-training-embedding-ivf (2026-09-15): IVFIndex's host
         # binding. It routes `_mojolearn_ivf` on a CPU-only install with the
         # GPU binding's whole surface (ivf_flat_build_and_search and the two
@@ -1661,10 +1710,42 @@ FAMILIES = (
         exports=(
             "ivf_host_numeric_mode", "ivf_host_vendor", "ivf_host_column",
             "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
-            "ivf_flat_build_and_search",
+            "ivf_flat_build_and_search", "ivf_flat_build", "ivf_flat_search",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=False,
+    ),
+    dict(
+        # lane/inference-embedding-ivf-cholesky (2026-09-15): public CPU
+        # search over a saved, GPU-built IVF-Flat index, with no build in the
+        # binary. The reference ivf family above carries the k-means
+        # quantizer fit and stays out of the wheels; this binding registers
+        # ivf_flat_search from the same source (bindings/ivf_host_search.mojo)
+        # and ships. It serves `_mojolearn_ivf` on a CPU-only install when the
+        # reference binding is not built.
+        family="ivf_search",
+        binding="_mojolearn_ivf_search_host",
+        routes=None,
+        serves=("_mojolearn_ivf",),
+        loaded_by="_backend._HOST_INFERENCE_MODULES and python/mojolearn/_classical_host.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=("ivf", "ivf-euclidean"),
+        forest_kinds=(),
+        classes=("IVFIndex",),
+        display="IVF-Flat search over a saved index",
+        host_modules=(
+            "ivf/host/ivf_host.mojo", "bindings/ivf_host_search.mojo",
+            "bindings/ivf_index_arrays.mojo",
+            "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo",
+        ),
+        exports=(
+            "ivf_search_host_numeric_mode", "ivf_search_host_vendor",
+            "ivf_search_host_column", "ivf_search_host_sabotage",
+            "ivf_vendor", "ivf_numeric_mode", "ivf_flat_search",
+        ),
+        gate="tools/classical_host_gate.py and tools/identity_break.py",
+        ships_in_wheel=True,
     ),
     dict(
         # lane/inference-forecast-umap-pca (2026-09-15): public CPU inference
@@ -1945,6 +2026,7 @@ def as_dict():
         forest_kinds=forest_kinds(),
         classical_recorded=list(CLASSICAL_RECORDED),
         forecast_recorded=list(FORECAST_RECORDED),
+        search_lookup_recorded=list(SEARCH_LOOKUP_RECORDED),
         classical_gpu_columns=list(CLASSICAL_GPU_COLUMNS),
         training_gpu_columns=list(TRAINING_GPU_COLUMNS),
         training_fix_columns=list(TRAINING_FIX_COLUMNS),
