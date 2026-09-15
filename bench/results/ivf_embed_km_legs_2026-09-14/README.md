@@ -110,3 +110,11 @@ called complete, and exposure needs the same door work as IVF. Neither is expose
 
 km_check: first vendor runs after 834ba18dc and 572ccd949 pass at IDENTICAL on both vendors with
 the three-column card equal; FAST passes on both at b163b76ba.
+
+## Later the same day: the five open arms resolved, and the doors
+
+lane/expose-ivf-embedding resolved the five findings above in the check (none was a kernel defect)
+and reran the script at 6c91eb1c3: all sixteen arms BIT on an H100 and an MI300X, and fifteen BIT
+with NO_FLUSH_ACC asserted inert on the M4 (`bench/results/embedding_sabotage_2026-09-14/README.md`).
+IVFIndex and Embedding are exposed on that lane, with identity_break lanes `ivf` and `embedding`
+IDENTICAL x3 (`bench/results/identity_break/2026-09-14_ivf-embedding/README.md`).

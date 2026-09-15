@@ -447,6 +447,12 @@ def emb_refuse_device_ids(
     """Contract section 8 and 9.1 ON THE DEVICE ENTRY POINTS, which is where they were missing. IT IS AN OUT-OF-BOUNDS READ.** `emb_gather_kernel` computes `weight.unsafe_load(v * width + j)` with NO bounds branch on the normative path -- the only bounds handling in the file lives inside `SAB_GATHER_CLAMP_OOR`, a SABOTAGE arm, so a build without that define has none at all."""
     if n_positions <= 0:
         return
+    comptime if SAB_GATHER_CLAMP_OOR:
+        # THE SABOTAGE IS THE WHOLE WRONG SPELLING, NOT HALF OF IT: the
+        # refusal is dropped and the gather kernel clamps instead. With the
+        # refusal left in, the kernel's clamp could never see an
+        # out-of-range id and the arm was unrunnable (2026-09-14 legs).
+        return
     step_count_host_alloc()
     var h = ctx.enqueue_create_host_buffer[DType.int32](n_positions)
     step_count_sync()

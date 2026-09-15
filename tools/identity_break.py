@@ -126,14 +126,14 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whole-batch answer (one ulp) and stamps `batch_sabotage: true`
             in the JSON.
 
-THE LANES, 166 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
+THE LANES, 172 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
 tokenizer the same day when those two got their doors, 16 `par-*` lanes that
 evening for the ordered multi-GPU drivers run on ONE device, and 15 lanes for
 the doors workstream D opened: Cholesky, the kernel methods, the Gaussian
 mixture, HDBSCAN, resampling, the training primitives and the KMeans arms,
 then 15 more `par-*` lanes that night for the multi-GPU drivers the first 16
-missed). One per public estimator
+missed, then `par-forest-pool`, `par-gmm`, `par-resample` and `par-hdbscan` for the drivers the multigpu lane added, and `ivf` and `embedding` when IVFIndex and Embedding left `_NOT_YET`). One per public estimator
 plus linalg and metrics, then one per public constructor VALUE that selects
 a different numeric path and no earlier lane pins (a kernel, an objective, a
 sampler, a solver, a metric, a reduction).
@@ -185,6 +185,8 @@ sampler, a solver, a metric, a reduction).
                par-byte-lm-offload par-samba-clip
     2026-09-14 night (drivers added by the multigpu lane; devices=_par_devices())
       par-forest-pool par-gmm par-resample par-hdbscan
+    2026-09-14 night (lane/expose-ivf-embedding, the last two _NOT_YET doors)
+      ivf embedding
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -2206,6 +2208,51 @@ def _(ml, X, yc, yr, Xh=None):
                                      np.asarray(e.linear_forward(xh, w_lin))))
 
 
+@lane("ivf")
+def _(ml, X, yc, yr, Xh=None):
+    """IVFIndex (python/mojolearn/_ivf_impl.py), cuVS ivf_flat build plus
+    search under one card: the coarse k-means quantizer, the CSR list
+    layout, the probe selection and the per-list distance tiles. 16 lists
+    and 4 probes over an index of 4096 rows, so the probe set is a real
+    subset; 64 queries. Train hashes the distances, the original row ids
+    (the tie class: ids diverging while distances agree) and the
+    per-query candidate counts. The index does not cross, so the model
+    column is n/a:no-save; the probe searches 64 held-out rows."""
+    m = ml.IVFIndex(n_lists=16, n_probes=4, n_neighbors=8, random_state=3).fit(X[:4096])
+    d, i = m.search(X[4096:4160])
+    return _fit(dict(dist=_h(d), idx=_h(i), cand=_h(m.n_candidates_)),
+                m, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
+
+
+@lane("embedding")
+def _(ml, X, yc, yr, Xh=None):
+    """Embedding (python/mojolearn/embedding.py), profile
+    mojolearn.identical.embedding.fp32.v1: the gather, the ascending fold
+    with padding_idx=3, the same fold without a padding row, and the
+    microbatch carry. V=128, d=16, T=512 ids from the fixture's bytes (runs
+    of several positions per row, so the fold order is exercised) and dY
+    from the fixture's values (the denormal fixture puts subnormals in the
+    fold, where the E-seam flush pins are the answer). The carry, split at
+    t0=171, must equal the unsplit gradient byte for byte (contract 7.4) or
+    the train cell reads REFUSED naming the pair. No model crosses; the
+    probe gathers 512 held-out ids."""
+    V, Dm, T = 128, 16, 512
+    w = _hw((V, Dm), "emb:w", -0.25, 0.25)
+    ids = (_ids(X, 1, T).reshape(T) % V).astype(np.int32)
+    dy = np.ascontiguousarray(_seq(X, 1, T, Dm).reshape(T, Dm))
+    e = ml.Embedding(V, Dm, padding_idx=3, weight=w)
+    y = np.asarray(e.forward(ids))
+    dw = np.asarray(e.backward(ids, dy))
+    t0 = 171
+    g1 = e.backward(ids[:t0], dy[:t0])
+    g2 = np.asarray(e.backward(ids[t0:], dy[t0:], grad=g1))
+    _same_bytes("carried dW (t0=171)", g2, "unsplit dW", dw)
+    dw_nopad = np.asarray(ml.Embedding(V, Dm, weight=w).backward(ids, dy))
+    idh = (_ids(Xh, 1, T).reshape(T) % V).astype(np.int32)
+    return _fit(dict(fwd=_h(y), dw=_h(dw), dw_nopad=_h(dw_nopad)),
+                e, lambda m: (np.asarray(m.forward(idh)),))
+
+
 @lane("kmeans-sqrt")
 def _(ml, X, yc, yr, Xh=None):
     """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken in
@@ -3406,6 +3453,21 @@ def _batch_training_primitives(ml, e, Xh):
             _BatchRows("linear_forward", idx, lambda r: (np.asarray(T.linear_forward(take(xh, r), w_lin)),))]
 
 
+def _batch_ivf(ml, e, Xh):
+    """A search is row-wise in its queries (policy 3 rebuilds the same index
+    from the same fit rows on every call), so each query alone against 64."""
+    return [_BatchRows("search", Xh[:64], lambda r: e.search(r) + (e.n_candidates_,))]
+
+
+def _batch_embedding(ml, e, Xh):
+    """The gather is row-wise in the ids; each id alone against 64."""
+    idh = (_ids(Xh, 1, 64).reshape(64) % e.num_embeddings).astype(np.int32)
+    idx = np.arange(64, dtype=np.int64).reshape(64, 1)
+    return [_BatchRows("forward", idx, lambda r: (np.asarray(e.forward(np.ascontiguousarray(idh[r[:, 0]]))),))]
+
+
+_batch_decl(_batch_ivf, "ivf")
+_batch_decl(_batch_embedding, "embedding")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
 _batch_decl(_batch_training_primitives, "training-primitives")
 _batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "mlp", "par-mlp")

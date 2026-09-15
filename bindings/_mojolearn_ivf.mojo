@@ -1,19 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPython boundary for the IVF-FLAT lane, PREPARED AND NOT EXPOSED
-(workstream D, 2026-09-14).
+"""CPython boundary for the IVF-FLAT lane (`mojolearn.IVFIndex`), exposed 2026-09-14.
 
-The lane has Apple evidence only (`ivf/checks/ivf_check.mojo`, the layout
-sabotage, the large-k and large-probe checks); no NVIDIA or AMD box has
-built or run it. The plan (docs/lanes/TEMP_claim_surface_plan_2026-09-14.md
-section 4, item 4) exposes it only after both legs, so this binding is
-written, compile-checked, and left OUT of `python/mojolearn/_backend.py`'s
-`_MODULES` and of every packaging list until then. `python/mojolearn/
-_ivf_impl.py` is the matching Python half, also unexported. The exposure
-step, once the two legs read IDENTICAL, is: `_mojolearn_ivf` into
-`_MODULES` and `_build_script`, the four packaging lists that
-`packaging/check_ext_lists.py` holds to it, `IVFFlat` into `__all__`, and
-the `ivf-flat` lane body (docs/lanes/LANE_BODY_ivf.py) into the harness.
+`ivf/checks/ivf_check.mojo` (the layout sabotage, the large-k and
+large-probe checks) reads ALL OK at IDENTICAL on the Apple M4, an NVIDIA
+H100 and an AMD MI300X with one card, 1e7c1702, on all three
+(bench/results/ivf_embed_km_legs_2026-09-14/README.md). The binding is in
+`python/mojolearn/_backend.py`'s `_MODULES` and `_build_script` and in the
+four packaging lists `packaging/check_ext_lists.py` holds to it;
+`python/mojolearn/_ivf_impl.py` is the Python half and the identity_break
+lane is `ivf`.
 
 ONE ENTRY, ONE CARD. `ivf_flat_build_and_search_host` is the entry every
 gate uses (the estimator's policy 3): a build and a search under one
@@ -27,6 +23,7 @@ and mirrored in `_ivf_impl.py`.
 """
 
 from std.os import abort
+from std.sys.compile import is_defined
 from bindings.hostptr import f32_ptr, i32_ptr, copy_f32, read_f32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -99,6 +96,14 @@ def _ivf_run(
     # bytes are the same bytes.
     for i in range(m * k):
         ip.unsafe_store(i, Int32(Int(r.indices[i])))
+    comptime if is_defined["MOJOLEARN_IVF_BINDING_SABOTAGE"]():
+        # NEVER SHIPPED. Swaps the first two neighbor ids of query 0, the
+        # tie-class corruption a wrong (distance, id) order would produce, so
+        # the identity_break `ivf` lane is SEEN TO FAIL on its idx part.
+        if m * k >= 2:
+            var a = ip.unsafe_load(0)
+            ip.unsafe_store(0, ip.unsafe_load(1))
+            ip.unsafe_store(1, a)
     for i in range(m):
         cp.unsafe_store(i, r.n_candidates[i])
     # DEVIATION 1946: the context dies LAST, after every value built on it.

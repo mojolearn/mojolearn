@@ -9,7 +9,7 @@ NO REFERENCE FILE. It runs the device spelling
 (`embedding/checks/embedding_oracle.mojo`) and compares every recorded
 stage BY BITS.
 
-**RAN ON THREE COLUMNS, SABOTAGE ARMS RUN (2026-09-14).** Apple and AMD produced `embedding.identical.card` at md5 `c7f824c35336bef2a3d0f672a172ef29` on 2026-08-28, clause (a) passing on 6,887 cells, and the Apple M4, an NVIDIA H100 and an AMD MI300X produced the same md5 at 171752af4. `tools/embedding_sabotage_arm.sh` built the sixteen arms on all three: ten BIT under clause (g) on every column and NO_FLUSH_ACC an eleventh on NVIDIA and AMD; EMPTY_ROW_NEG_ZERO and SORT_TIE_REVERSED move their predicted-inert controls, PAD_ROW_NEG_ZERO moves emb.dw_seed before emb.dw, ACCUM_BY_ADD's clause (e) by-add control is dead on f_split, and NO_FLUSH_ACC is inert on Apple as contract 9.3 predicts but raises; GATHER_CLAMP_OOR has no runnable witness (`bench/results/ivf_embed_km_legs_2026-09-14/README.md`). The historical paragraph below is kept as written. Written
+**RAN ON THREE COLUMNS, SABOTAGE ARMS RUN (2026-09-14).** Apple and AMD produced `embedding.identical.card` at md5 `c7f824c35336bef2a3d0f672a172ef29` on 2026-08-28, clause (a) passing on 6,887 cells, and the Apple M4, an NVIDIA H100 and an AMD MI300X produced the same md5 at 171752af4. `tools/embedding_sabotage_arm.sh` built the sixteen arms on all three (`bench/results/ivf_embed_km_legs_2026-09-14/README.md`): ten BIT everywhere, NO_FLUSH_ACC an eleventh on NVIDIA and AMD, and five raised or could not run. Each of the five was the check's prediction or the arm, and each is resolved in this file: exact inert masks for EMPTY_ROW_NEG_ZERO (`emb.dw_seed` moves on f_nodup, `emb.dw` must not) and SORT_TIE_REVERSED (`emb.perm` moves on f_dupsame, `emb.dw` must not) in `inert_case_moves`; PAD_ROW_NEG_ZERO's first stage is `emb.dw_seed`, which `host_dump` defines to include the padding store; ACCUM_BY_ADD's by-add control moves on f_tree4 at t0 = 2 by planted bits and is asserted inert on f_split at t0 = 3, where it is the carry by construction; GATHER_CLAMP_OOR drops the device id refusal as well, so `device_oor_refusal` is its runnable witness; and NO_FLUSH_ACC is decided by `device_raw_add_keeps_subnormal`, a device probe, instead of the host's arithmetic, and asserted inert on every case where the device flushes. After the resolutions the M4 reads fifteen BIT and NO_FLUSH_ACC inert as asserted; the NVIDIA and AMD columns are in `bench/results/embedding_sabotage_2026-09-14/`. The historical paragraph below is kept as written. Written
 2026-08-25, DEVIATIONS 1500 through 1524. No `mojo` process has read it, no
 device has run it, no bit produced by it has been observed. Every sentence
 below that says a clause "passes", a sabotage "bites", or a stage "moves" is
@@ -135,29 +135,32 @@ because nothing here has run.
     SEED_SEEDLESS          emb.dw                 f_negzero1    f_dupsame
     SINGLE_RUN_BYPASS      emb.dw                 f_negzero1    f_dupsame
     EMPTY_ROW_SKIPPED      emb.dw_seed            f_empty       (none)
-    EMPTY_ROW_NEG_ZERO     emb.dw_seed            f_empty       f_nodup
+    EMPTY_ROW_NEG_ZERO     emb.dw_seed            f_empty       f_nodup, emb.dw only
     FOLD_READS_LAUNCH      emb.dw                 f_order3      f_tree4
     RANK_BY_ARRIVAL        emb.perm               f_multiblock  f_nodup
-    SORT_TIE_REVERSED      emb.perm               f_order3      f_dupsame
+    SORT_TIE_REVERSED      emb.perm               f_order3      f_dupsame, emb.dw only
     PAD_ROW_CONTRIBUTES    emb.counts             f_pad         f_nodup
-    PAD_ROW_NEG_ZERO       emb.dw                 f_pad         f_nodup
-    NO_FLUSH_ACC           emb.dw                 (see below)   ALL, on FTZ
+    PAD_ROW_NEG_ZERO       emb.dw_seed            f_pad         f_nodup
+    NO_FLUSH_ACC           emb.dw                 f_subacc      ALL, on a flushing device
     GATHER_NO_FLUSH        emb.fwd                f_subw        f_nodup
-    GATHER_CLAMP_OOR       emb.fwd                NOT RUNNABLE  --
-    ACCUM_BY_ADD           emb.dw, clause (e)     f_split       f_split row 2
+    GATHER_CLAMP_OOR       emb.fwd                f_oor_high    f_nodup
+    ACCUM_BY_ADD           emb.dw, clause (e)     f_tree4 t0=2  f_split t0=3
     ACCUM_REFILLS          emb.dw_seed            f_accum       f_nodup
 
-**THREE OF THE SIXTEEN ARE NOT REACH PROOFS AND ARE REPORTED AS SMOKE TESTS
+**TWO OF THE SIXTEEN ARE NOT REACH PROOFS ON EVERY COLUMN AND ARE REPORTED
 BY NAME**, which is the count a reader should carry rather than "sixteen
 arms exist".
 
   * `NO_FLUSH_ACC` is **INERT ON APPLE ENTIRELY** (contract 9.3): `ftz` is
     bitwise a no-op on an FTZ backend, so pinned and unpinned agree there.
-    `check_flush_pin_is_reached` measures whether THIS backend flushes and
-    says which; the arm becomes a bit-level reach proof, with no edit, on
-    the first non-flushing column.
-  * `GATHER_CLAMP_OOR` needs an out-of-range id, and the CLEAN half of that
-    comparison is the out-of-bounds read of DEVIATION 1506. Not run.
+    `device_raw_add_keeps_subnormal` measures whether THIS DEVICE flushes
+    the raw add (the host's answer was the wrong processor, 2026-09-14);
+    where it does, the arm is asserted inert on every case, and on a
+    non-flushing column it is a bit-level reach proof.
+  * `GATHER_CLAMP_OOR` was the third until 2026-09-14: its clean half would
+    have been an out-of-bounds read. The device entry points now refuse the
+    id by name before any launch, the arm drops that refusal and clamps, and
+    `device_oor_refusal` compares the two without reading out of bounds.
   * `EMPTY_ROW_SKIPPED` has no inert case: it skips the store for EVERY
     cell, not only the empty rows, so with a poisoned buffer it moves
     everywhere. That is the arm being blunt, not the gate being weak, and
@@ -224,6 +227,7 @@ repository has lost a night to that.
 from std.memory import bitcast
 from std.os import getenv
 
+from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace, read_trace_lines
@@ -231,7 +235,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from transformer.checks.transformer_fixture import fixture_splitmix64
 
 from embedding.checks.embedding_fixture import (
+    BITS_MIN_NORMAL,
     BITS_MIN_SUBNORMAL,
+    BITS_NEG_1P5_MIN_NORMAL,
     BITS_NEG_ZERO,
     BITS_ONE,
     BITS_POISON,
@@ -1105,6 +1111,82 @@ def check_flush_pin_is_reached() raises -> Bool:
         " arm CAN fire here and its verdict is a real one"
     )
     return True
+
+
+def emb_raw_add_probe_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+):
+    """`dst[i] = src[2 i] + src[2 i + 1]` for `i` in 0 and 1: the unpinned add `EMB_NO_FLUSH_ACC` spells, and a normal control add."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= 2:
+        return
+    dst.unsafe_store(i, src.unsafe_load(2 * i) + src.unsafe_load(2 * i + 1))
+
+
+def device_raw_add_keeps_subnormal(ctx: DeviceContext) raises -> Bool:
+    """Does the DEVICE's raw add keep a subnormal? Contract 9.3's question, asked where the arm runs.
+
+    FINDING, 2026-09-14 legs. `check_flush_pin_is_reached` answers on the
+    HOST: `sub + sub` in the check's own process. On the Apple M4 the arm64
+    host keeps subnormals, so that answer said the arm CAN fire, while the
+    Metal device flushes the add and the arm moved nothing on f_subacc; the
+    check raised "IS ARMED AND MOVED NO BIT" on the column where contract 9.3
+    predicts the arm inert. The prediction was right and the instrument
+    measured the wrong processor. This probe runs f_subacc's own first add,
+    `0x80C00000 + 0x00800000` (exact result `0x80400000`, a negative
+    subnormal), in a kernel reading both operands from a device buffer, so
+    nothing folds it at compile time."""
+    var inp = List[Float32]()
+    inp.append(f32_from_bits(BITS_NEG_1P5_MIN_NORMAL))
+    inp.append(f32_from_bits(BITS_MIN_NORMAL))
+    inp.append(f32_from_bits(BITS_ONE))
+    inp.append(f32_from_bits(BITS_ONE))
+    var d_in = _upload_f32(ctx, inp)
+    var d_out = _upload_f32(ctx, emb_poison(2))
+    ctx.enqueue_function[emb_raw_add_probe_kernel](
+        d_out.unsafe_ptr(),
+        d_in.unsafe_ptr(),
+        grid_dim=(1, 1, 1),
+        block_dim=(2, 1, 1),
+    )
+    ctx.synchronize()
+    var got = _download_f32(ctx, d_out, 2)
+    _ = d_out^
+    _ = d_in^
+    # The control cell: 1.0 + 1.0 must read 2.0 (0x40000000), or the launch
+    # never ran and the first cell measures nothing.
+    if bits_of(got[1]) != UInt32(0x40000000):
+        raise Error(
+            String("embedding_check: the device raw-add probe's control cell")
+            + " (1.0 + 1.0) read "
+            + hexbits(got[1])
+            + ", not 0x40000000, so the probe launch did not run and no"
+            + " NO_FLUSH_ACC verdict follows."
+        )
+    var bits = bits_of(got[0])
+    if bits == UInt32(0x80400000):
+        print(
+            "device probe: raw 0x80c00000 + 0x00800000 -> 0x80400000 on the"
+            " DEVICE, a kept subnormal, so EMB_NO_FLUSH_ACC CAN fire on this"
+            " column"
+        )
+        return True
+    if bits == BITS_POS_ZERO or bits == BITS_NEG_ZERO:
+        print(
+            "device probe: raw 0x80c00000 + 0x00800000 -> "
+            + hexbits(got[0])
+            + " on the DEVICE, a flushed add, so EMB_NO_FLUSH_ACC is INERT on"
+            " this column (contract 9.3) and clause (g) asserts that instead"
+        )
+        return False
+    raise Error(
+        String("embedding_check: the device raw-add probe returned ")
+        + hexbits(got[0])
+        + ", neither the kept subnormal 0x80400000 nor a signed zero. The"
+        + " probe did not measure what it names (poison still there, or a"
+        + " launch that never ran), so no NO_FLUSH_ACC verdict follows."
+    )
 
 
 def preflight() raises -> Bool:
@@ -2027,15 +2109,73 @@ def clause_e(ctx: DeviceContext) raises:
     )
 
     # ---- THE BY-ADD CONTROL, WHICH MUST MOVE ----------------------------
+    # FINDING, 2026-09-14 legs: on f_split at t0 = 3 the control was DEAD on
+    # all three columns, and PROVABLY so. Every straddling row there has
+    # exactly ONE contributor after the boundary (row 0: t = 0, 2 | 5; row 1:
+    # t = 1 | 4), and with one contributor on the second side the by-add
+    # spelling `A + (+0 + a)` is the carry `A + a` term for term. ADD only
+    # departs from the chain when the SECOND side has two or more
+    # contributors, `A + (b0 + b1)` against `(A + b0) + b1`, AND the values
+    # are not associative. So the split at f_split's own boundary is now the
+    # arm's INERT case, asserted, and the witness is f_tree4 split at t0 = 2,
+    # planted by bits: first side {0x3F800000, 0x33800000} carries 1.0 (the
+    # 2^-24 tie rounds to even), second side {0x33800000, 0x33800000} sums
+    # exactly to 2^-23, so by-add gives 0x3F800001 where the chain gives
+    # 0x3F800000. f_split itself is unchanged, since it is the card case.
     var t0c = c.split
-    var by_add = _by_add_two(ctx, cfg, ids, dy, t0c)
-    var straddle_rows = _straddle_row_mask(c, t0c)
+    var one_after = _second_side_max_run(c, t0c)
+    if one_after > 1:
+        raise Error(
+            String("embedding_check: f_split's straddling rows now have ")
+            + String(one_after)
+            + " contributors after t0 = "
+            + String(t0c)
+            + ", so the by-add inert prediction there is no longer provable."
+            + " The fixture changed; re-derive the control."
+        )
+    var inert_add = _by_add_two(ctx, cfg, ids, dy, t0c)
+    var inert_moved = 0
+    for i in range(cells):
+        if bits_of(unsplit[i]) != bits_of(inert_add[i]):
+            inert_moved += 1
+    if inert_moved != 0:
+        raise Error(
+            String("embedding_check: CLAUSE (e)'s BY-ADD INERT CASE MOVED ")
+            + String(inert_moved)
+            + " cells on f_split at t0 = "
+            + String(t0c)
+            + ", where every straddling row has one contributor after the"
+            + " boundary and by-add is the carry term for term."
+        )
+
+    var ct = emb_case(emb_case_by_name(String("f_tree4")))
+    var tcfg = emb_case_config(ct)
+    var tids = emb_case_ids(ct)
+    var tdy = emb_case_dy(ct)
+    var tcells = tcfg.vocab * tcfg.width
+    var t0w = 2
+    var tunsplit = _device_dw(ctx, tcfg, tids, tdy, List[Float32]())
+    var tcarry = _carry_two(ctx, tcfg, tids, tdy, t0w)
+    for i in range(tcells):
+        if bits_of(tunsplit[i]) != bits_of(tcarry[i]):
+            raise Error(
+                String("embedding_check: CLAUSE (e) FAILED on f_tree4 at t0 = 2,")
+                + " cell "
+                + String(i)
+                + " ("
+                + hexbits(tunsplit[i])
+                + " -> "
+                + hexbits(tcarry[i])
+                + "). The carry must reproduce the unsplit chain here too."
+            )
+    var by_add = _by_add_two(ctx, tcfg, tids, tdy, t0w)
+    var straddle_rows = _straddle_row_mask(ct, t0w)
     var moved_straddle = 0
     var moved_clean = 0
-    for v in range(cfg.vocab):
-        for j in range(cfg.width):
-            var i = v * cfg.width + j
-            if bits_of(unsplit[i]) == bits_of(by_add[i]):
+    for v in range(tcfg.vocab):
+        for j in range(tcfg.width):
+            var i = v * tcfg.width + j
+            if bits_of(tunsplit[i]) == bits_of(by_add[i]):
                 continue
             if straddle_rows[v]:
                 moved_straddle += 1
@@ -2044,16 +2184,11 @@ def clause_e(ctx: DeviceContext) raises:
     if moved_straddle == 0:
         raise Error(
             String("embedding_check: CLAUSE (e)'s BY-ADD CONTROL IS DEAD.")
-            + " `dW = ftz(dW_first + dW_second)` at t0 = "
-            + String(t0c)
-            + " gave the SAME BITS as the carried call on every straddling"
-            + " row. Contract 7.4 says ADD does not reproduce the unsplit"
-            + " chain in general -- `((a0+a1)+a2)+a3` is not"
-            + " `(a0+a1) + (a2+a3)` -- so either this fixture's straddling"
-            + " runs are too short or their values are exactly"
-            + " representable, and clause (e) would pass on the by-add"
-            + " spelling as well as on the carry"
-            + " ([[reached-but-inert]])."
+            + " `dW = ftz(dW_first + dW_second)` on f_tree4 at t0 = 2 gave the"
+            + " SAME BITS as the unsplit chain on every straddling row, and"
+            + " the planted bits predict 0x3F800001 against 0x3F800000."
+            + " Clause (e) would pass on the by-add spelling as well as on"
+            + " the carry ([[reached-but-inert]])."
         )
     if moved_clean != 0:
         raise Error(
@@ -2066,15 +2201,40 @@ def clause_e(ctx: DeviceContext) raises:
             + " ([[verify-reach-not-output]])."
         )
     print(
-        "clause (e) by-add control: `dW_first + dW_second` at t0 = "
-        + String(t0c)
-        + " moves "
+        "clause (e) by-add control: `dW_first + dW_second` on f_tree4 at t0 = 2"
+        " moves "
         + String(moved_straddle)
-        + " cells on STRADDLING rows and "
+        + " cells on STRADDLING rows ("
+        + hexbits(tunsplit[0])
+        + " -> "
+        + hexbits(by_add[0])
+        + ") and "
         + String(moved_clean)
-        + " on rows entirely on one side. The carry is what the clause"
-        " gates and the arm is a REACH PROOF, not a smoke test."
+        + " on rows entirely on one side, and is INERT on f_split at t0 = "
+        + String(t0c)
+        + " (0 of "
+        + String(cells)
+        + " cells, one contributor after the boundary per straddling row)."
+        " The carry is what the clause gates and the arm is a REACH PROOF."
     )
+
+
+def _second_side_max_run(c: EmbCase, t0: Int) raises -> Int:
+    """The most contributors any STRADDLING row of `c` has at or after `t0`."""
+    var ids = emb_case_ids(c)
+    var cfg = emb_case_config(c)
+    var mask = _straddle_row_mask(c, t0)
+    var most = 0
+    for v in range(cfg.vocab):
+        if not mask[v]:
+            continue
+        var n = 0
+        for t in range(t0, len(ids)):
+            if Int(ids[t]) == v:
+                n += 1
+        if n > most:
+            most = n
+    return most
 
 
 def _carry_two(
@@ -2576,10 +2736,11 @@ def arm_expectation(arm: String) raises -> ArmExpectation:
             arm, String("emb.dw_seed"), String("f_empty"), String("f_nodup"),
             False, False,
             String(
-                "contract 5.5, +0.0 and not -0.0. Inert on f_nodup because"
-                " that case has NO empty row -- V == T and every id is"
-                " distinct -- and a -0.0 seed under a nonempty run is"
-                " laundered by the first add"
+                "contract 5.5, +0.0 and not -0.0. On f_nodup the arm MUST"
+                " move emb.dw_seed (the seed is written -0.0 on every cell of"
+                " every case) and MUST NOT move emb.dw: that case has NO empty"
+                " row -- V == T and every id is distinct -- so a -0.0 seed"
+                " under a nonempty run is laundered by the first add"
             ),
         )
     if arm == "FOLD_READS_LAUNCH":
@@ -2615,7 +2776,10 @@ def arm_expectation(arm: String) raises -> ArmExpectation:
                 " CONSTRUCTION**: this is the PLAN_SCAN spelling of the arm"
                 " and its PLAN_SORT half must be gated separately; the sort clause"
                 " is half gated and half not gated at all -- contract 11.1"
-                " says so and this table repeats it"
+                " says so and this table repeats it. On f_dupsame the arm MUST"
+                " move emb.perm (a duplicate pair's slots swap) and MUST NOT"
+                " move emb.dw (the pair carries bitwise equal dY rows, so"
+                " the reversed run is the same sequence of additions)"
             ),
         )
     if arm == "PAD_ROW_CONTRIBUTES":
@@ -2633,9 +2797,16 @@ def arm_expectation(arm: String) raises -> ArmExpectation:
         )
     if arm == "PAD_ROW_NEG_ZERO":
         return ArmExpectation(
-            arm, String("emb.dw"), String("f_pad"), String("f_nodup"),
+            arm, String("emb.dw_seed"), String("f_pad"), String("f_nodup"),
             False, False,
-            String("contract section 8, +0.0 STORED at row padding_idx"),
+            String(
+                "contract section 8, +0.0 STORED at row padding_idx. The"
+                " store is written at emb.dw_seed FIRST: host_dump defines"
+                " that stage as the T = 0 backward, which is the seed AND the"
+                " padding_idx store (the device enqueues emb_pad_row_kernel"
+                " at n_positions < 1), and then again after the fold at"
+                " emb.dw"
+            ),
         )
     if arm == "NO_FLUSH_ACC":
         return ArmExpectation(
@@ -2664,14 +2835,17 @@ def arm_expectation(arm: String) raises -> ArmExpectation:
         )
     if arm == "GATHER_CLAMP_OOR":
         return ArmExpectation(
-            arm, String("emb.fwd"), String(""), String(""), False, True,
+            arm, String("emb.fwd"), String("f_oor_high"), String("f_nodup"),
+            False, False,
             String(
-                "contract section 8, the refusal. **NOT RUNNABLE.** Its"
-                " witness needs an out-of-range id, and the CLEAN half of"
-                " that comparison is emb_gather_kernel reading"
-                " weight.unsafe_load(v * width + j) out of bounds"
-                " (DEVIATION 1506). Running an out-of-bounds read to"
-                " demonstrate that it is out of bounds is not a test"
+                "contract section 8, the refusal. The arm drops the device"
+                " entry point's id refusal and clamps in emb_gather_kernel"
+                " instead. Its witness is device_oor_refusal on f_oor_high"
+                " and f_oor_neg: the clean build refuses both BY NAME before"
+                " any launch (so its half reads nothing out of bounds), the"
+                " armed build accepts them and writes the clamped rows into"
+                " emb.fwd. Inert on every clause (a) case, whose ids are all"
+                " in range"
             ),
         )
     if arm == "ACCUM_BY_ADD":
@@ -2709,6 +2883,161 @@ def arm_expectation(arm: String) raises -> ArmExpectation:
     )
 
 
+def device_oor_refusal(ctx: DeviceContext, armed: String) raises -> Int:
+    """Contract section 8's refusal ON THE DEVICE ENTRY POINT, and the witness of `EMB_GATHER_CLAMP_OOR`.
+
+    Clause (f) holds the HOST refusal (`emb_refuse_ids`) to raising by name;
+    this holds `identical_embedding_forward_into` to the same on f_oor_high
+    (an id at V) and f_oor_neg (an id at -1). The clean half never launches:
+    the refusal runs before the gather is enqueued, which the poisoned output
+    buffer coming back untouched shows, so no out-of-bounds read happens.
+    Under `GATHER_CLAMP_OOR` the refusal is dropped and the kernel clamps; the
+    call must then return and `emb.fwd` must equal the host clamp spelling
+    `ftz(ftz(W[clamp(id)]))` bit for bit. Returns the cells an accepted call
+    wrote (0 when both calls refused). Runs on every build; only the clamp
+    build may accept."""
+    var names: List[String] = [String("f_oor_high"), String("f_oor_neg")]
+    var accepted_cells = 0
+    var refused = 0
+    for ni in range(len(names)):
+        var oc = emb_case(emb_case_by_name(names[ni]))
+        var cfg = emb_case_config(oc)
+        var ids = emb_case_ids(oc)
+        var w = emb_case_weight(oc)
+        var t = oc.n_positions
+        var y_cells = t * cfg.width
+        var d_ids = _upload_i32(ctx, ids)
+        var d_w = _upload_f32(ctx, w)
+        var d_y = _upload_f32(ctx, emb_poison(y_cells))
+        var raised = False
+        var msg = String("")
+        try:
+            identical_embedding_forward_into(ctx, d_y, d_w, d_ids, t, cfg)
+            ctx.synchronize()
+        except e:
+            raised = True
+            msg = String(e)
+        var got = _download_f32(ctx, d_y, y_cells)
+        _ = d_y^
+        _ = d_w^
+        _ = d_ids^
+        if raised:
+            if msg.find(String("REFUSED")) < 0:
+                raise Error(
+                    String("embedding_check: the device forward raised on ")
+                    + names[ni]
+                    + " but not BY NAME: "
+                    + msg
+                )
+            if count_poison(got) != y_cells:
+                raise Error(
+                    String("embedding_check: the device forward refused ")
+                    + names[ni]
+                    + " by name, but only "
+                    + String(count_poison(got))
+                    + " of "
+                    + String(y_cells)
+                    + " output cells still hold the poison, so a launch ran"
+                    + " before the refusal."
+                )
+            refused += 1
+            print(
+                "device refusal: "
+                + names[ni]
+                + " REFUSED by name on the device entry point, output buffer"
+                " untouched ("
+                + String(y_cells)
+                + " poisoned cells), so nothing was launched"
+            )
+            continue
+        var mism = 0
+        for tt in range(t):
+            var v = Int(ids[tt])
+            if v < 0:
+                v = 0
+            if v >= cfg.vocab:
+                v = cfg.vocab - 1
+            for j in range(cfg.width):
+                var want = ftz(ftz(w[v * cfg.width + j]))
+                if bits_of(want) != bits_of(got[tt * cfg.width + j]):
+                    mism += 1
+        if mism != 0:
+            raise Error(
+                String("embedding_check: the device forward ACCEPTED ")
+                + names[ni]
+                + " and "
+                + String(mism)
+                + " of "
+                + String(y_cells)
+                + " emb.fwd cells differ from the clamped gather, so it did"
+                + " not clamp either; what it read is not known."
+            )
+        accepted_cells += y_cells
+        print(
+            "device refusal: "
+            + names[ni]
+            + " ACCEPTED by the device entry point, emb.fwd equals the"
+            " clamped gather on all "
+            + String(y_cells)
+            + " cells"
+        )
+    if armed != "GATHER_CLAMP_OOR" and refused != len(names):
+        raise Error(
+            String("embedding_check: DEVICE REFUSAL FAILED. ")
+            + String(len(names) - refused)
+            + " of "
+            + String(len(names))
+            + " out-of-range cases were accepted by"
+            + " identical_embedding_forward_into on a build without the"
+            + " GATHER_CLAMP_OOR arm. Contract section 8: refused by name,"
+            + " never clamped."
+        )
+    if armed != "GATHER_CLAMP_OOR":
+        print(
+            "device refusal: PASS, both out-of-range cases refused by name"
+            " before any launch"
+        )
+    return accepted_cells
+
+
+def inert_case_moves(arm: String) -> String:
+    """The ONE stage an arm is predicted to move on its inert case, or "" for none.
+
+    FINDING, 2026-09-14 legs. The first table asserted "9/9 stages unmoved"
+    on every inert case, and two arms moved exactly one stage there on all
+    three columns: EMPTY_ROW_NEG_ZERO moved emb.dw_seed on f_nodup and
+    SORT_TIE_REVERSED moved emb.perm on f_dupsame. Neither is a defect. The
+    seed stage is written -0.0 on every case by that arm, and a reversed tie
+    swaps the slots of every duplicate pair; what the contract's inert clause
+    is about is the DOWNSTREAM stage, emb.dw, which neither moved. So the
+    mask is exact: the named stage MUST move and the other eight, emb.dw
+    included, MUST NOT. That is stronger than the old mask, not weaker: it
+    shows the arm reached its stage and the fold was provably blind to it."""
+    if arm == "EMPTY_ROW_NEG_ZERO":
+        return String("emb.dw_seed")
+    if arm == "SORT_TIE_REVERSED":
+        return String("emb.perm")
+    return String("")
+
+
+def verdict_stage_moved(v: CaseVerdict, tag: String) raises -> Int:
+    if tag == "emb.dw_seed":
+        return v.moved_seed
+    if tag == "emb.perm":
+        return v.moved_perm
+    if tag == "emb.counts":
+        return v.moved_counts
+    if tag == "emb.fwd":
+        return v.moved_fwd
+    if tag == "emb.dw":
+        return v.moved_dw
+    raise Error(
+        String("embedding_check: CaseVerdict carries no per-stage count for '")
+        + tag
+        + "'"
+    )
+
+
 def find_verdict(
     verdicts: List[CaseVerdict], name: String
 ) raises -> CaseVerdict:
@@ -2736,7 +3065,10 @@ def stage_index_of(tag: String) raises -> Int:
 
 
 def clause_g(
-    arm: String, verdicts: List[CaseVerdict], flush_can_fire: Bool
+    arm: String,
+    verdicts: List[CaseVerdict],
+    flush_can_fire: Bool,
+    oor_accepted_cells: Int,
 ) raises:
     """The INVERTED verdict of a sabotage build.
 
@@ -2754,16 +3086,33 @@ def clause_g(
     print("clause (g): arm " + arm + " -- " + exp.note)
 
     if arm == "NO_FLUSH_ACC" and not flush_can_fire:
+        # Contract 9.3's prediction on a flushing column is INERT ENTIRELY,
+        # and that is asserted as a mask over every case rather than read
+        # off one: an arm that moved anything here would mean the device
+        # probe and the kernel disagree about the add.
+        for i in range(len(verdicts)):
+            if verdicts[i].n_moved != 0:
+                raise Error(
+                    String("embedding_check: SABOTAGE NO_FLUSH_ACC moved ")
+                    + String(verdicts[i].n_moved)
+                    + " stages on "
+                    + verdicts[i].name
+                    + ", first at "
+                    + verdicts[i].first
+                    + ", on a column whose device probe measured a FLUSHED"
+                    + " raw add. Contract 9.3 predicts the arm inert on every"
+                    + " case here, so the probe or the prediction is wrong."
+                )
         print(
             "clause (g): "
             + arm
-            + " is a **SMOKE TEST ON THIS COLUMN**, not a passing arm. The"
-            " backend flushes subnormals in hardware (preflight measured"
-            " it), so the pinned and unpinned spellings are BITWISE EQUAL"
-            " here and no verdict this build produces is evidence about the"
-            " pin. Contract 9.3, and gemm 4.1's correction is the standing"
-            " warning. It becomes a real arm on the first non-flushing"
-            " column, with no edit to anything."
+            + " INERT ON THIS COLUMN, asserted on all "
+            + String(len(verdicts))
+            + " cases: the device flushes the raw add (device probe above),"
+            " so the pinned and unpinned spellings are BITWISE EQUAL here,"
+            " as contract 9.3 predicts. This is a SMOKE TEST, not a reach"
+            " proof: the arm's reach is shown on a non-flushing column"
+            " (NVIDIA and AMD, where it BIT on f_subacc on 2026-09-14)."
         )
         return
 
@@ -2789,68 +3138,122 @@ def clause_g(
         )
         return
 
-    var wv = find_verdict(verdicts, exp.witness_case)
-    if wv.n_moved == 0:
-        raise Error(
-            String("embedding_check: SABOTAGE ")
-            + arm
-            + " IS ARMED AND MOVED NO BIT on its witness case "
-            + exp.witness_case
-            + ". Either its branch was never reached at this shape or it is"
-            + " inert there ([[reached-but-inert]]). It falsifies NOTHING"
-            + " and must not be reported as a passing arm."
+    if arm == "GATHER_CLAMP_OOR":
+        if oor_accepted_cells == 0:
+            raise Error(
+                "embedding_check: SABOTAGE GATHER_CLAMP_OOR IS ARMED AND MOVED"
+                " NO BIT: the device entry point still refused f_oor_high and"
+                " f_oor_neg, so the clamp was never reached"
+                " ([[reached-but-inert]])."
+            )
+        print(
+            "clause (g): GATHER_CLAMP_OOR BIT on f_oor_high: the device entry"
+            " point accepted f_oor_high and f_oor_neg, which the clean build"
+            " refuses by name, and wrote "
+            + String(oor_accepted_cells)
+            + " cells of emb.fwd from clamped rows, FIRST at emb.fwd, which is"
+            " the stage its own clause writes."
         )
-    var want = stage_index_of(exp.first_stage)
-    if wv.first_index != want:
-        raise Error(
-            String("embedding_check: SABOTAGE ")
-            + arm
-            + " moved '"
-            + wv.first
-            + "' FIRST on "
-            + exp.witness_case
-            + ", and contract 11.1 says its own clause writes '"
-            + exp.first_stage
-            + "'. Each arm must move the stage its OWN clause writes and no"
-            + " earlier one; an earlier stage means the arm is not aimed"
-            + " where it says it is."
-        )
-    if exp.must_not_move_dw and wv.moved_dw != 0:
-        raise Error(
-            String("embedding_check: SABOTAGE ")
-            + arm
-            + " moved emb.dw on "
-            + String(wv.moved_dw)
-            + " cells of "
-            + exp.witness_case
-            + ", and contract section 8 requires it to move NOTHING there."
-            + " The drop-at-source and overwrite-afterwards spellings of"
-            + " padding_idx are PROVABLY bit-equal in dW, because a position"
-            + " carrying padding_idx can only ever contribute to row"
-            + " padding_idx, which emb_pad_row_kernel overwrites. **This arm"
-            + " IS that proof**, and a dW that moved means the equivalence"
-            + " is false."
-        )
-    print(
-        "clause (g): "
-        + arm
-        + " BIT on "
-        + exp.witness_case
-        + ": "
-        + String(wv.n_moved)
-        + " of 9 stages moved, FIRST at "
-        + exp.first_stage
-        + ", which is the stage its own clause writes."
-    )
-    if exp.must_not_move_dw:
+    else:
+        var wv = find_verdict(verdicts, exp.witness_case)
+        if wv.n_moved == 0:
+            raise Error(
+                String("embedding_check: SABOTAGE ")
+                + arm
+                + " IS ARMED AND MOVED NO BIT on its witness case "
+                + exp.witness_case
+                + ". Either its branch was never reached at this shape or it is"
+                + " inert there ([[reached-but-inert]]). It falsifies NOTHING"
+                + " and must not be reported as a passing arm."
+            )
+        var want = stage_index_of(exp.first_stage)
+        if wv.first_index != want:
+            raise Error(
+                String("embedding_check: SABOTAGE ")
+                + arm
+                + " moved '"
+                + wv.first
+                + "' FIRST on "
+                + exp.witness_case
+                + ", and contract 11.1 says its own clause writes '"
+                + exp.first_stage
+                + "'. Each arm must move the stage its OWN clause writes and no"
+                + " earlier one; an earlier stage means the arm is not aimed"
+                + " where it says it is."
+            )
+        if exp.must_not_move_dw and wv.moved_dw != 0:
+            raise Error(
+                String("embedding_check: SABOTAGE ")
+                + arm
+                + " moved emb.dw on "
+                + String(wv.moved_dw)
+                + " cells of "
+                + exp.witness_case
+                + ", and contract section 8 requires it to move NOTHING there."
+                + " The drop-at-source and overwrite-afterwards spellings of"
+                + " padding_idx are PROVABLY bit-equal in dW, because a position"
+                + " carrying padding_idx can only ever contribute to row"
+                + " padding_idx, which emb_pad_row_kernel overwrites. **This arm"
+                + " IS that proof**, and a dW that moved means the equivalence"
+                + " is false."
+            )
         print(
             "clause (g): "
             + arm
-            + " left emb.dw UNMOVED, which is the half that proves contract"
-            " section 8's two padding_idx spellings are bit-equal. The card"
-            " is the only instrument that can see this clause at all."
+            + " BIT on "
+            + exp.witness_case
+            + ": "
+            + String(wv.n_moved)
+            + " of 9 stages moved, FIRST at "
+            + exp.first_stage
+            + ", which is the stage its own clause writes."
         )
-    if exp.inert_case != "":
+        if exp.must_not_move_dw:
+            print(
+                "clause (g): "
+                + arm
+                + " left emb.dw UNMOVED, which is the half that proves contract"
+                " section 8's two padding_idx spellings are bit-equal. The card"
+                " is the only instrument that can see this clause at all."
+            )
+    if exp.inert_case != "" and inert_case_moves(arm) != "":
+        var iv2 = find_verdict(verdicts, exp.inert_case)
+        var must = inert_case_moves(arm)
+        var n_must = verdict_stage_moved(iv2, must)
+        if iv2.n_moved != 1 or n_must == 0 or iv2.moved_dw != 0:
+            raise Error(
+                String("embedding_check: SABOTAGE ")
+                + arm
+                + " on its inert case "
+                + exp.inert_case
+                + " moved "
+                + String(iv2.n_moved)
+                + " stages (first at "
+                + iv2.first
+                + ", "
+                + must
+                + " on "
+                + String(n_must)
+                + " cells, emb.dw on "
+                + String(iv2.moved_dw)
+                + " cells), and the exact mask requires "
+                + must
+                + " to move and the other eight stages, emb.dw included, not"
+                + " to ([[verify-reach-not-output]])."
+            )
+        print(
+            "clause (g): "
+            + arm
+            + " on its inert case "
+            + exp.inert_case
+            + " moved exactly "
+            + must
+            + " ("
+            + String(n_must)
+            + " cells) and left the other 8 stages unmoved, emb.dw included,"
+            " which is the exact predicted mask."
+        )
+    elif exp.inert_case != "":
         var iv = find_verdict(verdicts, exp.inert_case)
         if iv.n_moved != 0:
             raise Error(
@@ -2899,8 +3302,9 @@ def main() raises:
     )
     print(
         "=== embedding_check: clause (a) card md5 c7f824c3, 6887 cells, on"
-        " Apple, NVIDIA and AMD; sabotage arms run on all three, eleven of"
-        " sixteen bite on NVIDIA and AMD, ten on Apple. Read the header."
+        " Apple, NVIDIA and AMD; the sixteen sabotage arms run through"
+        " tools/embedding_sabotage_arm.sh, per-column verdicts in"
+        " bench/results/embedding_sabotage_2026-09-14/. Read the header."
     )
     print(
         "mode "
@@ -2994,8 +3398,12 @@ def main() raises:
             if first_case == "":
                 first_case = verdicts[i].name + " at " + verdicts[i].first
 
+    if flush_can_fire:
+        flush_can_fire = device_raw_add_keeps_subnormal(ctx)
+    var oor_accepted_cells = device_oor_refusal(ctx, armed)
+
     comptime if ANY_EMB_SABOTAGE:
-        clause_g(armed, verdicts, flush_can_fire)
+        clause_g(armed, verdicts, flush_can_fire, oor_accepted_cells)
         print(
             "clauses (b), (c) and (d) are NOT run under a sabotage build:"
             " they are INVARIANCE claims and a deterministic sabotage"
