@@ -37,7 +37,11 @@ per right-hand-side column. A column's substitution is sequential in its rows
 partitioned and a one-column solve runs on one device. Whole columns are
 independent: each owner receives the factor and its columns, runs both
 original kernels, and its columns are copied back into their original
-positions after each stage. The `chol.solve.forward` and `chol.solve.back`
+positions after each stage. The factor, the columns and the results move
+through host memory and each owner's own context, not device to device: the
+device-to-device form diverged on two MI300X for every factor above 1 MiB, in
+the columns owned by device 1 (`bench/results/multi_gpu/2026-09-14/
+cholesky-mi300x-diag/`); the cause is not identified. The `chol.solve.forward` and `chol.solve.back`
 card stages are recorded on the root after each gather, so a traced
 multi-device solve writes the same card.
 

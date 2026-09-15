@@ -715,3 +715,19 @@ The final Samba checkpoint gate passes trained-model continuation, seven
 corruption refusals before model construction, failed-publication atomicity,
 legacy loading and a 415,293,679-byte archive roundtrip. Full evidence is in
 `bench/results/multi_gpu/2026-09-14/samba-stream-checkpoint-h100/`.
+
+### Cholesky, KernelRidge, Nystroem and RBFSampler
+
+`fit_cholesky` and `solve_cholesky` move each panel's trailing-update rows and
+the solve's right-hand-side columns; `fit_kernel_method` and
+`apply_kernel_method` run KernelRidge and Nystroem over the SVM kernel-row seam
+and the Cholesky driver; `transform_rbf_sampler` splits query rows across
+one-device workers. Designs: [cholesky.md](cholesky.md) and
+[kernel_methods.md](kernel_methods.md). The column solve is staged through host
+memory: its device-to-device form diverged on two MI300X for factors above
+1 MiB, in the columns owned by device 1, with the cause not identified
+(`bench/results/multi_gpu/2026-09-14/cholesky-mi300x-diag/`). Final receipts on
+two H100s and two MI300X at one commit
+(`bench/results/multi_gpu/2026-09-15/kernel-methods-cholesky-final/`) pass the
+native and public gates, fail under sabotage builds, and are equal across the
+two vendors.

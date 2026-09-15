@@ -77,10 +77,10 @@ implementations still require their own AMD/Apple qualification.
 | ExponentialSmoothing | Independent-series additive/multiplicative fit; two-H100 fit/forecast gates pass | Distributed prediction; broader configurations and capacity qualification |
 | StandardScaler / MinMaxScaler | Column-sharded fit/transform/inverse; two-H100 gates passed | Large-memory and cross-vendor qualification |
 | HDBSCAN | No complete parallel driver; linkage subcalls contain existing neighbor/distance seams | Complete fit dispatch and qualification; dense graph, MST and hierarchy pooling |
-| KernelRidge / Nystroem | No complete parallel driver; non-Laplacian kernel construction shares SVM's internal seam | Fit/transform dispatch, RNG/basis and full-state gates; kernel matrix, factorization and eigensolver pooling |
-| RBFSampler | No parallel driver or native feature partition | Global random-feature identities, distributed transform, state pooling and qualification |
+| KernelRidge / Nystroem | fit_kernel_method / apply_kernel_method: kernel-matrix output rows through the SVM seam for linear, rbf, poly and sigmoid ('laplacian' refused by name); KernelRidge factor rows and target columns through the Cholesky driver; Nystroem basis and Jacobi on the root; state and outputs equal one device on two H100s and two MI300X with equal receipts across vendors | Kernel matrix, factor and eigensolver pooling; laplacian rows; capacity |
+| RBFSampler | transform_rbf_sampler: whole query row ranges on one-device workers with the position-mapped fitted weights; transforms equal the one-call transform on two H100s and two MI300X with equal receipts | Fit has no data to partition; capacity |
 | GaussianMixture | No distributed EM driver; KMeans initialization has an internal assignment seam | EM reduction-order design, covariance/init variants, state pooling and qualification |
-| Cholesky | Public factor/solve surface has no parallel driver | Factorization/solve design, matrix pooling and operation-level qualification |
+| Cholesky | fit_cholesky / solve_cholesky (and MOJOLEARN_CHOLESKY_DEVICE_COUNT inside potrf_lower and cho_solve): each panel's trailing-update product by whole output rows, the solve by whole right-hand-side columns staged through host memory; panel order, pivots and root matrix unchanged; traces equal one device on two H100s and two MI300X with equal digests across vendors | Panel order is sequential and not partitioned; a single right-hand side is not partitioned; matrix pooling and capacity |
 
 The newer binding availability flags do not establish complete estimator
 dispatch or qualification. Prepared IVFFlat remains unexposed and disabled in
