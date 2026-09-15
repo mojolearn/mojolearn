@@ -33,6 +33,7 @@ import math
 from ._training_impl import _round_f32
 
 from . import _backend
+from . import _ragged
 from . import _training_impl as T
 from ._mamba_impl import Mamba3Block
 from ._transformer_impl import TransformerBlock
@@ -304,8 +305,20 @@ class SambaStack(object):
         return {"ids": ids, "key": key, "xs": xs, "h": x, "hn": hn,
                 "logits": logits}
 
-    def forward(self, inputs):
-        """`(B, L)` ids in, `(B, L, vocab)` float32 logits out, no dropout."""
+    def forward(self, inputs, *, lengths=None):
+        """`(B, L)` ids in, `(B, L, vocab)` float32 logits out, no dropout.
+
+        `lengths` (2026-09-15) makes the batch RAGGED: `B` integers in
+        `[1, L]`, row `i` real at positions `[0, lengths[i])` and padding
+        after. Every real position's logits are byte for byte the row run
+        alone at its own length (the stack is a per-token embedding, causal
+        blocks, a per-token norm and head; no arithmetic changes,
+        `_ragged.py` says why) and every padding position's logits are
+        exactly `+0.0`, whatever id the input held there."""
+        if lengths is not None:
+            ids = self._ids(inputs, "inputs")
+            return _ragged.ragged_forward(self.forward, ids, None, lengths, "<i4",
+                                          "SambaStack.forward")[0]
         acts = self._forward(inputs)
         b, l = acts["ids"].shape
         return acts["logits"].reshape((b, l, self.config.vocab))
