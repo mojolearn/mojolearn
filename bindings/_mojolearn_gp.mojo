@@ -110,6 +110,7 @@ from gaussian_process.estimator import (
     GPRegressor,
     gpr_fit_host,
     gpr_predict_host,
+    gpr_sample_y_host,
 )
 # The Cholesky door (workstream D, 2026-09-14). `cholesky/` is already
 # linked into this binary because the GP factors through it; exposing the
@@ -584,6 +585,110 @@ def gpr_predict_binding(
     return PythonObject(n_clamped)
 
 
+def _gpr_sample_y_run(
+    model: GPRegressor,
+    x_star: List[Float32],
+    n_star: Int,
+    n_samples: Int,
+    seed: UInt64,
+    out_addr: Int,
+) raises:
+    """The GIL-free half of `gpr_sample_y_binding`."""
+    var y = gpr_sample_y_host(model, x_star, n_star, n_samples, seed)
+    copy_f32(y.unsafe_ptr(), _f32_ptr(out_addr), n_star * n_samples)
+
+
+def gpr_sample_y_binding(
+    addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`sample_y(X, n_samples, random_state)` on a model handed back in
+    (DEVIATION 2793, gaussian_process/checks/sample_y.mojo). Returns
+    `n_samples`; the draws are in the model's normalized scale.
+
+    `addrs` is the NINE buffer addresses, in this exact order (mirrored in
+    `python/mojolearn/_gp_impl.py::sample_y`):
+
+        0  xtrain          n_train * n_features float32, read
+        1  l               n_train * n_train float32, read
+        2  dual            n_train float32, read
+        3  xstar           n_star * n_features float32, read
+        4  kinds           n_nodes int32, read
+        5  kparams         n_nodes float32, read
+        6  ls_len          n_nodes int32, read
+        7  ls              max(n_ls, 1) float32, read
+        8  y_out           n_star * n_samples float32, WRITTEN (row i is
+                            query row i, column s is draw s)
+
+    `params` is, in this exact order:
+
+        0  n_train
+        1  n_features
+        2  n_star
+        3  n_nodes
+        4  n_ls
+        5  info            LAPACK's info from the fit, PASSED THROUGH so
+                            the refusal to sample from a failed fit fires
+                            by name (DEVIATION 1634)
+        6  n_samples       refused below 1 by name in Mojo
+        7  random_state's low 32 bits
+        8  random_state's high 32 bits
+    """
+    if len(addrs) != 9:
+        raise Error(
+            "gpr_sample_y: addrs must contain 9 addresses (xtrain, l, dual,"
+            " xstar, kinds, kparams, ls_len, ls, y_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 9:
+        raise Error(
+            "gpr_sample_y: params must contain 9 values (n_train, n_features,"
+            " n_star, n_nodes, n_ls, info, n_samples, seed_lo, seed_hi), got "
+            + String(len(params))
+        )
+    var out_addr = Int(py=addrs[8])
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_star = Int(py=params[2])
+    var n_nodes = Int(py=params[3])
+    var n_ls = Int(py=params[4])
+    var info = Int(py=params[5])
+    var n_samples = Int(py=params[6])
+    var seed = (UInt64(Int(py=params[8])) << 32) | UInt64(Int(py=params[7]))
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        Int(py=addrs[6]),
+        Int(py=addrs[7]),
+        n_nodes,
+        n_ls,
+        String("gpr_sample_y"),
+    )
+    var xt = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var l = read_f32(Int(py=addrs[1]), max(0, n_train * n_train))
+    var dual = read_f32(Int(py=addrs[2]), max(0, n_train))
+    var x_star = read_f32(Int(py=addrs[3]), max(0, n_star * n_features))
+    var yzero = List[Float32]()
+    var model = GPRegressor(
+        xt^,
+        yzero^,
+        n_train,
+        n_features,
+        spec^,
+        Float32(0.0),
+        l^,
+        dual^,
+        Float32(0.0),
+        Float32(0.0),
+        Float32(0.0),
+        info,
+        0,
+    )
+    with GILReleased(Python()):
+        _gpr_sample_y_run(model, x_star, n_star, n_samples, seed, out_addr)
+    return PythonObject(n_samples)
+
+
 # ===========================================================================
 # THE CHOLESKY DOOR (workstream D, 2026-09-14). `cholesky/estimator.mojo`'s
 # one-shot host entries, reached through THIS binding because the GP build
@@ -759,6 +864,7 @@ def PyInit__mojolearn_gp() abi("C") -> PythonObject:
         m.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         m.def_function[gpr_fit_binding]("gpr_fit")
         m.def_function[gpr_predict_binding]("gpr_predict")
+        m.def_function[gpr_sample_y_binding]("gpr_sample_y")
         # The Cholesky door (workstream D, 2026-09-14).
         m.def_function[cholesky_parallel_available]("cholesky_parallel_available")
         m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")

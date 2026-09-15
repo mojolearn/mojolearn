@@ -41,6 +41,19 @@ Linux legs are OWED before this heading reads published.
   internal reference context, as every other CPU fit does. Apple M4 CPU column against the
   committed Apple, NVIDIA and AMD columns; the model cells of the new save formats are owed to
   the release record.
+- New `GaussianProcessRegressor.sample_y(X, n_samples=1, random_state=0)`, with
+  scikit-learn's `sample_y` as the reference: float32 `(n_rows, n_samples)` draws from the
+  posterior, the mean plus a factor of the predictive covariance `k(X, X) - V^T V` times
+  standard normals, un-normalized under `normalize_y`. The covariance is factored by the
+  identical Cholesky at its pinned `2^-20` jitter, the normals are position-mapped Philox keyed
+  by `random_state` (tag "GPSY") through the guarded Box-Muller, and the products are the
+  identical GEMM (DEVIATION 2793), so one model, `X`, `n_samples` and `random_state` give the
+  same bits on every vendor; they are not scikit-learn's bits. A covariance that does not
+  factor, `random_state=None` and the unfitted-prior arm refuse by name. On the GPU binding,
+  with an internal verifier arm in the gp host binding; public CPU `sample_y` from a saved
+  model is left to the neighbors and density inference lane. New `gp-sample-y` and
+  `gp-sample-y-normalize` identity lanes (batch n/a: the rows of one call are jointly
+  correlated), so the gp lanes' recorded cells do not move.
 - New `GaussianMixture.sample(n_samples)`, with scikit-learn's `BaseMixture.sample` as the
   reference: `(X, y)` with the component counts a multinomial draw over `weights_` and the
   rows grouped by component ascending. Every draw is position-mapped Philox keyed by

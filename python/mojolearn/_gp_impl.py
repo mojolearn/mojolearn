@@ -73,6 +73,7 @@ speed claim.
 """
 
 import math
+import numbers
 
 from . import _backend
 from ._array import Array
@@ -283,12 +284,12 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   memory and then to the device, so the
                                   False spelling ("store a reference") has
                                   nothing it could mean here
-        n_targets       refused   anything but None; it exists to shape
-                                  sample_y's prior draws, and sample_y is
-                                  unimplemented
-        random_state    refused   anything but None; only sample_y draws
-                                  random numbers in the reference, and sample_y is
-                                  unimplemented
+        n_targets       refused   anything but None; it shapes sample_y's
+                                  draws from the unfitted prior, and that
+                                  arm is not implemented
+        random_state    refused   anything but None; fit and predict draw
+                                  no random numbers, and sample_y takes its
+                                  own random_state argument (DEVIATION 2793)
         sparse X        refused   dense row-major float32 only
                                   (_buffer.py::as_f32_c)
         2-D y           refused   by name; multi-target GP fits are not
@@ -323,10 +324,9 @@ class GaussianProcessRegressor(NumericModeMixin):
     `predict(X, return_std=True)` is honored; `return_cov=True` is REFUSED:
     the lane computes only the DIAGONAL of the posterior covariance -- a
     full `V^T V` would be an `n_star x n_star` product of which `n_star`
-    cells are wanted (DEVIATION 1759). `sample_y` is refused for the same
-    reason plus a normal stream inside a reproducibility claim
-    (`gaussian_process/estimator.mojo::gpr_sample_y_host` carries the
-    closure condition). GP CLASSIFICATION is a different algorithm (a
+    cells are wanted (DEVIATION 1759). `sample_y(X, n_samples, random_state)`
+    is honored on a fitted model: it builds and factors that full matrix
+    inside its own call (DEVIATION 2793). GP CLASSIFICATION is a different algorithm (a
     Laplace approximation with a data-dependent Newton iteration) and is
     not here at all (DEVIATION 1766).
 
@@ -431,16 +431,14 @@ class GaussianProcessRegressor(NumericModeMixin):
         if n_targets is not None:
             raise NotImplementedError(
                 "mojolearn GaussianProcessRegressor: n_targets is refused; "
-                "it shapes sample_y's prior draws, and sample_y is not "
-                "implemented (gaussian_process/estimator.mojo::gpr_sample_y_host "
-                "carries the closure condition). y is single-target here"
+                "it shapes sample_y's draws from the unfitted prior, which is "
+                "not implemented. y is single-target here"
             )
         if random_state is not None:
             raise NotImplementedError(
                 "mojolearn GaussianProcessRegressor: random_state is "
-                "refused; the only consumer of randomness upstream is "
-                "sample_y, which is not implemented. fit and predict draw no "
-                "random numbers"
+                "refused; fit and predict draw no random numbers, and "
+                "sample_y takes its own random_state argument (DEVIATION 2793)"
             )
         self.kernel = kernel
         # CONVERSION, NOT POLICY (the SVR epsilon rule): a non-number still
@@ -606,8 +604,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         if not hasattr(self, "alpha_"):
             raise ValueError(
                 "mojolearn GaussianProcessRegressor: call fit() first (the "
-                "unfitted-prior arm of sklearn's predict is not implemented: it "
-                "exists to serve sample_y, which is refused)"
+                "unfitted-prior arm of sklearn's predict is not implemented)"
             )
         q, _ = as_f32_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
@@ -716,15 +713,82 @@ class GaussianProcessRegressor(NumericModeMixin):
         return self.log_marginal_likelihood_value_
 
     def sample_y(self, X, n_samples=1, random_state=0):
-        raise NotImplementedError(
-            "mojolearn GaussianProcessRegressor: sample_y is NOT IMPLEMENTED "
-            "(gaussian_process/NOT_IMPLEMENTED.tsv). It draws from the full "
-            "posterior COVARIANCE, and this lane computes only its DIAGONAL "
-            "(DEVIATION 1759); it also needs a second Cholesky and a normal "
-            "random stream inside a reproducibility claim. "
-            "gaussian_process/estimator.mojo::gpr_sample_y_host names the "
-            "closure condition"
+        """Draws from the posterior at `X`: float32 `(n_rows, n_samples)`,
+        column `s` one joint draw over the rows.
+
+        scikit-learn's `GaussianProcessRegressor.sample_y` is the reference:
+        the mean plus a factor of the predictive covariance times standard
+        normals, un-normalized under `normalize_y`. DEVIATION 2793
+        (`gaussian_process/checks/sample_y.mojo`) names the stream, the jitter
+        and the order: the covariance `k(X, X) - V^T V` is factored by the
+        repository's identical Cholesky with its pinned `2^-20` jitter, the
+        normals are position-mapped Philox keyed by `random_state` (DEVIATION
+        2791's construction, tag "GPSY"), and the product is the identical
+        GEMM. The same model, `X`, `n_samples` and `random_state` give the
+        same bits on every vendor and on every call; they are not
+        scikit-learn's bits. `random_state` must be an int in `[0, 2**64)`
+        (None and a RandomState are refused: the key is the int). A covariance
+        that does not factor is refused by name. The unfitted-prior arm and
+        multi-target draws are not implemented.
+        """
+        if not hasattr(self, "alpha_"):
+            raise ValueError(
+                "mojolearn GaussianProcessRegressor: call fit() first (sampling "
+                "the unfitted prior is not implemented)"
+            )
+        if isinstance(n_samples, bool) or not isinstance(n_samples, numbers.Integral):
+            raise TypeError("mojolearn GaussianProcessRegressor: n_samples must be an int")
+        seed = random_state
+        if (isinstance(seed, bool) or not isinstance(seed, numbers.Integral)
+                or not 0 <= int(seed) < 2 ** 64):
+            raise ValueError(
+                "mojolearn GaussianProcessRegressor: sample_y needs random_state to "
+                f"be an int in [0, 2**64), got {seed!r}; it is the key of every "
+                "draw (DEVIATION 2793)"
+            )
+        seed = int(seed)
+        n = int(n_samples)
+        q, _ = as_f32_c(X, ndim=2, name="X")
+        if q.shape[1] != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn GaussianProcessRegressor: X has {q.shape[1]} "
+                f"features, fit saw {self.n_features_in_}"
+            )
+        n_star = q.shape[0]
+        n_train = self.X_train_.shape[0]
+        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays()
+        # Never a zero-length buffer: a refused n still addresses real memory.
+        out = empty((max(n_star * n, 1),), "<f4")
+        xt = self.X_train_
+        lf = self.L_
+        dual = self.alpha_
+        self._extension().gpr_sample_y(
+            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_sample_y_binding.
+            # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, y_out
+            [
+                addr_ro(xt, name="xt"),
+                addr_ro(lf, name="lf"),
+                addr_ro(dual, name="dual"),
+                addr_ro(q, name="q"),
+                addr_ro(kinds, name="kinds"),
+                addr_ro(kparams, name="kparams"),
+                addr_ro(ls_len, name="ls_len"),
+                addr_ro(ls, name="ls"),
+                addr(out, name="y_out"),
+            ],
+            # n_train, n_features, n_star, n_nodes, n_ls, info, n_samples,
+            # random_state low 32 bits, random_state high 32 bits
+            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls,
+             self.info_, n, seed & 0xFFFFFFFF, seed >> 32],
         )
+        if getattr(self, "normalize_y_", False):
+            # predict's un-normalization of the mean, applied to every draw:
+            # std * (mean + L z) + y_mean, so the covariance is std**2 C.
+            s_ = self._y_train_std
+            mu = self._y_train_mean
+            out = Array.from_list(
+                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in out.tolist()], "<f4")
+        return out.reshape((n_star, n))
 
     def score(self, X, y):
         """R^2, scikit-learn's definition, accumulated in FLOAT64 from

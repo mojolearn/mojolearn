@@ -80,6 +80,7 @@ from gaussian_process.host.gpr_oracle import (
     gpr_host_kernel_white,
     gpr_host_predict,
 )
+from gaussian_process.host.sample_y_oracle import gpr_host_sample_y
 
 
 def gp_host_numeric_mode_binding() raises -> PythonObject:
@@ -439,6 +440,69 @@ def gpr_predict_binding(
     return PythonObject(n_clamped)
 
 
+def gpr_sample_y_binding(
+    addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`sample_y(X, n_samples, random_state)` on the host, the GPU binding's
+    name and contract: `addrs` 0 xtrain, 1 l, 2 dual, 3 xstar, 4 kinds,
+    5 kparams, 6 ls_len, 7 ls, 8 y_out (n_star * n_samples float32);
+    `params` 0 n_train, 1 n_features, 2 n_star, 3 n_nodes, 4 n_ls, 5 info
+    (passed through), 6 n_samples, 7 random_state low 32 bits, 8 high 32
+    bits. The arithmetic is `gaussian_process/host/sample_y_oracle.mojo::
+    gpr_host_sample_y` (DEVIATION 2793). An internal verifier arm: public
+    CPU sample_y from a saved model belongs to
+    lane/inference-neighbors-density. Returns n_samples."""
+    if len(addrs) != 9:
+        raise Error(
+            "gpr_sample_y: addrs must contain 9 addresses (xtrain, l, dual,"
+            " xstar, kinds, kparams, ls_len, ls, y_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 9:
+        raise Error(
+            "gpr_sample_y: params must contain 9 values (n_train, n_features,"
+            " n_star, n_nodes, n_ls, info, n_samples, seed_lo, seed_hi), got "
+            + String(len(params))
+        )
+    var yp = f32_ptr(Int(py=addrs[8]))
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_star = Int(py=params[2])
+    var n_nodes = Int(py=params[3])
+    var n_ls = Int(py=params[4])
+    var info = Int(py=params[5])
+    var n_samples = Int(py=params[6])
+    var seed = (UInt64(Int(py=params[8])) << 32) | UInt64(Int(py=params[7]))
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        Int(py=addrs[6]),
+        Int(py=addrs[7]),
+        n_nodes,
+        n_ls,
+        String("gpr_sample_y"),
+    )
+    var xt = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var l = read_f32(Int(py=addrs[1]), max(0, n_train * n_train))
+    var dual = read_f32(Int(py=addrs[2]), max(0, n_train))
+    var x_star = read_f32(Int(py=addrs[3]), max(0, n_star * n_features))
+    with GILReleased(Python()):
+        var y = gpr_host_sample_y(
+            xt, l, dual, n_train, n_features, spec, info, x_star, n_star,
+            n_samples, seed,
+        )
+        for i in range(n_star * n_samples):
+            yp.unsafe_store(i, y[i])
+        _ = y^
+    _ = xt^
+    _ = l^
+    _ = dual^
+    _ = x_star^
+    _ = spec^
+    return PythonObject(n_samples)
+
+
 # ===========================================================================
 # THE CHOLESKY DOOR, on the host (the GPU binding's workstream D entries).
 # ===========================================================================
@@ -549,6 +613,7 @@ def PyInit__mojolearn_gp_host() abi("C") -> PythonObject:
         module.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         module.def_function[gpr_fit_binding]("gpr_fit")
         module.def_function[gpr_predict_binding]("gpr_predict")
+        module.def_function[gpr_sample_y_binding]("gpr_sample_y")
         module.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         module.def_function[cholesky_factor_binding]("cholesky_factor")
         module.def_function[cholesky_solve_binding]("cholesky_solve")
