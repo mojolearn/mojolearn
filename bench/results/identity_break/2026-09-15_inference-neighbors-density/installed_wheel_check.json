@@ -12,8 +12,8 @@
     "_mojolearn_svm": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_svm_host.so"
   },
   "binary": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/nd/wheel/target/mojolearn/host/_mojolearn_estimators_host.so",
-  "checked_at": "2026-09-15T13:20:16-0400",
-  "commit": "f1d9feecb137ab688cb826fdd12682e63665a7d9",
+  "checked_at": "2026-09-15T13:27:52-0400",
+  "commit": "41f3462dba148cc8d8561c9b7c297518f68fba39",
   "exit": 0,
   "expect_mismatch": false,
   "fixtures": [
@@ -47,7 +47,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.290159
+      "seconds": 0.267468
     },
     {
       "cases": [
@@ -79,7 +79,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.083418
+      "seconds": 0.077371
     },
     {
       "cases": [
@@ -111,7 +111,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.083004
+      "seconds": 0.074201
     },
     {
       "cases": [
@@ -143,7 +143,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.020807
+      "seconds": 0.018917
     },
     {
       "cases": [
@@ -175,7 +175,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.020858
+      "seconds": 0.019179
     },
     {
       "cases": [
@@ -207,7 +207,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.020897
+      "seconds": 0.018171
     },
     {
       "cases": [
@@ -239,7 +239,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.017965
+      "seconds": 0.017591
     },
     {
       "cases": [
@@ -271,7 +271,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.01794
+      "seconds": 0.016569
     },
     {
       "cases": [
@@ -303,7 +303,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.018097
+      "seconds": 0.016628
     },
     {
       "cases": [
@@ -335,7 +335,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.044134
+      "seconds": 0.037051
     },
     {
       "cases": [
@@ -367,7 +367,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.044209
+      "seconds": 0.03662
     },
     {
       "cases": [
@@ -399,7 +399,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.044044
+      "seconds": 0.037464
     },
     {
       "cases": [
@@ -431,7 +431,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.02489
+      "seconds": 0.023378
     },
     {
       "cases": [
@@ -463,7 +463,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.024954
+      "seconds": 0.021984
     },
     {
       "cases": [
@@ -495,7 +495,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.02487
+      "seconds": 0.023955
     },
     {
       "cases": [
@@ -527,7 +527,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.041809
+      "seconds": 0.03585
     },
     {
       "cases": [
@@ -559,7 +559,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.041946
+      "seconds": 0.035632
     },
     {
       "cases": [
@@ -591,7 +591,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.041925
+      "seconds": 0.034662
     },
     {
       "cases": [
@@ -641,7 +641,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.179682
+      "seconds": 0.161027
     },
     {
       "cases": [
@@ -691,7 +691,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.015075
+      "seconds": 0.014825
     },
     {
       "cases": [
@@ -741,7 +741,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.014992
+      "seconds": 0.015277
     },
     {
       "cases": [
@@ -789,7 +789,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.060756
+      "seconds": 0.054271
     },
     {
       "cases": [
@@ -837,7 +837,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.061183
+      "seconds": 0.05591
     },
     {
       "cases": [
@@ -885,7 +885,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.063103
+      "seconds": 0.05416
     },
     {
       "cases": [
@@ -935,7 +935,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.04003
+      "seconds": 0.036942
     },
     {
       "cases": [
@@ -985,7 +985,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.040786
+      "seconds": 0.037963
     },
     {
       "cases": [
@@ -1035,7 +1035,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.041417
+      "seconds": 0.038565
     },
     {
       "cases": [
@@ -1085,7 +1085,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.033934
+      "seconds": 0.030216
     },
     {
       "cases": [
@@ -1135,7 +1135,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.033201
+      "seconds": 0.031022
     },
     {
       "cases": [
@@ -1185,7 +1185,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.034299
+      "seconds": 0.031626
     },
     {
       "cases": [
@@ -1235,7 +1235,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.13465
+      "seconds": 0.120426
     },
     {
       "cases": [
@@ -1285,7 +1285,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.125816
+      "seconds": 0.113877
     },
     {
       "cases": [
@@ -1335,7 +1335,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.134284
+      "seconds": 0.131074
     },
     {
       "cases": [
@@ -1385,7 +1385,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.030753
+      "seconds": 0.02925
     },
     {
       "cases": [
@@ -1435,7 +1435,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.030945
+      "seconds": 0.029093
     },
     {
       "cases": [
@@ -1485,7 +1485,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.031254
+      "seconds": 0.027676
     },
     {
       "cases": [
@@ -1517,7 +1517,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.020645
+      "seconds": 0.019172
     },
     {
       "cases": [
@@ -1549,7 +1549,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.020484
+      "seconds": 0.020342
     },
     {
       "cases": [
@@ -1581,7 +1581,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.020296
+      "seconds": 0.019528
     },
     {
       "cases": [
@@ -1631,7 +1631,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.030936
+      "seconds": 0.030068
     },
     {
       "cases": [
@@ -1681,7 +1681,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.030991
+      "seconds": 0.030549
     },
     {
       "cases": [
@@ -1731,7 +1731,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.030956
+      "seconds": 0.028677
     },
     {
       "cases": [
@@ -1763,7 +1763,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.030615
+      "seconds": 0.027971
     },
     {
       "cases": [
@@ -1795,7 +1795,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.032013
+      "seconds": 0.032811
     },
     {
       "cases": [
@@ -1827,7 +1827,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.030578
+      "seconds": 0.030617
     },
     {
       "cases": [
@@ -1859,7 +1859,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.017919
+      "seconds": 0.017498
     },
     {
       "cases": [
@@ -1891,7 +1891,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.018878
+      "seconds": 0.016865
     },
     {
       "cases": [
@@ -1923,7 +1923,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.024547
+      "seconds": 0.022968
     },
     {
       "cases": [
@@ -1955,7 +1955,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.030142
+      "seconds": 0.028929
     },
     {
       "cases": [
@@ -1987,7 +1987,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.031399
+      "seconds": 0.029545
     },
     {
       "cases": [
@@ -2019,7 +2019,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.032996
+      "seconds": 0.031534
     },
     {
       "cases": [
@@ -2051,7 +2051,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.134936
+      "seconds": 0.126508
     },
     {
       "cases": [
@@ -2083,7 +2083,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.126773
+      "seconds": 0.113872
     },
     {
       "cases": [
@@ -2115,7 +2115,7 @@
       "recorded_gpu_arch": null,
       "recorded_numeric_mode": "identical",
       "recorded_vendor": "metal",
-      "seconds": 0.161653
+      "seconds": 0.144102
     }
   ],
   "gpu_columns": [],

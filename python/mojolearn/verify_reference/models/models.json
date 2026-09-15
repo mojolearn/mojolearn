@@ -1,0 +1,78 @@
+{
+ "format": "mojolearn.verify-models.v1",
+ "models": [
+  {
+   "batch_hash": "cec53714495b4d9c",
+   "bytes": 94660,
+   "class": "RandomForestClassifier",
+   "file": "rf-clf.base.npz",
+   "fixture": "base",
+   "lane": "rf-clf",
+   "load": "load",
+   "model_hash": "ed1592a2b0ab1658",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "nvidia"
+    ],
+    "vendor": "metal"
+   }
+  },
+  {
+   "batch_hash": "9d36287df25eff95",
+   "bytes": 79675,
+   "class": "GradientBoosting",
+   "file": "gbdt-symmetric.base.npz",
+   "fixture": "base",
+   "lane": "gbdt-symmetric",
+   "load": "load",
+   "model_hash": "ee776c33f052679a",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu",
+     "nvidia"
+    ],
+    "vendor": "metal"
+   }
+  },
+  {
+   "batch_hash": "b578bef320871443",
+   "bytes": 1642,
+   "class": "LinearRegression",
+   "file": "ols.base.npz",
+   "fixture": "base",
+   "lane": "ols",
+   "load": "load",
+   "model_hash": "a84289377ea9180f",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "nvidia"
+    ],
+    "vendor": "metal"
+   }
+  },
+  {
+   "batch_hash": "65941b218439dea2",
+   "bytes": 3138,
+   "class": "PCA",
+   "file": "pca.base.npz",
+   "fixture": "base",
+   "lane": "pca",
+   "load": "load",
+   "model_hash": "b41a408ef6ffb8c9",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "nvidia"
+    ],
+    "vendor": "metal"
+   }
+  }
+ ]
+}

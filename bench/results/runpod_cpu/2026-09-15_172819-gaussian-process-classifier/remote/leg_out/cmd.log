@@ -1,0 +1,50 @@
+== cpu column Tue Sep 15 17:30:01 UTC 2026
+rc=0
+== host sabotage column Tue Sep 15 17:30:21 UTC 2026
+rc=0
+== batch sabotage column Tue Sep 15 17:30:31 UTC 2026
+rc=1
+== tests Tue Sep 15 17:30:41 UTC 2026
+rc=0
+rc=1
+== /root/leg_out/box.txt
+Mem:            1007          65         254           0         686         934
+overlay          40G   69M   40G   1% /
+3.14.7 2.5.2
+473 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x511500000000, nodemask=1)
+Mojo 1.0.0 (ed45d567)
+== /root/leg_out/cpu-x86.batch-sabotage.txt
+BATCH_MOVED gpc-multiclass/denormal_ftz: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc-multiclass/dupes: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc-multiclass/odd: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+BATCH_MOVED gpc-multiclass/negative: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x0000000000000001 vs alone 0x0000000000000000
+wrote /root/leg_out/cpu-x86.batch-sabotage.json
+== /root/leg_out/cpu-x86.host-sabotage.txt
+infer: stable=27
+model: stable=18 n/a=9
+batch: stable=27
+n/a: gp model n/a:no-save
+wrote /root/leg_out/cpu-x86.host-sabotage.json
+== /root/leg_out/cpu-x86.txt
+infer: stable=27
+model: stable=18 n/a=9
+batch: stable=27
+n/a: gp model n/a:no-save
+wrote /root/leg_out/cpu-x86.json
+== /root/leg_out/pytest.txt
+=========================== short test summary info ============================
+FAILED python/mojolearn/tests/test_host_surface.py::test_binding_exports_exactly_the_manifest[mixture]
+FAILED python/mojolearn/tests/test_host_surface.py::test_recordings_and_columns_exist
+FAILED python/mojolearn/tests/test_host_surface.py::test_training_gpu_columns_exist
+3 failed, 136 passed in 0.62s
+== /root/leg_out/so_sha256.txt
+502d5fbc9a560c5fca90d955d51447dfa85c345af7365fa4ae661b54ee26f21d  python/mojolearn/host/_mojolearn_core_host.so
+95d6b996255de21a45182119799b824c06b769203533397327817d4ce7bb6d01  python/mojolearn/host/_mojolearn_gp_host.so
+426ea62ad000274fc57ad6ff5aa49ecb37ea02308abcb1683cccc1f5fcc57132  python/mojolearn/host-sabotage/_mojolearn_core_host.so
+4c9f7b5a044634c5e1feaf2b90372f6228d276a99dde99652683d5ec964f0cef  python/mojolearn/host-sabotage/_mojolearn_gp_host.so
+== /root/leg_out/test_gpc_surface.txt
+PASS test_bindings_and_manifest_carry_the_entries
+PASS test_classification_is_no_longer_not_implemented
+PASS test_constructor_refuses_by_name
+PASS test_degenerate_classes
+PASS test_repeat_batch_save_load_and_host_model

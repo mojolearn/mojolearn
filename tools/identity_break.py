@@ -347,7 +347,8 @@ sampler, a solver, a metric, a reduction).
     2026-09-15 (lane/embedding-owed, PLAN_SORT through Embedding(plan="sort"))
       embedding-sort
     2026-09-15 (lane/cpu-training-small-gaps)
-      metrics-fowlkes-mallows gbdt-adapter-score-weighted rf-score-weighted
+      metrics-fowlkes-mallows gbdt-adapter-score-weighted rf-score-weighted svc-poly
+      gp-normalize-y
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -1232,6 +1233,45 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.predict(Xh[:64, :4], return_std=True))
 
 
+def _gpc_three_classes(X):
+    """Three balanced classes for the first 256 rows: the stable rank of the
+    labels' own score (columns 3 and 4, `labels_for`'s rule) cut in thirds,
+    so every fixture, `negative` and `ties` included, hands the one-vs-rest
+    lane three classes."""
+    s = (X[:256, 3] + np.float32(0.5) * X[:256, 4]).astype(np.float32)
+    y3 = np.empty(256, dtype=np.int64)
+    y3[np.argsort(s, kind="stable")] = (np.arange(256) * 3) // 256
+    return y3
+
+
+def _gpc_parts(m, q):
+    fits = m.estimators_
+    return dict(L=_h(*[e.L_ for e in fits]), pi=_h(*[e.pi_ for e in fits]), W_sr=_h(*[e.W_sr_ for e in fits]),
+                lml=_h(np.array([e.log_marginal_likelihood_value_ for e in fits] +
+                                [m.log_marginal_likelihood_value_], dtype=np.float64)),
+                n_iter=_h(np.array([e.n_iter_ for e in fits], dtype=np.int64)),
+                predict=_h(m.predict(q)), proba=_h(m.predict_proba(q)))
+
+
+@lane("gpc")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessClassifier, binary, optimizer=None (DEVIATION 1761):
+    the Laplace fit's Newton loop, whose iteration count is on the card
+    (DEVIATION 2830), sized like the gp lane. The model column is the saved
+    classifier and its reload."""
+    m = ml.GaussianProcessClassifier(kernel=ml.ConstantKernel(1.0) * ml.RBF(1.0)).fit(X[:256, :4], yc[:256])
+    return _fit(_gpc_parts(m, X[256:320, :4]), m, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
+
+
+@lane("gpc-multiclass")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessClassifier one-vs-rest over three classes
+    (DEVIATION 2833) with a Matern nu=1.5 kernel scaled by a constant."""
+    k = ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5)
+    m = ml.GaussianProcessClassifier(kernel=k).fit(X[:256, :4], _gpc_three_classes(X))
+    return _fit(_gpc_parts(m, X[256:320, :4]), m, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
+
+
 @lane("umap")
 def _(ml, X, yc, yr, Xh=None):
     """Exact neighbor search is quadratic, so 1024 rows of eight columns
@@ -2067,6 +2107,17 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
 
+@lane("svc-poly")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC(kernel='poly') (lane/cpu-training-small-gaps, 2026-09-15): the
+    identical linear Gram, then kernel_methods' polynomial epilogue (one fused
+    multiply-add, an ascending repeated product; DEVIATION 1663) at degree 3,
+    gamma 0.1 and coef0 1.0. Sized like the svc lane."""
+    m = ml.SVC(C=1.0, kernel="poly", degree=3, gamma=0.1, coef0=1.0, max_iter=200).fit(X[:2000], yc[:2000])
+    return _fit(dict(decision=_h(m.decision_function(X[2000:2256])), predict=_h(m.predict(X[2000:2256]))),
+                m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+
 @lane("svr-linear")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.SVR(C=1.0, kernel="linear", epsilon=0.1, max_iter=200).fit(X[:2000], yr[:2000])
@@ -2211,6 +2262,23 @@ def _gp_lane(nu, length_scale):
                     m, lambda e: e.predict(Xh[:64, :4], return_std=True))
     body.__doc__ = f"Matern nu={nu} length_scale={length_scale}: a kernel node kind the gp lane never launches; the vector length scale is the ARD divide loop."
     return body
+
+
+@lane("gp-normalize-y")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessRegressor(normalize_y=True) (lane/cpu-training-small-gaps,
+    2026-09-15): the gp lane's kernel and slices with y centered and scaled by
+    StandardScaler's pinned folds before the fit, and the predictive mean and
+    std scaled back on the host. The target is shifted by 50 so the mean is
+    not near zero."""
+    k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+    y = np.ascontiguousarray(yr[:256] + np.float32(50.0)).astype(np.float32)
+    m = ml.GaussianProcessRegressor(kernel=k, normalize_y=True).fit(X[:256, :4], y)
+    mean, std = m.predict(X[256:320, :4], return_std=True)
+    return _fit(dict(alpha=_h(m.alpha_), L=_h(m.L_), lml=_h(np.float64(m.log_marginal_likelihood_value_)),
+                     y_stats=_h(np.float32([m._y_train_mean, m._y_train_std])),
+                     mean=_h(mean), std=_h(std)),
+                m, lambda e: e.predict(Xh[:64, :4], return_std=True))
 
 
 for _name, _nu, _ls in (("matern12", 0.5, 1.0), ("matern32", 1.5, 1.0), ("matern52-ard", 2.5, [1.0, 2.0, 0.5, 4.0])):
@@ -3876,6 +3944,9 @@ def _batch_hdbscan(ml, e, Xh):
 _batch_decl(_batch_hdbscan, "hdbscan", "hdbscan-leaf")
 
 
+_batch_decl(_rows_calls("predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gpc", "gpc-multiclass")
+
+
 def _batch_kneighbors(ml, e, Xh):
     return [_BatchRows("kneighbors", Xh[:64], lambda r: tuple(e.kneighbors(r)))]
 
@@ -3909,7 +3980,7 @@ _batch_decl(_rows_calls("predict", sl=slice(0, 256), min_batch=2, refusal=CD_PRE
 _batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "logistic", "logistic-l1", "logistic-elasticnet",
             "logistic-unpenalized-no-intercept", "par-logistic")
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 256)), "logistic-multiclass")
-_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "svc", "svc-linear", "par-svm")
+_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "svc", "svc-linear", "par-svm", "svc-poly")
 _batch_decl(_rows_calls("score_samples", sl=(slice(0, 256), slice(0, 4))), "kde", "kde-weighted",
             "kde-tophat-sqeuclidean", "kde-epanechnikov-l1", "kde-exponential-chebyshev",
             "kde-cosine-minkowski")
@@ -3924,7 +3995,7 @@ def _batch_gp(ml, e, Xh):
     return [_BatchRows("predict(return_std=True)", Xh[:64, :4], lambda r: tuple(e.predict(r, return_std=True)))]
 
 
-_batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp")
+_batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "par-gp", "gp-normalize-y")
 # UMAP.transform is batch-dependent BY ITS OWN CONTRACT: umap/transform.mojo's
 # module docstring says "Query batching may change results (global sigma
 # floor, edge weighting and RNG ordinals)", and the part measured it on the
@@ -5617,6 +5688,63 @@ def _has_save_load(est):
     return _save_load(est) is not None
 
 
+#: PUBLIC CPU INFERENCE (lane/inference-gbdt-modes, 2026-09-15). `1` for
+#: every lane, or a comma list of lanes: the infer cell is the held-out probe
+#: asked of `mojolearn.host_model(<the saved file>)` (HostForest, HostGBDT or
+#: a classical host model, the shipped wheel families) instead of the fitted
+#: estimator, and the model cell hashes that file. The reload cell stays the
+#: estimator class's own `load`, so a host answer that differs from the
+#: class's reads RELOAD-MOVED here as well as DIVERGENT against the GPU
+#: columns. A file host_model refuses reads REFUSED. The JSON records the
+#: lanes under `host_infer`.
+HOST_INFER_ENV = "MOJOLEARN_IDENTITY_HOST_INFER"
+
+
+def _host_infer_lanes():
+    raw = os.environ.get(HOST_INFER_ENV, "").strip()
+    if not raw or raw == "0":
+        return None
+    return True if raw == "1" else set(p.strip() for p in raw.split(",") if p.strip())
+
+
+def _host_infer_on(name):
+    lanes = _host_infer_lanes()
+    return lanes is True or (lanes is not None and name in lanes)
+
+
+def _probe_fit_host(fit, name):
+    """`_probe_fit` under HOST_INFER_ENV: save, then predict through
+    `host_model`. Same return shape."""
+    if not _has_save_load(fit.est):
+        return None, None, None, "infer: host infer asked of an estimator with no save"
+    save, load, suffix = _save_load(fit.est)
+    from mojolearn._forest_host import binary_path, host_model
+    try:
+        with tempfile.TemporaryDirectory(prefix="identity_break_host_") as tmp:
+            path = os.path.join(tmp, f"{name}{suffix}")
+            getattr(fit.est, save)(path)
+            model = _hfile(path)
+            try:
+                host = host_model(path)
+                # THE BINARY THAT PREDICTED IS THE ONE NAMED (2026-09-15): host_record
+                # loads MOJOLEARN_HOST_DIR's forest binding under the module name
+                # _forest_host reuses from sys.modules, so a MOJOLEARN_FOREST_HOST_BINARY
+                # pointing elsewhere (a sabotage build) was silently not the one asked,
+                # and a forest sabotage column read IDENTICAL on a RunPod x86 pod.
+                bound = getattr(getattr(host, "_binding", None), "__file__", None)
+                if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
+                        os.path.realpath(bound) != os.path.realpath(binary_path())):
+                    raise RuntimeError(f"the forest binding in this process is {bound}, "
+                                       f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+                infer = _h(*fit.probe(host_model(path)))
+            except Exception as exc:
+                return None, None, None, f"infer (host_model): {type(exc).__name__}: {exc}"
+            reload = _h(*fit.probe(getattr(type(fit.est), load)(path)))
+    except Exception as exc:
+        return None, None, None, f"model: {type(exc).__name__}: {exc}"
+    return infer, model, reload, None
+
+
 def _probe_fit(fit, name):
     """The infer and model columns of ONE fit. Returns (infer, model, reload,
     error) where infer and model are a hash or an `n/a:<reason>` string,
@@ -5625,6 +5753,8 @@ def _probe_fit(fit, name):
     stage that raised leaves its column None, which reads REFUSED."""
     if not callable(fit.probe):
         return fit.probe, "n/a:no-save", None, None
+    if _host_infer_on(name):
+        return _probe_fit_host(fit, name)
     try:
         infer = _h(*fit.probe(fit.est))
     except Exception as exc:
@@ -5765,6 +5895,9 @@ def _run_reference(args):
                       skipped=sorted(skip), batch_protocol=batch_protocol,
                       batch_sabotage=batch_sabotage, rlpair_protocol=rlpair_protocol,
                       rlpair_sabotage=rlpair_sabotage)
+        host_infer = _host_infer_lanes()
+        if host_infer is not None:
+            record["host_infer"] = "all" if host_infer is True else sorted(host_infer)
         for part in extra:
             record[f"{part}_protocol"] = _part_protocol(part, args.batch_alone)
             record[f"{part}_sabotage"] = extra_sabotage[part] or False

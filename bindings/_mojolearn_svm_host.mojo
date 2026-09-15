@@ -89,6 +89,7 @@ from svm.impl.svm_parameter import (
     C_SVC,
     EPSILON_SVR,
     KERNEL_LINEAR,
+    KERNEL_POLYNOMIAL,
     KERNEL_RBF,
     KernelParams,
     SvmParameter,
@@ -155,17 +156,19 @@ def svm_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
-def _kernel_params(kernel: Int, gamma: Float64) raises -> KernelParams:
+def _kernel_params(
+    kernel: Int, gamma: Float64, degree: Int = 3, coef0: Float64 = 0.0
+) raises -> KernelParams:
     """`svm/estimator.mojo::_kernel_params`, the same refusal and the same
     constructor defaults (degree 3, coef0 0, read by no implemented
     kernel)."""
-    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF:
+    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL:
         raise Error(
             "svm: kernel=" + String(kernel) + " is not implemented in rung 1;"
             + " only LINEAR (" + String(KERNEL_LINEAR) + ") and RBF ("
             + String(KERNEL_RBF) + ") are (svm/NOT_IMPLEMENTED.tsv)"
         )
-    return KernelParams(kernel, 3, gamma, 0.0)
+    return KernelParams(kernel, degree, gamma, coef0)
 
 
 def svc_fit_binding(
@@ -191,6 +194,8 @@ def svc_fit_binding(
         5  tol             (float)
         6  max_iter        (-1 = no limit, cuML's default)
         7  nochange_steps
+        8  degree          (POLYNOMIAL only; 3 otherwise)
+        9  coef0           (float; POLYNOMIAL only; 0 otherwise)
 
     The OUTPUT buffers are worst-case sized by the caller (`dual_addr` and
     `support_idx_addr` hold `n_rows` entries, `support_matrix_addr`
@@ -198,9 +203,9 @@ def svc_fit_binding(
     `n_support * n_features`) are written. `info_addr` is FIVE float64:
     b, n_support, n_iter, classes[0] (the SMALLER sorted distinct label),
     classes[1] (the LARGER, mapped to +1)."""
-    if len(params) != 8:
+    if len(params) != 10:
         raise Error(
-            "svc_fit: params must contain 8 values, got " + String(len(params))
+            "svc_fit: params must contain 10 values, got " + String(len(params))
         )
     var xp = f32_ptr(_index(x_addr))
     var y_address = _index(y_addr)
@@ -216,6 +221,8 @@ def svc_fit_binding(
     var tol = Float64(py=params[5])
     var max_iter = _index(params[6])
     var nochange_steps = _index(params[7])
+    var degree = _index(params[8])
+    var coef0 = Float64(py=params[9])
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svc_fit: n_rows and n_features must both be positive")
     var labels = read_f32(y_address, max(0, n_rows))
@@ -231,7 +238,7 @@ def svc_fit_binding(
                 "svc_fit_host: y has " + String(len(labels)) + " values, n_rows is "
                 + String(n_rows)
             )
-        var kp = _kernel_params(kernel, gamma)
+        var kp = _kernel_params(kernel, gamma, degree, coef0)
         var param = SvmParameter.default()
         param.C = c
         param.tol = tol
@@ -315,12 +322,14 @@ def svc_predict_binding(
         9  cache_size_mib  (float; the device's prediction BATCH knob,
                             launch-invariant by gate; only its positivity
                             is checked here, as on the device)
+        10 degree          (POLYNOMIAL only; 3 otherwise)
+        11 coef0           (float; POLYNOMIAL only; 0 otherwise)
 
     `predict_class` is `applyPrediction`'s epilogue, `label0 if val < 0
     else label1`, the spelling of `decision_kernel`."""
-    if len(params) != 10:
+    if len(params) != 12:
         raise Error(
-            "svc_predict: params must contain 10 values, got " + String(len(params))
+            "svc_predict: params must contain 12 values, got " + String(len(params))
         )
     var x_address = _index(x_addr)
     var op = f32_ptr(_index(out_addr))
@@ -334,6 +343,8 @@ def svc_predict_binding(
     var gamma = Float64(py=params[7])
     var predict_class = _index(params[8]) != 0
     var buffer_mib = Float64(py=params[9])
+    var degree = _index(params[10])
+    var coef0 = Float64(py=params[11])
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svc_predict: n_rows and n_features must both be positive")
     if n_support < 0:
@@ -354,7 +365,7 @@ def svc_predict_binding(
                 "svc_predict_host: the predict buffer (cache_size) must be a"
                 " positive number of MiB, got " + String(buffer_mib)
             )
-        var kp = _kernel_params(kernel, gamma)
+        var kp = _kernel_params(kernel, gamma, degree, coef0)
         var x = read_f32(x_address, n_rows * n_cols)
         var res = OracleResult[DType.float32]()
         res.b = b

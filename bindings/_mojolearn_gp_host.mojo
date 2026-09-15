@@ -80,6 +80,10 @@ from gaussian_process.host.gpr_oracle import (
     gpr_host_kernel_white,
     gpr_host_predict,
 )
+# Gaussian process classification (lane/gaussian-process-classifier,
+# 2026-09-15): the GPU binding's gpc_fit and gpc_predict, same contract.
+from gaussian_process.host.gpc_oracle import gpc_host_fit, gpc_host_predict
+from gaussian_process.host.gpc_steps import gpc_proba
 
 
 def gp_host_numeric_mode_binding() raises -> PythonObject:
@@ -440,6 +444,180 @@ def gpr_predict_binding(
 
 
 # ===========================================================================
+# GAUSSIAN PROCESS CLASSIFICATION, on the host
+# (bindings/_mojolearn_gp.mojo::gpc_fit_binding and gpc_predict_binding,
+# their address and params orders word for word).
+# ===========================================================================
+
+
+def _gpc_fit_run(
+    x: List[Float32],
+    y: List[Float32],
+    spec: GPHostKernelSpec,
+    n_train: Int,
+    n_features: Int,
+    max_iter_predict: Int,
+    lp: MutPointer[Float32, MutUntrackedOrigin],
+    pp: MutPointer[Float32, MutUntrackedOrigin],
+    wp: MutPointer[Float32, MutUntrackedOrigin],
+    sp: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> Int:
+    """The GIL-free half of `gpc_fit_binding`."""
+    var fit = gpc_host_fit(x, n_train, n_features, y, spec, max_iter_predict)
+    for i in range(n_train * n_train):
+        lp.unsafe_store(i, fit.l[i])
+    for i in range(n_train):
+        pp.unsafe_store(i, fit.pi[i])
+        wp.unsafe_store(i, fit.wsr[i])
+    sp.unsafe_store(0, Float64(fit.lml))
+    sp.unsafe_store(1, Float64(fit.n_iter))
+    sp.unsafe_store(2, Float64(fit.nb))
+    return fit.n_iter
+
+
+def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """One binary Laplace fit on the host. `addrs`: 0 x, 1 y, 2 kinds,
+    3 kparams, 4 ls_len, 5 ls, 6 l_out, 7 pi_out, 8 wsr_out, 9 scalars_out
+    (lml, n_iter, nb). `params`: 0 n_train, 1 n_features, 2 n_nodes, 3 n_ls,
+    4 max_iter_predict. Returns the iteration count."""
+    if len(addrs) != 10:
+        raise Error(
+            "gpc_fit: addrs must contain 10 addresses (x, y, kinds, kparams,"
+            " ls_len, ls, l_out, pi_out, wsr_out, scalars_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 5:
+        raise Error(
+            "gpc_fit: params must contain 5 values (n_train, n_features,"
+            " n_nodes, n_ls, max_iter_predict), got "
+            + String(len(params))
+        )
+    var lp = f32_ptr(Int(py=addrs[6]))
+    var pp = f32_ptr(Int(py=addrs[7]))
+    var wp = f32_ptr(Int(py=addrs[8]))
+    var sp = f64_ptr(Int(py=addrs[9]))
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_nodes = Int(py=params[2])
+    var n_ls = Int(py=params[3])
+    var max_iter_predict = Int(py=params[4])
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[2]),
+        Int(py=addrs[3]),
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        n_nodes,
+        n_ls,
+        String("gpc_fit"),
+    )
+    var x = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    var n_iter = 0
+    with GILReleased(Python()):
+        n_iter = _gpc_fit_run(
+            x, y, spec, n_train, n_features, max_iter_predict, lp, pp, wp, sp
+        )
+    _ = x^
+    _ = y^
+    _ = spec^
+    return PythonObject(n_iter)
+
+
+def _gpc_predict_run(
+    xt: List[Float32],
+    y: List[Float32],
+    pi: List[Float32],
+    wsr: List[Float32],
+    l: List[Float32],
+    spec: GPHostKernelSpec,
+    x_star: List[Float32],
+    n_train: Int,
+    n_features: Int,
+    n_star: Int,
+    want_proba: Bool,
+    mean_addr: Int,
+    var_addr: Int,
+    proba_addr: Int,
+) raises -> Int:
+    """The GIL-free half of `gpc_predict_binding`."""
+    var lat = gpc_host_predict(
+        xt, y, pi, wsr, l, n_train, n_features, spec, x_star, n_star, want_proba
+    )
+    var mp = f32_ptr(mean_addr)
+    for t in range(n_star):
+        mp.unsafe_store(t, lat.mean[t])
+    if want_proba:
+        var p = gpc_proba(lat.mean, lat.variance)
+        var vp = f32_ptr(var_addr)
+        var pr = f64_ptr(proba_addr)
+        for t in range(n_star):
+            vp.unsafe_store(t, lat.variance[t])
+            pr.unsafe_store(t, p[t])
+    return 0
+
+
+def gpc_predict_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """The latent mean (and with want_proba the variance and the class-1
+    probability) on the host. `addrs`: 0 xtrain, 1 y, 2 pi, 3 wsr, 4 l,
+    5 xstar, 6 kinds, 7 kparams, 8 ls_len, 9 ls, 10 mean_out, 11 var_out,
+    12 proba_out. `params`: 0 n_train, 1 n_features, 2 n_star, 3 n_nodes,
+    4 n_ls, 5 want_proba. Returns 0."""
+    if len(addrs) != 13:
+        raise Error(
+            "gpc_predict: addrs must contain 13 addresses (xtrain, y, pi,"
+            " wsr, l, xstar, kinds, kparams, ls_len, ls, mean_out, var_out,"
+            " proba_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 6:
+        raise Error(
+            "gpc_predict: params must contain 6 values (n_train, n_features,"
+            " n_star, n_nodes, n_ls, want_proba), got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_star = Int(py=params[2])
+    var n_nodes = Int(py=params[3])
+    var n_ls = Int(py=params[4])
+    var want_proba = Int(py=params[5]) != 0
+    var mean_addr = Int(py=addrs[10])
+    var var_addr = Int(py=addrs[11])
+    var proba_addr = Int(py=addrs[12])
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[6]),
+        Int(py=addrs[7]),
+        Int(py=addrs[8]),
+        Int(py=addrs[9]),
+        n_nodes,
+        n_ls,
+        String("gpc_predict"),
+    )
+    var xt = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    var pi = read_f32(Int(py=addrs[2]), max(0, n_train))
+    var wsr = read_f32(Int(py=addrs[3]), max(0, n_train))
+    var l = read_f32(Int(py=addrs[4]), max(0, n_train * n_train))
+    var x_star = read_f32(Int(py=addrs[5]), max(0, n_star * n_features))
+    var rc = 0
+    with GILReleased(Python()):
+        rc = _gpc_predict_run(
+            xt, y, pi, wsr, l, spec, x_star, n_train, n_features, n_star,
+            want_proba, mean_addr, var_addr, proba_addr,
+        )
+    _ = xt^
+    _ = y^
+    _ = pi^
+    _ = wsr^
+    _ = l^
+    _ = x_star^
+    _ = spec^
+    return PythonObject(rc)
+
+
+# ===========================================================================
 # THE CHOLESKY DOOR, on the host (the GPU binding's workstream D entries).
 # ===========================================================================
 
@@ -549,6 +727,8 @@ def PyInit__mojolearn_gp_host() abi("C") -> PythonObject:
         module.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         module.def_function[gpr_fit_binding]("gpr_fit")
         module.def_function[gpr_predict_binding]("gpr_predict")
+        module.def_function[gpc_fit_binding]("gpc_fit")
+        module.def_function[gpc_predict_binding]("gpc_predict")
         module.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         module.def_function[cholesky_factor_binding]("cholesky_factor")
         module.def_function[cholesky_solve_binding]("cholesky_solve")

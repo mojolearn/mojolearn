@@ -1,0 +1,122 @@
+NOTE: --lanes scopes this diff to 3 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gp_host'] commit=a3357cd9857cd79035f25d0c5147dbe592309252
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gp_host'] commit=a3357cd9857cd79035f25d0c5147dbe592309252
+| lane/fixture                 | verdict    | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|------------|------------------|------------------|
+| gp/base                      | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | e15b5efc40ea26f8 |
+| gp/denormal                  | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | c625a2141dd6acdd |
+| gp/denormal_ftz              | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | c625a2141dd6acdd |
+| gp/dupes                     | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | 2e2a10344363b280 |
+| gp/hashed                    | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | 51b0598a1d45605b |
+| gp/negative                  | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | 9f0c3b73267773eb |
+| gp/odd                       | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | 3be623d029fa736a |
+| gp/ties                      | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: - | bebf0692fc6e2b8c |
+| gp/wide                      | DIVERGENT  | parts differ: alpha,L,mean,std; agree: lml | 61387dec206612a1 |
+| gpc-multiclass/base          | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | 74b11d950d05c6ca |
+| gpc-multiclass/denormal      | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | e08082b402e73fb0 |
+| gpc-multiclass/denormal_ftz  | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | e08082b402e73fb0 |
+| gpc-multiclass/dupes         | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | 74b11d950d05c6ca |
+| gpc-multiclass/hashed        | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | 8dc459abfa02a13c |
+| gpc-multiclass/negative      | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | 3160bad223620990 |
+| gpc-multiclass/odd           | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | 75c98698d31da8b2 |
+| gpc-multiclass/ties          | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | 56b3aad7dfdc45d1 |
+| gpc-multiclass/wide          | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | f752f1bda08fa644 |
+| gpc/base                     | DIVERGENT  | parts differ: L,pi,W_sr,lml,proba; agree: n_iter,predict | 04e55361ae6eac6a |
+| gpc/denormal                 | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | 7a7b05eee8bb544d |
+| gpc/denormal_ftz             | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | 7a7b05eee8bb544d |
+| gpc/dupes                    | DIVERGENT  | parts differ: L,pi,W_sr,lml,proba; agree: n_iter,predict | 04e55361ae6eac6a |
+| gpc/hashed                   | DIVERGENT  | parts differ: L,pi,W_sr,n_iter,proba; agree: lml,predict | 9b458faaf4fd2c84 |
+| gpc/negative                 | DIVERGENT  | parts differ: L,pi,W_sr,lml,proba; agree: n_iter,predict | 97fe7ce1b7685d8d |
+| gpc/odd                      | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | 1ed8ba01c1ad634d |
+| gpc/ties                     | DIVERGENT  | parts differ: L,pi,W_sr,n_iter,proba; agree: lml,predict | c1adcfb716563fdd |
+| gpc/wide                     | DIVERGENT  | parts differ: L,pi,W_sr,lml,proba; agree: n_iter,predict | 76e219efd19e0767 |
+
+summary: DIVERGENT=27
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-7713-64-core-processor | cpu-amd-epyc-7713-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| gp/base                      | infer  | DIVERGENT    | 1e032c58b3e9cd14 | 8e7139702b9e9c32 |
+| gp/base                      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp/base                      | batch  | DIVERGENT    | 305bfd4eaf79a5fa | 2dd95259cddc4efe |
+| gp/denormal                  | infer  | DIVERGENT    | 353cd97119d0e754 | 6d5eec9721715f56 |
+| gp/denormal                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp/denormal                  | batch  | DIVERGENT    | 9305dbeb22908e4a | 6f12932408d1c006 |
+| gp/denormal_ftz              | infer  | DIVERGENT    | 353cd97119d0e754 | 6d5eec9721715f56 |
+| gp/denormal_ftz              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp/denormal_ftz              | batch  | DIVERGENT    | 9305dbeb22908e4a | 6f12932408d1c006 |
+| gp/dupes                     | infer  | DIVERGENT    | 52e6b306c452f16c | a32b7a94d0af7d89 |
+| gp/dupes                     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp/dupes                     | batch  | DIVERGENT    | 3caf5f428c1e5112 | 6a4d743577528bba |
+| gp/hashed                    | infer  | DIVERGENT    | 6eec04108625b28e | 6fef05e1e0c24ced |
+| gp/hashed                    | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp/hashed                    | batch  | DIVERGENT    | f18ced6112fb55e8 | c044011838fde80e |
+| gp/negative                  | infer  | DIVERGENT    | b2713d53a58fa4c9 | bb60c94ed8b79fbc |
+| gp/negative                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp/negative                  | batch  | DIVERGENT    | 0284440d2cd65731 | b1378db6e40a2f6b |
+| gp/odd                       | infer  | DIVERGENT    | 9e3f1cf6c455f0fa | ab8d6e4330031ce3 |
+| gp/odd                       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp/odd                       | batch  | DIVERGENT    | e3e6d237ca783492 | acc8b158e837ff90 |
+| gp/ties                      | infer  | DIVERGENT    | 22b0b528124de8d0 | 7df6cdfa2c7e252d |
+| gp/ties                      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp/ties                      | batch  | DIVERGENT    | 42c01186900b0c68 | 846c1ab1a4386ddb |
+| gp/wide                      | infer  | DIVERGENT    | 890cda1ff831faab | e98844487c1664c4 |
+| gp/wide                      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gp/wide                      | batch  | DIVERGENT    | d3e6783a8a000e56 | 2694c6417830a85d |
+| gpc-multiclass/base          | infer  | DIVERGENT    | 84db38aa85e9efe3 | 5cdb66152ec2b641 |
+| gpc-multiclass/base          | model  | DIVERGENT    | a7da75ab43e33d59 | 59b2f522baafab59 |
+| gpc-multiclass/base          | batch  | DIVERGENT    | 772762bf3af9d5ab | a893e927880a597a |
+| gpc-multiclass/denormal      | infer  | DIVERGENT    | fb65a74653a8c928 | 8671e4f695ac8d45 |
+| gpc-multiclass/denormal      | model  | DIVERGENT    | 6a06c6e9e1b52fbd | ad7684fdc4d80a9f |
+| gpc-multiclass/denormal      | batch  | DIVERGENT    | 0b6b909883561caf | b8d0d35954b54522 |
+| gpc-multiclass/denormal_ftz  | infer  | DIVERGENT    | fb65a74653a8c928 | 8671e4f695ac8d45 |
+| gpc-multiclass/denormal_ftz  | model  | DIVERGENT    | ec9bd2135d89a38a | ec238ec62a073e96 |
+| gpc-multiclass/denormal_ftz  | batch  | DIVERGENT    | 0b6b909883561caf | b8d0d35954b54522 |
+| gpc-multiclass/dupes         | infer  | DIVERGENT    | 84db38aa85e9efe3 | 5cdb66152ec2b641 |
+| gpc-multiclass/dupes         | model  | DIVERGENT    | a7da75ab43e33d59 | 59b2f522baafab59 |
+| gpc-multiclass/dupes         | batch  | DIVERGENT    | 772762bf3af9d5ab | a893e927880a597a |
+| gpc-multiclass/hashed        | infer  | DIVERGENT    | ea81a2c3a726ff07 | d6c09978bf825455 |
+| gpc-multiclass/hashed        | model  | DIVERGENT    | ad095c88a27ebcc8 | 3bfd7a499365098b |
+| gpc-multiclass/hashed        | batch  | DIVERGENT    | 29ed3923c985a394 | 70296a14bbb590e6 |
+| gpc-multiclass/negative      | infer  | DIVERGENT    | d35fed113ef73176 | 8b4616c4fbfc8fdb |
+| gpc-multiclass/negative      | model  | DIVERGENT    | dec1293907b2b18f | 0807e7254b6545c2 |
+| gpc-multiclass/negative      | batch  | DIVERGENT    | 5fc9640b35c5fd5d | 440251db5e43e5fb |
+| gpc-multiclass/odd           | infer  | DIVERGENT    | f57fd8a7a5d1e719 | ceb7bf7d51eb1fbf |
+| gpc-multiclass/odd           | model  | DIVERGENT    | e09bd84a508af322 | 7ae72179a752276a |
+| gpc-multiclass/odd           | batch  | DIVERGENT    | b117ad2778d35fd5 | 2bc42ae2be8b7db0 |
+| gpc-multiclass/ties          | infer  | DIVERGENT    | 5f34edf8c694f013 | b210fbcd41874f1f |
+| gpc-multiclass/ties          | model  | DIVERGENT    | 3b3ac4079026dcdb | b0094ee8b360b4c6 |
+| gpc-multiclass/ties          | batch  | DIVERGENT    | f212e023f26bc35c | cb367f29dd1960dc |
+| gpc-multiclass/wide          | infer  | DIVERGENT    | b3674a9463aa4f92 | 84f72782bc08b704 |
+| gpc-multiclass/wide          | model  | DIVERGENT    | bde361487f19df87 | bbcaf55a6067acee |
+| gpc-multiclass/wide          | batch  | DIVERGENT    | 7ad6723007e8de0c | 008706fd09eb7a42 |
+| gpc/base                     | infer  | DIVERGENT    | fc0b4c2f28c2e079 | b0f8d27a5a36fe19 |
+| gpc/base                     | model  | DIVERGENT    | 81b8bb9e635d8e83 | e3fac3eecd7973e1 |
+| gpc/base                     | batch  | DIVERGENT    | b46f1f9043e091a8 | 93ce22166fab8be7 |
+| gpc/denormal                 | infer  | DIVERGENT    | cd21375d6187b126 | 341a5578a67b2eb2 |
+| gpc/denormal                 | model  | DIVERGENT    | 1ed2aed7cb4ce5f2 | 42a0eecd6a102567 |
+| gpc/denormal                 | batch  | DIVERGENT    | ba78f499f85cae98 | 322b23c4462a6bf9 |
+| gpc/denormal_ftz             | infer  | DIVERGENT    | cd21375d6187b126 | 341a5578a67b2eb2 |
+| gpc/denormal_ftz             | model  | DIVERGENT    | b91daefb85705ccd | e758af0d58e286cc |
+| gpc/denormal_ftz             | batch  | DIVERGENT    | ba78f499f85cae98 | 322b23c4462a6bf9 |
+| gpc/dupes                    | infer  | DIVERGENT    | fc0b4c2f28c2e079 | b0f8d27a5a36fe19 |
+| gpc/dupes                    | model  | DIVERGENT    | 81b8bb9e635d8e83 | e3fac3eecd7973e1 |
+| gpc/dupes                    | batch  | DIVERGENT    | b46f1f9043e091a8 | 93ce22166fab8be7 |
+| gpc/hashed                   | infer  | DIVERGENT    | 9da411da0b1e3037 | baa2a5b4d2a2993a |
+| gpc/hashed                   | model  | DIVERGENT    | f4c2aca55d9362f2 | a7f2fc326ae764f3 |
+| gpc/hashed                   | batch  | DIVERGENT    | 0419fbbe5d340ea4 | e18963f8acf2e5b8 |
+| gpc/negative                 | infer  | DIVERGENT    | b7e320a5c79c2f12 | 234314b21d6c386b |
+| gpc/negative                 | model  | DIVERGENT    | 42456472e82844f7 | 5d504c4ff89dcbe0 |
+| gpc/negative                 | batch  | DIVERGENT    | c2f1bdf1ba2a74f9 | 92ee69ae75ba7931 |
+| gpc/odd                      | infer  | DIVERGENT    | 1af8d13ad9045833 | 42fe4b1ff22d5fa1 |
+| gpc/odd                      | model  | DIVERGENT    | d5a786c8bdd995bf | 1952421448b017aa |
+| gpc/odd                      | batch  | DIVERGENT    | 1d0177239abe0a3c | 3df9c163dba531a9 |
+| gpc/ties                     | infer  | DIVERGENT    | ede5baa0c8969b06 | a09e2d86b2bf3a24 |
+| gpc/ties                     | model  | DIVERGENT    | 7b9bf869ad365c26 | ea0a6578a3d338e0 |
+| gpc/ties                     | batch  | DIVERGENT    | c5069c7b59de4ee1 | fad0e1a75018ae42 |
+| gpc/wide                     | infer  | DIVERGENT    | 209675fda33ccf51 | f236b0144d4bfb49 |
+| gpc/wide                     | model  | DIVERGENT    | a3ba1f8be78a6a1e | de008a3224926493 |
+| gpc/wide                     | batch  | DIVERGENT    | e8e16299ce5b249c | 32ad0b95fdbeaafe |
+
+summary (infer/model): DIVERGENT=45, N/A=9
+summary (batch): DIVERGENT=27
+summary (rlpair): 
