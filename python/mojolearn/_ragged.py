@@ -14,9 +14,14 @@ of the argument is two sentences:
 
 1. A real position's output is BYTE FOR BYTE the output of the same
    sequence run alone at its own length (`forward(x[i:i+1, :lengths[i]])`).
-2. A padding position's output is exactly `+0.0` (or byte 0 for
-   `next_bytes`, which reads the last REAL position instead), whatever the
-   caller put at the padding positions of the input.
+2. A padding position's output is exactly `+0.0` (`next_bytes` reads the
+   last REAL position instead), whatever the caller put at the padding
+   positions of the input.
+
+Sentence 2 holds in every numeric mode. Sentence 1 is a claim of the
+IDENTICAL tier, the tier whose contracts make a row independent of its batch
+and its length; under FAST and DETERMINISTIC the two copies are the same and
+the equality is not promised, as for any batch.
 
 NO ARITHMETIC CHANGES, AND THIS IS WHY IT NEEDS NONE. Every model reached
 here is CAUSAL: a position reads only itself and earlier positions. Right
@@ -39,6 +44,15 @@ call, which keeps a caller's non-finite or out-of-vocabulary padding from
 reaching the per-call refusals, and the padding positions of the output
 are overwritten with `+0.0` after it. Numpy-free: both are flat byte copies
 through `_buffer.memory_at`.
+
+THE OUTPUT COPY IS INERT ON THE MAMBA BLOCKS, MEASURED. A Mamba-1, -2 or -3
+block maps an all-`+0.0` token to exactly `+0.0` (the RMSNorm of zero is
+zero and every path to the output is multiplied by it), so on those blocks
+the padding outputs are already `+0.0` after the input copy and a
+sabotage that skips the output copy passes their tests (M4, 2026-09-15).
+The input copy is not inert there: skipping it hands the NaN padding to the
+per-call refusal. On the transformer, the byte LM and Samba both copies
+bite (test_ragged_lengths.py, both sabotages run).
 
 WHAT IS REFUSED, BY NAME. `lengths` together with a carried state (a
 decode continuation of a ragged batch would need per-row positions, which

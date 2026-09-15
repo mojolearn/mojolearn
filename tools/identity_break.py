@@ -85,8 +85,8 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             also asked every prefix LENGTH 1, 7 and L-1 against the whole
             length, and the forecasters the horizons 1, 7 and H-1 against H
             (their batch of series is a different fit, so their part is
-            length only). No sequence API takes padding or a ragged batch,
-            so a sequence is compared alone against same-length peers. The
+            length only). A sequence is compared alone against same-length
+            peers here; right-padded ragged batches are the `ragged` part. The
             value is one hash of the whole-batch outputs when every
             comparison is the same bytes, else `BATCH_MOVED:<call>:<where>:
             <first output and element, both values in hex>` at the first
@@ -114,9 +114,9 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             declarations sit outside the lane bodies (`BATCH`), so no train,
             infer or model hash moves. IT TESTS the host call path's batch
             splitting through the bindings, on ONE box. IT DOES NOT TEST
-            padding or ragged batches; serving-scale B and the backward
-            pass are, since 2026-09-15, the opt-in parts `batchscale` and
-            `batchgrad` below. No part here makes a
+            serving-scale B, padding or ragged batches, or the backward
+            pass; since 2026-09-15 those are the opt-in parts `batchscale`,
+            `ragged` and `batchgrad` below. No part here makes a
             cross-vendor statement; that comes from `--diff` over records.
             THE SABOTAGE turns every hashed batch cell BATCH_MOVED,
             and a run where it does not is a broken part
@@ -127,7 +127,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             whole-batch answer (one ulp) and stamps `batch_sabotage: true`
             in the JSON.
 
-TWO OPT-IN PARTS (2026-09-15), each its own JSON keys (`<part>`,
+THREE OPT-IN PARTS (2026-09-15), each its own JSON keys (`<part>`,
 `<part>_verdict`, `<part>_error`, `<part>_notes`, `<part>_protocol`,
 `<part>_sabotage`) and its own `summary (<part>):` line of `--diff`,
 printed only where a column carries it. A run that does not pass the flag
@@ -191,6 +191,16 @@ BATCH_MOVED (a failure under IDENTICAL only), N/A, REFUSED.
             knn, rf-clf, rf-reg, gbdt-symmetric, gbdt-rmse, ols, ridge,
             logistic, pca. Inputs past a fixture's size wrap around it. The
             batch part's sabotage switch sabotages this part too.
+    ragged  `--ragged`. PADDED AND RAGGED BATCHES, through the `lengths=`
+            argument the causal sequence models take since 2026-09-15
+            (python/mojolearn/_ragged.py: TransformerBlock, Mamba1/2/3Block
+            and SambaStack `forward`, the byte LM `logits` and `next_bytes`).
+            Rows of lengths (16, 1, 7, 9, 16, 3, 12, 15) at L = 16 and
+            (300, 1, 65, 129, 257, 128) at L = 300, the padding filled with
+            NaN (floats) or vocab + 7 (ids). Every row's real positions must
+            equal the row run alone at its own length, and every padding
+            output must be exactly +0.0; next_bytes must equal the row alone.
+            The batch part's sabotage switch sabotages this part too.
 
 THE LANES, 178 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
@@ -4313,12 +4323,144 @@ _batchscale_decl(_scale_calls("transform"), "pca")
 BATCHSCALE_DEFAULT = "n/a:not-in-the-serving-set"
 
 
+# ---------------------------------------------------------------- the ragged part (2026-09-15)
+# See `ragged` in the module docstring. Opt-in (`--ragged`). The causal
+# sequence models take `lengths=` since 2026-09-15 (python/mojolearn/_ragged.py):
+# a right-padded batch whose real positions must equal each row alone at its
+# own length and whose padding outputs must be exactly +0.0. The padding
+# INPUT is filled with junk (NaN for the float blocks, out-of-vocabulary ids
+# for the token models) so a padding value that reached any real position,
+# or any refusal, is seen.
+
+#: row lengths of the short ragged batch (L = SEQ_LEN) and of the long one;
+#: the long lengths straddle the Mamba-3 chunk (64), the v1 GEMM leaf (128)
+#: and the Mamba-2 chunk (256)
+RAGGED_LENGTHS = (16, 1, 7, 9, 16, 3, 12, 15)
+RAGGED_LONG_LENGTHS = (300, 1, 65, 129, 257, 128)
+
+RAGGED = {}
+
+
+def _ragged_decl(spec, *names):
+    for n in names:
+        if n in RAGGED:
+            raise RuntimeError(f"identity_break: lane {n!r} has two ragged declarations")
+        RAGGED[n] = spec
+
+
+class _RaggedCall:
+    """One ragged call. `x` is (B, L, ...) with junk at the padding
+    positions, `padded(x, lengths)` returns a tuple of outputs whose axis 0
+    is the rows, and `alone(x_row)` the same outputs for one row cut to its
+    length. `axes[k]` is output k's length axis (1), or None for a per-row
+    output (next_bytes) compared whole."""
+
+    def __init__(self, label, x, lengths, padded, alone, axes=(1,)):
+        self.label, self.x, self.lengths = label, np.ascontiguousarray(x), tuple(lengths)
+        self.padded, self.alone, self.axes = padded, alone, tuple(axes)
+
+
+def _eval_ragged(call, sabotage, digest):
+    outs = [np.array(np.asarray(o), copy=True) for o in call.padded(call.x, call.lengths)]
+    if len(outs) != len(call.axes):
+        raise ValueError(f"{call.label}: {len(outs)} outputs, {len(call.axes)} axes declared")
+    if sabotage:
+        outs[0] = _flip_first_float(outs[0])
+    for i, n in enumerate(call.lengths):
+        alone = [np.asarray(o) for o in call.alone(np.ascontiguousarray(call.x[i:i + 1, :n]))]
+        for k, (O, A, ax) in enumerate(zip(outs, alone, call.axes)):
+            A = np.ascontiguousarray(A)
+            want = np.ascontiguousarray(O[i:i + 1] if ax is None else O[i:i + 1, :n])
+            where = f"BATCH_MOVED:{call.label}:row {i} (length {n} of {call.x.shape[1]}) output {k}"
+            if want.shape != A.shape or want.dtype != A.dtype:
+                return f"{where}: padded {want.dtype.str}{list(want.shape)} vs alone {A.dtype.str}{list(A.shape)}"
+            if want.tobytes() != A.tobytes():
+                return f"{where} real positions: {_first_diff(want, A).replace('whole', 'padded', 1).replace(' vs ', ' vs alone ', 1)}"
+            if ax is not None:
+                pad = np.ascontiguousarray(O[i, n:])
+                if pad.tobytes() != bytes(pad.nbytes):
+                    first = next(j for j, c in enumerate(pad.tobytes()) if c) // pad.dtype.itemsize
+                    return f"{where}: padding output element {first} is not +0.0"
+    digest.update(f"ragged:{call.label}:{list(call.x.shape)}:{call.lengths}".encode())
+    for o in outs:
+        o = np.ascontiguousarray(o)
+        digest.update(f"{o.dtype.str}{o.shape}".encode())
+        digest.update(o.tobytes())
+    return None
+
+
+def _junk_float(x, lengths):
+    x = np.array(x, dtype=np.float32, copy=True)
+    for i, n in enumerate(lengths):
+        x[i, n:] = np.float32("nan")
+    return x
+
+
+def _junk_ids(ids, lengths, vocab):
+    ids = np.array(ids, dtype=np.int32, copy=True)
+    for i, n in enumerate(lengths):
+        ids[i, n:] = vocab + 7
+    return ids
+
+
+def _ragged_block(ml, blk, Xh):
+    dm = blk.d_model
+    L2 = max(RAGGED_LONG_LENGTHS)
+    x = _junk_float(_seq(Xh, len(RAGGED_LENGTHS), SEQ_LEN, dm), RAGGED_LENGTHS)
+    xl = _junk_float(_tiled(Xh, (len(RAGGED_LONG_LENGTHS), L2, dm)), RAGGED_LONG_LENGTHS)
+    fwd = lambda a, lens: (np.asarray(blk.forward(a, lengths=lens)),)
+    one = lambda r: (np.asarray(blk.forward(r)),)
+    return [_RaggedCall(f"forward(lengths) L={SEQ_LEN}", x, RAGGED_LENGTHS, fwd, one),
+            _RaggedCall(f"forward(lengths) L={L2}", xl, RAGGED_LONG_LENGTHS, fwd, one)]
+
+
+_ragged_decl(_ragged_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "transformer", "transformer-window")
+
+
+def _ragged_byte_lm(ml, e, Xh):
+    shape = ml.ByteLanguageModelConfig()
+    lens = tuple(min(n * 2, shape.length) for n in RAGGED_LENGTHS)
+    ids = _junk_ids(_ids(Xh, len(lens), shape.length), lens, shape.vocab_size)
+    both = lambda a, ls: (np.asarray(e.logits(a, lengths=ls)), np.asarray(e.next_bytes(a, lengths=ls), dtype=np.int64))
+    one = lambda r: (np.asarray(e.logits(r)), np.asarray(e.next_bytes(r), dtype=np.int64))
+    calls = [_RaggedCall(f"logits, next_bytes(lengths) L={shape.length}", ids, lens, both, one, axes=(1, None))]
+    long_m = _long_byte_lm(ml, e)
+    L2 = max(RAGGED_LONG_LENGTHS)
+    idl = _junk_ids(_tiled_ids(Xh, len(RAGGED_LONG_LENGTHS), L2), RAGGED_LONG_LENGTHS, shape.vocab_size)
+    calls.append(_RaggedCall(f"logits(lengths) L={L2}", idl, RAGGED_LONG_LENGTHS,
+                             lambda a, ls: (np.asarray(long_m.logits(a, lengths=ls)),),
+                             lambda r: (np.asarray(long_m.logits(r)),)))
+    return calls
+
+
+_ragged_decl(_ragged_byte_lm, "byte-lm", "byte-lm-resident", "byte-lm-host-infer", "byte-lm-host-infer-threaded")
+
+
+def _ragged_samba(ml, st, Xh):
+    v = st.config.vocab
+    ids = _junk_ids(_ids(Xh, len(RAGGED_LENGTHS), SEQ_LEN, v), RAGGED_LENGTHS, v)
+    L2 = max(RAGGED_LONG_LENGTHS)
+    idl = _junk_ids(_tiled_ids(Xh, len(RAGGED_LONG_LENGTHS), L2, v), RAGGED_LONG_LENGTHS, v)
+    fwd = lambda a, ls: (np.asarray(st.forward(a, lengths=ls)),)
+    one = lambda r: (np.asarray(st.forward(r)),)
+    return [_RaggedCall(f"forward(lengths) L={SEQ_LEN}", ids, RAGGED_LENGTHS, fwd, one),
+            _RaggedCall(f"forward(lengths) L={L2}", idl, RAGGED_LONG_LENGTHS, fwd, one)]
+
+
+_ragged_decl(_ragged_samba, "samba", "samba-untied-dropout-accum")
+_ragged_decl("n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+             "par-samba", "par-samba-clip", "par-byte-lm", "par-byte-lm-model-pool", "par-byte-lm-offload")
+
+RAGGED_DEFAULT = "n/a:no-sequence-axis"
+
+
 # ---------------------------------------------------------------- the opt-in parts, one runner
 
 #: part name -> (declarations, default, CLI flag, sabotage env)
 EXTRA_PARTS = {
     "batchgrad": (BATCHGRAD, BATCHGRAD_DEFAULT, "batch_grad", BATCHGRAD_SABOTAGE_ENV),
     "batchscale": (BATCHSCALE, BATCHSCALE_DEFAULT, "batch_scale", BATCH_SABOTAGE_ENV),
+    "ragged": (RAGGED, RAGGED_DEFAULT, "ragged", BATCH_SABOTAGE_ENV),
 }
 
 
@@ -4330,6 +4472,7 @@ def _part_protocol(part, alone):
     if part == "batchscale":
         return dict(batches=list(SCALE_BATCHES), whole=SCALE_WHOLE, long_l=SCALE_LONG_L,
                     prefixes=list(SCALE_PREFIXES))
+    return dict(lengths=list(RAGGED_LENGTHS), long_lengths=list(RAGGED_LONG_LENGTHS), padding="nan/vocab+7")
 
 
 def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
@@ -4355,6 +4498,8 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
                 moved = _eval_grad_carry(ml, call, sabotage, digest, notes)
             elif isinstance(call, _ScaleRows):
                 moved = _eval_scale_rows(call, flip, digest)
+            elif isinstance(call, _RaggedCall):
+                moved = _eval_ragged(call, flip, digest)
             else:
                 raise TypeError(f"{part}: unknown call type {type(call).__name__}")
             if moved:
@@ -5050,6 +5195,8 @@ def main():
                     help="add the batchgrad part: per-row gradients and clause 9.2 aligned accumulation")
     ap.add_argument("--batch-scale", action="store_true",
                     help="add the batchscale part: B in {1, 17, 64, 256} inside B = 1024, and long-L prefixes")
+    ap.add_argument("--ragged", action="store_true",
+                    help="add the ragged part: lengths= right-padded batches against each row alone")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--diff", nargs="+", default=None, metavar="JSON",
                     help="compare JSONs cell by cell: the train column, then infer and model where carried")
