@@ -360,8 +360,8 @@ byte LM's. Each also builds from source through
 | tsa | `_mojolearn_tsa_host.so` | `_mojolearn_tsa` | holtwinters, holtwinters-multiplicative, kpss | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | solver | `_mojolearn_solver_host.so` | `_mojolearn_solver` | lasso, elasticnet, agglomerative, elasticnet-l2end-no-intercept | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | svm | `_mojolearn_svm_host.so` | `_mojolearn_svm` | svc, iforest, svc-linear, iforest-tuned, svr, svr-linear | SVC, IsolationForest, SVR (svc) | tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml) | yes |
-| trees | `_mojolearn_trees_host.so` | `_mojolearn_trees` | et-clf, et-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
-| rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| trees | `_mojolearn_trees_host.so` | `_mojolearn_trees` | et-clf, et-reg, et-clf-entropy-bestfirst, et-reg-bootstrap-parallel | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| rf | `_mojolearn_rf_host.so` | `_mojolearn_rf` | rf-clf, rf-reg, rf-clf-entropy-log2-noboot, rf-clf-balanced-parallel, rf-reg-poisson, rf-reg-gamma-ig | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | gp | `_mojolearn_gp_host.so` | `_mojolearn_gp` | gp, gp-matern12, gp-matern32, gp-matern52-ard, cholesky | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | kernel_methods | `_mojolearn_kernel_methods_host.so` | `_mojolearn_kernel_methods` | rbf-sampler, kernel-ridge, nystroem | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | mixture | `_mojolearn_mixture_host.so` | `_mojolearn_mixture` | gmm, gmm-random-init | no | tools/identity_break.py (cpu-identity-gate.yml) | yes |

@@ -975,17 +975,21 @@ def host_families_built():
 #:     fit_extra_trees_regressor_host_exact (the device trainer restated on
 #:     the host, exact keys and quantized leaves), forest_export,
 #:     forest_export_legacy, forest_export_release and et_predict over
-#:     core/forest_host_predict.mojo; et_predict_gpu_parallel and the
-#:     resident forest_* entries are absent (inference_engine=
-#:     'parallel_groves' is a GPU engine).
+#:     core/forest_host_predict.mojo; since 2026-09-15 the resident
+#:     forest_prepare_gpu, forest_predict_resident_reuse_gpu and
+#:     forest_release_gpu (inference_engine='parallel_groves') over
+#:     core/forest_host_groves.mojo, with et_predict_gpu_parallel and the
+#:     other resident arms absent.
 #:   _mojolearn_rf -> _mojolearn_rf_host (rf-clf, rf-reg; workstream E
 #:     batch 3, 2026-09-14): the eight rf_*_fit entries over
 #:     ensemble/host/rf_oracle.mojo::rf_host_fit (the device trainer
 #:     restated on the host), forest_export, forest_export_legacy,
 #:     forest_export_release, and rf_predict_proba and rf_predict_reg over
-#:     core/forest_host_predict.mojo; the class-weighted and shard fits, the
-#:     POISSON, GAMMA and INVERSE_GAUSSIAN criteria and the GPU engines
-#:     refuse by name. This is its own family, not the forest host binding
+#:     core/forest_host_predict.mojo; since 2026-09-15 the POISSON, GAMMA and
+#:     INVERSE_GAUSSIAN criteria, rf_classifier_fit_weighted (the weighted
+#:     bootstrap; weights without a bootstrap refuse by name) and the
+#:     resident parallel_groves entries over core/forest_host_groves.mojo;
+#:     the shard fits and the non-resident GPU engines refuse by name. This is its own family, not the forest host binding
 #:     named above, because it exports the GPU binding's names.
 #:   _mojolearn_gp -> _mojolearn_gp_host (gp, gp-matern12, gp-matern32,
 #:     gp-matern52-ard; workstream E, 2026-09-14): gpr_fit and gpr_predict

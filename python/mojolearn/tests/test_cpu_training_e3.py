@@ -8,8 +8,10 @@ the package took the CPU-only path.
 What the source checks hold: the manifest declares the rf family, routes
 `_mojolearn_rf`, covers rf-clf and rf-reg and no longer names the random
 forests as having no CPU training path; the binding registers the GPU
-binding's fit, export and predict names and leaves the weighted, shard and
-GPU engine entries absent so they refuse by name; the oracle imports no GPU
+binding's fit, export and predict names and leaves the shard and
+non-resident GPU engine entries absent so they refuse by name (the weighted
+fit and the resident parallel_groves entries joined on 2026-09-15, see
+test_cpu_training_forest_variants.py); the oracle imports no GPU
 module and nothing from `ensemble/` beyond the `checks/numerics.mojo`
 seams; the oracle spells the device constructs a bit claim rests on (the
 pinned width 32 reduction, the ftz-compared quantile unique, the bootstrap
@@ -50,7 +52,7 @@ def _read(rel):
 def test_manifest_declares_the_rf_family():
     fam = host_surface.family("rf")
     assert fam["routes"] == "_mojolearn_rf"
-    assert fam["training_lanes"] == ("rf-clf", "rf-reg")
+    assert fam["training_lanes"][:2] == ("rf-clf", "rf-reg")
     assert ORACLE in fam["host_modules"] and (ROOT / ORACLE).is_file()
     assert (ROOT / host_surface.build_shim("rf")).is_file()
     assert (ROOT / host_surface.binding_source("rf")).is_file()
@@ -70,10 +72,9 @@ def test_binding_registers_the_gpu_names():
                              "rf_predict_proba", "rf_predict_reg", "rf_vendor", "rf_numeric_mode"):
         assert f'("{name}")' in src, f"the rf host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name} for rf"
-    for absent in ("rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
-                   "rf_classifier_fit_shard", "rf_regressor_fit_shard",
+    for absent in ("rf_classifier_fit_shard", "rf_regressor_fit_shard",
                    "rf_predict_proba_gpu_parallel", "rf_predict_reg_gpu_parallel",
-                   "forest_prepare_gpu", "forest_predict_resident_reuse_gpu"):
+                   "forest_predict_resident_gpu", "forest_predict_resident_into_gpu"):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
 

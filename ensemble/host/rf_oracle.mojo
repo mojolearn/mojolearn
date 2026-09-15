@@ -79,15 +79,25 @@ truncated, summed in Int32, dequantized as `Float32(raw) / scale`; the
 scale is the binding's `choose_scale` over the label magnitudes, as the GPU
 binding computes it (`bindings/_mojolearn_rf.mojo:594-600`).
 
-WHAT IS REFUSED BY NAME: class weights (`WeightedClassificationBin`), the
-POISSON, GAMMA and INVERSE_GAUSSIAN criteria, and `max_n_bins > 1024`
-(their own refusal). OOB scoring never crosses the GPU binding either.
+ADDED 2026-09-15 (the forest variant lanes rf-reg-poisson, rf-reg-gamma-ig
+and rf-clf-balanced-parallel): the POISSON, GAMMA and INVERSE_GAUSSIAN gains
+(`objectives.mojo:981-1245`, the storage-width right label sum, the `eps_`
+guards, `identical_log`), and the class-weighted BOOTSTRAP, whose weights
+act only through the row draw (`randomforest.mojo:2570-2582`):
+`prepare_weights`' Float64 CDF and the Philox `uniform<double>` draws read
+through `upper_bound` (`:2098-2135`).
+
+WHAT IS REFUSED BY NAME: class weights WITHOUT bootstrap (the weighted
+objective, `WeightedClassificationBin`), and `max_n_bins > 1024` (their own
+refusal). OOB scoring never crosses the GPU binding either.
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` draws every bootstrap
-row from the NEXT Philox subsequence (`i + 1` in place of `i`), so every
-tree of a bootstrap forest trains on a different row multiset and every
-fixture's forest moves. An arm on an integer fold could not fail: every
-histogram here is an integer sum that no order moves.
+row, weighted or not, from the NEXT Philox subsequence (`i + 1` in place of
+`i`), so every tree of a bootstrap forest trains on a different row
+multiset, and adds one to every node's column-sample seed, so a forest
+without a bootstrap that samples columns moves too. An arm on an integer
+fold could not fail: every histogram here is an integer sum that no order
+moves.
 
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the rf-clf and rf-reg lanes is the measurement.
@@ -213,17 +223,12 @@ def rf_host_check_params(p: RfHostParams, classification: Bool) raises:
             )
     else:
         if (
-            p.criterion == RF_POISSON
-            or p.criterion == RF_GAMMA
-            or p.criterion == RF_INVERSE_GAUSSIAN
+            p.criterion != RF_MSE
+            and p.criterion != RF_POISSON
+            and p.criterion != RF_GAMMA
+            and p.criterion != RF_INVERSE_GAUSSIAN
+            and p.criterion != RF_CRITERION_END
         ):
-            raise Error(
-                "rf host: the POISSON, GAMMA and INVERSE_GAUSSIAN criteria have"
-                " no host restatement yet (ensemble/host/rf_oracle.mojo); a"
-                " CPU-only install refuses them by name rather than fitting a"
-                " different forest"
-            )
-        if p.criterion != RF_MSE and p.criterion != RF_CRITERION_END:
             raise Error(
                 "rf host: split criterion " + String(p.criterion)
                 + " has no arm in the regression objective (DEVIATION 407)"
@@ -519,6 +524,10 @@ def host_seed_tree_node(seed: UInt64, treeid: Int, nodeid: Int) -> UInt32:
     h = host_fnv1a32(h, UInt32((seed >> 32) & UInt64(0xFFFFFFFF)))
     h = host_fnv1a32(h, UInt32(treeid))
     h = host_fnv1a32(h, UInt32(nodeid))
+    comptime if RF_ORACLE_HOST_SABOTAGE:
+        # THE NEGATIVE CONTROL's second arm: every node's column-sample seed
+        # one off, so a forest without a bootstrap draw moves too.
+        h = h + UInt32(1)
     return h
 
 
@@ -802,6 +811,111 @@ def _dequantize(raw: Int32, scale: Float32) -> Float32:
     return Float32(Int(raw)) / scale
 
 
+def _dequantize_wide(raw: Int64, scale: Float32) -> Float32:
+    """`_dequantize_wide`, `bins.mojo:183-189`: one rounding after the
+    storage-width subtraction."""
+    return Float32(Int(raw)) / scale
+
+
+comptime RF_REG_EPS = Float32(10.0) * Float32(1.1920928955078125e-07)
+"""`RegressionObjectiveFunction.eps_`, `objectives.mojo:895`:
+`10 * numeric_limits<float>::epsilon()`, the epsilon written as 2^-23."""
+
+
+def host_poisson_gain(
+    counts: List[UInt32], label_sums: List[Int32], i: Int, n_bins: Int, scale: Float32
+) -> Float32:
+    """`PoissonGain`, `objectives.mojo:981-1064`: the right label sum
+    subtracted at storage width (`LabelSumMinus`, `bins.mojo`), the `eps_`
+    guards, every `raft::log` through `identical_log` (`core/tree_math.mojo`
+    for Float32), each store flushed."""
+    var parent_weight = Int64(Int(counts[n_bins - 1]))
+    var left_weight = Int64(Int(counts[i]))
+    var right_weight = parent_weight - left_weight
+    if parent_weight <= 0 or left_weight <= 0 or right_weight <= 0:
+        return RF_SPLIT_MIN
+    var inv_len = ftz(Float32(1) / parent_weight.cast[DType.float32]())
+    var label_sum = ftz(_dequantize(label_sums[n_bins - 1], scale))
+    var left_label_sum = ftz(_dequantize(label_sums[i], scale))
+    var right_label_sum = ftz(_dequantize_wide(
+        Int64(Int(label_sums[n_bins - 1])) - Int64(Int(label_sums[i])), scale
+    ))
+    if label_sum <= RF_REG_EPS or left_label_sum <= RF_REG_EPS or right_label_sum <= RF_REG_EPS:
+        return RF_SPLIT_MIN
+    var parg = ftz(label_sum * inv_len)
+    var parent_obj = ftz(-label_sum * identical_log(parg))
+    var larg = ftz(left_label_sum / left_weight.cast[DType.float32]())
+    var left_obj = ftz(-left_label_sum * identical_log(larg))
+    var rarg = ftz(right_label_sum / right_weight.cast[DType.float32]())
+    var right_obj = ftz(-right_label_sum * identical_log(rarg))
+    var lr = ftz(left_obj + right_obj)
+    var gain = ftz(parent_obj - lr)
+    gain = ftz(gain * inv_len)
+    return gain
+
+
+def host_gamma_gain(
+    counts: List[UInt32], label_sums: List[Int32], i: Int, n_bins: Int, scale: Float32
+) -> Float32:
+    """`GammaGain`, `objectives.mojo:1067-1156`, `host_poisson_gain`'s shape
+    with the weights as the log factors."""
+    var parent_weight = Int64(Int(counts[n_bins - 1]))
+    var left_weight = Int64(Int(counts[i]))
+    var right_weight = parent_weight - left_weight
+    if parent_weight <= 0 or left_weight <= 0 or right_weight <= 0:
+        return RF_SPLIT_MIN
+    var inv_len = ftz(Float32(1) / parent_weight.cast[DType.float32]())
+    var label_sum = ftz(_dequantize(label_sums[n_bins - 1], scale))
+    var left_label_sum = ftz(_dequantize(label_sums[i], scale))
+    var right_label_sum = ftz(_dequantize_wide(
+        Int64(Int(label_sums[n_bins - 1])) - Int64(Int(label_sums[i])), scale
+    ))
+    if label_sum <= RF_REG_EPS or left_label_sum <= RF_REG_EPS or right_label_sum <= RF_REG_EPS:
+        return RF_SPLIT_MIN
+    var parg = ftz(label_sum * inv_len)
+    var parent_obj = ftz(parent_weight.cast[DType.float32]() * identical_log(parg))
+    var larg = ftz(left_label_sum / left_weight.cast[DType.float32]())
+    var left_obj = ftz(left_weight.cast[DType.float32]() * identical_log(larg))
+    var rarg = ftz(right_label_sum / right_weight.cast[DType.float32]())
+    var right_obj = ftz(right_weight.cast[DType.float32]() * identical_log(rarg))
+    var lr = ftz(left_obj + right_obj)
+    var gain = ftz(parent_obj - lr)
+    gain = ftz(gain * inv_len)
+    return gain
+
+
+def host_inverse_gaussian_gain(
+    counts: List[UInt32], label_sums: List[Int32], i: Int, n_bins: Int, scale: Float32
+) -> Float32:
+    """`InverseGaussianGain`, `objectives.mojo:1159-1245`: no transcendental."""
+    var parent_weight = Int64(Int(counts[n_bins - 1]))
+    var left_weight = Int64(Int(counts[i]))
+    var right_weight = parent_weight - left_weight
+    if parent_weight <= 0 or left_weight <= 0 or right_weight <= 0:
+        return RF_SPLIT_MIN
+    var label_sum = ftz(_dequantize(label_sums[n_bins - 1], scale))
+    var left_label_sum = ftz(_dequantize(label_sums[i], scale))
+    var right_label_sum = ftz(_dequantize_wide(
+        Int64(Int(label_sums[n_bins - 1])) - Int64(Int(label_sums[i])), scale
+    ))
+    if label_sum <= RF_REG_EPS or left_label_sum <= RF_REG_EPS or right_label_sum <= RF_REG_EPS:
+        return RF_SPLIT_MIN
+    var pw = parent_weight.cast[DType.float32]()
+    var lw = left_weight.cast[DType.float32]()
+    var rw = right_weight.cast[DType.float32]()
+    var psq = ftz(-pw * pw)
+    var parent_obj = ftz(psq / label_sum)
+    var lsq = ftz(-lw * lw)
+    var left_obj = ftz(lsq / left_label_sum)
+    var rsq = ftz(-rw * rw)
+    var right_obj = ftz(rsq / right_label_sum)
+    var lr = ftz(left_obj + right_obj)
+    var gain = ftz(parent_obj - lr)
+    var denom = ftz(Float32(2) * pw)
+    gain = ftz(gain / denom)
+    return gain
+
+
 def host_mse_gain(
     counts: List[UInt32], label_sums: List[Int32], i: Int, n_bins: Int, scale: Float32
 ) -> Float32:
@@ -1013,10 +1127,88 @@ def n_sampled_rows_host(bootstrap: Bool, max_samples: Float32, n_rows: Int) -> I
     return Int(f)
 
 
-def host_sampled_rows(seed: UInt64, tree_id: Int, bootstrap: Bool, n_rows: Int, n_sampled: Int) raises -> List[Int32]:
-    """`RowSampler._sample_rows`, `randomforest.mojo:2093-2206`, the two
-    unweighted arms."""
+def host_philox_uniform_double(mut gen: HostPhilox, start: Float64, end: Float64) -> Float64:
+    """`custom_next_uniform_double`, `core/philox.mojo:349-354`: `next_u64`
+    low word first, the top 53 bits over 2^53, times the span, plus the
+    start (their order)."""
+    var a = UInt64(Int(gen.next_u32())) & UInt64(0xFFFFFFFF)
+    var b = UInt64(Int(gen.next_u32())) & UInt64(0xFFFFFFFF)
+    var v = (a | (b << 32)) >> 11
+    var res = Float64(Int(v)) / Float64(Int(UInt64(1) << 53))
+    return (res * (end - start)) + start
+
+
+def host_weight_cdf(weights: List[Float32], n_rows: Int) raises -> List[Float64]:
+    """`RowSampler.prepare_weights`, `randomforest.mojo:1931-2000`: their two
+    refusals by value, then the inclusive Float64 scan whose LAST element is
+    the draw span."""
+    if len(weights) < n_rows:
+        raise Error(
+            "sample_weight holds " + String(len(weights)) + " values but n_rows is "
+            + String(n_rows)
+        )
+    var total = Float64(0.0)
+    for i in range(n_rows):
+        var w = weights[i]
+        if not (w == w):
+            raise Error(
+                "sample_weight values must be finite and non-negative; index "
+                + String(i) + " is NaN"
+            )
+        if w < Float32(0.0):
+            raise Error(
+                "sample_weight values must be finite and non-negative; index "
+                + String(i) + " is " + String(w)
+            )
+        total += Float64(w)
+    if total <= 0.0:
+        raise Error(
+            "sample_weight values must contain at least one positive value"
+            " (randomforest.cuh:93-95)"
+        )
+    var cdf = List[Float64](capacity=n_rows)
+    var run = Float64(0.0)
+    for i in range(n_rows):
+        run += Float64(weights[i])
+        cdf.append(run)
+    return cdf^
+
+
+def host_sampled_rows(
+    seed: UInt64,
+    tree_id: Int,
+    bootstrap: Bool,
+    n_rows: Int,
+    n_sampled: Int,
+    weight_cdf: List[Float64] = List[Float64](),
+) raises -> List[Int32]:
+    """`RowSampler._sample_rows`, `randomforest.mojo:2093-2206`: the two
+    unweighted arms and the weighted bootstrap (`weight_cdf` non-empty)."""
     var rows = List[Int32](capacity=n_sampled)
+    if bootstrap and len(weight_cdf) > 0:
+        # `:2098-2135`: `uniform_double_host` over `[0, weight_sum)` at stride
+        # 110592 (`core/philox.mojo:357-379`, one generator per subsequence),
+        # then `std::upper_bound` over the CDF.
+        var weight_sum = weight_cdf[n_rows - 1]
+        var draw_seed = UInt64(Int(host_seed_tree(seed, tree_id)))
+        for i in range(n_sampled):
+            var sub = UInt64(i % RF_RNG_STRIDE)
+            comptime if RF_ORACLE_HOST_SABOTAGE:
+                sub = sub + UInt64(1)
+            var gen = host_philox_init(draw_seed, sub, UInt64(0))
+            for _ in range(i // RF_RNG_STRIDE):
+                _ = host_philox_uniform_double(gen, Float64(0.0), weight_sum)
+            var d = host_philox_uniform_double(gen, Float64(0.0), weight_sum)
+            var lo = 0
+            var hi = n_rows
+            while lo < hi:
+                var mid = (lo + hi) // 2
+                if weight_cdf[mid] <= d:
+                    lo = mid + 1
+                else:
+                    hi = mid
+            rows.append(Int32(lo))
+        return rows^
     if not bootstrap:
         # DEVIATION 2484's sequence, `row_ids_tiled_sequence_kernel`.
         for i in range(n_sampled):
@@ -1126,6 +1318,12 @@ def _node_best_split(
                             gain = host_entropy_gain(counts, i, nb, n_classes)
                         else:
                             gain = host_gini_gain(counts, i, nb, n_classes)
+                    elif criterion == RF_POISSON:
+                        gain = host_poisson_gain(counts, label_sums, i, nb, label_scale)
+                    elif criterion == RF_GAMMA:
+                        gain = host_gamma_gain(counts, label_sums, i, nb, label_scale)
+                    elif criterion == RF_INVERSE_GAUSSIAN:
+                        gain = host_inverse_gaussian_gain(counts, label_sums, i, nb, label_scale)
                     else:
                         gain = host_mse_gain(counts, label_sums, i, nb, label_scale)
                     if gain > p.min_impurity_decrease:
@@ -1183,6 +1381,7 @@ def rf_host_fit(
     params: RfHostParams,
     label_scale: Float32,
     tree_start: Int = 0,
+    weights: List[Float32] = List[Float32](),
 ) raises -> RfHostForest:
     """`fit_forest`, `ensemble/randomforest.mojo:2299-2849`, on the host.
 
@@ -1209,6 +1408,13 @@ def rf_host_fit(
     elif len(labels_f) != n_rows:
         raise Error("rf host: y must hold n_rows targets")
     rf_host_check_params(p, classification)
+    if len(weights) > 0 and not p.bootstrap:
+        raise Error(
+            "rf host: class weights without bootstrap reach the weighted"
+            " objective (WeightedClassificationBin), which has no host"
+            " restatement (ensemble/host/rf_oracle.mojo); a CPU-only install"
+            " refuses it by name rather than fitting a different forest"
+        )
     # `Builder.__init__`'s criterion resolution (`builder.mojo:1224-1228`).
     var criterion = p.criterion
     if criterion == RF_CRITERION_END:
@@ -1238,6 +1444,11 @@ def rf_host_fit(
     for i in range(n_rows * n_cols):
         x[i] = ftz(x[i])
     var q = host_compute_quantiles(x, n_rows, n_cols, p.max_n_bins, p.seed)
+    # `fit_forest` calls `prepare_weights` before the first tree
+    # (`randomforest.mojo:2567-2568`).
+    var weight_cdf = List[Float64]()
+    if len(weights) > 0:
+        weight_cdf = host_weight_cdf(weights, n_rows)
 
     # `Builder.__init__` (`builder.mojo:1230-1242`): `n_sampled_cols_for`.
     var original_cols = Int(Float32(n_cols) * p.max_features)
@@ -1256,7 +1467,7 @@ def rf_host_fit(
     forest.offsets.append(Int32(0))
     for t in range(p.n_trees):
         var tree_id = tree_start + t
-        var row_ids = host_sampled_rows(p.seed, tree_id, p.bootstrap, n_rows, n_sampled)
+        var row_ids = host_sampled_rows(p.seed, tree_id, p.bootstrap, n_rows, n_sampled, weight_cdf)
 
         # `NodeQueue.__init__` (`builder.mojo:197-232`).
         var t_colid = List[Int32]()

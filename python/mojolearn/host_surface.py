@@ -420,6 +420,23 @@ TRAINING_LANE_NAMES = {
     "gmm-random-init": "the Gaussian mixture with a random start",
     "hdbscan": "HDBSCAN",
     "hdbscan-leaf": "HDBSCAN with leaf selection",
+    # The forest variant lanes (lane/cpu-training-forest-variants,
+    # 2026-09-15). rf-clf-entropy-log2-noboot was already served by
+    # ensemble/host/rf_oracle.mojo (entropy, log2 features, no bootstrap, the
+    # level-order leaf cap); the oracle gained the POISSON, GAMMA and
+    # INVERSE_GAUSSIAN gains and the class-weighted bootstrap, the rf binding
+    # rf_classifier_fit_weighted, and both forest bindings the resident
+    # parallel_groves entries over core/forest_host_groves.mojo; ExtraTrees'
+    # best-first growth fits through train_tree_exact_bestfirst. On the M4's
+    # CPU column (one core), all 54 train, 108 infer and model and 54 batch
+    # cells IDENTICAL x4 against the 166-lane record before the gate ran, and
+    # the sabotage build DIVERGENT on every one.
+    "rf-clf-entropy-log2-noboot": "the random forest classifier with entropy splits, log2 features and no bootstrap",
+    "rf-clf-balanced-parallel": "the class-weighted random forest classifier with the parallel groves engine",
+    "rf-reg-poisson": "the random forest regressor with the Poisson criterion",
+    "rf-reg-gamma-ig": "the random forest regressor with the gamma and inverse Gaussian criteria",
+    "et-clf-entropy-bestfirst": "the best-first Extra Trees classifier with entropy splits",
+    "et-reg-bootstrap-parallel": "the bootstrapped Extra Trees regressor with the parallel groves engine",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
@@ -780,14 +797,14 @@ FAMILIES = (
         routes="_mojolearn_trees",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("et-clf", "et-reg"),
+        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ExtraTreesClassifier", "ExtraTreesRegressor"),
         display="the Extra Trees classifier and regressor",
         host_modules=(
             "extratrees/estimator.mojo", "extratrees/checks/pcg_rng.mojo",
-            "core/forest_host_predict.mojo",
+            "core/forest_host_predict.mojo", "core/forest_host_groves.mojo",
         ),
         exports=(
             "trees_host_numeric_mode", "trees_host_vendor", "trees_host_column",
@@ -797,7 +814,8 @@ FAMILIES = (
             "et_regressor_fit", "et_regressor_fit_export",
             "et_regressor_fit_rowmajor", "et_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
-            "et_predict",
+            "et_predict", "forest_prepare_gpu", "forest_predict_resident_reuse_gpu",
+            "forest_release_gpu",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -814,12 +832,18 @@ FAMILIES = (
         routes="_mojolearn_rf",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("rf-clf", "rf-reg"),
+        training_lanes=(
+            "rf-clf", "rf-reg", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
+            "rf-reg-poisson", "rf-reg-gamma-ig",
+        ),
         inference_lanes=(),
         forest_kinds=(),
         classes=("RandomForestClassifier", "RandomForestRegressor"),
         display="the random forest classifier and regressor",
-        host_modules=("ensemble/host/rf_oracle.mojo", "core/forest_host_predict.mojo"),
+        host_modules=(
+            "ensemble/host/rf_oracle.mojo", "core/forest_host_predict.mojo",
+            "core/forest_host_groves.mojo",
+        ),
         exports=(
             "rf_host_numeric_mode", "rf_host_vendor", "rf_host_column",
             "rf_host_sabotage", "rf_vendor", "rf_numeric_mode",
@@ -829,6 +853,8 @@ FAMILIES = (
             "rf_regressor_fit_rowmajor", "rf_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "rf_predict_proba", "rf_predict_reg",
+            "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
+            "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
