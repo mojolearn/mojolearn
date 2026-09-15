@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Reorder each leaf's index range so its two children are contiguous.
 
-FOLLOWS `catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu`
-at CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/greedy_subsets_searcher/kernel/split_points.cu`
+(CatBoost `54a8143a`).
 
 This is what keeps `TDataPartition{Offset, Size}` true after a split. A leaf
 IS a contiguous range, so splitting one means physically partitioning its
@@ -594,8 +594,8 @@ comptime GATHER_INPLACE_SIZE = 1024
 #: `const ui32 blockSize = 1024` (`split_points.cu:103`), which is also the
 #: kernel's `BlockSize` template default (`split_points.cu:52`).
 #:
-#: `Size == BlockSize`, so their strided `for (i = tid; i < Size; i += BlockSize)`
-#: runs exactly once per thread. The loop is transcribed in that form anyway,
+#: `Size == BlockSize`, so the reference's strided `for (i = tid; i < Size; i += BlockSize)`
+#: runs exactly once per thread. The loop is written in that form anyway,
 #: because the stride is what keeps the kernel correct at ANY block size: if a
 #: device refuses a 1024-wide threadgroup this constant drops on its own and
 #: the body does not change.

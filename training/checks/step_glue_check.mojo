@@ -26,7 +26,7 @@ CLAUSES (each prints PASS or FAIL lines; the last line is the verdict):
   (c) RMSNorm BACKWARD (`bwd_rms_norm`): `dot`, `dx`, `dW` the same way;
       REACH: the first moved element of `dot` is floor(45 / R) * R.
   (d) UPDATE: `identical_optimizer_step` against `byte_glue_update_launch`
-      in place (the shipped kernel) and out of place (the transcribed
+      in place (the shipped kernel) and out of place (the restated
       kernel) on 1,000 elements over three tensors, gradients that overflow
       `g * g` to infinity, subnormal and zero gradients: param, m, v
       bit-equal, and the out-of-place launch leaves its inputs untouched.

@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Least squares through the normal equations and an eigendecomposition.
 
-FOLLOWS `raft/linalg/detail/lstsq.cuh::lstsqEig` at RAFT `661a3b8`.
-Followed statement for statement.
+Reference: `lstsqEig`, `raft/linalg/detail/lstsq.cuh` (RAFT `661a3b8`).
 
-This is cuML's OLS solver `algo = 1` (`cuml/cpp/src/glm/ols.cuh:120`). Their
-six steps, copied:
+This is cuML's OLS solver `algo = 1` (`cuml/cpp/src/glm/ols.cuh:120`). The
+reference's six steps:
 
     covA = A^T A                 O(rows * cols^2)
     Ab   = A^T b                 O(rows * cols)

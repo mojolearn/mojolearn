@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`qn_fit`, `qn_fit_x`, `qnFit`, `qn_decision_function`, `qn_predict`.
 
-FOLLOWS `cuml/cpp/src/glm/qn/qn.cuh` at cuML `00094f7`. Partial: the loss
+Reference: `cuml/cpp/src/glm/qn/qn.cuh` (cuML `00094f7`). Partial: the loss
 switch (`qn_fit_x`, `qn.cuh:121-173`) implements all eight ids -- `QN_LOSS_
 LOGISTIC`, `QN_LOSS_SOFTMAX` (`glm_softmax.mojo`, the multinomial arm),
 `QN_LOSS_SQUARED` / `QN_LOSS_ABS` (`glm_linear.mojo`), the four SVM losses
@@ -12,7 +12,7 @@ is_classification && C == 2 ? 1 : C`, and RAISES by name on `sample_weight`
 their trailing parameter (default 0). The sparse entries (`qnFitSparse` and
 siblings) and `qn_predict`'s argmax arm are not implemented.
 
-WHAT `qn_fit` DOES WITH THE PENALTY, `qn.cuh:53-86`, copied:
+WHAT `qn_fit` DOES WITH THE PENALTY, `qn.cuh:53-86`:
 
     l1 = penalty_l1; l2 = penalty_l2          (double -> T)
     if penalty_normalized: l1 /= N; l2 /= N   (T divided by int-as-T)

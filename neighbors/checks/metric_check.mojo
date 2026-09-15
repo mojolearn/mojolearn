@@ -32,7 +32,7 @@ THE THREE LEVELS OF TRUTH are in `neighbors/checks/metric_oracle.mojo`:
 a float32 second spelling (bit-equal under IDENTICAL), a float64
 mathematical reference computed a THIRD way (so a wrong formula cannot
 hide behind a faithful second spelling), and scikit-learn's weight rule
-transcribed from their file.
+as written in their file.
 """
 
 from std.memory import bitcast

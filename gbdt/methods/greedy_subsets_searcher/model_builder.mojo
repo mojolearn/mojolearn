@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Fold a list of leaf PATHS into a tree.
 
-FOLLOWS `TFlatTreeBuilder` and `BuildTreeLikeModel<TNonSymmetricTree>` in
-`catboost/cuda/methods/greedy_subsets_searcher/model_builder.cpp` at CatBoost
-`54a8143a`. Followed statement for statement.
+Reference: `TFlatTreeBuilder` and `BuildTreeLikeModel<TNonSymmetricTree>`,
+`catboost/cuda/methods/greedy_subsets_searcher/model_builder.cpp` (CatBoost
+`54a8143a`).
 
 The searcher hands back leaves as a flat `TVector<TLeafPath>` in LEAF-ID
 order, plus a weight and a value vector per leaf. Nothing in that list says

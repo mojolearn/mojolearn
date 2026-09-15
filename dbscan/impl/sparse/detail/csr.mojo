@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Weakly connected components by label propagation.
 
-FOLLOWS `raft/sparse/detail/csr.cuh::weak_cc_label_device` and
-`weak_cc_init_all_kernel` at RAFT `661a3b8`. Followed statement for statement.
+Reference: `raft/sparse/detail/csr.cuh::weak_cc_label_device` and
+`weak_cc_init_all_kernel` (RAFT `661a3b8`).
 
 This is the step that turns DBSCAN's neighbor graph into clusters, and it is
 the only part of DBSCAN that is not distance arithmetic.
@@ -20,11 +20,11 @@ components:
 - a border point may RECEIVE a label but never pass one on,
 - so two clusters touching a common border point stay separate,
 
-which is the single most commonly got-wrong part of DBSCAN. Their kernel
+which is the single most commonly got-wrong part of DBSCAN. The reference kernel
 encodes it as `ci_allow_prop` and `cj_allow_prop`, and both guards are
-copied exactly.
+matched exactly.
 
-Initialization is theirs too: a core point starts labelled `i + 1` and a
+Initialization matches the reference too: a core point starts labelled `i + 1` and a
 non-core point starts at `MAX_LABEL`, so the min-propagation naturally leaves
 untouched non-core points at `MAX_LABEL` and those are the noise.
 

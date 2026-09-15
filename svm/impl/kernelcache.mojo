@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`KernelCache`: the square working-set tile and the batched full tile.
 
-FOLLOWS `cuml/cpp/src/svm/kernelcache.cuh` at cuML v26.08.00 (`KernelCache`
+Reference: `cuml/cpp/src/svm/kernelcache.cuh` (cuML v26.08.00) (`KernelCache`
 with `InitWorkingSet`, `getKernelIndices`, `getSquareTileWithoutCaching`,
 `InitFullTileBatching`, `getNextBatchKernel`, `selectValueSubset`, the
-`n_rows` batching by `kernel_tile_byte_limit`), on THEIR `cache_size == 0`
+`n_rows` batching by `kernel_tile_byte_limit`), on the reference `cache_size == 0`
 PATH: `raft::cache::Cache` with `n_cache_sets = 0`, `GetSize() == 0`, so
 every `if (batch_cache.GetSize() > 0)` is skipped, `ws_idx_mod == ws_idx`,
 `n_cached == 0`, and every column of the full tile is computed. That path
-is a legal value of their parameter and this file is exactly it.
+is a legal value of the reference parameter and this file is exactly it.
 
 NOT IMPLEMENTED (svm/NOT_IMPLEMENTED.tsv; svm/README.md "the cache decision"):
 `BatchCache` / `raft::cache::Cache` (the 32-way set-associative LRU:

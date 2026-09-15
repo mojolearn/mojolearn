@@ -3,7 +3,7 @@
 """`GaussianMixture` on the GPU (workstream D, 2026-09-14).
 
 The Python door of `mixture/estimator.mojo` through
-`bindings/_mojolearn_mixture.mojo`. THERE IS NO UPSTREAM: cuML, cuVS and
+`bindings/_mojolearn_mixture.mojo`. THERE IS NO GPU REFERENCE: cuML, cuVS and
 RAFT ship no Gaussian mixture at the pinned commits, so scikit-learn's
 `_gaussian_mixture.py` and `_base.py` are the SEMANTICS and the oracle,
 never the design source (the estimator's header). Every parameter here

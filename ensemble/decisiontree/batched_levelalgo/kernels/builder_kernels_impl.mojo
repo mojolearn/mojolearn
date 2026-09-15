@@ -3,11 +3,11 @@
 """The four device kernels of the cuML random forest: histogram, split
 scoring, node partition, leaf.
 
-MIRRORS
+Reference:
 `cpp/src/decisiontree/batched-levelalgo/kernels/builder_kernels_impl.cuh`
 at rapidsai/cuml `v26.08.00` (`265b9da6a0e75dbef071a3168398b993a5ff6f0e`),
 checked out read-only at `~/CascadeProjects/upstream/cuml-v26.08.00`.
-Their file is 470 lines; every construct in it is either implemented below with
+The reference file is 470 lines; every construct in it is either implemented below with
 a `builder_kernels_impl.cuh:<line>` citation or named in the deviation
 block as declined with a price.
 
@@ -55,10 +55,10 @@ take a runtime byte count (`extern __shared__ char smem[]`,
 the slot count is a comptime expression. Resolved in three parts.
 
 --- 103a. THE HISTOGRAM BLOB IS A COMPTIME 16 KiB CARVE-OUT ---------
-THEIRS: one `char[]` of exactly
+REFERENCE: one `char[]` of exactly
 `max_n_bins * num_outputs * sizeof(BinT) + max_n_bins * sizeof(DataT)
  + sizeof(BinT) + sizeof(DataT)` bytes (`builder.cuh:526-533`).
-OURS: one comptime `stack_allocation[SMEM_BIN_SLOTS, BinT, SHARED]`,
+HERE: one comptime `stack_allocation[SMEM_BIN_SLOTS, BinT, SHARED]`,
 with `SMEM_BIN_SLOTS` defaulting to
 `TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES // size_of[BinT]()`,
 and the quantile copy carved out of its tail exactly as theirs is.
@@ -68,7 +68,7 @@ WHY THE DEFAULT IS THEIR CONSTANT AND NOT THIS LAPTOP'S 32 KiB:
 `builder.cuh:545-547` sends any configuration ABOVE it to the global
 path regardless of how much shared memory the device has. 16 KiB is below
 every row of `checks/kernel_matrix.column_shared_limit`, so their
-dispatch is already vendor-independent and the constant is transcribed
+dispatch is already vendor-independent and the constant is kept
 rather than re-derived from a queried budget.
 IS THE BLOB BIG ENOUGH FOR EVERY CONFIGURATION THEY SEND TO SHARED? Yes,
 and it is arithmetic rather than hope. They take the shared arm only when
@@ -80,7 +80,7 @@ which is at least `16384 - size_of[BinT] + 1`. For the four bins
 against required maxima of 16376, 16372, 16372 and 16368. Their
 `sizeof(BinT) + sizeof(DataT)` alignment padding is what buys the margin;
 DEVIATION 120 in `builder_kernels.mojo` already recorded that the padding
-is transcribed and not dropped, and this is where that pays.
+is kept and not dropped, and this is where that pays.
 THE QUANTILE CARVE-OUT NEEDS NO `alignPointer`. Their `alignPointer`
 (`builder_kernels.cuh:60-64`) rounds a `char*` up to `sizeof(OutT)`. Here
 the blob's base is `BinT`-aligned by construction and the carve-out is at
@@ -101,9 +101,9 @@ if it matters, the fix is a second comptime instantiation at a smaller
 `SMEM_BIN_SLOTS`, which is a parameter the launcher already exposes.
 
 --- 103b. `use_global_memory_histogram` BECOMES A COMPTIME PARAMETER -
-THEIRS: a `bool` KERNEL ARGUMENT (`:294`), branched on at `:322` and
+REFERENCE: a `bool` KERNEL ARGUMENT (`:294`), branched on at `:322` and
 `:346`, so one instantiation serves both arms.
-OURS: a comptime `USE_GLOBAL_MEMORY_HISTOGRAM` parameter, so the two arms
+HERE: a comptime `USE_GLOBAL_MEMORY_HISTOGRAM` parameter, so the two arms
 are two instantiations and the launcher picks between them on the SAME
 runtime `SharedMemoryConfig.use_global_memory_histogram` their launcher
 passes down. The dispatch decision is unchanged, byte for byte; only the
@@ -120,9 +120,9 @@ value, and both arms are separately named and separately checked in
 unchecked path, so neither of these is opt-in.
 
 --- 103c. THE LEAF HISTOGRAM IS A COMPTIME CAP ---------------------
-THEIRS: `smem_size = sizeof(BinT) * dataset.num_outputs`
+REFERENCE: `smem_size = sizeof(BinT) * dataset.num_outputs`
 (`builder.cuh:654`), a runtime product.
-OURS: `LEAF_SMEM_BIN_SLOTS`, comptime, defaulting (since DEVIATION
+HERE: `LEAF_SMEM_BIN_SLOTS`, comptime, defaulting (since DEVIATION
 1894) to `LEAF_SMEM_MAX_OUTPUTS` = 1024 slots -- 4 KiB for the integer
 classification bin -- instead of the 16 KiB
 `TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES // size_of[BinT]()`
@@ -147,7 +147,7 @@ DEVIATION 127. NO 64-BIT INTEGER ATOMIC. `countLocalLeftKernel` ends
 
 `Atomic.fetch_add` on a `UInt64` is a hard COMPILE error on Apple GPU
 (measured, `ensemble/checks/atomic_width_probe.mojo`), so the 64-bit
-atomic cannot be transcribed. Resolved as a 32-bit shadow counter.
+atomic cannot be written as the reference writes it. Resolved as a 32-bit shadow counter.
 
 WHAT WAS DONE. A device array `local_nleft` of `Int32`, one slot per work
 item, is zeroed by `reset_local_left_counts_kernel` alongside their
@@ -728,7 +728,7 @@ def phase_setup_kernel[
     default-construct lambda), `mutex[i] = 0` (their memset, over the
     full `max_batch_size` extent), and `column_samples[i] =
     sampled_column_at(...)` (the SAME `@always_inline` body
-    `sample_features_kernel` runs, imported, not transcribed). No
+    `sample_features_kernel` runs, imported, not restated). No
     accumulation exists in any of the three, so no accumulation order can
     move; the thread/block shape is free to differ from the originals'.
 
@@ -921,7 +921,7 @@ def count_local_left_kernel[
     workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
     local_nleft: MutPointer[Int32, MutAnyOrigin],
 ):
-    """`countLocalLeftKernel`, `:55-82`, transcribed line for line.
+    """`countLocalLeftKernel`, `:55-82`.
 
     `sabotage` is a CHECK HOOK and 0 is the only value a caller may pass;
     1 drops their `split.IsValid()` guard (`:75`), so a node that found no
@@ -1847,7 +1847,7 @@ def leaf_kernel[
     instance_ranges: MutPointer[InstanceRange, MutAnyOrigin],
     leaves: MutPointer[Scalar[O.DataT], MutAnyOrigin],
 ):
-    """`leafKernel`, `:213-241`, transcribed line for line.
+    """`leafKernel`, `:213-241`.
 
     One block per node of the batch. The shared histogram is
     `num_outputs` bins wide -- `IncrementHistogram(histogram, 1, 0,
@@ -2164,7 +2164,7 @@ def build_histograms_kernel[
     column_samples: MutPointer[Int32, MutAnyOrigin],
     workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
 ):
-    """`buildHistogramsKernel`, `:285-352`, transcribed line for line.
+    """`buildHistogramsKernel`, `:285-352`.
 
     THE COMPUTE CORE. Grid is 2D: `blockIdx.x` indexes the tiled
     `workload_info` (so one node may own many blocks), `blockIdx.y`
@@ -2755,7 +2755,7 @@ def find_best_splits_kernel[
     mutex: MutPointer[Int32, MutAnyOrigin],
     splits: MutPointer[Split[O.DataT], MutAnyOrigin],
 ):
-    """`findBestSplitsKernel`, `:353-393`, transcribed line for line.
+    """`findBestSplitsKernel`, `:353-393`.
 
     Grid is 2D: `blockIdx.x` is the node in the batch, `blockIdx.y` the
     column within this sampling round -- so `splits + nid` and
@@ -2888,7 +2888,7 @@ def find_best_splits_kernel[
     # `:395` -- `sp.evalBestSplit(split_scratch, splits + nid, mutex + nid,
     # quantiles_for_split, n_bins);` DEVIATION 404 picks the arm: the
     # pinned reduction under NUMERIC_IDENTICAL (width 32 on every vendor,
-    # no warp primitives), the transcribed warp-shuffle reduction under
+    # no warp primitives), the reference warp-shuffle reduction under
     # FAST. At `WARP_SIZE == 32` the two arms are the same function --
     # `builder_kernels_check.mojo`'s arm C-pinned holds that per cell.
     comptime if pinned_reduce:

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ridgeFit`: l2-regularized least squares, cuML's `eig` solver.
 
-FOLLOWS `cuml/cpp/src/glm/ridge.cuh` at cuML `00094f7`: `ridgeSolve`,
+Reference: `cuml/cpp/src/glm/ridge.cuh` (cuML `00094f7`): `ridgeSolve`,
 `ridgeEig`, `ridgeFit`. Partial.
 
 WHAT THEIR `eig` SOLVER ACTUALLY IS, because the name undersells it

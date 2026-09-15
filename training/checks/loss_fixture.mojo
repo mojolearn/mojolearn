@@ -88,7 +88,7 @@ WHAT THIS FILE DOES **NOT** DO
   reads them back before the call. That is `loss_check.mojo`'s clause (f)
   and it cannot be expressed as a host list.
 * **It carries no expected BITS for the ordinary cases.** Writing down
-  what `ce.denom` should be at `V = 300` would be transcribing the oracle,
+  what `ce.denom` should be at `V = 300` would be copying the oracle's answer,
   which is a restatement and not a check. The two EXACT families are the
   only place a value is written by hand, and contract 12.1 is explicit
   that they gate CORRECTNESS and separate NO spelling from any other.

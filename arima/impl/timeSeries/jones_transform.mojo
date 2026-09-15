@@ -3,10 +3,10 @@
 """The Jones (1980) transform: unconstrained parameters to a stationary AR /
 invertible MA polynomial, and back.
 
-FOLLOWS `cuml/cpp/src_prims/timeSeries/jones_transform.cuh` at cuML 265b9da6
-(v26.08.00): `transform` (:35-67), `invtransform` (:71-91),
-`jones_transform_kernel` (:105-138), `jones_transform` (:156-182). COPY, DO
-NOT IMPROVE. One thread per series; `parameter <= 8` (their local arrays
+Reference: `cuml/cpp/src_prims/timeSeries/jones_transform.cuh` (cuML 265b9da6,
+v26.08.00): `transform` (:35-67), `invtransform` (:71-91),
+`jones_transform_kernel` (:105-138), `jones_transform` (:156-182). Arithmetic
+order is pinned for identity; a change needs a DEVIATION. One thread per series; `parameter <= 8` (the reference's local arrays
 are `DataT[8]`; `ASSERT(parameter >= 1 && parameter <= 8)`).
 
 THE ARITHMETIC, line for line (`transform`):

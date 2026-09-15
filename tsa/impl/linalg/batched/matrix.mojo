@@ -2,15 +2,15 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The batched differencing kernels of `MLCommon::LinAlg::Batched`.
 
-FOLLOWS `cuml/cpp/src_prims/linalg/batched/matrix.cuh` at cuML 265b9da6
-(v26.08.00), lines 71-108 ONLY: `batched_diff_kernel` and
+Reference: `cuml/cpp/src_prims/linalg/batched/matrix.cuh` (cuML 265b9da6,
+v26.08.00), lines 71-108 ONLY: `batched_diff_kernel` and
 `batched_second_diff_kernel`. The rest of that file (the `Matrix<T>` class
 over cuBLAS strided-batched GEMM, `b_gemm`, `b_gels`, `b_kron`, the
 Hessenberg/Schur/Sylvester Lyapunov path) is not reached by the
 stationarity test and is listed in `tsa/NOT_IMPLEMENTED.tsv`; the parts the ARIMA
 lane reaches live in `arima/impl/linalg/batched/matrix.mojo`.
 
-Layout is theirs: column-major with the series in
+Layout: column-major with the series in
 columns, so series `b` occupies `[b * n_elem, (b + 1) * n_elem)` and the
 block id is the batch id (`matrix.cuh:74-76`).
 

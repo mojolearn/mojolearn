@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Gradient-boosted trees on the GPU, mirroring CatBoost: its three growth
+"""Gradient-boosted trees on the GPU, with CatBoost as the reference: its three growth
 policies (oblivious SymmetricTree, Depthwise, Lossguide), its losses.
 
 **THE DEFAULTS ARE CatBoost's, NOT scikit-learn's**, and several of them
@@ -399,7 +399,7 @@ def _one_string(member):
 
 
 class GradientBoosting(NumericModeMixin):
-    """Gradient-boosted trees, mirroring CatBoost's GPU learner: its three
+    """Gradient-boosted trees, with CatBoost's GPU learner as the reference: its three
     growth policies (`grow_policy`), its losses, its leaf estimators.
 
     Parameters

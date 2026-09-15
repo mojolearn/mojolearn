@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`HDBSCAN` on the GPU, mirroring cuML (workstream D, 2026-09-14).
+"""`HDBSCAN` on the GPU. Reference: cuML (workstream D, 2026-09-14).
 
 The Python door of `hdbscan/estimator.mojo::hdbscan_fit_host` through
-`bindings/_mojolearn_hdbscan.mojo`. The implemented path is cuML's
+`bindings/_mojolearn_hdbscan.mojo`. The path follows the steps of cuML's
 `runner.h:152-234` (brute-force k-NN, Boruvka MST, single linkage, the
 condensed tree, excess-of-mass or leaf selection); the lane README lists
 what is mirrored and what is refused.

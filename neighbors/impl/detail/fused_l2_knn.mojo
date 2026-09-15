@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""L2 k-NN with the distance matrix NEVER written. Their DISPATCHED DEFAULT.
+"""L2 k-NN with the distance matrix NEVER written. The reference's DISPATCHED DEFAULT.
 
-FOLLOWS `cuvs/src/neighbors/detail/fused_l2_knn.cuh::fusedL2kNN` at cuVS
-`94c2819`, built on `raft/linalg/contractions.cuh::Policy2x8` and
-`raft/linalg/detail/contractions.cuh::Contractions_NT`, with their
+Reference: `cuvs/src/neighbors/detail/fused_l2_knn.cuh::fusedL2kNN` (cuVS
+`94c2819`), built on `raft/linalg/contractions.cuh::Policy2x8` and
+`raft/linalg/detail/contractions.cuh::Contractions_NT`, with
 `neighbors/impl/topk/warp_topk.mojo`'s `WarpSelect` as the selector.
 That selector was written clean-room from Batcher (1968) on 2026-08-31 and
-replaced a statement-for-statement match; the queue's SHAPE is what this file depends on,
+replaced an earlier selector; the queue's SHAPE is what this file depends on,
 not its provenance.
 Partial.
 
@@ -88,7 +88,7 @@ tile takes the `:367-453` arm instead, which counts the candidates below
 `warpKTop`, warp-prefix-sums them into `allWarpTopKs` (`:396`, `:427-429`),
 and merges them with `updateSortedWarpQ` (`:147-185`).
 
-OURS: `heap0`/`heap1` are constructed once, before the column loop, and
+HERE: `heap0`/`heap1` are constructed once, before the column loop, and
 every column tile runs their `else` arm. `shDumpKV`, `allWarpTopKs`,
 `loadWarpQShmem`, `storeWarpQShmem` and `updateSortedWarpQ` are all
 unreached and unimplemented.

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`SmoSolver`: the outer decomposition loop.
 
-FOLLOWS `cuml/cpp/src/svm/smosolver.h` + `smosolver.cuh` at cuML v26.08.00:
+Reference: `cuml/cpp/src/svm/smosolver.h` + `smosolver.cuh` (cuML v26.08.00):
 `Solve`, `UpdateF`, `Initialize`, `InitPenalty` (unweighted arm), `SvcInit`,
 `SvrInit`, the `EPSILON_SVR` doubling and its second `UpdateF` gemv,
 `GetNonzeroDeltaAlpha`, `CheckStoppingCondition`, `GetDefaultMaxIter`,
@@ -18,7 +18,7 @@ gated 44 of 44 and the refusal in `solve` came out.
     unaryOp(f = -y)                          -> svc_init_kernel
     thrust::copy_if (GetNonzeroDeltaAlpha)   -> flag_nonzero + SelectScratch
     raft::update_host(host_return_buff)      -> one 2-float read, per outer
-                                                iteration, as theirs
+                                                iteration, as the reference
     cublasgemv (UpdateF)                     -> update_f_kernel (DEVIATION 634)
 
 # =========================================================================
@@ -58,10 +58,10 @@ gated 44 of 44 and the refusal in `solve` came out.
 # `svc_check.mojo::check_nan_never_recorded` (an overflowing fixture).
 # =========================================================================
 
-THE STOPPING RULE is host Float64 exactly as theirs is host double on a
+THE STOPPING RULE is host Float64 exactly as the reference is host double on a
 float `diff`: `diff > diff_prev * 1.5` and `abs(diff - diff_prev) < 0.001
 * tol` promote through the double literals, `diff < tol` is float. The
-`nochange_steps` rule and its `n_small_diff` counter are transcribed; the
+`nochange_steps` rule and its `n_small_diff` counter are implemented; the
 NaN throw is the same sentence.
 """
 
@@ -589,7 +589,7 @@ struct SmoSolver(Movable):
     ) raises:
         """`Solve(matrix, n_rows, n_cols, y, sample_weight, &dual_coefs,
         &n_support, &support_matrix, &idx, &b, max_iter, max_outer_iter,
-        max_inner_iter)`, transcribed (`smosolver.cuh:99-221`). `card` is
+        max_inner_iter)` (reference: `smosolver.cuh:99-221`). `card` is
         the stage recorder (DISABLED is a no-op)."""
         var n_rows = self.n_rows
         var n_cols = self.n_cols

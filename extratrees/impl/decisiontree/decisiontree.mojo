@@ -164,7 +164,7 @@ struct DecisionTreeParams(ImplicitlyCopyable, Movable):
 
 
 def validity_check(params: DecisionTreeParams) raises:
-    """`decisiontree.cu:27-45`, transcribed assertion for assertion, plus the
+    """`decisiontree.cu:27-45`, assertion for assertion, plus the
     refusals this implementation owes its caller.
 
     Their assertions are kept in their order and with their bounds so that a

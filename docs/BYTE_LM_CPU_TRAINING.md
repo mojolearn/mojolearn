@@ -401,5 +401,5 @@ cell with serial chains. That is a sequential algorithm that happens to run on
 a GPU.
 
 One thing to establish rather than assume: the GPU's default attention
-backward is the fused path, and a host port would follow the eager one, so the
+backward is the fused path, and a host version would follow the eager one, so the
 two must be shown to agree bitwise.

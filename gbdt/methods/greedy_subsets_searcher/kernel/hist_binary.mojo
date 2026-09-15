@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The binary-feature histogram kernel: 32 features per 4-byte load.
 
-FOLLOWS `hist_binary.cu` plus the loop it instantiates,
+Reference: `hist_binary.cu` plus the loop it instantiates,
 `compute_hist_loop_one_stat.cuh` (`ALIGN_MEMORY`,
 `TComputeHistogramImpl<FourElements>::Compute`,
-`ComputeSplitPropertiesDirectLoadsImpl`), at CatBoost `54a8143a`.
-Followed statement for statement.
+`ComputeSplitPropertiesDirectLoadsImpl`) (CatBoost `54a8143a`).
 
 **This is the kernel that should matter most on covtype**, where 44 of 54
 columns are 0/1 and route to `BinaryFeatures`. One `UInt32` of the compressed

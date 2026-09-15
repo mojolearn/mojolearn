@@ -3,8 +3,8 @@
 """The one-byte DRIVER: which accumulator runs, on which features, and where
 the result goes.
 
-FOLLOWS `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_templ.cuh` at
-CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/kernel/pointwise_hist2_one_byte_templ.cuh`
+(CatBoost `54a8143a`).
 
 The six accumulators know how to add a point. This file is everything else:
 

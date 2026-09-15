@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The queue the worker drains.
 
-FOLLOWS `catboost/cuda/cuda_lib/tasks_queue/single_host_task_queue.h` at
-CatBoost `54a8143a`. Followed statement for statement where it follow statement for statements. See the
+Reference: `catboost/cuda/cuda_lib/tasks_queue/single_host_task_queue.h`
+(CatBoost `54a8143a`). Differences from the reference are listed in the
 DEVIATION BLOCK.
 
 Their queue is `NThreading::TOneOneQueue` (`single_host_task_queue.h:13`), a

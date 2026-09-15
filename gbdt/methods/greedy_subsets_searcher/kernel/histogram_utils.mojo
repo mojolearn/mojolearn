@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Sibling subtraction and the per-feature bin prefix scan.
 
-FOLLOWS `catboost/cuda/methods/greedy_subsets_searcher/kernel/
-histogram_utils.cu` at CatBoost `54a8143a`. Followed statement for statement.
+Reference: `catboost/cuda/methods/greedy_subsets_searcher/kernel/
+histogram_utils.cu` (CatBoost `54a8143a`).
 
 Four kernels, all bucket-scaling rather than row-scaling, so neither is
 where the time goes. They matter because of what they let the histogram
@@ -516,8 +516,8 @@ def copy_histograms_vec4_kernel(
     """`copy_histograms_kernel` moving 16 bytes per thread instead of 4.
 
     ================= DEVIATION BLOCK =================
-    Their `CopyHistogramsImpl` (`histogram_utils.cu:15-34`) copies ONE
-    float per thread, and this implementation followed statement for statement that. On NVIDIA that
+    The reference `CopyHistogramsImpl` (`histogram_utils.cu:15-34`) copies ONE
+    float per thread, and this implementation did the same. On NVIDIA that
     is free: `__ldg` plus `WriteThrough` (`st.global.wt`) already move a
     full sector per warp. On this Metal box it is not -- MEASURED, at a
     depth-6 level's shape (100 features x 254 folds x 2 stats, 32 pairs):

@@ -8,7 +8,7 @@ tools/identity_break.py, 2026-09-14).
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. Every kernel of `preprocessing/
 standard.mojo` and `preprocessing/minmax.mojo` is spelled a SECOND time
-here, statement for statement, with the arithmetic leaves of
+here, in the same statement order, with the arithmetic leaves of
 `checks/numerics.mojo` (`ftz`, `identical_mul`, `identical_div`,
 `portable_sqrtf`) and DEVIATION 653's slab tree (`metrics/checks/
 pinned_sum.mojo::virtual_block_sum` at block 256, `PINNED_SUM_W` 256)

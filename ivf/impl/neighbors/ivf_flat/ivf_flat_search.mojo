@@ -2,15 +2,15 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IVF-FLAT's search: coarse select, probe, select again.
 
-FOLLOWS `cuvs/src/neighbors/ivf_flat/ivf_flat_search.cuh` at cuVS
-`6ba2ce2`: `search_impl` (`:40-306`) and `search_with_filtering`
-(`:311-374`). Partial, and one of their two kernels is REFUSED rather than
+Reference: `search_impl` (`:40-306`) and `search_with_filtering`
+(`:311-374`), `cuvs/src/neighbors/ivf_flat/ivf_flat_search.cuh` (cuVS
+`6ba2ce2`). Partial, and one of the reference's two kernels is REFUSED rather than
 implemented.
 
-THEIR FIVE STEPS
------------------
+THE REFERENCE'S FIVE STEPS
+--------------------------
 
-| # | theirs | line | ours |
+| # | reference | line | here |
 |---|---|---|---|
 | 1 | query norms + `outer_add` + `gemm` = query-to-centroid distances | `:109-162` | the tiled k-NN arm's two kernels, mode-dispatched (below) |
 | 2 | `cuvs::selection::select_k` picks the `n_probes` nearest lists | `:180-188` | `select_radix_identical` / `select_radix`, key `(distance, list id)` |

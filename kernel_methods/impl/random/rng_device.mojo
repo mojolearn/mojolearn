@@ -3,8 +3,8 @@
 """`next_float` and `box_muller_transform`: the two RAFT functions this lane
 needs from `rng_device.cuh` and that `core/philox.mojo` does not carry.
 
-FOLLOWS `raft/cpp/include/raft/random/detail/rng_device.cuh` at RAFT
-`ebf9268` (`upstream/raft-v26.08.00`), lines 481-487 and 133-146.
+Reference: `raft/cpp/include/raft/random/detail/rng_device.cuh`, lines 481-487
+and 133-146 (RAFT `ebf9268`, `upstream/raft-v26.08.00`).
 
 WHY THIS FILE EXISTS AND IS NOT IN `core/philox.mojo`. That file implements
 RAFT's `PhiloxGenerator` and its `uniformInt` because those are what cuML's
@@ -66,7 +66,7 @@ def km_min_unit() -> Float32:
 
 
 def km_unit_float_from(mut gen: PhiloxState) -> Float32:
-    """FOLLOWS `PhiloxGenerator::next_float`, `rng_device.cuh:481-487`:
+    """Reference: `PhiloxGenerator::next_float`, `rng_device.cuh:481-487`:
 
         uint32_t val = next_u32() >> 8;
         ret = static_cast<float>(val) / float(uint32_t(1) << 24);
@@ -89,7 +89,7 @@ def km_unit_float_from(mut gen: PhiloxState) -> Float32:
 
 
 def km_guard_unit(u: Float32) -> Float32:
-    """DEVIATION 1676's guard, and it is OURS, not RAFT's.
+    """DEVIATION 1676's guard, added here; RAFT has no such guard.
 
     RAFT's transform opens with `raft::sqrt(minus2 * raft::log(val1))` and
     `next_float`'s range is `[0, 1)` -- CLOSED AT ZERO -- so at `val1 == +0.0`
@@ -99,7 +99,7 @@ def km_guard_unit(u: Float32) -> Float32:
     a non-finite weight whose feature map is NaN for every row.
 
     A wrong answer with no error is the class `ENGINEERING_RULES 0c` and the
-    standing rule `assume-our-code-is-broken` say to FIX rather than implementation.
+    standing rule `assume-our-code-is-broken` say to FIX rather than replicate.
     The fix is the smallest one available: `+0.0` becomes `2^-24`, which is
     EXACTLY the smallest positive value the generator can produce, so the
     substituted draw is a value the generator itself produces and the
@@ -119,7 +119,7 @@ def km_guard_unit(u: Float32) -> Float32:
 def km_boxmuller_pair(
     u1: Float32, u2: Float32, sigma: Float32, mu: Float32
 ) -> Tuple[Float32, Float32]:
-    """FOLLOWS `raft::random::detail::box_muller_transform`
+    """Reference: `raft::random::detail::box_muller_transform`
     (`rng_device.cuh:133-142`), reached through the two-sigma overload at
     `:145-146` with `sigma2 = sigma1` and `mu2 = mu1`:
 

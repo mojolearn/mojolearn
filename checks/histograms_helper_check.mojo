@@ -42,8 +42,8 @@ A NOTE ON WHAT IS *NOT* GATED, because saying so is part of the result. The
 `BuildFromScratch = true` field initialiser, and this check demonstrates it
 rather than hiding it: `CurrentBit` reaches 0 only by incrementing from its
 initial -1, and at that moment the flag is already true. Deleting the clause
-leaves every gate below green -- measured, not assumed. It is transcribed
-because it is theirs and because it is the clause that still holds if a
+leaves every gate below green -- measured, not assumed. It is kept
+because the reference has it and because it is the clause that still holds if a
 future caller ever resets the counter without resetting the flag.
 """
 
