@@ -9,9 +9,12 @@ import re
 import struct
 
 MODES = {'fast': 0, 'deterministic': 2, 'identical': 1}
+# Every binding of _backend._MODULES except the byte LM, which expected_bindings
+# adds when packaged. packaging/check_ext_lists.py holds this set to _MODULES.
 BINDINGS = {'_mojolearn' + suffix for suffix in ('', '_gbdt', '_estimators', '_rf', '_trees',
             '_svm', '_solver', '_metrics', '_preprocessing', '_tsa', '_linalg', '_arima', '_training', '_gp',
-            '_mamba', '_transformer')}
+            '_mamba', '_transformer', '_kernel_methods', '_mixture', '_hdbscan', '_resample', '_ivf',
+            '_embedding')}
 CORPUS_CASES = ('base_b2_l4_d8', 'mamba2/m2_base_b2_l4_d32',
                 'mamba3/m3_base_b2_l4_d32')
 SURFACES = ('smoke', 'umap', 'umap-transform', 'umap-quality', 'ordered-rmse', 'mamba', 'transformer', 'arima')
