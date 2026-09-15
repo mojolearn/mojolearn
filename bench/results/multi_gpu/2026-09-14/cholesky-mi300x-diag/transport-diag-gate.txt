@@ -1,0 +1,132 @@
+arch=gfx942
+diag exit=0
+TRANSPORT rank 0 columns cells 300 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 90000 differing 0 first -1 target zeros 44850
+TRANSPORT rank 1 columns cells 300 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 90000 differing 0 first -1 target zeros 44850
+PASS cholesky factor+solve 300 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 300 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 90000 differing 0 first -1 target zeros 44850
+TRANSPORT rank 1 columns cells 600 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 90000 differing 0 first -1 target zeros 44850
+PASS cholesky factor+solve 300 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 400 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 160000 differing 0 first -1 target zeros 79800
+TRANSPORT rank 1 columns cells 400 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 160000 differing 0 first -1 target zeros 79800
+PASS cholesky factor+solve 400 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 400 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 160000 differing 0 first -1 target zeros 79800
+TRANSPORT rank 1 columns cells 800 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 160000 differing 0 first -1 target zeros 79800
+PASS cholesky factor+solve 400 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 450 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 202500 differing 0 first -1 target zeros 101025
+TRANSPORT rank 1 columns cells 450 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 202500 differing 0 first -1 target zeros 101025
+PASS cholesky factor+solve 450 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 450 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 202500 differing 0 first -1 target zeros 101025
+TRANSPORT rank 1 columns cells 900 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 202500 differing 0 first -1 target zeros 101025
+PASS cholesky factor+solve 450 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 480 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 230400 differing 0 first -1 target zeros 114960
+TRANSPORT rank 1 columns cells 480 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 230400 differing 0 first -1 target zeros 114960
+PASS cholesky factor+solve 480 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 480 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 230400 differing 0 first -1 target zeros 114960
+TRANSPORT rank 1 columns cells 960 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 230400 differing 0 first -1 target zeros 114960
+PASS cholesky factor+solve 480 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 500 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 250000 differing 0 first -1 target zeros 124750
+TRANSPORT rank 1 columns cells 500 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 250000 differing 0 first -1 target zeros 124750
+PASS cholesky factor+solve 500 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 500 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 250000 differing 0 first -1 target zeros 124750
+TRANSPORT rank 1 columns cells 1000 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 250000 differing 0 first -1 target zeros 124750
+PASS cholesky factor+solve 500 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 510 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 260100 differing 0 first -1 target zeros 129795
+TRANSPORT rank 1 columns cells 510 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 260100 differing 0 first -1 target zeros 129795
+PASS cholesky factor+solve 510 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 510 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 260100 differing 0 first -1 target zeros 129795
+TRANSPORT rank 1 columns cells 1020 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 260100 differing 0 first -1 target zeros 129795
+PASS cholesky factor+solve 510 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 511 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 261121 differing 0 first -1 target zeros 130305
+TRANSPORT rank 1 columns cells 511 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 261121 differing 0 first -1 target zeros 130305
+PASS cholesky factor+solve 511 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 511 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 261121 differing 0 first -1 target zeros 130305
+TRANSPORT rank 1 columns cells 1022 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 261121 differing 0 first -1 target zeros 130305
+PASS cholesky factor+solve 511 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 512 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 262144 differing 0 first -1 target zeros 130816
+TRANSPORT rank 1 columns cells 512 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 262144 differing 0 first -1 target zeros 130816
+PASS cholesky factor+solve 512 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 512 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 262144 differing 0 first -1 target zeros 130816
+TRANSPORT rank 1 columns cells 1024 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 262144 differing 0 first -1 target zeros 130816
+PASS cholesky factor+solve 512 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 513 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 263169 differing 0 first -1 target zeros 131328
+TRANSPORT rank 1 columns cells 513 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 263169 differing 0 first -1 target zeros 131328
+PASS cholesky factor+solve 513 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 513 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 263169 differing 0 first -1 target zeros 131328
+TRANSPORT rank 1 columns cells 1026 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 263169 differing 0 first -1 target zeros 131328
+PASS cholesky factor+solve 513 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 520 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 270400 differing 0 first -1 target zeros 134940
+TRANSPORT rank 1 columns cells 520 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 270400 differing 0 first -1 target zeros 134940
+PASS cholesky factor+solve 520 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 520 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 270400 differing 0 first -1 target zeros 134940
+TRANSPORT rank 1 columns cells 1040 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 270400 differing 0 first -1 target zeros 134940
+PASS cholesky factor+solve 520 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 600 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 360000 differing 0 first -1 target zeros 179700
+TRANSPORT rank 1 columns cells 600 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 360000 differing 0 first -1 target zeros 179700
+PASS cholesky factor+solve 600 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 600 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 360000 differing 0 first -1 target zeros 179700
+TRANSPORT rank 1 columns cells 1200 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 360000 differing 0 first -1 target zeros 179700
+PASS cholesky factor+solve 600 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 800 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 640000 differing 0 first -1 target zeros 319600
+TRANSPORT rank 1 columns cells 800 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 640000 differing 0 first -1 target zeros 319600
+PASS cholesky factor+solve 800 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 800 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 640000 differing 0 first -1 target zeros 319600
+TRANSPORT rank 1 columns cells 1600 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 640000 differing 0 first -1 target zeros 319600
+PASS cholesky factor+solve 800 3 info 0 devices 2
+TRANSPORT rank 0 columns cells 1024 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 1048576 differing 0 first -1 target zeros 523776
+TRANSPORT rank 1 columns cells 1024 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 1048576 differing 0 first -1 target zeros 523776
+PASS cholesky factor+solve 1024 2 info 0 devices 2
+TRANSPORT rank 0 columns cells 1024 differing 0 first -1 target zeros 0
+TRANSPORT rank 0 factor cells 1048576 differing 0 first -1 target zeros 523776
+TRANSPORT rank 1 columns cells 2048 differing 0 first -1 target zeros 0
+TRANSPORT rank 1 factor cells 1048576 differing 0 first -1 target zeros 523776
+PASS cholesky factor+solve 1024 3 info 0 devices 2

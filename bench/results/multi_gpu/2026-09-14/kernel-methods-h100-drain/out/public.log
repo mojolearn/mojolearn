@@ -1,0 +1,128 @@
+1985 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72fe80000000, nodemask=1)
+1985 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a0b80000000, nodemask=2)
+2175 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b3900000000, nodemask=2)
+2175 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x734fc0000000, nodemask=1)
+2356 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7bd740000000, nodemask=2)
+2356 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x518f40000000, nodemask=1)
+PASS KernelRidge 1 3 1 linear
+2410 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x100f40000000, nodemask=1)
+2410 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a9100000000, nodemask=2)
+2590 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30ae80000000, nodemask=1)
+2590 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7aee40000000, nodemask=2)
+PASS KernelRidge 1 3 1 rbf
+2644 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x124040000000, nodemask=1)
+2824 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31bcc0000000, nodemask=1)
+PASS KernelRidge 1 3 1 poly
+2878 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x794b80000000, nodemask=2)
+2878 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x506b00000000, nodemask=1)
+3058 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x506580000000, nodemask=1)
+PASS KernelRidge 1 3 1 sigmoid
+3112 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x316bc0000000, nodemask=1)
+3293 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x502940000000, nodemask=1)
+3293 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x391540000000, nodemask=2)
+PASS KernelRidge 37 4 1 linear
+3347 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12f340000000, nodemask=1)
+3347 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b2180000000, nodemask=2)
+3401 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5208c0000000, nodemask=1)
+PASS Nystroem 37 4 32 linear
+3455 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x184340000000, nodemask=2)
+3455 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51a880000000, nodemask=1)
+3636 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x732b80000000, nodemask=1)
+3636 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a7700000000, nodemask=2)
+PASS KernelRidge 37 4 1 rbf
+3690 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x529940000000, nodemask=1)
+3744 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32b900000000, nodemask=1)
+3744 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59b540000000, nodemask=2)
+PASS Nystroem 37 4 32 rbf
+3798 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x183fc0000000, nodemask=2)
+3981 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x597800000000, nodemask=2)
+3981 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7269c0000000, nodemask=1)
+PASS KernelRidge 37 4 1 poly
+4045 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x10e700000000, nodemask=1)
+4045 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x385a40000000, nodemask=2)
+4099 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x303c80000000, nodemask=1)
+PASS Nystroem 37 4 32 poly
+4153 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50fe40000000, nodemask=1)
+4334 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x307cc0000000, nodemask=1)
+4334 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59bc00000000, nodemask=2)
+PASS KernelRidge 37 4 1 sigmoid
+4388 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x194580000000, nodemask=2)
+4388 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72ea00000000, nodemask=1)
+4442 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3ab280000000, nodemask=2)
+4442 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x339f80000000, nodemask=1)
+PASS Nystroem 37 4 32 sigmoid
+4496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x317280000000, nodemask=1)
+4677 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x315940000000, nodemask=1)
+4677 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x395500000000, nodemask=2)
+PASS KernelRidge 129 6 3 linear
+4731 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58e080000000, nodemask=2)
+4731 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x731f00000000, nodemask=1)
+4785 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x505e80000000, nodemask=1)
+4785 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x583a00000000, nodemask=2)
+PASS Nystroem 129 6 64 linear
+4839 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b2600000000, nodemask=2)
+5020 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x513b40000000, nodemask=1)
+PASS KernelRidge 129 6 3 rbf
+5074 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73f800000000, nodemask=1)
+5128 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x504e00000000, nodemask=1)
+PASS Nystroem 129 6 64 rbf
+5182 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70cbc0000000, nodemask=1)
+5182 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7acdc0000000, nodemask=2)
+5363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x13c840000000, nodemask=1)
+PASS KernelRidge 129 6 3 poly
+5417 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33f380000000, nodemask=1)
+5473 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x728400000000, nodemask=1)
+PASS Nystroem 129 6 64 poly
+5536 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1028c0000000, nodemask=1)
+5718 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x318e00000000, nodemask=1)
+PASS KernelRidge 129 6 3 sigmoid
+5772 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38cb80000000, nodemask=2)
+5772 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12c780000000, nodemask=1)
+5826 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x337d40000000, nodemask=1)
+PASS Nystroem 129 6 64 sigmoid
+5880 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a3a00000000, nodemask=2)
+6061 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19ed80000000, nodemask=2)
+6061 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x326100000000, nodemask=1)
+PASS KernelRidge 515 9 2 linear
+6115 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18efc0000000, nodemask=2)
+6169 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79c640000000, nodemask=2)
+6169 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53c740000000, nodemask=1)
+PASS Nystroem 515 9 64 linear
+6223 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31d9c0000000, nodemask=1)
+6404 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x534300000000, nodemask=1)
+6404 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x18df80000000, nodemask=2)
+PASS KernelRidge 515 9 2 rbf
+6458 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x387500000000, nodemask=2)
+6512 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33c3c0000000, nodemask=1)
+PASS Nystroem 515 9 64 rbf
+6566 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x322880000000, nodemask=1)
+6747 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x119080000000, nodemask=1)
+6747 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x787fc0000000, nodemask=2)
+PASS KernelRidge 515 9 2 poly
+6801 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53fe40000000, nodemask=1)
+6855 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b3000000000, nodemask=2)
+6855 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x735940000000, nodemask=1)
+PASS Nystroem 515 9 64 poly
+6909 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x301040000000, nodemask=1)
+PASS KernelRidge equal refusal 515 9 2 sigmoid
+7090 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x130480000000, nodemask=1)
+7146 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x130a40000000, nodemask=1)
+PASS Nystroem 515 9 64 sigmoid
+7209 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b6500000000, nodemask=2)
+7210 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x308600000000, nodemask=1)
+7209 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51e140000000, nodemask=1)
+PASS RBFSampler 3 5 1 1
+7441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3010c0000000, nodemask=1)
+7440 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a9380000000, nodemask=2)
+7441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x596bc0000000, nodemask=2)
+PASS RBFSampler 8 100 1000 128
+7800 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73d080000000, nodemask=1)
+7801 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5087c0000000, nodemask=1)
+7801 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a5bc0000000, nodemask=2)
+7800 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x185440000000, nodemask=2)
+PASS RBFSampler 17 257 4097 1000
+8161 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7938c0000000, nodemask=2)
+8160 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x789740000000, nodemask=2)
+PASS RBFSampler 2 64 333 4096
+8390 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x526540000000, nodemask=1)
+PASS 32 kernel method configurations and 8 refusals

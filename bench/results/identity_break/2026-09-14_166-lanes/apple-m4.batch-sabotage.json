@@ -1,0 +1,281 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "1eea14f80d4d027c302cb70c15dbafda09f3a6fa",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  }
+ },
+ "cells": {
+  "lasso/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2fa3301e45a46091"
+   ],
+   "parts": [
+    {
+     "coef": "cbf1c7c9efd2522b",
+     "predict": "3d88c8f7b1f26ee4"
+    }
+   ],
+   "infer": [
+    "7334b38e7b651e27"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:predict:row 0 of 256 in a batch of 2:output 0 element 0: whole 0x40bae407 vs in a batch of 2 0x40bae406"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "holtwinters/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9781c2061a287937"
+   ],
+   "parts": [
+    {
+     "forecast": "cff24aef76c6431d"
+    }
+   ],
+   "infer": [
+    "f930b5ed0ef2c318"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:forecast:length 1 of 512:position 0 output 0 element 0: whole 0x4026a8e1 vs prefix 0x4026a8e0"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "standard-scaler/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9954d8aba9fdfba3"
+   ],
+   "parts": [
+    {
+     "mean": "76e9820929e60694",
+     "var": "a20fb423ecf03128",
+     "scale": "896905baaa8b9450",
+     "transform": "5352a1483442eb63",
+     "inverse": "023c52f22335ccc5"
+    }
+   ],
+   "infer": [
+    "fa0fbdef7ccae250"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "BATCH_MOVED:transform:row 0 of 256 alone:output 0 element 0: whole 0x3eadb404 vs alone 0x3eadb405"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "byte-lm/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f9a8d760f503f795"
+   ],
+   "parts": [
+    {
+     "loss": "08c41aea43d82173",
+     "params": "fa339c06dccfb5db",
+     "logits": "310c2e67a48ecb0f"
+    }
+   ],
+   "infer": [
+    "220885cbd8d2f82f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b1d65b99997911c5"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "220885cbd8d2f82f"
+   ],
+   "batch": [
+    "BATCH_MOVED:logits:row 0 of 16 alone:output 0 element 0: whole 0xbb90f346 vs alone 0xbb90f347"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  },
+  "par-queries-knn/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4b0dd36744b84c37"
+   ],
+   "parts": [
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50",
+     "predict": "8977a96d816eac66",
+     "proba": "aee3a3584a2d98ad"
+    }
+   ],
+   "infer": [
+    "8381d6badb2ee31b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f0b9be0fd408466b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8381d6badb2ee31b"
+   ],
+   "batch": [
+    "BATCH_MOVED:ParallelQueries kneighbors:row 0 of 64 alone:output 0 element 0: whole 0x400be2ea vs alone 0x400be2eb"
+   ],
+   "batch_verdict": "BATCH_MOVED"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": true,
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad/wt-apple-R/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.13.15",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "b7d4cd75aab8e013a1771d916d46bb3dddb6deda9c5a827d96111879d2e731cf",
+    "size": 2721184
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "a741f30b9941f4f364527051f4645143f195f162386a503636fcc4b58dd81810",
+    "size": 656000
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "b025644e81d527a46ec2df6b866f37d512a668c85208e0674134e425e52ddae6",
+    "size": 3877784
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "e814f0d6a53a915b09216c4c95716916a6492d398d51c62a36c2e3aed0286633",
+    "size": 3337208
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "b1207a3eb8a10011f08a60f304ab56093858674910fbd245c15ed0374116b32e",
+    "size": 6240176
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "b5756d473c3b83e5d379da21d3f668a212ccca0748a71a0b56f55c7f01438544",
+    "size": 1490768
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "216cbd4c122585038eed7f9e9b560eaa2175b026a1a6768058276ab01d0aa0aa",
+    "size": 1811400
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "741c5786a43c8a61b9558186422cfe3da3b93a26571b765616e0dc2cea3fb568",
+    "size": 1598880
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "f350e816c0085501857893c8586866b12375f1cb590d22212cbc5f475e2a4111",
+    "size": 943096
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "0eb572f3140835781b81e939e555d548f56c28d4ccfb4715babd27f24e19427b",
+    "size": 2706640
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "ef2d80590fadfe27e7f0ef21d586f5e3d5c9ccada249eae7f6fe4b69eefb0829",
+    "size": 3847592
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "b4ee8f49d875b440cc006259085758f59b15a25c1927ad315ef066ec898ebf0a",
+    "size": 2292968
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "cf2cd8b9d72aac7f76cfa4e134f6f2e90843ee8cf5e99050985b54b2eb55dfa2",
+    "size": 345976
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "368e07c4f80bed8cceb5990bad3571e3c8e4de425f1563221f35eb7dfe9843f2",
+    "size": 1191704
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "04ea21319a6811873f630c5bf0dd03d70e273d808587fac3b14a29d13536ad67",
+    "size": 1645552
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "3d544fbf7a6f70894c9415e87f06736ae6ad1c4b5a40d2f7f6b8b2ab749641f8",
+    "size": 1492152
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "f66e93b82ddb0f1d33fa0bf8dc5505ef89a5775becbc778fdfcc5d43037b77c8",
+    "size": 1848960
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "b8f754947aeffb69d4a953e43e320317514743c77c7e45d3a61cf8b1b8e4055f",
+    "size": 1608056
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "db8330587b7c57a2d39fc470e15e7e9f6ecf353483d4b3f56c1fc87e94ab2b7b",
+    "size": 2705912
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "ab9be23348500c8071f31c6351e7d7288ea955df4b64df75eb7e10d360febf42",
+    "size": 1317344
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "a2fbd2c0e4b7878281bd3d21df9aaaf3444350661c86f7cacad39021787fb58b",
+    "size": 592416
+   }
+  ]
+ }
+}

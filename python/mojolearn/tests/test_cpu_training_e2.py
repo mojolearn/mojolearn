@@ -111,8 +111,10 @@ def test_manifest_covers_metrics():
     assert "metrics" in host_surface.covered_lanes(), "metrics is not a covered training lane"
     fam = host_surface.family("metrics")
     assert fam["routes"] == "_mojolearn_metrics"
-    # spectral-precomputed joined the family on lane/cpu-training-batch2-declare.
-    assert fam["training_lanes"] == ("metrics", "spectral", "spectral-precomputed", "metrics-classification")
+    # spectral-precomputed joined the family on lane/cpu-training-batch2-declare,
+    # umap on lane/cpu-training-umap-b (tests/test_cpu_training_umap.py),
+    # metrics-classification on lane/cpu-training-metrics-classification.
+    assert fam["training_lanes"] == ("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification")
     assert METRICS_ORACLE in fam["host_modules"]
     assert (ROOT / METRICS_ORACLE).is_file()
     assert (ROOT / "bindings/build_metrics_host.sh").is_file()
@@ -126,9 +128,10 @@ def test_metrics_binding_registers_the_lane_entries():
     for name in METRICS_EXPORTS + ("metrics_vendor", "metrics_numeric_mode"):
         assert f'("{name}")' in src, f"the metrics host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name} for metrics"
-    # rand_score, trustworthiness, kl_divergence, log_loss and
-    # confusion_matrix are registered since the metrics-classification lane.
-    for absent in ("umap_fit_transform", "umap_transform", "graph_parallel_available"):
+    # umap_fit_transform left this list on lane/cpu-training-umap-b; rand_score,
+    # trustworthiness, kl_divergence, log_loss and confusion_matrix on the
+    # metrics-classification lane.
+    for absent in ("graph_parallel_available",):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
 

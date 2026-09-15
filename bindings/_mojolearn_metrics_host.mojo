@@ -38,6 +38,14 @@ the GPU binding's precomputed affinity entry under its name and eight-value
 graph given as COO triples); the dense affinity's COO scan it needs,
 `nonzero_f64_count` and `nonzero_f64_fill`, is in the core host binding.
 
+THE UMAP ENTRIES (lane/cpu-training-umap-b, 2026-09-14):
+`umap_fit_transform`, `umap_transform` and `umap_numeric_mode` under the
+GPU binding's names, address contracts and 10/13 and 11/14 value `params`
+lists, over `umap/host/umap_oracle.mojo` (the host k-NN, the fuzzy graph,
+the spectral oracle for the initialization, and the IDENTICAL device epoch
+fold restated vertex by vertex); `python/mojolearn/_umap_impl.py` runs
+unchanged.
+
 THE METRICS-CLASSIFICATION LANE (2026-09-14) adds the GPU binding's
 remaining metric entries under their names and params lists: `rand_score`,
 `roc_auc_score`, `precision_recall_curve`, `log_loss`, `confusion_matrix`,
@@ -46,11 +54,11 @@ remaining metric entries under their names and params lists: `rand_score`,
 `metrics/host/classification_oracle.mojo` (the log loss's probability
 check, `probability_rows_f32`, is in the core host binding).
 
-The GPU binding's OTHER entries (the UMAP entries and
-`graph_parallel_available`) are deliberately ABSENT here, so every lane that
+The GPU binding's OTHER entries (`graph_parallel_available`) are deliberately ABSENT here, so every lane that
 reaches them keeps refusing BY NAME through `_HostBinding` until a lane
 lands them.
 """
+from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -65,6 +73,12 @@ from spectral.host.spectral_oracle import (
     host_spectral_fit_predict_coo,
     host_spectral_fit_predict_dataset,
 )
+from umap.host.umap_oracle import (
+    UMAP_ORACLE_HOST_SABOTAGE,
+    host_umap_fit_transform,
+    host_umap_transform,
+)
+from umap.params import UMAPParams
 from metrics.host.metrics_oracle import (
     DISTANCE_L2_SQRT_UNEXPANDED,
     METRICS_ORACLE_HOST_SABOTAGE,
@@ -90,7 +104,6 @@ from metrics.host.classification_oracle import (
     host_regression_error,
     host_trustworthiness,
 )
-from std.math import isfinite
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -172,8 +185,12 @@ def metrics_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary was built with -D MOJOLEARN_HOST_SABOTAGE=1 (the
     gate's negative control): every slab tree's chunk boundaries shifted by
     one value, which moves r2 and the silhouette, and the spectral
-    recluster seeded one draw off; refused outside the gate as one set."""
-    return PythonObject(METRICS_ORACLE_HOST_SABOTAGE or SPECTRAL_ORACLE_HOST_SABOTAGE)
+    recluster seeded one draw off, and every UMAP negative draw keyed one
+    epoch late; refused outside the gate as one set."""
+    return PythonObject(
+        METRICS_ORACLE_HOST_SABOTAGE or SPECTRAL_ORACLE_HOST_SABOTAGE
+        or UMAP_ORACLE_HOST_SABOTAGE
+    )
 
 
 # The GPU binding's names, same contract.
@@ -806,6 +823,115 @@ def trustworthiness_binding(
     return PythonObject(out)
 
 
+# ===========================================================================
+# Group F: UMAP fit_transform and transform.
+# ===========================================================================
+
+
+def _umap_float32(value: PythonObject) raises -> Float32:
+    return Float32(Float64(py=value))
+
+
+def umap_fit_transform_binding(
+    x_addr: PythonObject,
+    embedding_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`umap_fit_transform_binding`, `bindings/_mojolearn_metrics.mojo`, on
+    the host: the same refusals in the same order, then
+    `host_umap_fit_transform`. Writes the `n_samples x n_components`
+    row-major embedding; returns `n_components`.
+
+    `params` (mirrored in `_umap_impl.py`): `0 n_samples, 1 n_features,
+    2 n_neighbors, 3 n_components, 4 n_epochs, 5 min_dist, 6 spread,
+    7 set_op_mix_ratio, 8 local_connectivity, 9 random_state`, then
+    optionally `10 learning_rate, 11 repulsion_strength,
+    12 negative_sample_rate`."""
+    if len(params) != 10:
+        _want(String("umap_fit_transform"), params, 13)
+    var n = _index(params[0])
+    var d = _index(params[1])
+    var seed = _index(params[9])
+    if d < 1 or seed < 0:
+        raise Error("UMAP requires positive features and a nonnegative seed")
+    var config = UMAPParams(
+        n_neighbors=_index(params[2]), n_components=_index(params[3]),
+        n_epochs=_index(params[4]), min_dist=_umap_float32(params[5]),
+        spread=_umap_float32(params[6]),
+        set_op_mix_ratio=_umap_float32(params[7]),
+        local_connectivity=_umap_float32(params[8]),
+        random_seed=UInt64(seed),
+    )
+    if len(params) == 13:
+        config.learning_rate = _umap_float32(params[10])
+        config.repulsion_strength = _umap_float32(params[11])
+        config.negative_sample_rate = _index(params[12])
+    config.validate(n)
+    if (config.n_components != 2 and config.n_components != 3) or (
+        n < 2 * config.n_components + 4
+    ):
+        raise Error("UMAP requires 2D/3D output and enough samples for spectral init")
+    var x = read_f32(_index(x_addr), n * d)
+    var output = f32_ptr(_index(embedding_addr))
+    var embedding = List[Float32]()
+    with GILReleased(Python()):
+        embedding = host_umap_fit_transform(x, n, d, config)
+    if len(embedding) != n * config.n_components:
+        raise Error("UMAP returned an unexpected embedding shape")
+    for value in embedding:
+        if not isfinite(value):
+            raise Error("UMAP returned a non-finite embedding")
+    for i in range(len(embedding)):
+        output.unsafe_store(i, embedding[i])
+    return PythonObject(config.n_components)
+
+
+def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`umap_transform_binding`, `bindings/_mojolearn_metrics.mojo`, on the
+    host. Addresses: training X, frozen embedding, query X, output. Scalars:
+    `n_train, n_queries, n_features`, then the eight legacy fit parameters
+    and optionally `learning_rate, repulsion_strength,
+    negative_sample_rate`. Only the output is written."""
+    _want(String("umap_transform addresses"), addrs, 4)
+    if len(params) != 11:
+        _want(String("umap_transform parameters"), params, 14)
+    var n = _index(params[0])
+    var rows = _index(params[1])
+    var d = _index(params[2])
+    var seed = _index(params[10])
+    if n < 2 or rows < 1 or d < 1 or seed < 0:
+        raise Error("UMAP transform requires positive dimensions and a nonnegative seed")
+    var config = UMAPParams(
+        n_neighbors=_index(params[3]), n_components=_index(params[4]),
+        n_epochs=_index(params[5]), min_dist=_umap_float32(params[6]),
+        spread=_umap_float32(params[7]),
+        set_op_mix_ratio=_umap_float32(params[8]),
+        local_connectivity=_umap_float32(params[9]), random_seed=UInt64(seed),
+    )
+    if len(params) == 14:
+        config.learning_rate = _umap_float32(params[11])
+        config.repulsion_strength = _umap_float32(params[12])
+        config.negative_sample_rate = _index(params[13])
+    config.validate(n)
+    if config.n_components != 2 and config.n_components != 3:
+        raise Error("UMAP transform supports only 2D or 3D")
+    var training = read_f32(_index(addrs[0]), n * d)
+    var fitted = read_f32(_index(addrs[1]), n * config.n_components)
+    var queries = read_f32(_index(addrs[2]), rows * d)
+    var output = f32_ptr(_index(addrs[3]))
+    var embedding = List[Float32]()
+    with GILReleased(Python()):
+        embedding = host_umap_transform(training, fitted, queries, n, rows, d, config)
+    if len(embedding) != rows * config.n_components:
+        raise Error("UMAP transform returned an unexpected shape")
+    for value in embedding:
+        if not isfinite(value):
+            raise Error("UMAP transform returned a non-finite embedding")
+    for i in range(len(embedding)):
+        output.unsafe_store(i, embedding[i])
+    return PythonObject(config.n_components)
+
+
 @export
 def PyInit__mojolearn_metrics_host() abi("C") -> PythonObject:
     try:
@@ -838,6 +964,9 @@ def PyInit__mojolearn_metrics_host() abi("C") -> PythonObject:
         module.def_function[trustworthiness_binding]("trustworthiness")
         module.def_function[spectral_fit_predict_dataset_binding]("spectral_fit_predict_dataset")
         module.def_function[spectral_fit_predict_graph_binding]("spectral_fit_predict_graph")
+        module.def_function[umap_fit_transform_binding]("umap_fit_transform")
+        module.def_function[umap_transform_binding]("umap_transform")
+        module.def_function[metrics_numeric_mode_binding]("umap_numeric_mode")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_metrics_host: ", error))
