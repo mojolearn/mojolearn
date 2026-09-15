@@ -1204,6 +1204,45 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.predict(Xh[:64, :4], return_std=True))
 
 
+def _gpc_three_classes(X):
+    """Three balanced classes for the first 256 rows: the stable rank of the
+    labels' own score (columns 3 and 4, `labels_for`'s rule) cut in thirds,
+    so every fixture, `negative` and `ties` included, hands the one-vs-rest
+    lane three classes."""
+    s = (X[:256, 3] + np.float32(0.5) * X[:256, 4]).astype(np.float32)
+    y3 = np.empty(256, dtype=np.int64)
+    y3[np.argsort(s, kind="stable")] = (np.arange(256) * 3) // 256
+    return y3
+
+
+def _gpc_parts(m, q):
+    fits = m.estimators_
+    return dict(L=_h(*[e.L_ for e in fits]), pi=_h(*[e.pi_ for e in fits]), W_sr=_h(*[e.W_sr_ for e in fits]),
+                lml=_h(np.array([e.log_marginal_likelihood_value_ for e in fits] +
+                                [m.log_marginal_likelihood_value_], dtype=np.float64)),
+                n_iter=_h(np.array([e.n_iter_ for e in fits], dtype=np.int64)),
+                predict=_h(m.predict(q)), proba=_h(m.predict_proba(q)))
+
+
+@lane("gpc")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessClassifier, binary, optimizer=None (DEVIATION 1761):
+    the Laplace fit's Newton loop, whose iteration count is on the card
+    (DEVIATION 2830), sized like the gp lane. The model column is the saved
+    classifier and its reload."""
+    m = ml.GaussianProcessClassifier(kernel=ml.ConstantKernel(1.0) * ml.RBF(1.0)).fit(X[:256, :4], yc[:256])
+    return _fit(_gpc_parts(m, X[256:320, :4]), m, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
+
+
+@lane("gpc-multiclass")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessClassifier one-vs-rest over three classes
+    (DEVIATION 2833) with a Matern nu=1.5 kernel scaled by a constant."""
+    k = ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5)
+    m = ml.GaussianProcessClassifier(kernel=k).fit(X[:256, :4], _gpc_three_classes(X))
+    return _fit(_gpc_parts(m, X[256:320, :4]), m, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
+
+
 @lane("umap")
 def _(ml, X, yc, yr, Xh=None):
     """Exact neighbor search is quadratic, so 1024 rows of eight columns
@@ -3779,6 +3818,9 @@ def _batch_hdbscan(ml, e, Xh):
 
 
 _batch_decl(_batch_hdbscan, "hdbscan", "hdbscan-leaf")
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gpc", "gpc-multiclass")
 
 
 def _batch_kneighbors(ml, e, Xh):

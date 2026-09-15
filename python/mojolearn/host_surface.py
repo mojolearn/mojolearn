@@ -240,6 +240,13 @@ TRAINING_LANE_NAMES = {
     "gp-matern12": "the Gaussian process with a Matern kernel at nu 0.5",
     "gp-matern32": "the Gaussian process with a Matern kernel at nu 1.5",
     "gp-matern52-ard": "the Gaussian process with an ARD Matern kernel at nu 2.5",
+    # Gaussian process classification (lane/gaussian-process-classifier,
+    # 2026-09-15): gaussian_process/host/gpc_oracle.mojo over the gp oracle's
+    # kernel matrix, the Cholesky oracle and gemm_oracle, the Newton steps in
+    # gaussian_process/host/gpc_steps.mojo (the GPU path compiles the same
+    # file). No GPU record carries these lanes yet, so their cells are OWED.
+    "gpc": "the binary Gaussian process classifier",
+    "gpc-multiclass": "the one-vs-rest Gaussian process classifier",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
     # variants of families that already had a host path, every one in the
     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
@@ -1108,20 +1115,25 @@ FAMILIES = (
         routes="_mojolearn_gp",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard"),
+        # GaussianProcessClassifier joined on
+        # lane/gaussian-process-classifier (2026-09-15): gpc_fit and
+        # gpc_predict under the GPU binding's contract.
+        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gpc", "gpc-multiclass"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("GaussianProcessRegressor",),
-        display="the Gaussian process regressor",
+        classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
+        display="the Gaussian process regressor and classifier",
         host_modules=(
             "gaussian_process/host/gpr_oracle.mojo",
+            "gaussian_process/host/gpc_oracle.mojo",
+            "gaussian_process/host/gpc_steps.mojo",
             "cholesky/host/chol_oracle.mojo",
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
-            "gpr_fit", "gpr_predict", "cholesky_profile_jitter",
+            "gpr_fit", "gpr_predict", "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
