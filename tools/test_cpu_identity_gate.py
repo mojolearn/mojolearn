@@ -282,5 +282,60 @@ class OwedTests(unittest.TestCase):
             self.assertIn('km/base infer: the sabotage column has no value', self.output.getvalue())
 
 
+class BuildListTests(unittest.TestCase):
+    """cpu_identity_gate_check.py build-list: the workflow's build lists
+    against python/mojolearn/host_surface.py (2026-09-15)."""
+
+    def setUp(self):
+        self.manifest = gate.load_manifest()
+        self.full = self.manifest['families']()
+        self.binding = {f['family']: f['binding'] for f in self.manifest['FAMILIES']}
+
+    def errors(self, families, sabotage=None, readback=None, scope='full'):
+        sabotage = families if sabotage is None else sabotage
+        readback = [self.binding.get(f, f) for f in families] if readback is None else readback
+        return gate.build_list_errors(self.manifest, list(families), list(sabotage), list(readback), scope)
+
+    def test_manifest_lists_pass(self):
+        self.assertEqual(self.errors(self.full), [])
+        self.assertEqual(self.errors(self.manifest['wheel_families'](), scope='routine'), [])
+
+    def test_the_old_hand_list_fails_on_the_seven_shipped_bindings(self):
+        old = ['byte_lm', 'forest', 'tokenizer'] + self.manifest['routed_families']()
+        errors = self.errors(old)
+        for b in ('_mojolearn_neural_host', '_mojolearn_mixture_infer_host', '_mojolearn_gp_infer_host',
+                  '_mojolearn_hdbscan_infer_host', '_mojolearn_embedding_infer_host',
+                  '_mojolearn_ivf_search_host', '_mojolearn_forecast_host'):
+            self.assertIn(f'the production build leaves out {b}', '\n'.join(errors))
+        self.assertTrue(self.errors(old, scope='routine'))
+
+    def test_one_binding_removed_fails(self):
+        for scope, families in (('full', self.full), ('routine', self.manifest['wheel_families']())):
+            less = [f for f in families if f != 'forecast']
+            for where in ('production', 'sabotage'):
+                errors = (self.errors(less, sabotage=families, readback=[self.binding[f] for f in families], scope=scope)
+                          if where == 'production' else self.errors(families, sabotage=less, scope=scope))
+                self.assertIn(f'the {where} build leaves out _mojolearn_forecast_host', '\n'.join(errors), (scope, where))
+
+    def test_readback_must_name_the_build(self):
+        readback = [self.binding[f] for f in self.full if f != 'neural']
+        self.assertIn('read-back list', '\n'.join(self.errors(self.full, readback=readback)))
+
+    def test_unknown_family_fails(self):
+        self.assertIn('not a family the manifest declares', '\n'.join(self.errors(self.full + ['nonesuch'])))
+
+    def test_cli_exit_codes(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ok = gate.main(['build-list', '--families', ' '.join(self.full), '--sabotage-families',
+                            ' '.join(self.full), '--readback', ','.join(self.binding[f] for f in self.full),
+                            '--scope', 'full'])
+            less = [f for f in self.full if f != 'ivf_search']
+            bad = gate.main(['build-list', '--families', ' '.join(less), '--sabotage-families', ' '.join(less),
+                             '--readback', ','.join(self.binding[f] for f in less), '--scope', 'full'])
+        self.assertEqual((ok, bad), (0, 1), out.getvalue())
+        self.assertIn('leaves out _mojolearn_ivf_search_host', out.getvalue())
+
+
 if __name__ == '__main__':
     unittest.main()

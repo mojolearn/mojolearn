@@ -9,7 +9,7 @@ by this file; that is the package owner's call. Import it as
 WHAT IS HERE
 
     ExponentialSmoothing   cuml.tsa.ExponentialSmoothing, backed by
-                           `holtwinters/` (DEVIATIONS 660-665, 697-699)
+                           `holtwinters/` (DEVIATIONS 660-665, 697-699, 2717)
     kpss_test              cuml.tsa.stationarity.kpss_test, backed by
                            `tsa/` (DEVIATIONS 671-672)
     select_d               auto_arima's "Choose the hyper-parameter d"
@@ -58,7 +58,7 @@ row in the ledger at all. Under `MOJOLEARN_NUMERIC_MODE=identical` these
 run the pinned spelling that is DESIGNED to be vendor-independent, which
 is a claim about the source and not a measurement of three GPUs.
 
-UPSTREAM IS RETIRING WHAT ExponentialSmoothing MIRRORS. The pinned tree's
+THE REFERENCE LIBRARY IS RETIRING ExponentialSmoothing. The pinned tree's
 `holtwinters.pyx` carries a `.. deprecated:: 26.08` and says
 `cuml.tsa.ExponentialSmoothing` will be removed in cuML 26.12. The implementation is
 checked against v26.08.00 and stays valid; what expires is the ability to
@@ -141,7 +141,7 @@ def _series_major(y, name):
 
 
 def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
-    """The KPSS stationarity test, mirroring
+    """The KPSS stationarity test, with the reference
     `cuml.tsa.stationarity.kpss_test` (`tsa/`, DEVIATIONS 671-672).
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
@@ -278,7 +278,7 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
 
 
 class ExponentialSmoothing:
-    """Holt-Winters exponential smoothing, mirroring
+    """Holt-Winters exponential smoothing, with the reference
     `cuml.tsa.ExponentialSmoothing` (`holtwinters/`, DEVIATIONS 660-665 and
     697-699).
 
@@ -306,7 +306,7 @@ class ExponentialSmoothing:
         start_periods    honored   must be >= 2 and <= seasonal_periods.
         ts_num           honored   the number of series; must match
                                    `endog`'s first dimension, and cuML's
-                                   mismatch message is mirrored.
+                                   mismatch message is the same.
         eps              honored   default 2.24e-3, cuML's. Must be > 0.
         verbose          REFUSED   cuML's logging plumbing; there is no
                                    logger here.
@@ -353,13 +353,12 @@ class ExponentialSmoothing:
                                   cuML writes this only in the arm its fit
                                   does not take.
 
-    A cuML DEFECT THAT IS REPRODUCED ON PURPOSE AND NOT FIXED. When the line
-    search hits its iteration limit, `hw_optim.cuh:485-508` stores the LAST
-    trial point rather than the one that minimized the loss. That is
-    rapidsai/cuml#888 and it is flagged in their own comment. It is
-    deterministic and vendor-independent, so fixing it would move the
-    fitted parameters away from cuML's for no identity gain
-    (`holtwinters/NOT_IMPLEMENTED.tsv`).
+    THE LINE-SEARCH LIMIT, DEVIATION 2717. When the BFGS line search hits
+    its iteration limit, this implementation stores the trial point with
+    the lowest loss (strictly lower replaces, so a tie keeps the earliest
+    trial), not the last trial the reference stores (rapidsai/cuml#888).
+    A line search that exits normally is unchanged. Fits that reach the
+    limit can therefore differ from the reference's parameters.
 
     A DIVERGENCE FROM cuML's PYTHON THAT IS NOT A NUMERIC ONE. cuML caches
     `forecasted_points` and recomputes only when `h` grows, so a second

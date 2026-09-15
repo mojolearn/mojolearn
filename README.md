@@ -96,9 +96,9 @@ It also lets a job move. Train on rented NVIDIA capacity, continue on AMD from
 the checkpoint, and the run stays on the same trajectory rather than a nearby
 one. Hardware stops being a confounding variable in a mixed fleet.
 
-There is a second reason to be here, independent of the contract. CatBoost,
-XGBoost, LightGBM and cuML have no Metal backend, so GPU tree training and GPU
-classical learning have not run on Apple silicon at all. One Mojo source
+There is a second reason to be here, independent of the contract. GPU tree
+training and GPU classical learning have not had an Apple silicon backend. One
+Mojo source
 builds for Metal, CUDA and HIP, which puts them on the laptop as well as the
 datacenter.
 
@@ -200,9 +200,8 @@ fast tier that are not "trees" is a rule you would have to look up, and one
 rule beats two wins. The neural lanes gate every fused kernel on the identical
 contract, so their lower tiers were slower than the default anyway.
 
-What every other family offers instead is the part no vendor sells: cuML is
-CUDA and Linux only and does not run on Apple silicon at all, and
-cross-vendor bitwise identity is available nowhere else.
+What every other family offers instead is cross-vendor bitwise identity:
+the same bits on Apple, NVIDIA and AMD GPUs and on the CPU.
 
 ## Who this is for
 
@@ -451,7 +450,7 @@ parameters or numeric mode requires refitting, and changing query batching
 can change results. Supervised targets, alternate metrics and alternate
 initialization remain unsupported.
 
-The APIs intentionally resemble scikit-learn, but mojolearn is not a drop-in
+The APIs follow familiar estimator conventions, but mojolearn is not a drop-in
 replacement. Where an algorithm has a settled convention for a default, that
 convention is followed. Unsupported parameters raise explicitly rather than
 being silently ignored.
@@ -504,7 +503,7 @@ What will get in your way first:
 - mojolearn is not a drop-in replacement for scikit-learn, CatBoost or cuML.
   Parameter coverage is intentionally smaller than any of them, and
   unsupported parameters raise.
-- Source builds need the Mojo toolchain through [pixi](https://pixi.sh), and
+- Source builds need the Mojo toolchain through pixi, and
   one build targets one GPU architecture. NVIDIA Linux is source-build-only
   today.
 - The support matrix is honest about gaps. Several public surfaces still have
@@ -540,6 +539,13 @@ Current priorities are in [ROADMAP.md](ROADMAP.md). See also
 outside, at three costs](docs/VERIFY_EXTERNALLY.md), [release](docs/PYPI_RELEASE.md),
 [engineering rules](ENGINEERING_RULES.md), [contributing](CONTRIBUTING.md),
 [governance](GOVERNANCE.md), and [notices](NOTICE).
+
+## Trademarks and affiliation
+
+mojolearn is an independent project by Andrew Hendel. It is not affiliated
+with, sponsored by, or endorsed by Modular, Inc. MAX® and Mojo® are trademarks
+of Modular, Inc. Binary wheels include unmodified Modular runtime components
+redistributed under Modular's own license; see [NOTICE](NOTICE).
 
 ## Citation
 

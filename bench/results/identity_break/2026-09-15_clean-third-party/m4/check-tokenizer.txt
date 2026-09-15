@@ -1,0 +1,12 @@
+✨ Pixi task (check-tokenizer in default): sh tokenizer/tools/gen_unicode_table.sh && python3 python/mojolearn/_tokenizer_synthetic.py build/tokenizer_synthetic && mojo run -I . tokenizer/checks/tokenizer_check.mojo
+gen_unicode_table: python3 on PATH is not unicodedata 16.0.0; using pixi exec --spec python=3.14
+tokenizer/impl/unicode_table_generated.mojo: up to date (unicodedata 16.0.0, sha256 ad4e106533e0f7ef)
+build/tokenizer_synthetic: 512 ranks (256 merges) + <|endoftext|>, 22 cases
+tokenizer_check: byte-level BPE against build/tokenizer_synthetic/cases.json
+  pattern agrees with the fixture (mojolearn.tokenizer-synthetic.v1, written by python/mojolearn/_tokenizer_synthetic.py)
+  tables: 512 ranks, all 256 byte tokens present, n_vocab 513 with <|endoftext|> = 512
+  # unicodedata 16.0.0
+  bijection: 256 distinct codepoints, 188 fixed points, 68 remapped to U+0100..U+0143, ' ' spells Ġ
+  reach: both whitespace alternatives, the single-space arm, the lowercase-only contraction set, three category-table traps, and the special token in all three positions
+cases: 22/22 exact id sequences, 22/22 byte-exact decode round trips
+tokenizer_check: PASS

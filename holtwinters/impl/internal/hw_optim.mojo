@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""cuML `cpp/src/holtwinters/internal/hw_optim.cuh` (v26.08.00).
+"""Reference: cuML `cpp/src/holtwinters/internal/hw_optim.cuh` (v26.08.00).
 
 `holtwinters_finite_gradient_device`, `holtwinters_bfgs_optim_device`, the
 global-scratch optim kernel and `holtwinters_optim_gpu`. ONE THREAD PER
@@ -50,7 +50,7 @@ operation, so hoisting moves no bit).
 WHY, in order:
   (a) HARDWARE. Metal has no float64 (mojolearn's standing hardware
       limit). Their H11/H33 arm is not portable AT ALL -- it cannot be
-      mirrored on one of the three vendors this lane must be identical on,
+      implemented on one of the three vendors this lane must be identical on,
       so "implementation it exactly" is not among the options.
   (b) It is a BUG, not a design choice, by the repo's own test: the same
       formula for the same symmetric matrix must not depend on whether
@@ -86,8 +86,8 @@ is `(0 - 0) / 2eps = 0`, so `OPTIM_MIN_GRAD_NORM` returns with `x = NaN`,
 and the final `bound_device` writes alpha = beta = gamma = 0. The fit thus
 REPORTS (0, 0, 0) for a series whose gradient was zero at (0.4, 0.3, 0.3)
 -- a stationary point, by their own `min_grad_norm` criterion, which they
-test only AFTER a step. This is cuml#888's instability in its simplest
-form.
+test only AFTER a step. This is the reference optimizer's instability in
+its simplest form.
 WHAT OURS DOES: when `linesearch_step_size <= 0` (their default) and
 `p.p == 0`, return `OPTIM_MIN_GRAD_NORM` with the current parameters,
 BEFORE the step: their own stop criterion, applied where the gradient is
@@ -110,6 +110,47 @@ same NaN -> bound -> 0 chain) deterministically on every vendor, and the
 card hashes its NaNs through DEVIATION 661's one payload.
 ============================================================================
 
+============ DEVIATION 2717 (2026-09-15): AT THE LINE-SEARCH LIMIT THE
+============ LOWEST-LOSS TRIAL IS STORED, NOT THE LAST ONE ================
+WHAT THE REFERENCE DOES (`hw_optim.cuh:485-508`, rapidsai/cuml#888, flagged
+in its own comment at :346-349): the backtracking loop halves `step_size`
+while the Armijo test rejects, up to `linesearch_iter_limit` times, and
+then `x = nx` stores whatever the LAST trial was. When the loop stops on
+the counter, that last trial is the smallest step, which need not be the
+trial with the lowest loss, so the optimizer can move to a worse point
+than one it already evaluated.
+WHAT THIS IMPLEMENTATION DOES: every trial's loss is already evaluated.
+The loop keeps the best one seen, starting with trial 0: a later trial
+replaces it only when `loss < best_loss` STRICTLY (`_ls_improves`), so an
+exact tie keeps the earliest, largest-step trial and a NaN loss never
+replaces anything. When the loop stops because `i >= linesearch_iter_limit`
+(the same condition that sets decision bit 2), `nx`, `step_size` and `loss`
+are set to the best trial's values before the stop tests, the stored `x`,
+and the BFGS update `s = step_size * p` use them. A loop that exits on the
+Armijo test is unchanged bit for bit. The limit arm is defined by the
+counter, as the reference's is, so a final trial that would have passed
+the test is still subject to the selection.
+WHY: mojolearn does not reproduce known defects of a reference library
+(the ExtraTrees precedent, DEVIATIONS 164/165). Identity is kept by
+construction: the selection adds copies and one exact compare, no
+arithmetic, no FMA-sensitive spelling, and the host oracle
+(`holtwinters/host/hw_oracle.mojo`, which is also the tsa CPU host binding)
+applies the identical rule.
+WHAT CHANGES NUMERICALLY: only fits where the limit is reached AND some
+earlier trial's loss is strictly lower than the last trial's (or equal
+with different bits). There `hw.opt.iterNNN.params`, the fitted
+alpha/beta/gamma, SSE, components, forecast and possibly `niter`,
+criterion and the decision bits move away from the reference's. Every
+recorded census before this entry reports LS_LIMIT on 0 of 35 standard
+series and on 0 of 128 search fits at the default limit of 100, so no
+recorded card is expected to move; that is an expectation, not a rerun.
+MEASURED: nothing yet. `hw_check::check_hw_linesearch_limit_keeps_best`
+replays the first iteration's line search on the host, independently of
+the kernel and the oracle, and asserts the stored point is that replay's
+selection; the sabotage `MOJOLEARN_HW_SABOTAGE_LS_LAST` restores the last
+trial and must FAIL it. Both are UNBUILT as of this entry.
+============================================================================
+
 ============ DEVIATION 699 (2026-08-24): THE OPTIMIZER RECORDS ITS
 ============ DECISIONS, NOT ONLY ITS NUMBERS ==============================
 WHAT THEIRS DOES: nothing. Every branch this optimizer takes -- whether the
@@ -129,7 +170,7 @@ WHAT OURS DOES: one extra Int32 per series, `hw.opt.decisions`, packed:
     bit 0   the DEVIATION 662 zero-direction guard returned
     bit 1   `phi > 0` reset the Hessian to the identity at least once
     bit 2   the line search hit `linesearch_iter_limit` at least once
-            (cuml#888's path: the LAST nx is stored, not the minimising one)
+            (DEVIATION 2717's arm: the lowest-loss trial is stored there)
     bit 3   `rho_ == 0` at least once -- the second NaN route, where
             `rho = 1/0 = inf` and `k = inf * 0 = NaN` poisons every H entry
     bit 4   a Hessian entry was NaN at least once
@@ -175,6 +216,7 @@ from holtwinters.impl.internal.hw_eval import (
 )
 from holtwinters.impl.internal.hw_utils import (
     SAB_CRIT_ORDER,
+    SAB_LS_LAST,
     SAB_LS_TIE,
     SAB_NO_FTZ,
     SAB_NO_ZERO_DIR_GUARD,
@@ -246,6 +288,16 @@ def _ls_reject(loss: Float32, target: Float32) -> Bool:
     comptime if SAB_LS_TIE:
         return loss >= target
     return loss > target
+
+
+@always_inline
+def _ls_improves(loss: Float32, best_loss: Float32) -> Bool:
+    """DEVIATION 2717's selection rule: a later line-search trial replaces
+    the best one only when its loss is STRICTLY lower, so an exact tie
+    keeps the earliest (largest-step) trial, and a NaN loss never replaces
+    anything (every compare with NaN is false). An exact compare, no
+    arithmetic, the same answer on every vendor and in every mode."""
+    return loss < best_loss
 
 
 @always_inline
@@ -457,6 +509,14 @@ def holtwinters_bfgs_optim_device(
             tid, ts, n, batch_size, frequency, shift, plevel, ptrend, pseason,
             pseason_width, start_season, use_beta, use_gamma, nx1, nx2, nx3, additive,
         )
+        # DEVIATION 2717: the best trial so far, starting with trial 0. Pure
+        # copies of values already computed; the only new operation is the
+        # exact compare in `_ls_improves`.
+        var best_step = step_size
+        var best_nx1 = nx1
+        var best_nx2 = nx2
+        var best_nx3 = nx3
+        var best_loss = loss
         var i = 0
         while i < linesearch_iter_limit and _ls_reject(
             loss, _f(identical_mul_add(step_size, cauchy, loss_ref))
@@ -470,12 +530,25 @@ def holtwinters_bfgs_optim_device(
                 pseason_width, start_season, use_beta, use_gamma, nx1, nx2, nx3, additive,
             )
             i += 1
+            if _ls_improves(loss, best_loss):
+                best_step = step_size
+                best_nx1 = nx1
+                best_nx2 = nx2
+                best_nx3 = nx3
+                best_loss = loss
         ls_halvings += i
         if i >= linesearch_iter_limit:
-            # cuml#888: `x = nx` below stores the LAST nx, not the one that
-            # minimised loss. Their bug, implemented faithfully; recorded so a
-            # fixture that reaches it can be identified from the card.
+            # DEVIATION 2717: the limit arm stores the trial with the lowest
+            # loss (earliest on a tie), with ITS step size and loss, so the
+            # stop tests and the BFGS update `s = step_size * p` below see
+            # the point actually stored. A normal exit is untouched.
             decisions |= HW_DEC_LS_LIMIT
+            comptime if not SAB_LS_LAST:
+                step_size = best_step
+                nx1 = best_nx1
+                nx2 = best_nx2
+                nx3 = best_nx3
+                loss = best_loss
         # end of line search
 
         # see if new {params} meet stop condition
