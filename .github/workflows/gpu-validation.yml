@@ -26,8 +26,15 @@
 name: GPU validation
 
 on:
+  # LIGHT TOUCH (Andrew, Sep 15 2026): this workflow never starts by itself. Every job
+  # is skipped unless the dispatch input confirm is RUN-HEAVY, so a wrong trigger costs nothing.
   workflow_dispatch:
     inputs:
+      confirm:
+        description: "Heavy run on paid or queued runners. Type RUN-HEAVY to really run it; anything else skips every job"
+        required: true
+        default: ""
+        type: string
       rounds:
         description: Boosting rounds per shape in the validation report
         required: false
@@ -35,6 +42,7 @@ on:
 
 jobs:
   nvidia:
+    if: inputs.confirm == 'RUN-HEAVY'
     name: NVIDIA (CUDA)
     runs-on: [self-hosted, linux, gpu, cuda]
     timeout-minutes: 90
@@ -90,6 +98,7 @@ jobs:
           if-no-files-found: warn
 
   amd:
+    if: inputs.confirm == 'RUN-HEAVY'
     name: AMD (HIP)
     runs-on: [self-hosted, linux, gpu, rocm]
     timeout-minutes: 90
