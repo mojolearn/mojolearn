@@ -1165,6 +1165,8 @@ check-mamba-decode = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/check
 check-mamba-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_check.mojo"
 check-mamba2-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba2_check.mojo"
 check-mamba3-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba3_check.mojo"
+# host only, no GPU: the Mamba-1 host backward oracle against the device VJP (mamba/host/gen) on the 16 corpus cases
+check-mamba1-backward-oracle-host = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings mamba/checks/mamba_backward_host_oracle_check.mojo"
 # DEVIATION 2712: the four Mamba lanes cold on a binding whose scratch buffers
 # hold NaN; every cell must equal the committed record (tools/mamba_poison_gate.sh)
 check-mamba-poison = "sh tools/mamba_poison_gate.sh"
