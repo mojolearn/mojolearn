@@ -201,6 +201,64 @@ def test_refuses_ids_of_the_wrong_type(tok):
     _raises(lambda: tok.decode_bytes(5), TypeError, "ids must be a sequence of int, got int")
 
 
+def _batch_documents():
+    """Every fixture case (both readings are asked separately below), the
+    fixed byte strings, empty documents between them and one invalid UTF-8
+    document: adjacent documents whose concatenation would merge."""
+    docs = [c["text"].encode("utf-8") for c in _cases()]
+    docs += [raw for raw, _allow, _want in FIXED]
+    docs += [b"", b"hello", b"", b" world", b"\xff\xfe<|endoftext|>\xc3", b"it", b"'s"]
+    return docs
+
+
+def test_encode_batch_each_document_as_alone(tok):
+    docs = _batch_documents()
+    for allow in (False, True):
+        got = tok.encode_batch(docs, allow_endoftext=allow)
+        assert len(got) == len(docs)
+        for k, (d, ids) in enumerate(zip(docs, got)):
+            assert ids == tok.encode_bytes(d, allow_endoftext=allow), (k, d, allow)
+
+
+def test_encode_batch_split_invariant(tok):
+    """The batch boundary is invisible: every split of the batch, every
+    single document and the reversed order read the same ids per document.
+    A binding built with MOJOLEARN_TOKENIZER_BATCH_SABOTAGE fails here."""
+    docs = _batch_documents()
+    whole = tok.encode_batch(docs, allow_endoftext=True)
+    for a in (1, 7, len(docs) // 2):
+        assert tok.encode_batch(docs[:a], allow_endoftext=True) + tok.encode_batch(docs[a:], allow_endoftext=True) == whole
+    assert [tok.encode_batch([d], allow_endoftext=True)[0] for d in docs] == whole
+    assert tok.encode_batch(docs[::-1], allow_endoftext=True) == whole[::-1]
+    assert tok.encode_batch([b"hello", b" world"]) == [[31373], [995]]
+
+
+def test_encode_batch_accepts_str_and_empty(tok):
+    assert tok.encode_batch([]) == []
+    assert tok.encode_batch(["", b""]) == [[], []]
+    assert tok.encode_batch(["hello world", bytearray(b"hello")]) == [[31373, 995], [31373]]
+    assert tok.encode_batch(("<|endoftext|>",), allow_endoftext=True) == [[50256]]
+    assert tok.encode_batch(iter(["é"])) == [[2634]]
+
+
+def test_decode_batch_round_trip(tok):
+    docs = _batch_documents()
+    ids = tok.encode_batch(docs, allow_endoftext=True)
+    assert tok.decode_bytes_batch(ids) == docs
+    assert tok.decode_batch(ids) == [d.decode("utf-8", "replace") for d in docs]
+    assert tok.decode_batch([]) == []
+
+
+def test_batch_refusals(tok):
+    _raises(lambda: tok.encode_batch("abc"), TypeError, "encode_batch takes a sequence of documents, got str")
+    _raises(lambda: tok.encode_batch(b"abc"), TypeError, "encode_batch takes a sequence of documents, got bytes")
+    _raises(lambda: tok.encode_batch(5), TypeError, "encode_batch takes a sequence of documents, got int")
+    _raises(lambda: tok.encode_batch(["a", 3]), TypeError, "document 1 must be str or bytes-like, got int")
+    _raises(lambda: tok.encode_batch(["a"], allow_endoftext=1), TypeError, "allow_endoftext must be a bool, got int")
+    _raises(lambda: tok.decode_batch([[1], [50257]]), ValueError, "id 50257 at position 0 is outside [0, 50257)")
+    _raises(lambda: tok.decode_bytes_batch(b"ab"), TypeError, "decode_bytes_batch takes a sequence of id sequences")
+
+
 def test_refuses_a_missing_table_by_name(tmp_path=None):
     """Resolved before the binding is loaded, so this needs no build."""
     import tempfile

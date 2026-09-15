@@ -639,6 +639,9 @@ FAMILIES = (
         # define reverses gpt2_encode's ids). Covering it needs the gate to
         # build the tokenizer binding with its own define into the sabotage
         # set; until then test_tokenizer_surface.py is its gate.
+        # gpt2_encode_batch (lane/inference-tokenizer-neural, 2026-09-15)
+        # has its own negative control, -D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1,
+        # which the lane's batch part reads BATCH_MOVED.
         training_lanes=(),
         inference_lanes=(),
         forest_kinds=(),
@@ -652,7 +655,8 @@ FAMILIES = (
         exports=(
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "gpt2_load",
-            "gpt2_n_vocab", "gpt2_max_token_bytes", "gpt2_encode", "gpt2_decode",
+            "gpt2_n_vocab", "gpt2_max_token_bytes", "gpt2_encode", "gpt2_encode_batch",
+            "gpt2_decode",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         ships_in_wheel=True,
