@@ -17,6 +17,17 @@ Linux legs are OWED before this heading reads published.
   binding both export it; the new `metrics-fowlkes-mallows` identity lane covers it, with
   the metrics host sabotage build required to read DIVERGENT. Apple M4 Metal and CPU columns
   only; the NVIDIA and AMD columns are owed to the release record.
+- New `HDBSCAN(prediction_data=True)` and `mojolearn.hdbscan.approximate_predict(clusterer,
+  points_to_predict)`, mirroring cuML's prediction data and `approximate_predict`: the label
+  and probability of new points under the fitted clustering, on the GPU binding and the CPU host
+  binding. Without `prediction_data=True` it refuses by name, as cuML does. A tie in mutual
+  reachability distance resolves in (distance, index) order (DEVIATION 1615). The fit is
+  unchanged: the committed Apple, NVIDIA and AMD train hashes of the `hdbscan` and
+  `hdbscan-leaf` lanes still match. Those lanes and `par-hdbscan` now carry infer and batch
+  cells instead of `n/a:transductive`, with the batch and host sabotage builds required to
+  move them. Apple M4 Metal and CPU columns only; the NVIDIA and AMD cells are owed to the
+  release record. `membership_vector` and `all_points_membership_vectors` are not
+  implemented and refuse by name.
 - `GradientBoosting.fit` takes `group_id`, CatBoost's Pool argument: one string or integer id per
   row (an integer compares by its decimal spelling, as their Pool hashes it), each group's rows
   consecutive or the fit raises "group Ids are not consecutive". The grouping crosses into the GPU

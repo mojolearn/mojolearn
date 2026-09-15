@@ -266,10 +266,12 @@ def _retain_et_export(var result: FitResult) raises -> PythonObject:
 def _et_fit[
     CLASSIFIER: Bool, EXPORT: Bool, ROWMAJOR: Bool
 ](
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    tree_start: Int = 0,
 ) raises -> PythonObject:
     """`_et_classifier_fit` / `_et_regressor_fit` of the GPU binding: the
-    same slot checks in the same words, then the host fit."""
+    same slot checks in the same words, then the host fit. `tree_start` is
+    the GPU binding's global tree ID offset (the shard fits below)."""
     comptime entry = "et_classifier_fit" if CLASSIFIER else "et_regressor_fit"
     if len(params) != N_FIT_PARAMS:
         raise Error(
@@ -314,11 +316,12 @@ def _et_fit[
         var y = read_f32(y_address, n_rows)
         comptime if CLASSIFIER:
             result = fit_extra_trees_classifier_host_exact(
-                x, y, Int32(n_rows), Int32(n_features), Int32(n_classes), config
+                x, y, Int32(n_rows), Int32(n_features), Int32(n_classes), config,
+                tree_start,
             )
         else:
             result = fit_extra_trees_regressor_host_exact(
-                x, y, Int32(n_rows), Int32(n_features), config
+                x, y, Int32(n_rows), Int32(n_features), config, tree_start
             )
     comptime if EXPORT:
         return _retain_et_export(result^)
@@ -372,6 +375,25 @@ def et_regressor_fit_rowmajor_export_binding(
     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject
 ) raises -> PythonObject:
     return _et_fit[False, True, True](x_addr, y_addr, params)
+
+
+def et_classifier_fit_shard_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    tree_start: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_trees.mojo::et_classifier_fit_shard_binding`:
+    the column-major fit of trees `tree_start .. tree_start + n_estimators`
+    of the whole forest (`parallel_ensemble.fit_forest`'s shard;
+    lane/cpu-training-par-wave2, 2026-09-15)."""
+    return _et_fit[True, False, False](x_addr, y_addr, params, _index(tree_start))
+
+
+def et_regressor_fit_shard_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    tree_start: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_trees.mojo::et_regressor_fit_shard_binding`."""
+    return _et_fit[False, False, False](x_addr, y_addr, params, _index(tree_start))
 
 
 def et_forest_export_binding(
@@ -531,6 +553,8 @@ def PyInit__mojolearn_trees_host() abi("C") -> PythonObject:
         module.def_function[et_forest_export_binding]("forest_export")
         module.def_function[et_forest_export_legacy_binding]("forest_export_legacy")
         module.def_function[et_forest_export_release_binding]("forest_export_release")
+        module.def_function[et_classifier_fit_shard_binding]("et_classifier_fit_shard")
+        module.def_function[et_regressor_fit_shard_binding]("et_regressor_fit_shard")
         module.def_function[et_predict_binding]("et_predict")
         module.def_function[resident_prepare_binding]("forest_prepare_gpu")
         module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")
