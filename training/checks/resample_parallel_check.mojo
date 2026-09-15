@@ -147,6 +147,14 @@ def main() raises:
     # MOJOLEARN_RESAMPLE_CHECK_ONLY=boot|perm|mc runs one family, so the
     # sabotage build can be shown failing in each partition on its own.
     var only = String(getenv("MOJOLEARN_RESAMPLE_CHECK_ONLY", ""))
+    if String(getenv("MOJOLEARN_RESAMPLE_CHECK_LARGE", "0")) == "1":
+        # Distributions above 1 MiB on the owner-to-root copies.
+        boot_case(root, count, 53, 2, STAT_MEAN, METHOD_PERCENTILE, ALT_TWO_SIDED, 300001, 0)
+        boot_case(root, count, 53, 2, STAT_PEARSON, METHOD_BASIC, ALT_LESS, 400000, 7)
+        perm_case(root, count, 40, 33, STAT_DIFF_MEANS, ALT_TWO_SIDED, 300001, 0)
+        mc_case(root, count, MC_F_PRODUCT, 70000000, 0)
+        print("PASS resample parallel large")
+        return
     var stats: List[Int] = [STAT_MEAN, STAT_STD, STAT_QUANTILE, STAT_PEARSON, STAT_DIFF_MEANS, STAT_TRIMMED_MEAN]
     var reps: List[Int] = [2, 7, 1000, 4099]
     for s in stats:
