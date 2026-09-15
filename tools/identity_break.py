@@ -3552,8 +3552,34 @@ _batch_decl(_batch_iforest, "iforest", "iforest-tuned", "par-iforest")
 
 _batch_decl("n/a:no-predict", "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted", "kmeans-sqrt",
             "kmeans-classic-pp", "kmeans-cosine", "par-kmeans")
-_batch_decl("n/a:transductive", "dbscan", "dbscan-brute-l1", "dbscan-weighted", "par-dbscan", "agglomerative",
-            "spectral", "spectral-precomputed", "hdbscan", "hdbscan-leaf")
+# The transductive clustering lanes (read 2026-09-15 against the Python
+# estimator, the GPU binding, the CPU host binding and cuML v26.08.00): none
+# has a held-out row call on EITHER backend, so no batch part exists to ask.
+#   DBSCAN: density.py:189,286 fit and fit_predict only; _mojolearn_estimators
+#     and _mojolearn_estimators_host export dbscan_fit only; cuML dbscan.pyx
+#     has fit (:301) and fit_predict (:478) only.
+#   AgglomerativeClustering: _hierarchy_impl.py:311 fit_predict only; the
+#     solver and solver host bindings export linkage_fit only; cuML
+#     agglomerative.pyx has fit (:139) and fit_predict (:216) only.
+#   SpectralClustering: _spectral_impl.py:547 predict raises
+#     NotImplementedError; the metrics bindings export spectral_fit_predict_
+#     dataset and _graph only; cuML spectral_clustering.pyx has fit (:263) and
+#     fit_predict (:239) only.
+#   HDBSCAN: cuML HAS held-out calls (hdbscan.pyx approximate_predict :1264,
+#     membership_vector :1180, all_points_membership_vectors :1114) but ours
+#     does not on GPU or CPU: hdbscan.py:180 fit_predict only, _mojolearn_
+#     hdbscan.mojo:188 and _mojolearn_hdbscan_host.mojo:142 export hdbscan_fit
+#     only, deferred at hdbscan/NOT_IMPLEMENTED.tsv:4. Implementing them (with
+#     generate_prediction_data) is what would make these lanes fillable.
+_batch_decl("n/a:transductive (DBSCAN has no predict on GPU, CPU or cuML; fit and fit_predict only)",
+            "dbscan", "dbscan-brute-l1", "dbscan-weighted", "par-dbscan")
+_batch_decl("n/a:transductive (AgglomerativeClustering has no predict on GPU, CPU or cuML; fit and fit_predict only)",
+            "agglomerative")
+_batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
+            "spectral", "spectral-precomputed")
+_batch_decl("n/a:transductive (HDBSCAN approximate_predict and membership_vector not implemented on GPU or CPU; "
+            "cuML has them; hdbscan/NOT_IMPLEMENTED.tsv:4)",
+            "hdbscan", "hdbscan-leaf")
 
 
 def _batch_kneighbors(ml, e, Xh):
@@ -3612,7 +3638,22 @@ _batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "p
 # 0xbf99e1c6 in the batch of 64). A BATCH_MOVED there is the documented
 # algorithm, not a defect, so the part records the reason instead of failing
 # every IDENTICAL run; the infer column still hashes the whole-batch transform.
-_batch_decl("n/a:batch-dependent-by-contract (umap/transform.mojo: query batching may change results)",
+# The four batch couplings, read 2026-09-15 (the CPU host restatement,
+# umap/host/umap_oracle.mojo:594,614,689,698,706, carries the same four):
+#   1. the sigma floor 0.001 * mean over EVERY query's neighbor distances
+#      (transform.mojo:44,66);
+#   2. the edge schedule scales each weight by the maximum over the whole
+#      batch (:141, used at :147);
+#   3. the negative-sample counter hashes the batch-local edge ordinal
+#      row * k + j (:146,154), so a row's draws depend on its position;
+#   4. with n_epochs == 0 the epoch count is 100 or 30 by n_queries (:224);
+#      the lanes pass n_epochs=8, so this one is not reached here.
+# cuML's transform couples a batch the same ways (runner.cuh:549-554 epochs
+# by inputs.n, fuzzy_simpl_set/naive.cuh:168 the mean_dist sigma floor,
+# optimize_batch_kernel.cuh:267 Philox seeded by the batch COO row), and
+# its docstring says "the transform() function is stochastic" (umap.pyx:1475).
+_batch_decl("n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, "
+            ":141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same)",
             "umap", "par-graph-umap")
 _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "kernel-ridge")
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "nystroem")
@@ -3823,7 +3864,11 @@ _batch_decl(_batch_pq("radius_neighbors", sl=slice(0, 64), ragged=True, sort_res
 _batch_decl(_batch_pq("score_samples", sl=(slice(0, 256), slice(0, 4))), "par-queries-kde")
 _batch_decl(_batch_rsn("kneighbors", "predict", "predict_proba"), "par-reference-knn")
 _batch_decl(_batch_rsn("predict"), "par-reference-knn-reg")
-_batch_decl("n/a:transductive", "par-graph-agglomerative", "par-graph-spectral")
+# parallel_graph.fit_graph is fit-only; see the agglomerative and spectral reasons above
+_batch_decl("n/a:transductive (AgglomerativeClustering has no predict on GPU, CPU or cuML; fit and fit_predict only)",
+            "par-graph-agglomerative")
+_batch_decl("n/a:transductive (SpectralClustering.predict raises NotImplementedError; cuML has none either)",
+            "par-graph-spectral")
 _batch_decl(_rows_calls("predict"), "par-ordered-rmse")
 _batch_decl(_rows_calls("predict", prep=_coded), "par-feature-freq")
 _batch_decl(_rows_calls("predict", "predict_proba"), "par-boosting-pointwise")
@@ -3833,7 +3878,10 @@ _batch_decl("n/a:no-model", "par-byte-lm-model-pool", "par-byte-lm-offload")
 _batch_decl(_rows_calls("predict", "predict_proba"), "par-forest-pool")
 _batch_decl(_rows_calls("score_samples", "predict", sl=(slice(0, 64), slice(0, 4))), "par-gmm")
 _batch_decl("n/a:function", "par-resample")
-_batch_decl("n/a:transductive", "par-hdbscan")
+# parallel_classical.fit_hdbscan is fit-only; see the hdbscan reason above
+_batch_decl("n/a:transductive (HDBSCAN approximate_predict and membership_vector not implemented on GPU or CPU; "
+            "cuML has them; hdbscan/NOT_IMPLEMENTED.tsv:4)",
+            "par-hdbscan")
 _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "par-kernel-ridge")
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "par-nystroem")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "par-rbf-sampler")
