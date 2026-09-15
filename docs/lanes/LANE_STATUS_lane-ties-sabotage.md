@@ -5,7 +5,7 @@ and ivf-euclidean moves under `-D MOJOLEARN_HOST_SABOTAGE=1` on every fixture,
 `ties` included, in the identity sabotage column and in the classical host gate
 recordings; then the saved-model sabotage step requires every fixture.
 
-## Done (on the branch)
+## Done
 
 - `core/knn_host_predict.mojo`: `host_sabotage_value_flip` (bits always differ)
   on every L1, Lp and cosine cell distance, every ball cover edge distance and
@@ -13,20 +13,23 @@ recordings; then the saved-model sabotage step requires every fixture.
 - `ivf/host/ivf_host.mojo`: `ivf_sabotage_value_flip` on every distance
   `host_ivf_search` returns, after the root, sabotage builds only.
 - `tools/classical_host_gate.py`: `sabotage_verdict`, `--every-fixture` and
-  `--lane-rule-only LANE` (the looser rule kept for a named lane).
-  `tools/test_cpu_identity_gate.py` `SabotageVerdictTests`.
+  `--lane-rule-only LANE`. `tools/test_cpu_identity_gate.py` `SabotageVerdictTests`
+  (fail against a copy without the every-fixture branch).
 - `.github/workflows/cpu-identity-gate.yml`: the saved-model sabotage step
-  uses `--every-fixture`.
+  uses `--every-fixture`, no exemption.
+- Evidence: `bench/results/identity_break/2026-09-15_ties-sabotage/README.md`
+  (one RunPod CPU pod, DELETE verified). Old arms 166 of 216 parts moved, new
+  arms 180 of 216; the 36 left are the neighbor lanes' saved-file hashes, which
+  no host arm reaches. Production IDENTICAL to the records on all nine fixtures.
 
-## Owed
+## Open (not changed here)
 
-- One RunPod CPU pod (`tools/runpod_cpu_leg.sh`, lane tag `ties-sabotage`):
-  old arms (origin/main sources rebuilt on the pod) then new arms; per lane and
-  fixture counts; production diff against the committed records; owed check;
-  gate on the new rule. Rented at 1475db274 (22:32 ET, lease 170 min, the pod
-  deletes itself). The command is `bench/results/identity_break/2026-09-15_ties-sabotage/leg_cmd.tmpl.sh`
-  with `@@OLD_B64@@` replaced by a base64 tgz of origin/main's two oracle files, and
-  `leg_args.sh` holds the leg arguments. Results go under that directory.
-- If a recording lane other than the six fails `--every-fixture`, name it with
-  `--lane-rule-only` in the workflow and list it here.
-- Merge to main: docs_facts --check, wheel_ci pins, test_cpu_identity_gate.
+- The owed check fails on the 18 radius and radius-manhattan model file hashes
+  under both the old and new arms (no host sabotage arm can move a saved index
+  file). Needs a decision: a GPU record carrying those cells, or an owed rule
+  for file hashes.
+
+## Remaining
+
+- Merge to main: docs_facts --check, wheel_ci pins, test_cpu_identity_gate; push
+  HEAD:main; remove the worktree.

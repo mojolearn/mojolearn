@@ -1,0 +1,209 @@
+/root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:1435:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = out[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:1531:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                op[i] = out[i]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:1545:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    op[r * (eff + 1) + k] = Float32(identical_exp64(Float64(out[r * eff + k]) - mx) / se)
+                    ~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:1546:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                op[r * (eff + 1) + eff] = Float32(identical_exp64(-mx) / se)
+                ~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:1549:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                op[i] = Float32(1.0 / (1.0 + identical_exp64(-Float64(out[i]))))
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:83:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:399:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    if Int(tree_offsets_p[0]) != 0 or Int(tree_offsets_p[n_trees]) != n_splits:
+           ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:399:57: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    if Int(tree_offsets_p[0]) != 0 or Int(tree_offsets_p[n_trees]) != n_splits:
+                                          ~~~~~~~~~~~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:401:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    if Int(leaf_offsets_p[0]) != 0 or Int(leaf_offsets_p[n_trees]) != n_leaf_values:
+           ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:401:57: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    if Int(leaf_offsets_p[0]) != 0 or Int(leaf_offsets_p[n_trees]) != n_leaf_values:
+                                          ~~~~~~~~~~~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:406:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        fold_counts.append(Int(fold_counts_p[f]))
+                               ~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:407:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        one_hot.append(one_hot_p[f] != 0)
+                       ~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:110:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var lo = Int(border_offsets_p[f])
+                     ~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:111:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var hi = Int(border_offsets_p[f + 1])
+                     ~~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:123:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var treat = Int(nan_p[f])
+                        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:137:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if v > borders_p[lo + b]:
+                       ~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:197:36: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var lo = Int(tree_offsets_p[t])
+                     ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:198:36: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var hi = Int(tree_offsets_p[t + 1])
+                     ~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:204:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var leaf_lo = Int(leaf_offsets_p[t])
+                          ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:205:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var leaf_hi = Int(leaf_offsets_p[t + 1])
+                          ~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:220:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                layout, split_feature_p[lo + level], split_take_bin_p[lo + level],
+                        ~~~~~~~~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:220:70: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                layout, split_feature_p[lo + level], split_take_bin_p[lo + level],
+                                                     ~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:224:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var bin_idx = Int(split_bin_p[lo + level])
+                              ~~~~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:230:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            eqs.append(split_take_bin_p[lo + level] != 0)
+                       ~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:244:51: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                cursor[at] = cursor[at] + leaves_p[leaf_lo + leaf * dim + d]
+                                          ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:278:36: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var lo = Int(tree_offsets_p[t])
+                     ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:279:36: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var hi = Int(tree_offsets_p[t + 1])
+                     ~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:284:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var leaf_lo = Int(leaf_offsets_p[t])
+                          ~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:285:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var leaf_hi = Int(leaf_offsets_p[t + 1])
+                          ~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:301:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                layout, node_feature_p[lo + i], node_take_bin_p[lo + i],
+                        ~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:301:64: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                layout, node_feature_p[lo + i], node_take_bin_p[lo + i],
+                                                ~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:305:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var bin = Int(node_bin_p[lo + i])
+                          ~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:306:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var left = Int(node_left_p[lo + i])
+                           ~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:307:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var right = Int(node_right_p[lo + i])
+                            ~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:320:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            eqs.append(node_take_bin_p[lo + i] != 0)
+                       ~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:90:
+./core/gbdt_host_predict.mojo:355:51: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                cursor[at] = cursor[at] + leaves_p[leaf_lo + bin * dim + d]
+                                          ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:982:22: warning: assignment to 'text' was never used; assign to '_' instead?
+    var text = String("")
+                     ^
+/root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:983:31: warning: assignment to 'losses' was never used; assign to '_' instead?
+    var losses = List[Float64]()
+                              ^
+/root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:1164:19: warning: assignment to 'cur_dim' was never used; assign to '_' instead?
+    var cur_dim = 1
+                  ^
+/root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:1604:22: warning: assignment to 'text' was never used; assign to '_' instead?
+    var text = String("")
+                     ^
+/root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:1656:22: warning: assignment to 'text' was never used; assign to '_' instead?
+    var text = String("")
+                     ^
+Included from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:97:
+./gbdt/host/gbdt_oracle.mojo:1100:23: warning: assignment to 'final_score' was never used; assign to '_' instead?
+    var final_score = score
+                      ^
+Included from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:127:
+./gbdt/host/gbdt_oracle_multiclass.mojo:457:23: warning: assignment to 'final_score' was never used; assign to '_' instead?
+    var final_score = score
+                      ^
+Included from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:146:
+./gbdt/host/gbdt_oracle_ordered.mojo:971:9: warning: ref 'iteration' was never used, remove it?
+    for iteration in range(n_estimators):
+        ^
+Included from /root/mojolearn/bindings/_mojolearn_gbdt_host.mojo:147:
+./gbdt/host/gbdt_oracle_pointwise.mojo:426:9: warning: ref 'iteration' was never used, remove it?
+    for iteration in range(n_estimators):
+        ^
+built python/mojolearn/host-sabotage/_mojolearn_gbdt_host.so
+BINCACHE negative-miss+built-uploaded bindings/build_gbdt_host.sh key=db9972358ead9ba3 seconds=53.8
