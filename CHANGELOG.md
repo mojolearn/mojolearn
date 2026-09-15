@@ -10,6 +10,17 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- Seven more brute force k-NN metrics (lane/neighbors-rest, for 0.8.7). `NearestNeighbors`,
+  `KNeighborsClassifier` and `KNeighborsRegressor` take `metric='canberra'`, `'correlation'`,
+  `'jensenshannon'`, `'inner_product'`, `'braycurtis'` and scikit-learn's `'hamming'` and
+  `'russellrao'`, on the GPU and from a saved model on a CPU with no GPU, each one cell per
+  thread with the feature axis ascending (`distance_ops.mojo`, THE SEVEN METRICS; DEVIATIONS
+  2898 to 2901). What stays refused by name is `'haversine'`, which needs an arcsine no pinned
+  primitive provides. Correlation refuses a constant row and jensenshannon a negative entry,
+  each with its reason, where the reference returns a NaN into the selector; an inner product
+  search returns the largest products first and refuses `weights='distance'`, which would
+  weight the farthest neighbour most. Identity lanes knn-canberra, knn-braycurtis,
+  knn-correlation, knn-jensenshannon, knn-hamming, knn-russellrao and knn-inner-product.
 - Sabotage value arms for the neighbor and IVF host oracles (lane/ties-sabotage, for 0.8.7).
   A fold walked in the other order is exact on the integer `ties` fixture, so the sabotage
   build left the ties cells of knn-cosine, knn-rbc, radius, radius-manhattan, ivf and

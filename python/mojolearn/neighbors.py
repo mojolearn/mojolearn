@@ -137,8 +137,15 @@ _DIST_L2_SQRT_EXPANDED = 1
 _DIST_COSINE_EXPANDED = 2
 _DIST_L1 = 3
 _DIST_L2_SQRT_UNEXPANDED = 5
+_DIST_INNER_PRODUCT = 6
 _DIST_LINF = 7
+_DIST_CANBERRA = 8
 _DIST_LP_UNEXPANDED = 9
+_DIST_CORRELATION_EXPANDED = 10
+_DIST_BRAY_CURTIS = 14
+_DIST_JENSEN_SHANNON = 15
+_DIST_HAMMING_UNEXPANDED = 16
+_DIST_RUSSEL_RAO_EXPANDED = 18
 
 #: THE BALL COVER'S OWN TABLE, and it is NOT `_METRIC_TABLE`.
 #:
@@ -193,18 +200,35 @@ _METRIC_TABLE = {
     "cosine": _DIST_COSINE_EXPANDED,
     "minkowski": _DIST_LP_UNEXPANDED,
     "lp": _DIST_LP_UNEXPANDED,
+    # lane/neighbors-rest (2026-09-15): the rest of cuML's brute set
+    # (braycurtis is a TODO there) and scikit-learn's hamming and
+    # russellrao. `neighbors/impl/distance/detail/distance_ops.mojo`, THE
+    # SEVEN METRICS, carries each definition and DEVIATIONS 2898 to 2901.
+    "canberra": _DIST_CANBERRA,
+    "correlation": _DIST_CORRELATION_EXPANDED,
+    "jensenshannon": _DIST_JENSEN_SHANNON,
+    "inner_product": _DIST_INNER_PRODUCT,
+    "braycurtis": _DIST_BRAY_CURTIS,
+    "hamming": _DIST_HAMMING_UNEXPANDED,
+    "russellrao": _DIST_RUSSEL_RAO_EXPANDED,
 }
+
+#: The brute force metrics the random ball cover does not take. Its pruning
+#: is the triangle inequality over the four ops `rbc_cmp_dist` carries
+#: (`neighbors/impl/ball_cover/common.mojo`), and none of these is one of
+#: them; correlation, braycurtis, russellrao and inner_product are not
+#: metrics at all.
+_BRUTE_ONLY_METRICS = (
+    "canberra", "correlation", "jensenshannon", "inner_product",
+    "braycurtis", "hamming", "russellrao",
+)
 
 #: Names in cuML's `VALID_METRICS["brute"]` (`neighbors/__init__.py:27-48`)
 #: that this tree does not compute. Refused BY NAME so a caller learns the
-#: metric is UNIMPLEMENTED rather than unknown.
+#: metric is UNIMPLEMENTED rather than unknown. haversine needs an arcsine
+#: and `checks/numerics.mojo` has no identical one.
 _UNSUPPORTED_METRICS = (
-    "canberra",
-    "jensenshannon",
-    "correlation",
-    "inner_product",
     "haversine",
-    "braycurtis",
 )
 
 _WEIGHTS_UNIFORM = 0
@@ -239,6 +263,20 @@ def _resolve_weights(cls_name, weights):
             "weighting; use 'uniform' or 'distance'"
         )
     return _WEIGHTS_TABLE[weights]
+
+
+def _refuse_similarity_weights(cls_name, metric, weights):
+    """DEVIATION 2901: `weights='distance'` is `1/d`, and an inner product
+    is a similarity (larger is nearer), so it would weight the farthest
+    neighbour most. Refused by name; the Mojo entries refuse the same pair."""
+    if weights == "distance" and isinstance(metric, str) and metric.lower() == "inner_product":
+        raise ValueError(
+            f"mojolearn {cls_name}: weights='distance' with "
+            "metric='inner_product' is refused. The distance weighting is "
+            "1/d and an inner product is a similarity (larger is nearer), so "
+            "it would weight the farthest neighbour most. Use "
+            "weights='uniform'."
+        )
 
 
 def _refuse_inert_p(cls_name, metric, p):
@@ -388,6 +426,16 @@ def _resolve_rbc_metric(cls_name, metric, p):
             "NearestNeighbors with algorithm='brute', which needs no "
             "inequality and honors every implemented metric."
         )
+    if key in _BRUTE_ONLY_METRICS:
+        raise ValueError(
+            f"mojolearn {cls_name}: metric={metric!r} is REFUSED on the "
+            "random ball cover. Its pruning is the triangle inequality over "
+            "the euclidean, manhattan, chebyshev and minkowski (p >= 1) "
+            "comparisons it carries, and this metric is not one of them "
+            "(correlation, braycurtis, russellrao and inner_product are not "
+            "metrics at all). Use NearestNeighbors with algorithm='brute', "
+            "which computes it exactly."
+        )
     if key in _UNSUPPORTED_METRICS:
         raise ValueError(
             f"mojolearn {cls_name}: metric={metric!r} is in cuML's "
@@ -457,10 +505,16 @@ class NearestNeighbors(NumericModeMixin):
                                 computes: 'euclidean'/'l2', 'sqeuclidean',
                                 'l1'/'cityblock'/'manhattan'/'taxicab',
                                 'chebyshev'/'linf', 'cosine',
-                                'minkowski'/'lp'. THE REST of their
-                                VALID_METRICS['brute'] set (canberra,
-                                jensenshannon, correlation, inner_product,
-                                haversine, braycurtis) is refused BY NAME.
+                                'minkowski'/'lp', and since 2026-09-15
+                                (lane/neighbors-rest) 'canberra',
+                                'correlation', 'jensenshannon' (rows not
+                                renormalized; negative entries refused),
+                                'inner_product' (largest first; distances
+                                are the products), 'braycurtis', and
+                                scikit-learn's 'hamming' and 'russellrao'
+                                (nonzero read as True). 'haversine' is
+                                refused BY NAME: it needs an arcsine and
+                                there is no identical one.
                                 UNTIL 2026-09-01 THIS ROW READ "refused,
                                 anything but Euclidean"; cosine and
                                 Minkowski are implemented and the sentence is
@@ -810,6 +864,7 @@ class KNeighborsClassifier(NearestNeighbors):
     def _check_refusals(self):
         super()._check_refusals()
         _resolve_weights(type(self).__name__, self.weights)
+        _refuse_similarity_weights(type(self).__name__, self.metric, self.weights)
 
     def save(self, path):
         """Write the fitted model to `path` as an npz: the index and
@@ -1041,6 +1096,7 @@ class KNeighborsRegressor(NearestNeighbors):
     def _check_refusals(self):
         super()._check_refusals()
         _resolve_weights(type(self).__name__, self.weights)
+        _refuse_similarity_weights(type(self).__name__, self.metric, self.weights)
 
     def save(self, path):
         """Write the fitted model to `path` as an npz: the index and

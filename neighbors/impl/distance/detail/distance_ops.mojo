@@ -170,6 +170,70 @@ distance slightly below zero or slightly above two is round-off in THEIR
 formula, and clamping it would be a different answer from theirs on
 exactly the fixtures a user would notice. `metric_check.mojo` plants a
 self-neighbour and records what comes out instead of hiding it.
+
+THE SEVEN METRICS (lane/neighbors-rest, 2026-09-15)
+----------------------------------------------------
+Reference: cuVS `distance_ops/{canberra,correlation,jensen_shannon,hamming,
+russel_rao}.cuh`, `distance.cuh`'s CorrelationExpanded setup and cuVS brute
+force's `select_min = is_min_close(metric)` for InnerProduct; BrayCurtis
+from scikit-learn (`scipy.spatial.distance.braycurtis`). Every one is a
+core plus an epilogue in ONE thread per cell, features ascending, each
+operand `ftz`'d as loaded, every primitive from `checks/numerics.mojo`. None
+reads a norm buffer, so `tiled_brute_force_knn`'s `use_norms = false` arm
+takes all seven in both modes and no new arm exists.
+
+    canberra       acc += add != 0 ? |x-y| / add : 0,  add = |x| + |y|
+                   (`canberra.cuh`'s `(add != 0) * diff / (add + (add == 0))`
+                   is that value: at add = 0, diff = 0 too)
+    braycurtis     sum |x-y| / sum |x+y|
+    correlation    1 - (k sxy - sx sy) / sqrt((k sxx - sx^2)(k syy - sy^2))
+    jensenshannon  acc += -x (logM - log x) - y (logM - log y), m = (x+y)/2,
+                   a zero m or x or y reads log as 0; sqrt(acc / 2)
+    hamming        count(x != y) * (1/k)
+    russellrao     (k - count(x != 0 and y != 0)) * (1/k)
+    inner_product  the negation of sum x y, stored; see DEVIATION 2901
+
+DEVIATION 2898 (2026-09-15): CORRELATION'S ROW SUMS ARE FOLDED IN THE CELL.
+REFERENCE: `distance.cuh:118-205` precomputes each row's sum (`reduce`) and
+squared L2 norm (`norm<L2Norm>`) through RAFT's reductions and the op reads
+them from registers. HERE the five accumulators (sx, sy, sxx, syy, sxy) are
+running folds over the same ascending feature axis in the cell's thread, so
+each row statistic is a pure function of the row and of nothing else. The
+epilogue is theirs, grouping included: `numer / sqrt(Q * R)`. A row whose
+`Q = k sxx - sx^2` computes to zero or below (a constant row; its
+correlation is 0/0) is refused by name at the host entry, as cosine refuses
+an all-zero row (DEVIATION 553), and so is a pair of rows whose `Q * R`
+flushes to zero (the smallest index Q times the smallest query Q, which is
+the smallest product because a correctly rounded product is monotone).
+REFERENCE BEHAVIOR NOT CARRIED: no guard, a NaN distance into the selector.
+
+DEVIATION 2899 (2026-09-15): JENSEN-SHANNON REFUSES NEGATIVE ENTRIES AND
+RECTIFIES BEFORE THE ROOT. REFERENCE: `jensen_shannon.cuh` takes `log` of
+whatever arrives and roots `0.5 * acc` bare. A negative entry makes `log`
+NaN, and round-off can leave `acc` a hair below zero on a near-identical
+pair, whose root is NaN. HERE a negative entry (tested on the raw value,
+`v < 0`) in the index or the queries is refused by name, and `0.5 * acc`
+at or below zero roots as zero. Rows are NOT renormalized to sum to one;
+the reference does not, so the answer is scipy's only on probability rows.
+
+DEVIATION 2900 (2026-09-15): RUSSELL-RAO READS ITS OPERANDS AS BOOLEANS.
+REFERENCE: `russel_rao.cuh` accumulates `x * y`, which is scikit-learn's
+boolean count only on 0/1 data. scikit-learn converts to bool (nonzero is
+True) before counting, and that is what a caller typing the name gets
+there, so the core counts `x != 0 and y != 0`. On 0/1 data the two agree.
+BrayCurtis's `0 / 0` (two all-zero rows) reads 0, as Canberra's per-feature
+`0 / 0` does in the reference; a zero denominator with a nonzero numerator
+is `+inf`, the IEEE quotient.
+
+DEVIATION 2901 (2026-09-15): INNER PRODUCT'S SELECT-MAX IS AN ASCENDING
+SELECT OVER THE STORED NEGATION. REFERENCE: `select_min = false` for
+InnerProduct, the largest products first. Every selector in this tree is a
+select-min over a total order, so the cell stores `0 - acc` (exact, and
+`+0` for a zero product, never `-0`: `acc` cannot be `-0` because the fold
+starts at `+0`) and the host entry writes `0 - v` back after the sort, which
+is `acc` bit for bit. Ties keep the lower index first, as for every metric.
+A distance weighting over a similarity has no meaning and is refused by
+name (`refuse_similarity_weights`).
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
@@ -183,6 +247,7 @@ from checks.kernel_matrix import (
 from checks.numerics import (
     ftz,
     identical_div,
+    identical_log,
     identical_mul,
     identical_mul_add,
     identical_pow,
@@ -217,6 +282,19 @@ comptime DIST_L2_UNEXPANDED = 4
 comptime DIST_L2_SQRT_UNEXPANDED = 5
 comptime DIST_LINF = 7
 comptime DIST_LP_UNEXPANDED = 9
+
+# THE SEVEN METRICS OF lane/neighbors-rest (2026-09-15), at their cuVS
+# values (`c/include/cuvs/distance/distance.h`). BrayCurtis has an
+# enumerator and no op file in the reference (cuML's VALID_METRICS carries
+# it as a TODO); its op here is scikit-learn's definition. See THE SEVEN
+# METRICS below.
+comptime DIST_INNER_PRODUCT = 6
+comptime DIST_CANBERRA = 8
+comptime DIST_CORRELATION_EXPANDED = 10
+comptime DIST_BRAY_CURTIS = 14
+comptime DIST_JENSEN_SHANNON = 15
+comptime DIST_HAMMING_UNEXPANDED = 16
+comptime DIST_RUSSEL_RAO_EXPANDED = 18
 
 #: SCHEDULING: one thread owns one output cell; the block width moves no
 #: bit. Same value and same contract as `PAIRWISE_ELEM_TPB` and
@@ -258,7 +336,7 @@ def metric_norm_takes_sqrt(metric: Int) -> Bool:
 
 
 def metric_is_known(metric: Int) -> Bool:
-    """The eight enumerators this tree computes. Anything else is a caller
+    """The fifteen enumerators this tree computes. Anything else is a caller
     error and the host entries refuse it by value."""
     return (
         metric == DIST_L2_EXPANDED
@@ -269,6 +347,22 @@ def metric_is_known(metric: Int) -> Bool:
         or metric == DIST_L2_SQRT_UNEXPANDED
         or metric == DIST_LINF
         or metric == DIST_LP_UNEXPANDED
+        or metric_is_neighbors_rest(metric)
+    )
+
+
+def metric_is_neighbors_rest(metric: Int) -> Bool:
+    """The seven metrics of lane/neighbors-rest, every one computed whole in
+    one thread per cell with no norm (`use_norms = false` here, including
+    correlation; see THE SEVEN METRICS)."""
+    return (
+        metric == DIST_INNER_PRODUCT
+        or metric == DIST_CANBERRA
+        or metric == DIST_CORRELATION_EXPANDED
+        or metric == DIST_BRAY_CURTIS
+        or metric == DIST_JENSEN_SHANNON
+        or metric == DIST_HAMMING_UNEXPANDED
+        or metric == DIST_RUSSEL_RAO_EXPANDED
     )
 
 
@@ -290,6 +384,20 @@ def metric_value_name(metric: Int) -> String:
         return String("Linf")
     if metric == DIST_LP_UNEXPANDED:
         return String("LpUnexpanded")
+    if metric == DIST_INNER_PRODUCT:
+        return String("InnerProduct")
+    if metric == DIST_CANBERRA:
+        return String("Canberra")
+    if metric == DIST_CORRELATION_EXPANDED:
+        return String("CorrelationExpanded")
+    if metric == DIST_BRAY_CURTIS:
+        return String("BrayCurtis")
+    if metric == DIST_JENSEN_SHANNON:
+        return String("JensenShannon")
+    if metric == DIST_HAMMING_UNEXPANDED:
+        return String("HammingUnexpanded")
+    if metric == DIST_RUSSEL_RAO_EXPANDED:
+        return String("RusselRaoExpanded")
     return String("?")
 
 
@@ -389,6 +497,162 @@ def cosine_zero_norm_row_ptr(
         if all_zero:
             return i
     return -1
+
+
+def refuse_similarity_weights(metric: Int, weighted: Bool) raises:
+    """DEVIATION 2901: `weights='distance'` inverts a DISTANCE; an inner
+    product is a similarity, larger is nearer, so `1/d` would weight the
+    farthest neighbour most. Refused by name for a vote or a mean."""
+    if weighted and metric == DIST_INNER_PRODUCT:
+        raise Error(
+            "mojolearn k-NN: weights='distance' with metric='inner_product'"
+            " is refused; the distance weighting is 1/d and an inner product"
+            " is a similarity (larger is nearer), so it would weight the"
+            " farthest neighbour most (DEVIATION 2901). Use weights='uniform'"
+        )
+
+
+def _js_negative_message(what: String, row: Int) -> String:
+    """DEVIATION 2899's refusal, in ONE place: the pointer walk and the
+    `List` walk below raise the same sentence."""
+    return (
+        "knn_search: metric='jensenshannon' but " + what + " row "
+        + String(row) + " holds a negative entry; the divergence takes the"
+        " log of each entry and is undefined below zero (DEVIATION 2899)"
+    )
+
+
+def _correlation_constant_message(what: String, row: Int, q: Float32) -> String:
+    """DEVIATION 2898's constant-row refusal, in ONE place."""
+    return (
+        "knn_search: metric='correlation' but " + what + " row " + String(row)
+        + " has zero variance (k*sum(x^2) - sum(x)^2 computes to " + String(q)
+        + "); correlation divides by it and is undefined for a constant row"
+        " (DEVIATION 2898)"
+    )
+
+
+def _correlation_underflow_message(qi: Float32, qq: Float32) -> String:
+    """DEVIATION 2898's flushed-product refusal, in ONE place."""
+    return (
+        "knn_search: metric='correlation' but the product of the smallest"
+        " index and query row variances (" + String(qi) + " * " + String(qq)
+        + ") flushes to zero in float32, so a distance would divide by zero"
+        " (DEVIATION 2898)"
+    )
+
+
+@always_inline
+def _correlation_row_statistic(
+    v_sum: Float32, v_sq: Float32, n_features: Int
+) -> Float32:
+    """`correlation_row_q` over a row's finished sums."""
+    return correlation_row_q(v_sum, v_sq, n_features)
+
+
+def _neighbors_rest_row_refusal(
+    metric: Int, x: MutPointer[Float32, MutUntrackedOrigin], n_rows: Int,
+    n_features: Int, what: String, mut q_min: Float32,
+) raises:
+    """The input refusals of DEVIATIONS 2898 and 2899 for one matrix, index
+    or queries, on the raw rows. `q_min` receives the smallest correlation
+    row statistic `Q` (unchanged for any other metric)."""
+    if metric == DIST_JENSEN_SHANNON:
+        for i in range(n_rows):
+            for f in range(n_features):
+                if x.unsafe_load(i * n_features + f) < Float32(0.0):
+                    raise Error(_js_negative_message(what, i))
+    if metric == DIST_CORRELATION_EXPANDED:
+        for i in range(n_rows):
+            var sx = Float32(0.0)
+            var sxx = Float32(0.0)
+            for f in range(n_features):
+                var v = ftz(x.unsafe_load(i * n_features + f))
+                sx = correlation_sum_core(sx, v)
+                sxx = inner_product_core(sxx, v, v)
+            var q = _correlation_row_statistic(sx, sxx, n_features)
+            if q <= Float32(0.0):
+                raise Error(_correlation_constant_message(what, i, q))
+            if q < q_min:
+                q_min = q
+
+
+def _neighbors_rest_row_refusal_list(
+    metric: Int, x: List[Float32], n_rows: Int, n_features: Int,
+    what: String, mut q_min: Float32,
+) raises:
+    """`_neighbors_rest_row_refusal` over a `List`, which is the host
+    oracle's boundary (`cosine_zero_norm_row` and its `_ptr` twin sit side
+    by side for the same reason). Same tests, same sentences."""
+    if metric == DIST_JENSEN_SHANNON:
+        for i in range(n_rows):
+            for f in range(n_features):
+                if x[i * n_features + f] < Float32(0.0):
+                    raise Error(_js_negative_message(what, i))
+    if metric == DIST_CORRELATION_EXPANDED:
+        for i in range(n_rows):
+            var sx = Float32(0.0)
+            var sxx = Float32(0.0)
+            for f in range(n_features):
+                var v = ftz(x[i * n_features + f])
+                sx = correlation_sum_core(sx, v)
+                sxx = inner_product_core(sxx, v, v)
+            var q = _correlation_row_statistic(sx, sxx, n_features)
+            if q <= Float32(0.0):
+                raise Error(_correlation_constant_message(what, i, q))
+            if q < q_min:
+                q_min = q
+
+
+def _neighbors_rest_variance_product(qi: Float32, qq: Float32) raises:
+    """The pair test of DEVIATION 2898: the smallest index variance times
+    the smallest query variance, which is the smallest product because a
+    correctly rounded product is monotone in each operand."""
+    if ftz(identical_mul(qi, qq)) <= Float32(0.0):
+        raise Error(_correlation_underflow_message(qi, qq))
+
+
+def refuse_neighbors_rest_inputs(
+    metric: Int,
+    index: MutPointer[Float32, MutUntrackedOrigin], n_index: Int,
+    queries: MutPointer[Float32, MutUntrackedOrigin], n_queries: Int,
+    n_features: Int,
+) raises:
+    """Every input refusal the seven metrics carry, index first, before any
+    distance. The GPU entry (`knn_search_traced`) calls this one and the
+    host oracle calls the `_list` twin below; both walk the same tests and
+    raise the same sentences."""
+    if not metric_is_neighbors_rest(metric):
+        return
+    var inf = bitcast[DType.float32](UInt32(0x7F800000))
+    var qi = inf
+    var qq = inf
+    _neighbors_rest_row_refusal(metric, index, n_index, n_features, "index", qi)
+    _neighbors_rest_row_refusal(
+        metric, queries, n_queries, n_features, "query", qq
+    )
+    if metric == DIST_CORRELATION_EXPANDED:
+        _neighbors_rest_variance_product(qi, qq)
+
+
+def refuse_neighbors_rest_inputs_list(
+    metric: Int, index: List[Float32], n_index: Int,
+    queries: List[Float32], n_queries: Int, n_features: Int,
+) raises:
+    """`refuse_neighbors_rest_inputs` over `List`s, for the host oracle."""
+    if not metric_is_neighbors_rest(metric):
+        return
+    var inf = bitcast[DType.float32](UInt32(0x7F800000))
+    var qi = inf
+    var qq = inf
+    _neighbors_rest_row_refusal_list(
+        metric, index, n_index, n_features, "index", qi
+    )
+    _neighbors_rest_row_refusal_list(
+        metric, queries, n_queries, n_features, "query", qq
+    )
+    if metric == DIST_CORRELATION_EXPANDED:
+        _neighbors_rest_variance_product(qi, qq)
 
 
 # ===========================================================================
@@ -504,6 +768,148 @@ def l2_exp_epilog(
     if is_sqrt:
         dist = ftz(identical_sqrt(dist))
     return dist
+
+
+# THE SEVEN METRICS' CORES AND EPILOGUES (lane/neighbors-rest). Host
+# callable, like the cores above; `core/knn_host_predict.mojo` calls them.
+
+
+@always_inline
+def canberra_core(acc: Float32, x: Float32, y: Float32) -> Float32:
+    """`canberra.cuh`: `acc += (add != 0) * diff / (add + (add == 0))`,
+    which is `diff / add` when `add != 0` and 0 otherwise."""
+    var diff = abs(ftz(x - y))
+    var add = ftz(abs(x) + abs(y))
+    if add != Float32(0.0):
+        return ftz(acc + ftz(identical_div(diff, add)))
+    return acc
+
+
+@always_inline
+def bray_curtis_num_core(acc: Float32, x: Float32, y: Float32) -> Float32:
+    """scikit-learn's numerator, `sum |x - y|`."""
+    return ftz(acc + abs(ftz(x - y)))
+
+
+@always_inline
+def bray_curtis_den_core(acc: Float32, x: Float32, y: Float32) -> Float32:
+    """scikit-learn's denominator, `sum |x + y|`."""
+    return ftz(acc + abs(ftz(x + y)))
+
+
+@always_inline
+def bray_curtis_epilog(num: Float32, den: Float32) -> Float32:
+    """`num / den`; `0 / 0` reads 0 and `num / 0` is `+inf` (DEVIATION
+    2900)."""
+    if den == Float32(0.0):
+        if num == Float32(0.0):
+            return Float32(0.0)
+        return bitcast[DType.float32](UInt32(0x7F800000))
+    return ftz(identical_div(num, den))
+
+
+@always_inline
+def correlation_sum_core(acc: Float32, v: Float32) -> Float32:
+    """A row sum's fold step (DEVIATION 2898)."""
+    return ftz(acc + v)
+
+
+@always_inline
+def correlation_row_q(s: Float32, ss: Float32, k: Int) -> Float32:
+    """`correlation.cuh`'s `Q_denom = k * regx2n - regxn * regxn`, from the
+    row's sum `s` and sum of squares `ss`."""
+    var kf = Float32(k)
+    return ftz(ftz(identical_mul(kf, ss)) - ftz(identical_mul(s, s)))
+
+
+@always_inline
+def correlation_epilog(
+    sx: Float32, sy: Float32, sxx: Float32, syy: Float32, sxy: Float32, k: Int
+) -> Float32:
+    """`correlation.cuh`'s epilogue, their grouping:
+    `1 - (k*acc - xn*yn) / sqrt(Q_denom * R_denom)`."""
+    var kf = Float32(k)
+    var numer = ftz(ftz(identical_mul(kf, sxy)) - ftz(identical_mul(sx, sy)))
+    var q = correlation_row_q(sx, sxx, k)
+    var r = correlation_row_q(sy, syy, k)
+    var root = ftz(identical_sqrt(ftz(identical_mul(q, r))))
+    return ftz(Float32(1.0) - ftz(identical_div(numer, root)))
+
+
+@always_inline
+def jensen_shannon_core(acc: Float32, x: Float32, y: Float32) -> Float32:
+    """`jensen_shannon.cuh`'s core, with its zero substitutions as branches:
+    `log(m + m_zero)` read as 0 when `m == 0`, `log(x + x_zero)` as 0 when
+    `x == 0` (the term is then `-0 * (...)`, which a zero `x` makes 0)."""
+    var m = ftz(identical_mul(Float32(0.5), ftz(x + y)))
+    var log_m = Float32(0.0)
+    if m != Float32(0.0):
+        log_m = ftz(identical_log(m))
+    var log_x = Float32(0.0)
+    if x != Float32(0.0):
+        log_x = ftz(identical_log(x))
+    var log_y = Float32(0.0)
+    if y != Float32(0.0):
+        log_y = ftz(identical_log(y))
+    var tx = ftz(identical_mul(-x, ftz(log_m - log_x)))
+    var ty = ftz(identical_mul(-y, ftz(log_m - log_y)))
+    return ftz(acc + ftz(tx + ty))
+
+
+@always_inline
+def jensen_shannon_epilog(acc: Float32) -> Float32:
+    """`sqrt(0.5 * acc)`, rectified at zero (DEVIATION 2899)."""
+    var half = ftz(identical_mul(Float32(0.5), acc))
+    if half <= Float32(0.0):
+        return Float32(0.0)
+    return ftz(identical_sqrt(half))
+
+
+@always_inline
+def hamming_core(acc: Float32, x: Float32, y: Float32) -> Float32:
+    """`hamming.cuh`: `acc += (x != y)`."""
+    if x != y:
+        return ftz(acc + Float32(1.0))
+    return acc
+
+
+@always_inline
+def russell_rao_core(acc: Float32, x: Float32, y: Float32) -> Float32:
+    """The count of features where both operands are nonzero (DEVIATION
+    2900)."""
+    if x != Float32(0.0) and y != Float32(0.0):
+        return ftz(acc + Float32(1.0))
+    return acc
+
+
+@always_inline
+def one_over_features(k: Int) -> Float32:
+    """`hamming.cuh`'s `AccT(1.0) / k` and `russel_rao.cuh`'s `1.0f / k_`."""
+    return ftz(identical_div(Float32(1.0), Float32(k)))
+
+
+@always_inline
+def hamming_epilog(acc: Float32, k: Int) -> Float32:
+    """`acc *= one_over_k`."""
+    return ftz(identical_mul(acc, one_over_features(k)))
+
+
+@always_inline
+def russell_rao_epilog(acc: Float32, k: Int) -> Float32:
+    """`(k - acc) * one_over_k`."""
+    return ftz(identical_mul(ftz(Float32(k) - acc), one_over_features(k)))
+
+
+@always_inline
+def inner_product_epilog(acc: Float32) -> Float32:
+    """DEVIATION 2901: the stored value is `0 - acc`."""
+    return ftz(Float32(0.0) - acc)
+
+
+@always_inline
+def inner_product_restore(v: Float32) -> Float32:
+    """DEVIATION 2901: the reported value, `0 - v`, which is `acc`."""
+    return Float32(0.0) - v
 
 
 # ===========================================================================
@@ -696,7 +1102,70 @@ def metric_distance_kernel(
             )
         return
 
+    if metric_is_neighbors_rest(metric):
+        dist.unsafe_store(idx, neighbors_rest_cell(x, i, y, j, k, metric))
+        return
+
     dist.unsafe_store(idx, bitcast[DType.float32](UInt32(0x7FC00000)))
+
+
+@always_inline
+def neighbors_rest_cell(
+    x: MutPointer[Float32, MutAnyOrigin],
+    i: Int,
+    y: MutPointer[Float32, MutAnyOrigin],
+    j: Int,
+    k: Int,
+    metric: Int,
+) -> Float32:
+    """One cell of the seven metrics: `x` row `i` against `y` row `j`, the
+    feature axis ascending, each operand `ftz`'d as loaded, the op's core,
+    then its epilogue (THE SEVEN METRICS)."""
+    var acc = Float32(0.0)
+    if metric == DIST_CORRELATION_EXPANDED:
+        var sx = Float32(0.0)
+        var sy = Float32(0.0)
+        var sxx = Float32(0.0)
+        var syy = Float32(0.0)
+        for f in range(k):
+            var xv = ftz(x.unsafe_load(i * k + f))
+            var yv = ftz(y.unsafe_load(j * k + f))
+            sx = correlation_sum_core(sx, xv)
+            sy = correlation_sum_core(sy, yv)
+            sxx = inner_product_core(sxx, xv, xv)
+            syy = inner_product_core(syy, yv, yv)
+            acc = inner_product_core(acc, xv, yv)
+        return correlation_epilog(sx, sy, sxx, syy, acc, k)
+    if metric == DIST_BRAY_CURTIS:
+        var den = Float32(0.0)
+        for f in range(k):
+            var xv = ftz(x.unsafe_load(i * k + f))
+            var yv = ftz(y.unsafe_load(j * k + f))
+            acc = bray_curtis_num_core(acc, xv, yv)
+            den = bray_curtis_den_core(den, xv, yv)
+        return bray_curtis_epilog(acc, den)
+    for f in range(k):
+        var xv = ftz(x.unsafe_load(i * k + f))
+        var yv = ftz(y.unsafe_load(j * k + f))
+        if metric == DIST_CANBERRA:
+            acc = canberra_core(acc, xv, yv)
+        elif metric == DIST_JENSEN_SHANNON:
+            acc = jensen_shannon_core(acc, xv, yv)
+        elif metric == DIST_HAMMING_UNEXPANDED:
+            acc = hamming_core(acc, xv, yv)
+        elif metric == DIST_RUSSEL_RAO_EXPANDED:
+            acc = russell_rao_core(acc, xv, yv)
+        else:
+            acc = inner_product_core(acc, xv, yv)
+    if metric == DIST_CANBERRA:
+        return acc
+    if metric == DIST_JENSEN_SHANNON:
+        return jensen_shannon_epilog(acc)
+    if metric == DIST_HAMMING_UNEXPANDED:
+        return hamming_epilog(acc, k)
+    if metric == DIST_RUSSEL_RAO_EXPANDED:
+        return russell_rao_epilog(acc, k)
+    return inner_product_epilog(acc)
 
 
 def cosine_epilog_kernel(

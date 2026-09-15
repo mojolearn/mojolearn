@@ -58,7 +58,13 @@ from neighbors.estimator import (
 )
 from neighbors.impl.distance.detail.distance_ops import (
     COSINE_NORM_TPB,
+    DIST_BRAY_CURTIS,
+    DIST_CANBERRA,
+    DIST_CORRELATION_EXPANDED,
     DIST_COSINE_EXPANDED,
+    DIST_HAMMING_UNEXPANDED,
+    DIST_INNER_PRODUCT,
+    DIST_JENSEN_SHANNON,
     DIST_L1,
     DIST_L2_EXPANDED,
     DIST_L2_SQRT_EXPANDED,
@@ -66,6 +72,7 @@ from neighbors.impl.distance.detail.distance_ops import (
     DIST_L2_UNEXPANDED,
     DIST_LINF,
     DIST_LP_UNEXPANDED,
+    DIST_RUSSEL_RAO_EXPANDED,
     METRIC_ELEM_TPB,
     cosine_row_norm_kernel,
     metric_distance_kernel,
@@ -233,6 +240,14 @@ def _all_metrics() -> List[Int]:
         DIST_L2_SQRT_UNEXPANDED,
         DIST_LINF,
         DIST_LP_UNEXPANDED,
+        # lane/neighbors-rest (2026-09-15)
+        DIST_INNER_PRODUCT,
+        DIST_CANBERRA,
+        DIST_CORRELATION_EXPANDED,
+        DIST_BRAY_CURTIS,
+        DIST_JENSEN_SHANNON,
+        DIST_HAMMING_UNEXPANDED,
+        DIST_RUSSEL_RAO_EXPANDED,
     ]
 
 
@@ -395,8 +410,9 @@ def check_metric_device_equals_oracle() raises:
             n_equal += cells
     print(
         "check_metric_device_equals_oracle "
-        + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name() + "]: 8"
-        " DistanceType values x " + String(cells) + " cells, "
+        + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name() + "]: "
+        + String(len(_all_metrics()))
+        + " DistanceType values x " + String(cells) + " cells, "
         + String(n_equal) + " bit-equal, " + String(n_diff) + " differ"
         + (
             ""
@@ -470,14 +486,18 @@ def check_metric_matches_float64_reference() raises:
             #    ulp compounded over the sum and the final root.
             #  - the unexpanded arms get 1e-5, which is float32 rounding
             #    and nothing else: they subtract first and never cancel.
+            #  - lane/neighbors-rest: correlation's expanded numerator and
+            #    variances cancel like the L2 expansion (1e-2); jensen-shannon
+            #    goes through `identical_log` and roots a small sum (1e-3).
             var tol = 1e-5
             if (
                 metric == DIST_L2_EXPANDED
                 or metric == DIST_L2_SQRT_EXPANDED
                 or metric == DIST_COSINE_EXPANDED
+                or metric == DIST_CORRELATION_EXPANDED
             ):
                 tol = 1e-2
-            elif metric == DIST_LP_UNEXPANDED:
+            elif metric == DIST_LP_UNEXPANDED or metric == DIST_JENSEN_SHANNON:
                 tol = 1e-3
             var pnote = String("")
             if metric == DIST_LP_UNEXPANDED:
@@ -787,13 +807,12 @@ def check_metric_refusals() raises:
     var names: List[String] = [
         "euclidean", "l2", "sqeuclidean", "l1", "cityblock", "manhattan",
         "taxicab", "chebyshev", "linf", "cosine", "minkowski", "lp",
+        "canberra", "correlation", "jensenshannon", "inner_product",
+        "braycurtis", "hamming", "russellrao",
     ]
     for nm in names:
         _ = knn_metric_from_name(nm)
-    var unimplemented: List[String] = [
-        "canberra", "jensenshannon", "correlation", "inner_product",
-        "haversine", "braycurtis",
-    ]
+    var unimplemented: List[String] = ["haversine"]
     for nm in unimplemented:
         var r = False
         try:
@@ -837,7 +856,7 @@ def check_metric_refusals() raises:
     _ = h_oi^
     print(
         "check_metric_refusals OK [" + _mode_name() + "]: " + String(n)
-        + " refusals by name/value, 12 metric names and 2 weightings"
+        + " refusals by name/value, 19 metric names and 2 weightings"
         " resolve, a non-Lp metric discards every bad p"
     )
     _ = ctx^

@@ -119,6 +119,7 @@ from cluster.host.kmeans_oracle import (
     host_kmeans_transform,
     host_kmeans_validate,
 )
+from neighbors.impl.distance.detail.distance_ops import refuse_similarity_weights
 from core.knn_host_predict import (
     KNN_HOST_SABOTAGE,
     host_rbc_edge_distance,
@@ -545,6 +546,7 @@ def knn_classify_binding(
                 + String(no)
             )
         var weighted = _knn_host_weighted(dt[2], "knn_classifier_predict")
+        refuse_similarity_weights(dt[0], weighted)  # DEVIATION 2901
         if ni < 0 or nq < 0 or nf < 0 or kk < 0:
             raise Error("knn_classify: a negative dimension was passed")
         var index = read_f32(index_address, ni * nf)
@@ -646,6 +648,7 @@ def knn_regress_binding(
                 + String(no)
             )
         var weighted = _knn_host_weighted(dt[2], "knn_regressor_predict")
+        refuse_similarity_weights(dt[0], weighted)  # DEVIATION 2901
         if ni < 0 or nq < 0 or nf < 0 or kk < 0:
             raise Error("knn_regress: a negative dimension was passed")
         var index = read_f32(index_address, ni * nf)

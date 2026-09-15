@@ -29,9 +29,12 @@ Three levels, deliberately:
 
 from std.math import sqrt
 
+from std.math import log
+
 from checks.numerics import (
     ftz,
     identical_div,
+    identical_log,
     identical_mul,
     identical_mul_add,
     identical_pow,
@@ -39,6 +42,13 @@ from checks.numerics import (
 )
 from core.row_norms import NORM_TPB
 from neighbors.impl.distance.detail.distance_ops import (
+    DIST_BRAY_CURTIS,
+    DIST_CANBERRA,
+    DIST_CORRELATION_EXPANDED,
+    DIST_HAMMING_UNEXPANDED,
+    DIST_INNER_PRODUCT,
+    DIST_JENSEN_SHANNON,
+    DIST_RUSSEL_RAO_EXPANDED,
     DIST_COSINE_EXPANDED,
     DIST_L1,
     DIST_L2_EXPANDED,
@@ -154,6 +164,83 @@ def oracle_metric_distance(
             dist = ftz(identical_sqrt(dist))
         return dist
 
+    # lane/neighbors-rest (2026-09-15): the seven metrics, spelled again
+    # from the reference op files and DEVIATIONS 2898 to 2901, not from
+    # `neighbors_rest_cell`.
+    if metric == DIST_CORRELATION_EXPANDED:
+        var sx = Float32(0.0)
+        var sy = Float32(0.0)
+        var sxx = Float32(0.0)
+        var syy = Float32(0.0)
+        for f in range(d):
+            var a = ftz(x[i * d + f])
+            var b = ftz(y[j * d + f])
+            sx = ftz(sx + a)
+            sy = ftz(sy + b)
+            sxx = ftz(identical_mul_add(a, a, sxx))
+            syy = ftz(identical_mul_add(b, b, syy))
+            acc = ftz(identical_mul_add(a, b, acc))
+        var kf = Float32(d)
+        var numer = ftz(ftz(identical_mul(kf, acc)) - ftz(identical_mul(sx, sy)))
+        var qd = ftz(ftz(identical_mul(kf, sxx)) - ftz(identical_mul(sx, sx)))
+        var rd = ftz(ftz(identical_mul(kf, syy)) - ftz(identical_mul(sy, sy)))
+        var root = ftz(identical_sqrt(ftz(identical_mul(qd, rd))))
+        return ftz(Float32(1.0) - ftz(identical_div(numer, root)))
+    if metric == DIST_BRAY_CURTIS:
+        var den = Float32(0.0)
+        for f in range(d):
+            var a = ftz(x[i * d + f])
+            var b = ftz(y[j * d + f])
+            acc = ftz(acc + abs(ftz(a - b)))
+            den = ftz(den + abs(ftz(a + b)))
+        if den == Float32(0.0):
+            if acc == Float32(0.0):
+                return Float32(0.0)
+            return Float32(1.0) / Float32(0.0)
+        return ftz(identical_div(acc, den))
+    var one_over_k = ftz(identical_div(Float32(1.0), Float32(d)))
+    for f in range(d):
+        var a = ftz(x[i * d + f])
+        var b = ftz(y[j * d + f])
+        if metric == DIST_CANBERRA:
+            var add = ftz(abs(a) + abs(b))
+            if add != Float32(0.0):
+                acc = ftz(acc + ftz(identical_div(abs(ftz(a - b)), add)))
+        elif metric == DIST_JENSEN_SHANNON:
+            var m = ftz(identical_mul(Float32(0.5), ftz(a + b)))
+            var lm = ftz(identical_log(m)) if m != Float32(0.0) else Float32(0.0)
+            var la = ftz(identical_log(a)) if a != Float32(0.0) else Float32(0.0)
+            var lb = ftz(identical_log(b)) if b != Float32(0.0) else Float32(0.0)
+            var ta = ftz(identical_mul(-a, ftz(lm - la)))
+            var tb = ftz(identical_mul(-b, ftz(lm - lb)))
+            acc = ftz(acc + ftz(ta + tb))
+        elif metric == DIST_HAMMING_UNEXPANDED:
+            if a != b:
+                acc = ftz(acc + Float32(1.0))
+        elif metric == DIST_RUSSEL_RAO_EXPANDED:
+            if a != Float32(0.0) and b != Float32(0.0):
+                acc = ftz(acc + Float32(1.0))
+        elif metric == DIST_INNER_PRODUCT:
+            acc = ftz(identical_mul_add(a, b, acc))
+        else:
+            raise Error(
+                "oracle_metric_distance: unknown DistanceType " + String(metric)
+            )
+    if metric == DIST_CANBERRA:
+        return acc
+    if metric == DIST_JENSEN_SHANNON:
+        var half = ftz(identical_mul(Float32(0.5), acc))
+        if half <= Float32(0.0):
+            return Float32(0.0)
+        return ftz(identical_sqrt(half))
+    if metric == DIST_HAMMING_UNEXPANDED:
+        return ftz(identical_mul(acc, one_over_k))
+    if metric == DIST_RUSSEL_RAO_EXPANDED:
+        return ftz(identical_mul(ftz(Float32(d) - acc), one_over_k))
+    if metric == DIST_INNER_PRODUCT:
+        # the STORED value, DEVIATION 2901
+        return ftz(Float32(0.0) - acc)
+
     raise Error(
         "oracle_metric_distance: unknown DistanceType " + String(metric)
     )
@@ -192,6 +279,69 @@ def reference_metric_distance_f64(
             xn += a * a
             yn += b * b
         return 1.0 - dot / (sqrt(xn) * sqrt(yn))
+    # lane/neighbors-rest: the seven as mathematics. Correlation CENTERS
+    # first (scipy's form), not the expanded identity; jensen-shannon uses
+    # the host libm log; inner product is the stored negation.
+    var kd = Float64(d)
+    if metric == DIST_CORRELATION_EXPANDED:
+        var mx = 0.0
+        var my = 0.0
+        for f in range(d):
+            mx += Float64(x[i * d + f])
+            my += Float64(y[j * d + f])
+        mx /= kd
+        my /= kd
+        var num = 0.0
+        var vx = 0.0
+        var vy = 0.0
+        for f in range(d):
+            var a = Float64(x[i * d + f]) - mx
+            var b = Float64(y[j * d + f]) - my
+            num += a * b
+            vx += a * a
+            vy += b * b
+        return 1.0 - num / sqrt(vx * vy)
+    if (
+        metric == DIST_CANBERRA or metric == DIST_BRAY_CURTIS
+        or metric == DIST_JENSEN_SHANNON or metric == DIST_HAMMING_UNEXPANDED
+        or metric == DIST_RUSSEL_RAO_EXPANDED or metric == DIST_INNER_PRODUCT
+    ):
+        var s = 0.0
+        var den = 0.0
+        for f in range(d):
+            var a = Float64(x[i * d + f])
+            var b = Float64(y[j * d + f])
+            if metric == DIST_CANBERRA:
+                if abs(a) + abs(b) > 0.0:
+                    s += abs(a - b) / (abs(a) + abs(b))
+            elif metric == DIST_BRAY_CURTIS:
+                s += abs(a - b)
+                den += abs(a + b)
+            elif metric == DIST_JENSEN_SHANNON:
+                var m = 0.5 * (a + b)
+                if a > 0.0:
+                    s += a * log(a / m)
+                if b > 0.0:
+                    s += b * log(b / m)
+            elif metric == DIST_HAMMING_UNEXPANDED:
+                if a != b:
+                    s += 1.0
+            elif metric == DIST_RUSSEL_RAO_EXPANDED:
+                if a != 0.0 and b != 0.0:
+                    s += 1.0
+            else:
+                s += a * b
+        if metric == DIST_BRAY_CURTIS:
+            return s / den
+        if metric == DIST_JENSEN_SHANNON:
+            return sqrt(0.5 * s) if s > 0.0 else 0.0
+        if metric == DIST_HAMMING_UNEXPANDED:
+            return s / kd
+        if metric == DIST_RUSSEL_RAO_EXPANDED:
+            return (kd - s) / kd
+        if metric == DIST_INNER_PRODUCT:
+            return -s
+        return s
     var acc = 0.0
     if metric == DIST_LP_UNEXPANDED:
         for f in range(d):

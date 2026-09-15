@@ -199,6 +199,15 @@ LANES = {
                           {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
     'knn-minkowski-p3': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
                                 {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
+    # lane/neighbors-rest (2026-09-15): the seven brute force metrics, each
+    # probed on the lane's own input transform (identity_break's
+    # KNN_METRIC_INPUT), exactly as its identity_break lane probes.
+    **{name: ('NearestNeighbors',
+              (lambda n: lambda e, X: e.kneighbors(identity_tool()._knn_input(n)(X[:64])))(name),
+              {'kneighbors_indices':
+               (lambda n: lambda e, X: e.kneighbors(identity_tool()._knn_input(n)(X[:64]))[1])(name)})
+       for name in ('knn-canberra', 'knn-braycurtis', 'knn-correlation', 'knn-jensenshannon',
+                    'knn-hamming', 'knn-russellrao', 'knn-inner-product')},
     'knn-rbc': ('NearestNeighbors', lambda e, X: e.kneighbors(X[:64]),
                        {'kneighbors_indices': lambda e, X: e.kneighbors(X[:64])[1]}),
     'knn-clf-distance': ('KNeighborsClassifier',

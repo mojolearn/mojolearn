@@ -338,6 +338,9 @@ sampler, a solver, a metric, a reduction).
       par-forest-pool par-gmm par-resample par-hdbscan
     2026-09-15 (the Cholesky and kernel-method drivers; devices=_par_devices())
       par-cholesky par-kernel-ridge par-nystroem par-rbf-sampler
+    2026-09-15 (lane/neighbors-rest, the seven brute force metrics)
+      knn-canberra knn-braycurtis knn-correlation knn-jensenshannon
+               knn-hamming knn-russellrao knn-inner-product
     2026-09-15 (GaussianMixture.sample, DEVIATIONS 2791 and 2792)
       gmm-sample gmm-random-init-sample
     2026-09-15 (GaussianProcessRegressor.sample_y, DEVIATION 2793)
@@ -2377,6 +2380,47 @@ for _name, _kw in (("sqeuclidean", dict(metric="sqeuclidean")), ("manhattan", di
     lane(f"knn-{_name}")(_knn_lane(**_kw))
 
 
+#: lane/neighbors-rest (2026-09-15): the seven brute force metrics
+#: (neighbors/impl/distance/detail/distance_ops.mojo, THE SEVEN METRICS).
+#: Three lanes read a transformed copy of the fixture, the same transform on
+#: the training and the held-out rows: jensenshannon takes |X| (it refuses a
+#: negative entry, DEVIATION 2899, and seven of the nine fixtures carry one),
+#: hamming and russellrao take round(X) (on continuous data every pair
+#: differs in every feature, so every hamming distance is 1 and every
+#: russellrao distance is 0). tools/classical_host_gate.py reads the same map.
+KNN_METRIC_INPUT = {
+    "knn-jensenshannon": lambda a: np.abs(a).astype(np.float32),
+    "knn-hamming": lambda a: np.round(a).astype(np.float32),
+    "knn-russellrao": lambda a: np.round(a).astype(np.float32),
+}
+NEIGHBORS_REST_LANES = {
+    "knn-canberra": "canberra", "knn-braycurtis": "braycurtis", "knn-correlation": "correlation",
+    "knn-jensenshannon": "jensenshannon", "knn-hamming": "hamming", "knn-russellrao": "russellrao",
+    "knn-inner-product": "inner_product",
+}
+
+
+def _knn_input(lane_name):
+    """The lane's input transform (KNN_METRIC_INPUT), identity elsewhere."""
+    return KNN_METRIC_INPUT.get(lane_name, lambda a: a)
+
+
+def _knn_metric_lane(lane_name, metric):
+    t = _knn_input(lane_name)
+
+    def body(ml, X, yc, yr, Xh=None):
+        m = ml.NearestNeighbors(n_neighbors=8, metric=metric).fit(t(X[:4096]))
+        d, i = m.kneighbors(t(X[4096:4160]))
+        return _fit(dict(dist=_h(d), idx=_h(i)), m, lambda e: e.kneighbors(t(Xh[:64])))
+    body.__doc__ = (f"NearestNeighbors metric={metric!r}: one of the seven brute force ops of "
+                    "lane/neighbors-rest" + (", on the lane's transformed input" if lane_name in KNN_METRIC_INPUT else "") + ".")
+    return body
+
+
+for _name, _metric in NEIGHBORS_REST_LANES.items():
+    lane(_name)(_knn_metric_lane(_name, _metric))
+
+
 @lane("knn-clf-distance")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.KNeighborsClassifier(n_neighbors=8, weights="distance").fit(X[:4096], yc[:4096])
@@ -4296,6 +4340,19 @@ def _batch_kneighbors(ml, e, Xh):
 
 _batch_decl(_batch_kneighbors, "knn", "knn-sqeuclidean", "knn-manhattan", "knn-chebyshev", "knn-cosine",
             "knn-minkowski-p3", "knn-rbc")
+
+
+def _batch_kneighbors_input(lane_name):
+    """`_batch_kneighbors` over the lane's transformed held-out rows."""
+    t = _knn_input(lane_name)
+
+    def fn(ml, e, Xh):
+        return [_BatchRows("kneighbors", t(Xh[:64]), lambda r: tuple(e.kneighbors(r)))]
+    return fn
+
+
+for _lane_name in NEIGHBORS_REST_LANES:
+    _batch_decl(_batch_kneighbors_input(_lane_name), _lane_name)
 _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 64)), "knn-clf", "knn-clf-distance")
 _batch_decl(_rows_calls("predict", sl=slice(0, 64)), "knn-reg", "knn-reg-distance")
 

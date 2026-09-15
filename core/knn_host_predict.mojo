@@ -162,12 +162,35 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import ftz, identical_div, identical_mul_add, identical_sqrt
 from neighbors.impl.distance.detail.distance_ops import (
+    DIST_BRAY_CURTIS,
+    DIST_CANBERRA,
+    DIST_CORRELATION_EXPANDED,
     DIST_COSINE_EXPANDED,
+    DIST_HAMMING_UNEXPANDED,
+    DIST_INNER_PRODUCT,
+    DIST_JENSEN_SHANNON,
     DIST_L1,
     DIST_LINF,
     DIST_LP_UNEXPANDED,
+    DIST_RUSSEL_RAO_EXPANDED,
+    bray_curtis_den_core,
+    bray_curtis_epilog,
+    bray_curtis_num_core,
+    canberra_core,
+    correlation_epilog,
+    correlation_sum_core,
     cosine_epilog,
     cosine_zero_norm_row,
+    hamming_core,
+    hamming_epilog,
+    inner_product_epilog,
+    inner_product_restore,
+    jensen_shannon_core,
+    jensen_shannon_epilog,
+    metric_is_neighbors_rest,
+    refuse_neighbors_rest_inputs_list,
+    russell_rao_core,
+    russell_rao_epilog,
     inner_product_core,
     l1_core,
     linf_core,
@@ -249,15 +272,84 @@ def host_resolve_metric(metric: Int, is_sqrt: Bool) raises -> Int:
         or metric == DIST_LINF
         or metric == DIST_LP_UNEXPANDED
         or metric == DIST_COSINE_EXPANDED
+        or metric_is_neighbors_rest(metric)
     ):
         return metric
     raise Error(
         "knn host: no CPU implementation of cuVS DistanceType value "
         + String(metric)
         + " yet; the host computes sqeuclidean (0), euclidean/l2 (1),"
-        " cosine (2), manhattan (3), chebyshev (7) and minkowski (9)"
-        " only (core/knn_host_predict.mojo)"
+        " cosine (2), manhattan (3), inner_product (6), chebyshev (7),"
+        " canberra (8), minkowski (9), correlation (10), braycurtis (14),"
+        " jensenshannon (15), hamming (16) and russellrao (18) only"
+        " (core/knn_host_predict.mojo)"
     )
+
+
+def host_neighbors_rest_cell(
+    q: List[Float32], row: Int, y: List[Float32], col: Int, d: Int,
+    metric: Int,
+) -> Float32:
+    """One cell of `neighbors_rest_cell` (the kernel's thread) for the seven
+    metrics of lane/neighbors-rest, `x = q` row `row` against `y` row `col`,
+    the feature axis ascending, each operand `ftz`'d as it is loaded, THE
+    SAME CORES AND EPILOGUES the kernel calls. The loop is restated here
+    rather than shared because the kernel's boundary is a pointer and this
+    one's is a `List`, which is why `host_metric_cell` above is written the
+    same way.
+
+    THE SABOTAGE ARM is the ties-sabotage lane's value flip on the cell."""
+    var acc = Float32(0.0)
+    var out: Float32
+    if metric == DIST_CORRELATION_EXPANDED:
+        var sx = Float32(0.0)
+        var sy = Float32(0.0)
+        var sxx = Float32(0.0)
+        var syy = Float32(0.0)
+        for f in range(d):
+            var qv = ftz(q[row * d + f])
+            var yv = ftz(y[col * d + f])
+            sx = correlation_sum_core(sx, qv)
+            sy = correlation_sum_core(sy, yv)
+            sxx = inner_product_core(sxx, qv, qv)
+            syy = inner_product_core(syy, yv, yv)
+            acc = inner_product_core(acc, qv, yv)
+        out = correlation_epilog(sx, sy, sxx, syy, acc, d)
+    elif metric == DIST_BRAY_CURTIS:
+        var den = Float32(0.0)
+        for f in range(d):
+            var qv = ftz(q[row * d + f])
+            var yv = ftz(y[col * d + f])
+            acc = bray_curtis_num_core(acc, qv, yv)
+            den = bray_curtis_den_core(den, qv, yv)
+        out = bray_curtis_epilog(acc, den)
+    else:
+        for f in range(d):
+            var qv = ftz(q[row * d + f])
+            var yv = ftz(y[col * d + f])
+            if metric == DIST_CANBERRA:
+                acc = canberra_core(acc, qv, yv)
+            elif metric == DIST_JENSEN_SHANNON:
+                acc = jensen_shannon_core(acc, qv, yv)
+            elif metric == DIST_HAMMING_UNEXPANDED:
+                acc = hamming_core(acc, qv, yv)
+            elif metric == DIST_RUSSEL_RAO_EXPANDED:
+                acc = russell_rao_core(acc, qv, yv)
+            else:
+                acc = inner_product_core(acc, qv, yv)
+        if metric == DIST_CANBERRA:
+            out = acc
+        elif metric == DIST_JENSEN_SHANNON:
+            out = jensen_shannon_epilog(acc)
+        elif metric == DIST_HAMMING_UNEXPANDED:
+            out = hamming_epilog(acc, d)
+        elif metric == DIST_RUSSEL_RAO_EXPANDED:
+            out = russell_rao_epilog(acc, d)
+        else:
+            out = inner_product_epilog(acc)
+    comptime if KNN_HOST_SABOTAGE:
+        out = host_sabotage_value_flip(out)
+    return out
 
 
 def host_row_norm(x: List[Float32], row: Int, d: Int) -> Float32:
@@ -529,6 +621,23 @@ def host_knn_search(
                 " undefined at the origin (DEVIATION 553)"
             )
     var dist_row = List[Float32](length=n_index, fill=Float32(0.0))
+    if metric_is_neighbors_rest(mtr):
+        # lane/neighbors-rest: `knn_search_traced`'s refusals (the one
+        # function both call), every cell, the selection and the sort, then
+        # DEVIATION 2901's restore for the inner product.
+        refuse_neighbors_rest_inputs_list(
+            mtr, index, n_index, queries, n_queries, d
+        )
+        for row in range(n_queries):
+            for col in range(n_index):
+                dist_row[col] = host_neighbors_rest_cell(
+                    queries, row, index, col, d, mtr
+                )
+            host_select_k(dist_row, n_index, k, out_dist, out_idx, row * k)
+        if mtr == DIST_INNER_PRODUCT:
+            for i in range(n_queries * k):
+                out_dist[i] = inner_product_restore(out_dist[i])
+        return
     if mtr != KNN_HOST_DIST_L2_EXPANDED and mtr != KNN_HOST_DIST_L2_SQRT_EXPANDED:
         # `compute_norms_for_metric`: cosine's TRUE norm, none for the rest.
         var index_cn = List[Float32](length=n_index, fill=Float32(0.0))

@@ -99,7 +99,48 @@ spot check. CPU columns and sabotage on one RunPod CPU pod at a time.
 
 ## Done
 
-(nothing merged yet)
+### Item 1, written (evidence owed)
+
+- `neighbors/impl/distance/detail/distance_ops.mojo`: the seven cuVS values
+  (InnerProduct 6, Canberra 8, CorrelationExpanded 10, BrayCurtis 14,
+  JensenShannon 15, HammingUnexpanded 16, RusselRaoExpanded 18), a core and
+  an epilogue each, `neighbors_rest_cell` in `metric_distance_kernel`, the
+  input refusals (`refuse_neighbors_rest_inputs`, and the `_list` twin for
+  the host boundary, raising the same sentences), and
+  `refuse_similarity_weights`. DEVIATIONS 2898 to 2901 in the module
+  docstring: correlation's row sums folded in the cell with the constant-row
+  and flushed-variance refusals, jensenshannon's negative-entry refusal and
+  rectifier, russellrao's boolean reading and braycurtis's zero rules, and
+  inner product's select-max as an ascending select over the stored
+  negation.
+- `neighbors/estimator.mojo`: the seven names in `knn_metric_from_name`
+  (haversine refused by name with the arcsine reason), the input refusals in
+  `knn_search_traced`, the inner product restore after the host sort, and
+  the weights refusal in both `knn_classifier_predict` and
+  `knn_regressor_predict`.
+- `core/knn_host_predict.mojo`: `host_neighbors_rest_cell` (the same cores
+  and epilogues over the host's `List` boundary, with the ties-sabotage
+  value flip) and the seven metrics in `host_resolve_metric` and
+  `host_knn_search`; `bindings/_mojolearn_core_host.mojo` refuses the
+  similarity weighting too.
+- `python/mojolearn/neighbors.py`: the names in `_METRIC_TABLE`,
+  `_BRUTE_ONLY_METRICS` refused on the ball cover with the inequality as the
+  reason, `_UNSUPPORTED_METRICS` down to haversine, and
+  `_refuse_similarity_weights`.
+- Gates and lanes: `metric_check.mojo` runs all 15 DistanceType values
+  against the float32 oracle and the float64 reference (`metric_oracle.mojo`
+  spells the seven a second and a third time) and its refusal arm now
+  resolves 19 names; identity lanes knn-canberra, knn-braycurtis,
+  knn-correlation, knn-jensenshannon, knn-hamming, knn-russellrao and
+  knn-inner-product with batch declarations, three of them on a transformed
+  fixture (`KNN_METRIC_INPUT`); `tools/classical_host_gate.py` probes and
+  `python/mojolearn/host_surface.py` lane lists; the TSV rows for the seven,
+  for haversine, and for the stale rows (the brute force index API, ivf_flat,
+  the cuML approximate facade, the row_norms defect, weights=callable);
+  `python/mojolearn/tests/test_knn_extended_metrics.py`.
+
+Builds on the M4, one core: the GPU `_mojolearn` binding and the core host
+binding compile.
 
 ## Resume
 

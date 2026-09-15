@@ -141,15 +141,25 @@ from neighbors.impl.selection.distance_weights import (
     host_distance_weights,
 )
 from neighbors.impl.distance.detail.distance_ops import (
+    DIST_BRAY_CURTIS,
+    DIST_CANBERRA,
+    DIST_CORRELATION_EXPANDED,
     DIST_COSINE_EXPANDED,
+    DIST_HAMMING_UNEXPANDED,
+    DIST_INNER_PRODUCT,
+    DIST_JENSEN_SHANNON,
     DIST_L1,
     DIST_L2_EXPANDED,
     DIST_L2_SQRT_EXPANDED,
     DIST_LINF,
     DIST_LP_UNEXPANDED,
+    DIST_RUSSEL_RAO_EXPANDED,
     cosine_zero_norm_row_ptr,
+    inner_product_restore,
     metric_uses_norms,
     metric_value_name,
+    refuse_neighbors_rest_inputs,
+    refuse_similarity_weights,
     validate_metric_arg,
 )
 
@@ -194,21 +204,32 @@ def knn_metric_from_name(name: String) raises -> Int:
         return DIST_COSINE_EXPANDED
     if name == "minkowski" or name == "lp":
         return DIST_LP_UNEXPANDED
-    if (
-        name == "canberra"
-        or name == "jensenshannon"
-        or name == "correlation"
-        or name == "inner_product"
-        or name == "haversine"
-        or name == "braycurtis"
-    ):
+    # lane/neighbors-rest (2026-09-15): the rest of their brute set, plus
+    # scikit-learn's hamming and russellrao (distance_ops.mojo, THE SEVEN
+    # METRICS).
+    if name == "canberra":
+        return DIST_CANBERRA
+    if name == "correlation":
+        return DIST_CORRELATION_EXPANDED
+    if name == "jensenshannon":
+        return DIST_JENSEN_SHANNON
+    if name == "inner_product":
+        return DIST_INNER_PRODUCT
+    if name == "braycurtis":
+        return DIST_BRAY_CURTIS
+    if name == "hamming":
+        return DIST_HAMMING_UNEXPANDED
+    if name == "russellrao":
+        return DIST_RUSSEL_RAO_EXPANDED
+    if name == "haversine":
         raise Error(
-            "mojolearn k-NN: metric='"
-            + name
-            + "' is in cuML's VALID_METRICS['brute'] but is NOT IMPLEMENTED"
-            " (neighbors/NOT_IMPLEMENTED.tsv); implemented: euclidean, l2,"
-            " sqeuclidean, l1, cityblock, manhattan, taxicab, chebyshev,"
-            " linf, cosine, minkowski, lp"
+            "mojolearn k-NN: metric='haversine' is in cuML's"
+            " VALID_METRICS['brute'] but is NOT IMPLEMENTED"
+            " (neighbors/NOT_IMPLEMENTED.tsv: it needs an arcsine, and"
+            " checks/numerics.mojo has no identical one); implemented:"
+            " euclidean, l2, sqeuclidean, l1, cityblock, manhattan, taxicab,"
+            " chebyshev, linf, cosine, minkowski, lp, canberra, correlation,"
+            " jensenshannon, inner_product, braycurtis, hamming, russellrao"
         )
     raise Error("mojolearn k-NN: unknown metric '" + name + "'")
 from neighbors.checks.radius_distances import rbc_edge_distances
@@ -486,6 +507,12 @@ def _knn_search_traced_retaining(
                 + " is all zeros; cosine distance divides by ||x|| and is"
                 " undefined at the origin (DEVIATION 553)"
             )
+    # DEVIATIONS 2898 and 2899 (lane/neighbors-rest): correlation's constant
+    # rows and jensenshannon's negative entries, index first, the host
+    # oracle's function.
+    refuse_neighbors_rest_inputs(
+        mtr, index_ptr, n_index, queries_ptr, n_queries, n_features
+    )
 
     var devices = knn_device_count(n_queries, knn_method)
     var query_tile = plan_query_tile(n_index, n_queries, requested_query_tile)
@@ -692,8 +719,14 @@ def _knn_search_traced_retaining(
         trace.record_host("knn.sorted_dist", hd.unsafe_ptr(), n_queries * k)
         trace.record_host("knn.sorted_idx", hi.unsafe_ptr(), n_queries * k)
 
+    # DEVIATION 2901: the selection ran over the stored negation of the
+    # inner product; the caller reads the product itself.
+    var restore_inner_product = mtr == DIST_INNER_PRODUCT
     for i in range(n_queries * k):
-        out_dist_ptr.unsafe_store(i, hd.unsafe_ptr().unsafe_load(i))
+        var dv = hd.unsafe_ptr().unsafe_load(i)
+        if restore_inner_product:
+            dv = inner_product_restore(dv)
+        out_dist_ptr.unsafe_store(i, dv)
         out_idx_ptr.unsafe_store(i, hi.unsafe_ptr().unsafe_load(i))
 
     # DEVIATION 2487: retain the existing sorted device indices. A real
@@ -828,6 +861,7 @@ def knn_classifier_predict(
             + String(weights)
             + " is neither WEIGHTS_UNIFORM nor WEIGHTS_DISTANCE"
         )
+    refuse_similarity_weights(metric, weighted)  # DEVIATION 2901
     # `knn_search_traced` refuses k <= 0, k > n_index and the empty shapes
     # by name; nothing here re-derives those refusals.
     var retained_indices = List[DeviceBuffer[DType.uint32]]()
@@ -1034,6 +1068,7 @@ def knn_regressor_predict(
             + String(weights)
             + " is neither WEIGHTS_UNIFORM nor WEIGHTS_DISTANCE"
         )
+    refuse_similarity_weights(metric, weighted)  # DEVIATION 2901
     var used_tile = knn_search_traced(
         ctx,
         trace,

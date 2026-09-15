@@ -176,6 +176,10 @@ CLASSICAL_RECORDED = (
     # svr-linear, recorded on the M4's Metal set on all nine fixtures. The
     # NVIDIA and AMD recordings are owed to the next release record.
     "bench/results/classical_host/2026-09-15-apple-m4-svm",
+    # lane/neighbors-rest (2026-09-15): the seven brute force metrics,
+    # recorded on the M4's Metal set on all nine fixtures. The NVIDIA and AMD
+    # recordings are owed to the next release record.
+    "bench/results/classical_host/2026-09-15-apple-m4-neighbors-rest",
 )
 
 #: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
@@ -381,6 +385,15 @@ TRAINING_LANE_NAMES = {
     "radius-manhattan": "radius neighbors under manhattan distance",
     "radius-chebyshev": "radius neighbors under chebyshev distance",
     "radius-minkowski-p3": "radius neighbors under minkowski distance at p 3",
+    # lane/neighbors-rest (2026-09-15): the seven brute force metrics, each
+    # through core/knn_host_predict.mojo's call of the kernel's own cell.
+    "knn-canberra": "nearest neighbors under canberra distance",
+    "knn-braycurtis": "nearest neighbors under bray-curtis distance",
+    "knn-correlation": "nearest neighbors under correlation distance",
+    "knn-jensenshannon": "nearest neighbors under jensen-shannon distance",
+    "knn-hamming": "nearest neighbors under hamming distance",
+    "knn-russellrao": "nearest neighbors under russell-rao distance",
+    "knn-inner-product": "nearest neighbors by largest inner product",
     "dbscan-weighted": "weighted DBSCAN",
     "logistic-l1": "l1-penalized logistic regression",
     "logistic-elasticnet": "elasticnet-penalized logistic regression",
@@ -963,6 +976,8 @@ FAMILIES = (
             "kmeans-sqrt", "kmeans-classic-pp", "kmeans-cosine",
             "par-queries-knn", "par-queries-radius", "par-reference-knn",
             "par-reference-knn-reg",
+            "knn-canberra", "knn-braycurtis", "knn-correlation", "knn-jensenshannon",
+            "knn-hamming", "knn-russellrao", "knn-inner-product",
         ),
         # The neighbors and density inference lane (2026-09-15) adds every
         # k-NN metric, the ball cover, the distance-weighted vote and mean
@@ -970,7 +985,10 @@ FAMILIES = (
         inference_lanes=("knn", "knn-clf", "knn-reg", "knn-sqeuclidean", "knn-manhattan",
                          "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
                          "knn-clf-distance", "knn-reg-distance", "radius", "radius-manhattan",
-                         "radius-chebyshev", "radius-minkowski-p3"),
+                         "radius-chebyshev", "radius-minkowski-p3",
+                         # lane/neighbors-rest (2026-09-15)
+                         "knn-canberra", "knn-braycurtis", "knn-correlation", "knn-jensenshannon",
+                         "knn-hamming", "knn-russellrao", "knn-inner-product"),
         forest_kinds=(),
         classes=(
             "NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans",
