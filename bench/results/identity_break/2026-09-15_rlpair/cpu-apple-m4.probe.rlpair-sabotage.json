@@ -1,0 +1,683 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4-probe",
+ "commit": "8d4fa23af429b784cbc74d4392fb6493be10f41f",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  }
+ },
+ "cells": {
+  "byte-lm-host-infer/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9a22cf6df14a6ca8"
+   ],
+   "parts": [
+    {
+     "loss_bits": "4904f86d2a8a4e7a",
+     "logits": "9192e9f205ff4407",
+     "next": "44076661be92dd9b"
+    }
+   ],
+   "infer": [
+    "b67a1f3d482ffaca"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:skipped (--no-batch)"
+   ],
+   "batch_verdict": "N/A",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x40ab20a4 vs 0x40ab20a5"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:lane arm prefix recompute",
+    "sampler:threaded=True prefix recompute",
+    "trainer:logits(threaded=False)"
+   ]
+  },
+  "mamba1/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1609902abaf80a04"
+   ],
+   "parts": [
+    {
+     "forward": "a1b9bd38c3d8533d",
+     "prefill": "a1b9bd38c3d8533d",
+     "step": "50c8fffaf8c010a2",
+     "backward": "f1511e64f8fa8249"
+    }
+   ],
+   "infer": [
+    "97e86b9db80719a7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:skipped (--no-batch)"
+   ],
+   "batch_verdict": "N/A",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x401646a9 vs 0x401646a8"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ]
+  },
+  "mamba2/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5b05a3ecbd70248e"
+   ],
+   "parts": [
+    {
+     "forward": "22f79ee009fd9884",
+     "prefill": "22f79ee009fd9884",
+     "step": "3fa40f29231409be",
+     "backward": "f252b3fc19f5f9f5"
+    }
+   ],
+   "infer": [
+    "b0084ee171c0720f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:skipped (--no-batch)"
+   ],
+   "batch_verdict": "N/A",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x3f74221c vs 0x3f74221d"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ]
+  },
+  "mamba3/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "63de4bf6b9f8262a"
+   ],
+   "parts": [
+    {
+     "forward": "ad91191acfc10cdc",
+     "prefill": "ad91191acfc10cdc",
+     "step": "a8f15324412ea8ac",
+     "backward": "c22b89ea9adb5239"
+    }
+   ],
+   "infer": [
+    "6d73873ffe222457"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:skipped (--no-batch)"
+   ],
+   "batch_verdict": "N/A",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x3f1bd715 vs 0x3f1bd714"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ]
+  },
+  "transformer/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "295d4e62d4c78b14"
+   ],
+   "parts": [
+    {
+     "forward": "8d431df291630b43",
+     "prefill": "8d431df291630b43",
+     "step": "cb617deca75d536b",
+     "backward": "2b4978ef99181243"
+    }
+   ],
+   "infer": [
+    "d658bafd272776e1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:skipped (--no-batch)"
+   ],
+   "batch_verdict": "N/A",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x4006c21d vs 0x4006c21c"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ]
+  },
+  "samba/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "037e7701daa7fc7c"
+   ],
+   "parts": [
+    {
+     "loss": "a4ec77c75e14345b",
+     "logits": "0fe4484b8ae121c4",
+     "params": "925e00879ea7d1b2"
+    }
+   ],
+   "infer": [
+    "77db10c414ebd846"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "674582804fcf1a50"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "77db10c414ebd846"
+   ],
+   "batch": [
+    "n/a:skipped (--no-batch)"
+   ],
+   "batch_verdict": "N/A",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x40a60ba0 vs 0x40a60ba1"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ]
+  },
+  "mamba2-dtlimit/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b9e7928a2a4d30cf"
+   ],
+   "parts": [
+    {
+     "forward": "a28525fcbdf69e7c",
+     "prefill": "a28525fcbdf69e7c",
+     "step": "1a8d61928f80731b",
+     "backward": "dce0c7958d21aa6e"
+    }
+   ],
+   "infer": [
+    "574842725ea2d43f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:skipped (--no-batch)"
+   ],
+   "batch_verdict": "N/A",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x3f84cf92 vs 0x3f84cf93"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ]
+  },
+  "transformer-window/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "49ffb2316f238e6d"
+   ],
+   "parts": [
+    {
+     "forward": "c82dd5cdbfffbfbd",
+     "prefill": "c82dd5cdbfffbfbd",
+     "step": "b2ddd5d3feb8f2c9",
+     "backward": "fe5c6d7f0d134528"
+    }
+   ],
+   "infer": [
+    "a35cf82209713d66"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:skipped (--no-batch)"
+   ],
+   "batch_verdict": "N/A",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x4006c21d vs 0x4006c21c"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ]
+  },
+  "byte-lm-host-infer-threaded/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9a22cf6df14a6ca8"
+   ],
+   "parts": [
+    {
+     "loss_bits": "4904f86d2a8a4e7a",
+     "logits": "9192e9f205ff4407",
+     "next": "44076661be92dd9b"
+    }
+   ],
+   "infer": [
+    "b67a1f3d482ffaca"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:skipped (--no-batch)"
+   ],
+   "batch_verdict": "N/A",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x40ab20a4 vs 0x40ab20a5"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:lane arm prefix recompute",
+    "sampler:threaded=False prefix recompute",
+    "trainer:logits(threaded=False)"
+   ]
+  },
+  "samba-untied-dropout-accum/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4610c84719bc1a25"
+   ],
+   "parts": [
+    {
+     "loss": "5e82d5357d084426",
+     "logits": "f1a775afe812bd4b",
+     "params": "d28a060fcb9c4f35"
+    }
+   ],
+   "infer": [
+    "43f7860a7ff7a633"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4c6bb23f04af6858"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "43f7860a7ff7a633"
+   ],
+   "batch": [
+    "n/a:skipped (--no-batch)"
+   ],
+   "batch_verdict": "N/A",
+   "rlpair": [
+    "RLPAIR_MOVED:sampler B=5 vs trainer B=5:seq 0 token 0:nll 0x40a7e5f4 vs 0x40a7e5f5"
+   ],
+   "rlpair_verdict": "RLPAIR_MOVED",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ]
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": false
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": true,
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.13.15",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_kernel_methods_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_mixture_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_preprocessing_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_resample_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_rf_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_solver_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_svm_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_tokenizer_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_trees_host": {
+    "column": "cpu",
+    "sabotage": false
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad/rlparity/cpuprobe/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.13.15",
+  "par_devices": "0",
+  "bindings": []
+ }
+}
