@@ -1,5 +1,13 @@
 # Fan-out rules, Sep 14 2026 evening (read fully before doing anything)
 
+## 00. OVERRIDES EVERYTHING BELOW: GPU records only for PyPI releases (Andrew, Sep 15 ~10:30 ET)
+- Between releases, rent NO GPU boxes: no RunPod, DigitalOcean or Hot Aisle legs for any lane.
+- Prove on the Apple M4 locally (Metal vs host CPU, one core) and against GPU columns already in the repo.
+- Write anything that needs NVIDIA or AMD bits as OWED to the next release record.
+- At a PyPI release, take ONE record: 1 AMD, 1 NVIDIA, 1 Apple column. No second AMD model, no extra NVIDIA architecture, no two-device columns, no full re-record unless Andrew asks.
+- The box and leg rules in section 3 apply only to that release record.
+
+
 ## 0. Round 2 updates (Sep 14 ~20:45 ET)
 - Main has moved a lot since launch: GBDT and ARIMA CPU training, IVFIndex and Embedding exposed, and multi-GPU drivers for forest pool, GaussianMixture, resampling, HDBSCAN, Cholesky, KernelRidge, Nystroem and RBFSampler. Always fetch first.
 - tools/identity_break.py no longer has a single owner. Anyone may add lanes. Merge origin/main right before every push, and keep both sides of lane-list conflicts.
@@ -66,8 +74,8 @@ Six agents run at once: gbdt, arima, cpudecl, harness, multigpu, legsdocs. Each 
 - NEVER cancel an owed run, a queued CI run, or another agent's box. `bash tools/hotaisle_leg.sh status` shows VMs; only reap one whose description names YOUR lane and whose driver is dead.
 
 ## 4. CI
-- The CPU identity gate (seven GitHub-hosted runners) is SLOW; 16 runs were queued at launch. Every push to a branch touching python/ or bindings/ queues more.
-- Push a branch only when it is ready for a gate. Batch your commits. Never cancel queued runs.
+- The routine CPU identity gate uses three hosted environments (Linux x86-64, Linux ARM64, Apple silicon macOS), with inference/plumbing checks on pushes. Full CPU training certification runs weekly, manually, and before publication, with parallel lane shards. See CPU_GATE_RECOVERY_2026-09-15.md. The seven-runner queue described at launch is historical.
+- Push a branch only when it is ready for a gate. Batch your commits. The workflow cancels superseded runs on the same branch only; main runs are never cancelled. Do not manually cancel other owed runs.
 - `gh run list --branch <b> -L 5`, `gh run view <id> --json jobs`, and `gh run view <id> --log-failed | tail -200` for failures. Poll every 5 to 10 minutes, not faster.
 
 ## 5. Evidence rules (the lessons behind them are expensive)
