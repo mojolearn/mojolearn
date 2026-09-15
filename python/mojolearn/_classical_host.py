@@ -75,6 +75,8 @@ class _HostBound:
     (`_BINDING`) and refuses every other family by name, so a host subclass
     can never reach a GPU binding by accident."""
 
+    _HOST_INFERENCE_ONLY = True
+
     def _bind(self, name=None):
         name = name or self._BINDING
         if name != self._BINDING or name not in _HOST_BASENAMES:

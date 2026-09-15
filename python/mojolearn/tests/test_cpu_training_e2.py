@@ -30,6 +30,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
+from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -169,6 +170,7 @@ def test_manifest_covers_spectral_and_the_oracle_moved():
     assert f'- "{SPECTRAL_ORACLE}"' in workflow
 
 
+@reference_training()
 def test_spectral_runs_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -211,6 +213,7 @@ def test_manifest_covers_the_scalers():
     assert f'- "{SCALER_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
 
 
+@reference_training()
 def test_scalers_run_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -262,6 +265,7 @@ def test_manifest_covers_logistic():
     assert f'- "{QN_ORACLE}"' in _read(".github/workflows/cpu-identity-gate.yml")
 
 
+@reference_training()
 def test_logistic_runs_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -285,6 +289,7 @@ def test_logistic_runs_on_the_host_when_built():
     assert l1[0].tobytes() == l1[1].tobytes(), "two host OWL-QN fits returned different coefficients"
 
 
+@reference_training()
 def test_metrics_run_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -309,6 +314,7 @@ def test_metrics_run_on_the_host_when_built():
     assert -0.5 <= ari <= 1.0 and 0.0 <= vm <= 1.0 and 0.0 <= r2 <= 1.0 and -1.0 <= sil <= 1.0
 
 
+@reference_training()
 def test_kmeans_fit_runs_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
