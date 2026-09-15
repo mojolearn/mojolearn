@@ -471,13 +471,26 @@ TRAINING_LANE_NAMES = {
     "rf-reg-gamma-ig": "the random forest regressor with the gamma and inverse Gaussian criteria",
     "et-clf-entropy-bestfirst": "the best-first Extra Trees classifier with entropy splits",
     "et-reg-bootstrap-parallel": "the bootstrapped Extra Trees regressor with the parallel groves engine",
+    # The Mamba block lanes (lane/cpu-training-mamba, 2026-09-15): the three
+    # blocks' forward, carried-state prefill and decode step over their host
+    # oracles, and the zero-state prefill backward over mamba/host/gen/, the
+    # device VJP written out for the host by tools/mamba_host_gen.py (the
+    # Mamba-1 host backward oracle differs from the device in low bits, so
+    # it is not the one used). On the M4, one core, shared machine: all 36
+    # train (forward, prefill, step and backward parts), 36 infer and 36
+    # batch cells IDENTICAL x4 against the 166-lane record before the gate
+    # ran, and the MOJOLEARN_HOST_SABOTAGE build DIVERGENT.
+    "mamba2": "the Mamba-2 block",
+    "mamba2-dtlimit": "the Mamba-2 block with an active dt clamp",
+    "mamba1": "the Mamba-1 block",
+    "mamba3": "the Mamba-3 block",
 }
 
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
-    "the Transformer, Mamba and Samba blocks",
+    "the Transformer and Samba blocks",
     "the Embedding layer",
     "gradient boosting training outside its declared lanes (the ordered RMSE and feature-frequency fits, categorical features, sample weights, eval sets and the pointwise searcher among them)",
 )
@@ -1141,6 +1154,48 @@ FAMILIES = (
             "resample_host_numeric_mode", "resample_host_vendor", "resample_host_column",
             "resample_host_sabotage", "resample_vendor", "resample_numeric_mode",
             "bootstrap", "permutation_test", "monte_carlo_integrate",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # lane/cpu-training-mamba (2026-09-15): the Mamba blocks' host
+        # binding. It routes `_mojolearn_mamba` on a CPU-only install with
+        # the GPU binding's whole surface: the forwards and decode steps
+        # over the three block oracles (mamba/checks/mamba{,2,3}_oracle.mojo),
+        # and the three zero-state prefill VJPs over mamba/host/gen/, the
+        # device passes (forward stages included) written out for the host
+        # by tools/mamba_host_gen.py: each kernel a serial loop over its
+        # launch grid, the device GEMM through gemm_oracle
+        # (mamba/host/device_shim.mojo). The gate's manifest step fails when
+        # the generated files lag the device source.
+        family="mamba",
+        binding="_mojolearn_mamba_host",
+        routes="_mojolearn_mamba",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("mamba2", "mamba2-dtlimit", "mamba1", "mamba3"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("Mamba1Block", "Mamba2Block", "Mamba3Block"),
+        display="the Mamba-1, Mamba-2 and Mamba-3 blocks' forward, decode step and prefill backward",
+        host_modules=(
+            "mamba/checks/mamba_oracle.mojo",
+            "mamba/checks/mamba2_oracle.mojo",
+            "mamba/checks/mamba3_oracle.mojo",
+            "mamba/host/device_shim.mojo",
+            "mamba/host/gen/modeling_mamba_prefill_backward.mojo",
+            "mamba/host/gen/mamba2_prefill_backward.mojo",
+            "mamba/host/gen/mamba3_prefill_backward.mojo",
+            "gemm/host/gemm_oracle.mojo",
+        ),
+        exports=(
+            "mamba_host_numeric_mode", "mamba_host_vendor", "mamba_host_column",
+            "mamba_host_sabotage", "mamba_vendor", "mamba_numeric_mode",
+            "mamba1_forward", "mamba1_backward", "mamba1_decode_step",
+            "mamba2_forward", "mamba2_decode_step", "mamba2_backward",
+            "mamba3_forward", "mamba3_forward_fresh", "mamba3_decode_step",
+            "mamba3_backward",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

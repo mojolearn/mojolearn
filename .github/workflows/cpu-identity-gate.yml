@@ -131,6 +131,21 @@ on:
       - "training/checks/loss_oracle.mojo"
       - "training/checks/optimizer_oracle.mojo"
       - "training/host/samba_ops_oracle.mojo"
+      - "mamba/host/**"
+      - "mamba/impl/**"
+      - "mamba/checks/mamba_fixture.mojo"
+      - "mamba/checks/mamba2_fixture.mojo"
+      - "mamba/checks/mamba3_fixture.mojo"
+      - "mamba/checks/mamba_oracle.mojo"
+      - "mamba/checks/mamba2_oracle.mojo"
+      - "mamba/checks/mamba3_oracle.mojo"
+      - "mamba/checks/mamba_backward.mojo"
+      - "mamba/checks/mamba2_backward.mojo"
+      - "mamba/checks/mamba3_backward.mojo"
+      - "core/identity_trace.mojo"
+      - "gemm/checks/gemm_identical.mojo"
+      - "tools/mamba_host_gen.py"
+      - "python/mojolearn/_mamba_impl.py"
       - "embedding/checks/embedding_oracle.mojo"
       - "gemm/checks/gemm_backward.mojo"
       - "python/mojolearn/_training_impl.py"
@@ -332,6 +347,10 @@ jobs:
             echo "FIX_COLUMNS=$(python3 $manifest --training-fix-columns)"
           } | tee -a "$GITHUB_ENV" | tee "$GATE_OUT/manifest.txt"
           python3 $manifest --json > "$GATE_OUT/host_surface.json"
+          # The Mamba host passes are GENERATED from the device source
+          # (tools/mamba_host_gen.py); a device edit that was not regenerated
+          # would build a host binding of the OLD arithmetic, so it fails here.
+          python3 tools/mamba_host_gen.py --check
           for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns) $(python3 $manifest --training-fix-columns); do
             [ -e "$d" ] || { echo "manifest names $d, which is not in this checkout: the record lags the surface" >&2; exit 1; }
           done
