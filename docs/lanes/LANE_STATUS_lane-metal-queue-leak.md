@@ -14,7 +14,11 @@ Evidence from this lane (outside the repo, survives a scratchpad wipe): /Users/a
 Phase 1 is done, and it answered the question without this lane running a
 single GPU job: a live `mojo` process was caught holding 1211 of the machine's
 1243 command queues, and the count fell to 34 within about 15 seconds of that
-process exiting. Phase 2 (our own measured fits, and the fix) has not started.
+process exiting. A health check then measured GBDT Metal fits at about 2.7x
+faster than the degraded afternoon numbers, with the queue count flat at 34
+across eleven fits, so the degraded state is gone and no reboot is needed.
+Phase 2 (finding which workload shape does accumulate queues, and the fix) has
+not started.
 
 ## The finding
 
@@ -73,6 +77,37 @@ process alive); 654 to 692 at 18:27, of which `VTDecoderXPCService` held 632 to
 670, gaining about 1.8 a second; 6591 to 6754 later (coordinator), where
 `killall VTDecoderXPCService` gave no immediate drop but the count was back to
 127 and then 35 by 19:27.
+
+## Health check, Sep 15 19:39 to 19:42 EDT, alone under the Metal lock
+
+Two runs, identical mode, Metal, one core, `nice -n 19`, the shared checkout's
+built bindings.
+
+Small fixture, 2000 x 8, 20 trees, depth 6, five fits: 7186, 7067, 6747, 7000
+and 7160 ms.
+
+Like for like against the degraded evidence, the same script
+(`/Users/andrewhendel/mojolearn-evidence/gbdt-metal-slowdown-2026-09-15/gbdt_direct.py`)
+at 20000 rows:
+
+| policy | now | degraded, Sep 15 afternoon |
+|---|---|---|
+| SymmetricTree | 8.289, 7.735, 8.288 s | 21.5 to 23.4 s |
+| Depthwise | 11.848, 14.082, 13.373 s | 27.0 to 30.4 s |
+
+**The degraded state is gone**: about 2.7x faster on SymmetricTree and about
+2.2x on Depthwise, and nothing resembling the 20x slow fits. What cannot be
+claimed from here is a clean bill of health against "about 1 s per fit": no
+GBDT Metal timing from before the slowdown is committed anywhere in this repo,
+so that figure has no anchor and 7 to 8 s is neither proven healthy nor proven
+slow. Establishing a real baseline for this shape is separate work.
+
+**Queues stayed at 34 throughout**: before each run, after every fit, the
+moment each process exited, and 20 to 30 s later. Eleven fits across two
+processes added none. So the per-call `DeviceContext` in the GBDT binding path
+does NOT accumulate queues in this build, and it is not what filled pid 78701.
+Whatever that process was doing (long-lived contexts held concurrently, a
+check binary, or another lane's shape) is what phase 2 has to find.
 
 ## Where a command queue is created in our code
 
