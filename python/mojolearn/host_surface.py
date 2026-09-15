@@ -240,6 +240,9 @@ TRAINING_LANE_NAMES = {
     "gp-matern12": "the Gaussian process with a Matern kernel at nu 0.5",
     "gp-matern32": "the Gaussian process with a Matern kernel at nu 1.5",
     "gp-matern52-ard": "the Gaussian process with an ARD Matern kernel at nu 2.5",
+    # lane/cpu-training-small-gaps (2026-09-15): normalize_y=True, the folds
+    # through the preprocessing host binding's standard_fit and standard_transform.
+    "gp-normalize-y": "the Gaussian process with normalized targets",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
     # variants of families that already had a host path, every one in the
     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
@@ -270,6 +273,9 @@ TRAINING_LANE_NAMES = {
     "elasticnet-l2end-no-intercept": "elasticnet at the l2 end without an intercept",
     "holtwinters-multiplicative": "multiplicative Holt-Winters",
     "svc-linear": "the linear SVC",
+    # lane/cpu-training-small-gaps (2026-09-15): SVC(kernel='poly') through the
+    # svm host binding's svc_fit and svc_predict (degree and coef0 in params).
+    "svc-poly": "the polynomial SVC",
     "iforest-tuned": "the tuned isolation forest",
     # Same batch, each needing a host restatement it did not have: the
     # cosine, manhattan, chebyshev and minkowski k-NN metrics
@@ -1001,7 +1007,7 @@ FAMILIES = (
         routes="_mojolearn_svm",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear"),
+        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear", "svc-poly"),
         inference_lanes=("svc",),
         forest_kinds=(),
         classes=("SVC", "IsolationForest", "SVR"),
@@ -1108,7 +1114,7 @@ FAMILIES = (
         routes="_mojolearn_gp",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard"),
+        training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianProcessRegressor",),
