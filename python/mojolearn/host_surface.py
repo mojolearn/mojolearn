@@ -300,6 +300,20 @@ TRAINING_LANE_NAMES = {
     # Gate run 34900811380, as above.
     "gbdt-depthwise": "gradient boosting on depthwise trees with the Logloss loss",
     "gbdt-lossguide": "gradient boosting on lossguide trees with the Logloss loss",
+    # lane/cpu-training-gbdt-ordered (2026-09-15): OrderedRMSE trains
+    # through gbdt/host/gbdt_oracle_ordered.mojo (the pointwise searcher's
+    # fold arm, its 8-bit fixed-point and half-byte float histograms, the
+    # dynamic cosine scorer and the ordered Newton leaves restated on the
+    # host) and ExperimentalTwoLevelFeatureFreq through
+    # gbdt/host/gbdt_oracle_feature_freq.mojo (the synchronized two-level
+    # tensor search over the symmetric oracle's histograms), exported as
+    # gbdt_fit_ordered_rmse and gbdt_fit_two_level_feature_freq from the
+    # gbdt host binding; sample_weight refuses by name on both. On the M4's
+    # CPU column (one core) both lanes read all 18 train, 36 infer and model
+    # and 18 batch cells IDENTICAL x4 against the 166-lane columns before
+    # the gate ran, and the sabotage build DIVERGENT on every cell.
+    "gbdt-ordered-rmse": "ordered boosting with the RMSE loss (OrderedRMSE)",
+    "gbdt-feature-freq": "the two-level FeatureFreq estimator",
     # Workstream E (lane/cpu-training-arima, 2026-09-14): batched ARIMA
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
@@ -327,7 +341,7 @@ TRAINING_LANE_NAMES = {
 #: README until the marked span is rewritten.
 NO_CPU_PATH = (
     "the neural blocks",
-    "gradient boosting training other than symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss",
+    "gradient boosting training other than symmetric trees with the Logloss or RMSE loss, depthwise and lossguide trees with the Logloss loss, OrderedRMSE and the two-level FeatureFreq estimator",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -758,8 +772,12 @@ FAMILIES = (
         # host binding. It routes `_mojolearn_gbdt` on a CPU-only install
         # with the GPU binding's fit, predict, model-dim and sigmoid names;
         # gbdt_fit refuses by name every value outside the gbdt-symmetric,
-        # gbdt-rmse, gbdt-depthwise and gbdt-lossguide configurations, and the multi-dimensional predict, the ordered and
-        # FeatureFreq fits and the adapters' device transforms stay absent.
+        # gbdt-rmse, gbdt-depthwise and gbdt-lossguide configurations;
+        # gbdt_fit_ordered_rmse and gbdt_fit_two_level_feature_freq train the
+        # gbdt-ordered-rmse and gbdt-feature-freq lanes
+        # (lane/cpu-training-gbdt-ordered, 2026-09-15) and refuse
+        # sample_weight by name; the multi-dimensional predict and the
+        # adapters' device transforms stay absent.
         # Not the forest host binding: that one is loaded by path under its
         # own names and takes the model as flat arrays.
         family="gbdt",
@@ -767,20 +785,25 @@ FAMILIES = (
         routes="_mojolearn_gbdt",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gbdt-symmetric", "gbdt-rmse", "gbdt-depthwise", "gbdt-lossguide"),
+        training_lanes=(
+            "gbdt-symmetric", "gbdt-rmse", "gbdt-depthwise", "gbdt-lossguide",
+            "gbdt-ordered-rmse", "gbdt-feature-freq",
+        ),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("GradientBoosting",),
-        display="gradient boosting on symmetric trees with the Logloss or RMSE loss and depthwise and lossguide trees with the Logloss loss",
+        classes=("GradientBoosting", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq"),
+        display="gradient boosting on symmetric trees with the Logloss or RMSE loss, depthwise and lossguide trees with the Logloss loss, OrderedRMSE and the two-level FeatureFreq estimator",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
+            "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_fit", "gbdt_predict", "gbdt_model_dim", "gbdt_sigmoid",
+            "gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

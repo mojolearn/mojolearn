@@ -108,6 +108,8 @@ on:
       - "gbdt/host/gbdt_oracle_rmse.mojo"
       - "gbdt/host/gbdt_oracle_depthwise.mojo"
       - "gbdt/host/gbdt_oracle_lossguide.mojo"
+      - "gbdt/host/gbdt_oracle_ordered.mojo"
+      - "gbdt/host/gbdt_oracle_feature_freq.mojo"
       - "arima/host/arima_oracle.mojo"
       - "arima/impl/tsa/arima_common.mojo"
       - "spectral/checks/symmetric_eig_host.mojo"
@@ -545,7 +547,10 @@ jobs:
       # subsequence, in gpr_oracle by walking the scaled distance's
       # feature axis descending, in gbdt_oracle by adding 1.0 to the
       # Newton leaf walker's Hessian regularizer, in gbdt_oracle_rmse by
-      # adding 1.0 to the searcher's leaf regularizer, in arima_oracle by
+      # adding 1.0 to the searcher's leaf regularizer, in
+      # gbdt_oracle_ordered by adding 1.0 to the ordered Newton Hessian
+      # regularizer, in gbdt_oracle_feature_freq by adding 1.0 to the leaf
+      # value's l2, in arima_oracle by
       # doubling the finite-difference step, and in umap_oracle by keying
       # every negative draw one epoch late);
       # each further phase 1

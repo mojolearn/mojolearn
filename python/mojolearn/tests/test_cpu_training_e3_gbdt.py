@@ -9,8 +9,9 @@ What the source checks hold: the manifest declares the gbdt family, routes
 `_mojolearn_gbdt`, covers gbdt-symmetric only and names the rest of gradient
 boosting training as having no CPU path; the binding registers the GPU
 binding's fit, predict, model-dim and sigmoid names and leaves the
-multi-dimensional predict, the ordered and FeatureFreq fits and the
-adapters' binary transforms absent so they refuse by name; every parameter
+multi-dimensional predict and the adapters' binary transforms absent so
+they refuse by name (the ordered and FeatureFreq fits are registered since
+lane/cpu-training-gbdt-ordered, test_cpu_training_gbdt_ordered.py); every parameter
 refusal inside `gbdt_fit` carries the sentence the CPU identity gate's
 column check keys on; the oracle imports no GPU module, and the gbdt host
 modules it reuses import none either; the oracle spells the device
@@ -81,8 +82,7 @@ def test_binding_registers_the_gpu_names():
                  "gbdt_vendor", "gbdt_numeric_mode"):
         assert f'("{name}")' in src, f"the gbdt host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name} for gbdt"
-    for absent in ("gbdt_predict_multi", "gbdt_fit_ordered_rmse",
-                   "gbdt_fit_two_level_feature_freq", "gbdt_binary_probabilities",
+    for absent in ("gbdt_predict_multi", "gbdt_binary_probabilities",
                    "gbdt_binary_classes", "gbdt_per_round_paths",
                    "gbdt_parallel_available", "pointwise_parallel_available"):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"

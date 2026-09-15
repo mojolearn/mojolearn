@@ -27,9 +27,15 @@ the same five-element return), `gbdt_predict` and `gbdt_model_dim` (the
 model text in, as `bindings/_mojolearn_gbdt.mojo:410-450`), `gbdt_sigmoid`
 (its body), `gbdt_vendor` answering "cpu" and `gbdt_numeric_mode`.
 
+`gbdt_fit_ordered_rmse` (the gbdt-ordered-rmse lane, through
+`gbdt/host/gbdt_oracle_ordered.mojo`) and `gbdt_fit_two_level_feature_freq`
+(the gbdt-feature-freq lane, through `gbdt/host/gbdt_oracle_feature_freq.mojo`)
+take the GPU binding's params and return its model text
+(lane/cpu-training-gbdt-ordered, 2026-09-15); both refuse `sample_weight` by
+name.
+
 ABSENT, and so refused BY NAME through `_HostBinding`: `gbdt_predict_multi`
-(a multi-dimensional model), `gbdt_fit_ordered_rmse`,
-`gbdt_fit_two_level_feature_freq`, `gbdt_binary_probabilities` and
+(a multi-dimensional model), `gbdt_binary_probabilities` and
 `gbdt_binary_classes` (the adapters' device transforms),
 `gbdt_per_round_paths` and the two `*_parallel_available` probes.
 
@@ -43,7 +49,9 @@ The sabotage arm (`gbdt_host_sabotage`) is
 `gbdt/host/gbdt_oracle.mojo::GBDT_ORACLE_HOST_SABOTAGE`: the Newton walker's
 Hessian regularizer is one larger, so every leaf of every tree moves; on
 the RMSE arm, which runs no walker, the searcher's leaf regularizer
-(`gbdt/host/gbdt_oracle_rmse.mojo::_rmse_leaf_value`) is one larger.
+(`gbdt/host/gbdt_oracle_rmse.mojo::_rmse_leaf_value`) is one larger; the
+ordered arm's Newton Hessian regularizer and the FeatureFreq leaf value's l2
+are one larger.
 """
 from std.math import isfinite
 from std.memory import bitcast
@@ -998,9 +1006,7 @@ def PyInit__mojolearn_gbdt_host() abi("C") -> PythonObject:
         module.def_function[gbdt_predict_binding]("gbdt_predict")
         module.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         module.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
-        module.def_function[gbdt_fit_two_level_feature_freq_binding](
-            "gbdt_fit_two_level_feature_freq"
-        )
+        module.def_function[gbdt_fit_two_level_feature_freq_binding]("gbdt_fit_two_level_feature_freq")
         module.def_function[gbdt_fit_ordered_rmse_binding]("gbdt_fit_ordered_rmse")
         return module.finalize()
     except error:
