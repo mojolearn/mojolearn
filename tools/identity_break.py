@@ -2482,8 +2482,12 @@ def _(ml, X, yc, yr, Xh=None):
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     ids = np.asarray(tok.encode_bytes(raw, allow_endoftext=True), dtype=np.int32)
     back = np.frombuffer(tok.decode_bytes(ids.tolist()), dtype=np.uint8)
-    assert back.tobytes() == raw, "tokenizer lane: decode(encode(x)) != x"
-    return _fit(dict(ids=_h(ids), decoded=_h(back), n_vocab=_h(np.int64(tok.n_vocab))),
+    # The round trip is a hashed part, not an assertion (2026-09-15): a
+    # sabotaged binary must read DIVERGENT, and a raise would read REFUSED,
+    # which the owed check (tools/cpu_identity_gate_check.py owed) does not
+    # count as a catch. A production column hashes roundtrip=1 everywhere.
+    roundtrip = np.int64(1 if back.tobytes() == raw else 0)
+    return _fit(dict(ids=_h(ids), decoded=_h(back), roundtrip=_h(roundtrip), n_vocab=_h(np.int64(tok.n_vocab))),
                 tok, lambda e: (np.asarray(e.encode_bytes(np.ascontiguousarray(Xh).tobytes()[:4096],
                                                           allow_endoftext=True), dtype=np.int32),))
 
