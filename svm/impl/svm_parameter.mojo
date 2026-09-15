@@ -11,7 +11,7 @@ What the record carries that the brief's rung 1 does not use, and what
 happens to it:
 
     svmType                C_SVC and EPSILON_SVR are honored; NU_SVC and
-                           NU_SVR are raised by name, which is upstream's own
+                           NU_SVR are raised by name, which is the reference's own
                            boundary. This line read "SVR is rung 2" until
                            `fea6becc` (2026-08-31)
     epsilon                honored only as SVR's parameter: raised if non-zero
@@ -145,7 +145,7 @@ def check_rung1_scope(
     # the two differ in the gradient initialization, the domain size and how
     # the coefficients are combined, not in the solver.
     #
-    # NU_SVC and NU_SVR stay refused, and that is upstream's own boundary
+    # NU_SVC and NU_SVR stay refused, and that is the reference's own boundary
     # rather than ours: `smosolver.cuh`'s Initialize has no arm for them
     # either.
     if param.svmType != C_SVC and param.svmType != EPSILON_SVR:
@@ -154,7 +154,7 @@ def check_rung1_scope(
             + " is not implemented (C_SVC and EPSILON_SVR are; NU_SVC/NU_SVR are"
             + " unimplemented upstream too)"
         )
-    # `epsilon` IS THE SVR PARAMETER AND ONLY THAT. C_SVC ignores it upstream,
+    # `epsilon` IS THE SVR PARAMETER AND ONLY THAT. C_SVC ignores it in the reference,
     # so a non-zero value on a classifier is still refused rather than
     # silently dropped; on a regressor it is required to be finite and
     # non-negative, which is DEVIATION 636's family (NaN fails `< 0.0` and

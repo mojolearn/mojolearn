@@ -87,7 +87,7 @@ message is itself a mamba3 forward FIX — see the fragility note below).
 | what | where | role |
 |---|---|---|
 | the block order, NORMATIVE | `mamba_ssm/modules/mamba3.py::Mamba3.forward` (:160-278): in_proj + 8-way split (:176-186, layout :106-107), heavy-tail A + clamp (:194-195), dt (:196), `ADT = _A * DT` pairing (:197), angle expand-to-heads (:202), B/C norms (:204-206), the SISO call (:249-265), out_proj (:277); `__init__` defaults (:44-70), B/C biases (:121-122), D (:140) | normative |
-| the elementwise and whole-block MATH, NORMATIVE | `tests/ops/triton/test_mamba3_siso.py::mamba3_siso_fwd_ref` (:149-340): `tanh(Angles)*π` (:201), `σ(trap)` (:249), angle cumsum + init + mod 2π (:252-257), resumption correction (:261-267), shifted scale (:272-275), bias-then-QK-dot-then-rotate order (:278-288, `_rotary` :216-226), quadratic attention (:296-299), state term contract-then-decay (:301-304), D (:306-307), the QK-dot subtraction (:309), Z-gate (:311-312), final state (:315-321). fp32 by default (:163, :184-197) — the witness that fp32 semantics are upstream-spelled | normative for VALUES; its whole-sequence SCHEDULE and its diagonal SPELLING are replaced (DEVIATIONS 827, 830) |
+| the elementwise and whole-block MATH, NORMATIVE | `tests/ops/triton/test_mamba3_siso.py::mamba3_siso_fwd_ref` (:149-340): `tanh(Angles)*π` (:201), `σ(trap)` (:249), angle cumsum + init + mod 2π (:252-257), resumption correction (:261-267), shifted scale (:272-275), bias-then-QK-dot-then-rotate order (:278-288, `_rotary` :216-226), quadratic attention (:296-299), state term contract-then-decay (:301-304), D (:306-307), the QK-dot subtraction (:309), Z-gate (:311-312), final state (:315-321). fp32 by default (:163, :184-197) — the witness that fp32 semantics are reference-spelled | normative for VALUES; its whole-sequence SCHEDULE and its diagonal SPELLING are replaced (DEVIATIONS 827, 830) |
 | the chunked schedule SHAPE | `mamba_ssm/ops/triton/mamba3/mamba3_siso_fwd.py::mamba3_siso_fwd_kernel`: phase 1 preprocessing (:276-351 — shifted dt/trap loads :293-302, scale :304-306, pre-rotation QK dot :319-325, rotations :332-335/:347-350, final-K stored post-rotation pre-scale :337-341, K scaled :343), phase 2 (:353-451 — resumption correction :367-371, strict-causal mask :413-417, diagonal-plus-D add :421-422, Z-gate :430-431, serial state update :440-444); wrapper's final-state pick (:709-729: k at `(seqlen-1) % chunk_size`, v = last token raw) | normative for STRUCTURE; its exp2·log2e respelling (:386, :407, :412, :440-442), its `min(·, 0.0)` guard (:412 — inert, since ADT <= -A_floor·dt <= 0 by S5/S6), its `tl.sum` for da_cs_last (:397) and its `tl.cumsum`/`tl.dot` trees are NOT pinned — the mamba2 S11/S12/DEVIATION-782 spellings are inherited over them |
 | the angle chain | `mamba_ssm/ops/triton/mamba3/angle_dt.py::angle_dt_fwd_kernel` (:83-122): `tanh_approx(angle)*π` (:94), `*dt` (:101), chunked cumsum (:104-105), mod 2π as `x - 2π*floor(x/2π)` (:108), state modded per chunk (:115-117) | shape and mod SPELLING; its PER-CHUNK mod placement is refused (DEVIATION 829) |
 | per-token recurrence SEMANTICS | `test_mamba3_siso.py::mamba3_siso_step_ref` (:34-146): the three-term update `S = α·S + β·(k_prev⊗v_prev) + γ·(k⊗v)` with `α = exp(adt)`, `β = (1-σ(trap))·dt·α`, `γ = σ(trap)·dt` (:119-127), per-token angle mod (:109-111); the module's `step` (mamba3.py:314-440, CuteDSL `mamba3_step_fn`, "Only tested on H100" :320) and `ops/triton/mamba3/mamba3_siso_step.py` | SEMANTICS ONLY; the rounding is the `STEP_UPSTREAM_RECURRENCE` required-RED arm (DEVIATION 831) |
@@ -102,7 +102,7 @@ message is itself a mamba3 forward FIX — see the fragility note below).
 records that `mamba3_siso_fwd_kernel` SILENTLY corrupted its forward
 output on Blackwell at `num_stages > 1` (a Triton codegen fault across
 three Triton versions), fixed by pruning the autotune space
-(`_prune_mamba3_siso_fwd_configs`, mamba3_siso_fwd.py:19-31). Upstream's
+(`_prune_mamba3_siso_fwd_configs`, mamba3_siso_fwd.py:19-31). The reference's
 own forward was execution-config-dependent and WRONG on one vendor
 generation with no error raised. That is this contract's whole thesis
 stated by the opposition: the execution plan must not be able to touch
@@ -149,7 +149,7 @@ are inputs to this profile.
 | `identical_sigmoid` | EXISTS (row 52, `portable_sigmoidf`) | S8 trap |
 | `identical_clamp` | EXISTS, `checks/numerics.mojo:2273`. Requested by mamba2 DEVIATION 788 and landed since; this profile is the SECOND consumer and the FIRST whose bound ALWAYS binds structurally (S5's `max=-A_floor`) | S5 |
 | mod-2π reduction | NEW SPELLING, not a new function: composed from `identical_div`, exact `floor`, `pinned_mul`, one subtract (DEVIATION 829). No request to the identity lane needed | S10 |
-| π / 2π constants | `Float32(π) = 0x40490FDB`, `Float32(2π) = 0x40C90FDB`, pinned BY BITS in the oracle and kernels; the upstream float64 literal `3.141592653589793` rounds to these in every f32 context the references use | S10, S13 |
+| π / 2π constants | `Float32(π) = 0x40490FDB`, `Float32(2π) = 0x40C90FDB`, pinned BY BITS in the oracle and kernels; the reference float64 literal `3.141592653589793` rounds to these in every f32 context the references use | S10, S13 |
 
 The stale sentence in `archive/research/IDENTICAL_SSM_NOTES.md` ("only `portable_cosf`
 exists", "`portable_sinf` not asked for") predates DEVIATION 820 and is
@@ -239,7 +239,7 @@ verbatim from the siblings.
 
 ## 5. State, decode, and what "resumable" means here
 
-The upstream carried state is FOUR pieces (`allocate_inference_cache`,
+The reference carried state is FOUR pieces (`allocate_inference_cache`,
 mamba3.py:442-482): θ (angle state, [B, H, 32], fp32), h (SSM state,
 [B, H, P, N], fp32), k_last (post-bias post-rotation PRE-scale,
 [B, 1, H, N]), v_last ([B, H, P]). NO conv window exists.
@@ -254,7 +254,7 @@ DEVIATION 831 splits "resumable" into two claims the references conflate:
    trapezoid FITS this construction: a prefill of length t gives token
    s < t the scale `γ_s + β'_{s+1}` using only tokens <= t, so per-token
    outputs are prefix-stable and the resumption replay reproduces them.
-2. **The upstream `Input_States` continuation** (four tensors in, S22's
+2. **The reference `Input_States` continuation** (four tensors in, S22's
    correction) is SUPPORTED, corpus-checked — and NOT
    claimed bit-equal to an unbroken prefill, not even at a chunk
    boundary. The argument: in an unbroken run the boundary token's K-row
@@ -266,7 +266,7 @@ DEVIATION 831 splits "resumable" into two claims the references conflate:
    corpus row, never a bitwise gate. Anyone who "fixes" gate D2m3 to
    bitwise has misread the trapezoid.
 
-The upstream step spellings (`mamba3_siso_step_ref`'s three-term α/β/γ
+The reference step spellings (`mamba3_siso_step_ref`'s three-term α/β/γ
 recurrence, the CuteDSL `mamba3_step_fn`, `mamba3_siso_step.py`) round
 differently from the chunked prefill and are kept as the required-RED
 arm `STEP_UPSTREAM_RECURRENCE`, exactly the sibling's move.
@@ -394,10 +394,10 @@ cross-vendor sentence; only the E-series leg does.
   standing is DEVIATION 783's, inherited; CHUNK_SIZE_32 is the
   falsifier at the new value.
 - **DEVIATION 828 — the rotation seam and the portable trig pair.**
-  Upstream spells the rotation's trig THREE ways at the one pin (torch
+  The reference spells the rotation's trig THREE ways at the one pin (torch
   cos/sin in the refs; PTX `cos.approx`/`sin.approx` in the prefill
   kernel, utils.py:13-50; `tl.cos`/`tl.sin` in the decode rotary
-  kernel) — mutually bit-incompatible, so upstream's own prefill and
+  kernel) — mutually bit-incompatible, so the reference's own prefill and
   decode already disagree. The profile pins `portable_cosf`/
   `portable_sinf` (DEVIATION 820's pair, one shared core) on BOTH
   paths, the interleaved (2i, 2i+1) pairing (the SISO spelling;
@@ -409,7 +409,7 @@ cross-vendor sentence; only the E-series leg does.
   structural spelling agrees with `cos(+0.0) = 1.0`, `sin(+0.0) = +0.0`
   exactly, so the three spellings' bits coincide — recorded 782-style).
 - **DEVIATION 829 — the angle recurrence, serial per-token mod-2π.**
-  Upstream places the mod-2π reduction THREE ways: per chunk on both
+  The reference places the mod-2π reduction THREE ways: per chunk on both
   running state and outputs (angle_dt.py:108, :117), once at the end of
   the whole cumsum (fwd_ref :253-257), and NOWHERE (the decode rotary
   kernel stores the advanced angle state unreduced) — three different
@@ -439,7 +439,7 @@ cross-vendor sentence; only the E-series leg does.
 - **DEVIATION 831 — decode is prefill resumption; boundary handoff is
   NOT bitwise.** Section 5. The buffer construction (mamba2 DEVIATION
   786 inherited as the principle) earns per-token decode==prefill; the
-  four-piece upstream state is a REPORT plus the S22 continuation
+  four-piece reference state is a REPORT plus the S22 continuation
   input, and the trapezoid's split-scale rounding makes the
   continuation tolerance-checked, never bit-gated — with the
   one-rounding-versus-two argument written out so the missing gate is
@@ -475,9 +475,9 @@ tools/identity_break.py and python/mojolearn/tests/test_ragged_lengths.py.
   BF16/FP16 (the shipped surface's own bf16 casts are refused, not
   reproduced), no multi-block model, no tokenizer, no CuteDSL/TileLang
   surface, no performance number (IDENTITY IS NOT FREE on any vendor).
-- The upstream `Input_States` boundary continuation is supported but NOT
+- The reference `Input_States` boundary continuation is supported but NOT
   claimed bit-equal to an unbroken prefill (DEVIATION 831).
-- No claim is made about upstream's OWN cross-implementation agreement —
+- No claim is made about the reference's OWN cross-implementation agreement —
   at the pin its three trig spellings and two diagonal spellings
   disagree with each other; this profile picks, it does not referee.
 

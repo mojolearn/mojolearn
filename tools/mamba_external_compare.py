@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Compare real upstream CUDA Mamba blocks with retained Mojo native bytes.
+"""Compare real mamba-ssm CUDA Mamba blocks with retained Mojo native bytes.
 
 Main lane only; this program never builds, installs dependencies or rents GPUs.
 Requires an NVIDIA GPU, torch, mamba-ssm (with CUDA extensions), causal-conv1d
 (for Mamba 1/2), generated repository corpus and the IDENTICAL Mamba binding.
-Mamba 3 additionally requires an upstream version containing its Triton SISO
+Mamba 3 additionally requires a mamba-ssm version containing its Triton SISO
 kernel. NO reference implementation fallback is permitted.
 
 Example (from the repository root, after the native certificate succeeds):
@@ -22,7 +22,7 @@ this checkout, preventing stale certificate admission.
 Mamba 3's official SISO wrapper casts derived activations to BF16 internally.
 This is explicitly a MIXED PRECISION comparison, never an FP32/bitwise claim.
 Default tolerances remain strict; a failure is preserved, never relaxed. CLI
-rtol/atol overrides are recorded. Optional timings measure ONLY upstream CUDA
+rtol/atol overrides are recorded. Optional timings measure ONLY mamba-ssm CUDA
 resident forward and forward+backward, including Python dispatch/synchronization.
 They are NOT competitive ratios against Mojo's host-transfer API or certificates.
 Official source entry points:
@@ -198,7 +198,7 @@ def run(args, result):
     eps = meta["rms_eps"]
 
     def forward():
-        # Our public block wraps the upstream mixer with this RMSNorm/residual.
+        # Our public block wraps the mamba-ssm mixer with this RMSNorm/residual.
         normalized = norm * (x / torch.sqrt(x.square().mean(-1, keepdim=True) + eps))
         return x + upstream(normalized)
 

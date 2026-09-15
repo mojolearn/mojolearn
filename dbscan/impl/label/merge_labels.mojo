@@ -152,7 +152,7 @@ def merge_labels(
     # 507): `propagate_label_kernel` reaches a UNIQUE fixed point whatever
     # order its `atomicMin`s land in, and a run cut off at `max_iterations`
     # has not reached it. Under IDENTICAL that is refused; under FAST it is
-    # upstream's silent truncation.
+    # the reference's silent truncation.
     var merged = False
     for _it in range(max_iterations):
         h_m.unsafe_ptr().unsafe_store(0, Int32(0))

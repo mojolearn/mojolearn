@@ -910,7 +910,7 @@ def fit_with_test(
     # run and what CatBoost runs for MULTICLASS symmetric trees. True is
     # `TDocParallelObliviousTreeSearcher`, which is what CatBoost runs for
     # SINGLE-TARGET symmetric trees at `boosting_type=Plain`
-    # (`archive/reference/PORTING.md` 91 F) -- the arm every matched benchmark pins CatBoost
+    # -- the arm every matched benchmark pins CatBoost
     # to.
     #
     # Additive with a default, like `test` above and for the same reason:

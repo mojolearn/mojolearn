@@ -174,4 +174,4 @@ raw-byte agreement, cross-vendor state agreement, successful checkpoint resume,
 and held-out learning are separate checks. A successful guard exit, the exact
 source/binding/input witnesses, and effective failure controls are required
 before admitting the corresponding retained run. No universal bitwise claim
-or upstream feature-parity claim is implied by the alpha export list.
+or reference feature-parity claim is implied by the alpha export list.

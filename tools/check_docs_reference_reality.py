@@ -156,9 +156,9 @@ def main():
                 continue
             if (ROOT / base).exists():
                 continue
-            # UPSTREAM IS CITED ON PURPOSE AND IS NOT CHECKED OUT HERE. This
-            # package implements CatBoost, cuML, cuVS, RAFT, HuggingFace and
-            # mamba_ssm, and naming the exact upstream file is the whole
+            # THE REFERENCE IS CITED ON PURPOSE AND IS NOT CHECKED OUT HERE.
+            # This package cites CatBoost, cuML, cuVS, RAFT, HuggingFace and
+            # mamba_ssm, and naming the exact reference file is the whole
             # point of a DEVIATION block. Those citations are evidence, not
             # broken links, and a checker that flags them is telling the
             # author to stop doing the right thing.

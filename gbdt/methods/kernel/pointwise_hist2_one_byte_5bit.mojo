@@ -25,7 +25,7 @@ slots). This repository already implemented that arithmetic once, in
 `gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_5bit.mojo`, and
 it is written again here rather than imported because CatBoost has two files
 and the file layout here matches that split. It is three lines; it is not the
-hundred-line loop `archive/reference/PORTING.md` 13 is about.
+hundred-line loop.
 
 **They part at two places and both matter:**
 
@@ -47,7 +47,7 @@ hundred-line loop `archive/reference/PORTING.md` 13 is about.
    [[uniform-test-data-hides-permutation]] describes and why the gate for
    this file compares per (feature, fold, stat) and never sums.
 
-DEVIATION (archive/reference/PORTING.md 1, same arithmetic as the other family): CatBoost runs
+DEVIATION (same arithmetic as the other family): CatBoost runs
 this at `BlockSize = 384` (`pointwise_hist2_one_byte_templ.cuh:236`), so
 `384 * 32` floats is 49,152 bytes against Apple's 32,768. The matrix
 resolves the block to the largest that fits the budget (256 on 32 KB) and
@@ -60,11 +60,11 @@ not wrap) even though both currently resolve to the same value: doubling
 the fixed route's block was measured a no-op and reverted -- the negative
 is recorded on `pw_hist2_block_size_for`.
 
-DEVIATION (archive/reference/PORTING.md 11 and 92): their `thread_block_tile<8>::sync()`
+DEVIATION: their `thread_block_tile<8>::sync()`
 (`:79`, `:99`, `:178`) becomes a threadgroup `barrier()`, which is the only
 sync Mojo exposes. That is what forces the uniform-iteration path in
-`compute_point_hist2_loop.mojo`. `archive/reference/PORTING.md` 92 records that the failure
-this prevents does not reproduce on this device, and that the path is kept on
+`compute_point_hist2_loop.mojo`. The failure
+this prevents does not reproduce on this device, and the path is kept on
 the specification rather than on a measurement.
 
 NOT IMPLEMENTED FROM THIS FILE: the `TUnrollsTrait<0, FourElements>`

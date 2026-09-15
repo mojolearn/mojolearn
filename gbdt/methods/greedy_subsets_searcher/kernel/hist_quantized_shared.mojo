@@ -229,7 +229,7 @@ def qh_add_row(
             var j = (tid + i) & 3
             var bin = Int((ci >> UInt32(24 - 8 * j)) & UInt32(255))
             var cell = (((w << 2) + j) << 9) + (bin << 1)
-            # DEVIATION 1898: upstream's atomicAdd is relaxed; the
+            # DEVIATION 1898: the reference's atomicAdd is relaxed; the
             # non-Apple Mojo default is seq_cst.
             _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
                 smem.unsafe_offset(cell), pair[0]

@@ -919,7 +919,7 @@ def bwd_rope_kernel(
     pos0_in: Int32,
 ):
     """One thread per output cell of `[M, n_h*head_dim]`, token-major. ONE
-    kernel serves q and k, because upstream applies one function to both
+    kernel serves q and k, because the reference applies one function to both
     (:158-159) and a second spelling would be a second place to drift.
 
     The forward acts on the pair `(a_i, a_{i+half})` at table column
