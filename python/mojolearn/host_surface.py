@@ -273,6 +273,17 @@ TRAINING_LANE_NAMES = {
     # cells on the M4's CPU column (one core) before the gate ran, and the
     # sabotage build DIVERGENT on all 27.
     "pca-full-whiten": "whitened PCA through the full SVD",
+    # The metrics-classification lane (lane/cpu-training-metrics-classification,
+    # 2026-09-14): precision, recall and F1 under every average, the
+    # zero-division arms, the log loss, the ROC AUC, the confusion matrix, the
+    # precision-recall curve, the three regression errors, the Rand index, the
+    # KL divergence and trustworthiness through
+    # metrics/host/classification_oracle.mojo, exported under the GPU binding's
+    # names from the metrics host binding (the log loss's probability check,
+    # probability_rows_f32, from the core host binding). IDENTICAL x4 on all
+    # nine train cells on the M4's CPU column (one core) before the gate ran,
+    # and the sabotage build DIVERGENT on all nine.
+    "metrics-classification": "the classification, ranking and regression metrics",
     # Workstream E batch 3 (2026-09-14): gradient boosting on its default
     # symmetric tree with the Logloss loss trains through
     # gbdt/host/gbdt_oracle.mojo, the device trainer restated on the host,
@@ -437,7 +448,7 @@ FAMILIES = (
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "argmax_rows_f32",
             "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
-            "scale_rows_f32",
+            "scale_rows_f32", "probability_rows_f32",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,
@@ -513,7 +524,7 @@ FAMILIES = (
         routes="_mojolearn_metrics",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("metrics", "spectral", "spectral-precomputed"),
+        training_lanes=("metrics", "spectral", "spectral-precomputed", "metrics-classification"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -523,10 +534,17 @@ FAMILIES = (
             "metrics.homogeneity_score", "metrics.completeness_score",
             "metrics.v_measure_score", "metrics.r2_score",
             "metrics.silhouette_score", "metrics.silhouette_samples",
+            "metrics.rand_score", "metrics.precision_score", "metrics.recall_score",
+            "metrics.f1_score", "metrics.log_loss", "metrics.roc_auc_score",
+            "metrics.confusion_matrix", "metrics.precision_recall_curve",
+            "metrics.mean_squared_error", "metrics.mean_absolute_error",
+            "metrics.root_mean_squared_error", "metrics.kl_divergence",
+            "metrics.trustworthiness",
         ),
-        display="the label, r2 and silhouette metrics and spectral clustering",
+        display="the label, classification, ranking, regression, r2, KL, silhouette and trustworthiness metrics and spectral clustering",
         host_modules=(
             "metrics/host/metrics_oracle.mojo",
+            "metrics/host/classification_oracle.mojo",
             "spectral/host/spectral_oracle.mojo",
             "cluster/host/kmeans_oracle.mojo",
             "core/knn_host_predict.mojo",
@@ -538,6 +556,10 @@ FAMILIES = (
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
             "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
+            "rand_score", "mean_squared_error", "mean_absolute_error",
+            "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",
+            "log_loss", "confusion_matrix", "precision_recall_fscore",
+            "kl_divergence", "trustworthiness",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         ships_in_wheel=True,

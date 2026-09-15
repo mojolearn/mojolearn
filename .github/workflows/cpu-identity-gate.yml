@@ -92,6 +92,7 @@ on:
       - "dbscan/host/dbscan_oracle.mojo"
       - "cluster/host/kmeans_oracle.mojo"
       - "metrics/host/metrics_oracle.mojo"
+      - "metrics/host/classification_oracle.mojo"
       - "spectral/host/spectral_oracle.mojo"
       - "tsa/checks/kpss_oracle.mojo"
       - "preprocessing/host/scaler_oracle.mojo"
@@ -483,7 +484,8 @@ jobs:
       # in xorwow by one extra step before every split fraction (every
       # isolation tree, in kmeans_oracle by one extra unit in every
       # quantized centroid-sum cell, in metrics_oracle by shifting every
-      # slab tree's chunk boundaries by one value, in spectral_oracle by
+      # slab tree's chunk boundaries by one value (classification_oracle's
+      # log loss, regression errors and KL divergence fold through it), in spectral_oracle by
       # seeding the recluster one draw off, in scaler_oracle by the same
       # shifted tree plus the min-max offset's subtraction as an addition,
       # in qn_oracle by walking the solver's dot chains descending, in

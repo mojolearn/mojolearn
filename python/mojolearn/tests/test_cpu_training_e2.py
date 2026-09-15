@@ -112,7 +112,7 @@ def test_manifest_covers_metrics():
     fam = host_surface.family("metrics")
     assert fam["routes"] == "_mojolearn_metrics"
     # spectral-precomputed joined the family on lane/cpu-training-batch2-declare.
-    assert fam["training_lanes"] == ("metrics", "spectral", "spectral-precomputed")
+    assert fam["training_lanes"] == ("metrics", "spectral", "spectral-precomputed", "metrics-classification")
     assert METRICS_ORACLE in fam["host_modules"]
     assert (ROOT / METRICS_ORACLE).is_file()
     assert (ROOT / "bindings/build_metrics_host.sh").is_file()
@@ -126,8 +126,9 @@ def test_metrics_binding_registers_the_lane_entries():
     for name in METRICS_EXPORTS + ("metrics_vendor", "metrics_numeric_mode"):
         assert f'("{name}")' in src, f"the metrics host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name} for metrics"
-    for absent in ("rand_score", "trustworthiness", "umap_fit_transform",
-                   "kl_divergence", "log_loss", "confusion_matrix"):
+    # rand_score, trustworthiness, kl_divergence, log_loss and
+    # confusion_matrix are registered since the metrics-classification lane.
+    for absent in ("umap_fit_transform", "umap_transform", "graph_parallel_available"):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
 
