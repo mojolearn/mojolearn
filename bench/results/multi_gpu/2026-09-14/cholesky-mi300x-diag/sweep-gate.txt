@@ -1,0 +1,53 @@
+arch=gfx942
+diag exit=0
+PASS cholesky factor+solve 300 2 info 0 devices 2
+PASS cholesky factor+solve 300 3 info 0 devices 2
+PASS cholesky factor+solve 400 2 info 0 devices 2
+PASS cholesky factor+solve 400 3 info 0 devices 2
+PASS cholesky factor+solve 450 2 info 0 devices 2
+PASS cholesky factor+solve 450 3 info 0 devices 2
+PASS cholesky factor+solve 480 2 info 0 devices 2
+PASS cholesky factor+solve 480 3 info 0 devices 2
+PASS cholesky factor+solve 500 2 info 0 devices 2
+PASS cholesky factor+solve 500 3 info 0 devices 2
+PASS cholesky factor+solve 510 2 info 0 devices 2
+PASS cholesky factor+solve 510 3 info 0 devices 2
+PASS cholesky factor+solve 511 2 info 0 devices 2
+PASS cholesky factor+solve 511 3 info 0 devices 2
+PASS cholesky factor+solve 512 2 info 0 devices 2
+PASS cholesky factor+solve 512 3 info 0 devices 2
+DIAG n513-r2 column 0 rows differing 0 first row -1
+DIAG n513-r2 column 1 rows differing 513 first row 0
+DIAG n513-r2 trace 0	chol.solve.forward	f32	1026	9e249d211a9cf9d4   VS   0	chol.solve.forward	f32	1026	f7c6a7c436c780fe
+DIAG n513-r3 column 0 rows differing 0 first row -1
+DIAG n513-r3 column 1 rows differing 513 first row 0
+DIAG n513-r3 column 2 rows differing 513 first row 0
+DIAG n513-r3 trace 0	chol.solve.forward	f32	1539	0aff087be8bbb00e   VS   0	chol.solve.forward	f32	1539	75726b4f9aa8fd2b
+DIAG n520-r2 column 0 rows differing 0 first row -1
+DIAG n520-r2 column 1 rows differing 520 first row 0
+DIAG n520-r2 trace 0	chol.solve.forward	f32	1040	51497b89f9c8a10b   VS   0	chol.solve.forward	f32	1040	b1417e6f723051ea
+DIAG n520-r3 column 0 rows differing 0 first row -1
+DIAG n520-r3 column 1 rows differing 520 first row 0
+DIAG n520-r3 column 2 rows differing 520 first row 0
+DIAG n520-r3 trace 0	chol.solve.forward	f32	1560	f944e16e8b6ad034   VS   0	chol.solve.forward	f32	1560	0592df3fea7d5405
+DIAG n600-r2 column 0 rows differing 0 first row -1
+DIAG n600-r2 column 1 rows differing 600 first row 0
+DIAG n600-r2 trace 0	chol.solve.forward	f32	1200	24d17c7eb1229ef6   VS   0	chol.solve.forward	f32	1200	1af5135b87f01883
+DIAG n600-r3 column 0 rows differing 0 first row -1
+DIAG n600-r3 column 1 rows differing 600 first row 0
+DIAG n600-r3 column 2 rows differing 600 first row 0
+DIAG n600-r3 trace 0	chol.solve.forward	f32	1800	bcf47b5ae7bd4e7b   VS   0	chol.solve.forward	f32	1800	c56fdec04d2cae4c
+DIAG n800-r2 column 0 rows differing 0 first row -1
+DIAG n800-r2 column 1 rows differing 800 first row 0
+DIAG n800-r2 trace 0	chol.solve.forward	f32	1600	cabbf4a39ac7cbdc   VS   0	chol.solve.forward	f32	1600	3991b6351a6a500c
+DIAG n800-r3 column 0 rows differing 0 first row -1
+DIAG n800-r3 column 1 rows differing 800 first row 0
+DIAG n800-r3 column 2 rows differing 800 first row 0
+DIAG n800-r3 trace 0	chol.solve.forward	f32	2400	9b8d0bca4da4a8c1   VS   0	chol.solve.forward	f32	2400	eec61cfaa8ac41fd
+DIAG n1024-r2 column 0 rows differing 0 first row -1
+DIAG n1024-r2 column 1 rows differing 1024 first row 0
+DIAG n1024-r2 trace 0	chol.solve.forward	f32	2048	444850dd8abf8fe9   VS   0	chol.solve.forward	f32	2048	7d5e1e5fa25e42c1
+DIAG n1024-r3 column 0 rows differing 0 first row -1
+DIAG n1024-r3 column 1 rows differing 1024 first row 0
+DIAG n1024-r3 column 2 rows differing 1024 first row 0
+DIAG n1024-r3 trace 0	chol.solve.forward	f32	3072	3838a000b66229b1   VS   0	chol.solve.forward	f32	3072	12f583a5f568d07d

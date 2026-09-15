@@ -106,6 +106,19 @@ def run_case(n: Int, nrhs: Int, broken: Bool, jitter: Float32, count: Int, root:
     _set(count, smany)
     var x2 = cholesky_solve_host(many, b, nrhs)
     d = first_divergence(sone, smany)
+    if d != "" and String(getenv("MOJOLEARN_CHOLESKY_CHECK_DIAG", "0")) == "1":
+        # Diagnostic: name the first differing row of every right-hand side.
+        for j in range(nrhs):
+            var bad = -1
+            var count = 0
+            for i in range(n):
+                if bitcast[DType.uint32](x1[i * nrhs + j]) != bitcast[DType.uint32](x2[i * nrhs + j]):
+                    count += 1
+                    if bad < 0:
+                        bad = i
+            print("DIAG", name, "column", j, "rows differing", count, "first row", bad)
+        print("DIAG", name, "trace", d)
+        return
     if d != "":
         raise Error("solve trace differs " + name + ": " + d)
     _same(x1, x2, name + " solution")
@@ -119,6 +132,14 @@ def main() raises:
     var root = String(getenv("MOJOLEARN_CHOLESKY_CHECK_DIR", "/tmp"))
     var ns: List[Int] = [1, 2, 31, 32, 33, 65, 100, 257, 513]
     var rhs: List[Int] = [1, 2, 3, 7]
+    if String(getenv("MOJOLEARN_CHOLESKY_CHECK_DIAG", "0")) == "1":
+        # Size sweep around the shape that diverged on two MI300X (n=513, two right-hand sides).
+        var sweep: List[Int] = [300, 400, 450, 480, 500, 510, 511, 512, 513, 520, 600, 800, 1024]
+        var sweep_rhs: List[Int] = [2, 3]
+        for n in sweep:
+            for r in sweep_rhs:
+                run_case(n, r, False, chol_jitter_pinned(), count, root)
+        return
     for n in ns:
         for r in rhs:
             run_case(n, r, False, chol_jitter_pinned(), count, root)

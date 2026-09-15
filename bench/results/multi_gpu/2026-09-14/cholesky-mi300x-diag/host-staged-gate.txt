@@ -1,0 +1,30 @@
+arch=gfx942
+full exit=0 PASS=40 PASS cholesky parallel gate
+full-repeat exit=0 PASS=40 PASS cholesky parallel gate
+sweep exit=0
+PASS cholesky factor+solve 300 2 info 0 devices 2
+PASS cholesky factor+solve 300 3 info 0 devices 2
+PASS cholesky factor+solve 400 2 info 0 devices 2
+PASS cholesky factor+solve 400 3 info 0 devices 2
+PASS cholesky factor+solve 450 2 info 0 devices 2
+PASS cholesky factor+solve 450 3 info 0 devices 2
+PASS cholesky factor+solve 480 2 info 0 devices 2
+PASS cholesky factor+solve 480 3 info 0 devices 2
+PASS cholesky factor+solve 500 2 info 0 devices 2
+PASS cholesky factor+solve 500 3 info 0 devices 2
+PASS cholesky factor+solve 510 2 info 0 devices 2
+PASS cholesky factor+solve 510 3 info 0 devices 2
+PASS cholesky factor+solve 511 2 info 0 devices 2
+PASS cholesky factor+solve 511 3 info 0 devices 2
+PASS cholesky factor+solve 512 2 info 0 devices 2
+PASS cholesky factor+solve 512 3 info 0 devices 2
+PASS cholesky factor+solve 513 2 info 0 devices 2
+PASS cholesky factor+solve 513 3 info 0 devices 2
+PASS cholesky factor+solve 520 2 info 0 devices 2
+PASS cholesky factor+solve 520 3 info 0 devices 2
+PASS cholesky factor+solve 600 2 info 0 devices 2
+PASS cholesky factor+solve 600 3 info 0 devices 2
+PASS cholesky factor+solve 800 2 info 0 devices 2
+PASS cholesky factor+solve 800 3 info 0 devices 2
+PASS cholesky factor+solve 1024 2 info 0 devices 2
+PASS cholesky factor+solve 1024 3 info 0 devices 2

@@ -1,0 +1,21 @@
+arch=gfx942
+peer exit=0
+peer-repeat exit=0
+/root/gemm_leg_out/peer/peer.log:PEERCOPY cells 4096 bytes 16384 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer.log:PEERCOPY cells 65536 bytes 262144 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer.log:PEERCOPY cells 262144 bytes 1048576 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer.log:PEERCOPY cells 262145 bytes 1048580 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer.log:PEERCOPY cells 263169 bytes 1052676 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer.log:PEERCOPY cells 524288 bytes 2097152 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer.log:PEERCOPY cells 1048576 bytes 4194304 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer.log:PEERCOPY cells 4194304 bytes 16777216 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer.log:PEERCOPY cases with a difference: 0
+/root/gemm_leg_out/peer/peer-repeat.log:PEERCOPY cells 4096 bytes 16384 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer-repeat.log:PEERCOPY cells 65536 bytes 262144 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer-repeat.log:PEERCOPY cells 262144 bytes 1048576 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer-repeat.log:PEERCOPY cells 262145 bytes 1048580 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer-repeat.log:PEERCOPY cells 263169 bytes 1052676 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer-repeat.log:PEERCOPY cells 524288 bytes 2097152 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer-repeat.log:PEERCOPY cells 1048576 bytes 4194304 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer-repeat.log:PEERCOPY cells 4194304 bytes 16777216 peer_clone differing 0 host_staged differing 0
+/root/gemm_leg_out/peer/peer-repeat.log:PEERCOPY cases with a difference: 0
