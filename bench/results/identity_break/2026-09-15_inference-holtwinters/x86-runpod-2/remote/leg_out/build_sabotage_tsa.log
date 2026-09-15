@@ -1,0 +1,68 @@
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:211:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[i] = fitted.level[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:212:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[components_len + i] = fitted.trend[i]
+            ~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:213:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[2 * components_len + i] = fitted.season[i]
+            ~~^~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:215:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sp[b] = fitted.sse[b]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:216:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sp[batch_size + b] = fitted.alpha[b]
+            ~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:217:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sp[2 * batch_size + b] = fitted.beta[b]
+            ~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:218:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sp[3 * batch_size + b] = fitted.gamma[b]
+            ~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:227:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if isfinite(cp[i]):
+                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:228:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    cp[i] = bitcast[DType.float32](bitcast[DType.uint32](cp[i]) ^ UInt32(1))
+                    ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:228:76: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    cp[i] = bitcast[DType.float32](bitcast[DType.uint32](cp[i]) ^ UInt32(1))
+                                                                         ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:230:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if isfinite(sp[i]):
+                            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:231:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sp[i] = bitcast[DType.float32](bitcast[DType.uint32](sp[i]) ^ UInt32(1))
+                    ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:231:76: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    sp[i] = bitcast[DType.float32](bitcast[DType.uint32](sp[i]) ^ UInt32(1))
+                                                                         ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:232:16: error: use of unknown declaration 'b'
+            fp[b] = Int32(fitted.niter[b])
+               ^
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:233:29: error: use of unknown declaration 'b'
+            fp[batch_size + b] = Int32(fitted.criterion[b])
+                            ^
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:314:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            fp[b] = Int32(1) if st.stationary[b] else Int32(0)
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tsa_host.mojo:315:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sp[b] = st.stat[b]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+BINCACHE negative-miss+build-failed bindings/build_tsa_host.sh key=ea4fdbec2235b9c2 seconds=0.6

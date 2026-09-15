@@ -1,0 +1,19 @@
+# vendor=cpu-amd-epyc-9655p-96-core-processor commit=27b6a850506fede9873401280d8fe49285e00b21 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655P 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_core_host', '_mojolearn_forecast_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-15 22:10:08  Linux-7.0.0-30-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| holtwinters            | 9781c2061a287937 | b2a5df45db1395b0 | 66f688c307cabc3b | 560cdc45a69cc987 | db35c88da059e9e1 | db35c88da059e9e1 | 9781c2061a287937 | 8fb4dd76d8080a46 | 8fa4116875bdf59c |
+| holtwinters infer      | f930b5ed0ef2c318 | a48df2766423502f | bfa4a149ae74602c | 5df1cfaa8f4b4e78 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | f930b5ed0ef2c318 | baeea8494596eeb9 | c03b71a1af7f0d5c |
+| holtwinters model      | 386ea9716a68db57 | b8929131c9bb8ffe | 0bbf65d228c3a691 | 8811438af56608f5 | e0329aaf3a587b5d | e0329aaf3a587b5d | 386ea9716a68db57 | 122949dbfaf73984 | 6fa74fd4f6957e5d |
+| holtwinters batch      | 093a7898c986d9bc | 91f206e60b961689 | f064bf24785a3ab0 | 1121af8980a0f61f | 0b25b078a96b247e | 0b25b078a96b247e | 093a7898c986d9bc | 7428081677199491 | 9c696ef56c5a8db9 |
+| holtwinters-multiplicative | d49a5a62e2e56bb6 | 8ea8adf3ce3677e9 | b4527085a076f4fe | e6cdbd540175f484 | db35c88da059e9e1 | db35c88da059e9e1 | d49a5a62e2e56bb6 | 55b8c755b3169576 | cbf95f4b980df3c4 |
+| holtwinters-multiplicative infer | 733c9600a564ad92 | 54aab1a29ccacdfe | 4c14823c8b1dbcd7 | c0221c39c93138de | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 733c9600a564ad92 | 899a6730dedaa535 | 462c8ebc8d2efa04 |
+| holtwinters-multiplicative model | b8a024b882e689d8 | e57730b49d91cf1a | 1be92a88fe27b753 | 3998344adee0204b | fb2179fa46b8c783 | fb2179fa46b8c783 | b8a024b882e689d8 | 50be27dd6867acbd | 432eee1e5166113f |
+| holtwinters-multiplicative batch | 68a40b58dc692b32 | da0498edc9d73bae | 17d71141dbd7a3c6 | 97d1ce7117d1cb95 | 0b25b078a96b247e | 0b25b078a96b247e | 68a40b58dc692b32 | 2793fec672ddc457 | 60acbb07363d6af3 |
+
+cells=18 stable=18 moved=0 refused=0
+infer: stable=18
+model: stable=18
+batch: stable=18
+wrote /root/leg_out/cpu-x86.host-infer.json

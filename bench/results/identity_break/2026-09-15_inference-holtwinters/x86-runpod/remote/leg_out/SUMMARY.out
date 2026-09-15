@@ -1,0 +1,242 @@
+pytest	1
+ib_hw	0
+ib_hw_sab	0
+ib_hw_host	0
+ib_ar	0
+ib_ar_sab	0
+diff_hw	0
+diff_hw_sab	1
+owed	1
+diff_hw_host	1
+diff_ar	1
+diff_ar_sab	1
+gate	0
+gate_sab	0
+gate_fcsab	0
+build_main_forecast	0
+wheel_new	1
+wheel_old	1
+install	1
+gate_installed	2
+installed_smoke	1
+summary: DIVERGENT=3, IDENTICAL=24
+summary (infer/model): DIVERGENT=3, IDENTICAL=24, N/A=24, ONE-COLUMN=3
+summary (batch): DIVERGENT=3, IDENTICAL=24
+summary (rlpair): 
+REQUIRE FAIL arima-011/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 4 over ['arima', 'arima-011', 'arima-seasonal-c']: 75 short
+summary: IDENTICAL=27
+summary (infer/model): IDENTICAL=27, N/A=24, ONE-COLUMN=3
+summary (batch): IDENTICAL=27
+summary (rlpair): 
+REQUIRE FAIL arima-011/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-011/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima-seasonal-c/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL arima/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 4 over ['arima', 'arima-011', 'arima-seasonal-c']: 75 short
+summary: IDENTICAL=18
+summary (infer/model): IDENTICAL=18, ONE-COLUMN=18
+summary (batch): IDENTICAL=18
+summary (rlpair): 
+REQUIRE FAIL holtwinters-multiplicative/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 4 over ['holtwinters', 'holtwinters-multiplicative']: 18 short
+summary: DIVERGENT=18
+summary (infer/model): DIVERGENT=18, ONE-COLUMN=18
+summary (batch): DIVERGENT=18
+summary (rlpair): 
+REQUIRE FAIL holtwinters-multiplicative/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 4 over ['holtwinters', 'holtwinters-multiplicative']: 18 short
+summary: IDENTICAL=18
+summary (infer/model): IDENTICAL=18, OWED=18
+summary (batch): IDENTICAL=18
+summary (rlpair): 
+require-columns 4 over ['holtwinters', 'holtwinters-multiplicative']: OK (18 OWED)
+summary (owed): OWED=18; the next release record owes exactly these cell parts; wrote /root/leg_out/owed_cells.json
+gate verdict IDENTICAL (21 fixtures, 3 GPU columns, exit 0)
+gate verdict EXPECTED MISMATCH SEEN (18 fixtures, 0 GPU columns, exit 0)
+gate: import failed: ModuleNotFoundError: No module named 'mojolearn'
+gate verdict EXPECTED MISMATCH SEEN (21 fixtures, 0 GPU columns, exit 0)
+owed verdict FAIL (12 of 18 owed cell part(s) moved, 6 failure(s))
+1 failed, 165 passed in 1.08s
+forecast 0
+tsa 3
+arima 2

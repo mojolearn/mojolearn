@@ -1,0 +1,107 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 2 lane(s); 163 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9655-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_core_host', '_mojolearn_forecast_host', '_mojolearn_tsa_host'] commit=6238827b9c1d144565095f2b65fd8f07017c2802
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9655-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| holtwinters-multiplicative/base | DIVERGENT  | parts differ: forecast; agree: - | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | ecf0a70f47b690d0 |
+| holtwinters-multiplicative/denormal | DIVERGENT  | parts differ: forecast; agree: - | db35c88da059e9e1 | db35c88da059e9e1 | 6735b93b8cf9ec19 |
+| holtwinters-multiplicative/denormal_ftz | DIVERGENT  | parts differ: forecast; agree: - | db35c88da059e9e1 | db35c88da059e9e1 | 6735b93b8cf9ec19 |
+| holtwinters-multiplicative/dupes | DIVERGENT  | parts differ: forecast; agree: - | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | ecf0a70f47b690d0 |
+| holtwinters-multiplicative/hashed | DIVERGENT  | parts differ: forecast; agree: - | b4527085a076f4fe | b4527085a076f4fe | 44382d15ac9e10f5 |
+| holtwinters-multiplicative/negative | DIVERGENT  | parts differ: forecast; agree: - | cbf95f4b980df3c4 | cbf95f4b980df3c4 | 3bd3ca7d74842231 |
+| holtwinters-multiplicative/odd | DIVERGENT  | parts differ: forecast; agree: - | 55b8c755b3169576 | 55b8c755b3169576 | 32afd82f67d0a563 |
+| holtwinters-multiplicative/ties | DIVERGENT  | parts differ: forecast; agree: - | 8ea8adf3ce3677e9 | 8ea8adf3ce3677e9 | 27a878ed67e06961 |
+| holtwinters-multiplicative/wide | DIVERGENT  | parts differ: forecast; agree: - | e6cdbd540175f484 | e6cdbd540175f484 | 0e2e1b6a4613722e |
+| holtwinters/base             | DIVERGENT  | parts differ: forecast; agree: - | 9781c2061a287937 | 9781c2061a287937 | 043d64237ccff2ff |
+| holtwinters/denormal         | DIVERGENT  | parts differ: forecast; agree: - | db35c88da059e9e1 | db35c88da059e9e1 | 6735b93b8cf9ec19 |
+| holtwinters/denormal_ftz     | DIVERGENT  | parts differ: forecast; agree: - | db35c88da059e9e1 | db35c88da059e9e1 | 6735b93b8cf9ec19 |
+| holtwinters/dupes            | DIVERGENT  | parts differ: forecast; agree: - | 9781c2061a287937 | 9781c2061a287937 | 043d64237ccff2ff |
+| holtwinters/hashed           | DIVERGENT  | parts differ: forecast; agree: - | 66f688c307cabc3b | 66f688c307cabc3b | 98ad8da759c5b1bc |
+| holtwinters/negative         | DIVERGENT  | parts differ: forecast; agree: - | 8fa4116875bdf59c | 8fa4116875bdf59c | 137ff9dcf7f8d267 |
+| holtwinters/odd              | DIVERGENT  | parts differ: forecast; agree: - | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 | 88fce772bb314e49 |
+| holtwinters/ties             | DIVERGENT  | parts differ: forecast; agree: - | b2a5df45db1395b0 | b2a5df45db1395b0 | 521107c88c61bf0c |
+| holtwinters/wide             | DIVERGENT  | parts differ: forecast; agree: - | 560cdc45a69cc987 | 560cdc45a69cc987 | 0b117c34ba705aa8 |
+
+summary: DIVERGENT=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9655-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| holtwinters-multiplicative/base | infer  | DIVERGENT    | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 | ffd8dcde861173f0 |
+| holtwinters-multiplicative/base | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 12d2f21f3e97de97 |
+| holtwinters-multiplicative/base | batch  | DIVERGENT    | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 | dbd252a13ce5dd66 |
+| holtwinters-multiplicative/denormal | infer  | DIVERGENT    | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | e4d1fb4fb6483655 |
+| holtwinters-multiplicative/denormal | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 39c03bd2f4382c67 |
+| holtwinters-multiplicative/denormal | batch  | DIVERGENT    | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 875a061dd457af0a |
+| holtwinters-multiplicative/denormal_ftz | infer  | DIVERGENT    | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | e4d1fb4fb6483655 |
+| holtwinters-multiplicative/denormal_ftz | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 39c03bd2f4382c67 |
+| holtwinters-multiplicative/denormal_ftz | batch  | DIVERGENT    | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 875a061dd457af0a |
+| holtwinters-multiplicative/dupes | infer  | DIVERGENT    | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 | ffd8dcde861173f0 |
+| holtwinters-multiplicative/dupes | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 12d2f21f3e97de97 |
+| holtwinters-multiplicative/dupes | batch  | DIVERGENT    | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 | dbd252a13ce5dd66 |
+| holtwinters-multiplicative/hashed | infer  | DIVERGENT    | 4c14823c8b1dbcd7 | 4c14823c8b1dbcd7 | 4c14823c8b1dbcd7 | ba5c1c712369662a |
+| holtwinters-multiplicative/hashed | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 2bd0886252faba8b |
+| holtwinters-multiplicative/hashed | batch  | DIVERGENT    | 17d71141dbd7a3c6 | 17d71141dbd7a3c6 | 17d71141dbd7a3c6 | d6248b43bfa604c0 |
+| holtwinters-multiplicative/negative | infer  | DIVERGENT    | 462c8ebc8d2efa04 | 462c8ebc8d2efa04 | 462c8ebc8d2efa04 | 2278107238db7cc4 |
+| holtwinters-multiplicative/negative | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 3c29650215ecccac |
+| holtwinters-multiplicative/negative | batch  | DIVERGENT    | 60acbb07363d6af3 | 60acbb07363d6af3 | 60acbb07363d6af3 | fa0a7f5733e5d02f |
+| holtwinters-multiplicative/odd | infer  | DIVERGENT    | 899a6730dedaa535 | 899a6730dedaa535 | 899a6730dedaa535 | 86e93066bca6a0ba |
+| holtwinters-multiplicative/odd | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | d2303d837887128d |
+| holtwinters-multiplicative/odd | batch  | DIVERGENT    | 2793fec672ddc457 | 2793fec672ddc457 | 2793fec672ddc457 | 4a645ff068810d38 |
+| holtwinters-multiplicative/ties | infer  | DIVERGENT    | 54aab1a29ccacdfe | 54aab1a29ccacdfe | 54aab1a29ccacdfe | 224a352fced77780 |
+| holtwinters-multiplicative/ties | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 929a8a6c362406c9 |
+| holtwinters-multiplicative/ties | batch  | DIVERGENT    | da0498edc9d73bae | da0498edc9d73bae | da0498edc9d73bae | 03f77550599fb187 |
+| holtwinters-multiplicative/wide | infer  | DIVERGENT    | c0221c39c93138de | c0221c39c93138de | c0221c39c93138de | d5484588d9d2ee5b |
+| holtwinters-multiplicative/wide | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | ae6694422d7fb9eb |
+| holtwinters-multiplicative/wide | batch  | DIVERGENT    | 97d1ce7117d1cb95 | 97d1ce7117d1cb95 | 97d1ce7117d1cb95 | b2793f2126cfb98b |
+| holtwinters/base             | infer  | DIVERGENT    | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | 3302f9748bad900f |
+| holtwinters/base             | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 66dc70355f2fbd76 |
+| holtwinters/base             | batch  | DIVERGENT    | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc | 87e3e88933cfbb99 |
+| holtwinters/denormal         | infer  | DIVERGENT    | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | e4d1fb4fb6483655 |
+| holtwinters/denormal         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 316b19263f12c2a4 |
+| holtwinters/denormal         | batch  | DIVERGENT    | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 875a061dd457af0a |
+| holtwinters/denormal_ftz     | infer  | DIVERGENT    | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | e4d1fb4fb6483655 |
+| holtwinters/denormal_ftz     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 316b19263f12c2a4 |
+| holtwinters/denormal_ftz     | batch  | DIVERGENT    | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 875a061dd457af0a |
+| holtwinters/dupes            | infer  | DIVERGENT    | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | 3302f9748bad900f |
+| holtwinters/dupes            | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 66dc70355f2fbd76 |
+| holtwinters/dupes            | batch  | DIVERGENT    | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc | 87e3e88933cfbb99 |
+| holtwinters/hashed           | infer  | DIVERGENT    | bfa4a149ae74602c | bfa4a149ae74602c | bfa4a149ae74602c | 167a7213b6498ff7 |
+| holtwinters/hashed           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0a31ec9d4f78d779 |
+| holtwinters/hashed           | batch  | DIVERGENT    | f064bf24785a3ab0 | f064bf24785a3ab0 | f064bf24785a3ab0 | 12b838f9c5430235 |
+| holtwinters/negative         | infer  | DIVERGENT    | c03b71a1af7f0d5c | c03b71a1af7f0d5c | c03b71a1af7f0d5c | b2cac8c37b12d9a7 |
+| holtwinters/negative         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | e02102d2d8829d0d |
+| holtwinters/negative         | batch  | DIVERGENT    | 9c696ef56c5a8db9 | 9c696ef56c5a8db9 | 9c696ef56c5a8db9 | bffc6945cb987ef5 |
+| holtwinters/odd              | infer  | DIVERGENT    | baeea8494596eeb9 | baeea8494596eeb9 | baeea8494596eeb9 | 00dc7617b7ce88f7 |
+| holtwinters/odd              | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | a171abb48c4aae89 |
+| holtwinters/odd              | batch  | DIVERGENT    | 7428081677199491 | 7428081677199491 | 7428081677199491 | 1fde9b74a2a258dc |
+| holtwinters/ties             | infer  | DIVERGENT    | a48df2766423502f | a48df2766423502f | a48df2766423502f | 65808b6378f92981 |
+| holtwinters/ties             | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | e4efb9da166756c2 |
+| holtwinters/ties             | batch  | DIVERGENT    | 91f206e60b961689 | 91f206e60b961689 | 91f206e60b961689 | 97e6ff8f76a3494e |
+| holtwinters/wide             | infer  | DIVERGENT    | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 | 10f2b66df27f6a77 |
+| holtwinters/wide             | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 7145e6651e39dc9a |
+| holtwinters/wide             | batch  | DIVERGENT    | 1121af8980a0f61f | 1121af8980a0f61f | 1121af8980a0f61f | b455a1a12a1962f9 |
+
+summary (infer/model): DIVERGENT=18, ONE-COLUMN=18
+summary (batch): DIVERGENT=18
+summary (rlpair): 
+REQUIRE FAIL holtwinters-multiplicative/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters-multiplicative/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL holtwinters/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 4 over ['holtwinters', 'holtwinters-multiplicative']: 18 short

@@ -1,0 +1,23 @@
+Imported from /root/mojolearn/bindings/_mojolearn_arima_host.mojo:48:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_arima_host.mojo:56:
+./arima/host/arima_oracle.mojo:1004:16: warning: 'if' condition always evaluates to 'True'; 'else' branch is unreachable
+    if AH_PAST > 0:
+               ^
+/root/mojolearn/bindings/_mojolearn_arima_host.mojo:193:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+Included from /root/mojolearn/bindings/_mojolearn_arima_host.mojo:65:
+./bindings/arima_host_predict.mojo:143:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+Included from /root/mojolearn/bindings/_mojolearn_arima_host.mojo:65:
+./bindings/arima_host_predict.mojo:215:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+built python/mojolearn/host-sabotage/_mojolearn_arima_host.so
+BINCACHE negative-miss+built-uploaded bindings/build_arima_host.sh key=8635e6f39ba2e7c6 seconds=12.5

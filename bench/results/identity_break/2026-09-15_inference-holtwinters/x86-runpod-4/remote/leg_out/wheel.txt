@@ -1,0 +1,8 @@
+-rw-r--r-- 1 root root 1045819 Sep 15 22:13 /tmp/wheel_new/mojolearn-0.8.5-py3-none-linux_x86_64.whl
+-rw-r--r-- 1 root root 1036273 Sep 15 22:13 /tmp/wheel_old/mojolearn-0.8.5-py3-none-linux_x86_64.whl
+-rwxr-xr-x 1 root root 267200 Sep 15 22:13 /tmp/oldhost/_mojolearn_forecast_host.so
+-rwxr-xr-x 1 root root 298536 Sep 15 22:13 python/mojolearn/host/_mojolearn_forecast_host.so
+wheel_new mojolearn/host/_mojolearn_core_host.so 594488 170826
+wheel_new mojolearn/host/_mojolearn_forecast_host.so 298536 78756
+wheel_old mojolearn/host/_mojolearn_core_host.so 594488 170826
+wheel_old mojolearn/host/_mojolearn_forecast_host.so 267200 69213

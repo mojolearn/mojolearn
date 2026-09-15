@@ -1,0 +1,19 @@
+owed holtwinters-multiplicative/base model: production b8a024b882e689d8 sabotage 01f013e9cc47e7a2 MOVED
+owed holtwinters-multiplicative/dupes model: production b8a024b882e689d8 sabotage 01f013e9cc47e7a2 MOVED
+owed holtwinters-multiplicative/hashed model: production 1be92a88fe27b753 sabotage 4f9eff4c6215a66f MOVED
+owed holtwinters-multiplicative/negative model: production 432eee1e5166113f sabotage b817fbb7febcb46b MOVED
+owed holtwinters-multiplicative/odd model: production 50be27dd6867acbd sabotage 7159969483d02314 MOVED
+owed holtwinters-multiplicative/ties model: production e57730b49d91cf1a sabotage e375f3d79200bac7 MOVED
+owed holtwinters/base model: production 386ea9716a68db57 sabotage 3f559d95dab5b295 MOVED
+owed holtwinters/dupes model: production 386ea9716a68db57 sabotage 3f559d95dab5b295 MOVED
+owed holtwinters/hashed model: production 0bbf65d228c3a691 sabotage eab4a2942ad59569 MOVED
+owed holtwinters/negative model: production 6fa74fd4f6957e5d sabotage 806aa886b1e315cd MOVED
+owed holtwinters/odd model: production 122949dbfaf73984 sabotage e623bde495743401 MOVED
+owed holtwinters/ties model: production b8929131c9bb8ffe sabotage d2916f7c97b065c8 MOVED
+owed FAIL: holtwinters-multiplicative/denormal model: DID NOT MOVE under the sabotage host set (fb2179fa46b8c783); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: holtwinters-multiplicative/denormal_ftz model: DID NOT MOVE under the sabotage host set (fb2179fa46b8c783); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: holtwinters-multiplicative/wide model: DID NOT MOVE under the sabotage host set (3998344adee0204b); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: holtwinters/denormal model: DID NOT MOVE under the sabotage host set (e0329aaf3a587b5d); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: holtwinters/denormal_ftz model: DID NOT MOVE under the sabotage host set (e0329aaf3a587b5d); an owed cell that sabotage cannot move rests on nothing
+owed FAIL: holtwinters/wide model: DID NOT MOVE under the sabotage host set (8811438af56608f5); an owed cell that sabotage cannot move rests on nothing
+owed verdict FAIL (12 of 18 owed cell part(s) moved, 6 failure(s))

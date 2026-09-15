@@ -1,0 +1,144 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 2 lane(s); 163 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_core_host', '_mojolearn_forecast_host'] commit=204e1561f655e5c36da9bbff0db173c83af5742f
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| holtwinters-multiplicative/base | IDENTICAL x3 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | REFUSED          |
+| holtwinters-multiplicative/denormal | IDENTICAL x3 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | REFUSED          |
+| holtwinters-multiplicative/denormal_ftz | IDENTICAL x3 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | REFUSED          |
+| holtwinters-multiplicative/dupes | IDENTICAL x3 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | REFUSED          |
+| holtwinters-multiplicative/hashed | IDENTICAL x3 | b4527085a076f4fe | b4527085a076f4fe | b4527085a076f4fe | REFUSED          |
+| holtwinters-multiplicative/negative | IDENTICAL x3 | cbf95f4b980df3c4 | cbf95f4b980df3c4 | cbf95f4b980df3c4 | REFUSED          |
+| holtwinters-multiplicative/odd | IDENTICAL x3 | 55b8c755b3169576 | 55b8c755b3169576 | 55b8c755b3169576 | REFUSED          |
+| holtwinters-multiplicative/ties | IDENTICAL x3 | 8ea8adf3ce3677e9 | 8ea8adf3ce3677e9 | 8ea8adf3ce3677e9 | REFUSED          |
+| holtwinters-multiplicative/wide | IDENTICAL x3 | e6cdbd540175f484 | e6cdbd540175f484 | e6cdbd540175f484 | REFUSED          |
+| holtwinters/base             | IDENTICAL x3 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 | REFUSED          |
+| holtwinters/denormal         | IDENTICAL x3 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | REFUSED          |
+| holtwinters/denormal_ftz     | IDENTICAL x3 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | REFUSED          |
+| holtwinters/dupes            | IDENTICAL x3 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 | REFUSED          |
+| holtwinters/hashed           | IDENTICAL x3 | 66f688c307cabc3b | 66f688c307cabc3b | 66f688c307cabc3b | REFUSED          |
+| holtwinters/negative         | IDENTICAL x3 | 8fa4116875bdf59c | 8fa4116875bdf59c | 8fa4116875bdf59c | REFUSED          |
+| holtwinters/odd              | IDENTICAL x3 | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 | REFUSED          |
+| holtwinters/ties             | IDENTICAL x3 | b2a5df45db1395b0 | b2a5df45db1395b0 | b2a5df45db1395b0 | REFUSED          |
+| holtwinters/wide             | IDENTICAL x3 | 560cdc45a69cc987 | 560cdc45a69cc987 | 560cdc45a69cc987 | REFUSED          |
+
+summary: IDENTICAL=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| holtwinters-multiplicative/base | infer  | IDENTICAL x3 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 | REFUSED          |
+| holtwinters-multiplicative/base | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters-multiplicative/base | batch  | IDENTICAL x3 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 | REFUSED          |
+| holtwinters-multiplicative/denormal | infer  | IDENTICAL x3 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | REFUSED          |
+| holtwinters-multiplicative/denormal | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters-multiplicative/denormal | batch  | IDENTICAL x3 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | REFUSED          |
+| holtwinters-multiplicative/denormal_ftz | infer  | IDENTICAL x3 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | REFUSED          |
+| holtwinters-multiplicative/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters-multiplicative/denormal_ftz | batch  | IDENTICAL x3 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | REFUSED          |
+| holtwinters-multiplicative/dupes | infer  | IDENTICAL x3 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 | REFUSED          |
+| holtwinters-multiplicative/dupes | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters-multiplicative/dupes | batch  | IDENTICAL x3 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 | REFUSED          |
+| holtwinters-multiplicative/hashed | infer  | IDENTICAL x3 | 4c14823c8b1dbcd7 | 4c14823c8b1dbcd7 | 4c14823c8b1dbcd7 | REFUSED          |
+| holtwinters-multiplicative/hashed | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters-multiplicative/hashed | batch  | IDENTICAL x3 | 17d71141dbd7a3c6 | 17d71141dbd7a3c6 | 17d71141dbd7a3c6 | REFUSED          |
+| holtwinters-multiplicative/negative | infer  | IDENTICAL x3 | 462c8ebc8d2efa04 | 462c8ebc8d2efa04 | 462c8ebc8d2efa04 | REFUSED          |
+| holtwinters-multiplicative/negative | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters-multiplicative/negative | batch  | IDENTICAL x3 | 60acbb07363d6af3 | 60acbb07363d6af3 | 60acbb07363d6af3 | REFUSED          |
+| holtwinters-multiplicative/odd | infer  | IDENTICAL x3 | 899a6730dedaa535 | 899a6730dedaa535 | 899a6730dedaa535 | REFUSED          |
+| holtwinters-multiplicative/odd | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters-multiplicative/odd | batch  | IDENTICAL x3 | 2793fec672ddc457 | 2793fec672ddc457 | 2793fec672ddc457 | REFUSED          |
+| holtwinters-multiplicative/ties | infer  | IDENTICAL x3 | 54aab1a29ccacdfe | 54aab1a29ccacdfe | 54aab1a29ccacdfe | REFUSED          |
+| holtwinters-multiplicative/ties | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters-multiplicative/ties | batch  | IDENTICAL x3 | da0498edc9d73bae | da0498edc9d73bae | da0498edc9d73bae | REFUSED          |
+| holtwinters-multiplicative/wide | infer  | IDENTICAL x3 | c0221c39c93138de | c0221c39c93138de | c0221c39c93138de | REFUSED          |
+| holtwinters-multiplicative/wide | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters-multiplicative/wide | batch  | IDENTICAL x3 | 97d1ce7117d1cb95 | 97d1ce7117d1cb95 | 97d1ce7117d1cb95 | REFUSED          |
+| holtwinters/base             | infer  | IDENTICAL x3 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | REFUSED          |
+| holtwinters/base             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters/base             | batch  | IDENTICAL x3 | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc | REFUSED          |
+| holtwinters/denormal         | infer  | IDENTICAL x3 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | REFUSED          |
+| holtwinters/denormal         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters/denormal         | batch  | IDENTICAL x3 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | REFUSED          |
+| holtwinters/denormal_ftz     | infer  | IDENTICAL x3 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | REFUSED          |
+| holtwinters/denormal_ftz     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters/denormal_ftz     | batch  | IDENTICAL x3 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | REFUSED          |
+| holtwinters/dupes            | infer  | IDENTICAL x3 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | REFUSED          |
+| holtwinters/dupes            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters/dupes            | batch  | IDENTICAL x3 | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc | REFUSED          |
+| holtwinters/hashed           | infer  | IDENTICAL x3 | bfa4a149ae74602c | bfa4a149ae74602c | bfa4a149ae74602c | REFUSED          |
+| holtwinters/hashed           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters/hashed           | batch  | IDENTICAL x3 | f064bf24785a3ab0 | f064bf24785a3ab0 | f064bf24785a3ab0 | REFUSED          |
+| holtwinters/negative         | infer  | IDENTICAL x3 | c03b71a1af7f0d5c | c03b71a1af7f0d5c | c03b71a1af7f0d5c | REFUSED          |
+| holtwinters/negative         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters/negative         | batch  | IDENTICAL x3 | 9c696ef56c5a8db9 | 9c696ef56c5a8db9 | 9c696ef56c5a8db9 | REFUSED          |
+| holtwinters/odd              | infer  | IDENTICAL x3 | baeea8494596eeb9 | baeea8494596eeb9 | baeea8494596eeb9 | REFUSED          |
+| holtwinters/odd              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters/odd              | batch  | IDENTICAL x3 | 7428081677199491 | 7428081677199491 | 7428081677199491 | REFUSED          |
+| holtwinters/ties             | infer  | IDENTICAL x3 | a48df2766423502f | a48df2766423502f | a48df2766423502f | REFUSED          |
+| holtwinters/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters/ties             | batch  | IDENTICAL x3 | 91f206e60b961689 | 91f206e60b961689 | 91f206e60b961689 | REFUSED          |
+| holtwinters/wide             | infer  | IDENTICAL x3 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 | REFUSED          |
+| holtwinters/wide             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | REFUSED          |
+| holtwinters/wide             | batch  | IDENTICAL x3 | 1121af8980a0f61f | 1121af8980a0f61f | 1121af8980a0f61f | REFUSED          |
+
+summary (infer/model): IDENTICAL=18, N/A=18
+summary (batch): IDENTICAL=18
+summary (rlpair): 
+REQUIRE FAIL holtwinters-multiplicative/base train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/base train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/denormal train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/denormal_ftz train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/dupes train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/hashed train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/negative train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/odd train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/ties train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/wide train: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/base infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/base batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters-multiplicative/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/base infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/base batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/denormal infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/denormal batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/denormal_ftz infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/denormal_ftz batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/dupes infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/dupes batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/hashed infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/hashed batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/negative infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/negative batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/odd infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/odd batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/ties infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/ties batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/wide infer: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+REQUIRE FAIL holtwinters/wide batch: IDENTICAL x3 rests on 3 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: column cpu-amd-epyc-9655p-96-core-processor REFUSED the cell)
+require-columns 4 over ['holtwinters', 'holtwinters-multiplicative']: 54 short (0 OWED)
+summary (owed): OWED=0; the next release record owes exactly these cell parts; wrote /root/leg_out/owed_cells.host-infer.json

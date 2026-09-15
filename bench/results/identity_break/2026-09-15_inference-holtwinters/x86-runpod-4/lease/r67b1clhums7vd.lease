@@ -1,0 +1,5 @@
+pod='r67b1clhums7vd'
+target='-p 32150 root@103.196.86.88'
+armed_utc='2026-09-15T22:12:48Z'
+deadline_epoch=1789513968
+minutes=60

@@ -1,0 +1,23 @@
+# vendor=cpu-amd-epyc-9655p-96-core-processor commit=27b6a850506fede9873401280d8fe49285e00b21 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655P 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_core_host', '_mojolearn_forecast_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-15 22:10:09  Linux-7.0.0-30-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             |
+|------------------------|------------------|
+| arima                  | 0e77d6dec9ac0689 |
+| arima infer            | 8ff14f7006a4ae70 |
+| arima model            | 4ca0c4f897e15925 |
+| arima batch            | f95958dba3b0d046 |
+| arima-011              | 0b6e27da8bbe4b81 |
+| arima-011 infer        | 145816653fec7fd3 |
+| arima-011 model        | b1b6f1a2ed8f9122 |
+| arima-011 batch        | 8ce71130c0f6fbba |
+| arima-seasonal-c       | 42be56eb08618d06 |
+| arima-seasonal-c infer | 1371409bb3b2a902 |
+| arima-seasonal-c model | eb42b659f6dd72a3 |
+| arima-seasonal-c batch | 63bdb26d3454553c |
+
+cells=3 stable=3 moved=0 refused=0
+infer: stable=3
+model: stable=3
+batch: stable=3
+wrote /root/leg_out/cpu-x86.arima-base.sabotage.json

@@ -1,0 +1,25 @@
+Imported from /root/mojolearn/bindings/_mojolearn_forecast_host.mojo:52:
+Imported from ./bindings/arima_host_predict.mojo:25:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Included from /root/mojolearn/bindings/_mojolearn_forecast_host.mojo:52:
+./bindings/arima_host_predict.mojo:143:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+Included from /root/mojolearn/bindings/_mojolearn_forecast_host.mojo:52:
+./bindings/arima_host_predict.mojo:215:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+Included from /root/mojolearn/bindings/_mojolearn_forecast_host.mojo:56:
+./bindings/holtwinters_host_predict.mojo:122:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+Included from /root/mojolearn/bindings/_mojolearn_forecast_host.mojo:56:
+./bindings/holtwinters_host_predict.mojo:178:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+built python/mojolearn/host/_mojolearn_forecast_host.so
+BINCACHE miss+built-uploaded bindings/build_forecast_host.sh key=f18345ce7364a55a seconds=11.1

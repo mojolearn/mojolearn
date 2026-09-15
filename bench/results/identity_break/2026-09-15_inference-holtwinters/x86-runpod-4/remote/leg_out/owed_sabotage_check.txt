@@ -1,0 +1,19 @@
+owed holtwinters-multiplicative/base model: production b8a024b882e689d8 sabotage 12d2f21f3e97de97 MOVED
+owed holtwinters-multiplicative/denormal model: production fb2179fa46b8c783 sabotage 39c03bd2f4382c67 MOVED
+owed holtwinters-multiplicative/denormal_ftz model: production fb2179fa46b8c783 sabotage 39c03bd2f4382c67 MOVED
+owed holtwinters-multiplicative/dupes model: production b8a024b882e689d8 sabotage 12d2f21f3e97de97 MOVED
+owed holtwinters-multiplicative/hashed model: production 1be92a88fe27b753 sabotage 2bd0886252faba8b MOVED
+owed holtwinters-multiplicative/negative model: production 432eee1e5166113f sabotage 3c29650215ecccac MOVED
+owed holtwinters-multiplicative/odd model: production 50be27dd6867acbd sabotage d2303d837887128d MOVED
+owed holtwinters-multiplicative/ties model: production e57730b49d91cf1a sabotage 929a8a6c362406c9 MOVED
+owed holtwinters-multiplicative/wide model: production 3998344adee0204b sabotage ae6694422d7fb9eb MOVED
+owed holtwinters/base model: production 386ea9716a68db57 sabotage 66dc70355f2fbd76 MOVED
+owed holtwinters/denormal model: production e0329aaf3a587b5d sabotage 316b19263f12c2a4 MOVED
+owed holtwinters/denormal_ftz model: production e0329aaf3a587b5d sabotage 316b19263f12c2a4 MOVED
+owed holtwinters/dupes model: production 386ea9716a68db57 sabotage 66dc70355f2fbd76 MOVED
+owed holtwinters/hashed model: production 0bbf65d228c3a691 sabotage 0a31ec9d4f78d779 MOVED
+owed holtwinters/negative model: production 6fa74fd4f6957e5d sabotage e02102d2d8829d0d MOVED
+owed holtwinters/odd model: production 122949dbfaf73984 sabotage a171abb48c4aae89 MOVED
+owed holtwinters/ties model: production b8929131c9bb8ffe sabotage e4efb9da166756c2 MOVED
+owed holtwinters/wide model: production 8811438af56608f5 sabotage 7145e6651e39dc9a MOVED
+owed verdict OK (18 of 18 owed cell part(s) moved, 0 failure(s))

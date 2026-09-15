@@ -1,0 +1,2 @@
+built python/mojolearn/host/_mojolearn_forecast_host.so (from bincache key f18345ce7364a55a, sha256 3b77b11ef46fd7c273b4e3aade3626f4a8d8bfe86686f7dc1584626fb03a487d)
+BINCACHE hit bindings/build_forecast_host.sh key=f18345ce7364a55a seconds=0.2

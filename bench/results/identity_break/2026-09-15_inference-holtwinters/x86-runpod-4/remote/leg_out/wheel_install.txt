@@ -1,0 +1,3 @@
+Processing /tmp/wheel_new/mojolearn-0.8.5-py3-none-linux_x86_64.whl
+Installing collected packages: mojolearn
+Successfully installed mojolearn-0.8.5

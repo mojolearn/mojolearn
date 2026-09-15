@@ -1,0 +1,108 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 2 lane(s); 163 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9655-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_core_host', '_mojolearn_forecast_host', '_mojolearn_tsa_host'] commit=6238827b9c1d144565095f2b65fd8f07017c2802
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9655-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| holtwinters-multiplicative/base | IDENTICAL x4 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 |
+| holtwinters-multiplicative/denormal | IDENTICAL x4 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 |
+| holtwinters-multiplicative/denormal_ftz | IDENTICAL x4 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 |
+| holtwinters-multiplicative/dupes | IDENTICAL x4 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 | d49a5a62e2e56bb6 |
+| holtwinters-multiplicative/hashed | IDENTICAL x4 | b4527085a076f4fe | b4527085a076f4fe | b4527085a076f4fe | b4527085a076f4fe |
+| holtwinters-multiplicative/negative | IDENTICAL x4 | cbf95f4b980df3c4 | cbf95f4b980df3c4 | cbf95f4b980df3c4 | cbf95f4b980df3c4 |
+| holtwinters-multiplicative/odd | IDENTICAL x4 | 55b8c755b3169576 | 55b8c755b3169576 | 55b8c755b3169576 | 55b8c755b3169576 |
+| holtwinters-multiplicative/ties | IDENTICAL x4 | 8ea8adf3ce3677e9 | 8ea8adf3ce3677e9 | 8ea8adf3ce3677e9 | 8ea8adf3ce3677e9 |
+| holtwinters-multiplicative/wide | IDENTICAL x4 | e6cdbd540175f484 | e6cdbd540175f484 | e6cdbd540175f484 | e6cdbd540175f484 |
+| holtwinters/base             | IDENTICAL x4 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 |
+| holtwinters/denormal         | IDENTICAL x4 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 |
+| holtwinters/denormal_ftz     | IDENTICAL x4 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 | db35c88da059e9e1 |
+| holtwinters/dupes            | IDENTICAL x4 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 | 9781c2061a287937 |
+| holtwinters/hashed           | IDENTICAL x4 | 66f688c307cabc3b | 66f688c307cabc3b | 66f688c307cabc3b | 66f688c307cabc3b |
+| holtwinters/negative         | IDENTICAL x4 | 8fa4116875bdf59c | 8fa4116875bdf59c | 8fa4116875bdf59c | 8fa4116875bdf59c |
+| holtwinters/odd              | IDENTICAL x4 | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 | 8fb4dd76d8080a46 |
+| holtwinters/ties             | IDENTICAL x4 | b2a5df45db1395b0 | b2a5df45db1395b0 | b2a5df45db1395b0 | b2a5df45db1395b0 |
+| holtwinters/wide             | IDENTICAL x4 | 560cdc45a69cc987 | 560cdc45a69cc987 | 560cdc45a69cc987 | 560cdc45a69cc987 |
+
+summary: IDENTICAL=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9655-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| holtwinters-multiplicative/base | infer  | IDENTICAL x4 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 |
+| holtwinters-multiplicative/base | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | b8a024b882e689d8 |
+| holtwinters-multiplicative/base | batch  | IDENTICAL x4 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 |
+| holtwinters-multiplicative/denormal | infer  | IDENTICAL x4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 |
+| holtwinters-multiplicative/denormal | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | fb2179fa46b8c783 |
+| holtwinters-multiplicative/denormal | batch  | IDENTICAL x4 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e |
+| holtwinters-multiplicative/denormal_ftz | infer  | IDENTICAL x4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 |
+| holtwinters-multiplicative/denormal_ftz | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | fb2179fa46b8c783 |
+| holtwinters-multiplicative/denormal_ftz | batch  | IDENTICAL x4 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e |
+| holtwinters-multiplicative/dupes | infer  | IDENTICAL x4 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 | 733c9600a564ad92 |
+| holtwinters-multiplicative/dupes | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | b8a024b882e689d8 |
+| holtwinters-multiplicative/dupes | batch  | IDENTICAL x4 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 | 68a40b58dc692b32 |
+| holtwinters-multiplicative/hashed | infer  | IDENTICAL x4 | 4c14823c8b1dbcd7 | 4c14823c8b1dbcd7 | 4c14823c8b1dbcd7 | 4c14823c8b1dbcd7 |
+| holtwinters-multiplicative/hashed | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 1be92a88fe27b753 |
+| holtwinters-multiplicative/hashed | batch  | IDENTICAL x4 | 17d71141dbd7a3c6 | 17d71141dbd7a3c6 | 17d71141dbd7a3c6 | 17d71141dbd7a3c6 |
+| holtwinters-multiplicative/negative | infer  | IDENTICAL x4 | 462c8ebc8d2efa04 | 462c8ebc8d2efa04 | 462c8ebc8d2efa04 | 462c8ebc8d2efa04 |
+| holtwinters-multiplicative/negative | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 432eee1e5166113f |
+| holtwinters-multiplicative/negative | batch  | IDENTICAL x4 | 60acbb07363d6af3 | 60acbb07363d6af3 | 60acbb07363d6af3 | 60acbb07363d6af3 |
+| holtwinters-multiplicative/odd | infer  | IDENTICAL x4 | 899a6730dedaa535 | 899a6730dedaa535 | 899a6730dedaa535 | 899a6730dedaa535 |
+| holtwinters-multiplicative/odd | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 50be27dd6867acbd |
+| holtwinters-multiplicative/odd | batch  | IDENTICAL x4 | 2793fec672ddc457 | 2793fec672ddc457 | 2793fec672ddc457 | 2793fec672ddc457 |
+| holtwinters-multiplicative/ties | infer  | IDENTICAL x4 | 54aab1a29ccacdfe | 54aab1a29ccacdfe | 54aab1a29ccacdfe | 54aab1a29ccacdfe |
+| holtwinters-multiplicative/ties | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | e57730b49d91cf1a |
+| holtwinters-multiplicative/ties | batch  | IDENTICAL x4 | da0498edc9d73bae | da0498edc9d73bae | da0498edc9d73bae | da0498edc9d73bae |
+| holtwinters-multiplicative/wide | infer  | IDENTICAL x4 | c0221c39c93138de | c0221c39c93138de | c0221c39c93138de | c0221c39c93138de |
+| holtwinters-multiplicative/wide | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 3998344adee0204b |
+| holtwinters-multiplicative/wide | batch  | IDENTICAL x4 | 97d1ce7117d1cb95 | 97d1ce7117d1cb95 | 97d1ce7117d1cb95 | 97d1ce7117d1cb95 |
+| holtwinters/base             | infer  | IDENTICAL x4 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 |
+| holtwinters/base             | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 386ea9716a68db57 |
+| holtwinters/base             | batch  | IDENTICAL x4 | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc |
+| holtwinters/denormal         | infer  | IDENTICAL x4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 |
+| holtwinters/denormal         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | e0329aaf3a587b5d |
+| holtwinters/denormal         | batch  | IDENTICAL x4 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e |
+| holtwinters/denormal_ftz     | infer  | IDENTICAL x4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 5e7dba822d698dd4 |
+| holtwinters/denormal_ftz     | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | e0329aaf3a587b5d |
+| holtwinters/denormal_ftz     | batch  | IDENTICAL x4 | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e | 0b25b078a96b247e |
+| holtwinters/dupes            | infer  | IDENTICAL x4 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 | f930b5ed0ef2c318 |
+| holtwinters/dupes            | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 386ea9716a68db57 |
+| holtwinters/dupes            | batch  | IDENTICAL x4 | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc | 093a7898c986d9bc |
+| holtwinters/hashed           | infer  | IDENTICAL x4 | bfa4a149ae74602c | bfa4a149ae74602c | bfa4a149ae74602c | bfa4a149ae74602c |
+| holtwinters/hashed           | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 0bbf65d228c3a691 |
+| holtwinters/hashed           | batch  | IDENTICAL x4 | f064bf24785a3ab0 | f064bf24785a3ab0 | f064bf24785a3ab0 | f064bf24785a3ab0 |
+| holtwinters/negative         | infer  | IDENTICAL x4 | c03b71a1af7f0d5c | c03b71a1af7f0d5c | c03b71a1af7f0d5c | c03b71a1af7f0d5c |
+| holtwinters/negative         | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 6fa74fd4f6957e5d |
+| holtwinters/negative         | batch  | IDENTICAL x4 | 9c696ef56c5a8db9 | 9c696ef56c5a8db9 | 9c696ef56c5a8db9 | 9c696ef56c5a8db9 |
+| holtwinters/odd              | infer  | IDENTICAL x4 | baeea8494596eeb9 | baeea8494596eeb9 | baeea8494596eeb9 | baeea8494596eeb9 |
+| holtwinters/odd              | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 122949dbfaf73984 |
+| holtwinters/odd              | batch  | IDENTICAL x4 | 7428081677199491 | 7428081677199491 | 7428081677199491 | 7428081677199491 |
+| holtwinters/ties             | infer  | IDENTICAL x4 | a48df2766423502f | a48df2766423502f | a48df2766423502f | a48df2766423502f |
+| holtwinters/ties             | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | b8929131c9bb8ffe |
+| holtwinters/ties             | batch  | IDENTICAL x4 | 91f206e60b961689 | 91f206e60b961689 | 91f206e60b961689 | 91f206e60b961689 |
+| holtwinters/wide             | infer  | IDENTICAL x4 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 | 5df1cfaa8f4b4e78 |
+| holtwinters/wide             | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 8811438af56608f5 |
+| holtwinters/wide             | batch  | IDENTICAL x4 | 1121af8980a0f61f | 1121af8980a0f61f | 1121af8980a0f61f | 1121af8980a0f61f |
+
+summary (infer/model): IDENTICAL=18, ONE-COLUMN=18
+summary (batch): IDENTICAL=18
+summary (rlpair): 
+REQUIRE FAIL holtwinters-multiplicative/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters-multiplicative/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters-multiplicative/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters-multiplicative/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters-multiplicative/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters-multiplicative/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters-multiplicative/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters-multiplicative/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters-multiplicative/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+REQUIRE FAIL holtwinters/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass (not OWED: CPU column cpu-amd-epyc-9655-96-core-processor is not STABLE over two or more repeats (STABLE, 1 repeat(s)))
+require-columns 4 over ['holtwinters', 'holtwinters-multiplicative']: 18 short (0 OWED)
+summary (owed): OWED=0; the next release record owes exactly these cell parts; wrote /root/leg_out/owed_cells.host-infer.json
