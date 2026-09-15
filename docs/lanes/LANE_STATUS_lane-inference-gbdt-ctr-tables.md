@@ -77,4 +77,47 @@ the eight existing HostGBDT lanes on the base fixture with
 columns, read train IDENTICAL=8 (x4), infer/model IDENTICAL=16, batch
 IDENTICAL=8. `docs_facts --check`, `wheel_ci pins` and `inventory` exit 0.
 
-Identity columns, sabotage and the installed wheel: pending.
+Metal column (bindings from 1386833b4, one job): `apple-m4.json`, the two
+lanes on base, ties and odd, two repeats, 6 cells STABLE with infer, model and
+batch parts; the six saved models under `models/`. Metal base spot check of
+gbdt-feature-freq (whose GPU predict now runs `tensor_ctr_apply.mojo`),
+gbdt-categorical-ctr, gbdt-symmetric and gbdt-rmse against the 166-lane
+columns: train, infer, model and batch IDENTICAL x4 (`diff-metal-spot-base.txt`).
+
+x86 CPU column, RunPod pod 4lihtjtk6lizn0 (verified deleted, $0.011), commit
+02d79d425, the production forest binding: `cpu-x86.json`, every cell STABLE
+over two repeats. Diffed with the Metal column and the 166-lane NVIDIA and AMD
+columns, `--require-columns 4 --owed-json`: train OWED=6, infer/model
+OWED=12, batch OWED=6, exit 0; every part rests on the Metal and CPU hashes
+being equal, and `owed.json` lists the 24 parts the next release record owes
+(NVIDIA and AMD).
+
+Negative controls, same pod, each sabotage binary the only forest binary in
+its process: the forest sabotage build (`-D MOJOLEARN_FOREST_HOST_SABOTAGE=1`)
+and the CTR sabotage build (`-D MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1`) each read
+train DIVERGENT=6, infer DIVERGENT=6, batch DIVERGENT=6, diff exit 1. The
+model part reads IDENTICAL=6 under both, as it must: it hashes the saved file,
+which no host binary writes.
+
+An earlier pod (2nwrvarzfxso6r, $0.005) ran the two sabotage columns with the
+production forest binding in `MOJOLEARN_HOST_DIR`; host_record loaded it
+under the shared module name, so train and batch predicted through
+production (IDENTICAL) and only the infer guard refused. Those columns were
+discarded, and the lane's CPU load now takes the same guard.
+
+Installed test wheel (pod 2nwrvarzfxso6r, commit 63e734891, only
+`_mojolearn_forest_host.so` under `mojolearn/host/`, unpacked into an
+isolated target): `inf_gbdt_wheel_models.py check-saved` reads IDENTICAL=6
+against the Metal infer cells, and DIFFER=6 with the CTR sabotage binary.
+`test_gbdt_host_ctr` 5 passed there and failed under CTR sabotage;
+`test_gbdt_host_modes` 7 passed. On the Mac after merging origin/main:
+`test_host_surface` 144 passed, `docs_facts --check`, `wheel_ci pins` and
+`inventory` exit 0.
+
+## Owed
+
+- NVIDIA and AMD columns for the 24 cell parts in `owed.json`, at the next
+  release record.
+- The existing GBDT lanes beyond the base-fixture spot checks, at the same
+  record (Metal spot: four lanes; CPU spot: eight HostGBDT lanes).
+- Forest gate fixtures (`tools/forest_host_gate.py` kinds) for CTR models.

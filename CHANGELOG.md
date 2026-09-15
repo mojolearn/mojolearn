@@ -10,6 +10,19 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- Public CPU inference from a saved gradient boosting model whose categorical columns are above
+  `one_hot_max_size` (real CTR tables: Borders at three priors and FeatureFreq) or whose
+  `ExperimentalTwoLevelFeatureFreq` tree splits on a combination (tensor CTRs with split history),
+  fitted on a GPU (lane/inference-gbdt-ctr-tables). `mojolearn.host_model(path)` parses the
+  `ctr_table`, `ctr_entry`, `tensor_ctr_registry` and `feature_freq_tensor` records and the shipped
+  forest host binding applies them with the same `expand_raw_columns` and tensor apply body the GPU
+  predict calls (the tensor apply moved to `gbdt/models/tensor_ctr_apply.mojo`, which has no device
+  import). Unseen and seen-once categories take the tables' empty and learned values; a NaN, negative
+  or non-integer categorical value and a CTR type with no apply-time arithmetic are refused by name.
+  No saved-model record changed. On two new identity lanes the x86 CPU predictions from the Metal
+  column's saved models equal the Metal cells (train, infer, model and batch, base, ties and odd), and
+  both the forest and a new CTR sabotage build move every train, infer and batch cell; the NVIDIA and
+  AMD cells are owed (bench/results/identity_break/2026-09-15_gbdt-ctr-tables).
 - Public CPU inference from a saved model for `GaussianProcessRegressor` (every kernel the fit
   accepts, `normalize_y` included), `GaussianProcessClassifier` (binary and one-vs-rest) and
   `GaussianMixture.sample` (lane/inference-neighbors-density). `GaussianProcessRegressor` gains

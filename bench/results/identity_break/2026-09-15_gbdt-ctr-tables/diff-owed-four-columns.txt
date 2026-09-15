@@ -1,0 +1,123 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 166 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_forest_host'] commit=02d79d425f1ba2924c3d8edcbfe27b988a39f34f
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-x86-x86_64: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    amd-mi325x-gfx942: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-x86-x86_64: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    amd-mi325x-gfx942: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-x86-x86_64: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    amd-mi325x-gfx942: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-x86-x86_64: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    amd-mi325x-gfx942: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-x86-x86_64: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    amd-mi325x-gfx942: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '5061056b118d07d0'}
+    amd-mi325x-gfx942: {'X': '5061056b118d07d0'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': 'a8c3d1a560b5cabb'}
+    amd-mi325x-gfx942: {'X': 'a8c3d1a560b5cabb'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': 'e4b16c115962dfcd'}
+    amd-mi325x-gfx942: {'X': 'e4b16c115962dfcd'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '9dc786ade4574aff'}
+    amd-mi325x-gfx942: {'X': '9dc786ade4574aff'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': '45b539a3f66ce25d'}
+    amd-mi325x-gfx942: {'X': '45b539a3f66ce25d'}
+    cpu-x86-x86_64: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    nvidia-h100-sm_90a: {'X': 'd52a1af18a3c2f1c'}
+    amd-mi325x-gfx942: {'X': 'd52a1af18a3c2f1c'}
+    cpu-x86-x86_64: None
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-x86-x86_64   |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr-tables/base | OWED x2    | 9aef0c9ccfa6907c | (not run)        | (not run)        | 9aef0c9ccfa6907c |
+| gbdt-categorical-ctr-tables/odd | OWED x2    | 2b3fac1172a1b684 | (not run)        | (not run)        | 2b3fac1172a1b684 |
+| gbdt-categorical-ctr-tables/ties | OWED x2    | 24ff7d7c24861171 | (not run)        | (not run)        | 24ff7d7c24861171 |
+| gbdt-tensor-ctr-tables/base  | OWED x2    | 7cc167fbb56c972e | (not run)        | (not run)        | 7cc167fbb56c972e |
+| gbdt-tensor-ctr-tables/odd   | OWED x2    | 7377ac4d24ab4fc7 | (not run)        | (not run)        | 7377ac4d24ab4fc7 |
+| gbdt-tensor-ctr-tables/ties  | OWED x2    | a57c449ae1a19b4e | (not run)        | (not run)        | a57c449ae1a19b4e |
+
+summary: OWED=6
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-x86-x86_64   |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr-tables/base | infer  | OWED x2      | a624d9f200295ebd | (not run)        | (not run)        | a624d9f200295ebd |
+| gbdt-categorical-ctr-tables/base | model  | OWED x2      | bf3bea6dea6870d5 | (not run)        | (not run)        | bf3bea6dea6870d5 |
+| gbdt-categorical-ctr-tables/base | batch  | OWED x2      | d37a90de0b078e27 | (not run)        | (not run)        | d37a90de0b078e27 |
+| gbdt-categorical-ctr-tables/odd | infer  | OWED x2      | d0a5ab298e3f354c | (not run)        | (not run)        | d0a5ab298e3f354c |
+| gbdt-categorical-ctr-tables/odd | model  | OWED x2      | d12b8a92dfaf4f57 | (not run)        | (not run)        | d12b8a92dfaf4f57 |
+| gbdt-categorical-ctr-tables/odd | batch  | OWED x2      | 8a24ba90ab6fff7f | (not run)        | (not run)        | 8a24ba90ab6fff7f |
+| gbdt-categorical-ctr-tables/ties | infer  | OWED x2      | ba5bb1e19090253b | (not run)        | (not run)        | ba5bb1e19090253b |
+| gbdt-categorical-ctr-tables/ties | model  | OWED x2      | 1a89f2f0c4b4089c | (not run)        | (not run)        | 1a89f2f0c4b4089c |
+| gbdt-categorical-ctr-tables/ties | batch  | OWED x2      | da78c16224627804 | (not run)        | (not run)        | da78c16224627804 |
+| gbdt-tensor-ctr-tables/base  | infer  | OWED x2      | 18c29c1d0b000438 | (not run)        | (not run)        | 18c29c1d0b000438 |
+| gbdt-tensor-ctr-tables/base  | model  | OWED x2      | d701b87375180e4b | (not run)        | (not run)        | d701b87375180e4b |
+| gbdt-tensor-ctr-tables/base  | batch  | OWED x2      | c14b5f2874153914 | (not run)        | (not run)        | c14b5f2874153914 |
+| gbdt-tensor-ctr-tables/odd   | infer  | OWED x2      | b6a857464e3fc541 | (not run)        | (not run)        | b6a857464e3fc541 |
+| gbdt-tensor-ctr-tables/odd   | model  | OWED x2      | 4148bc1f3f9b7e87 | (not run)        | (not run)        | 4148bc1f3f9b7e87 |
+| gbdt-tensor-ctr-tables/odd   | batch  | OWED x2      | 3de632fb4d411bcf | (not run)        | (not run)        | 3de632fb4d411bcf |
+| gbdt-tensor-ctr-tables/ties  | infer  | OWED x2      | 1659c6bbc45fd69d | (not run)        | (not run)        | 1659c6bbc45fd69d |
+| gbdt-tensor-ctr-tables/ties  | model  | OWED x2      | 4274b123a863584a | (not run)        | (not run)        | 4274b123a863584a |
+| gbdt-tensor-ctr-tables/ties  | batch  | OWED x2      | c648d9eb03bb1455 | (not run)        | (not run)        | c648d9eb03bb1455 |
+
+summary (infer/model): OWED=12
+summary (batch): OWED=6
+summary (rlpair): 
+require-columns 4 over ['gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables']: OK (24 OWED)
+OWED gbdt-categorical-ctr-tables/base train: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-categorical-ctr-tables/odd train: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-categorical-ctr-tables/ties train: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/base train: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/odd train: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/ties train: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-categorical-ctr-tables/base infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-categorical-ctr-tables/base model: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-categorical-ctr-tables/base batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-categorical-ctr-tables/odd infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-categorical-ctr-tables/odd model: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-categorical-ctr-tables/odd batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-categorical-ctr-tables/ties infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-categorical-ctr-tables/ties model: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-categorical-ctr-tables/ties batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/base infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/base model: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/base batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/odd infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/odd model: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/odd batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/ties infer: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/ties model: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+OWED gbdt-tensor-ctr-tables/ties batch: no hash in nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 2 (apple-m4,cpu-x86-x86_64)
+summary (owed): OWED=24; the next release record owes exactly these cell parts; wrote /root/leg_out/owed.json
