@@ -5,7 +5,7 @@
 References: cuML v26.08.00 python/cuml/cuml/_thirdparty/sklearn/preprocessing/
 _data.py:815-849 and utils/extmath.py:123-145; sklearn preprocessing/_data.py
 _is_constant_feature and utils/extmath.py _incremental_mean_and_var.
-STD-1: fixed 256-row Float32 reductions replace upstream safe Float64 sums.
+STD-1: fixed 256-row Float32 reductions replace the reference's safe Float64 sums.
 Variance is mean squared centered residual, without sklearn's correction term.
 Exact constant columns retain their first value and zero variance despite sum
 rounding. Final chunk folds are ascending, per feature, on GPU.

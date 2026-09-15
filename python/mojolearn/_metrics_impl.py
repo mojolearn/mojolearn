@@ -60,7 +60,7 @@ reachable from Python. They are gated where they live, in
 import math
 import numbers
 from ._buffer import _materialize, _native
-from ._labels import is_bool, flatten_labels
+from ._labels import is_bool, flatten_labels, flat_view
 from ._arrays import _addr, _addr_ro
 
 from . import _backend
@@ -209,6 +209,34 @@ def _as_f32_1d(x, name, *, require_finite=True):
     return out
 
 
+def _sample_weight_f32(sample_weight, n, caller):
+    """Weights for the pinned-sum weighted arms (`metrics/impl/weighted_scores.mojo`):
+    one finite, non-negative Float32 per sample with a positive total, the
+    rule `GradientBoosting.fit` applies to its own sample_weight. Cast to
+    Float32 like the estimators' weights. scikit-learn's `np.average` also
+    accepts negative weights; those are refused here by name."""
+    shape = _shape_of(sample_weight)
+    if len(shape) != 1:
+        raise ValueError(
+            f"mojolearn {caller}: sample_weight must be 1-D, got shape {shape}"
+        )
+    if shape[0] != n:
+        raise ValueError(
+            f"mojolearn {caller}: sample_weight has {shape[0]} entries for {n} samples"
+        )
+    w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
+    values = flat_view(w, "f")
+    if not all_finite(w) or min(values) < 0:
+        raise ValueError(
+            f"mojolearn {caller}: sample_weight must have finite nonnegative entries"
+        )
+    if not max(values) > 0:
+        raise ValueError(
+            f"mojolearn {caller}: sample_weight must have positive total weight"
+        )
+    return w
+
+
 def _pair_1d(a, b, name_a, name_b, loader):
     x = loader(a, name_a)
     y = loader(b, name_b)
@@ -280,20 +308,22 @@ def accuracy_score(
                                   fraction, and recovering an integer count
                                   from a float32 fraction is a different
                                   computation, not this one.
-        sample_weight   refused   not implemented. cuML 26.08's own Python
-                                  `accuracy_score` supports it in pure cupy
-                                  and does not call this kernel at all;
-                                  weighting here would be a host formula
-                                  wearing a GPU metric's name.
+        sample_weight   honored   scikit-learn's `np.average(y_true ==
+                                  y_pred, weights=sample_weight)`, in Float32
+                                  on the pinned-sum path
+                                  (metrics/impl/weighted_scores.mojo): the
+                                  weights of agreeing samples and all weights
+                                  folded by the PINNED_SUM_W tree, then one
+                                  division. RAFT's kernel has no weighted arm
+                                  and cuML's Python weights in cupy, so this
+                                  arm follows the scikit-learn reference. Weights must be
+                                  1-D, one per sample, finite, non-negative
+                                  and of positive total (negative weights,
+                                  which numpy accepts, are refused by name).
 
     `n == 0` is refused by name inside the kernel (`count / n` is `0 / 0`
     in RAFT and a NaN may not reach a recorded value).
     """
-    if sample_weight is not None:
-        raise NotImplementedError(
-            "mojolearn accuracy_score: sample_weight is not implemented "
-            "(metrics/impl/stats/detail/scores.mojo has no weighted arm)"
-        )
     if not normalize:
         raise NotImplementedError(
             "mojolearn accuracy_score: normalize=False is refused; the "
@@ -302,6 +332,15 @@ def accuracy_score(
             "int((y_true == y_pred).sum()) if you want the count."
         )
     yt, yp = _pair_1d(y_true, y_pred, "y_true", "y_pred", _as_i32_1d)
+    if sample_weight is not None:
+        w = _sample_weight_f32(sample_weight, int(yt.shape[0]), "accuracy_score")
+        # ORDER MATCHES bindings/_mojolearn_metrics.mojo::accuracy_score_weighted_binding.
+        # n
+        return float(
+            _get_binding(numeric_mode).accuracy_score_weighted(
+                _addr_ro(yt), _addr_ro(yp), _addr_ro(w), [int(yt.shape[0])]
+            )
+        )
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::accuracy_score_binding.
     # n
     return float(
@@ -447,7 +486,7 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
 def fowlkes_mallows_score(labels_true, labels_pred, *, sparse="deprecated"):
     """The Fowlkes-Mallows index between two clusterings.
 
-    MIRRORS scikit-learn's `fowlkes_mallows_score`
+    Follows the scikit-learn reference `fowlkes_mallows_score`
     (`sklearn/metrics/cluster/_supervised.py`); cuML 26.08 has no such
     metric. The contingency matrix is built with INTEGER atomics on the
     device (the kernel mutual_info_score uses), the three pair counts
@@ -602,8 +641,15 @@ def r2_score(
         multioutput     refused   anything but 'uniform_average' with 1-D
                                   input. 2-D targets are not implemented; the
                                   kernel takes one flat pair of arrays.
-        sample_weight   refused   not implemented (RAFT's r2_score has no
-                                  weighted arm).
+        sample_weight   honored   scikit-learn's weighted definition, in
+                                  Float32 on the pinned-sum path
+                                  (metrics/impl/weighted_scores.mojo; RAFT's
+                                  r2_score has no weighted arm):
+                                  `sum w (y - y_pred)^2` over
+                                  `sum w (y - y_avg)^2` with `y_avg = sum w y
+                                  / sum w`, the same force_finite guards.
+                                  Weights must be 1-D, one per sample,
+                                  finite, non-negative and of positive total.
         force_finite    honored   True only, and it is BAKED IN. `ssto == 0`
                                   returns 1.0 when `sse == 0` and 0.0
                                   otherwise, which is scikit-learn's and
@@ -619,11 +665,6 @@ def r2_score(
     is +inf) still returns a NaN, but the ONE canonical payload
     `0x7fc00000` on every vendor.
     """
-    if sample_weight is not None:
-        raise NotImplementedError(
-            "mojolearn r2_score: sample_weight is not implemented "
-            "(metrics/impl/stats/detail/scores.mojo has no weighted arm)"
-        )
     if multioutput != "uniform_average":
         raise NotImplementedError(
             f"mojolearn r2_score: multioutput={multioutput!r} is refused; "
@@ -638,6 +679,15 @@ def r2_score(
             "payload into a recorded value"
         )
     y, yh = _pair_1d(y_true, y_pred, "y_true", "y_pred", _as_f32_1d)
+    if sample_weight is not None:
+        w = _sample_weight_f32(sample_weight, int(y.shape[0]), "r2_score")
+        # ORDER MATCHES bindings/_mojolearn_metrics.mojo::r2_score_weighted_binding.
+        # n
+        return float(
+            _get_binding(numeric_mode).r2_score_weighted(
+                _addr_ro(y), _addr_ro(yh), _addr_ro(w), [int(y.shape[0])]
+            )
+        )
     # ORDER MATCHES bindings/_mojolearn_metrics.mojo::r2_score_binding.
     # n
     return float(

@@ -204,7 +204,7 @@ comptime SAB_STD_SQRT = is_defined["MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT"]()
 #: so `ncv = min(n_samples, max(2k + 1, 20))` -- cuVS 25.08's spelling,
 #: which 26.08 replaced (`detail/spectral_embedding.cuh:67`). This is not a
 #: choice of ours being tested; it is a REGRESSION ARM against the older
-#: upstream. READ BY
+#: reference. READ BY
 #: `impl/preprocessing/detail/spectral_embedding.mojo`; it
 #: lives here because that module imports this one and the reverse would
 #: be a cycle. The device arm's `ncv` then differs from the oracle's, which

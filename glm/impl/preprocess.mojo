@@ -6,7 +6,7 @@ UNWEIGHTED arms -- cuML 26.08.
 This file was written under `solver/impl/glm/` by the cd lane (the glm
 section had `preprocess.cuh` as NOT IMPLEMENTED; OLS's Python surface centers
 on the host instead) and MOVED here 2026-08-23 by the identity lane, per
-the hand-off in `solver/README.md`: it is the same upstream file and this
+the hand-off in `solver/README.md`: it is the same reference file and this
 is where it belongs. `solver/impl/cd.mojo` is its one caller
 today; `glm/impl/ols.mojo` still refuses `fit_intercept` on the
 device and could take it next (glm/NOT_IMPLEMENTED.tsv). Nothing here is

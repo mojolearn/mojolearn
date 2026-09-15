@@ -1,0 +1,50 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_tokenizer_host'] commit=be61d7fe09f7ca438e7583f20c5a8ee8824b36a3
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_tokenizer_host'] commit=be61d7fe09f7ca438e7583f20c5a8ee8824b36a3
+| lane/fixture                 | verdict    | cpu-apple-m4     | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| tokenizer/base               | IDENTICAL x2 | 517f2f49a8b132ca | 517f2f49a8b132ca |
+| tokenizer/denormal           | IDENTICAL x2 | f6b394c18a5aaa7d | f6b394c18a5aaa7d |
+| tokenizer/denormal_ftz       | IDENTICAL x2 | 78c666f6eec7ff12 | 78c666f6eec7ff12 |
+| tokenizer/dupes              | IDENTICAL x2 | 66adf17fb3d2e10d | 66adf17fb3d2e10d |
+| tokenizer/hashed             | IDENTICAL x2 | 06facfcc72bd8bbe | 06facfcc72bd8bbe |
+| tokenizer/negative           | IDENTICAL x2 | fe6242fcbfde85f1 | fe6242fcbfde85f1 |
+| tokenizer/odd                | IDENTICAL x2 | 517f2f49a8b132ca | 517f2f49a8b132ca |
+| tokenizer/ties               | IDENTICAL x2 | 5a785172c94613e5 | 5a785172c94613e5 |
+| tokenizer/wide               | IDENTICAL x2 | 4622630cfcdf7025 | 4622630cfcdf7025 |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | cpu-apple-m4     | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| tokenizer/base               | infer  | IDENTICAL x2 | 41c748b68629980a | 41c748b68629980a |
+| tokenizer/base               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/base               | batch  | BATCH_MOVED  | f03ec8e8ec3957db | BATCH_MOVED      |
+| tokenizer/denormal           | infer  | IDENTICAL x2 | 62f32161a9d8cb5a | 62f32161a9d8cb5a |
+| tokenizer/denormal           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/denormal           | batch  | BATCH_MOVED  | 6f4da30ca849a47f | BATCH_MOVED      |
+| tokenizer/denormal_ftz       | infer  | IDENTICAL x2 | fac4ddb673bb07e9 | fac4ddb673bb07e9 |
+| tokenizer/denormal_ftz       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/denormal_ftz       | batch  | BATCH_MOVED  | 095715a6b997a4a4 | BATCH_MOVED      |
+| tokenizer/dupes              | infer  | IDENTICAL x2 | 7ab3d96850c8d03e | 7ab3d96850c8d03e |
+| tokenizer/dupes              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/dupes              | batch  | BATCH_MOVED  | 2488cdb155742e4d | BATCH_MOVED      |
+| tokenizer/hashed             | infer  | IDENTICAL x2 | c6e83493b99eaa03 | c6e83493b99eaa03 |
+| tokenizer/hashed             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/hashed             | batch  | BATCH_MOVED  | f99c99a35c9005f5 | BATCH_MOVED      |
+| tokenizer/negative           | infer  | IDENTICAL x2 | bda2f03dde645cbc | bda2f03dde645cbc |
+| tokenizer/negative           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/negative           | batch  | BATCH_MOVED  | 7ac736dae669cf61 | BATCH_MOVED      |
+| tokenizer/odd                | infer  | IDENTICAL x2 | 41c748b68629980a | 41c748b68629980a |
+| tokenizer/odd                | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/odd                | batch  | BATCH_MOVED  | eb00540aa514c20d | BATCH_MOVED      |
+| tokenizer/ties               | infer  | IDENTICAL x2 | cea676361afdd883 | cea676361afdd883 |
+| tokenizer/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/ties               | batch  | BATCH_MOVED  | 56565699fda44295 | BATCH_MOVED      |
+| tokenizer/wide               | infer  | IDENTICAL x2 | 031065bfeb8c23b7 | 031065bfeb8c23b7 |
+| tokenizer/wide               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/wide               | batch  | BATCH_MOVED  | 3f795e8ab9282a81 | BATCH_MOVED      |
+
+summary (infer/model): IDENTICAL=9, N/A=9
+summary (batch): BATCH_MOVED=9
+summary (rlpair): 

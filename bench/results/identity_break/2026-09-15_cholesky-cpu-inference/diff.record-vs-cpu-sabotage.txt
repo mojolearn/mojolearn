@@ -1,0 +1,59 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 165 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_linalg_host'] commit=0486e44ba86b4c95ca5c302c4fd4520792025ee1
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| cholesky/base                | DIVERGENT  | parts differ: L,logdet,solve; agree: info,nb,jitter | ce043656132b08b4 | ce043656132b08b4 | d2e3d7a9e865d6a3 |
+| cholesky/denormal            | DIVERGENT  | parts differ: L,logdet,solve; agree: info,nb,jitter | 1034aafd0276dd46 | 1034aafd0276dd46 | 0a3c21083bf3ce7f |
+| cholesky/denormal_ftz        | DIVERGENT  | parts differ: L,logdet,solve; agree: info,nb,jitter | 1034aafd0276dd46 | 1034aafd0276dd46 | 0a3c21083bf3ce7f |
+| cholesky/dupes               | DIVERGENT  | parts differ: L,logdet,solve; agree: info,nb,jitter | 6f1c8237b2b0fde3 | 6f1c8237b2b0fde3 | ddd9701cb0a2155e |
+| cholesky/hashed              | DIVERGENT  | parts differ: L,logdet,solve; agree: info,nb,jitter | 5fb5c65c65498259 | 5fb5c65c65498259 | beb8ce4a550c172a |
+| cholesky/negative            | DIVERGENT  | parts differ: L,logdet,solve; agree: info,nb,jitter | 7e22ee0c08fc0bac | 7e22ee0c08fc0bac | dd0f0c63ee216674 |
+| cholesky/odd                 | DIVERGENT  | parts differ: L,logdet,solve; agree: info,nb,jitter | f14ab646fe0965fd | f14ab646fe0965fd | aac2b819e8ec5531 |
+| cholesky/ties                | DIVERGENT  | parts differ: L,logdet,solve; agree: info,nb,jitter | ab1c40c4c2552b74 | ab1c40c4c2552b74 | bbcd6f05c338107c |
+| cholesky/wide                | DIVERGENT  | parts differ: L,logdet,solve; agree: info,nb,jitter | d65809f907fe79c3 | d65809f907fe79c3 | 7d6cd5c2bc6015fe |
+
+summary: DIVERGENT=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| cholesky/base                | infer  | DIVERGENT    | d2e567879951cd00 | d2e567879951cd00 | d2e567879951cd00 | 61c3dbf79b1ddbcc |
+| cholesky/base                | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 490111a1e0b5e1f8 |
+| cholesky/base                | batch  | DIVERGENT    | 4f247a3c9540ed93 | 4f247a3c9540ed93 | 4f247a3c9540ed93 | b175cce82fbe1815 |
+| cholesky/denormal            | infer  | IDENTICAL x4 | 32f10944298bb446 | 32f10944298bb446 | 32f10944298bb446 | 32f10944298bb446 |
+| cholesky/denormal            | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | a8c372af3158cd06 |
+| cholesky/denormal            | batch  | IDENTICAL x4 | 6ac1ebde83b416fa | 6ac1ebde83b416fa | 6ac1ebde83b416fa | 6ac1ebde83b416fa |
+| cholesky/denormal_ftz        | infer  | IDENTICAL x4 | 32f10944298bb446 | 32f10944298bb446 | 32f10944298bb446 | 32f10944298bb446 |
+| cholesky/denormal_ftz        | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | a8c372af3158cd06 |
+| cholesky/denormal_ftz        | batch  | IDENTICAL x4 | 6ac1ebde83b416fa | 6ac1ebde83b416fa | 6ac1ebde83b416fa | 6ac1ebde83b416fa |
+| cholesky/dupes               | infer  | DIVERGENT    | d2e567879951cd00 | d2e567879951cd00 | d2e567879951cd00 | 61c3dbf79b1ddbcc |
+| cholesky/dupes               | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 490111a1e0b5e1f8 |
+| cholesky/dupes               | batch  | DIVERGENT    | 4f247a3c9540ed93 | 4f247a3c9540ed93 | 4f247a3c9540ed93 | b175cce82fbe1815 |
+| cholesky/hashed              | infer  | DIVERGENT    | 7883549fbd7cd9ac | 7883549fbd7cd9ac | 7883549fbd7cd9ac | c028f894cfe8b366 |
+| cholesky/hashed              | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | c3a6b3b6338d5287 |
+| cholesky/hashed              | batch  | DIVERGENT    | 7f5db9df49fa144b | 7f5db9df49fa144b | 7f5db9df49fa144b | 037c1feaf214a2da |
+| cholesky/negative            | infer  | DIVERGENT    | b676d94cd17bc3f9 | b676d94cd17bc3f9 | b676d94cd17bc3f9 | 6f89efed750deaae |
+| cholesky/negative            | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 5053fa2269e4d86c |
+| cholesky/negative            | batch  | DIVERGENT    | f8023ba763c7a769 | f8023ba763c7a769 | f8023ba763c7a769 | 8fada2cc194afa2b |
+| cholesky/odd                 | infer  | DIVERGENT    | 75d9bfac2c1c09d8 | 75d9bfac2c1c09d8 | 75d9bfac2c1c09d8 | cd2a8821f99f17c9 |
+| cholesky/odd                 | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | bf317c9d4e870273 |
+| cholesky/odd                 | batch  | DIVERGENT    | ff3b58dda958f58c | ff3b58dda958f58c | ff3b58dda958f58c | 6a01560f347de256 |
+| cholesky/ties                | infer  | DIVERGENT    | 222d12985ad494e9 | 222d12985ad494e9 | 222d12985ad494e9 | 2fd4434c6d75645e |
+| cholesky/ties                | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | ab541cc9be23e4d4 |
+| cholesky/ties                | batch  | DIVERGENT    | 5d80a4c8eb280505 | 5d80a4c8eb280505 | 5d80a4c8eb280505 | 081a640ec2c75c1f |
+| cholesky/wide                | infer  | DIVERGENT    | 4dacdc1854773af2 | 4dacdc1854773af2 | 4dacdc1854773af2 | a4f89803d4162253 |
+| cholesky/wide                | model  | ONE-COLUMN   | n/a:no-save      | n/a:no-save      | n/a:no-save      | 681da9c200c2f7ff |
+| cholesky/wide                | batch  | DIVERGENT    | 6728544ea8c96949 | 6728544ea8c96949 | 6728544ea8c96949 | 8577284c2af07e50 |
+
+summary (infer/model): DIVERGENT=7, IDENTICAL=2, ONE-COLUMN=9
+summary (batch): DIVERGENT=7, IDENTICAL=2
+summary (rlpair): 
+REQUIRE FAIL cholesky/base model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL cholesky/denormal model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL cholesky/denormal_ftz model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL cholesky/dupes model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL cholesky/hashed model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL cholesky/negative model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL cholesky/odd model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL cholesky/ties model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+REQUIRE FAIL cholesky/wide model: ONE-COLUMN rests on 1 real hash(es), --require-columns 4 demands that many; a column that should cover this lane is refusing, which is not a pass
+require-columns 4 over ['cholesky']: 9 short

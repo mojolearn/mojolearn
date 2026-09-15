@@ -203,7 +203,7 @@ HERE: neither. `n_landmarks` is `floor(sqrt(m))`, so their assert refuses
 request. Here `D` is simply `+inf` when fewer than k landmarks exist, tests
 1 and 2 then never fire, and the query degrades to an exact full scan
 driven by `tau` alone. Slower, never wrong. The dimension assert is not
-copied either: it exists upstream because their kernels stage the query row
+copied either: it exists in the reference because their kernels stage the query row
 in a `local_x_ptr[MAX_COL_Q]` register array with `MAX_COL_Q == 3`
 (`registers.cuh:41`), which this file does not do -- it reads the query row
 from global memory like the eps kernels do. High dimensions make the cover

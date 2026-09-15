@@ -36,7 +36,7 @@ estimator (`feature_parallel_pointwise_oblivious_tree.h:43`,
 `leaves_estimation/oblivious_tree_leaves_estimator.h:143`) -- none of which
 this repository has. Implementing them now would be writing a cache for a caller
 that does not exist, which is the defect `ENGINEERING_RULES.md` rule 3 names.
-They belong with rung 2 of `archive/reference/PORTING.md` 91 E.
+They belong with rung 2.
 
 WHAT "TAKES THE MANAGER'S ANSWERS AS ARGUMENTS" MEANS, and why it is not a
 redesign. `TBinarizedFeaturesManager` is unimplemented. Every function above that
@@ -59,7 +59,7 @@ THREE DEPARTURES, ALL IN THIS FILE, NONE ARITHMETIC.
 2. **The manager is a parameter list.** `ToSplit`, both
    `SplitConditionToString` overloads, `PrintBestScore` and
    `HasPermutationDependentSplit` take `const TBinarizedFeaturesManager&`
-   upstream. There is no such type here, so each takes the values it would
+   in the reference. There is no such type here, so each takes the values it would
    have read. One consequence is real and is NOT hidden: their `ToSplit`
    opens with
 

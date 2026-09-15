@@ -531,7 +531,7 @@ def update_workload_info[
     `kernels/builder_kernels.mojo` from the other side.
 
     Returns their `n_blocks_dimx`. WRITES STRAIGHT INTO `h_workload_info`
-    -- RESTORES upstream: theirs fills the pinned `h_workload_info` array
+    -- RESTORES the reference: theirs fills the pinned `h_workload_info` array
     in place (`:401`) and this used to rebuild a `List` (growth reallocs
     on every level) that the upload then copied into the pinned buffer
     element by element. The pointer must hold at least
@@ -836,7 +836,7 @@ struct TreeState[O: ObjectiveLike](Movable):
 struct _DevPrefixView(Movable):
     """A cached prefix view of one device workspace buffer.
 
-    RESTORES their carve-once shape: upstream carves every pointer out of
+    RESTORES their carve-once shape: the reference carves every pointer out of
     `d_buff` ONCE (`builder.cuh:334-368`) and then passes COUNTS to
     count-parameterized APIs, so no per-level object is ever created.
     `enqueue_copy`/`enqueue_memset` here are buffer-shaped (the byte
@@ -1164,7 +1164,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     # tree's node count exceeds every earlier tree's. `leaf_capacity` is
     # in NODES, batched the way theirs batches (`min(100000, n_nodes)`).
     var leaf_capacity: Int
-    # The HOST staging is sized in NODES-OF-THE-TREE, not batch: upstream
+    # The HOST staging is sized in NODES-OF-THE-TREE, not batch: the reference
     # stages each batch out of the FULL-SIZE host vectors
     # (`tree->sparsetree`, `tree->vector_leaf`, `builder.cuh:648-651`,
     # `:663-666`), which is what lets its batches enqueue with no sync
@@ -1670,7 +1670,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         mut self,
     ) -> MutPointer[WorkloadInfo, MutUntrackedOrigin]:
         """The pinned array `update_workload_info` fills in place --
-        upstream's `h_workload_info` member (`builder.cuh:198`).
+        the reference's `h_workload_info` member (`builder.cuh:198`).
         DEVIATION 1908: it lives in the packed phase span, directly after
         this phase's work items; call only after `_stage_work_items` has
         set `cur_wl_rel`."""
@@ -2525,7 +2525,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # memory under an in-flight launch. The DEVICE trio is
         # batch-sized, as their `d_tree`/`d_instance_ranges`/`d_leaves`
         # are (`builder.cuh:638-641`); the HOST trio is tree-sized,
-        # because upstream stages every batch out of the FULL-SIZE host
+        # because the reference stages every batch out of the FULL-SIZE host
         # vectors (`:648-651`, `:663-666`) -- that per-batch-disjoint
         # host staging is what lets the batches below enqueue with no
         # sync between them.
@@ -2652,7 +2652,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             h_views.append(hl^)
             begin = end
 
-        # RESTORES upstream: their `SetLeafPredictions` carries NO sync
+        # RESTORES the reference: their `SetLeafPredictions` carries NO sync
         # inside the batch loop (`builder.cuh:643-667`); this used to
         # drain the whole device -- all K pipelined trees -- once per
         # batch. One drain covers every batch, then the host reads.

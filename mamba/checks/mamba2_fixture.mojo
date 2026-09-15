@@ -114,7 +114,7 @@ struct Mamba2Dims(Copyable, Movable):
 
 
 struct Mamba2Weights(Copyable, Movable):
-    """One block's parameters, host side, upstream shapes, row-major.
+    """One block's parameters, host side, reference shapes, row-major.
     `bias=False, conv_bias=True` (mamba2.py:56-57), so only conv1d carries
     a bias; `dt_bias` is a separate parameter (mamba2.py:117), not a
     Linear bias.
@@ -413,7 +413,7 @@ def m2_case_x(k: Int) raises -> List[Float32]:
 
 def m2_case_init_states(k: Int) raises -> List[Float32]:
     """`initial_states` [B, H, P, N] for the case: the hashed tensor when
-    `has_init_states`, zeros otherwise (upstream's `None`,
+    `has_init_states`, zeros otherwise (the reference's `None`,
     ssd_minimal.py:64-66)."""
     var c = m2_corpus_case(k)
     var dims = Mamba2Dims.of(c.d_model)

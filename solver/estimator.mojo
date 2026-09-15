@@ -103,7 +103,7 @@ def cd_fit_host(
     THE COEFFICIENT VECTOR IS ZEROED HERE, AND THAT IS A DECISION.
     `cdFit` READS `coef` as its starting point and never zeroes it
     (`cd.cuh` has no memset); cuML's Python passes `cp.zeros` on every fit
-    because `warm_start=True` is refused upstream (`_params_from_cpu`).
+    because `warm_start=True` is refused in the reference (`_params_from_cpu`).
     This surface does the same, so a fit is a pure function of `(X, y,
     params)` and not of whatever was in the caller's output array. Warm
     starting is therefore NOT reachable from Python, which matches cuML.

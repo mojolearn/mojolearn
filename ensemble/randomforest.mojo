@@ -94,7 +94,7 @@ comptime LABELS_SAMPLED_ORDER = True
 # Optional bootstrap-row sorting preserves the drawn multiset. Stable
 # partitioning then keeps node ranges ascending. Integer/fixed-point
 # histograms, counts, leaves, and the resulting forest remain identical, but
-# `row_ids` order and its diagnostic trace intentionally differ from upstream.
+# `row_ids` order and its diagnostic trace intentionally differ from the reference.
 # `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
 comptime ROWS_SORTED_SAMPLE = is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
 
@@ -255,7 +255,7 @@ struct RF_params(ImplicitlyCopyable, Movable):
         """
         # `n_streams` IS honored since DEVIATION 117 was implemented: the
         # forest loop pipelines that many trees over the one Metal queue,
-        # mirroring their omp/stream pool (`randomforest.cuh:336-367`).
+        # matching their omp/stream pool (`randomforest.cuh:336-367`).
         # The refusal that stood here guarded the serial implementation and is gone
         # with it; no output bit depends on the value, because their
         # per-tree and per-node RNG is a pure hash of (seed, treeid[,
@@ -518,7 +518,7 @@ def check_random_seed(random_state: Int) raises -> UInt64:
     truncation faithfully (`random_utils.mojo:107-120`).
 
     So this is not a bounds check for its own sake -- it is the reason the
-    truncation upstream is harmless, and a caller building `RF_params` by
+    truncation in the reference is harmless, and a caller building `RF_params` by
     hand should run it. `RF_params.seed` stays a full UInt64 because their
     C++ field is a `uint64_t`; the restriction is the Python layer's.
 

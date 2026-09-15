@@ -464,7 +464,7 @@ def _solve_shaped_algo(
 # DIFFERENT in the two modes, because `GLOBAL_NUMERIC_MODE` is comptime and
 # one process is one mode:
 #
-#   FAST       the shipped behaviour does not move; where the upstream is
+#   FAST       the shipped behaviour does not move; where the reference is
 #              not launch-invariant the check REPORTS rather than asserts,
 #              and that report is what prices the pin.
 #   IDENTICAL  the pinned arms are REACHED, the fitted coefficients are
@@ -790,9 +790,9 @@ def _fit_bits(
     #
     # `emit_ols_card`'s fixture (`ols_trace.mojo`) always used two host
     # buffers, which is why the traced repro never reproduced and every leg
-    # reported that the card fixture's two fits agreed. archive/reference/PORTING.md item 12
-    # states the rule this violated, and records that the last time it cost
-    # an hour and "presented as a broken kernel".
+    # reported that the card fixture's two fits agreed. The last time
+    # this class of fixture mismatch happened it cost an hour and "presented as a broken
+    # kernel".
     var big_b = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
     for i in range(n * d):

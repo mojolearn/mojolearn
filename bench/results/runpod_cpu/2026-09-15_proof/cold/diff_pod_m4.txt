@@ -1,0 +1,25 @@
+NOTE: column cpu-amd-epyc-7702p-64-core-processor is a CPU column: cpu_model='AMD EPYC 7702P 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host'] commit=dc3852e5be173c5ccdbb97f987db1740b40864ce
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host'] commit=dc3852e5be173c5ccdbb97f987db1740b40864ce
+| lane/fixture                 | verdict    | cpu-amd-epyc-7702p-64-core-processor | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| kmeans/base                  | IDENTICAL x2 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+| ols/base                     | IDENTICAL x2 | 3d1d7c30b12d9872 | 3d1d7c30b12d9872 |
+| ridge/base                   | IDENTICAL x2 | a91478be750dc756 | a91478be750dc756 |
+
+summary: IDENTICAL=3
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-7702p-64-core-processor | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| kmeans/base                  | infer  | IDENTICAL x2 | b9a7dd27a045bc21 | b9a7dd27a045bc21 |
+| kmeans/base                  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans/base                  | batch  | IDENTICAL x2 | 2dc7903bd0a181f5 | 2dc7903bd0a181f5 |
+| ols/base                     | infer  | IDENTICAL x2 | 2546a13c03838433 | 2546a13c03838433 |
+| ols/base                     | model  | IDENTICAL x2 | a84289377ea9180f | a84289377ea9180f |
+| ols/base                     | batch  | IDENTICAL x2 | b578bef320871443 | b578bef320871443 |
+| ridge/base                   | infer  | IDENTICAL x2 | a5a404bb201b0eeb | a5a404bb201b0eeb |
+| ridge/base                   | model  | IDENTICAL x2 | efada80fdc2d4259 | efada80fdc2d4259 |
+| ridge/base                   | batch  | IDENTICAL x2 | 5817cf4d9fb9bd91 | 5817cf4d9fb9bd91 |
+
+summary (infer/model): IDENTICAL=5, N/A=1
+summary (batch): IDENTICAL=3
+summary (rlpair): 

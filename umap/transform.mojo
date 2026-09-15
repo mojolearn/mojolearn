@@ -12,7 +12,7 @@ skips slot zero; memberships include it, including a zero-distance edge.
 Numerical contract: 64 ordered Float64 sigma iterations, ascending neighbor
 initialization and serial Float32 coordinate updates. Unlike umap-learn's
 RNG and epochs-per-sample implementation, refinement uses this repository's
-SplitMix64 counter and floor-difference schedule. No upstream byte-parity
+SplitMix64 counter and floor-difference schedule. No reference byte-parity
 claim. IDENTICAL host pow/exp/log2 use the portable binary64 seams; other modes
 retain stdlib arithmetic. Cross-host certification requires matching captures. Query batching
 may change results (global sigma floor, edge weighting and RNG ordinals).
