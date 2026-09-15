@@ -51,7 +51,14 @@ def fake_host(monkeypatch, tmp_path):
     m.all_finite_f32 = lambda addr, n: int(np.isfinite(buffer(addr, n)).all())
     monkeypatch.setitem(sys.modules, host_mod._MODULE_NAME, m)
     monkeypatch.setattr(host_mod, '_MODULE', None)
-    monkeypatch.setitem(_buffer._NATIVE, 'all_finite_f32', m.all_finite_f32)
+    # A PRIVATE helper cache, not an item planted in the process-wide one.
+    # `_buffer._native` caches every helper it resolves for the life of the
+    # process, so any earlier module that converted an array (a transpose,
+    # a float64 cast) leaves its real binding's callable there, and
+    # `_native(key)` then answers from the cache without ever reaching the
+    # resolver these tests fake. Swapping the dict for the test and letting
+    # monkeypatch restore it makes the result independent of test order.
+    monkeypatch.setattr(_buffer, '_NATIVE', {'all_finite_f32': m.all_finite_f32})
     return m
 
 

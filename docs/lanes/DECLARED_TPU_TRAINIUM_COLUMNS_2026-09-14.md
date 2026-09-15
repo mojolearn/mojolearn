@@ -22,8 +22,9 @@ ran on either machine.
   (`check-ieee-arith` with its built-to-separate FMA arm, `check-division`).
 - `column_arithmetic_refusal_reason` names every documented ABSENT primitive.
   `column_meets_identity_floor` and `identity_refusal_reason` read it first.
-  Only ABSENT refuses. UNAUDITED is a measurement owed and never a verdict,
-  which is why Qualcomm, Intel and the spec baseline resolve exactly as before.
+  Only ABSENT refuses. UNAUDITED is a measurement owed and never a verdict.
+  On 2026-09-14 Qualcomm, Intel and the spec baseline were UNAUDITED and
+  resolved exactly as before; the 2026-09-15 audit below fills their rows.
 - `column_has_threadgroup_int_atomics` answers False for both new columns
   (neither vendor documents an atomic add). It answered True for every column
   before, and still does for all nine older ones.
@@ -116,7 +117,7 @@ announced for Mojo. Its kernel documentation was not researched in this lane.
 
 ## Verification (M4, one core, nice 19, `mojo build -j 1`)
 
-- Baseline at b449ffa78 and this lane, both numeric modes (default and
+- (2026-09-14 lane) Baseline at b449ffa78 and this lane, both numeric modes (default and
   `-D MOJOLEARN_NUMERIC_IDENTICAL=1`). `matrix_main` output with the new
   primitives lines and the two new columns removed is byte-identical to
   baseline in both modes, so every row printed for the nine older columns
@@ -131,6 +132,63 @@ announced for Mojo. Its kernel documentation was not researched in this lane.
   rows change. The printout comparison above is the observed half of that
   argument.
 
+## Qualcomm, Intel and the spec baseline (audited 2026-09-15)
+
+Andrew asked for the three older declared columns to be checked against the
+same four primitives. Mojo emits code for none of them, so there is no vendor
+kernel language to read. The audit reads the portable standards their rows
+already cite (OpenCL, Vulkan through SPIR-V and GLSL, and SYCL for Intel's
+oneAPI), and confirms each part ships a standard stack that has the primitive.
+OpenCL runs on Adreno in phones and in Snapdragon X laptops (the llama.cpp
+OpenCL backend, written for Adreno first, lists Adreno 750 through X2-90), and
+Intel's compute runtime provides OpenCL and Level Zero for Xe.
+
+| primitive | qualcomm | intel | spec-baseline |
+|---|---|---|---|
+| fused multiply-add | PRESENT (OpenCL C `fma`, correctly rounded by spec) | PRESENT (same, and `sycl::fma`) | ABSENT (Vulkan guarantees none) |
+| binary32 division | PRESENT as a name, rounding a device flag | PRESENT as a name, rounding a device flag | PRESENT as a name, 2.5 ulp allowed |
+| exact int32 | PRESENT | PRESENT | PRESENT |
+| float bits readable | PRESENT (SPIR-V `OpBitcast`) | PRESENT (`OpBitcast`, `sycl::bit_cast`) | PRESENT |
+
+What the specifications say, quoted.
+
+- OpenCL C 3.0 `fma` "Returns the correctly rounded floating-point
+  representation of the sum of c with the infinitely precise product of a and
+  b. Rounding of intermediate products shall not occur." Table 65 lists fma as
+  "Correctly rounded", and section 7.4 says addition, subtraction,
+  multiplication and fused multiply-add "are IEEE 754 compliant and are
+  therefore correctly rounded". SPIR-V OpenCL.std instruction 25 and SYCL 2020
+  `sycl::fma` use the same sentence. `CL_FP_FMA` only says whether the builtin
+  is done in hardware.
+- The same OpenCL C spec says `#pragma OPENCL FP_CONTRACT` "DEFAULT value is
+  ON", so a plain `a*b+c` may be fused or not at the compiler's choice. This is
+  exactly the hazard the explicit fma exists to remove.
+- Vulkan compute has no such guarantee. GLSL.std.450 `Fma` "Computes a * b +
+  c", and the GLSL 4.60 precision table allows `a * b + c` as a "Correctly
+  rounded single operation or sequence of two correctly rounded operations",
+  with `fma()` "Inherited from a * b + c". SPIR-V's `NoContraction` decoration
+  can forbid fusing, but nothing in Vulkan forces it. The spec baseline is what
+  both standards guarantee, so its fma row is ABSENT, and it is now refused on
+  arithmetic as well as on its 16 KB memory floor. The refusal names both.
+- Division is the real risk on these columns. OpenCL C Table 65 allows
+  single-precision `x / y` "<= 2.5 ulp" (the embedded profile "<= 3 ulp"), and
+  correct rounding is the optional device flag
+  `CL_FP_CORRECTLY_ROUNDED_DIVIDE_SQRT`. GLSL allows "2.5 ULP". The row stays
+  PRESENT because a division can be named, and `check-division` is the first
+  gate at bring-up. A device that fails it still has a correctly rounded fma,
+  which is enough to correct a quotient the way `portable_sqrtf` already
+  corrects a square root. That repair is not built.
+- OpenCL also makes subnormal support optional ("may be flushed to zero"),
+  which `ftz` already normalizes.
+
+Verification (M4, one core, both numeric modes, against origin/main 3ddf1f3c9).
+`matrix_main` changes only on the primitives lines of the three columns and on
+the refusal lines of the spec baseline, TPU and Trainium (each refusal now
+also names its kernel-shaped reason). Every table row is unchanged.
+`check_hardware_matrix` passes. Three sabotage arms fail it as required, namely
+Qualcomm fma set to ABSENT, spec-baseline fma set to PRESENT ("spec-baseline
+fma = 1, want 0"), and a refusal reason that drops the memory half.
+
 ## Sources (read 2026-09-14)
 
 - Pallas TPU quickstart, https://docs.jax.dev/en/latest/pallas/tpu/quickstart.html
@@ -139,3 +197,15 @@ announced for Mojo. Its kernel documentation was not researched in this lane.
 - NKI ISA common fields (data types, math operators, activations, engine precision), https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/api/nki.api.shared.html
 - NKI ISA reference pages `tensor_tensor`, `scalar_tensor_tensor`, `tensor_scalar`, `tensor_reduce`, `tensor_scalar_reduce`, `activation`, `reciprocal`, `nc_matmul`, `core_barrier`, under https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/api/generated/
 - StableHLO specification, https://github.com/openxla/stablehlo/blob/5a1e6d92793b5f21551561e1628d86a24909ae49/docs/spec.md
+
+Read 2026-09-15 for the Qualcomm, Intel and spec-baseline audit.
+
+- OpenCL C 3.0 (math functions, FP_CONTRACT, chapter 7, Tables 65 and 66), https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_C.html
+- OpenCL API 3.0 (`CL_DEVICE_SINGLE_FP_CONFIG` flags), https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html
+- SPIR-V OpenCL.std extended instructions, https://registry.khronos.org/SPIR-V/specs/unified1/OpenCL.ExtendedInstructionSet.100.html
+- SPIR-V GLSL.std.450 extended instructions, https://registry.khronos.org/SPIR-V/specs/unified1/GLSL.std.450.html
+- SPIR-V specification (`OpBitcast`, `NoContraction`), https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html
+- GLSL 4.60 (section 4.7.1 precision table, `fma`, `precise`), https://registry.khronos.org/OpenGL/specs/gl/GLSLangSpec.4.60.html
+- SYCL 2020 (`sycl::fma`, `sycl::bit_cast`, `fp_config`), https://registry.khronos.org/SYCL/specs/sycl-2020/html/sycl-2020.html
+- llama.cpp OpenCL backend (Adreno support list), https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/OPENCL.md
+- Intel compute runtime (OpenCL and Level Zero for Xe), https://github.com/intel/compute-runtime
