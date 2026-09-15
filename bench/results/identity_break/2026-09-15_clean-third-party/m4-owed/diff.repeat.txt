@@ -1,0 +1,49 @@
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_tokenizer_host'] commit=40e41063c3dbffcfe9865e7ce81d34a4482309d6
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_tokenizer_host'] commit=40e41063c3dbffcfe9865e7ce81d34a4482309d6
+| lane/fixture                 | verdict    | cpu-apple-m4     | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| tokenizer/base               | IDENTICAL x2 | 08b10bbc6f4b565b | 08b10bbc6f4b565b |
+| tokenizer/denormal           | IDENTICAL x2 | c55a5605e8de64b8 | c55a5605e8de64b8 |
+| tokenizer/denormal_ftz       | IDENTICAL x2 | 8b9f4a27b574806e | 8b9f4a27b574806e |
+| tokenizer/dupes              | IDENTICAL x2 | 46adf25a7982a9a6 | 46adf25a7982a9a6 |
+| tokenizer/hashed             | IDENTICAL x2 | e61f50aae6c6dbd9 | e61f50aae6c6dbd9 |
+| tokenizer/negative           | IDENTICAL x2 | cd7e602ad066e3d5 | cd7e602ad066e3d5 |
+| tokenizer/odd                | IDENTICAL x2 | 08b10bbc6f4b565b | 08b10bbc6f4b565b |
+| tokenizer/ties               | IDENTICAL x2 | 94eb3bf4446a414a | 94eb3bf4446a414a |
+| tokenizer/wide               | IDENTICAL x2 | 30fd2b8c5fdcf9e1 | 30fd2b8c5fdcf9e1 |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | cpu-apple-m4     | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| tokenizer/base               | infer  | IDENTICAL x2 | 1939b74da0333639 | 1939b74da0333639 |
+| tokenizer/base               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/base               | batch  | IDENTICAL x2 | 6e235476cc31241f | 6e235476cc31241f |
+| tokenizer/denormal           | infer  | IDENTICAL x2 | e881084e86e9c718 | e881084e86e9c718 |
+| tokenizer/denormal           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/denormal           | batch  | IDENTICAL x2 | 52a4b46c6638283e | 52a4b46c6638283e |
+| tokenizer/denormal_ftz       | infer  | IDENTICAL x2 | 0ce2094be5609967 | 0ce2094be5609967 |
+| tokenizer/denormal_ftz       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/denormal_ftz       | batch  | IDENTICAL x2 | ed742c6961610923 | ed742c6961610923 |
+| tokenizer/dupes              | infer  | IDENTICAL x2 | 5315d2de648bc57b | 5315d2de648bc57b |
+| tokenizer/dupes              | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/dupes              | batch  | IDENTICAL x2 | b3db5e08a72d5afc | b3db5e08a72d5afc |
+| tokenizer/hashed             | infer  | IDENTICAL x2 | 471b06ab4e24044f | 471b06ab4e24044f |
+| tokenizer/hashed             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/hashed             | batch  | IDENTICAL x2 | 0a2474e3f79bd1c9 | 0a2474e3f79bd1c9 |
+| tokenizer/negative           | infer  | IDENTICAL x2 | 2188bf1646406ed2 | 2188bf1646406ed2 |
+| tokenizer/negative           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/negative           | batch  | IDENTICAL x2 | b680bde5e6e8d3c8 | b680bde5e6e8d3c8 |
+| tokenizer/odd                | infer  | IDENTICAL x2 | 1939b74da0333639 | 1939b74da0333639 |
+| tokenizer/odd                | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/odd                | batch  | IDENTICAL x2 | 428ccb5ef4e44ab4 | 428ccb5ef4e44ab4 |
+| tokenizer/ties               | infer  | IDENTICAL x2 | 3b5edfe0d355b03e | 3b5edfe0d355b03e |
+| tokenizer/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/ties               | batch  | IDENTICAL x2 | 48f42ce5bfd939ae | 48f42ce5bfd939ae |
+| tokenizer/wide               | infer  | IDENTICAL x2 | c4af8e403d8a4ff5 | c4af8e403d8a4ff5 |
+| tokenizer/wide               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenizer/wide               | batch  | IDENTICAL x2 | 023683c8a469bd0b | 023683c8a469bd0b |
+
+summary (infer/model): IDENTICAL=9, N/A=9
+summary (batch): IDENTICAL=9
+summary (rlpair): 

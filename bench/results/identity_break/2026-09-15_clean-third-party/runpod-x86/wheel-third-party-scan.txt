@@ -1,0 +1,20 @@
+members 101
+suspicious member names: []
+largest non-binary members:
+     575987 mojolearn/verify_reference/table.json
+     363085 mojolearn/_identity_break.py
+     125164 mojolearn/host_surface.py
+     103416 mojolearn/ensemble.py
+      94660 mojolearn/verify_reference/models/rf-clf.base.npz
+      93685 mojolearn/_training_impl.py
+      86363 mojolearn/_backend.py
+      79675 mojolearn/verify_reference/models/gbdt-symmetric.base.npz
+      67705 mojolearn/_verify.py
+      66248 mojolearn/neighbors.py
+      64557 mojolearn/_metrics_impl.py
+      64074 mojolearn/_mamba_impl.py
+tokenizer host in wheel: True 381464
+  b'Ghello' in tokenizer host bytes: False
+  b'\xc4\xa0hello' in tokenizer host bytes: False
+  b'tiktoken' in tokenizer host bytes: False
+  b'50256' in tokenizer host bytes: False
