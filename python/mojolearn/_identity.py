@@ -6,13 +6,11 @@ shipped in the wheel (the packaging lane, 2026-09-14).
 
 `python -m mojolearn verify` asks one pinned k-means fit one question. This
 asks EVERY lane of the record the manifest names (python/mojolearn/
-host_surface.py, `TRAINING_GPU_COLUMNS`; 166 lanes over 9 hostile fixtures
-in the 2026-09-14 166-lane record) the same question the release did: does
+host_surface.py, `TRAINING_GPU_COLUMNS`; 178 lanes over 9 hostile fixtures
+in the 2026-09-15 178-lane record) the same question the release did: does
 this box, running the installed binaries, produce the same train, infer and
 model hashes as the Apple M4, the NVIDIA H100 and the AMD MI325X did at the
-recorded commit. That record's three columns themselves disagree on one
-cell, kmeans-sqrt/wide (the H100 inertia), so a box that runs that lane
-reads MISMATCH there whatever it computes. It is the fourth column of `tools/identity_break.py`, run
+recorded commit. It is the fourth column of `tools/identity_break.py`, run
 where the user is.
 
 WHAT SHIPS AND WHERE IT COMES FROM. The wheel carries a COPY of
@@ -303,9 +301,7 @@ def cmd_identity(args):
     record = host_surface.training_gpu_column_record()
     record_lanes, record_fixtures = _column_lanes_and_fixtures([p for _, p, _ in cols])
     cpu_only = _backend.vendor() == "cpu"
-    # A covered lane in TRAINING_FIX_LANES is diffed against the fix record by
-    # the gate, not against the record this command ships, so a CPU-only
-    # install does not run it here (host_surface.record_covered_lanes()).
+    # A CPU-only install runs the covered lanes (host_surface.record_covered_lanes()).
     lanes = [l for l in record_lanes if not cpu_only or l in host_surface.record_covered_lanes()]
     if args.lanes:
         asked = [x for x in args.lanes.split(",") if x]

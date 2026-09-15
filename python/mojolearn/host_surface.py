@@ -49,8 +49,6 @@ before the package can import (the gate runner has no binding built yet):
 
     python3 python/mojolearn/host_surface.py --covered-lanes
     python3 python/mojolearn/host_surface.py --record-covered-lanes
-    python3 python/mojolearn/host_surface.py --fix-covered-lanes
-    python3 python/mojolearn/host_surface.py --training-fix-columns
     python3 python/mojolearn/host_surface.py --routed-families
     python3 python/mojolearn/host_surface.py --bindings --sep ,
     python3 python/mojolearn/host_surface.py --classical-recorded
@@ -90,37 +88,20 @@ BUILDER = "bindings/build_host_family.sh"
 #: hold against it. Since 2026-09-14 night the 166-lane record at 1eea14f80
 #: (the batch part, fifteen more par-* lanes, every lane complete on all three
 #: columns, the AMD column MI325X again) is the one; it carries one DIVERGENT
-#: training cell, kmeans-sqrt/wide (the H100 inertia stands alone,
-#: docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md), on a lane no
-#: CPU column covers, and the workflow asserts that count exactly. That cell is
-#: fixed since 9fde8f5f7 (DEVIATIONS 2715 and 2716); the kmeans lanes' cells
-#: after the fix are bench/results/identity_break/2026-09-14_kmeans-sqrt-fix,
-#: which the workflow asserts IDENTICAL x3 in its own step.
+#: training cell, kmeans-sqrt/wide (the H100 inertia stood alone,
+#: docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md), and its
+#: kmeans-sqrt labels predate the fix in 9fde8f5f7 (DEVIATIONS 2715 and 2716),
+#: so from 2026-09-15 the gate diffed that lane against the kmeans-sqrt fix
+#: record instead. Since 2026-09-15 the 178-lane record at df617c699 (every
+#: lane main carries, the kmeans-sqrt fix, the ivf and embedding lanes and
+#: 39 par-* lanes, the AMD column MI325X, every cell IDENTICAL x3) is the
+#: one, so every covered lane is diffed against it and the fix record is
+#: evidence only.
 TRAINING_GPU_COLUMNS = (
-    "bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json",
-    "bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json",
-    "bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json",
+    "bench/results/identity_break/2026-09-15_178-lanes/apple-m4.json",
+    "bench/results/identity_break/2026-09-15_178-lanes/nvidia-h100-sm_90a.json",
+    "bench/results/identity_break/2026-09-15_178-lanes/amd-mi325x-gfx942.json",
 )
-
-#: The covered lanes whose cells in TRAINING_GPU_COLUMNS predate a fix of
-#: the lane on every GPU column, and the three columns of the same boxes
-#: taken after the fix, which the training gate diffs those lanes against
-#: instead (--require-columns 4, the same verdict rule). kmeans-sqrt is the
-#: one (lane/cpu-training-misc, 2026-09-15): the 166-lane record carries its
-#: pre-fix labels on all three columns and the H100's pre-fix inertia on
-#: `wide` (DEVIATIONS 2716 and 2715), the fix record at 9fde8f5f7 carries the
-#: fixed cells IDENTICAL x3, and the host oracle was fixed in the same
-#: commit, so the CPU column reads IDENTICAL x4 against the fix record and
-#: DIVERGENT on all nine fixtures against the 166-lane record. A lane leaves
-#: this list the day TRAINING_GPU_COLUMNS names a record taken after its
-#: fix. `python -m mojolearn identity` diffs against TRAINING_GPU_COLUMNS
-#: alone, so on a CPU-only install it runs `record_covered_lanes()`.
-TRAINING_FIX_COLUMNS = (
-    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json",
-    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/nvidia-h100-sm_90a.json",
-    "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/amd-mi325x-gfx942.json",
-)
-TRAINING_FIX_LANES = ("kmeans-sqrt",)
 
 #: The GPU columns the classical INFERENCE gate compares each host identity
 #: hash against (tools/classical_host_gate.py check --gpu-column).
@@ -404,7 +385,7 @@ TRAINING_LANE_NAMES = {
     # column, and cross_val_score over the gbdt family's RMSE fit, the core
     # family's fold-row gather (gather_rows_bytes) and the metrics family's
     # r2. On the M4, one core: all 36 cells IDENTICAL x4 (kmeans-sqrt
-    # against TRAINING_FIX_COLUMNS), and the sabotage set DIVERGENT on
+    # against the kmeans-sqrt fix record), and the sabotage set DIVERGENT on
     # kmeans-sqrt, kmeans-classic-pp and cross-val on every fixture.
     "kmeans-sqrt": "k-means under the rooted euclidean metric",
     "kmeans-classic-pp": "k-means from the classic k-means++ start",
@@ -1261,21 +1242,12 @@ def covered_lanes():
     return named
 
 
-def fix_covered_lanes():
-    """The covered lanes the training gate diffs against
-    TRAINING_FIX_COLUMNS, in the gate's order. Every one must be covered."""
-    covered = covered_lanes()
-    unknown = [lane for lane in TRAINING_FIX_LANES if lane not in covered]
-    if unknown:
-        raise RuntimeError(f"host_surface: TRAINING_FIX_LANES names uncovered lanes {unknown}")
-    return [lane for lane in covered if lane in TRAINING_FIX_LANES]
-
-
 def record_covered_lanes():
     """The covered lanes the training gate diffs against
-    TRAINING_GPU_COLUMNS: every covered lane not in TRAINING_FIX_LANES."""
-    fixed = fix_covered_lanes()
-    return [lane for lane in covered_lanes() if lane not in fixed]
+    TRAINING_GPU_COLUMNS. Since the 178-lane record carries every lane after
+    the kmeans-sqrt fix, that is every covered lane; the name stays for the
+    gate and `python -m mojolearn identity`, which read it."""
+    return covered_lanes()
 
 
 def inference_lanes():
@@ -1353,13 +1325,11 @@ def as_dict():
         routed=routed_modules(),
         covered_lanes=covered_lanes(),
         record_covered_lanes=record_covered_lanes(),
-        fix_covered_lanes=fix_covered_lanes(),
         inference_lanes=inference_lanes(),
         forest_kinds=forest_kinds(),
         classical_recorded=list(CLASSICAL_RECORDED),
         classical_gpu_columns=list(CLASSICAL_GPU_COLUMNS),
         training_gpu_columns=list(TRAINING_GPU_COLUMNS),
-        training_fix_columns=list(TRAINING_FIX_COLUMNS),
         training_gpu_column_record=training_gpu_column_record(),
         wheel_families=wheel_families(),
         wheel_bindings=wheel_bindings(),
@@ -1377,7 +1347,6 @@ def main(argv=None):
     g.add_argument("--routed-bindings", action="store_true", help="the routed families' basenames")
     g.add_argument("--covered-lanes", action="store_true", help="identity_break lanes with a CPU training path (comma separated)")
     g.add_argument("--record-covered-lanes", action="store_true", help="covered lanes diffed against --training-gpu-columns (comma separated)")
-    g.add_argument("--fix-covered-lanes", action="store_true", help="covered lanes diffed against --training-fix-columns (comma separated)")
     g.add_argument("--inference-lanes", action="store_true", help="classical gate lanes served from a saved model (comma separated)")
     g.add_argument("--forest-kinds", action="store_true", help="forest gate kinds (comma separated)")
     g.add_argument("--wheel-families", action="store_true", help="families whose host binding ships in the wheels")
@@ -1386,7 +1355,6 @@ def main(argv=None):
     g.add_argument("--classical-recorded", action="store_true", help="classical gate recording directories")
     g.add_argument("--classical-gpu-columns", action="store_true", help="the GPU columns the classical gate compares against")
     g.add_argument("--training-gpu-columns", action="store_true", help="the GPU columns the training gate diffs against")
-    g.add_argument("--training-fix-columns", action="store_true", help="the GPU columns the training gate diffs --fix-covered-lanes against")
     g.add_argument("--markdown", action="store_true", help="the surface as a Markdown table")
     g.add_argument("--json", action="store_true", help="the whole manifest as JSON")
     p.add_argument("--sep", default=None, help="separator for list output (default: comma for lanes and kinds, space otherwise)")
@@ -1397,7 +1365,7 @@ def main(argv=None):
     if args.markdown:
         print(markdown_table())
         return 0
-    comma = (args.covered_lanes or args.record_covered_lanes or args.fix_covered_lanes
+    comma = (args.covered_lanes or args.record_covered_lanes
              or args.inference_lanes or args.forest_kinds)
     sep = args.sep if args.sep is not None else ("," if comma else " ")
     if args.families:
@@ -1418,10 +1386,6 @@ def main(argv=None):
         items = covered_lanes()
     elif args.record_covered_lanes:
         items = record_covered_lanes()
-    elif args.fix_covered_lanes:
-        items = fix_covered_lanes()
-    elif args.training_fix_columns:
-        items = list(TRAINING_FIX_COLUMNS)
     elif args.inference_lanes:
         items = inference_lanes()
     elif args.forest_kinds:

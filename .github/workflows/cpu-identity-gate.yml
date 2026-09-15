@@ -156,7 +156,7 @@ on:
       - "bench/results/identity_break/2026-09-14_47-lanes/**"
       - "bench/results/identity_break/2026-09-14_136-lanes/**"
       - "bench/results/identity_break/2026-09-14_166-lanes/**"
-      - "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/**"
+      - "bench/results/identity_break/2026-09-15_178-lanes/**"
       - "bench/results/forest_host/**"
       - ".github/workflows/cpu-identity-gate.yml"
 
@@ -270,7 +270,7 @@ jobs:
             /bench/results/identity_break/2026-09-14_47-lanes/
             /bench/results/identity_break/2026-09-14_136-lanes/
             /bench/results/identity_break/2026-09-14_166-lanes/
-            /bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/
+            /bench/results/identity_break/2026-09-15_178-lanes/
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -328,11 +328,9 @@ jobs:
             echo "CLASSICAL_GPU_COLUMNS=$(python3 $manifest --classical-gpu-columns)"
             echo "GPU_COLUMNS=$(python3 $manifest --training-gpu-columns)"
             echo "RECORD_COVERED_LANES=$(python3 $manifest --record-covered-lanes)"
-            echo "FIX_COVERED_LANES=$(python3 $manifest --fix-covered-lanes)"
-            echo "FIX_COLUMNS=$(python3 $manifest --training-fix-columns)"
           } | tee -a "$GITHUB_ENV" | tee "$GATE_OUT/manifest.txt"
           python3 $manifest --json > "$GATE_OUT/host_surface.json"
-          for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns) $(python3 $manifest --training-fix-columns); do
+          for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns); do
             [ -e "$d" ] || { echo "manifest names $d, which is not in this checkout: the record lags the surface" >&2; exit 1; }
           done
 
@@ -464,18 +462,11 @@ jobs:
             --report "$GATE_OUT/classical_gate_prod.json" 2>&1 | tee "$GATE_OUT/classical_gate_prod.log"
 
       # The tool loads on this CPU and the three committed GPU columns diff
-      # exactly as recorded (the 2026-09-14 166-lane record at 1eea14f80, the
-      # batch part and 31 par-* lanes, AMD column MI325X): 1493 train cells
-      # IDENTICAL x3 and ONE DIVERGENT, kmeans-sqrt/wide, where the H100
-      # inertia stands alone (docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md).
-      # --diff exits 1 on that cell, so the step requires exit 1 AND the exact
-      # summary tokens AND that row: a second divergence, a diff that printed
-      # nothing, or fewer cells changes a token and fails the step. The cell is
-      # EXPLAINED AND FIXED since 9fde8f5f7 (NVIDIA's approximate sqrt in the
-      # min-reduce kernels, DEVIATION 2715; that record's kmeans-sqrt labels are
-      # also wrong on every column, DEVIATION 2716). These committed JSONs are
-      # the 1eea14f80 bytes and keep their count; the kmeans lanes' current
-      # cells are the kmeans-sqrt fix record, asserted two steps below.
+      # exactly as recorded (the 2026-09-15 178-lane record at df617c699, the
+      # batch part and 39 par-* lanes, AMD column MI325X): every train cell
+      # IDENTICAL x3, the kmeans-sqrt fix included. --diff exits 0, and the
+      # step requires the exact summary tokens: a divergence, a diff that
+      # printed nothing, or fewer cells changes a token and fails the step.
       - name: identity_break --diff over the three committed GPU columns (require 3)
         if: always()
         run: |
@@ -483,12 +474,11 @@ jobs:
           python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 3 \
             > "$GATE_OUT/diff_gpu3.txt" 2>&1 || st=$?
           cat "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary: DIVERGENT=1, IDENTICAL=1493' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (infer/model): IDENTICAL=1899, N/A=1089' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (batch): IDENTICAL=1188, N/A=306' "$GATE_OUT/diff_gpu3.txt"
-          grep -E '^\| kmeans-sqrt/wide +\| DIVERGENT +\| parts differ: inertia;' "$GATE_OUT/diff_gpu3.txt"
+          grep -Fx 'summary: IDENTICAL=1602' "$GATE_OUT/diff_gpu3.txt"
+          grep -Fx 'summary (infer/model): IDENTICAL=1998, N/A=1206' "$GATE_OUT/diff_gpu3.txt"
+          grep -Fx 'summary (batch): IDENTICAL=1278, N/A=324' "$GATE_OUT/diff_gpu3.txt"
           grep -F 'require-columns 3 over' "$GATE_OUT/diff_gpu3.txt" | grep -F ': OK'
-          [ "$st" = 1 ] || { echo "expected --diff to exit 1 on the one recorded DIVERGENT cell, got $st" >&2; exit 1; }
+          [ "$st" = 0 ] || { echo "expected --diff to exit 0 on the 178-lane record, got $st" >&2; exit 1; }
 
       # The control for the step above: demanding a fourth real hash on a lane
       # no CPU column has covered must FAIL. If it passes, --require-columns
@@ -504,31 +494,6 @@ jobs:
           fi
           grep -F 'REQUIRE FAIL gemm-pinned/base train' "$GATE_OUT/diff_gpu4_control.txt"
           echo "control OK: --require-columns 4 refused three columns"
-
-      # The kmeans lanes after the kmeans-sqrt fix (DEVIATIONS 2715 and 2716,
-      # bench/results/identity_break/2026-09-14_kmeans-sqrt-fix): the three fixed
-      # columns diff IDENTICAL on all 72 cells, and the unfixed columns of the
-      # same boxes must still read the one NVIDIA inertia cell DIVERGENT, so the
-      # record cannot pass by carrying identical files.
-      - name: identity_break --diff over the kmeans-sqrt fix record (fixed IDENTICAL, unfixed DIVERGENT)
-        if: always()
-        run: |
-          R=bench/results/identity_break/2026-09-14_kmeans-sqrt-fix
-          st=0
-          python3 tools/identity_break.py --diff $R/apple-m4.json $R/nvidia-h100-sm_90a.json \
-            $R/amd-mi325x-gfx942.json --require-columns 3 > "$GATE_OUT/diff_kmsqrt_fixed.txt" 2>&1 || st=$?
-          cat "$GATE_OUT/diff_kmsqrt_fixed.txt"
-          [ "$st" = 0 ] || { echo "fixed kmeans columns: --diff exited $st" >&2; exit 1; }
-          grep -F 'summary: IDENTICAL=72' "$GATE_OUT/diff_kmsqrt_fixed.txt"
-          grep -F 'require-columns 3 over' "$GATE_OUT/diff_kmsqrt_fixed.txt" | grep -F ': OK'
-          st=0
-          python3 tools/identity_break.py --diff $R/unfixed/apple-m4.json $R/unfixed/nvidia-h100-sm_90a.json \
-            $R/unfixed/amd-mi325x-gfx942.json $R/unfixed/nvidia-rtx-4090-sm_89.json --require-columns 4 \
-            > "$GATE_OUT/diff_kmsqrt_unfixed.txt" 2>&1 || st=$?
-          cat "$GATE_OUT/diff_kmsqrt_unfixed.txt"
-          grep -F 'summary: DIVERGENT=1, IDENTICAL=8' "$GATE_OUT/diff_kmsqrt_unfixed.txt"
-          grep -E '^\| kmeans-sqrt/wide +\| DIVERGENT +\| parts differ: inertia; agree: centers,labels,scales' "$GATE_OUT/diff_kmsqrt_unfixed.txt"
-          [ "$st" = 1 ] || { echo "unfixed kmeans-sqrt columns: expected --diff to exit 1, got $st" >&2; exit 1; }
 
       # THE FOURTH COLUMN, THE PLUMBING SMOKE. Two lanes, one fixture, one
       # repeat, on this CPU, through the CPU-only package. Every cell must
@@ -556,11 +521,9 @@ jobs:
             --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_smoke_check.log"
 
       # THE FOURTH COLUMN, THE COVERED LANES. Every fixture, two repeats, then
-      # the four-way diff with --require-columns 4 on exactly those lanes:
-      # RECORD_COVERED_LANES against GPU_COLUMNS, and FIX_COVERED_LANES (the
-      # covered lanes whose record cells predate a fix on every column,
-      # kmeans-sqrt) against FIX_COLUMNS, the same boxes after the fix
-      # (python/mojolearn/host_surface.py, TRAINING_FIX_LANES).
+      # the four-way diff with --require-columns 4 on exactly those lanes
+      # (RECORD_COVERED_LANES, every covered lane since the 178-lane record)
+      # against GPU_COLUMNS.
       # Empty COVERED_LANES runs nothing and says so; that is a statement about
       # phase 1, not a pass.
       - name: The CPU column, covered lanes (every fixture)
@@ -579,10 +542,6 @@ jobs:
             --binding "$ALL_HOST_BINDINGS" 2>&1 | tee "$GATE_OUT/cpu_column_check.log"
           python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
             --require-columns 4 --lanes "$RECORD_COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
-          if [ -n "$FIX_COVERED_LANES" ]; then
-            python3 tools/identity_break.py --diff $FIX_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
-              --require-columns 4 --lanes "$FIX_COVERED_LANES" 2>&1 | tee "$GATE_OUT/diff_four_columns_fix.txt"
-          fi
 
       # The covered lanes' negative control (brief section 3.4). A gate that
       # cannot fail proves nothing, so the whole host set is built again with
@@ -663,14 +622,6 @@ jobs:
             exit 1
           fi
           grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_sab.txt"
-          if [ -n "$FIX_COVERED_LANES" ]; then
-            if python3 tools/identity_break.py --diff $FIX_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
-                 --require-columns 4 --lanes "$FIX_COVERED_LANES" > "$GATE_OUT/diff_four_columns_fix_sab.txt" 2>&1; then
-              echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the fix columns on $FIX_COVERED_LANES" >&2
-              exit 1
-            fi
-            grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_fix_sab.txt"
-          fi
           echo "sabotage caught on the covered lanes"
 
       # The same sabotage host set (built by the step above into host-sab)

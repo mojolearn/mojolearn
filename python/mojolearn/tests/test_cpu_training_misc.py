@@ -10,14 +10,14 @@ path.
 
 What the source checks hold: the manifest declares the three k-means lanes
 on the core family and cross-val on the gbdt family, and names each for the
-docs; kmeans-sqrt is the one lane the gate diffs against the fix record
-(TRAINING_FIX_COLUMNS), because the 166-lane record carries its pre-fix
-cells on every column, and the fix record's three columns carry the lane
-STABLE and equal on every fixture; the covered lanes split into the record
-set and the fix set with nothing lost; the CPU identity gate reads both sets
-and the fix columns from the manifest and diffs each against its own columns
-in the covered step and in the sabotage step; `python -m mojolearn identity`
-runs only the record set on a CPU-only install; the core host binding
+docs; the record TRAINING_GPU_COLUMNS names (the 178-lane record) carries
+the kmeans-sqrt cells after the fix (DEVIATIONS 2715 and 2716), STABLE, equal
+on its three columns and equal to the kmeans-sqrt fix record's columns on
+every fixture, so every covered lane is a record lane and the manifest keeps
+no fix list; the CPU identity gate diffs the covered lanes against the GPU
+columns in the covered step and in the sabotage step, and has no fix-column
+diff left; `python -m mojolearn identity` runs the record set on a CPU-only
+install; the core host binding
 registers `gather_rows_bytes` (cross_val_score's fold rows) under the base
 binding's name, and the oracle refuses the cosine metric in the device's
 words; the resample family routes `_mojolearn_resample` to its own host
@@ -81,52 +81,47 @@ def test_manifest_covers_the_misc_lanes():
     assert "model_selection.cross_val_score" in gbdt["classes"]
 
 
-def test_fix_lanes_split_the_covered_lanes():
+def test_record_covers_every_covered_lane():
     covered = host_surface.covered_lanes()
-    record = host_surface.record_covered_lanes()
-    fixed = host_surface.fix_covered_lanes()
-    assert fixed == ["kmeans-sqrt"], fixed
-    assert not set(record) & set(fixed)
-    assert sorted(record + fixed) == sorted(covered)
-    assert [l for l in covered if l in record] == record, "the record set lost the gate's order"
-    assert host_surface.main(["--fix-covered-lanes"]) == 0
+    assert host_surface.record_covered_lanes() == covered
+    for gone in ("TRAINING_FIX_LANES", "TRAINING_FIX_COLUMNS", "fix_covered_lanes"):
+        assert not hasattr(host_surface, gone), f"host_surface still carries {gone}"
     assert host_surface.main(["--record-covered-lanes"]) == 0
+    for flag in ("--fix-covered-lanes", "--training-fix-columns"):
+        try:
+            host_surface.main([flag])
+        except SystemExit as exc:
+            assert exc.code == 2, (flag, exc.code)
+        else:
+            raise AssertionError(f"host_surface accepted {flag}")
 
 
-def test_fix_columns_carry_the_fixed_lane_on_every_fixture():
-    """The three fix columns must exist, be the record boxes, and carry each
-    fix lane STABLE with one hash per fixture across all three; the 166-lane
-    record must NOT (otherwise the lane belongs back on the record)."""
-    assert len(host_surface.TRAINING_FIX_COLUMNS) == 3
-    for fix, rec in zip(host_surface.TRAINING_FIX_COLUMNS, host_surface.TRAINING_GPU_COLUMNS):
-        assert fix.rsplit("/", 1)[1] == rec.rsplit("/", 1)[1], (fix, rec)
-    cols = [json.loads(_read(rel))["cells"] for rel in host_surface.TRAINING_FIX_COLUMNS]
+def test_record_carries_the_fixed_kmeans_sqrt_cells():
+    """The record's three columns carry kmeans-sqrt STABLE, equal across the
+    three, and equal to the kmeans-sqrt fix record's columns on every fixture:
+    the record was taken after 9fde8f5f7, so no covered lane needs a fix list."""
+    fix_dir = "bench/results/identity_break/2026-09-14_kmeans-sqrt-fix"
     recs = [json.loads(_read(rel))["cells"] for rel in host_surface.TRAINING_GPU_COLUMNS]
-    for lane in host_surface.fix_covered_lanes():
-        differs = 0
-        for fx in FIXTURES:
-            key = f"{lane}/{fx}"
-            hashes = set()
-            for c in cols:
-                assert c[key]["verdict"] == "STABLE", (key, c[key]["verdict"])
-                hashes.add(c[key]["hashes"][0])
-            assert len(hashes) == 1, f"{key}: the fix columns disagree {hashes}"
-            if any(r[key]["hashes"][0] not in hashes for r in recs):
-                differs += 1
-        assert differs > 0, f"{lane}: the record already carries the fixed cells; drop it from TRAINING_FIX_LANES"
+    fixes = [json.loads(_read(f"{fix_dir}/{rel.rsplit('/', 1)[1]}"))["cells"]
+             for rel in host_surface.TRAINING_GPU_COLUMNS]
+    for fx in FIXTURES:
+        key = f"kmeans-sqrt/{fx}"
+        hashes = set()
+        for c in recs + fixes:
+            assert c[key]["verdict"] == "STABLE", (key, c[key]["verdict"])
+            hashes.add(c[key]["hashes"][0])
+        assert len(hashes) == 1, f"{key}: the record and the fix columns disagree {hashes}"
 
 
-def test_workflow_diffs_each_set_against_its_columns():
+def test_workflow_diffs_the_covered_lanes_against_the_record():
     text = _read(".github/workflows/cpu-identity-gate.yml")
-    for flag in ("--record-covered-lanes", "--fix-covered-lanes", "--training-fix-columns"):
-        assert flag in text, f"the workflow does not read {flag}"
+    assert "--record-covered-lanes" in text, "the workflow does not read --record-covered-lanes"
+    for gone in ("--fix-covered-lanes", "--training-fix-columns", "FIX_COLUMNS", "FIX_COVERED_LANES"):
+        assert gone not in text, f"the workflow still carries {gone}"
     assert text.count('--diff $GPU_COLUMNS "$GATE_OUT/cpu-') == 2, "record diffs (covered and sabotage)"
     assert text.count('--lanes "$RECORD_COVERED_LANES"') == 2
-    assert text.count('--diff $FIX_COLUMNS "$GATE_OUT/cpu-') == 2, "fix diffs (covered and sabotage)"
-    assert text.count('--lanes "$FIX_COVERED_LANES"') == 2
-    for rel in host_surface.TRAINING_FIX_COLUMNS:
-        directory = "/" + rel.rsplit("/", 1)[0] + "/"
-        assert directory in text, f"the sparse checkout does not bring down {directory}"
+    directory = "/" + host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 1)[0] + "/"
+    assert directory in text, f"the sparse checkout does not bring down {directory}"
     assert '- "python/mojolearn/model_selection.py"' in text
 
 
