@@ -84,6 +84,7 @@ from gbdt.host.gbdt_oracle_depthwise import (
     gbdt_host_ns_model_text,
 )
 from gbdt.options.data_processing_options import nan_mode_from_name
+from gbdt.host.gbdt_oracle_feature_freq import gbdt_feature_freq_host_fit
 
 
 #: `SCORE_FUNCTION_COSINE` and `LEAF_ESTIMATION_NEWTON`
@@ -860,6 +861,61 @@ def gbdt_model_dim_binding(model: PythonObject) raises -> PythonObject:
     return PythonObject(_parse_model(String(py=model)).dim)
 
 
+def gbdt_fit_two_level_feature_freq_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    weights_addr: PythonObject,
+    sources_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`gbdt_fit_two_level_feature_freq_binding`
+    (`bindings/_mojolearn_gbdt.mojo:499-532`): the same seven params in the
+    same order, `[n_rows, n_features, n_weights, n_sources, learning_rate,
+    l2_leaf_reg, random_seed]`, the model text back, through
+    `gbdt/host/gbdt_oracle_feature_freq.mojo::gbdt_feature_freq_host_fit`
+    (the gbdt-feature-freq lane). `sample_weight` refuses by name. The seed
+    is read and, as on the device (`gbdt/estimator.mojo:220-226` hands it to
+    a searcher that draws no noise at `score_std_dev` 0), reaches no bit."""
+    if len(params) != 7:
+        raise Error("two-level FeatureFreq params must have seven values")
+    var x_address = Int(py=x_addr)
+    var y_address = Int(py=y_addr)
+    _ = f32_ptr(x_address)
+    _ = f32_ptr(y_address)
+    _ = f32_ptr(Int(py=weights_addr))
+    var sp = u32_ptr(Int(py=sources_addr))
+    var n_rows = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_weights = Int(py=params[2])
+    var n_sources = Int(py=params[3])
+    var learning_rate = Float32(Float64(py=params[4]))
+    var l2_leaf_reg = Float32(Float64(py=params[5]))
+    _ = UInt64(Int(py=params[6]))
+    if n_rows < 1 or n_features < 2 or n_sources < 2:
+        raise Error("two-level FeatureFreq fit needs rows and two sources")
+    if n_weights != 0 and n_weights != n_rows:
+        raise Error("two-level FeatureFreq weights must be empty or per-row")
+    if n_weights != 0:
+        raise Error(
+            "no CPU implementation of"
+            " _mojolearn_gbdt.gbdt_fit_two_level_feature_freq for"
+            " sample_weight; the gbdt host binding trains the"
+            " gbdt-feature-freq lane only (unit weights), see"
+            " gbdt/host/gbdt_oracle_feature_freq.mojo"
+        )
+    var sources = List[Int]()
+    for i in range(n_sources):
+        sources.append(Int(sp.unsafe_load(i)))
+    var text = String("")
+    with GILReleased(Python()):
+        var x = read_f32(x_address, n_rows * n_features)
+        var y = read_f32(y_address, n_rows)
+        text = gbdt_feature_freq_host_fit(
+            x, y, n_rows, n_features, sources, learning_rate, l2_leaf_reg
+        )
+    return PythonObject(text)
+
+
 def gbdt_sigmoid_binding(
     raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
 ) raises -> PythonObject:
@@ -888,6 +944,9 @@ def PyInit__mojolearn_gbdt_host() abi("C") -> PythonObject:
         module.def_function[gbdt_predict_binding]("gbdt_predict")
         module.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         module.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
+        module.def_function[gbdt_fit_two_level_feature_freq_binding](
+            "gbdt_fit_two_level_feature_freq"
+        )
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_gbdt_host: ", error))
