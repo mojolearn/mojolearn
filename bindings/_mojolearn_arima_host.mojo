@@ -45,6 +45,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
+from bindings.arima_exog_layout import exog_filter_layout
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -154,6 +155,7 @@ def _refuse_method(method: Int) raises:
 
 def arima_fit_binding(
     y_addr: PythonObject,
+    exog_addr: PythonObject,
     params_addr: PythonObject,
     x_addr: PythonObject,
     x0_addr: PythonObject,
@@ -162,8 +164,9 @@ def arima_fit_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`bindings/_mojolearn_arima.mojo::arima_fit_binding`'s contract on the
-    host: `params` is (batch_size, n_obs, p, d, q, P, D, Q, s, k, n_exog,
-    method, max_iterations); returns `N * batch_size`."""
+    host: the addresses are (y, exog, params, x, x0, stats, flags), `params`
+    is (batch_size, n_obs, p, d, q, P, D, Q, s, k, n_exog, method,
+    max_iterations); returns `N * batch_size`."""
     if len(params) != 13:
         raise Error(
             "arima_fit: params must contain 13 values (batch_size, n_obs, p,"
@@ -172,6 +175,8 @@ def arima_fit_binding(
         )
     var y_address = Int(py=y_addr)
     _ = f32_ptr(y_address)
+    var exog_address = Int(py=exog_addr)
+    _ = f32_ptr(exog_address)
     var pp = f32_ptr(Int(py=params_addr))
     var xp = f32_ptr(Int(py=x_addr))
     var x0p = f32_ptr(Int(py=x0_addr))
@@ -204,7 +209,8 @@ def arima_fit_binding(
         arima_host_refuse_unrestated(order, "arima_fit")
         var N = order.complexity()
         var y = read_f32(y_address, batch_size * n_obs)
-        var r = arima_host_fit(y, batch_size, n_obs, order, max_iterations)
+        var exog = exog_filter_layout(exog_address, batch_size, n_obs, order.n_exog, "exog")
+        var r = arima_host_fit(y, exog, batch_size, n_obs, order, max_iterations)
         if (
             len(r.t_x) != N * batch_size
             or len(r.x) != N * batch_size

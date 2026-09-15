@@ -11,15 +11,16 @@ THREE ENTRY POINTS, AND THEY ARE THE WHOLE PUBLIC DOOR
 
     arima_fit_ptr_host       `ARIMA.fit` (`arima.pyx:860-958`) with
                              `method = "ml"`, `start_params = None`,
-                             `simple_differencing = True`, no exog. Runs
+                             `simple_differencing = True`, with or without
+                             exogenous regressors. Runs
                              `estimate_x0`, the inverse Jones transform,
                              the own-written batched L-BFGS, the forward
                              transform and the unpack, then evaluates the
                              log-likelihood once more AT the fitted point
                              so the caller has a number the optimizer's
                              rescaled objective does not give it.
-    arima_predict_ptr_host   `ARIMA.predict(start, end)` (`arima.pyx:615`)
-                             with `level = None` and no exog.
+    arima_predict_ptr_host   `ARIMA.predict(start, end, exog)`
+                             (`arima.pyx:615`) with `level = None`.
     arima_forecast_ptr_host  `ARIMA.forecast(nsteps)` (`arima.pyx:770`),
                              which the reference spells `predict(n_obs, n_obs +
                              nsteps)` and is that here too.
@@ -30,7 +31,7 @@ to hand a length back through a second call. Written out because the
 question was asked of this design directly and the answer is not obviously
 yes for a fit.
 
-    fit       params  N * batch_size,  N = p + q + P + Q + k + 1
+    fit       params  N * batch_size,  N = p + q + P + Q + k + n_exog + 1
               x       N * batch_size
               x0      N * batch_size
               stats   2 * batch_size   float32
@@ -38,9 +39,8 @@ yes for a fit.
     predict   out     (end - start) * batch_size
     forecast  out     n_steps * batch_size
 
-`N` is `ARIMAOrder::complexity()` with `n_exog = 0`, and `n_exog` is refused
-by name one line into every entry, so the Python side computes the same `N`
-from the order tuple it was constructed with. Nothing here is sized by an
+`N` is `ARIMAOrder::complexity()`, and the Python side computes the same `N`
+from the order tuple and the regressor count the fit was handed. Nothing here is sized by an
 answer. Contrast `svm/estimator.mojo`, where `n_support` is not known until
 the solve finishes and the caller has to allocate the worst case; ARIMA has
 no such quantity.
@@ -66,7 +66,7 @@ this file. `_refuse_method` below is the refusal, it runs before the
 
 WHAT THIS SURFACE DOES NOT ADD. Every other refusal already exists one layer
 down and is raised there by name. `arima/impl/tsa/arima_common.mojo::
-validate_order` refuses exog (`n_exog != 0`), `rd > 8`, `r > 5`, `p, q, P, Q
+validate_order` refuses `n_exog < 0` or above `EXOG_MAX`, `rd > 8`, `r > 5`, `p, q, P, Q
 > 8`, `d + D > 2`, a seasonal order with `s < 2` and an order with no
 parameters at all; `arima/impl/batched_arima.mojo::_refuse_non_finite`
 refuses a non-finite series with its flat index; `predict` refuses `start <
@@ -91,8 +91,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 
-from arima.impl.batched_arima import batched_diff, batched_loglike, predict
-from arima.impl.batched_fit import batched_fit
+from arima.impl.batched_arima import batched_diff, batched_loglike_x, predict_x
+from arima.impl.batched_fit import batched_fit_x
+from bindings.arima_exog_layout import exog_filter_layout
+from tsa.impl.timeSeries.arima_helpers import prepare_data
 from arima.impl.tsa.arima_common import (
     ARIMAOrder,
     ARIMAParams,
@@ -153,12 +155,8 @@ def _order(
     p: Int, d: Int, q: Int, P: Int, D: Int, Q: Int, s: Int, k: Int, n_exog: Int
 ) raises -> ARIMAOrder:
     """The nine integers as an `ARIMAOrder`, validated before anything opens
-    a device.
-
-    `validate_order` is where `n_exog != 0` is refused, and that refusal is
-    the one this whole surface most depends on: `ARIMAParams` carries no
-    `beta` anywhere in the lane, so an accepted exog would not be a wrong
-    answer, it would be a read of memory nobody wrote."""
+    a device (`n_exog` included: negative, or above `EXOG_MAX`, is refused
+    by name there)."""
     var order = ARIMAOrder(p, d, q, P, D, Q, s, k, n_exog)
     validate_order(order)
     return order
@@ -191,6 +189,21 @@ def _upload_f32(
     var buf = ctx.enqueue_create_buffer[DType.float32](count)
     var host = ctx.enqueue_create_host_buffer[DType.float32](count)
     copy_f32(ptr, host.unsafe_ptr(), max(0, n))
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+    ctx.synchronize()
+    _ = host^
+    return buf^
+
+
+def _upload_list(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:
+    """`values` onto the device, the staging buffer kept live past the
+    synchronize as `_upload_f32` keeps it."""
+    var n = len(values)
+    var buf = ctx.enqueue_create_buffer[DType.float32](max(1, n))
+    var host = ctx.enqueue_create_host_buffer[DType.float32](max(1, n))
+    for i in range(n):
+        host.unsafe_ptr().unsafe_store(i, values[i])
     if n > 0:
         ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
@@ -234,6 +247,7 @@ def _write_list_i32(
 def _loglike_at(
     ctx: DeviceContext,
     mut y: DeviceBuffer[DType.float32],
+    mut exog: DeviceBuffer[DType.float32],
     batch_size: Int,
     n_obs: Int,
     order: ARIMAOrder,
@@ -255,24 +269,32 @@ def _loglike_at(
     at `batched_arima.cu:175`. `check_finite = false`, because
     `batched_fit` already refused a non-finite series once and nothing has
     written the buffer since."""
+    var fut = ctx.enqueue_create_buffer[DType.float32](1)
+    var n_ser = order.n_exog * batch_size
     if order.need_diff():
         var n_kf = n_obs - order.n_diff()
         var y_kf = ctx.enqueue_create_buffer[DType.float32](n_kf * batch_size)
         batched_diff(ctx, y_kf, y, batch_size, n_obs, order)
+        var x_kf = ctx.enqueue_create_buffer[DType.float32](max(1, n_kf * n_ser))
+        if n_ser > 0:
+            prepare_data(ctx, x_kf, exog, n_ser, n_obs, order.d, order.D, order.s)
         ctx.synchronize()
-        var lld = batched_loglike(
-            ctx, y_kf, batch_size, n_kf, order.without_diff(), params,
+        var lld = batched_loglike_x(
+            ctx, y_kf, x_kf, fut, batch_size, n_kf, order.without_diff(), params,
             False, 0, 32, False,
         )
         var got = lld.loglike.copy()
         _ = lld^
+        _ = x_kf^
         _ = y_kf^
+        _ = fut^
         return got^
-    var ll = batched_loglike(
-        ctx, y, batch_size, n_obs, order, params, False, 0, 32, False
+    var ll = batched_loglike_x(
+        ctx, y, exog, fut, batch_size, n_obs, order, params, False, 0, 32, False
     )
     var out = ll.loglike.copy()
     _ = ll^
+    _ = fut^
     return out^
 
 
@@ -283,6 +305,7 @@ def _loglike_at(
 
 def arima_fit_ptr_host(
     y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    exog_address: Int,
     params_ptr: MutPointer[Float32, MutUntrackedOrigin],
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
     x0_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -304,7 +327,12 @@ def arima_fit_ptr_host(
 ) raises -> Int:
     """`ARIMA(order, seasonal_order, fit_intercept=k).fit(y)`, one shot.
     Returns `N * batch_size`, the number of float32 written to
-    `params_ptr`, with `N = p + q + P + Q + k + 1`.
+    `params_ptr`, with `N = p + q + P + Q + k + n_exog + 1`.
+
+    `exog_address` reads `batch_size * n_obs * n_exog` float32 as
+    `(batch_size, n_obs, n_exog)` C order (DEVIATION 996), and is not read
+    when `n_exog == 0`. A non-finite regressor is refused by name
+    (DEVIATION 997) before any device work.
 
     `y_ptr` reads `batch_size * n_obs` float32 with each SERIES CONTIGUOUS,
     series `b` at `[b * n_obs, (b + 1) * n_obs)`. That is the layout every
@@ -321,6 +349,7 @@ def arima_fit_ptr_host(
 
         series b occupies [b * N, (b + 1) * N)
             mu       k values     (absent when k == 0)
+            beta     n_exog values
             ar       p values
             ma       q values
             sar      P values
@@ -369,6 +398,7 @@ def arima_fit_ptr_host(
             + String(max_iterations) + ")"
         )
     var N = order.complexity()
+    var exog_host = exog_filter_layout(exog_address, batch_size, n_obs, order.n_exog, "exog")
 
     var ctx = DeviceContext()
     var trace = IdentityTrace()
@@ -381,11 +411,12 @@ def arima_fit_ptr_host(
         + " k=" + String(k) + " max_iterations=" + String(max_iterations)
     )
     var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
+    var exog = _upload_list(ctx, exog_host)
     var params = ARIMAParams(ctx, order, batch_size)
-    var r = batched_fit(
-        ctx, y, batch_size, n_obs, order, params, trace, max_iterations
+    var r = batched_fit_x(
+        ctx, y, exog, batch_size, n_obs, order, params, trace, max_iterations
     )
-    var loglike = _loglike_at(ctx, y, batch_size, n_obs, order, params)
+    var loglike = _loglike_at(ctx, y, exog, batch_size, n_obs, order, params)
 
     _write_list_f32(params_ptr, r.t_x, 0)
     _write_list_f32(x_ptr, r.x, 0)
@@ -397,6 +428,7 @@ def arima_fit_ptr_host(
 
     _ = r^
     _ = params^
+    _ = exog^
     _ = y^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
@@ -410,6 +442,8 @@ def arima_fit_ptr_host(
 
 def _predict_into(
     y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    exog_address: Int,
+    exog_fut_address: Int,
     params_ptr: MutPointer[Float32, MutUntrackedOrigin],
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
     batch_size: Int,
@@ -435,9 +469,16 @@ def _predict_into(
         )
     var N = order.complexity()
     var predict_ld = end - start
+    var num_steps = end - n_obs if end > n_obs else 0
+    var exog_host = exog_filter_layout(exog_address, batch_size, n_obs, order.n_exog, "exog")
+    var fut_host = exog_filter_layout(
+        exog_fut_address, batch_size, num_steps, order.n_exog, "exog (future values)"
+    )
 
     var ctx = DeviceContext()
     var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
+    var exog = _upload_list(ctx, exog_host)
+    var exog_fut = _upload_list(ctx, fut_host)
     var xin = _upload_f32(ctx, params_ptr, N * batch_size)
     var params = ARIMAParams(ctx, order, batch_size)
     unpack(ctx, params, order, batch_size, xin)
@@ -447,14 +488,16 @@ def _predict_into(
     # `d + s*D` are undefined under it and come back as the canonical NaN
     # (DEVIATION 676), which is `arima.pyx:672-674`'s warning made into a
     # value.
-    var res = predict(
-        ctx, y, batch_size, n_obs, start, end, order, params, True
+    var res = predict_x(
+        ctx, y, exog, exog_fut, batch_size, n_obs, start, end, order, params, True
     )
     _download_f32(ctx, res.y_p, out_ptr, predict_ld * batch_size)
 
     _ = res^
     _ = params^
     _ = xin^
+    _ = exog_fut^
+    _ = exog^
     _ = y^
     _ = ctx^
     return predict_ld * batch_size
@@ -462,6 +505,8 @@ def _predict_into(
 
 def arima_predict_ptr_host(
     y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    exog_address: Int,
+    exog_fut_address: Int,
     params_ptr: MutPointer[Float32, MutUntrackedOrigin],
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
     batch_size: Int,
@@ -478,8 +523,13 @@ def arima_predict_ptr_host(
     k: Int,
     n_exog: Int,
 ) raises -> Int:
-    """`ARIMA.predict(start, end)` with `level = None` and no exog
+    """`ARIMA.predict(start, end, exog)` with `level = None`
     (`arima.pyx:615-766`). Returns `(end - start) * batch_size`.
+
+    `exog_address` reads the fit's regressors, `(batch_size, n_obs, n_exog)`,
+    and `exog_fut_address` their future values, `(batch_size, max(end -
+    n_obs, 0), n_exog)` (DEVIATION 996); neither is read when `n_exog == 0`,
+    and the second is not read when `end <= n_obs`.
 
     `end` IS EXCLUDED, which is cuML's convention and is stated in their own
     docstring ("Index where to end the predictions, excluded"). It is NOT
@@ -503,13 +553,15 @@ def arima_predict_ptr_host(
     """
     var order = _order(p, d, q, P, D, Q, s, k, n_exog)
     return _predict_into(
-        y_ptr, params_ptr, out_ptr, batch_size, n_obs, start, end, order,
-        "arima_predict",
+        y_ptr, exog_address, exog_fut_address, params_ptr, out_ptr, batch_size,
+        n_obs, start, end, order, "arima_predict",
     )
 
 
 def arima_forecast_ptr_host(
     y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    exog_address: Int,
+    exog_fut_address: Int,
     params_ptr: MutPointer[Float32, MutUntrackedOrigin],
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
     batch_size: Int,
@@ -542,6 +594,6 @@ def arima_forecast_ptr_host(
         )
     var order = _order(p, d, q, P, D, Q, s, k, n_exog)
     return _predict_into(
-        y_ptr, params_ptr, out_ptr, batch_size, n_obs, n_obs, n_obs + n_steps,
-        order, "arima_forecast",
+        y_ptr, exog_address, exog_fut_address, params_ptr, out_ptr, batch_size,
+        n_obs, n_obs, n_obs + n_steps, order, "arima_forecast",
     )

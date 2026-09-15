@@ -9,12 +9,18 @@ Reference: `cuml/cpp/src/arima/batched_arima.cu` (cuML 265b9da6, v26.08.00):
 which is DEVIATION 678 in
 `arima/impl/linalg/batched/least_squares.mojo`.
 
-NOT IMPLEMENTED FROM THIS CHAIN, refused by name: the `order.n_exog > 0` block of
-`_start_params` (:857-931), which regresses the endogenous series on the
-exogenous ones and subtracts the fitted component. Exog is refused by
-`validate_order` for the whole lane, so that block cannot be reached; the
-refusal is not new here. `estimate_x0`'s `missing` arm (:975-983, `fillna`)
-is likewise unreachable, because a non-finite `y` is refused by name.
+THE `order.n_exog > 0` BLOCK OF `_start_params` (:854-931), lane/arima-exog
+(2026-09-15), is `exog_regression_kernel` below, run by `estimate_x0_x`
+before `start_params`: the differenced `y` is regressed on the differenced
+regressors (`b_gels`, here DEVIATION 678's Householder QR), a series whose
+solve fails keeps `beta = 0` (theirs zeroes it on `info > 0`, `:883-894`),
+and the fitted component `exog * beta` is subtracted from `y` before the
+ARMA least squares sees it (`:896-909`). When there are not more rows than
+regressors, `beta = 0` and `y` is untouched (`:911-918`). The fitted
+component is a closed gemm in theirs, so its fold is DEVIATION 995's choice,
+the one the filter's observation intercept uses. `estimate_x0`'s `missing`
+arm (:975-983, `fillna`) is unreachable, because a non-finite `y` is refused
+by name.
 
 =============================================================================
 THE SEAM THIS FILE EXISTS TO GET RIGHT, AND WOULD GET WRONG BY COPYING
@@ -588,6 +594,58 @@ def start_params(
     )
 
 
+def exog_regression_kernel(
+    scratch: MutPointer[Float32, MutAnyOrigin],
+    d_exog: MutPointer[Float32, MutAnyOrigin],
+    d_yd: MutPointer[Float32, MutAnyOrigin],
+    d_beta: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    batch_size_in: Int32,
+    m_in: Int32,
+    n_exog_in: Int32,
+):
+    """`_start_params`' exog block (`:856-909`) for one series, `m > n_exog`.
+
+    1. `b_gels(bm_exog_copy, bm_y_copy)` (`:858-866`): the differenced
+       regressors (`m x n_exog`, column `i` at `[bid*n_exog*m + i*m ..]`)
+       and the differenced `y` copied into this series' scratch, solved.
+    2. `b_2dcopy` then the `info > 0` zeroing (`:880-894`): `beta` is the
+       solution, or zeros when the solve refused.
+    3. `b_gemm(1.0, exog, beta, 0.0)` then `y - that` (`:896-909`): the
+       fitted component, DEVIATION 995's serial ascending fma from 0 over
+       the ORIGINAL regressors (theirs reads `bm_exog`, not the destroyed
+       copy), subtracted from `y` in place."""
+    var bid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if bid >= Int(batch_size_in):
+        return
+    var m = Int(m_in)
+    var n = Int(n_exog_in)
+    var sb = bid * (m * n + m)
+    var bb = sb + m * n
+    var xb = bid * n * m
+    var yb = bid * m
+    for i in range(n):
+        for t in range(m):
+            scratch.unsafe_store(sb + i * m + t, ftz(d_exog.unsafe_load(xb + i * m + t)))
+    for t in range(m):
+        scratch.unsafe_store(bb + t, ftz(d_yd.unsafe_load(yb + t)))
+    var inf = householder_qr_solve(scratch, sb, m, n, scratch, bb)
+    info.unsafe_store(bid, inf)
+    for i in range(n):
+        if inf == Int32(0):
+            d_beta.unsafe_store(bid * n + i, scratch.unsafe_load(bb + i))
+        else:
+            d_beta.unsafe_store(bid * n + i, Float32(0.0))
+    for t in range(m):
+        var acc = Float32(0.0)
+        for i in range(n):
+            var xv = ftz(d_exog.unsafe_load(xb + i * m + t))
+            var bv = ftz(d_beta.unsafe_load(bid * n + i))
+            acc = ftz(identical_mul_add(xv, bv, acc))
+        var yv = ftz(d_yd.unsafe_load(yb + t))
+        d_yd.unsafe_store(yb + t, ftz(yv - acc))
+
+
 def estimate_x0(
     ctx: DeviceContext,
     mut params: ARIMAParams,
@@ -596,8 +654,36 @@ def estimate_x0(
     n_obs: Int,
     order: ARIMAOrder,
 ) raises -> StartParamsResult:
-    """`estimate_x0` (`:948-1008`) with `missing = false` and `n_exog = 0`:
-    difference, then `_start_params`. Writes `params` in place.
+    """The `n_exog = 0` door the checks call: `estimate_x0_x` with
+    placeholders it does not read."""
+    if order.n_exog != 0:
+        raise Error(
+            "estimate_x0: n_exog=" + String(order.n_exog)
+            + " needs the exogenous series; call estimate_x0_x"
+        )
+    var e0 = ctx.enqueue_create_buffer[DType.float32](1)
+    var i0 = ctx.enqueue_create_buffer[DType.int32](1)
+    var r = estimate_x0_x(ctx, params, d_y, e0, batch_size, n_obs, order, i0)
+    _ = e0^
+    _ = i0^
+    return r^
+
+
+def estimate_x0_x(
+    ctx: DeviceContext,
+    mut params: ARIMAParams,
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_exog: DeviceBuffer[DType.float32],
+    batch_size: Int,
+    n_obs: Int,
+    order: ARIMAOrder,
+    mut exog_info: DeviceBuffer[DType.int32],
+) raises -> StartParamsResult:
+    """`estimate_x0` (`:948-1008`) with `missing = false`: difference `y`
+    and, when `n_exog > 0`, the regressors (`d_exog`, the filter's layout,
+    `:992-1004`), then `_start_params`, whose exog block runs first. Writes
+    `params` in place, and `exog_info[bid]` with the regression's solve code
+    (0 when there is no regression to run; the caller records it).
 
     Their `RAFT_FAIL` on `n_obs <= d + s*D` (`:989`) is kept as a raise by
     name; `prepare_data` would otherwise be handed a negative length."""
@@ -612,6 +698,44 @@ def estimate_x0(
     var n_obs_d = n_obs - d_sD
     var yd = ctx.enqueue_create_buffer[DType.float32](max(1, n_obs_d * batch_size))
     prepare_data(ctx, yd, d_y, batch_size, n_obs, order.d, order.D, order.s)
+    if order.n_exog > 0:
+        var n_exog = order.n_exog
+        var xd = ctx.enqueue_create_buffer[DType.float32](max(1, n_obs_d * n_exog * batch_size))
+        prepare_data(ctx, xd, d_exog, n_exog * batch_size, n_obs, order.d, order.D, order.s)
+        var grid = (batch_size + X0_TPB - 1) // X0_TPB
+        if n_obs_d > n_exog:
+            var scratch = ctx.enqueue_create_buffer[DType.float32](
+                (n_obs_d * n_exog + n_obs_d) * batch_size
+            )
+            ctx.enqueue_function[exog_regression_kernel](
+                scratch.unsafe_ptr(), xd.unsafe_ptr(), yd.unsafe_ptr(),
+                params.beta.unsafe_ptr(), exog_info.unsafe_ptr(),
+                Int32(batch_size), Int32(n_obs_d), Int32(n_exog),
+                grid_dim=(grid, 1, 1), block_dim=(X0_TPB, 1, 1),
+            )
+            ctx.synchronize()
+            _ = scratch^
+        else:
+            # `:911-918`: too few rows for the regression, beta = 0 and y
+            # untouched.
+            var zb = ctx.enqueue_create_host_buffer[DType.float32](n_exog * batch_size)
+            var zi = ctx.enqueue_create_host_buffer[DType.int32](batch_size)
+            for i in range(n_exog * batch_size):
+                zb.unsafe_ptr().unsafe_store(i, Float32(0.0))
+            for i in range(batch_size):
+                zi.unsafe_ptr().unsafe_store(i, Int32(0))
+            ctx.enqueue_copy(
+                dst_buf=params.beta.create_sub_buffer[DType.float32](0, n_exog * batch_size),
+                src_ptr=zb.unsafe_ptr(),
+            )
+            ctx.enqueue_copy(
+                dst_buf=exog_info.create_sub_buffer[DType.int32](0, batch_size),
+                src_ptr=zi.unsafe_ptr(),
+            )
+            ctx.synchronize()
+            _ = zb^
+            _ = zi^
+        _ = xd^
     var out = start_params(ctx, params, yd, batch_size, n_obs_d, order)
     ctx.synchronize()
     _ = yd^

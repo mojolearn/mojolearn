@@ -323,7 +323,7 @@ fi
 #                              blobs), the dD == 1 arm of the in-sample
 #                              kernel, finalize_forecast, and the MA block
 #                              of estimate_x0
-#   the two refusals        -> exog and method='css', which cost no device
+#   the two refusals        -> method='css' and a mismatched exog, which cost no device
 #                              work and prove the refusals are wired, not
 #                              merely present
 #
@@ -391,12 +391,29 @@ assert fd.shape == (batch, 3) and np.isfinite(fd).all(), fd
 # in Mojo, so both are caught as a bare Exception: a Mojo `Error` crossing
 # `def_function` is not a named Python type. That is what makes the message
 # check the real assertion here.
+# EXOGENOUS REGRESSORS (lane/arima-exog): fitted, forecast with their future
+# values, and refused by name on a shape that does not match.
+xg = np.asarray(rng.standard_normal((batch, n_obs, 2)), dtype=np.float32)
+mx = _arima_impl.ARIMA(order=(1, 0, 0), trend="c").fit(y, xg)
+assert mx.beta_.shape == (batch, 2), mx.beta_.shape
+assert mx.params_.shape == (batch, 1 + 2 + 1 + 1), mx.params_.shape
+fx = np.asarray(rng.standard_normal((batch, 3, 2)), dtype=np.float32)
+fcx = mx.forecast(3, exog=fx)
+assert fcx.shape == (batch, 3) and np.isfinite(fcx).all(), fcx
+px = mx.predict(n_obs, n_obs + 3, exog=fx)
+assert np.asarray(px).tobytes() == np.asarray(fcx).tobytes(), "forecast != predict with exog"
 try:
-    _arima_impl.ARIMA(order=(1, 0, 0)).fit(y, exog=np.ones((batch, n_obs, 1)))
-except Exception as exc:
-    assert "exog" in str(exc), exc
+    mx.forecast(3)
+except ValueError as exc:
+    assert "future values must be provided" in str(exc), exc
 else:
-    raise AssertionError("exog was ACCEPTED")
+    raise AssertionError("a forecast with no exog was ACCEPTED")
+try:
+    _arima_impl.ARIMA(order=(1, 0, 0)).fit(y, exog=np.ones((batch, n_obs + 1, 1), np.float32))
+except ValueError as exc:
+    assert "dimensions mismatch" in str(exc), exc
+else:
+    raise AssertionError("a mismatched exog was ACCEPTED")
 
 try:
     _arima_impl.ARIMA(order=(1, 0, 0), method="css").fit(y)
@@ -413,8 +430,8 @@ except NotImplementedError as exc:
 else:
     raise AssertionError("trend='ct' was ACCEPTED")
 
-print("  smoke: ARIMA fit/predict/forecast on (1,0,0) and (1,1,1), "
-      "exog and css refused")
+print("  smoke: ARIMA fit/predict/forecast on (1,0,0) and (1,1,1), exog "
+      "fitted and forecast, css and a mismatched exog refused")
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 

@@ -122,7 +122,9 @@ def fit_arima(estimator, y, *, devices=(0,), series_per_shard=1, exog=None):
     if type(estimator) is not ARIMA:
         raise TypeError('fit_arima requires mojolearn.ARIMA')
     if exog is not None:
-        raise NotImplementedError('ARIMA exogenous regressors are not implemented')
+        raise NotImplementedError(
+            'fit_arima does not shard exogenous regressors; ARIMA.fit(y, exog) '
+            'fits them on one device')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel ARIMA requires IDENTICAL numeric mode')
     if type(series_per_shard) is not int or series_per_shard < 1:

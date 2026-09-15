@@ -94,6 +94,15 @@ _METHODS = {"ml": 0, "css": 1, "css-ml": 2}
 #: The saved-model format tag (`ARIMA.save`, lane/inference-forecast-umap-pca).
 _ARIMA_FORMAT = "mojolearn-arima-1"
 
+#: DEVIATION 998: the format of a model fitted WITH exogenous regressors
+#: (lane/arima-exog, 2026-09-15). A model without them is still written as
+#: `mojolearn-arima-1`, byte for byte what it was, so every saved-model hash
+#: recorded before this lane stays valid; a model with them adds the fit's
+#: regressors (`exog`, `(batch_size, n_obs, n_exog)` float32, which predict
+#: reads) and a thirteenth `meta` field, `n_exog`, under this tag, which a
+#: loader that predates it refuses by name instead of reading one block short.
+_ARIMA_FORMAT_EXOG = "mojolearn-arima-2"
+
 #: What `arima_numeric_mode()` answers per tier, the `NUMERIC_*` constant in
 #: `checks/numerics.mojo`. Duplicated from `_backend._MODE_CODE` on purpose:
 #: the cross-check below is worth nothing if it reads its expectation from
@@ -150,32 +159,85 @@ def _series_major(y, name):
     return a, int(a.shape[0]), int(a.shape[1]), copied
 
 
-def _n_exog(exog):
-    """The number of exogenous regressors the caller supplied, which is the
-    number `arima/impl/tsa/arima_common.mojo::validate_order` refuses.
+def _input_ndim(y):
+    """The rank the caller handed `fit` for `y`, before `_series_major` makes
+    it 2-D: the buffer's own `ndim`, or the nesting depth of a list."""
+    try:
+        return int(probe(y).ndim)
+    except TypeError:
+        depth, v = 0, y
+        while isinstance(v, (list, tuple)):
+            depth += 1
+            v = v[0] if len(v) else None
+        return depth
 
-    THIS FUNCTION IS NOT A REFUSAL AND MUST NOT BECOME ONE. Exogenous
-    regressors are genuinely unimplemented: `ARIMAParams::beta`, `ARIMAOrder::
-    n_exog`, `d_exog` / `d_exog_fut`, `obs_intercept`, the two
-    `cublasgemmStridedBatched` calls at `batched_kalman.cu:930-972` and
-    everything downstream of them have no implementation at all
-    (`arima/NOT_IMPLEMENTED.tsv`). So the count is plumbed through as a
-    NUMBER and the Mojo validator raises, which keeps that refusal reachable
-    from every caller of the lane rather than from this file only. Any
-    non-None `exog` yields at least 1 so that no shape can slip past as a
-    zero.
-    """
-    if exog is None:
-        return 0
+
+def _exog_array(exog, batch_size, n_rows, y_ndim, name):
+    """A C-contiguous float32 `(batch_size, n_rows, n_exog)` array of `exog`.
+
+    Returns `(array, n_exog)`. DEVIATION 996: `exog` is `(batch_size, n_obs,
+    n_exog)`, `y`'s shape with a regressor axis last, which is statsmodels'
+    `(n_obs, k_exog)` with the batch in front. cuML's is `(n_obs, n_exog *
+    batch_size)` in Fortran order; the Mojo boundary
+    (`bindings/arima_exog_layout.mojo`) permutes to that layout. Two shorter
+    spellings are accepted because they are unambiguous:
+
+        y 1-D (one series)   exog (n_rows,) one regressor, or (n_rows, n_exog)
+        y 2-D                exog (batch_size, n_rows), one regressor
+
+    A non-finite value is NOT checked here: it is refused by name, with the
+    series, row and regressor, in `bindings/arima_exog_layout.mojo`
+    (DEVIATION 997), which every binding reaches."""
     try:
         pb = probe(exog)
     except TypeError:
-        # A list or anything else: at least one regressor, which is what
-        # the Mojo validator refuses (DEVIATION 2417).
-        return 1
-    if pb.ndim >= 2 and pb.shape[-1] >= 1:
-        return int(pb.shape[-1])
-    return 1
+        try:
+            exog = Array.from_list(exog, "<f4")
+        except Exception:
+            raise ValueError(
+                f"mojolearn ARIMA: {name} must be an array or a nested list of "
+                f"numbers, got {type(exog).__name__}"
+            ) from None
+        pb = probe(exog)
+    shape = tuple(int(v) for v in pb.shape)
+    if len(shape) == 3:
+        want = (batch_size, n_rows)
+        got = shape[:2]
+    elif len(shape) == 2 and y_ndim == 1:
+        want = (n_rows,)
+        got = shape[:1]
+        shape = (1, shape[0], shape[1])
+    elif len(shape) == 2:
+        want = (batch_size, n_rows)
+        got = shape
+        shape = (shape[0], shape[1], 1)
+    elif len(shape) == 1 and y_ndim == 1:
+        want = (n_rows,)
+        got = shape
+        shape = (1, shape[0], 1)
+    else:
+        raise ValueError(
+            f"mojolearn ARIMA: {name} must be (batch_size, n_rows, n_exog); a "
+            f"1-D y also takes (n_rows,) or (n_rows, n_exog) and a 2-D y takes "
+            f"(batch_size, n_rows) for one regressor. Got {len(pb.shape)}-D "
+            f"shape {tuple(pb.shape)} beside a {y_ndim}-D y"
+        )
+    if tuple(got) != tuple(want):
+        raise ValueError(
+            f"mojolearn ARIMA: dimensions mismatch, {name} has shape "
+            f"{tuple(pb.shape)} and must lead with {want} "
+            f"(batch_size={batch_size}, rows={n_rows})"
+        )
+    if shape[2] < 1:
+        raise ValueError(f"mojolearn ARIMA: {name} has no regressor columns, shape {tuple(pb.shape)}")
+    a, _copied = as_f32_c(exog, ndim=len(pb.shape), name=name)
+    return a.reshape(shape), int(shape[2])
+
+
+#: The address every binding call passes for an exogenous input that is not
+#: there. One float, never read (`n_exog == 0`, or no forecast steps).
+def _no_exog():
+    return empty((1,), "<f4")
 
 
 class ARIMA(NumericModeMixin):
@@ -223,8 +285,9 @@ class ARIMA(NumericModeMixin):
                                     `fit_intercept` (DEVIATION 993 below).
                                     't', 'ct' and a polynomial trend
                                     specification are REFUSED BY NAME by
-                                    `_arima_impl.py`: a time trend is an
-                                    exogenous column and exog has no implementation
+                                    `_arima_impl.py`: cuML has no time trend
+                                    to hold one to; pass the time index as an
+                                    `exog` column instead
         method            honored   for 'ml' ONLY. 'css' and 'css-ml' are
                                     REFUSED BY NAME by
                                     `arima/estimator.mojo::_refuse_method`,
@@ -237,14 +300,19 @@ class ARIMA(NumericModeMixin):
         maxiter           honored   the L-BFGS iteration cap, cuML's
                                     `maxiter`, default 1000 as theirs.
                                     Refused below 1 by `arima/estimator.mojo`
-        exog              refused   `arima/impl/tsa/arima_common.mojo::
-                                    validate_order`, by name, as
-                                    `n_exog != 0`. NOT refused here: this
-                                    file COUNTS the columns and hands the
-                                    count over, so the implemented refusal is
-                                    what fires. Exogenous regressors are
-                                    unimplemented end to end, `ARIMAParams` has
-                                    no `beta` field anywhere in the lane
+        exog              honored   on `fit(y, exog)`, `predict(start, end,
+                                    exog)` and `forecast(steps, exog)`
+                                    (lane/arima-exog, 2026-09-15): regression
+                                    with ARIMA errors as cuML's (`beta` packed
+                                    after `mu`, the regressors differenced like
+                                    `y`, `beta` started by least squares before
+                                    the ARMA fit, `x_t beta` added to every
+                                    prediction). `(batch_size, n_obs, n_exog)`
+                                    (DEVIATION 996); at most 17 regressors
+                                    (DEVIATION 994, validate_order); a
+                                    non-finite one refused by name (DEVIATION
+                                    997). cuML's `exog` is a CONSTRUCTOR
+                                    argument; here it goes to `fit` with `y`
         verbose           refused   `_arima_impl.py`, for anything truthy.
                                     In the reference it selects LOG LINES; this implementation
                                     prints none, so accepting it would be
@@ -355,10 +423,16 @@ class ARIMA(NumericModeMixin):
     ----------
     params_ : Array (batch_size, N) float32
         The fitted model, forward transformed, packed per series in
-        `ARIMAParams::pack`'s order: `mu` (only when `k == 1`), then `ar`
-        (p), `ma` (q), `sar` (P), `sma` (Q), then `sigma2`. `N = p + q + P +
-        Q + k + 1`. This is exactly the array `predict` and `forecast` send
-        back down.
+        `ARIMAParams::pack`'s order: `mu` (only when `k == 1`), `beta`
+        (n_exog), then `ar` (p), `ma` (q), `sar` (P), `sma` (Q), then
+        `sigma2`. `N = p + q + P + Q + k + n_exog + 1`. This is exactly the
+        array `predict` and `forecast` send back down.
+    beta_ : Array (batch_size, n_exog) float32
+        The regression coefficients, one per regressor per series. Raises
+        AttributeError when the fit had no `exog`, as `mu_` does without an
+        intercept.
+    n_exog_ : int
+        The regressor count the fit was handed, 0 without `exog`.
     mu_, ar_, ma_, sar_, sma_, sigma2_ : ndarray float32
         Named blocks of `params_`. `mu_` and `sigma2_` are `(batch_size,)`;
         `ar_`, `ma_`, `sar_` and `sma_` are `(batch_size, p)`,
@@ -423,22 +497,19 @@ class ARIMA(NumericModeMixin):
             k = 1 if trend.lower() == "c" else 0
         elif isinstance(trend, str) and trend.lower() in ("t", "ct"):
             raise NotImplementedError(
-                f"mojolearn ARIMA: trend={trend!r} is refused. A time trend "
-                "is an exogenous regressor, and exogenous regressors are "
-                "unimplemented end to end in this lane: ARIMAParams has no `beta` "
-                "field, ARIMAOrder.n_exog is refused at any non-zero value, "
-                "and the two cublasgemmStridedBatched calls that apply them "
-                "(batched_kalman.cu:930-972) have no implementation "
-                "(arima/NOT_IMPLEMENTED.tsv). This class carries trend=None, "
-                "'n' and 'c'; 'c' is cuML's fit_intercept=True"
+                f"mojolearn ARIMA: trend={trend!r} is refused. cuML has no "
+                "time trend (its only switch is fit_intercept), so there is no "
+                "reference to hold one to; a time trend is a regressor, so "
+                "pass the time index as an exog column to fit, predict and "
+                "forecast. This class carries trend=None, 'n' and 'c'; 'c' is "
+                "cuML's fit_intercept=True"
             )
         else:
             raise NotImplementedError(
                 f"mojolearn ARIMA: trend={trend!r} is refused. This class "
                 "carries None (statsmodels' rule: 'c' when d + D == 0, "
                 "otherwise 'n'), 'n' and 'c'. A polynomial trend "
-                "specification is a list of exogenous columns and exog has "
-                "no implementation (arima/NOT_IMPLEMENTED.tsv)"
+                "specification is a list of regressors: pass them as exog"
             )
         self.trend = trend
         self.k_ = k
@@ -473,6 +544,7 @@ class ARIMA(NumericModeMixin):
                 "under numpy.asarray)"
             )
         self.output_type = None
+        self.n_exog_ = 0
         self.complexity_ = p + q + P + Q + k + 1
 
     # -- the binding, and the tier it really is -----------------------------
@@ -510,18 +582,23 @@ class ARIMA(NumericModeMixin):
         every arm this lane can reach.
 
         `y` is `(batch_size, n_obs)` float32, one series per ROW; a 1-D `y`
-        is one series. `exog` is refused by
-        `arima/impl/tsa/arima_common.mojo::validate_order`, by name, and
-        this method does not check it, it counts it.
+        is one series. `exog` is `(batch_size, n_obs, n_exog)`, the
+        regressors beside every observation (see `_exog_array` for the
+        shorter spellings); without it the model has no regression.
 
         Returns `self`. Read `retcode_` before you believe a series: a batch
         is fitted together and a series that ran to `maxiter` is reported,
         not raised on.
         """
+        y_ndim = _input_ndim(y)
         arr, batch_size, n_obs, copied = _series_major(y, "y")
         p, d, q = self.order
         P, D, Q, s = self.seasonal_order
-        N = self.complexity_
+        if exog is None:
+            ex, n_exog = _no_exog(), 0
+        else:
+            ex, n_exog = _exog_array(exog, batch_size, n_obs, y_ndim, "exog")
+        N = p + q + P + Q + self.k_ + n_exog + 1
 
         params = empty((batch_size * N,), "<f4")
         x = empty((batch_size * N,), "<f4")
@@ -535,6 +612,7 @@ class ARIMA(NumericModeMixin):
         # `SVR.fit`'s support-vector arrays are (DEVIATION 873).
         written = self._extension().arima_fit(
             addr_ro(arr, name="y"),
+            addr_ro(ex, name="exog"),
             addr(params, name="params"),
             addr(x, name="x"),
             addr(x0, name="x0"),
@@ -544,7 +622,7 @@ class ARIMA(NumericModeMixin):
             # batch_size, n_obs, p, d, q, P, D, Q, s, k, n_exog, method,
             # max_iterations
             [batch_size, n_obs, p, d, q, P, D, Q, s, self.k_,
-             _n_exog(exog), _METHODS[self.method], self.maxiter],
+             n_exog, _METHODS[self.method], self.maxiter],
         )
         if int(written) != batch_size * N:
             raise RuntimeError(
@@ -557,6 +635,10 @@ class ARIMA(NumericModeMixin):
         self.batch_size_ = batch_size
         self.n_obs_ = n_obs
         self._y = arr
+        self._y_ndim = y_ndim
+        self.n_exog_ = n_exog
+        self.complexity_ = N
+        self._exog = ex if n_exog else None
         # DEVIATION 2416: every attribute is a `mojolearn.Array`. `reshape`
         # is a C-order view over the flat buffer the kernel wrote; a slice
         # copies (the Array contract), which is what `ascontiguousarray`
@@ -606,21 +688,30 @@ class ARIMA(NumericModeMixin):
         return self._block("mu_", 0, 1).ravel()
 
     @property
+    def beta_(self):
+        if getattr(self, "n_exog_", 0) == 0:
+            raise AttributeError(
+                "mojolearn ARIMA: there is no beta_ because this model was fit "
+                "without exogenous regressors; pass exog to fit"
+            )
+        return self._block("beta_", self.k_, self.n_exog_)
+
+    @property
     def ar_(self):
-        return self._block("ar_", self.k_, self.order[0])
+        return self._block("ar_", self.k_ + self.n_exog_, self.order[0])
 
     @property
     def ma_(self):
-        return self._block("ma_", self.k_ + self.order[0], self.order[2])
+        return self._block("ma_", self.k_ + self.n_exog_ + self.order[0], self.order[2])
 
     @property
     def sar_(self):
-        off = self.k_ + self.order[0] + self.order[2]
+        off = self.k_ + self.n_exog_ + self.order[0] + self.order[2]
         return self._block("sar_", off, self.seasonal_order[0])
 
     @property
     def sma_(self):
-        off = (self.k_ + self.order[0] + self.order[2]
+        off = (self.k_ + self.n_exog_ + self.order[0] + self.order[2]
                + self.seasonal_order[0])
         return self._block("sma_", off, self.seasonal_order[2])
 
@@ -634,8 +725,46 @@ class ARIMA(NumericModeMixin):
         if not hasattr(self, "params_"):
             raise ValueError(f"mojolearn ARIMA: call fit() before {who}")
 
+    def _future_exog(self, exog, end):
+        """The addresses' arrays for `predict(start, end, exog)`: the fit's
+        regressors and their future values. cuML's three checks
+        (`arima.pyx:688-696`), in its order and its words, then the shape
+        (`:713-722`)."""
+        n_exog = getattr(self, "n_exog_", 0)
+        if n_exog > 0 and end > self.n_obs_ and exog is None:
+            raise ValueError(
+                "mojolearn ARIMA: the model was fit with a regression component, "
+                "so future values must be provided via `exog`"
+            )
+        if n_exog == 0 and exog is not None:
+            raise ValueError(
+                "mojolearn ARIMA: a value was given for `exog` but the model was "
+                "fit without any regression component"
+            )
+        if end <= self.n_obs_ and exog is not None:
+            raise ValueError(
+                "mojolearn ARIMA: a value was given for `exog` but only in-sample "
+                "predictions were requested"
+            )
+        if n_exog == 0:
+            return _no_exog(), _no_exog()
+        if end <= self.n_obs_:
+            return self._exog, _no_exog()
+        fut, got = _exog_array(exog, self.batch_size_, end - self.n_obs_,
+                               getattr(self, "_y_ndim", 2), "exog")
+        if got != n_exog:
+            raise ValueError(
+                f"mojolearn ARIMA: dimensions mismatch, `exog` has {got} "
+                f"regressor column(s) and the model was fit with {n_exog}"
+            )
+        return self._exog, fut
+
     def predict(self, start=0, end=None, exog=None):
         """In-sample and out-of-sample prediction, `(batch_size, end - start)`.
+
+        `exog` is the regressors' FUTURE values, `(batch_size, end - n_obs,
+        n_exog)`, required exactly when the model has a regression and `end >
+        n_obs`, and refused otherwise (cuML's rule and words).
 
         `end` IS EXCLUDED. That is cuML's convention, stated in the cuML
         docstring ("Index where to end the predictions, excluded"), and it
@@ -671,18 +800,21 @@ class ARIMA(NumericModeMixin):
                 f"end={end}. `end` is EXCLUDED here, as it is in cuML; "
                 "statsmodels' end is the last index returned"
             )
+        ex, fut = self._future_exog(exog, end)
         out = empty((self.batch_size_ * width,), "<f4")
         y = self._y
         pr = self.params_
         self._extension().arima_predict(
             addr_ro(y, name="y"),
+            addr_ro(ex, name="exog"),
+            addr_ro(fut, name="exog (future values)"),
             addr_ro(pr, name="params"),
             addr(out, name="out"),
             # ORDER MATCHES
             # bindings/_mojolearn_arima.mojo::arima_predict_binding.
             # batch_size, n_obs, start, end, p, d, q, P, D, Q, s, k, n_exog
             [self.batch_size_, self.n_obs_, start, end, p, d, q, P, D, Q, s,
-             self.k_, _n_exog(exog)],
+             self.k_, self.n_exog_],
         )
         return out.reshape((self.batch_size_, width))
 
@@ -690,9 +822,10 @@ class ARIMA(NumericModeMixin):
         """`(batch_size, steps)` out-of-sample forecasts, continuing each
         series from its own last observation.
 
-        Upstream this is literally `predict(n_obs, n_obs + steps)` and it is
+        In the reference this is literally `predict(n_obs, n_obs + steps)` and it is
         that here too, so nothing in the answer depends on which of the two
-        you call. There is no NaN prefix in it: the in-sample kernel does
+        you call. `exog` is the regressors' future values, `(batch_size,
+        steps, n_exog)`, required when the model has a regression. There is no NaN prefix in it: the in-sample kernel does
         not launch at all when `start == n_obs`.
         """
         self._check_fitted("forecast")
@@ -703,11 +836,14 @@ class ARIMA(NumericModeMixin):
             )
         p, d, q = self.order
         P, D, Q, s = self.seasonal_order
+        ex, fut = self._future_exog(exog, self.n_obs_ + steps)
         out = empty((self.batch_size_ * steps,), "<f4")
         y = self._y
         pr = self.params_
         self._extension().arima_forecast(
             addr_ro(y, name="y"),
+            addr_ro(ex, name="exog"),
+            addr_ro(fut, name="exog (future values)"),
             addr_ro(pr, name="params"),
             addr(out, name="out"),
             # ORDER MATCHES
@@ -716,7 +852,7 @@ class ARIMA(NumericModeMixin):
             # reserved (MUST BE 0; the slot cuML's `level` would take, and
             # `level` is NOT IMPLEMENTED)
             [self.batch_size_, self.n_obs_, steps, p, d, q, P, D, Q, s,
-             self.k_, _n_exog(exog), 0],
+             self.k_, self.n_exog_, 0],
         )
         return out.reshape((self.batch_size_, steps))
 
@@ -728,7 +864,10 @@ class ARIMA(NumericModeMixin):
         packed fitted order, `x`, `x0`, `fx` (float32), `n_iter`, `retcode`
         (int32), `llf`, `aic`, `bic` (float64), `meta` `<i8` [p, d, q, P, D,
         Q, s, k, batch_size, n_obs, maxiter, input_copied], `trend`, `method`
-        and `numeric_mode`.
+        and `numeric_mode`, under format `mojolearn-arima-1`. A model fit with
+        `exog` (DEVIATION 998) is `mojolearn-arima-2`: the same members, the
+        fit's regressors as `exog` `(batch_size, n_obs, n_exog)` float32, and
+        `n_exog` appended to `meta`.
 
         A loaded model predicts and forecasts and answers every fitted
         attribute (`params_`, `ar_`, `ma_`, `sar_`, `sma_`, `mu_`,
@@ -742,8 +881,13 @@ class ARIMA(NumericModeMixin):
         p, d, q = self.order
         P, D, Q, s = self.seasonal_order
         b, n = int(self.batch_size_), int(self.n_obs_)
+        n_exog = int(getattr(self, "n_exog_", 0))
+        meta = [p, d, q, P, D, Q, s, int(self.k_), b, n, int(self.maxiter),
+                1 if getattr(self, "input_copied_", False) else 0]
+        if n_exog:
+            meta.append(n_exog)
         arrays = {
-            "format": _ARIMA_FORMAT,
+            "format": _ARIMA_FORMAT_EXOG if n_exog else _ARIMA_FORMAT,
             "estimator": type(self).__name__,
             "numeric_mode": _saved_mode(self),
             "trend": "none" if self.trend is None else str(self.trend).lower(),
@@ -758,12 +902,10 @@ class ARIMA(NumericModeMixin):
             "llf": self.llf_,
             "aic": self.aic_,
             "bic": self.bic_,
-            "meta": Array.from_list(
-                [p, d, q, P, D, Q, s, int(self.k_), b, n, int(self.maxiter),
-                 1 if getattr(self, "input_copied_", False) else 0],
-                "<i8",
-            ),
+            "meta": Array.from_list(meta, "<i8"),
         }
+        if n_exog:
+            arrays["exog"] = self._exog.reshape((b, n, n_exog))
         return _serialize.write_npz(path, arrays)
 
     @classmethod
@@ -772,12 +914,19 @@ class ARIMA(NumericModeMixin):
         answers the fitted attributes; it does not refit."""
         from . import _serialize
         from .decomposition import _check_saved_by, _restore_mode
-        arrays = _serialize.read_npz(path, _ARIMA_FORMAT)
+        arrays = _serialize.read_npz(path, (_ARIMA_FORMAT, _ARIMA_FORMAT_EXOG))
         _check_saved_by(arrays, path, cls)
+        with_exog = _serialize.scalar_str(arrays, "format") == _ARIMA_FORMAT_EXOG
         meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 12:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 12 are needed")
+        want = 13 if with_exog else 12
+        if meta.size != want:
+            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, {want} are needed")
         p, d, q, P, D, Q, s, k, b, n, maxiter, copied = (int(meta[i]) for i in range(12))
+        n_exog = int(meta[12]) if with_exog else 0
+        if with_exog and n_exog < 1:
+            raise ValueError(f"mojolearn: {path!r} is {_ARIMA_FORMAT_EXOG!r} with n_exog={n_exog}")
+        if not with_exog and "exog" in arrays:
+            raise ValueError(f"mojolearn: {path!r} is {_ARIMA_FORMAT!r} and holds an exog member")
         trend = _serialize.scalar_str(arrays, "trend")
         obj = cls(order=(p, d, q), seasonal_order=(P, D, Q, s),
                   trend=None if trend == "none" else trend,
@@ -785,11 +934,13 @@ class ARIMA(NumericModeMixin):
         if obj.k_ != k:
             raise ValueError(f"mojolearn: {path!r} records k={k}, its trend {trend!r} resolves to {obj.k_}")
         _restore_mode(obj, arrays)
-        N = obj.complexity_
+        N = obj.complexity_ + n_exog
         shapes = {"y": ("<f4", (b, n)), "params": ("<f4", (b, N)), "x": ("<f4", (b, N)),
                   "x0": ("<f4", (b, N)), "fx": ("<f4", (b,)), "n_iter": ("<i4", (b,)),
                   "retcode": ("<i4", (b,)), "llf": ("<f8", (b,)), "aic": ("<f8", (b,)),
                   "bic": ("<f8", (b,))}
+        if with_exog:
+            shapes["exog"] = ("<f4", (b, n, n_exog))
         got = {}
         for name, (dtype, shape) in shapes.items():
             value = _serialize.exact(arrays, name, dtype)
@@ -799,6 +950,9 @@ class ARIMA(NumericModeMixin):
         obj.batch_size_ = b
         obj.n_obs_ = n
         obj.input_copied_ = bool(copied)
+        obj.n_exog_ = n_exog
+        obj.complexity_ = N
+        obj._exog = got["exog"] if with_exog else None
         obj._y = got["y"]
         obj.params_ = got["params"]
         obj.x_ = got["x"]

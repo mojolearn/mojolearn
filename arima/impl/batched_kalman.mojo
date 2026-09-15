@@ -16,8 +16,7 @@ Layout: series `b` contiguous in `ys`/`pred` (`bid * nobs`),
 NOT IMPLEMENTED, each refused by name one layer up (`arima_common.mojo::
 validate_order`, `batched_arima.mojo`): the `rd > 8` block-per-series
 kernel (`_batched_kalman_device_loop_large_kernel`, `linalg/block.cuh`);
-the `r > 5` Schur Lyapunov arm; exogenous regressors (`d_exog`, `d_beta`,
-the two cuBLAS gemms at `:925-970`); confidence intervals (`level > 0`,
+the `r > 5` Schur Lyapunov arm; confidence intervals (`level > 0`,
 `d_F_fc`, `confidence_intervals` kernel, host `erfinv`); MISSING
 OBSERVATIONS (`isnan(yt)` arms at `:191,193,219,236,246`; NaN is refused at the
 surface so those arms would be unreachable, and an unreached branch is an
@@ -25,6 +24,28 @@ unchecked one -- ENGINEERING_RULES 8). `arima/NOT_IMPLEMENTED.tsv` lists each.
 
 PRECISION: DEVIATION 670 (`arima_common.mojo`): Float32 where the reference
 is `double`.
+
+EXOGENOUS REGRESSORS (lane/arima-exog, 2026-09-15). `_batched_kalman_filter`
+(`:921-972`) forms the OBSERVATION INTERCEPT `obs_intercept[bid*nobs + t] =
+sum_i exog[bid*n_exog*nobs + i*nobs + t] * beta[bid*n_exog + i]` with two
+`cublasgemmStridedBatched` calls (in-sample and forecast), and the loop
+kernel adds it first to every prediction (`pred += d_obs_inter[..]` at
+`:181`, `:286`), so `y_t - x_t beta` is the ARMA process the filter runs
+on. `obs_intercept_kernel` below is that product and the loop kernel takes
+the two buffers and a flag.
+
+=============================================================================
+DEVIATION 995: THE OBSERVATION INTERCEPT'S FOLD IS CHOSEN, NOT INHERITED
+=============================================================================
+THEIRS. `cublasgemmStridedBatched` with alpha = 1, beta = 0: a closed call
+whose accumulation order is not readable from source.
+OURS. One thread per series, `acc = 0`, then `acc = fma(exog, beta_i, acc)`
+over `i` ascending, the same choice DEVIATION 674 made for the other gemm
+shapes of this lane and `estimate_x0.mojo`'s exog component uses, so the
+fit's start and the filter agree about what `x_t beta` is. The loop adds it
+as theirs does, `pred = 0; pred += obs; pred += alpha[0]`, each through
+`ftz`. The `has_exog == 0` arm reads neither buffer and executes the
+statements it executed before this change.
 
 THE SEAMS, where arithmetic order is pinned (IDENTITY_PATHS rows 9/10/12):
   `sum += A[i + j*n] * v[j]`            Mv_l/MM_l  -> identical_mul_add, k ascending
@@ -436,15 +457,20 @@ def batched_kalman_loop_kernel(
     d_loglike: MutPointer[Float32, MutAnyOrigin],
     d_fc: MutPointer[Float32, MutAnyOrigin],
     d_info: MutPointer[Int32, MutAnyOrigin],
+    d_obs: MutPointer[Float32, MutAnyOrigin],
+    d_obs_fut: MutPointer[Float32, MutAnyOrigin],
     rd_in: Int32,
     nobs_in: Int32,
     batch_size_in: Int32,
     intercept_in: Int32,
     n_diff_in: Int32,
     fc_steps_in: Int32,
+    has_exog_in: Int32,
 ):
-    """`batched_kalman_loop_kernel` (:117-333) without the `missing` arms,
-    `d_obs_inter` (exog) and `conf_int`. `d_vs` (the innovations `y - pred`)
+    """`batched_kalman_loop_kernel` (:117-333) without the `missing` arms
+    and `conf_int`. `d_obs` / `d_obs_fut` are `d_obs_inter` /
+    `d_obs_inter_fut` (exog), read only when `has_exog_in != 0`, which is
+    theirs' `!= nullptr` test. `d_vs` (the innovations `y - pred`)
     is ours, for the card's `arima.resid`; theirs keeps `vs_it` in a
     register. `d_info[bid]` is ours: 0, or `it + 1` at the first summed step
     whose `F <= 0`."""
@@ -494,6 +520,8 @@ def batched_kalman_loop_kernel(
     for it in range(nobs):
         # 1. v = y - Z*alpha
         var pred = Float32(0.0)
+        if has_exog_in != 0:
+            pred = ftz(pred + ftz(d_obs.unsafe_load(b_ys + it)))
         if n_diff == 0:
             pred = ftz(pred + l_alpha[0])
         else:
@@ -592,6 +620,8 @@ def batched_kalman_loop_kernel(
     var b_fc = bid * fc_steps
     for it in range(fc_steps):
         var pred = Float32(0.0)
+        if has_exog_in != 0:
+            pred = ftz(pred + ftz(d_obs_fut.unsafe_load(b_fc + it)))
         if n_diff == 0:
             pred = ftz(pred + l_alpha[0])
         else:
@@ -602,6 +632,34 @@ def batched_kalman_loop_kernel(
         for i in range(rd):
             l_alpha[i] = l_v[i]
         l_alpha[n_diff] = ftz(l_alpha[n_diff] + mu)
+
+
+def obs_intercept_kernel(
+    d_exog: MutPointer[Float32, MutAnyOrigin],
+    d_beta: MutPointer[Float32, MutAnyOrigin],
+    d_obs: MutPointer[Float32, MutAnyOrigin],
+    batch_size_in: Int32,
+    n_in: Int32,
+    n_exog_in: Int32,
+):
+    """`:926-972`, one series per thread: `obs[bid*n + t] = sum_i
+    exog[bid*n_exog*n + i*n + t] * beta[bid*n_exog + i]`, DEVIATION 995's
+    serial ascending fma from 0. `n` is `nobs` for the in-sample call and
+    `fc_steps` for the forecast call, as theirs."""
+    var bid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if bid >= Int(batch_size_in):
+        return
+    var n = Int(n_in)
+    var n_exog = Int(n_exog_in)
+    var xb = bid * n_exog * n
+    var bb = bid * n_exog
+    for t in range(n):
+        var acc = Float32(0.0)
+        for i in range(n_exog):
+            var xv = ftz(d_exog.unsafe_load(xb + i * n + t))
+            var bv = ftz(d_beta.unsafe_load(bb + i))
+            acc = ftz(identical_mul_add(xv, bv, acc))
+        d_obs.unsafe_store(bid * n + t, acc)
 
 
 # ---------------------------------------------------------------------------
@@ -659,6 +717,11 @@ struct KalmanWorkspace(Movable):
     var fc: DeviceBuffer[DType.float32]
     var P0: DeviceBuffer[DType.float32]
     var alpha0: DeviceBuffer[DType.float32]
+    var obs: DeviceBuffer[DType.float32]
+    """The observation intercept `x_t beta` at every step (theirs'
+    `obs_intercept`), one float when `n_exog == 0`."""
+    var obs_fut: DeviceBuffer[DType.float32]
+    """The same over the forecast steps (theirs' `obs_intercept_fut`)."""
 
     def __init__(out self, ctx: DeviceContext, order: ARIMAOrder, batch_size: Int, n_obs: Int, fc_steps: Int) raises:
         var rd = order.rd()
@@ -688,6 +751,11 @@ struct KalmanWorkspace(Movable):
         self.fc = ctx.enqueue_create_buffer[DType.float32](max(1, fc_steps * batch_size))
         self.P0 = ctx.enqueue_create_buffer[DType.float32](rd2 * batch_size)
         self.alpha0 = ctx.enqueue_create_buffer[DType.float32](rd * batch_size)
+        var with_exog = order.n_exog != 0
+        self.obs = ctx.enqueue_create_buffer[DType.float32](n_obs * batch_size if with_exog else 1)
+        self.obs_fut = ctx.enqueue_create_buffer[DType.float32](
+            max(1, fc_steps * batch_size) if with_exog else 1
+        )
 
 
 def init_batched_kalman_matrices(
@@ -729,10 +797,43 @@ def batched_kalman_filter(
     fc_steps: Int,
     kalman_tpb: Int = KALMAN_TPB,
 ) raises -> KalmanWorkspace:
+    """The `n_exog == 0` entry the checks and the card call, unchanged in
+    what it launches: `batched_kalman_filter_x` with one-float placeholders
+    for the exogenous buffers, which the loop kernel does not read."""
+    if order.n_exog != 0:
+        raise Error(
+            "batched_kalman_filter: n_exog=" + String(order.n_exog)
+            + " needs the exogenous series; call batched_kalman_filter_x"
+        )
+    var e0 = ctx.enqueue_create_buffer[DType.float32](1)
+    var e1 = ctx.enqueue_create_buffer[DType.float32](1)
+    var ws = batched_kalman_filter_x(
+        ctx, d_ys, e0, e1, nobs, params, order, batch_size, fc_steps, kalman_tpb
+    )
+    _ = e0^
+    _ = e1^
+    return ws^
+
+
+def batched_kalman_filter_x(
+    ctx: DeviceContext,
+    mut d_ys: DeviceBuffer[DType.float32],
+    mut d_exog: DeviceBuffer[DType.float32],
+    mut d_exog_fut: DeviceBuffer[DType.float32],
+    nobs: Int,
+    mut params: ARIMAParams,
+    order: ARIMAOrder,
+    batch_size: Int,
+    fc_steps: Int,
+    kalman_tpb: Int = KALMAN_TPB,
+) raises -> KalmanWorkspace:
     """`batched_kalman_filter` (:1248-1303) -> `_batched_kalman_filter`
     (:889-1139) -> `batched_kalman_loop` (:746-819, the `rd <= 8` arm),
-    launch for launch; `level` (confidence intervals) and `exog` are not
-    parameters because they are refused one layer up. `kalman_tpb` is the
+    launch for launch; `level` (confidence intervals) is not a parameter
+    because it is refused one layer up. `d_exog` holds `batch_size * n_exog *
+    nobs` floats laid out `[bid*n_exog*nobs + i*nobs + t]` (theirs'
+    strided-batched layout) and `d_exog_fut` the same over `fc_steps`; both
+    are the FILTER's inputs, already differenced when the series was. `kalman_tpb` is the
     loop kernel's block width (their `dim3(32, 1)`): SCHEDULING, varied by
     the launch-invariance gate. Raises by name when a series' Lyapunov or
     intercept system is singular or an innovation variance is not positive."""
@@ -740,6 +841,21 @@ def batched_kalman_filter(
     var r = order.r()
     var n_diff = order.n_diff()
     var ws = KalmanWorkspace(ctx, order, batch_size, nobs, fc_steps)
+    var has_exog = order.n_exog != 0
+    if has_exog:
+        # `:926-972`, the in-sample product, then the forecast product when
+        # there are forecast steps.
+        ctx.enqueue_function[obs_intercept_kernel](
+            d_exog.unsafe_ptr(), params.beta.unsafe_ptr(), ws.obs.unsafe_ptr(),
+            Int32(batch_size), Int32(nobs), Int32(order.n_exog),
+            grid_dim=(_grid(batch_size, INIT_TPB), 1, 1), block_dim=(INIT_TPB, 1, 1),
+        )
+        if fc_steps > 0:
+            ctx.enqueue_function[obs_intercept_kernel](
+                d_exog_fut.unsafe_ptr(), params.beta.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+                Int32(batch_size), Int32(fc_steps), Int32(order.n_exog),
+                grid_dim=(_grid(batch_size, INIT_TPB), 1, 1), block_dim=(INIT_TPB, 1, 1),
+            )
     init_batched_kalman_matrices(ctx, params, batch_size, order, ws)
     ctx.enqueue_function[kalman_init_state_kernel](
         ws.R.unsafe_ptr(), ws.T.unsafe_ptr(), params.sigma2.unsafe_ptr(), params.mu.unsafe_ptr(),
@@ -767,8 +883,9 @@ def batched_kalman_filter(
         ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
         ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
         ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
-        ws.info_loop.unsafe_ptr(),
+        ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
         Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
+        Int32(1 if has_exog else 0),
         grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
     )
     var info1 = _read_info(ctx, ws.info_loop, batch_size)

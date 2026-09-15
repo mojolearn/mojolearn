@@ -62,6 +62,16 @@ WHAT IS MIRRORED, IN THE ORDER `arima_fit_ptr_host`
      (`arima/estimator.mojo:232-274`), one more filter pass on the fitted
      parameters with `trans = false`.
 
+EXOGENOUS REGRESSORS (lane/arima-exog, 2026-09-15), restated where the device
+reaches them: `exog_regression_kernel` (`estimate_x0.mojo`, the exog block of
+`_start_params`) before the ARMA least squares, the regressors differenced
+beside `y` (`batched_fit_x`), `beta` packed after `mu` and copied through the
+Jones transform, `obs_intercept_kernel` and the `has_exog` arms of the loop
+kernel (`batched_kalman.mojo`, DEVIATION 995's fold), and
+`prepare_future_data`'s one-difference arm (`arima_helpers.mojo`). The
+regressors arrive in the filter's layout, `[bid*n_exog*n + i*n + t]`
+(`bindings/arima_exog_layout.mojo`).
+
 `arima_forecast_ptr_host` and `arima_predict_ptr_host`
 (`arima/estimator.mojo:409-545`, `batched_arima.mojo:287-348`) are mirrored
 for `start == n_obs`: the differencing, the non-finite refusal on the filter
@@ -89,7 +99,11 @@ CPU identity gate could not hold a restatement of it to anything.
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` doubles the
 finite-difference step (2^-9 in place of DEVIATION 687's 2^-10), so every
 gradient, every iterate after x0 and the fitted parameters of every fixture
-move, and the forecasts computed from them move with them.
+move, and the forecasts computed from them move with them. The same define,
+or `-D MOJOLEARN_ARIMA_EXOG_SABOTAGE=1` alone, flips the lowest bit of every
+finite observation intercept (`ARIMA_ORACLE_EXOG_SABOTAGE`), so a model with
+regressors moves through the exog arithmetic itself, in the fit and in the
+forecast, and a model without them does not see it.
 
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the three ARIMA lanes is the measurement.
@@ -118,6 +132,11 @@ comptime ARIMA_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 #: bit flipped, one ulp, after all arithmetic.
 comptime ARIMA_ORACLE_PREDICT_SABOTAGE = (
     is_defined["MOJOLEARN_HOST_SABOTAGE"]() or is_defined["MOJOLEARN_ARIMA_PREDICT_SABOTAGE"]()
+)
+
+#: The exogenous arithmetic's own negative control (see THE NEGATIVE CONTROL).
+comptime ARIMA_ORACLE_EXOG_SABOTAGE = (
+    is_defined["MOJOLEARN_HOST_SABOTAGE"]() or is_defined["MOJOLEARN_ARIMA_EXOG_SABOTAGE"]()
 )
 
 #: DEVIATION 687, `ARIMA_FIT_H` (`batched_fit.mojo:148`), and the sabotage
@@ -189,8 +208,8 @@ def arima_host_fit_h() -> Float32:
 
 @fieldwise_init
 struct ArimaHostOrder(Copyable, Movable, ImplicitlyCopyable):
-    """`ARIMAOrder` (`arima_common.mojo:65-105`) with `n_exog = 0`, which the
-    binding has already required through the device's `validate_order`."""
+    """`ARIMAOrder` (`arima_common.mojo:65-105`), validated by the binding
+    through the device's `validate_order`."""
 
     var p: Int
     var d: Int
@@ -200,6 +219,7 @@ struct ArimaHostOrder(Copyable, Movable, ImplicitlyCopyable):
     var Q: Int
     var s: Int
     var k: Int
+    var n_exog: Int
 
     def n_diff(self) -> Int:
         return self.d + self.s * self.D
@@ -219,13 +239,13 @@ struct ArimaHostOrder(Copyable, Movable, ImplicitlyCopyable):
         return self.n_diff() + self.r()
 
     def complexity(self) -> Int:
-        return self.p + self.P + self.q + self.Q + self.k + 1
+        return self.p + self.P + self.q + self.Q + self.k + self.n_exog + 1
 
     def need_diff(self) -> Bool:
         return self.d + self.D != 0
 
     def without_diff(self) -> Self:
-        return ArimaHostOrder(self.p, 0, self.q, self.P, 0, self.Q, self.s, self.k)
+        return ArimaHostOrder(self.p, 0, self.q, self.P, 0, self.Q, self.s, self.k, self.n_exog)
 
 
 def arima_host_refuse_unrestated(order: ArimaHostOrder, who: String) raises:
@@ -285,6 +305,7 @@ struct ArimaHostParams(Copyable, Movable):
     kind, laid out `[bid * n_kind + i]`, at least one value long."""
 
     var mu: List[Float32]
+    var beta: List[Float32]
     var ar: List[Float32]
     var ma: List[Float32]
     var sar: List[Float32]
@@ -295,6 +316,7 @@ struct ArimaHostParams(Copyable, Movable):
 def _new_params(order: ArimaHostOrder, batch_size: Int) -> ArimaHostParams:
     return ArimaHostParams(
         mu=_zeros(max(1, order.k * batch_size)),
+        beta=_zeros(max(1, order.n_exog * batch_size)),
         ar=_zeros(max(1, order.p * batch_size)),
         ma=_zeros(max(1, order.q * batch_size)),
         sar=_zeros(max(1, order.P * batch_size)),
@@ -304,8 +326,8 @@ def _new_params(order: ArimaHostOrder, batch_size: Int) -> ArimaHostParams:
 
 
 def _pack(params: ArimaHostParams, order: ArimaHostOrder, batch_size: Int) -> List[Float32]:
-    """`pack_kernel` (`arima_common.mojo:162-201`): `[mu, ar, ma, sar, sma,
-    sigma2]` per series, a copy."""
+    """`pack_kernel` (`arima_common.mojo:162-201`): `[mu, beta, ar, ma, sar,
+    sma, sigma2]` per series, a copy."""
     var N = order.complexity()
     var out = _zeros(N * batch_size)
     for bid in range(batch_size):
@@ -313,6 +335,9 @@ def _pack(params: ArimaHostParams, order: ArimaHostOrder, batch_size: Int) -> Li
         if order.k != 0:
             out[o] = params.mu[bid]
             o += 1
+        for i in range(order.n_exog):
+            out[o + i] = params.beta[order.n_exog * bid + i]
+        o += order.n_exog
         for i in range(order.p):
             out[o + i] = params.ar[order.p * bid + i]
         o += order.p
@@ -338,6 +363,9 @@ def _unpack(x: List[Float32], order: ArimaHostOrder, batch_size: Int) -> ArimaHo
         if order.k != 0:
             params.mu[bid] = x[o]
             o += 1
+        for i in range(order.n_exog):
+            params.beta[order.n_exog * bid + i] = x[o + i]
+        o += order.n_exog
         for i in range(order.p):
             params.ar[order.p * bid + i] = x[o + i]
         o += order.p
@@ -415,6 +443,62 @@ def _finalize_forecast(
             else:
                 x = ftz(fc[fc_base + idx])
             fc[fc_base + i] = ftz(cur + x)
+
+
+def _prepare_future(
+    past: List[Float32], fut: List[Float32], n_series: Int, n_past: Int, n_fut: Int,
+    order: ArimaHostOrder,
+) raises -> List[Float32]:
+    """`prepare_future_data` (`arima_helpers.mojo`) for `d + D <= 1`:
+    `future_diff_kernel`'s one-difference arm, `ftz(ftz(fut[i]) -
+    sel(i - period))` with `_select_read` flushing its load, or the COPY."""
+    var dD = order.d + order.D
+    if dD == 0:
+        return fut.copy()
+    if dD != 1:
+        raise Error(
+            "arima host: prepare_future_data reached with d + D = " + String(dD)
+            + "; arima_host_refuse_unrestated refuses it first"
+        )
+    var period = 1 if order.d != 0 else order.s
+    var out = _zeros(max(1, n_fut * n_series))
+    for sid in range(n_series):
+        var pb = sid * n_past
+        var fb = sid * n_fut
+        for i in range(n_fut):
+            var a = ftz(fut[fb + i])
+            var idx = i - period
+            var b: Float32
+            if idx < 0:
+                b = ftz(past[pb + n_past + idx])
+            else:
+                b = ftz(fut[fb + idx])
+            out[fb + i] = ftz(a - b)
+    return out^
+
+
+def _obs_intercept(
+    exog: List[Float32], beta: List[Float32], batch_size: Int, n: Int, n_exog: Int
+) -> List[Float32]:
+    """`obs_intercept_kernel` (`batched_kalman.mojo`): `sum_i exog * beta_i`,
+    DEVIATION 995's serial ascending fma from 0, series major. Under
+    `ARIMA_ORACLE_EXOG_SABOTAGE` every finite value has its lowest bit
+    flipped."""
+    var out = _zeros(max(1, n * batch_size))
+    for bid in range(batch_size):
+        var xb = bid * n_exog * n
+        var bb = bid * n_exog
+        for t in range(n):
+            var acc = Float32(0.0)
+            for i in range(n_exog):
+                var xv = ftz(exog[xb + i * n + t])
+                var bv = ftz(beta[bb + i])
+                acc = ftz(identical_mul_add(xv, bv, acc))
+            comptime if ARIMA_ORACLE_EXOG_SABOTAGE:
+                if isfinite(acc):
+                    acc = bitcast[DType.float32](bitcast[DType.uint32](acc) ^ UInt32(1))
+            out[bid * n + t] = acc
+    return out^
 
 
 def _refuse_non_finite(y: List[Float32], n: Int, name: String) raises:
@@ -511,7 +595,7 @@ def _batched_jones(
 ) -> ArimaHostParams:
     """`batched_jones_transform` (`arima_helpers.mojo:202-230`): AR, MA, SAR,
     SMA when present, `sigma2_floor_kernel` (`:189-199`, `max(ftz(v),
-    1e-6)`) on BOTH directions, `mu` copied."""
+    1e-6)`) on BOTH directions, `mu` and `beta` copied."""
     var t = _new_params(order, batch_size)
     if order.p != 0:
         t.ar = _jones_transform(params.ar, batch_size, order.p, True, is_inv)
@@ -526,6 +610,8 @@ def _batched_jones(
     if order.k != 0:
         for i in range(batch_size):
             t.mu[i] = params.mu[i]
+    for i in range(order.n_exog * batch_size):
+        t.beta[i] = params.beta[i]
     return t^
 
 
@@ -668,6 +754,8 @@ struct KalmanHostOut(Movable):
 
 def _kalman(
     ys: List[Float32],
+    exog: List[Float32],
+    exog_fut: List[Float32],
     nobs: Int,
     t: ArimaHostParams,
     order: ArimaHostOrder,
@@ -701,6 +789,13 @@ def _kalman(
     var P_all = _zeros(rd2 * batch_size)
     var alpha_all = _zeros(rd * batch_size)
     var info0 = List[Int32](length=batch_size, fill=Int32(0))
+    var has_exog = order.n_exog != 0
+    var obs = _zeros(1)
+    var obs_fut = _zeros(1)
+    if has_exog:
+        obs = _obs_intercept(exog, t.beta, batch_size, nobs, order.n_exog)
+        if fc_steps > 0:
+            obs_fut = _obs_intercept(exog_fut, t.beta, batch_size, fc_steps, order.n_exog)
 
     for bid in range(batch_size):
         # -- init_batched_kalman_matrices_kernel (:149-235), n_diff = 0
@@ -843,6 +938,8 @@ def _kalman(
         for it in range(nobs):
             # 1. v = y - Z*alpha
             var pred = Float32(0.0)
+            if has_exog:
+                pred = ftz(pred + ftz(obs[b_ys + it]))
             pred = ftz(pred + l_alpha[0])
             pred_all[b_ys + it] = pred
             var yt = ftz(ys[b_ys + it])
@@ -886,6 +983,8 @@ def _kalman(
         var b_fc = bid * fc_steps
         for it in range(fc_steps):
             var pred = Float32(0.0)
+            if has_exog:
+                pred = ftz(pred + ftz(obs_fut[b_fc + it]))
             pred = ftz(pred + l_alpha[0])
             fc[b_fc + it] = pred
             _mv(rd, Float32(1.0), l_T, l_alpha, l_v)
@@ -911,15 +1010,15 @@ def _kalman(
 
 
 def _loglike_packed(
-    y_kf: List[Float32], batch_size: Int, n_obs_kf: Int, order_kf: ArimaHostOrder,
-    x: List[Float32],
+    y_kf: List[Float32], exog_kf: List[Float32], batch_size: Int, n_obs_kf: Int,
+    order_kf: ArimaHostOrder, x: List[Float32],
 ) raises -> List[Float32]:
     """`batched_loglike_packed` (`batched_arima.mojo:186-203`) with `trans =
     true` and `check_finite = false`: unpack, the forward transform, the
     filter, the host copy of the log-likelihood."""
     var raw = _unpack(x, order_kf, batch_size)
     var t = _batched_jones(order_kf, batch_size, False, raw)
-    var out = _kalman(y_kf, n_obs_kf, t, order_kf, batch_size, 0)
+    var out = _kalman(y_kf, exog_kf, _zeros(1), n_obs_kf, t, order_kf, batch_size, 0)
     return out.loglike.copy()
 
 
@@ -929,7 +1028,8 @@ def _loglike_packed(
 
 
 def _eval_batch(
-    y_kf: List[Float32], batch_size: Int, n_obs_kf: Int, order_kf: ArimaHostOrder,
+    y_kf: List[Float32], exog_kf: List[Float32], batch_size: Int, n_obs_kf: Int,
+    order_kf: ArimaHostOrder,
     h: Float32, scale: Float32, xin: List[Float32],
     mut fout: List[Float32], mut gout: List[Float32],
 ) raises:
@@ -941,14 +1041,14 @@ def _eval_batch(
     reset by COPY (`reset_param_kernel` `:374-393`); then `f = ftz(ftz(-ll) /
     scale)` and `g = ftz(ftz(-grad) / scale)`."""
     var N = order_kf.complexity()
-    var base = _loglike_packed(y_kf, batch_size, n_obs_kf, order_kf, xin)
+    var base = _loglike_packed(y_kf, exog_kf, batch_size, n_obs_kf, order_kf, xin)
     var x_pert = xin.copy()
     var grad = _zeros(N * batch_size)
     for i in range(N):
         for bid in range(batch_size):
             var idx = N * bid + i
             x_pert[idx] = ftz(ftz(xin[idx]) + h)
-        var pert = _loglike_packed(y_kf, batch_size, n_obs_kf, order_kf, x_pert)
+        var pert = _loglike_packed(y_kf, exog_kf, batch_size, n_obs_kf, order_kf, x_pert)
         for bid in range(batch_size):
             var diff = ftz(ftz(pert[bid]) - ftz(base[bid]))
             grad[N * bid + i] = ftz(diff / h)
@@ -1110,7 +1210,7 @@ struct LbfgsHostOut(Movable):
 
 
 def _batched_min_lbfgs(
-    y_kf: List[Float32], batch_size: Int, n_obs_kf: Int, scale: Float32,
+    y_kf: List[Float32], exog_kf: List[Float32], batch_size: Int, n_obs_kf: Int, scale: Float32,
     order_kf: ArimaHostOrder, x0: List[Float32], max_iterations: Int, h: Float32,
 ) raises -> LbfgsHostOut:
     """`batched_min_lbfgs` (`batched_fit.mojo:290-555`), statement for
@@ -1160,7 +1260,7 @@ def _batched_min_lbfgs(
         retcode.append(Int32(AH_OPT_MAX_ITERS_REACHED))
 
     # `:389-409`: evaluate at x0, exit early per series at a minimizer.
-    _eval_batch(y_kf, batch_size, n_obs_kf, order_kf, h, scale, x, fx, grad)
+    _eval_batch(y_kf, exog_kf, batch_size, n_obs_kf, order_kf, h, scale, x, fx, grad)
     for b in range(batch_size):
         gnorm[b] = _nrm_max_at(grad, b * n, n)
         if past > 0:
@@ -1228,7 +1328,7 @@ def _batched_min_lbfgs(
                 else:
                     for i in range(n):
                         cand[b * n + i] = x[b * n + i]
-            _eval_batch(y_kf, batch_size, n_obs_kf, order_kf, h, scale, cand, fxc, gradc)
+            _eval_batch(y_kf, exog_kf, batch_size, n_obs_kf, order_kf, h, scale, cand, fxc, gradc)
             for b in range(batch_size):
                 if not searching[b]:
                     continue
@@ -1547,8 +1647,39 @@ def _arma_least_squares(
                     ma[q * bid + iq] = Float32(0.0)
 
 
+def _exog_regression(
+    xd: List[Float32], mut yd: List[Float32], mut beta: List[Float32],
+    batch_size: Int, m: Int, n_exog: Int,
+):
+    """`exog_regression_kernel` (`estimate_x0.mojo`) one series at a time:
+    the QR solve of the differenced `y` on the differenced regressors, `beta
+    = 0` when it refuses, then `y - exog * beta` with DEVIATION 995's fold
+    over the original regressors."""
+    for bid in range(batch_size):
+        var xb = bid * n_exog * m
+        var yb = bid * m
+        var a = _zeros(m * n_exog)
+        for i in range(n_exog):
+            for t in range(m):
+                a[i * m + t] = ftz(xd[xb + i * m + t])
+        var b = _zeros(m)
+        for t in range(m):
+            b[t] = ftz(yd[yb + t])
+        var inf = _qr_solve(a, m, n_exog, b)
+        for i in range(n_exog):
+            beta[bid * n_exog + i] = b[i] if inf == Int32(0) else Float32(0.0)
+        for t in range(m):
+            var acc = Float32(0.0)
+            for i in range(n_exog):
+                var xv = ftz(xd[xb + i * m + t])
+                var bv = ftz(beta[bid * n_exog + i])
+                acc = ftz(identical_mul_add(xv, bv, acc))
+            var yv = ftz(yd[yb + t])
+            yd[yb + t] = ftz(yv - acc)
+
+
 def _estimate_x0(
-    y: List[Float32], batch_size: Int, n_obs: Int, order: ArimaHostOrder
+    y: List[Float32], exog: List[Float32], batch_size: Int, n_obs: Int, order: ArimaHostOrder
 ) raises -> ArimaHostParams:
     """`estimate_x0` (`estimate_x0.mojo:591-618`) then `start_params`
     (`:540-588`): the non-seasonal call estimates sigma2; the seasonal call
@@ -1563,6 +1694,13 @@ def _estimate_x0(
     var n_obs_d = n_obs - d_sD
     var yd = _prepare_data(y, batch_size, n_obs, order)
     var params = _new_params(order, batch_size)
+    if order.n_exog > 0:
+        # `estimate_x0_x`: the regressors differenced over `n_exog *
+        # batch_size` series, the regression when there are more rows than
+        # regressors, else beta = 0 and y untouched.
+        var xd = _prepare_data(exog, order.n_exog * batch_size, n_obs, order)
+        if n_obs_d > order.n_exog:
+            _exog_regression(xd, yd, params.beta, batch_size, n_obs_d, order.n_exog)
     var ns_run = order.p + order.q + order.k != 0
     var seasonal_run = order.P + order.Q != 0
     if not ns_run:
@@ -1601,7 +1739,7 @@ struct ArimaHostFit(Movable):
 
 
 def arima_host_fit(
-    y: List[Float32], batch_size: Int, n_obs: Int, order: ArimaHostOrder,
+    y: List[Float32], exog: List[Float32], batch_size: Int, n_obs: Int, order: ArimaHostOrder,
     max_iterations: Int,
 ) raises -> ArimaHostFit:
     """`batched_fit` (`batched_fit.mojo:586-717`) and `_loglike_at`
@@ -1613,7 +1751,7 @@ def arima_host_fit(
     _refuse_non_finite(y, batch_size * n_obs, "y")
 
     # 1. the starting parameters
-    var start = _estimate_x0(y, batch_size, n_obs, order)
+    var start = _estimate_x0(y, exog, batch_size, n_obs, order)
 
     # 2. into the unconstrained coordinates
     var N = order.complexity()
@@ -1633,8 +1771,11 @@ def arima_host_fit(
     var n_obs_kf = n_obs - order.n_diff() if diff else n_obs
     var order_kf = order.without_diff() if diff else order
     var y_kf = _prepare_data(y, batch_size, n_obs, order)
+    var exog_kf = _zeros(1)
+    if order.n_exog > 0:
+        exog_kf = _prepare_data(exog, order.n_exog * batch_size, n_obs, order)
     var res = _batched_min_lbfgs(
-        y_kf, batch_size, n_obs_kf, Float32(n_obs - 1), order_kf, x0,
+        y_kf, exog_kf, batch_size, n_obs_kf, Float32(n_obs - 1), order_kf, x0,
         max_iterations, arima_host_fit_h(),
     )
 
@@ -1645,15 +1786,34 @@ def arima_host_fit(
 
     # `_loglike_at`: one more pass at the fitted point, trans = false (the
     # `_copy_params` arm, no transform and no floor)
-    var at = _kalman(y_kf, n_obs_kf, fitted, order_kf, batch_size, 0)
+    var at = _kalman(y_kf, exog_kf, _zeros(1), n_obs_kf, fitted, order_kf, batch_size, 0)
     return ArimaHostFit(
         t_x=t_x^, x=res.x.copy(), x0=x0^, loglike=at.loglike.copy(),
         fx=res.fx.copy(), n_iter=res.n_iter.copy(), retcode=res.retcode.copy(),
     )
 
 
+def _filter_exog(
+    exog: List[Float32], exog_fut: List[Float32], batch_size: Int, n_obs: Int,
+    num_steps: Int, order: ArimaHostOrder,
+) raises -> Tuple[List[Float32], List[Float32]]:
+    """`predict_x`'s regressors for the filter (`batched_arima.mojo`): the
+    past differenced like `y` and the future through `prepare_future_data`,
+    or both as they are when nothing is differenced; placeholders when
+    `n_exog = 0`."""
+    if order.n_exog == 0:
+        return (_zeros(1), _zeros(1))
+    var n_ser = order.n_exog * batch_size
+    var past = _prepare_data(exog, n_ser, n_obs, order)
+    var fut = _zeros(1)
+    if num_steps > 0:
+        fut = _prepare_future(exog, exog_fut, n_ser, n_obs, num_steps, order)
+    return (past^, fut^)
+
+
 def arima_host_forecast(
-    y: List[Float32], params_packed: List[Float32], batch_size: Int, n_obs: Int,
+    y: List[Float32], exog: List[Float32], exog_fut: List[Float32],
+    params_packed: List[Float32], batch_size: Int, n_obs: Int,
     n_steps: Int, order: ArimaHostOrder,
 ) raises -> List[Float32]:
     """`predict` (`batched_arima.mojo:287-348`) with `start == n_obs`, `end =
@@ -1669,7 +1829,8 @@ def arima_host_forecast(
     var y_kf = _prepare_data(y, batch_size, n_obs, order)
     _refuse_non_finite(y_kf, n_obs_kf * batch_size, "y")
     var params = _unpack(params_packed, order, batch_size)
-    var kf = _kalman(y_kf, n_obs_kf, params, order_kf, batch_size, n_steps)
+    var xs = _filter_exog(exog, exog_fut, batch_size, n_obs, n_steps, order)
+    var kf = _kalman(y_kf, xs[0], xs[1], n_obs_kf, params, order_kf, batch_size, n_steps)
     var fc = kf.fc.copy()
     if diff:
         _finalize_forecast(fc, y, n_steps, batch_size, n_obs, n_obs, order)
@@ -1690,7 +1851,8 @@ def _predict_sabotage(mut out: List[Float32]):
 
 
 def arima_host_predict(
-    y: List[Float32], params_packed: List[Float32], batch_size: Int, n_obs: Int,
+    y: List[Float32], exog: List[Float32], exog_fut: List[Float32],
+    params_packed: List[Float32], batch_size: Int, n_obs: Int,
     start: Int, end: Int, order: ArimaHostOrder,
 ) raises -> List[Float32]:
     """`predict` (`batched_arima.mojo:287-348`) with `pre_diff = true` for
@@ -1712,7 +1874,8 @@ def arima_host_predict(
     var y_kf = _prepare_data(y, batch_size, n_obs, order)
     _refuse_non_finite(y_kf, n_obs_kf * batch_size, "y")
     var params = _unpack(params_packed, order, batch_size)
-    var kf = _kalman(y_kf, n_obs_kf, params, order_kf, batch_size, num_steps)
+    var xs = _filter_exog(exog, exog_fut, batch_size, n_obs, num_steps, order)
+    var kf = _kalman(y_kf, xs[0], xs[1], n_obs_kf, params, order_kf, batch_size, num_steps)
     var ld = end - start
     var out = _zeros(ld * batch_size)
     if start < n_obs:

@@ -11,8 +11,16 @@ Reference: `cuml/cpp/src/arima/batched_arima.cu` (cuML 265b9da6, v26.08.00):
 NOT IMPLEMENTED, refused by name: `method == CSS` (`conditional_sum_of_squares`,
 `sum_of_squares_kernel` :270-391; only `MLE` is offered, `truncate` must
 be 0), `information_criterion` (:592-625), `detect_missing` (NaN is
-refused, not detected), exogenous regressors, `level > 0` (confidence
-intervals). See `arima/NOT_IMPLEMENTED.tsv`.
+refused, not detected), `level > 0` (confidence intervals). See
+`arima/NOT_IMPLEMENTED.tsv`.
+
+EXOGENOUS REGRESSORS (lane/arima-exog, 2026-09-15): the `_x` entries take the
+filter's exogenous inputs, `d_exog` over the observations and `d_exog_fut`
+over the forecast steps, both `[bid*n_exog*n + i*n + t]`. `predict_x`
+differences them as theirs does (`:117-157`: `prepare_data` over `n_exog *
+batch_size` series, `prepare_future_data` for the future). The entries
+without `_x` are the `n_exog = 0` doors the checks and the card call; each
+hands the `_x` entry one-float placeholders nothing reads.
 
 CORRECTED 2026-09-01. This header used to list `estimate_x0` /
 `_start_params` / `_arma_least_squares` (`:627-1010`) as unimplemented because
@@ -64,8 +72,12 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.memory import bitcast
 
-from arima.impl.batched_kalman import KalmanWorkspace, batched_kalman_filter
-from arima.impl.timeSeries.arima_helpers import batched_jones_transform, finalize_forecast
+from arima.impl.batched_kalman import KalmanWorkspace, batched_kalman_filter_x
+from arima.impl.timeSeries.arima_helpers import (
+    batched_jones_transform,
+    finalize_forecast,
+    prepare_future_data,
+)
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
 from checks.numerics import ftz
 from tsa.impl.timeSeries.arima_helpers import prepare_data
@@ -101,9 +113,50 @@ struct LoglikeResult(Movable):
     var loglike: List[Float32]
 
 
+def _placeholder(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
+    """One float, for an exogenous input an `n_exog = 0` order never reads."""
+    var b = ctx.enqueue_create_buffer[DType.float32](1)
+    return b^
+
+
+def _refuse_exog_order(order: ARIMAOrder, who: String) raises:
+    if order.n_exog != 0:
+        raise Error(
+            who + ": n_exog=" + String(order.n_exog)
+            + " needs the exogenous series; call " + who + "_x"
+        )
+
+
 def batched_loglike(
     ctx: DeviceContext,
     mut d_y: DeviceBuffer[DType.float32],
+    batch_size: Int,
+    n_obs: Int,
+    order: ARIMAOrder,
+    mut params: ARIMAParams,
+    trans: Bool,
+    fc_steps: Int = 0,
+    kalman_tpb: Int = 32,
+    check_finite: Bool = True,
+) raises -> LoglikeResult:
+    """The `n_exog = 0` door (see the module docstring)."""
+    _refuse_exog_order(order, "batched_loglike")
+    var e0 = _placeholder(ctx)
+    var e1 = _placeholder(ctx)
+    var r = batched_loglike_x(
+        ctx, d_y, e0, e1, batch_size, n_obs, order, params, trans, fc_steps,
+        kalman_tpb, check_finite,
+    )
+    _ = e0^
+    _ = e1^
+    return r^
+
+
+def batched_loglike_x(
+    ctx: DeviceContext,
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_exog: DeviceBuffer[DType.float32],
+    mut d_exog_fut: DeviceBuffer[DType.float32],
     batch_size: Int,
     n_obs: Int,
     order: ARIMAOrder,
@@ -135,7 +188,9 @@ def batched_loglike(
     else:
         # non-transformed case: just use original parameters (:447-452)
         _copy_params(ctx, params, t_params, order, batch_size)
-    var ws = batched_kalman_filter(ctx, d_y, n_obs, t_params, order, batch_size, fc_steps, kalman_tpb)
+    var ws = batched_kalman_filter_x(
+        ctx, d_y, d_exog, d_exog_fut, n_obs, t_params, order, batch_size, fc_steps, kalman_tpb
+    )
     var h = ctx.enqueue_create_host_buffer[DType.float32](batch_size)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=ws.loglike)
     ctx.synchronize()
@@ -172,6 +227,8 @@ def _refuse_non_finite(
 def _copy_params(ctx: DeviceContext, mut src: ARIMAParams, mut dst: ARIMAParams, order: ARIMAOrder, batch_size: Int) raises:
     if order.k != 0:
         ctx.enqueue_copy(dst_buf=dst.mu.create_sub_buffer[DType.float32](0, batch_size), src_buf=src.mu.create_sub_buffer[DType.float32](0, batch_size))
+    if order.n_exog != 0:
+        ctx.enqueue_copy(dst_buf=dst.beta.create_sub_buffer[DType.float32](0, order.n_exog * batch_size), src_buf=src.beta.create_sub_buffer[DType.float32](0, order.n_exog * batch_size))
     if order.p != 0:
         ctx.enqueue_copy(dst_buf=dst.ar.create_sub_buffer[DType.float32](0, order.p * batch_size), src_buf=src.ar.create_sub_buffer[DType.float32](0, order.p * batch_size))
     if order.q != 0:
@@ -194,13 +251,38 @@ def batched_loglike_packed(
     mut params: ARIMAParams,
     check_finite: Bool = True,
 ) raises -> LoglikeResult:
-    """`:471-513`: unpack the packed vector into `params`, then the overload
-    above (`fc_steps = 0`). `params` is the caller's scratch (their
-    `arima_mem.params_*`)."""
-    unpack(ctx, params, order, batch_size, d_params)
-    return batched_loglike(
-        ctx, d_y, batch_size, n_obs, order, params, trans, 0, 32, check_finite
+    """The `n_exog = 0` door."""
+    _refuse_exog_order(order, "batched_loglike_packed")
+    var e0 = _placeholder(ctx)
+    var r = batched_loglike_packed_x(
+        ctx, d_y, e0, batch_size, n_obs, order, d_params, trans, params, check_finite
     )
+    _ = e0^
+    return r^
+
+
+def batched_loglike_packed_x(
+    ctx: DeviceContext,
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_exog: DeviceBuffer[DType.float32],
+    batch_size: Int,
+    n_obs: Int,
+    order: ARIMAOrder,
+    mut d_params: DeviceBuffer[DType.float32],
+    trans: Bool,
+    mut params: ARIMAParams,
+    check_finite: Bool = True,
+) raises -> LoglikeResult:
+    """`:471-513`: unpack the packed vector into `params`, then the overload
+    above (`fc_steps = 0`, so the future exogenous input is a placeholder).
+    `params` is the caller's scratch (their `arima_mem.params_*`)."""
+    unpack(ctx, params, order, batch_size, d_params)
+    var fut = _placeholder(ctx)
+    var r = batched_loglike_x(
+        ctx, d_y, d_exog, fut, batch_size, n_obs, order, params, trans, 0, 32, check_finite
+    )
+    _ = fut^
+    return r^
 
 
 # ---------------------------------------------------------------------------
@@ -296,10 +378,42 @@ def predict(
     pre_diff: Bool,
     kalman_tpb: Int = 32,
 ) raises -> PredictResult:
-    """`:86-267` with `level = 0` and no exog. `params` are the FITTED
-    (already transformed) parameters, so `batched_loglike` is called with
-    `trans = false` as theirs (`:175`). Returns `(end - start) * batch_size`
-    predictions, series-major."""
+    """The `n_exog = 0` door."""
+    _refuse_exog_order(order, "predict")
+    var e0 = _placeholder(ctx)
+    var e1 = _placeholder(ctx)
+    var r = predict_x(
+        ctx, d_y, e0, e1, batch_size, n_obs, start, end, order, params, pre_diff, kalman_tpb
+    )
+    _ = e0^
+    _ = e1^
+    return r^
+
+
+def predict_x(
+    ctx: DeviceContext,
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_exog: DeviceBuffer[DType.float32],
+    mut d_exog_fut: DeviceBuffer[DType.float32],
+    batch_size: Int,
+    n_obs: Int,
+    start: Int,
+    end: Int,
+    order: ARIMAOrder,
+    mut params: ARIMAParams,
+    pre_diff: Bool,
+    kalman_tpb: Int = 32,
+) raises -> PredictResult:
+    """`:86-267` with `level = 0`. `params` are the FITTED (already
+    transformed) parameters, so `batched_loglike` is called with `trans =
+    false` as theirs (`:175`). Returns `(end - start) * batch_size`
+    predictions, series-major.
+
+    `d_exog` is the regressors over the `n_obs` observations and `d_exog_fut`
+    over the `max(end - n_obs, 0)` forecast steps, both in the filter's
+    layout and UNDIFFERENCED; with `diff` they are differenced here exactly
+    as `y` is (`:120-146`), otherwise handed to the filter as they are
+    (`:154-156`)."""
     if start < 0 or end <= start:
         raise Error("predict: need 0 <= start < end (start=" + String(start) + ", end=" + String(end) + ")")
     validate_order(order)
@@ -308,6 +422,9 @@ def predict(
     var n_obs_kf: Int
     var order_after_prep = order
     var y_kf: DeviceBuffer[DType.float32]
+    var n_ser = batch_size * order.n_exog
+    var exog_kf: DeviceBuffer[DType.float32]
+    var exog_fut_kf: DeviceBuffer[DType.float32]
     if diff:
         n_obs_kf = n_obs - order.n_diff()
         y_kf = ctx.enqueue_create_buffer[DType.float32](n_obs_kf * batch_size)
@@ -317,7 +434,33 @@ def predict(
         n_obs_kf = n_obs
         y_kf = ctx.enqueue_create_buffer[DType.float32](n_obs * batch_size)
         ctx.enqueue_copy(dst_buf=y_kf, src_buf=d_y.create_sub_buffer[DType.float32](0, n_obs * batch_size))
-    var ll = batched_loglike(ctx, y_kf, batch_size, n_obs_kf, order_after_prep, params, False, num_steps, kalman_tpb)
+    if n_ser == 0:
+        exog_kf = _placeholder(ctx)
+        exog_fut_kf = _placeholder(ctx)
+    elif diff:
+        # `:121-145`: the regressors' past through prepare_data, their
+        # future through prepare_future_data against that past.
+        exog_kf = ctx.enqueue_create_buffer[DType.float32](n_obs_kf * n_ser)
+        prepare_data(ctx, exog_kf, d_exog, n_ser, n_obs, order.d, order.D, order.s)
+        exog_fut_kf = ctx.enqueue_create_buffer[DType.float32](max(1, num_steps * n_ser))
+        if num_steps > 0:
+            prepare_future_data(
+                ctx, exog_fut_kf, d_exog, d_exog_fut, n_ser, n_obs, num_steps,
+                order.d, order.D, order.s,
+            )
+    else:
+        exog_kf = ctx.enqueue_create_buffer[DType.float32](n_obs * n_ser)
+        ctx.enqueue_copy(dst_buf=exog_kf, src_buf=d_exog.create_sub_buffer[DType.float32](0, n_obs * n_ser))
+        exog_fut_kf = ctx.enqueue_create_buffer[DType.float32](max(1, num_steps * n_ser))
+        if num_steps > 0:
+            ctx.enqueue_copy(
+                dst_buf=exog_fut_kf,
+                src_buf=d_exog_fut.create_sub_buffer[DType.float32](0, num_steps * n_ser),
+            )
+    var ll = batched_loglike_x(
+        ctx, y_kf, exog_kf, exog_fut_kf, batch_size, n_obs_kf, order_after_prep, params,
+        False, num_steps, kalman_tpb,
+    )
     var predict_ld = end - start
     var y_p = ctx.enqueue_create_buffer[DType.float32](predict_ld * batch_size)
     comptime TPB = 128
@@ -344,6 +487,8 @@ def predict(
             grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
         )
     ctx.synchronize()
+    _ = exog_kf^
+    _ = exog_fut_kf^
     _ = y_kf^
     return PredictResult(y_p=y_p^, predict_ld=predict_ld, ll=ll^)
 
@@ -424,6 +569,32 @@ def batched_loglike_grad(
     mut d_x_pert: DeviceBuffer[DType.float32],
     check_finite: Bool = True,
 ) raises -> List[Float32]:
+    """The `n_exog = 0` door."""
+    _refuse_exog_order(order, "batched_loglike_grad")
+    var e0 = _placeholder(ctx)
+    var r = batched_loglike_grad_x(
+        ctx, d_y, e0, batch_size, n_obs, order, d_x, d_grad, h, trans, params,
+        d_x_pert, check_finite,
+    )
+    _ = e0^
+    return r^
+
+
+def batched_loglike_grad_x(
+    ctx: DeviceContext,
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_exog: DeviceBuffer[DType.float32],
+    batch_size: Int,
+    n_obs: Int,
+    order: ARIMAOrder,
+    mut d_x: DeviceBuffer[DType.float32],
+    mut d_grad: DeviceBuffer[DType.float32],
+    h: Float32,
+    trans: Bool,
+    mut params: ARIMAParams,
+    mut d_x_pert: DeviceBuffer[DType.float32],
+    check_finite: Bool = True,
+) raises -> List[Float32]:
     """`:515-591`. Returns the base log-likelihood (host) beside the device
     gradient, because the L-BFGS caller needs both and theirs evaluates the
     base inside this call.
@@ -439,8 +610,8 @@ def batched_loglike_grad(
     `check_grad_reset_preserves_negative_zero`."""
     var N = order.complexity()
     ctx.enqueue_copy(dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, N * batch_size), src_buf=d_x.create_sub_buffer[DType.float32](0, N * batch_size))
-    var base = batched_loglike_packed(
-        ctx, d_y, batch_size, n_obs, order, d_x, trans, params, check_finite
+    var base = batched_loglike_packed_x(
+        ctx, d_y, d_exog, batch_size, n_obs, order, d_x, trans, params, check_finite
     )
     comptime TPB = 128
     var grid = (batch_size + TPB - 1) // TPB
@@ -449,8 +620,8 @@ def batched_loglike_grad(
             d_x_pert.unsafe_ptr(), d_x.unsafe_ptr(), Int32(batch_size), Int32(N), Int32(i), h,
             grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
         )
-        var pert = batched_loglike_packed(
-            ctx, d_y, batch_size, n_obs, order, d_x_pert, trans, params, check_finite
+        var pert = batched_loglike_packed_x(
+            ctx, d_y, d_exog, batch_size, n_obs, order, d_x_pert, trans, params, check_finite
         )
         ctx.enqueue_function[grad_kernel](
             d_grad.unsafe_ptr(), pert.ws.loglike.unsafe_ptr(), base.ws.loglike.unsafe_ptr(),

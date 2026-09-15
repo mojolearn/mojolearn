@@ -62,6 +62,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 
 
+#: DEVIATION 994: the widest exogenous design `estimate_x0` regresses. It is
+#: `LS_MAX_COLS` (`arima/impl/linalg/batched/least_squares.mojo`), written
+#: out here so the order validator does not import the solver. cuML bounds
+#: `n_exog` by nothing but memory; its `b_gels` is a closed cuBLAS call with
+#: no column limit.
+comptime EXOG_MAX = 17
+
+
 @fieldwise_init
 struct ARIMAOrder(Copyable, Movable, ImplicitlyCopyable):
     """`arima_common.h:26-51`."""
@@ -118,8 +126,14 @@ def validate_order(order: ARIMAOrder) raises:
         raise Error("ARIMA: invalid order, at least one of p, q, P, Q, fit_intercept must be non-zero")
     if order.p > 8 or order.P > 8 or order.q > 8 or order.Q > 8:
         raise Error("ARIMA: invalid order, required p, q, P, Q <= 8")
-    if order.n_exog != 0:
-        raise Error("ARIMA: exog (n_exog=" + String(order.n_exog) + ") is not implemented; refused by name (arima/NOT_IMPLEMENTED.tsv)")
+    if order.n_exog < 0:
+        raise Error("ARIMA: invalid order, required n_exog >= 0 (n_exog=" + String(order.n_exog) + ")")
+    if order.n_exog > EXOG_MAX:
+        raise Error(
+            "ARIMA: n_exog=" + String(order.n_exog) + " exogenous regressors is above EXOG_MAX = "
+            + String(EXOG_MAX) + ", the widest least-squares system estimate_x0's Householder QR"
+            + " solves (LS_MAX_COLS, arima/impl/linalg/batched/least_squares.mojo); refused by name"
+        )
     if order.rd() > 8:
         raise Error(
             "ARIMA: rd = d + s*D + max(p + s*P, q + s*Q + 1) = " + String(order.rd())
@@ -144,6 +158,9 @@ struct ARIMAParams(Movable):
     absent kind still has a pointer to pass."""
 
     var mu: DeviceBuffer[DType.float32]
+    var beta: DeviceBuffer[DType.float32]
+    """`arima_common.h:55`, the exogenous regression coefficients, `[bid *
+    n_exog + i]`. One float long when `n_exog == 0`."""
     var ar: DeviceBuffer[DType.float32]
     var ma: DeviceBuffer[DType.float32]
     var sar: DeviceBuffer[DType.float32]
@@ -152,6 +169,7 @@ struct ARIMAParams(Movable):
 
     def __init__(out self, ctx: DeviceContext, order: ARIMAOrder, batch_size: Int) raises:
         self.mu = ctx.enqueue_create_buffer[DType.float32](max(1, order.k * batch_size))
+        self.beta = ctx.enqueue_create_buffer[DType.float32](max(1, order.n_exog * batch_size))
         self.ar = ctx.enqueue_create_buffer[DType.float32](max(1, order.p * batch_size))
         self.ma = ctx.enqueue_create_buffer[DType.float32](max(1, order.q * batch_size))
         self.sar = ctx.enqueue_create_buffer[DType.float32](max(1, order.P * batch_size))
@@ -162,16 +180,18 @@ struct ARIMAParams(Movable):
 def pack_kernel(
     param_vec: MutPointer[Float32, MutAnyOrigin],
     mu: MutPointer[Float32, MutAnyOrigin],
+    beta: MutPointer[Float32, MutAnyOrigin],
     ar: MutPointer[Float32, MutAnyOrigin],
     ma: MutPointer[Float32, MutAnyOrigin],
     sar: MutPointer[Float32, MutAnyOrigin],
     sma: MutPointer[Float32, MutAnyOrigin],
     sigma2: MutPointer[Float32, MutAnyOrigin],
     batch_size_in: Int32,
-    p_in: Int32, q_in: Int32, P_in: Int32, Q_in: Int32, k_in: Int32,
+    p_in: Int32, q_in: Int32, P_in: Int32, Q_in: Int32, k_in: Int32, n_exog_in: Int32,
 ):
     """`arima_common.cu` `ARIMAParams::pack`: `[mu, ar, ma, sar, sma,
-    sigma2]` per series (`n_exog = 0`). One thread per series; a copy, no
+    sigma2]` per series, `beta` (`n_exog` values) after `mu` as theirs
+    (`arima_common.cu:24-36`). One thread per series; a copy, no
     arithmetic."""
     var bid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if bid >= Int(batch_size_in):
@@ -181,11 +201,15 @@ def pack_kernel(
     var P = Int(P_in)
     var Q = Int(Q_in)
     var k = Int(k_in)
-    var N = p + q + P + Q + k + 1
+    var n_exog = Int(n_exog_in)
+    var N = p + q + P + Q + k + n_exog + 1
     var o = bid * N
     if k != 0:
         param_vec.unsafe_store(o, mu.unsafe_load(bid))
         o += 1
+    for i in range(n_exog):
+        param_vec.unsafe_store(o + i, beta.unsafe_load(n_exog * bid + i))
+    o += n_exog
     for i in range(p):
         param_vec.unsafe_store(o + i, ar.unsafe_load(p * bid + i))
     o += p
@@ -204,13 +228,14 @@ def pack_kernel(
 def unpack_kernel(
     param_vec: MutPointer[Float32, MutAnyOrigin],
     mu: MutPointer[Float32, MutAnyOrigin],
+    beta: MutPointer[Float32, MutAnyOrigin],
     ar: MutPointer[Float32, MutAnyOrigin],
     ma: MutPointer[Float32, MutAnyOrigin],
     sar: MutPointer[Float32, MutAnyOrigin],
     sma: MutPointer[Float32, MutAnyOrigin],
     sigma2: MutPointer[Float32, MutAnyOrigin],
     batch_size_in: Int32,
-    p_in: Int32, q_in: Int32, P_in: Int32, Q_in: Int32, k_in: Int32,
+    p_in: Int32, q_in: Int32, P_in: Int32, Q_in: Int32, k_in: Int32, n_exog_in: Int32,
 ):
     """`arima_common.cu` `ARIMAParams::unpack`, the inverse copy."""
     var bid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -221,11 +246,15 @@ def unpack_kernel(
     var P = Int(P_in)
     var Q = Int(Q_in)
     var k = Int(k_in)
-    var N = p + q + P + Q + k + 1
+    var n_exog = Int(n_exog_in)
+    var N = p + q + P + Q + k + n_exog + 1
     var o = bid * N
     if k != 0:
         mu.unsafe_store(bid, param_vec.unsafe_load(o))
         o += 1
+    for i in range(n_exog):
+        beta.unsafe_store(n_exog * bid + i, param_vec.unsafe_load(o + i))
+    o += n_exog
     for i in range(p):
         ar.unsafe_store(p * bid + i, param_vec.unsafe_load(o + i))
     o += p
@@ -256,10 +285,11 @@ def pack(
     mut param_vec: DeviceBuffer[DType.float32],
 ) raises:
     ctx.enqueue_function[pack_kernel](
-        param_vec.unsafe_ptr(), params.mu.unsafe_ptr(), params.ar.unsafe_ptr(),
-        params.ma.unsafe_ptr(), params.sar.unsafe_ptr(), params.sma.unsafe_ptr(),
-        params.sigma2.unsafe_ptr(), Int32(batch_size),
+        param_vec.unsafe_ptr(), params.mu.unsafe_ptr(), params.beta.unsafe_ptr(),
+        params.ar.unsafe_ptr(), params.ma.unsafe_ptr(), params.sar.unsafe_ptr(),
+        params.sma.unsafe_ptr(), params.sigma2.unsafe_ptr(), Int32(batch_size),
         Int32(order.p), Int32(order.q), Int32(order.P), Int32(order.Q), Int32(order.k),
+        Int32(order.n_exog),
         grid_dim=(_grid(batch_size), 1, 1), block_dim=(PARAMS_TPB, 1, 1),
     )
 
@@ -272,10 +302,11 @@ def unpack(
     mut param_vec: DeviceBuffer[DType.float32],
 ) raises:
     ctx.enqueue_function[unpack_kernel](
-        param_vec.unsafe_ptr(), params.mu.unsafe_ptr(), params.ar.unsafe_ptr(),
-        params.ma.unsafe_ptr(), params.sar.unsafe_ptr(), params.sma.unsafe_ptr(),
-        params.sigma2.unsafe_ptr(), Int32(batch_size),
+        param_vec.unsafe_ptr(), params.mu.unsafe_ptr(), params.beta.unsafe_ptr(),
+        params.ar.unsafe_ptr(), params.ma.unsafe_ptr(), params.sar.unsafe_ptr(),
+        params.sma.unsafe_ptr(), params.sigma2.unsafe_ptr(), Int32(batch_size),
         Int32(order.p), Int32(order.q), Int32(order.P), Int32(order.Q), Int32(order.k),
+        Int32(order.n_exog),
         grid_dim=(_grid(batch_size), 1, 1), block_dim=(PARAMS_TPB, 1, 1),
     )
 
@@ -296,6 +327,9 @@ struct ARIMAParamsHost(Movable, Copyable):
 
 
 def pack_host(params: ARIMAParamsHost, order: ARIMAOrder, batch_size: Int) -> List[Float32]:
+    """The checks' host packing, `n_exog = 0` ONLY: `ARIMAParamsHost` carries
+    no `beta`, and every checks fixture has no exogenous regressors. The
+    exog packing on the host is `arima/host/arima_oracle.mojo::_pack`."""
     var out = List[Float32]()
     for bid in range(batch_size):
         if order.k != 0:
@@ -313,6 +347,7 @@ def pack_host(params: ARIMAParamsHost, order: ARIMAOrder, batch_size: Int) -> Li
 
 
 def unpack_host(x: List[Float32], order: ARIMAOrder, batch_size: Int) -> ARIMAParamsHost:
+    """`pack_host`'s inverse, `n_exog = 0` ONLY (see `pack_host`)."""
     var N = order.complexity()
     var mu = List[Float32]()
     var ar = List[Float32]()

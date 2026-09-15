@@ -508,9 +508,14 @@ def arm_refusals(rep, y):
     arm = "REFUSALS, mojo side (992)"
     # THE NEEDLES ARE QUOTED FROM THE MOJO SOURCE. A paraphrase here would
     # pass against any message at all containing the paraphrase's words.
-    rep.raises(arm, Exception, "exog",
-               "exog is refused by validate_order, as n_exog != 0",
-               ARIMA(order=(1, 0, 0)).fit, y, np.ones((BATCH, y.shape[1], 1)))
+    rep.raises(arm, ValueError, "dimensions mismatch",
+               "exog whose rows disagree with y is refused by shape",
+               ARIMA(order=(1, 0, 0)).fit, y, np.ones((BATCH, y.shape[1] + 1, 1), np.float32))
+    bad = np.ones((BATCH, y.shape[1], 1), np.float32)
+    bad[0, 3, 0] = np.nan
+    rep.raises(arm, Exception, "non-finite value at series 0, row 3, regressor 0",
+               "a non-finite regressor is refused by name (DEVIATION 997)",
+               ARIMA(order=(1, 0, 0)).fit, y, bad)
     rep.raises(arm, Exception, "method='css'",
                "method='css' is refused by arima/estimator.mojo, only MLE is"
                " offered",

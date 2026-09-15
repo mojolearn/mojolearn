@@ -91,7 +91,7 @@ refuses by name every function it does not list.
 | training | `_mojolearn_training_host.so` | `_mojolearn_training` | mlp, optim-sgd, optim-adam-clip, cross-entropy-arms, training-primitives, par-mlp, samba, samba-untied-dropout-accum | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_training_host.sh` |
 | resample | `_mojolearn_resample_host.so` | `_mojolearn_resample` | bootstrap, permutation-test, monte-carlo | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_resample_host.sh` |
 | mamba | `_mojolearn_mamba_host.so` | `_mojolearn_mamba` | mamba2, mamba2-dtlimit, mamba1, mamba3 | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_mamba_host.sh` |
-| arima | `_mojolearn_arima_host.so` | `_mojolearn_arima` | arima, arima-011, arima-seasonal-c, par-arima | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_arima_host.sh` |
+| arima | `_mojolearn_arima_host.so` | `_mojolearn_arima` | arima, arima-011, arima-seasonal-c, par-arima, arima-exog, arima-exog-seasonal | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_arima_host.sh` |
 | embedding | `_mojolearn_embedding_host.so` | `_mojolearn_embedding` | embedding, embedding-sort | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_embedding_host.sh` |
 | embedding_infer | `_mojolearn_embedding_infer_host.so` | `_mojolearn_embedding` when its reference binding is not built | no | Embedding (embedding) | tools/classical_host_gate.py and tools/identity_break.py | yes |
 | ivf | `_mojolearn_ivf_host.so` | `_mojolearn_ivf` | ivf, ivf-euclidean, ivf-extend | no | tools/identity_break.py (cpu-identity-gate.yml) | no, `bindings/build_ivf_host.sh` |
