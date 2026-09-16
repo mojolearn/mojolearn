@@ -214,12 +214,29 @@ Stated as hypotheses, none of them measured here.
 
 ## STILL OWED BY THIS LANE
 
-1. **A RUNTIME WITNESS that the ExtraTrees mutex was contended in the measured cells.**
-   `bpn = 4` is arithmetic from the source, not an observation. The instrument exists and
-   is already in the repository: `extratrees/checks/split_reduce_check.mojo` carries a
-   `SPLIT_SAB_NO_LOCK` arm whose stated prediction is that publishing with no lock at all
-   "moves only cells served by more than one block, and at least one of them". Running that
-   check on gfx942 is the witness; it was not run inside this lease.
+1. ~~A runtime witness that the ExtraTrees cross-block publish is contended at all.~~
+   **PAID, on Apple.** `extratrees/checks/split_reduce_check.mojo` carries a
+   `SPLIT_SAB_NO_LOCK` arm that publishes with no lock. Run on the M4 under the exclusive
+   Metal lock, 2026-09-16, it reports
+
+       the mutex itself (publish with no lock at all, split.cuh:135-136),
+       read-modify-write window widened
+         prediction: 0 cells must move, 3 may move, the rest must not
+         RED as required: 3 of 10 cells wrong, in 8 of 8 run(s)
+         (a race: red in at least one run is the bar),
+         and the moved set matched the prediction
+
+   and the whole check ends `split_reduce_check: PASS`. That is the witness the counts
+   above needed. **Take the lock away and this publish loses candidates, reproducibly, in
+   exactly the cells more than one block serves.** So the merge really is contended, a lost
+   candidate really does reach the output, and the 0/545 is a quiet instrument rather than
+   an inert one. The neighbouring `SPLIT_SAB_BLOCK0_ONLY` arm moved 1 of 10 cells, which is
+   the same fact from the other side: more than one block publishes.
+
+   **What it still does not pay.** It ran on APPLE, at the check's own geometry, not on
+   gfx942 and not at the `bpn = 4` of the measured fits. The same check on gfx942 is one
+   command and was not run inside this lease. Evidence at
+   `/Users/andrewhendel/mojolearn-evidence/mutex-extratrees-knn/apple-metal-2026-09-16/split_reduce_check.log`.
 2. **ExtraTrees at more claimants.** `-D MOJOLEARN_ET_TPB_128` forces the 32-lane width on
    a 64-lane device and turns 2048 columns into `bpn = 16`. If the rate scales with
    claimants the way the forest's scaled with launches, that is where to look next, and it
