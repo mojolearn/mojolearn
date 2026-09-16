@@ -2302,42 +2302,102 @@ def wheel_bindings():
     return [f["binding"] for f in FAMILIES if f["ships_in_wheel"]]
 
 
+#: LANES A RELEASE RECORD DOES NOT COVER, so the public set does not either.
+#: `tools/identity_break.py` excludes every `par-*` lane from a full-column
+#: record (its RECORD_EXCLUDED_PREFIXES, 2026-09-16): in a record they are
+#: one-device runs, several cannot be covered honestly at all, and the
+#: two-device claim is made by the dedicated legs instead. Their references in
+#: the shipped table therefore come from a record whose scope no longer
+#: includes them and which nothing will refresh, and unlike a shrunk fixture
+#: there is no LANE_REVISIONS entry to catch it going stale. A user's `verify`
+#: must not rest on that. They stay covered lanes, and the CPU identity gate
+#: still runs all thirteen.
+PUBLIC_EXCLUDED_PREFIXES = ("par-",)
+
+#: COVERED LANES HELD BACK FROM THE PUBLIC SET, each with the reason, checked
+#: by python/mojolearn/tests/test_host_surface.py against the harness, the
+#: shipped table and the measured run rather than trusted as prose
+#: (lane/ship-cpu-host-families, 2026-09-16). A lane leaves this dict the day
+#: its reason stops being true, which for `stale reference` is the next
+#: release record.
+#:
+#:   stale reference   the lane's fixture moved past the hash the shipped
+#:                     table carries (identity_break LANE_REVISIONS, the
+#:                     thirteen lanes lane/identity-fixtures-light shrank).
+#:                     `_verify_all` would drop and name them anyway; keeping
+#:                     them out means the public set is a set that PASSES,
+#:                     not one that reports thirteen lanes it cannot compare.
+#:   no reference      no committed record carries a single hash for the lane,
+#:                     so every part would read OWED, which is not a pass.
+#:   own record        diffed against TRAINING_FIX_COLUMNS, not the release
+#:                     record (TRAINING_FIX_LANES). The shipped table is built
+#:                     from every committed record, so these do have hashes,
+#:                     but `record_covered_lanes()` is what the public set is
+#:                     held to and they are not in it.
+#:   measured          a CPU-only `verify --all` at this commit WATCHED the
+#:                     lane and it did not read clean. This reason is the only
+#:                     one that comes from a run rather than from a static
+#:                     condition, and it carries what the run said.
+PUBLIC_PENDING_LANES = {
+    "holtwinters": "stale reference",
+    "spectral": "stale reference",
+    "gbdt-nan-modes": "stale reference",
+    "gbdt-parametric-losses": "stale reference",
+    "gbdt-lossguide-newtoncosine": "stale reference",
+    "gbdt-pair-logit": "stale reference",
+    "hdbscan": "stale reference",
+    "hdbscan-leaf": "stale reference",
+    "mamba2-dtlimit": "stale reference",
+    "samba": "stale reference",
+    "samba-untied-dropout-accum": "stale reference",
+    "byte-lm": "stale reference",
+    "byte-lm-resident": "stale reference",
+    "metrics-fowlkes-mallows": "no reference",
+    "gbdt-adapter-score-weighted": "no reference",
+    "rf-score-weighted": "no reference",
+    "gbdt-yeti-rank": "no reference",
+    "arima-exog": "no reference",
+    "arima-exog-seasonal": "no reference",
+    "gbdt-categorical-ctr-tables": "no reference",
+    "gbdt-tensor-ctr-tables": "no reference",
+    "kmeans-sqrt": "own record",
+    "embedding": "own record",
+    "embedding-sort": "own record",
+    "ivf": "own record",
+    "ivf-euclidean": "own record",
+}
+
+
 def public_reference_lanes():
-    """Small explicit verification surface available in an inference wheel.
+    """THE LANES AN INSTALLED WHEEL CAN CHECK, on a CPU-only install, as
+    `python -m mojolearn verify --all` and `python -m mojolearn identity`
+    select them.
 
-    Full CPU training verification uses source bindings and covered_lanes().
-    These probes need only public inference dependencies, including linalg.
+    Until 2026-09-16 this was eight hand-named probes plus the tokenizer, and
+    then thirty-nine after lane/expose-inference-surface measured thirty more.
+    Both lists were bounded by the same thing: a lane whose host binding was
+    not in the wheel could not be re-run on the machine it was installed on,
+    whatever the shipped table said. Every host family ships now (see the
+    module docstring), so the limit is no longer what is installed but what
+    can be honestly compared: a covered lane, in a release record's scope,
+    with a reference in the shipped table, WATCHED to read clean by a CPU-only
+    run at this commit.
 
-    THIS LIST IS WHAT A USER CAN CHECK (lane/expose-inference-surface,
-    2026-09-16). It was nine lanes, against sixteen shipped host families
-    serving 79 declared inference lanes and seven forest kinds, so almost
-    everything the wheel carried was taken on faith. Thirty lanes were measured
-    against the three GPU columns on an Apple M4 CPU column, 9 fixtures and 2
-    repeats, read 0 DIVERGENT with their sabotage arm moving, and were promoted
-    here, taking the checkable surface to 39 lanes for ZERO extra wheel bytes:
-    every one is served by a binding that already ships and every reference
-    hash is already in the shipped table, it was simply never consulted.
-
-    The promotion waited for the fixture shrink (docs/lanes/FIXTURE_SHRINK_SCOPE.md,
-    landed at e2bb9e541) because these references ship in the wheel's table and
-    a lane whose fixture moved would ship a reference a user's `verify` then
-    fails against. None of the thirty is among the thirteen shrunk lanes, which
-    is why the evidence taken before the shrink still stands; it was re-checked
-    on the merged harness.
+    It is DERIVED, never hand-listed, so a lane that gains a CPU path joins on
+    the day it is declared, and one that cannot be compared is held back in
+    `PUBLIC_PENDING_LANES` with the reason written down. The promotion rule
+    lane/expose-inference-surface set is kept: a lane is public only because a
+    run was watched to read IDENTICAL for it, which is why every lane this
+    returns is in the measured run recorded in
+    docs/lanes/LANE_STATUS_lane-ship-cpu-host-families.md, and why
+    `PUBLIC_REFERENCE_CANDIDATES` stays out until its own condition is met.
     """
-    return [
-        # the original eight
-        "gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky",
-        # promoted 2026-09-16 (lane/expose-inference-surface), measured below
-        "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted", "kmeans-classic-pp",
-        "kmeans-cosine", "knn-clf-distance", "knn-reg-distance", "radius",
-        "dbscan", "dbscan-brute-l1", "dbscan-weighted", "kde-weighted", "pca-full-whiten",
-        "ols-no-intercept", "ols-weighted", "ridge-no-intercept", "logistic-l1",
-        "logistic-elasticnet", "logistic-unpenalized-no-intercept",
-        "svc-linear", "svr", "svr-linear", "iforest", "iforest-tuned",
-        "umap",
-        "kpss", "bootstrap", "permutation-test", "monte-carlo",
-    ] + list(PUBLIC_HOST_ONLY_LANES)
+    lanes = [lane for lane in covered_lanes()
+             if not lane.startswith(PUBLIC_EXCLUDED_PREFIXES)
+             and lane not in PUBLIC_PENDING_LANES
+             and lane not in PUBLIC_REFERENCE_CANDIDATES
+             and lane not in PUBLIC_HOST_ONLY_LANES]
+    return lanes + list(PUBLIC_HOST_ONLY_LANES)
 
 
 #: Public reference lanes of a shipped host family with no GPU path to cover,
