@@ -124,6 +124,31 @@ that reads IDENTICAL on the CPU route has not been checked less carefully
 than one that ran on Metal; it has been checked on the column that is cheap
 to run and easy to shard.
 
+## What stops the map narrowing WRONGLY
+
+Every rule above widens what returns a narrow answer. The map itself can fail
+the other way, and that failure is silent: a lane whose map is missing a file
+gets a green run for a change that moved its bits. Two inversions are checked
+over the WHOLE TREE, not against a case list, because a case list is what
+missed `python/mojolearn/neural_inference.py` and the six mamba and samba
+lanes it serves through subclasses.
+
+* if F imports B, a lane reaching F executes B, so lanes(F) is a subset of
+  lanes(B);
+* if F subclasses or patches a class in B, a lane reaching B can run F's
+  override, so lanes(B) is a subset of lanes(F);
+* the same question on the Mojo side, where a miss costs more because a Mojo
+  file IS the arithmetic: if F defines a struct conforming to a trait declared
+  in B, lanes(B) is a subset of lanes(F). It holds with no backward edge
+  needed, because Mojo conformance is not Python subclassing: a conforming
+  struct is reached only when something parametrises on the trait and is
+  handed that struct BY NAME, and naming a symbol from another file requires
+  importing it. The inversion stays in the tree so that remains true.
+
+`python3 tools/lane_select.py --census N` lists the files attributed to N
+lanes or fewer with what each defines. A missing edge hides in a file credited
+with too few.
+
 ## How the selector decides, and where it gives up
 
 `tools/lane_select.py` derives lane -> source files from declarations that

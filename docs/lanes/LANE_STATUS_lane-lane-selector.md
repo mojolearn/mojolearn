@@ -294,6 +294,114 @@ for an import statement took the tests rule from 124 of 125 inert to 91 of
 125, because 33 are named by a workflow or a script. That is the trade the
 rule is for. Over-firing costs a sweep; under-firing costs a defect.
 
+### The map narrowed WRONGLY: it followed imports only forward
+
+Reported by `lane/stateful-cpu-decoding`, and worse than every false sweep
+chased today. A false sweep prints FALLING BACK and a lane declines to run it.
+An under-attribution is silent and reads as a narrow PASS.
+
+`python/mojolearn/neural_inference.py` was credited with `mlp`, `transformer`
+and `transformer-window` while it also serves `mamba1`, `mamba2`,
+`mamba2-dtlimit`, `mamba3`, `samba` and `samba-untied-dropout-accum`. That
+lane deleted those wrappers' `forward` overrides.
+
+The shape is not one file. The file defines
+`Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block)` and IMPORTS
+`_mamba_impl`, so the edge runs BACKWARDS along the import graph and following
+imports forward never reaches it. The three lanes it did have were attributed
+only because those lane bodies happen to name the wrapper classes by hand. A
+file that subclasses a class in a lane's closure, or patches an attribute onto
+one at module level, is now in that closure, with its own imports followed.
+
+That edge needed the sink rule the forward one has: `_mode.py` is extended by
+23 package files against 2 for the next, and without excluding it the median
+file went from 32 lanes to 197. After the exclusion `neural_inference.py`
+serves 21 lanes, the median file is 33, and `kmeans_oracle.mojo`,
+`gbdt_host_predict.mojo` and `forest_host_predict.mojo` are unchanged at 20,
+23 and 7. The kmeans-save merge is still 36 of 212 and the umap/checks files
+are still unreachable.
+
+### Two inversions, over the whole tree
+
+A case list is what missed this file for as long as the map existed, so the
+check is not a case list.
+
+* if F imports B, a lane reaching F executes B, so lanes(F) subset of lanes(B);
+* if F extends B, a lane reaching B can run F's override, so lanes(B) subset
+  of lanes(F).
+
+Both hold with zero violations over every package file. Inversion 1 earned its
+place at once: the first spelling of the backward edge did not follow the
+extender's own imports, and inversion 1 caught that `mamba1` reached
+`neural_inference.py` without reaching the `_samba_impl` and
+`_transformer_impl` it imports at module level.
+
+An inversion that holds whatever the map does is not a check, so a test
+disables the backward edge and requires inversion 2 to name
+`neural_inference.py` and the four mamba lanes.
+
+`python3 tools/lane_select.py --census N` is the half a person reads: the
+files attributed to N lanes or fewer, with what each defines. A missing edge
+hides in a file credited with too few, and `neural_inference.py` at three
+lanes was exactly that shape. A census at 3 is in
+`/Users/andrewhendel/mojolearn-evidence/lane-selector-2026-09-16/census_3.txt`.
+
+### The Mojo side: measured, and the answer is no backward edge
+
+A Mojo under-attribution is worse than a Python one. A Python miss means a
+lane's door was missed; a Mojo miss means the ARITHMETIC changed and no cell
+was asked about it.
+
+10 repo traits, 14 conforming files, 9 real conformance edges after two
+exemptions, and lanes(declaration) equals lanes(implementation) on every one:
+23 against 23 for the block-scan and scan-by-key elements, 35 against 35 for
+all five `pointwise_hist2` templates and the leaves-estimation oracle. Mojo
+conformance is not Python subclassing. A conforming struct is reached only
+when something parametrises on the trait AND IS HANDED THAT STRUCT BY NAME,
+and naming a symbol from another file requires importing it, so the forward
+walk already has it. The inversion is in the tree so it stays true.
+
+Both exemptions are derived and both split this tree exactly:
+
+* a file with its own `main` is a standalone program. All five files that
+  conform to a repo trait purely to TEST it have one; none of the nine shipped
+  implementations does.
+* the conforming file must IMPORT the declaration. `core/philox.mojo` and
+  `mamba/host/gen/philox.mojo` each declare their own `U32Stream` and neither
+  imports the other, so matching by trait name alone invented an edge and
+  claimed 80 missing lanes.
+
+The first negative control was INVALID and said so by its arms moving
+together: dropping every path matching `pointwise_hist2` also removed the
+template carrying the lanes, so both sides fell and the inversion stayed
+silent at zero. The control now cuts ONE import and requires the declarer to
+keep its 35 lanes while the implementation loses them.
+
+`@parameter if is_defined[...]` is not a file-attribution question: it selects
+a branch INSIDE a file that is attributed already, and a `-D` define changes
+which branch runs, not which file. The same goes for an `@always_inline`
+helper passed as a parameter, which the caller has to name and therefore
+import.
+
+### One real gap the Mojo pass found
+
+`unreachable` searched only the corpus, which is what a lane already reaches,
+so a chain of files the map is missing voted nowhere.
+`core/forest_inference_model.mojo` is imported by
+`bindings/forest_inference_binding.mojo`, itself outside the map, and the
+model file read "nothing reaches it" while being part of a shipped binding's
+tree. A Mojo import is a compile-time fact and does not need the corpus to be
+believed, so any Mojo file a non-program imports now falls back.
+
+### Owed to a person, not to another rule
+
+`core/forest_inference.mojo` is imported by `bindings/_mojolearn_rf.mojo` and
+`bindings/_mojolearn_trees.mojo` and is in NO lane's map. That is not a
+backward edge; it is the per-export seeding declining to follow an inference
+path no lane's door calls by name. It may be correct and it may be a
+forward-walk gap. It wants the census read by a person rather than a hurried
+rule, which is the same reason the census at 3 is owed a human pass.
+
 ### The one path left, and why it stays
 
 `pixi.toml` pins the toolchain. A toolchain change can move bits on every
