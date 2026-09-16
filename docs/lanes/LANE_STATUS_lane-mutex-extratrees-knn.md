@@ -113,3 +113,116 @@ at a rate this leg cannot see, and the honest sentence is the bound, not the zer
 `docs/lanes/LANE_STATUS_lane-rf-score-weighted-nondeterminism.md` records a 0/100 that was
 flagged as ~7% likely by luck and used to retract a hypothesis IN THE SAME MESSAGE; the
 same cell returned 4/300 on the next leg. No cell here is read below 250.
+
+## THE RESULT. Both subsystems are NULLS, and the two nulls mean different things
+
+**DigitalOcean MI325X VF, gfx942, 2026-09-16T17:59:34Z to 18:22:36Z, 23 minutes of lease.
+Droplet 601138387, DELETE returned 204 and the post-destroy GET returned 404.** Evidence at
+`/Users/andrewhendel/mojolearn-evidence/mutex-extratrees-knn/gfx942-2026-09-16/` and
+`bench/results/e1g/2026-09-16_175653-amd-mi325x-et-knn-mutex/remote/`.
+
+### ExtraTrees, gfx942
+
+| arm | cols | bpn | contends | fits | moved | distinct | P(0) at the forest's 4.3% | 95% bound |
+|---|---|---|---|---|---|---|---|---|
+| **stock, no acquire** | 2048 | 4 | YES | **545** | **0** | 1 | **4e-11** | **0.55%** |
+| stock, same binary | 256 | 1 | no, one claimant | 300 | 0 | 1 | 1.9e-06 | 1.00% |
+| repaired (ships) | 2048 | 4 | YES | 545 | 0 | 1 | 4e-11 | 0.55% |
+| repaired (ships) | 256 | 1 | no, one claimant | 300 | 0 | 1 | 1.9e-06 | 1.00% |
+
+`distinct = 1` in every cell: not one of the 1690 fits produced a model that differed in
+any of the five exported arrays from the first fit of its cell.
+
+### fused L2 kNN, gfx942, at a grid no shipped build ever takes
+
+| arm | grid_x | producers per mutex | launches | wrong vs oracle | moved vs first |
+|---|---|---|---|---|---|
+| **stock, no acquire** | 16 (computed) | 16 | 300 | **0** | **0** |
+| repaired (ships) | 16 | 16 | 300 | 0 | 0 |
+| stock, no acquire | 8 (forced) | 8 | 200 | 0 | 0 |
+| repaired | 8 (forced) | 8 | 200 | 0 | 0 |
+| control, mutex never touched | 1 | n/a | 76 and 51 | 0 | n/a |
+| **positive control, sabotaged handoff** | 16 and 8 | | 1 each | **150** and **250** | |
+
+### Apple M4, Metal, the same two probes
+
+| subsystem | arm | N | moved |
+|---|---|---|---|
+| fused kNN | stock | 300 launches at 16 producers per mutex | 0 |
+| fused kNN | repaired | 300 | 0 |
+| ExtraTrees | repaired | 300 fits at 2048 cols, **bpn = 16** (TPB is 128 on a 32-lane warp) | 0 |
+
+## WHAT THE GATES DID, because a count is unreadable without them
+
+**The arms were two programs, checked by SECTION on the target before either was trusted,
+with both controls.** On gfx942:
+
+- NEGATIVE CONTROL. Two builds of identical source, same directory: `ALL SECTIONS
+  IDENTICAL` for the kNN probe and `26 sections compared, 0 moved` for the trees binding.
+  So `build_trees.sh`'s fresh `mktemp` does NOT leak into any compared section, and the
+  comparator is not noisy.
+- POSITIVE CONTROL. `-D MOJOLEARN_MUTEX_SECTION_SABOTAGE=1` moved `ELF,.text` and
+  `ELF,.rodata`. The comparator can report DIFFER on this target.
+- THE ARMS. Repaired against stock moved `ELF,.text` and `ELF,.rodata`, with `.rodata`
+  **128 bytes smaller** in the stock arm, which is the acquire spin the repair adds. The
+  trees binding's arms moved `ELF,.rodata` and `ELF,.strtab`.
+
+**The kNN probe's own controls behaved on every run.** The `grid_x = 1` arm, which is the
+same binary with the mutex never touched, matched the host oracle in every slot; the
+sabotaged handoff moved 150 slots at `grid_x = 16` and 250 at `grid_x = 8`. So the check
+CAN fail and the merge IS carrying the output.
+
+**And the positive control failed the first time it was run, on this desk, before the
+box.** `$def` unquoted in a zsh loop does not word-split, so
+`-D MOJOLEARN_MUTEX_SECTION_SABOTAGE=1` reached `mojo` as one argv entry and was dropped;
+the two "arms" were one program and the comparator correctly said SAME. That is the fourth
+appearance of this failure class in this lane family and the first time it was caught
+before a box was rented.
+
+## READ THESE TWO NULLS DIFFERENTLY
+
+**ExtraTrees is a real null with a real bound.** The stock claim, the exact pre-repair
+protocol that 0.8.5 ships, ran 545 fits at a configuration that contends four ways per
+node and did not move a bit. That excludes the forest's 4.3% at p = 4e-11 and bounds
+ExtraTrees' own rate at **0.55%** by the 95% rule of three. **It is not a clearance.** The
+forest's rate in its quietest measured configuration was 1.3%, and this leg would have
+caught that; its rate at bpn = 4 could still be anything below 0.55%. The protocol was
+invalid and the repair is right on the argument. What this measures is that ExtraTrees was
+not visibly losing candidates at the rate the forest was.
+
+**The fused kNN null is about a path no user can take, and that is the finding.** The
+mutex is not reachable in any shipped build (the reachability section above), so the 0/500
+launches say only that the defect does not fire on the check path. A user was never exposed
+here. This is the sharper half of the lane: the reconciliation listed the fused kNN as one
+of three subsystems "repaired by the argument" and carrying the same risk, and it does not
+carry the same risk, because `PIN_DETERMINISM` compiles the caller down to `grid_x = 1` and
+`bindings/build.sh` refuses every mode in which the pin is off.
+
+## WHY EXTRATREES MIGHT NOT MOVE WHERE THE FOREST DOES
+
+Stated as hypotheses, none of them measured here.
+
+1. **Four claimants against the forest's ten.** `N_BLKS_FOR_COLS` caps the forest at 10
+   column blocks per node and the forest's rate rose with launch count; ExtraTrees at 2048
+   columns has `ceildiv(2048, 512) = 4`. Fewer claimants is less window.
+2. **Different payload.** The forest merges histogram-derived candidates where near-ties
+   are common at depth; ExtraTrees' candidates are random thresholds, and losing one only
+   moves the output when the lost one was the winner.
+3. **The forest's rate is itself unexplained.** Section 0.2 of the reconciliation says the
+   mechanism is NOT DEMONSTRATED and the primitive check has returned a null twice at 4096
+   claims. A null here is the third null from an instrument that is not the forest.
+
+## STILL OWED BY THIS LANE
+
+1. **A RUNTIME WITNESS that the ExtraTrees mutex was contended in the measured cells.**
+   `bpn = 4` is arithmetic from the source, not an observation. The instrument exists and
+   is already in the repository: `extratrees/checks/split_reduce_check.mojo` carries a
+   `SPLIT_SAB_NO_LOCK` arm whose stated prediction is that publishing with no lock at all
+   "moves only cells served by more than one block, and at least one of them". Running that
+   check on gfx942 is the witness; it was not run inside this lease.
+2. **ExtraTrees at more claimants.** `-D MOJOLEARN_ET_TPB_128` forces the 32-lane width on
+   a 64-lane device and turns 2048 columns into `bpn = 16`. If the rate scales with
+   claimants the way the forest's scaled with launches, that is where to look next, and it
+   is one define and one more cell.
+3. **The kNN producer at a FAST build.** Not owed for the shipped product, since no build
+   script will produce one.
