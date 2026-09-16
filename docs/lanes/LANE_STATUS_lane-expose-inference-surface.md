@@ -410,6 +410,26 @@ That needs a GPU leg, and GPU legs are release-record only.
 four parts. It is served by `solver`, which does not ship, so unlike the 30 it
 needs a packaging decision as well as a recording.
 
+> **CORRECTION (lane/saved-model-reference-gaps, 2026-09-16).** The sentence
+> above is wrong about the route, and the code says so at
+> `python/mojolearn/_hierarchy_impl.py:176`: "The binding `predict` calls. The
+> FIT is `_mojolearn_solver`'s" and then `_BINDING = "_mojolearn_estimators"`.
+> Only the FIT is solver's. `AgglomerativeClustering.predict` calls
+> `_mojolearn_estimators.labeled_reference_predict`, and
+> `HostAgglomerativeClustering` inherits that same `_BINDING`, so its saved
+> model is served by the estimators host binding, which SHIPS. No packaging
+> decision was needed; the lane is declared in the estimators family now. The
+> same is true of `dbscan` (`python/mojolearn/density.py:178`).
+>
+> Two more things this section's reader should not carry away. First, the
+> `owed.json` files in the two 2026-09-15 lane records are STALE: both were
+> written before their own Apple/Metal columns were taken and still list
+> `apple-m4` as missing. Second, `spectral-precomputed` was never pending as
+> CODE. `_spectral_impl.py` fits, predicts and save/loads a precomputed
+> affinity, `identity_break.LANES` registers the lane, and both a CPU column
+> (9 fixtures) and a Metal column (2 fixtures) carry real digests for it. What
+> was owed there was a column, like the other three.
+
 ## 6. No silent exclusions
 
 Every one of the 32 families now carries a `wheel_note` saying why it does or
