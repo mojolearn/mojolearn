@@ -203,7 +203,13 @@ class MemoryReader:
         self.kind = None
         self.sysfs = None
         tried = []
-        auto = ["amdgpu-sysfs", "nvidia-smi", "rocm-smi"]
+        # ORDER MEASURED, NOT ASSUMED. On a RunPod MI300X pod /sys/class/drm
+        # holds EIGHT cards and the one the container owns is card33, not
+        # card0, so the sysfs reader read a stranger's counter and never moved.
+        # rocm-smi enumerates the devices the container actually has, and it
+        # is what the leg's own device log already prints. The sysfs reader
+        # stays as the last resort for a box with no rocm-smi.
+        auto = ["nvidia-smi", "rocm-smi", "amdgpu-sysfs"]
         if prefer and prefer not in auto + ["proc-rss"]:
             raise SystemExit("dbscan_memory_probe: unknown --source " + prefer)
         for kind in ([prefer] if prefer else auto):
@@ -444,14 +450,35 @@ def main():
     arms = args.arm or ["seq", "repeat", "shapes", "arms"]
     reader = MemoryReader(args.device, args.source)
     used_boot, total = reader.read()
+    free_boot = total - used_boot
     print("source=%s device=%d total=%.1f MiB used_before_any_gpu_work=%.1f MiB"
           % (reader.kind, args.device, total / 2**20, used_boot / 2**20),
           flush=True)
 
+    # THE CONDITION THE ORIGINAL COLUMN COULD NOT SEE, AND THE REASON THIS
+    # LANE EXISTS. `lane/classical-host-recordings` wrote "on a 192 GB card"
+    # about a RunPod MI300X whose card, MEASURED HERE from inside the process
+    # before it did any GPU work, had 360 MiB of 192 GB free: another tenant of
+    # the same physical card held 191 GB (rocm-smi --showpids, a kfd pid from
+    # outside this container). A rented card is not an empty card, and a
+    # hipErrorOutOfMemory on one says nothing about the code that raised it
+    # until this line has been read. It is printed, recorded in the JSON, and
+    # deliberately NOT a refusal: the run is still worth taking, it just has to
+    # be read as a run on a full card.
+    if total and free_boot < total // 2:
+        print("CARD ALREADY IN USE BY SOMETHING THAT IS NOT US: %.1f MiB of "
+              "%.1f MiB free before this process did any GPU work (%.1f%%). "
+              "Every refusal below is a refusal on a card that was already "
+              "this full, and is evidence about the card and not about the "
+              "fit." % (free_boot / 2**20, total / 2**20,
+                        100.0 * free_boot / total), flush=True)
+
     rows = []
     run = Runner(reader, rows)
     result = dict(source=reader.kind, device=args.device, total=total,
-                  used_boot=used_boot, arms=arms, repeats=args.repeats,
+                  used_boot=used_boot, free_boot=free_boot,
+                  card_already_in_use=bool(total and free_boot < total // 2),
+                  arms=arms, repeats=args.repeats,
                   n=args.n, rows=rows,
                   started=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
 
@@ -472,14 +499,20 @@ def main():
         moved = (rows[-1]["used_after"] - used_boot) / 2**20
         result["self_check_moved_mib"] = moved
         save()
-        if moved < args.move_floor:
+        # THE FLOOR IS ON THE ABSOLUTE MOVEMENT, and that is not a detail. On
+        # a SHARED card the figure can fall across our fit because a stranger
+        # freed more than we took; a one-sided floor called that "cannot move"
+        # and refused every arm on a paid box. What the floor is for is
+        # proving the READER is live, and a 12 GB fall proves that as well as
+        # a 12 GB rise.
+        if abs(moved) < args.move_floor:
             print("PROBE CANNOT MOVE: used memory went %.2f MiB across the "
                   "first fit, under the %.1f MiB floor. Every reading after "
                   "this would be unfalsifiable; refusing to run an arm."
                   % (moved, args.move_floor), flush=True)
             return 3
-        print("probe moves: %.1f MiB across the first fit (floor %.1f)"
-              % (moved, args.move_floor), flush=True)
+        print("probe moves: %+.1f MiB across the first fit (floor %.1f on the "
+              "absolute movement)" % (moved, args.move_floor), flush=True)
 
     if "seq" in arms:
         # tools/identity_break.py's own order: lane-major, fixtures inside,
