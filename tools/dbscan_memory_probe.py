@@ -33,6 +33,21 @@ the original observation confounds:
            tracks size rather than order is not a leak.
   arms     the same fixture with prediction_data on and off, rbc and brute,
            weighted and not, to name which path climbs.
+  cold     THE ORDER TEST. The largest neighbourhood (`wide`, 36,000,000 edges
+           at eps=0.9) fitted as the FIRST GPU work the process does, then
+           again, then the next largest, then `base`. If `wide` raises on fit
+           one of a fresh process it is SHAPED and no amount of history is
+           needed to produce it; if it raises only after other fits it is
+           ORDERED. The original column cannot tell these apart because `wide`
+           was its fourth fit.
+  budget   the same fixture at several `max_mbytes_per_batch` values. The
+           default (None -> 0) makes `dbscan_fit_impl_weighted` derive the
+           budget from `ctx.get_memory_info()` as 80% of TOTAL device memory,
+           so a 192 GB card and an 80 GB card take different paths through
+           `compute_batch_size` even on identical data. An explicit budget
+           takes that branch out, and a small one forces more than one batch,
+           which shrinks every per-batch allocation. Which of those changes the
+           outcome names the mechanism.
 
 The JSON is the evidence. Stdout is for watching a box.
 """
@@ -194,9 +209,7 @@ class MemoryReader:
         for kind in ([prefer] if prefer else auto):
             tried.append(kind)
             try:
-                if kind == "proc-rss":
-                pass
-            if kind == "amdgpu-sysfs":
+                if kind == "amdgpu-sysfs":
                     cards = sorted(glob.glob(
                         "/sys/class/drm/card*/device/mem_info_vram_used"))
                     if len(cards) <= index:
@@ -294,6 +307,7 @@ class Runner:
     def fit(self, arm, lane, kind, **override):
         kw = dict(LANE_KW[lane])
         kw.update(override)
+        kw = {k: v for k, v in kw.items() if v is not None or k not in override}
         X = self.data(kind)
         w = self.W if lane == "dbscan-weighted" else None
         used0, total = self.reader.read()
@@ -302,9 +316,12 @@ class Runner:
         n_clusters = None
         try:
             m = self.ml.DBSCAN(**kw).fit(X, sample_weight=w)
-            labels = m.labels_
-            n_clusters = int(len(set(np.asarray(labels).tolist())))
-            del m, labels
+            # `labels_` is mojolearn's own Array, not numpy; `tolist` is its
+            # documented reader. The distinct count is here so a fit that
+            # "succeeds" by labelling everything noise is visible in the row
+            # rather than hidden behind ok=True.
+            n_clusters = len(set(m.labels_.tolist()))
+            del m
         except BaseException as exc:          # noqa: BLE001 -- a raise is data
             err = "".join(traceback.format_exception_only(type(exc), exc)).strip()
         wall = time.time() - t0
@@ -350,13 +367,21 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True, help="JSON evidence file")
     ap.add_argument("--arm", action="append", default=[],
-                    choices=["seq", "repeat", "shapes", "arms"],
+                    choices=["seq", "repeat", "shapes", "arms", "cold",
+                             "budget"],
                     help="repeatable; default is every arm")
     ap.add_argument("--repeats", type=int, default=2,
                     help="seq: repeats per cell, as identity_break's --repeats")
     ap.add_argument("--n", type=int, default=12,
                     help="repeat/arms: fits per configuration")
     ap.add_argument("--repeat-fixture", default="base")
+    ap.add_argument("--self-check-fixture", default="ties",
+                    help="the fixture the self check fits. `cold` wants the "
+                         "largest neighbourhood to be the FIRST GPU work, so "
+                         "that arm passes --self-check-fixture wide")
+    ap.add_argument("--budgets", default="0,64,18,8",
+                    help="budget arm: max_mbytes_per_batch values in MB, 0 "
+                         "meaning the default 80%%-of-total derivation")
     ap.add_argument("--device", type=int, default=0)
     ap.add_argument("--source", default="",
                     help="force a memory source: amdgpu-sysfs, nvidia-smi, "
@@ -403,7 +428,7 @@ def main():
 
     # ------------------------------------------------ the probe must move first
     if not args.no_self_check:
-        run.fit("selfcheck", "dbscan", "ties")
+        run.fit("selfcheck", "dbscan", args.self_check_fixture)
         moved = (rows[-1]["used_after"] - used_boot) / 2**20
         result["self_check_moved_mib"] = moved
         save()
@@ -434,6 +459,18 @@ def main():
         for kind in sorted(FIXTURES, key=lambda k: NNZ_L2[k]):
             run.fit("shapes", "dbscan", kind)
         save()
+
+    if "cold" in arms:
+        for kind in ("wide", "wide", "denormal", "denormal", "base", "base"):
+            run.fit("cold", "dbscan", kind)
+        save()
+
+    if "budget" in arms:
+        for mb in [int(v) for v in args.budgets.split(",") if v.strip()]:
+            for _ in range(max(2, args.n // 3)):
+                run.fit("budget:%d" % mb, "dbscan", args.repeat_fixture,
+                        max_mbytes_per_batch=(None if mb == 0 else mb))
+            save()
 
     if "arms" in arms:
         f = args.repeat_fixture
