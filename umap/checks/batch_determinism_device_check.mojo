@@ -16,7 +16,7 @@ from std.memory import bitcast
 
 from max.gpu.host import DeviceContext
 from umap.checks.batch_determinism_check import (
-    C, D, K, NQ, N_TRAIN, _gather, _queries, _report_row, _row_differs, _training,
+    C, D, K, NQ, N_TRAIN, _gather, _mix, _queries, _report_row, _row_differs, _training,
 )
 from umap.params import UMAPParams
 from umap.transform import transform
@@ -133,9 +133,73 @@ def _arms(ctx: DeviceContext, negatives: Int) raises:
         )
 
 
+comptime N_WIDE = 300
+
+
+def _wide_queries() raises -> List[Float32]:
+    """The eight arms' queries, then 292 more on the same four clusters, so
+    row 0 is the same query every other arm in this file uses."""
+    var base = _queries()
+    var out = base.copy()
+    var centers: List[Float32] = [
+        0.0, 0.0, 0.0,
+        10.0, 0.0, 3.0,
+        0.0, 9.0, -4.0,
+        7.0, 8.0, 6.0,
+    ]
+    for i in range(NQ, N_WIDE):
+        var cluster = i % 4
+        for c in range(D):
+            var bits = Int(_mix(UInt64(i * 29 + c + 31337)) >> 40)
+            var jitter = (Float32(bits) / Float32(8388608.0) - Float32(1.0)) * Float32(1.3)
+            out.append(centers[cluster * D + c] + jitter)
+    return out^
+
+
+def _tile_arm(ctx: DeviceContext, negatives: Int) raises:
+    """THE ONE PLACE A BATCH COUPLING COULD STILL HIDE ON THE DEVICE ROUTE.
+
+    Everything above runs batches of eight, and on the device the k-NN is a
+    tiled kernel whose tile `neighbors/estimator.mojo::plan_query_tile` clamps
+    to the query count. A batch of eight therefore runs tile 8 in a single
+    pass, and no arm in this file ever reaches the default tile or the loop
+    over several tiles. If a query's neighbors depended on the tile it landed
+    in, the transform would still be batch dependent above the tile size and
+    every null above would have missed it, because the couplings this lane
+    repaired are not the only way a request size can reach a row.
+
+    Row 0 alone, at tile 1, against row 0 inside 300 queries, at tile 256 with
+    the loop running twice. Bitwise, as everywhere else.
+    """
+    var suffix = String("device.tile.nsr") + String(negatives)
+    var tr = _training()
+    var training = tr[0].copy()
+    var embedding = tr[1].copy()
+    var wide = _wide_queries()
+
+    var all_rows = List[Int]()
+    for i in range(N_WIDE):
+        all_rows.append(i)
+    var alone: List[Int] = [0]
+
+    var big = _run(ctx, training, embedding, wide, all_rows, negatives)
+    var one = _run(ctx, training, embedding, wide, alone, negatives)
+    var moved = _report_row(suffix, 0, big, 0, one, 0)
+    print(
+        "ARM TILE", suffix, "row 0 alone against row 0 inside", N_WIDE,
+        "queries moves it:", moved,
+    )
+    if moved:
+        raise Error(
+            "UMAP device transform is batch dependent at " + suffix
+            + ": the k-NN query tile reaches the row"
+        )
+
+
 def main() raises:
     print("UMAP transform batch-determinism measurement, device route")
     with DeviceContext() as ctx:
         _arms(ctx, 5)
         _arms(ctx, 0)
+        _tile_arm(ctx, 5)
     print("UMAP batch determinism device measurement COMPLETE")
