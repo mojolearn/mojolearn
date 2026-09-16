@@ -266,6 +266,10 @@ class SmallMLPTrainer:
     example dataset hash, sample order and batch size). It is retained exactly
     with the step counter, but this trainer does not fetch or reorder data.
     The caller must feed the corresponding next batch after restoring state.
+    Its CONTENTS are not validated and are never compared against the batches
+    the caller passes, so it is tamper-evident once inside a checkpoint
+    envelope and otherwise only as true as the caller made it
+    (lane/data-ordering-determinism, 2026-09-16).
 
     train_step returns pre-update loss/logits and all four parameter gradients,
     plus input_grad when requested. No clipping, dropout, mixed precision,
