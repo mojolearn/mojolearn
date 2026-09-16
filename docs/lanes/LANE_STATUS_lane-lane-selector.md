@@ -228,6 +228,47 @@ exactly like a clean tree. Its self-test now runs every pattern through the
 real `git grep` and requires the probe lines to match and the near misses not
 to.
 
+### Re-checked against the commits as they LANDED, not against branches
+
+The registry rule was reported as not narrowing on main. It does. The report
+measured `--changed-since a3a9c891b^` from a much later tip, and
+`--changed-since` compares a ref against the WORKING TREE, so that span was
+many lanes' commits rather than the one commit in question. Two OTHER paths in
+that span were forcing the fallback, and the whole-selection FALLING BACK line
+sat under all of them.
+
+The kmeans-save merge alone, `a3a9c891b^..a3a9c891b`, eight paths:
+
+    python/mojolearn/_classical_host.py   additive registry: 33 lane(s)
+    python/mojolearn/host_surface.py      additive registry: 9 lane(s)
+    python/mojolearn/cluster.py           33 lane(s)
+    tests/test_host_model_kmeans.py       a test module
+    tools/kmeans_save_boundary_check.py   nothing reaches it
+    tools/kmeans_save_nvidia_leg.sh       nothing reaches it
+    CHANGELOG.md, one LANE_STATUS         inert
+    === 36 of 212 lanes selected; paths forcing the fallback: NONE
+
+The other three rules, also against landed commits:
+
+* **docstrings and comments.** Four landed commits on main change a package
+  `.py` file in docstrings alone. One of them, `b8a2bbe2a`, is a three-way
+  control by itself: `ensemble.py` is inert, while `_byte_lm_impl.py` and
+  `_mlp_impl.py` are equally code-identical and correctly still fall back,
+  because their bytes are hashed at run time under `source_sha256`.
+* **an added lane.** Of the last 40 landed commits touching
+  `tools/identity_break.py`, five narrow to exactly one lane each
+  (`bpe-trainer`, `cross-val-folds`, `tokenizer`) and 35 answer every lane.
+* **nothing reaches it.** Of 120 files added by recent landed commits, 26 read
+  unreachable and 94 still fall back, among them `core/device_mutex.mojo` and
+  `python/mojolearn/_bpe_trainer.py`, which are product code.
+
+None of the three moved.
+
+### The one path left, and why it stays
+
+`pixi.toml` pins the toolchain. A toolchain change can move bits on every
+lane, so it selects every lane and that is not a gap to close.
+
 ### Measured cost
 
 Deriving the map took 146 s per call before memoization, and the property
