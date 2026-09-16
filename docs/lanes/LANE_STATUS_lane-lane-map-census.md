@@ -1,14 +1,16 @@
 # lane/lane-map-census: the two things `lane/lane-selector` owed to a person
 
-Branch `lane/lane-map-census`, from `main` at bd5324742.
+Branch `lane/lane-map-census`, from `main` at bd5324742, merged with
+`origin/main` at 78a6410dd and again at a9f7f765c and verified there.
 Worktree `/Users/andrewhendel/mojolearn-wt/lane-map-census`.
 Evidence in `/Users/andrewhendel/mojolearn-evidence/lane-map-census-2026-09-16/`.
 
 `lane/lane-selector` mechanised two inversions over the whole tree and then
 stopped, saying it had not mechanised JUDGEMENT. It left two items "owed to a
-person, not to another rule". This is that pass. Both were real, and between
-them they cost five under-attributions, each of which reads as a narrow PASS
-rather than as a sweep.
+person, not to another rule". This is that pass. Both were real. Between them
+they found six defects in the map: five UNDER-ATTRIBUTIONS, each of which reads
+as a narrow PASS rather than as a sweep, and one that made the map depend on
+the laptop it ran on.
 
 `tools/lane_select.py` was checked before editing: `lane/lane-selector` is
 merged, `git diff main lane/lane-selector -- tools/lane_select.py` is empty and
@@ -82,8 +84,8 @@ Three rules each hid it, and each is a rule rather than an exception.
 
 ## ITEM 2. The census at 3, read
 
-67 files at the start, 59 now. Most are genuinely narrow and narrow for a
-reason that is in the tree, not in a list. Three were not.
+67 files at the start, 59 now. Most are genuinely narrow, and narrow for a
+reason that is in the tree rather than in a list. Four groups were not.
 
 ### Confident: a missing edge (all four fixed)
 
@@ -100,7 +102,7 @@ reason that is in the tree, not in a list. Three were not.
 * **`core/gbdt_host_ctr.mojo` and `bindings/build_forest_host.sh` at 2.** They are reached only from `bindings/_mojolearn_forest_host.mojo`, and `host_surface.py`'s `forest` family declares exactly `gbdt-categorical-ctr-tables` and `gbdt-tensor-ctr-tables`. The third CTR-shaped lane, `gbdt-categorical-ctr`, says in its own docstring that NO CTR IS BUILT HERE.
 * **The host oracles that omit their `par-*` siblings** (`hdbscan_host_oracle.mojo` 2, `km_host_oracle.mojo` 3, `cd_oracle.mojo` 3, `resample_host.mojo` 3, `spectral_oracle.mojo` 3, `if_oracle.mojo` 2, `umap/host/umap_oracle.mojo` 1). Each is linked only into `*_host` bindings (measured, by taking each binding's import closure), and only 13 of the 50 `par-*` lanes are named by any host family. `host_surface.py` is the declaration of which lanes have a CPU route (`_verify_all.py:126`, "every CPU training lane is declared there"), and the map reads it live, so the day a `par-*` lane is added to a family the map follows without an edit here. Widening the map to guess at it would be a hand-kept exception.
 * **`python/mojolearn/linalg.py` at 2.** It re-exports `Cholesky`, but `__init__.py:178` binds `ml.Cholesky` straight from `._cholesky_impl`, so `linalg.py` is not on that lane's path. It holds `gemm-pinned` and `gemm-transposed`, which are the lanes that call `ml.linalg.matmul`.
-* **None of the 37 census `.mojo` files is a standalone program**, so none of them is out of scope for the reason a `checks/` program would be.
+* **None of the 35 census `.mojo` files is a standalone program** (checked on the merged tree, printing the list rather than a count, and it is empty), so none of them is out of scope for the reason a `checks/` program would be.
 
 ### Not confident
 
