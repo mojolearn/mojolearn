@@ -577,6 +577,21 @@ Linux legs are OWED before this heading reads published.
   every train cell it ran and IDENTICAL x4 or N/A on the infer and model cells. On a CPU-only
   install only the lanes with a CPU training path run. `--check` resolves the harness, the
   columns and the witness and runs nothing. Exit codes follow `verify`. Needs numpy.
+- **`KMeans` can be saved and loaded, so a k-means model fitted on a GPU predicts on a machine
+  with none.** `KMeans.predict` and `KMeans.transform` already shipped and
+  `mojolearn/host/_mojolearn_core_host.so` already exported both, but the class had no `save`,
+  so there was no file for `mojolearn.host_model()` to open and the whole train-here,
+  infer-there route stopped at serialization; `host_surface.py`'s own gap registry said so.
+  `save` writes the format `mojolearn-kmeans-1` through the same deterministic npz writer
+  every other portable model uses, and `mojolearn.host_model(path)` returns a `HostKMeans`
+  bound to the core host binding. ONE format covers every k-means lane: the metric and the
+  start are members of the file rather than tags of their own. The fit's own `labels_` travels
+  with the centroids, because it is what `predict` on the training rows must equal. A file of
+  another format or another estimator, a truncated one, one whose centroid count disagrees
+  with its dimensionality, one whose metric name disagrees with its code member, and one whose
+  arrays are at another dtype are each refused by name rather than loaded into a plausible
+  wrong answer. What is still owed for `kmeans` is the GPU recording under
+  `bench/results/classical_host/`, as for `dbscan`, `agglomerative` and `spectral`.
 
 ## 0.8.5 (published 2026-09-14)
 
