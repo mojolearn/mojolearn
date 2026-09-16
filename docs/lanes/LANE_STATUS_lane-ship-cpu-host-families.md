@@ -61,6 +61,15 @@ interruption cost one chunk rather than the whole run. Every chunk's JSON
 lands on disk as it finishes, under
 `~/mojolearn-evidence/ship-cpu-host-families/run-2026-09-16/chunks/`.
 
+**The confirmation**, after the nine were held back, is the shipped command
+itself in ONE process on the final set, so the headline number is printed by
+`verify --all` rather than computed from the manifest:
+
+```
+# verify --all: cpu (cpu), 122 lanes x 1 fixtures, harness checkout, ...
+RESULT: VERIFIED (verified 435 of 496 cell parts (0 divergent, 13 owed, 0 refused, 48 n/a)). 118.4s. exit 0
+```
+
 **The before arm** is the control, on the same machine, the same harness and
 the same fixtures, with origin/main's package and a host directory carrying
 exactly origin/main's SIXTEEN `wheel_bindings()`. That is what a CPU-only
@@ -72,9 +81,11 @@ inherited from another lane's write-up. Evidence in
 `_verify_all.verdict()` returned VERIFIED and exit 0 as soon as ONE part read
 IDENTICAL, before it looked at REFUSED, which is a verdict that cannot fail.
 Main's 87085a5eb fixes it, any refusal now reads INCOMPLETE and exits 4, and
-that fix is merged into this branch. It earned itself here twice. The first
-before arm read INCOMPLETE, exit 4, on 36 REFUSED parts, and the count above
-is lanes actually CHECKED rather than lanes that merely failed to refuse
+that fix is merged into this branch. It earned itself here: the first before
+arm read INCOMPLETE, exit 4, on 36 REFUSED parts, which is how the stale
+binding below was caught at all. Under the old verdict that same run would
+have read VERIFIED and the stale binding would have gone unnoticed. The count
+above is lanes actually CHECKED rather than lanes that merely failed to refuse
 loudly.
 
 ### A stale binding the run caught, and what it cost
@@ -199,8 +210,10 @@ bindings built from this tree on the M4, one core:
 
 The compressed column is a measurement, not a model: deflate level 6 with a
 raw window reproduces the published 0.8.6 wheel's recorded `compress_size`
-**exactly on 6 of 6** host bindings (level 9 matches none), so these are the
-bytes a wheel would carry.
+**exactly on all 15 of its 15** host bindings, while level 9 matches none of
+them, so these are the bytes a wheel would carry. Re-measured against
+`~/mojolearn-evidence/release-0.8.6/macos-wheel/mojolearn-0.8.6-py3-none-macosx_11_0_arm64.whl`,
+whose size on disk is the 26,368,494 the table below starts from.
 
 | wheel | before | after | delta |
 |---|---|---|---|
@@ -290,7 +303,17 @@ silently here.
   - `test_verify_all.py::test_shipped_verifier_hashes_like_the_harness` runs
     the harness and the verifier over every public reference lane in
     subprocesses. Widening the public set makes that test proportionally
-    slower; it took 197 s for the nine-plus-thirty set.
+    slower; it took 197 s for the nine-plus-thirty set and 211 s for 122.
+
+  One test in that file DID have to change, because this lane broke it.
+  `test_full_and_cpu_lane_sets` asserted that a CPU-only install refuses
+  `--lanes rf-clf` by name, and `rf-clf` is public now that the rf binding
+  ships, so the assertion had nothing left to catch and read
+  `DID NOT RAISE ValueError`. The example is now `par-forest`, which is
+  excluded by RULE (`PUBLIC_EXCLUDED_PREFIXES`) rather than by happening to be
+  off a list, so it stays a real test of the refusal however far the public
+  set grows. Checked by pointing it back at a public lane and watching it fail
+  again.
 
 ## How the host set was built
 

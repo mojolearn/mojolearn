@@ -104,10 +104,10 @@ env:
   #                       decides, and the day a family is held back again the
   #                       routine list shrinks with it and nothing here has to
   #                       change. The routine gate now builds the whole set on
-  #                       a push, which is the point -- it builds what the
-  #                       wheel ships -- at about seven minutes of compiling,
-  #                       restored from the host-v2 cache when no .mojo,
-  #                       build script or manifest moved.
+  #                       a push, which is the point, because it builds what
+  #                       the wheel ships, at about seven minutes of
+  #                       compiling, restored from the host-v2 cache when no
+  #                       .mojo, build script or manifest moved.
   #   SABOTAGE_FAMILIES   the same list, built again with
   #                       -D MOJOLEARN_HOST_SABOTAGE=1 into host-sab.
   #   ALL_HOST_BINDINGS   the BUILD_FAMILIES basenames, comma separated, the

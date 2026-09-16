@@ -87,7 +87,8 @@ Linux legs are OWED before this heading reads published.
   28,639,807 bytes (+8.61%) and the Linux wheel, projected from the ratio measured over the
   fifteen families in both published wheels, from 70,862,796 to 73,444,604 (+3.64%). The
   compressed figures are measurements: at deflate level 6 with a raw window this reproduces
-  the published 0.8.6 wheel's recorded compressed sizes exactly on six of six host bindings.
+  the published 0.8.6 wheel's recorded compressed sizes exactly on all fifteen of its host
+  bindings, where level 9 reproduces none of them.
   A wheel is still dominated by its GPU bindings, 312 MB uncompressed across 91 files on
   Linux, which is why sixteen more CPU binaries move the total so little. Every family's
   `wheel_note` now begins "Ships:" and says what that binding makes checkable that nothing

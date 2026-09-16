@@ -2405,6 +2405,12 @@ def public_reference_lanes():
 #: vocabulary the harness trains itself, so it needs no vocabulary file on the
 #: install. Since lane/cpu-verifier-gaps-7 it is also a covered lane, which
 #: the full CPU gate runs; this list is the inference wheel's reference set.
+#: It is public though no record carries its hashes yet (the GPT-2 table left
+#: the tree and the lane now loads the synthetic vocabulary the harness trains
+#: itself), so its parts read OWED until the next record. It was public before
+#: lane/ship-cpu-host-families widened the set and narrowing it would be a
+#: regression, which is why the derivation adds it back rather than deriving
+#: it: it is the one public lane a run selects without comparing.
 PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
 
 #: Lanes that PASS every static condition for `public_reference_lanes()` and
