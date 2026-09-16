@@ -28,9 +28,10 @@ exposed allocator-dependent NaNs (deviations 2712 and 2713).
 Mamba guard-band builds retain their per-buffer wait because their temporary
 sub-buffer views have a shorter lifetime.
 
-The nonfinite scan now writes its partials into an owning host List with one
-completion wait. The device kernel, first-index reduction, and refusal ordering
-are unchanged. Mamba list uploads and downloads likewise use ordinary host
+The nonfinite scan uses one completion wait. Integration retains the newer
+main implementation and its pinned host buffer; the measurements below used
+an owning host List. The device kernel, first-index reduction, and refusal
+ordering are unchanged. Mamba list uploads and downloads likewise use ordinary host
 pointers with one completion wait, retaining the old padded empty-upload path.
 The list owner or borrow survives until the copy completes.
 
@@ -125,3 +126,15 @@ Apple routine work is bypassed while the remaining latency is investigated.
 The standalone scan experiment showed variable launch/wait latency and no
 consistent win from replacing the reduction with a single-thread scan, so that
 experimental kernel was not shipped. No further Apple matrix was launched.
+
+## Integration with the later wait-removal merge
+
+Main advanced during this work. Its qualified pinned-buffer, one-wait scan
+implementation was retained, together with its trace-adjacent wait removals.
+The merged stage/transfer/scan-budget probe compiled in 5.04 seconds and passed
+in 0.51 seconds. The merged Transformer binding built in 48.27 seconds; its
+native decode probe, alongside the previously validated unchanged Mamba binding,
+finished in 14.57 seconds. All 30 output/state arrays matched the earlier
+candidate bytewise. Each integration command had a 60-second execution limit.
+The timings in the table above remain measurements of the earlier candidate,
+not of the final merged implementation.
