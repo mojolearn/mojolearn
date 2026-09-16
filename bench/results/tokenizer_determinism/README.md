@@ -4,6 +4,14 @@ Measured 2026-09-16 on lane `lane/tokenizer-trainer-determinism`. The question
 decides whether mojolearn builds its own vocabulary trainer or pins an
 existing one. It was measured, not reasoned about.
 
+> **The answer is BUILD, and this file first said PIN.** An earlier revision
+> recommended pinning Hugging Face `tokenizers` BPE on the strength of the
+> tables below. That recommendation is **withdrawn**; see **Resolution** at the
+> end. The measurements stand, but every one of them was taken in a single
+> trainer configuration, and the axis this lane did not move is the one that
+> decides the question. mojolearn's own deterministic BPE trainer is on main
+> (`lane/bpe-vocab-trainer`, `bench/results/bpe_trainer/README.md`).
+
 Subjects, both pinned to the version actually tested:
 
 | trainer | version |
@@ -131,6 +139,61 @@ the byte equality rests on that rather than on a coincidence.
 
 Notably, **corpus order does not reach the result at all** for HF: forward,
 reversed and rotated shard lists produce byte-identical artifacts.
+
+### What bounds that result is the CONFIGURATION, not the version
+
+Every row above was measured in one trainer configuration, byte-level BPE with
+no continuation prefix. This lane wrote down "do not generalize a trainer from
+one model type" after the unigram result, and then generalized across
+configurations *of* one model type anyway. Moving that axis gives a different
+answer.
+
+`tools/tokdet_prefix_config.py` trains three arms in **eight fresh processes**
+each, one core, `RAYON_NUM_THREADS=1`, `TOKENIZERS_PARALLELISM=false`, on a
+corpus the script generates itself from shared word stems so that count ties
+are common. Fresh processes are the point, because the cause is a per-process
+hash seed that a single process cannot see.
+
+| arm | distinct vocabularies in 8 processes |
+|---|---|
+| `BpeTrainer`, no prefix (**the control**) | **1** |
+| `BpeTrainer`, `continuing_subword_prefix="##"` | **8** |
+| `WordPieceTrainer` | **8** |
+
+The no-prefix arm is the fail-first control and the reason the other two can be
+read at all. It came back 1 of 8, so neither the corpus nor the harness is the
+cause of what the other two arms show.
+
+**The vocabularies genuinely disagree**, and this is not a renumbering. Between
+two `##` runs, 6 to 8 tokens are in one vocabulary and not the other, 15 shared
+tokens carry different ids, and the merge list differs as a **set** and not only
+as a sequence. The differing tokens reach the tokenization, so two runs of the
+same trainer on the same corpus at the same settings split the same word
+differently.
+
+```
+'ken'    run A  k ##en          run B  k ##e ##n
+'buil'   run A  buil            run B  bu ##i ##l
+'stan'   run A  stan            run B  st ##a ##n
+```
+
+Those counts move between invocations of the check itself, which is the
+signature of the cause rather than noise in the measurement.
+
+**The mechanism is a hash iteration order used as a tie-break.** `tokenizers`
+hands out ids to the prefixed continuation tokens while iterating a hash map,
+and those ids are what settles a count tie between two candidate merges. A
+version pin does not reach it, a thread pin does not reach it, and it is
+invisible from the API. `lane/bpe-vocab-trainer` found this independently by
+reading `bpe/trainer.rs`; the numbers here are a separate replication, on a
+different corpus, run after that lane merged.
+
+So the honest form of the HF BPE row is **"reproducible in the byte-level,
+no-prefix configuration"**. That happens to be the configuration mojolearn's own
+GPT-2-format tokenizer consumes, so the safe region is the region we would have
+used. The problem is not that the pin would fail today. The problem is that the
+boundary of the safe region is undocumented, unpromised, and silent, and a user
+who steps over it gets a different vocabulary with no error.
 
 ## Findings: `sentencepiece` 0.2.2, BPE
 
@@ -368,92 +431,121 @@ the lane status file.
 
 Pod `5dd31t9s9o3j2k`, 16 vCPU at $0.48/hr, billed 1,905 s from create to
 verified delete: **$0.2540**. Deleted and verified gone (HTTP 204, then 404,
-then absent from the pod listing). Note $0.48/hr, not the $0.24 that
-`docs/RUNPOD_CPU_LEG.md` still claims.
+then absent from the pod listing). $0.48/hr is the 16 vCPU price;
+`docs/RUNPOD_CPU_LEG.md` now records that the rate scales with `--vcpu` and
+that its $0.24 figure is the 8 vCPU one.
 
 ## Summary
 
 | trainer and model | bitwise reproducible | where it breaks |
 |---|---|---|
-| HF `tokenizers` BPE | **yes** | nowhere measured |
+| HF `tokenizers` BPE, no prefix | **yes** | nowhere measured on this axis |
+| HF `tokenizers` BPE, `##` prefix | **no** | 8 distinct vocabularies in 8 processes |
+| HF `tokenizers` WordPiece | **no** | 8 distinct vocabularies in 8 processes |
 | HF `tokenizers` unigram | **no** | scores wobble run to run |
 | `sentencepiece` BPE, whole corpus | **yes** | `.model` carries version and path metadata |
 | `sentencepiece` BPE, sampled | **no** | the sampling draw, and it cannot be pinned |
 | `sentencepiece` unigram | **yes** (1 thread) | thread axis unmeasured |
 
-Hugging Face BPE held on every axis this lane could move. Repeated runs,
+Hugging Face BPE held on every axis this lane originally moved. Repeated runs,
 vocabulary 1,000 and 8,000 and 32,000, forward and reversed and rotated corpus
 order, 1 through 16 threads, arm64 against x86_64, and three library versions.
+It does **not** hold across the axis this lane did not originally move, the
+trainer's own configuration.
 
-## If we pin, what would we have to state publicly
+## RETIRED: what pinning would have required
 
-Short, which is the point.
+**This section and the recommendation that followed it are superseded.** They
+are kept because a retracted argument that leaves no trace is worse than a wrong
+one, and because the conditions below are still the right conditions for anyone
+who uses Hugging Face `tokenizers` directly.
 
-- The trainer is Hugging Face `tokenizers`, and the model is **BPE, never
-  unigram**.
-- The corpus bytes and the vocabulary size are fixed. Everything downstream
-  follows from those.
-- The version is pinned as a matter of hygiene, though it did not have to be.
-  0.20.3, 0.22.1 and 0.23.2 all produced the same bytes.
+Pinning Hugging Face `tokenizers` BPE would have required stating that the model
+is BPE and never unigram, that the corpus bytes and vocabulary size are fixed,
+and that the version is pinned as hygiene. Thread count, corpus file order and
+architecture all turned out not to matter. Two warnings attach and still stand.
+Never use SentencePiece's `input_sentence_size` sampling, which does not
+reproduce and has no `random_seed` to pin in 0.2.2, and never extend a
+reproducibility claim to a Hugging Face unigram vocabulary.
 
-Three things we would **not** have to promise, because they turned out not to
-matter. Thread count is free, 1 through 16 agree. Corpus file order is free.
-Architecture is free, arm64 and x86_64 agree bit for bit.
+A third condition was missing from that list, and it is the one that retires it.
+The trainer must be in the byte-level, no-prefix configuration, because
+`continuing_subword_prefix` and `WordPieceTrainer` both leave the reproducible
+region silently. A condition nobody can check from the API is not a condition a
+library should ship behind.
 
-Two things we would have to warn about. Never use SentencePiece's
-`input_sentence_size` sampling path, which does not reproduce and has no
-`random_seed` to pin in 0.2.2. Never extend a reproducibility claim to a
-unigram vocabulary trained by Hugging Face.
+## Resolution: build it, and `lane/bpe-vocab-trainer` was right
 
-## If we build, what it would actually take
+**This lane recommended pinning Hugging Face BPE. That recommendation is
+withdrawn.** `lane/bpe-vocab-trainer` merged a deterministic byte-level BPE
+trainer to main on 2026-09-16 (`dd41ba82e`), and it is the right call. Three
+reasons, in the order they matter.
 
-The four pieces named in the brief, priced against what we found.
+**1. The pin's guarantee is a coincidence of one configuration, and the boundary
+is invisible.** Measured above. Hugging Face does not document or promise
+reproducibility, and the region where it holds is bounded by a hash iteration
+order that no version pin, thread pin or API flag reaches. Depending on an
+undocumented property means depending on something nobody has agreed to keep.
 
-1. **A tie-break total order.** BPE repeatedly takes the most frequent pair, and
-   the interface does not say who wins a tie. A deterministic trainer needs a
-   documented total order, for example the pair's byte sequence and then its
-   first-occurrence index, applied at every selection rather than only at the
-   top. Cheap to specify, and it is the part most likely to be got subtly
-   wrong.
-2. **A pinned reduction for parallel counting.** Per-shard counts must merge in
-   shard index order, never in completion order. This is the same discipline the
-   GEMM and multi-device work already runs under, so it is familiar rather than
-   novel.
-3. **Sorted iteration instead of hash order.** No hash map may be iterated to
-   produce output or to settle a tie. Worth noting that Hugging Face already
-   gets this right, and it is why its byte stability is structural.
-4. **No floats in the scoring.** For BPE this costs nothing, because selection
-   is over integer counts. It is not free for unigram, whose EM log-likelihood
-   is exactly where Hugging Face loses reproducibility.
+**2. Under a pin we would inherit a defect we are not allowed to write.** Using
+a hash map's iteration order to settle a tie is exactly the class of thing this
+project's rules forbid, and the same rules forbid reproducing a reference
+library's bug. Pinned, we could neither fix it nor gate against it. Owned, the
+tie-break is a stated total order in our source, highest count then smallest
+`(left_id, right_id)`, which is a sentence a reader can check against the code.
 
-So the algorithm itself is the easy part, and for BPE the no-floats
-requirement is satisfied for free. The real cost is everything around it.
-Byte-level pre-tokenization and its regex, special token handling, the
-`tokenizer.json` surface that the ecosystem reads, and a corpus ingestion path
-that is itself deterministic. That is the work, and none of it buys
-reproducibility we do not already have.
+**3. The two options differ in what a USER can verify, and that is the real
+difference.** Under a pin, a user verifies reproducibility by running a closed
+trainer twice and diffing the bytes. That is an existence check over whichever
+configurations they happened to try, it says nothing about the one they did not
+try, and it cannot distinguish "reproducible by construction" from "reproducible
+so far". Under the owned trainer, a user runs `pixi run check-bpe-trainer` and
+gets a Mojo implementation held **file byte for file byte** against an
+independent Python implementation of the *stated* algorithm, plus a sabotage arm
+watched failing, plus `n_ties_broken` carried out of the trainer so the gate
+fails if no fixture exercised the rule the sabotage reverses. The property is
+falsifiable in our harness rather than observed in someone else's binary.
 
-## Recommendation
+There is a fourth reason that is about distribution rather than determinism.
+mojolearn ships a byte-level BPE tokenizer and, since 2026-09-15, ships no
+vocabulary at all. Without a trainer, the only route from a user's corpus to a
+vocabulary our own tokenizer can load runs through a third-party library. That
+is not third-party data in the wheel, and it was never the concern the
+no-third-party-data rule was written for, but it does mean the only usable path
+through our own component would depend on something we do not control and cannot
+gate.
 
-**Pin Hugging Face `tokenizers` BPE. Do not build our own.**
+### What the pin argument got right, and what carries forward
 
-The empirical case is that there is nothing to fix. It is already bitwise
-reproducible across repeats, vocabulary size, corpus order, thread count,
-architecture and three library versions, and the comparison that says so was
-watched failing against perturbed vocabularies first, down to a single float32
-ulp. A trainer we wrote could at best match that, while costing us the
-ecosystem compatibility surface above.
+The measurements are not withdrawn, only the conclusion drawn from them.
 
-Build only if we later need something the ecosystem genuinely cannot give us.
-A deterministic **unigram** trainer would be such a thing, since Hugging
-Face's is not reproducible. Even there the cheaper answer is to pin
-SentencePiece unigram, which is byte-identical run to run, rather than write
-one.
+- **Hugging Face BPE, no prefix, is reproducible across repeats, vocabulary
+  size, corpus order, 1 through 16 threads, arm64 against x86_64, and three
+  library versions.** That is the interop baseline the trainer's
+  `tokenizer.json` round trip is measured against, and it is why that round trip
+  is a meaningful check rather than a comparison against a moving target.
+- **Hugging Face unigram is not reproducible**, 1,953 of 8,000 scores differ and
+  2 of 54,417 held-out lines retokenize. `lane/bpe-vocab-trainer`'s phase 3
+  already cites these numbers. A deterministic unigram trainer is the one nobody
+  else can offer, and it is where the differentiator actually lives.
+- **SentencePiece unigram is reproducible at one thread** and its BPE
+  vocabulary is thread-invariant, so SentencePiece remains the cheaper answer
+  for unigram until we write one.
+- **Never use SentencePiece's sampling path.** It does not reproduce and 0.2.2
+  exposes no `random_seed`.
+- **The x86_64 leg the trainer still owes can reuse this harness.**
+  `tools/tokdet_corpus.py` already cut byte-identical corpus shards on Apple M4
+  arm64 and on x86_64 Linux from the same R2 object, and
+  `tools/runpod_cpu_leg.sh --lane tokdet` is the rented-CPU path that carried it.
+  Nothing new has to be built to close that gap.
 
-This changes nothing about what we ship. No trainer becomes a mojolearn
-dependency, no vocabulary is vendored, and the wheel still carries no
-vocabularies. The pin is a statement about how a user trains a vocabulary, not
-about what is inside our wheel.
+### What this lane cost, and why it was still worth it
+
+One rented CPU pod at $0.2540 and a day of local one-core runs, to reach a
+conclusion that a separate lane reached by writing the trainer. The measurements
+survive as the ecosystem baseline and as the bound on the interop claim, and the
+negative result is on the record so that "why not just pin Hugging Face" has a
+measured answer the next time it is asked.
 
 ## What this evidence does not cover
 
@@ -465,6 +557,13 @@ Stated so the recommendation is not read wider than it was measured.
 - The unigram thread axis, which was lost to a harness bug and deliberately
   not re-rented.
 - Future library versions. Three releases agreeing is evidence, not a promise.
+- The configuration arms ran on a small generated corpus at vocabulary 300, not
+  on enwik8 at 8,000. That is the scale at which count ties are dense enough to
+  reach the tie-break, and it is why the no-prefix control is trained on the
+  same corpus rather than assumed. Whether the same mechanism bites a
+  32,000-token `##` vocabulary on 16 MB of prose is untested, and it does not
+  need to be, because a trainer that is nondeterministic anywhere cannot be
+  pinned as deterministic.
 
 ## Reproducing
 

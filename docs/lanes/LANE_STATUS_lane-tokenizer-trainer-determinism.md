@@ -1,18 +1,83 @@
 # LANE STATUS: `lane/tokenizer-trainer-determinism`
 
-**Question.** Are the two vocabulary trainers the ecosystem actually uses —
-Hugging Face `tokenizers` and SentencePiece — bitwise reproducible? The answer
+**CLOSED 2026-09-16, as a NEGATIVE RESULT.** This lane recommended pinning
+Hugging Face `tokenizers` BPE instead of writing our own vocabulary trainer.
+**That recommendation is withdrawn.** `lane/bpe-vocab-trainer` merged a
+deterministic byte-level BPE trainer to main the same morning (`dd41ba82e`),
+and it is right. Nothing on this branch contradicts it any more, and nothing
+here should be read as an argument against it.
+
+**Question.** Are the two vocabulary trainers the ecosystem actually uses,
+Hugging Face `tokenizers` and SentencePiece, bitwise reproducible? The answer
 decides whether mojolearn builds its own vocabulary trainer or pins one of
-theirs. Decision support, not a build. **No vocabulary trainer was written and
-none should be written on this branch.**
+theirs. Decision support, not a build. No vocabulary trainer was written on
+this branch.
 
 **Results:** `bench/results/tokenizer_determinism/README.md`.
+
+## Why the recommendation was wrong
+
+Every axis this lane moved was moved inside **one trainer configuration**,
+byte-level BPE with no continuation prefix. `tools/tokdet_prefix_config.py`
+moves the configuration axis, in eight fresh processes per arm at one core:
+
+| arm | distinct vocabularies in 8 processes |
+|---|---|
+| `BpeTrainer`, no prefix (the fail-first control) | **1** |
+| `BpeTrainer`, `continuing_subword_prefix="##"` | **8** |
+| `WordPieceTrainer` | **8** |
+
+The disagreement is genuine and not a renumbering. Between two `##` runs, 6 to
+8 tokens are in one vocabulary and not the other, the merge list differs as a
+**set**, and the same word encodes to different pieces (`buil` becomes `buil`
+in one run and `bu ##i ##l` in the other). The cause is a hash iteration order
+used to hand out continuation-token ids, and those ids settle count ties; no
+version pin or thread pin reaches it. `lane/bpe-vocab-trainer` found the same
+thing independently by reading `bpe/trainer.rs`. This is a separate
+replication, on a different corpus, run after that lane merged.
+
+This lane had already written down "do not generalize a trainer from one model
+type" and then generalized across configurations *of* one model type. That is
+the lesson worth carrying, and it is the same shape as the trap already in the
+list below.
+
+The deeper reason, which does not depend on the numbers: a pin and an owned
+implementation differ in **what a user can verify**. A pinned trainer is
+verified by running a closed binary twice and diffing, which is an existence
+check over the configurations that user happened to try. The owned trainer is
+verified by `pixi run check-bpe-trainer`, which holds Mojo against an
+independent Python implementation of a *stated* algorithm file byte for file
+byte, with a sabotage arm watched failing and `n_ties_broken` asserted non-zero
+so a passing gate cannot be vacuous. A hash-order tie-break is also exactly the
+kind of defect this project forbids writing and forbids reproducing; pinned, we
+could neither fix it nor gate against it.
+
+## What carries forward to `lane/bpe-vocab-trainer`
+
+- The ecosystem baseline the trainer's `tokenizer.json` round trip is measured
+  against. HF BPE with no prefix is byte-identical across repeats, vocabulary
+  size, corpus order, 1 through 16 threads, arm64 against x86_64 and three
+  library versions, so that round trip compares against a fixed target.
+- The unigram numbers phase 3 already cites (HF unigram, 1,953 of 8,000 scores
+  differ, 2 of 54,417 held-out lines retokenize; SentencePiece unigram
+  identical at one thread).
+- **The x86_64 leg the trainer owes needs nothing new built.**
+  `tools/tokdet_corpus.py` already cut byte-identical shards on Apple M4 arm64
+  and on x86_64 Linux from the same R2 object, and
+  `tools/runpod_cpu_leg.sh --lane tokdet` is the rented-CPU path that carried
+  it. Ask before renting.
+- The standing warnings. Never use SentencePiece's `input_sentence_size`
+  sampling, which does not reproduce and has no `random_seed` in 0.2.2. Never
+  extend a reproducibility claim to a Hugging Face unigram vocabulary.
 
 ## State
 
 - Harness committed: `tools/tokdet_corpus.py`, `tools/tokdet_train_hf.py`,
   `tools/tokdet_train_sp.py`, `tools/tokdet_compare.py`,
-  `tools/tokdet_matrix.py`, `tools/tokdet_pod_cmd.sh`.
+  `tools/tokdet_matrix.py`, `tools/tokdet_pod_cmd.sh`,
+  `tools/tokdet_prefix_config.py` (the configuration axis, self-contained,
+  carries its own fail-first control and exits non-zero when the control does
+  not hold).
 - Falsification gate passes for both trainers, in both directions (an exact
   copy compares identical; six one-at-a-time perturbations each trip the layer
   they must). Never trust a verdict from this harness without it.
@@ -35,8 +100,20 @@ none should be written on this branch.**
 ## Resume
 
 Worktree: `/Users/andrewhendel/CascadeProjects/mojolearn-wt/tokenizer-determinism`
-Scratchpad (corpus, venv, run artifacts, none of it committed):
-`/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/tokdet`
+
+Evidence, venv and run artifacts, none of it committed:
+`/Users/andrewhendel/mojolearn-evidence/tokenizer-trainer-determinism/`. The
+lane's original scratchpad was under `/private/tmp/claude-501/...` and the OS
+reaped it in the 2026-09-16 crash, which is why the configuration replication
+was rerun into `~/mojolearn-evidence/` instead.
+
+```sh
+E=/Users/andrewhendel/mojolearn-evidence/tokenizer-trainer-determinism
+python3 -m venv $E/hfenv && $E/hfenv/bin/pip install 'tokenizers==0.23.2'
+MAC_SLOTS=4 bash ~/mojolearn-evidence/tools/mac_slot.sh run nice -n 19 \
+    env RAYON_NUM_THREADS=1 TOKENIZERS_PARALLELISM=false \
+    $E/hfenv/bin/python tools/tokdet_prefix_config.py $E/run
+```
 
 Rebuild the throwaway environment:
 
@@ -155,12 +232,24 @@ bash tools/runpod_cpu_leg.sh --lane tokdetuni --vcpu 16 --lease 45 --build "" \
 - **Do not generalize a trainer from one model type.** Hugging Face is the
   reproducible one at BPE and the *unreproducible* one at unigram;
   SentencePiece is the reverse. Measure each model type.
+- **Do not generalize a trainer from one CONFIGURATION either, which is how
+  this lane reached a wrong recommendation.** HF BPE is reproducible with no
+  continuation prefix and NOT reproducible with one, and the difference is
+  invisible from the API. Having written the trap above, this lane then walked
+  into its sibling. An axis you did not move is not an axis that does not
+  exist.
+- **A per-process cause is invisible inside one process.** The hash seed is
+  redrawn per process, so five repeats inside one interpreter would have
+  reported IDENTICAL for every arm. Every run of
+  `tools/tokdet_prefix_config.py` is a fresh subprocess for that reason.
 
 ## What was found
 
 | trainer / model | bitwise reproducible? |
 |---|---|
-| HF `tokenizers` 0.23.2 BPE | yes, on every axis measured |
+| HF `tokenizers` 0.23.2 BPE, no prefix | yes, on every axis measured |
+| HF `tokenizers` 0.23.2 BPE, `##` prefix | **no**, 8 distinct in 8 processes |
+| HF `tokenizers` 0.23.2 WordPiece | **no**, 8 distinct in 8 processes |
 | HF `tokenizers` 0.23.2 unigram | **no** — scores wobble, 2 of 54,417 held-out lines retokenize |
 | `sentencepiece` 0.2.2 BPE, full corpus | yes (corpus order moves `.model` bytes, not the vocabulary) |
 | `sentencepiece` 0.2.2 BPE, sampled | **no**, and unpinnable — no `random_seed` in 0.2.2 |
