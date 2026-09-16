@@ -6,6 +6,8 @@ scikit-learn pipelines and splitters remain optional interoperability surfaces.
 Fold indices are host metadata; all learning stays with the GPU estimator.
 """
 import copy
+import hashlib
+import json
 import math
 import numbers
 import os
@@ -15,7 +17,7 @@ from ._buffer import _materialize, _native, empty
 from ._arrays import _addr, _addr_ro
 from ._labels import is_bool, flatten_labels
 
-__all__ = ['cross_val_score']
+__all__ = ['cross_val_score', 'split_descriptor']
 
 #: THE DORMANT NEGATIVE CONTROL for the fold assignment (lane/data-ordering-
 #: determinism, 2026-09-16). Fold assignment is the one data-ordering decision
@@ -123,6 +125,25 @@ def _default_folds(y, n_splits, classifier):
     Reference: sklearn 1.9.1 model_selection/_split.py KFold._iter_test_indices
     and StratifiedKFold._make_test_folds: first-seen class encoding, round-robin
     allocation over class-sorted labels, then contiguous fold blocks per class.
+
+    LINK 3, THE ROW ORDER (lane/data-ordering-determinism, 2026-09-16). There
+    is no seed here: the folds are unshuffled and this function is a pure
+    function of its arguments. What it never reads is X. The stratified branch
+    reads the LABEL SEQUENCE; the KFold branch reads `len(y)` and nothing else,
+    because its folds are contiguous blocks of positions. So the fold INDICES
+    this yields are not a pin on the split:
+
+      * a permutation of the rows that preserves the label sequence (swapping
+        two rows of the same class) leaves every index this yields BYTE
+        IDENTICAL while changing which rows the estimator is fitted on;
+      * ANY permutation leaves the KFold indices byte identical, because a
+        block of positions does not know which row sits at a position.
+
+    Measured on 2048 rows of the identity_break `base` fixture, both classes
+    1024 rows and 1010 label runs: a within-class rotation of all 2048 rows
+    moved none of the four fold-index hashes and all four fold-CONTENT hashes.
+    The row order is the caller's and mojolearn cannot pin it from inside; what
+    it can do is record it, which is `split_descriptor` below.
     """
     n = len(y)
     if is_bool(n_splits) or not isinstance(n_splits, numbers.Integral) or n_splits < 2:
@@ -162,6 +183,11 @@ def _default_folds(y, n_splits, classifier):
             size = n // n_splits + (fold < n % n_splits)
             tests[fold] = list(range(offset, offset + size))
             offset += size
+    # THE DORMANT CONTROL, actually called. It was defined and never invoked
+    # in the crash-preserved draft, which made the lane's negative control
+    # INERT: `MOJOLEARN_FOLD_ORDER_SABOTAGE=1` moved nothing, and a check that
+    # cannot fail is not a check.
+    tests = _sabotage_fold_order(tests)
     for test in tests:
         test.sort()
         heldout = set(test)
@@ -191,6 +217,110 @@ def _folds(cv, estimator, X, y, groups):
         raise ValueError('cv must be an integer, splitter or iterable of index pairs') from None
 
 
+#: The descriptor `split_descriptor` returns. Versioned because a reader who
+#: is handed one has to know what was and was not covered by its digest.
+SPLIT_DESCRIPTOR_SCHEMA = 'mojolearn.split_descriptor.v1'
+
+
+def _canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'),
+                      ensure_ascii=True, allow_nan=False).encode('ascii')
+
+
+def _digest(*chunks):
+    """sha256 over length-prefixed chunks, so no two field layouts collide."""
+    m = hashlib.sha256()
+    for chunk in chunks:
+        m.update(len(chunk).to_bytes(8, 'little'))
+        m.update(chunk)
+    return m.hexdigest()
+
+
+def _order_digest(value, name):
+    """The VALUES IN ARRIVAL ORDER, with their dtype and shape.
+
+    This is the only field of the descriptor that moves when rows are
+    permuted and nothing else changes, so it is the field that carries the
+    claim. A buffer array hashes its C-order bytes; a Python label list
+    hashes its canonical JSON, because label objects have no dtype.
+    """
+    if isinstance(value, list):
+        return _digest(b'list', _canonical(value))
+    array = _materialize(value, name)[0]._as_c()
+    return _digest(b'array', array.dtype.encode('ascii'),
+                   _canonical(list(array.shape)), array.tobytes())
+
+
+def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
+    """What a reproduction of a `cross_val_score` run has to be handed.
+
+    LINK 3 OF THE REPRODUCIBLE PIPELINE. Everything else mojolearn promises
+    is pinned by something mojolearn holds: the kernels by the numeric mode,
+    the artifact by its file hash, the byte-LM corpus by the caller's
+    `data_schedule`. The ORDER THE ROWS ARRIVE IN is not, and it cannot be:
+    mojolearn does not fetch, sort or reorder a caller's data. It is outside
+    the boundary. What is inside the boundary is RECORDING it, and until this
+    function a cross-validation run recorded nothing at all, so two runs of
+    the same code, the same config and the same rows in a different order
+    produced different scores with no artifact that showed why.
+
+    The trap this is aimed at is not the obvious one. Hashing the FOLD
+    ASSIGNMENT looks like it pins the split and does not:
+    `_default_folds` never reads X, so a permutation that keeps the label
+    sequence keeps every fold index byte identical (measured: 2048 rows
+    rotated within their class, zero of four fold-index hashes moved, four of
+    four fold-content hashes moved), and the KFold branch keeps its indices
+    under ANY permutation because its folds are blocks of positions.
+    `fold_assignment_sha256` is in the descriptor as a readable summary;
+    `X_sha256` and `y_sha256` are what carry the claim.
+
+    `estimator` is required whenever `cv` is None or an integer, and refused
+    by name rather than defaulted: `_classifier` of nothing is False, which
+    would silently describe a classifier's stratified folds as plain KFold
+    ones and hand the caller a descriptor of a split that never ran.
+
+    Returns a JSON-serializable dict whose `sha256` is over the canonical
+    encoding of every other field. It describes the split only. It is not a
+    hash of the scores, the estimator, the numeric mode or the binding; those
+    are `run_metadata()`'s job on the estimators that have one.
+    """
+    if (cv is None or (not is_bool(cv) and isinstance(cv, numbers.Integral))) and estimator is None:
+        raise ValueError(
+            'split_descriptor: the default folds are stratified for a classifier '
+            'and plain KFold otherwise, so estimator is required when cv is None '
+            'or an integer (pass the estimator cross_val_score was given)')
+    X = _materialize(X, 'X')[0]
+    if X.ndim != 2 or not X.shape[0] or not X.shape[1]:
+        raise ValueError('X must be a nonempty dense 2-D buffer array')
+    try:
+        y = _materialize(y, 'y')[0]
+    except TypeError:
+        y = flatten_labels(y)
+    if len(y) != len(X):
+        raise ValueError('y must be a 1-D buffer array matching X rows')
+    folds = []
+    for train, test in _folds(cv, estimator, X, y, groups):
+        folds.append(([int(i) for i in _indices(train, len(X), 'train').tolist()],
+                      [int(i) for i in _indices(test, len(X), 'test').tolist()]))
+    if not folds:
+        raise ValueError('cv must produce at least one fold')
+    descriptor = {
+        'schema': SPLIT_DESCRIPTOR_SCHEMA,
+        'n_rows': len(X),
+        'n_features': X.shape[1],
+        # THE ROW ORDER. The two fields a permutation moves.
+        'X_sha256': _order_digest(X, 'X'),
+        'y_sha256': _order_digest(y, 'y'),
+        'groups_sha256': None if groups is None else _order_digest(groups, 'groups'),
+        # A summary, NOT the pin; see the trap in this function's docstring.
+        'fold_assignment_sha256': _digest(b'folds', _canonical(folds)),
+        'n_folds': len(folds),
+        'fold_sizes': [[len(train), len(test)] for train, test in folds],
+    }
+    descriptor['sha256'] = hashlib.sha256(_canonical(descriptor)).hexdigest()
+    return descriptor
+
+
 def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
                     n_jobs=1, error_score='raise'):
     """Return one score per fold, fitting a fresh clone serially.
@@ -213,6 +343,14 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     Put unfitted transforms inside the pipeline to fit them on training folds.
     Set numeric_mode explicitly on every pipeline step and custom GPU metric.
     This function does not certify arbitrary pipelines as IDENTICAL.
+
+    THE SCORES ARE A FUNCTION OF THE ROW ORDER, and the default folds carry no
+    seed that would absorb it: they are unshuffled, so the fold a row lands in
+    is decided by WHERE IT SITS in X and y. Rerunning this on the same rows in
+    a different order is a different experiment and mojolearn cannot tell the
+    two apart, because it never fetches or reorders a caller's data. Record
+    `split_descriptor(X, y, estimator=estimator, cv=cv)` beside the scores; a
+    reader with the scores alone cannot reproduce them.
     """
     # Behavioral reference: sklearn 1.8.0 model_selection/_validation.py,
     # cross_validate (clone per fold), cross_val_score and _fit_and_score

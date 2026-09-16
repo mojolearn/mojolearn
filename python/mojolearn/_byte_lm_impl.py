@@ -427,6 +427,16 @@ class SmallByteLanguageModelTrainer:
     next_batch_index equals completed_steps; callers must provide the matching
     next batch after restoration. This class does not fetch/reorder a corpus.
 
+    NOTHING VALIDATES ITS CONTENTS, and a reader of a published run has to
+    know that (lane/data-ordering-determinism, 2026-09-16). The descriptor is
+    checked for size, depth, key count and JSON round-trip and for nothing
+    else: no key is required, no value is compared against the IDs handed to
+    train_step, and {'dataset': 'test'} trains. What it buys is that once a
+    checkpoint is written the descriptor is covered by the envelope's
+    payload_sha256, so it cannot be swapped without detection. That makes it
+    TAMPER-EVIDENT, not TRUE. The run is reproducible from it only to the
+    extent the caller made it so, and this class cannot tell the difference.
+
     resident=True retains an owned native context/model/optimizer across
     calls, and (DEVIATION 2514) the device buffers are then the ONLY copy of
     the parameters, moments and last gradient while the session is open:

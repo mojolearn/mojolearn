@@ -2974,29 +2974,52 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(scores=_h(np.asarray(scores, dtype=np.float64))))
 
 
+class _FoldClf:
+    """A classifier stand-in for `split_descriptor`, which refuses to guess.
+    The descriptor reads only `_estimator_type`; nothing is fitted."""
+    _estimator_type = "classifier"
+
+    def get_params(self, deep=False):
+        return {}
+
+
 @lane("cross-val-folds")
 def _(ml, X, yc, yr, Xh=None):
-    """THE FOLD PARTITION ITSELF (lane/data-ordering-determinism, 2026-09-16).
+    """THE FOLD PARTITION ITSELF, AND WHAT IT FAILS TO PIN
+    (lane/data-ordering-determinism, 2026-09-16).
 
-    Data ordering is link 3 of docs/lanes/PLAN_cross_vendor_llm.md's chain, and
-    for the neural path it is deliberately outside our boundary: the byte-LM
-    trainer does not fetch or reorder a corpus and records a `data_schedule`
-    descriptor instead. But fold assignment IS ours end to end -- which row is
-    trained on and which is held out, in which fold, in what order -- and no
-    lane hashed it.
+    Data ordering is link 3 of the reproducible-pipeline chain
+    (docs/lanes/PLAN_cross_vendor_llm.md). For the neural path it is
+    deliberately outside our boundary: the byte-LM trainer does not fetch or
+    reorder a corpus and takes a caller-supplied `data_schedule` descriptor
+    instead. Fold assignment looked like the one piece of data ordering that
+    IS ours end to end, and no lane hashed it.
+
+    It turned out to be ours only halfway, which is the finding this lane
+    carries. `model_selection._default_folds` NEVER READS X. The stratified
+    branch is a function of the label sequence; the KFold branch is a function
+    of `len(y)` alone, its folds being contiguous blocks of positions. So the
+    four fold-index parts below CANNOT MOVE under a row permutation that
+    preserves the label sequence, and the KFold two cannot move under any
+    permutation at all, while the rows the estimator is fitted on change
+    completely. Measured on 2048 rows, both classes 1024, 1010 label runs: a
+    within-class rotation of all 2048 rows moved 0 of 4 index hashes and 4 of
+    4 content hashes. That is why `content` is a part and not a comment.
+
+    `descriptor` is the repair: `model_selection.split_descriptor` hashes X and
+    y IN ARRIVAL ORDER beside the fold assignment, so a reproduction recipe has
+    something that moves when the order does. It is the cross-validation
+    analogue of `data_schedule`, and like `data_schedule` it records what is
+    outside the boundary rather than pretending to control it.
 
     The `cross-val` lane above hashes the SCORES of a fitted boosting
-    regressor. It would move if the folds moved, so it covers this BY
-    ARGUMENT; what it does not do is say so anywhere it can be read, because
-    it needs a GPU or a host binding to produce a cell at all and reads
-    REFUSED on a CPU-only install (`gather_rows_bytes`, measured 2026-09-16).
-
-    `model_selection._default_folds` is pure Python over the labels and the
-    split count: no RNG, no seed, no shuffle, no native call, nothing to key.
-    So this lane needs no binding and produces a cell on EVERY column,
-    including a CPU-only wheel, and what it hashes is which row lands in which
-    fold, in order: stratified (classifier) and plain KFold at three and five
-    splits over the first 2048 rows, train and test indices as int64.
+    regressor. It would move if the folds moved, so it covers the fold
+    assignment BY ARGUMENT; what it cannot do is say so anywhere a reader can
+    check, because it needs a GPU or a host binding to produce a cell at all
+    and reads REFUSED on a CPU-only install (`gather_rows_bytes`, measured
+    2026-09-16). This lane is pure Python over the labels and the split count:
+    no RNG, no seed, no native call, nothing to key. It produces a cell on
+    EVERY column, including a CPU-only wheel.
 
     `partition` is a HASHED part and not an assertion, for the tokenizer lane's
     reason: a raise reads REFUSED, which the owed check does not count as a
@@ -3008,9 +3031,13 @@ def _(ml, X, yc, yr, Xh=None):
     MOJOLEARN_HOST_ALLOW_SABOTAGE=1 rotates the row-to-fold assignment by one.
     Every invariant `partition` tests still passes and every fold keeps its
     size; only the assignment differs. So `partition` stays 1 and the four fold
-    hashes MOVE, which is the arm seen to fail rather than believed."""
+    hashes MOVE. MEASURED both ways on 2026-09-16: with the switch defined and
+    never called (the state this lane was found in) the arm is INERT and all
+    nine parts hold still, which is a check that cannot fail; with it wired
+    into `_default_folds` all eight order parts move and `partition` holds."""
     ms = ml.model_selection
     n = 2048
+    Xn = np.ascontiguousarray(X[:n])
     parts, ok = {}, 1
     for tag, labels, clf in (("strat", np.ascontiguousarray(yc[:n]).tolist(), True),
                              ("kfold", np.ascontiguousarray(yr[:n]).tolist(), False)):
@@ -3019,6 +3046,9 @@ def _(ml, X, yc, yr, Xh=None):
             train = [np.asarray(a, dtype=np.int64) for a, _ in folds]
             test = [np.asarray(b, dtype=np.int64) for _, b in folds]
             parts[f"{tag}{splits}"] = _h(*(train + test))
+            # WHAT THE INDEX HASH MISSES: the rows themselves, in the order the
+            # estimator is handed them.
+            parts[f"{tag}{splits}content"] = _h(*[Xn[b] for b in test])
             if (len(folds) != splits
                     or any(a.size == 0 or b.size == 0 for a, b in zip(train, test))
                     or any(np.intersect1d(a, b).size for a, b in zip(train, test))
@@ -3027,8 +3057,10 @@ def _(ml, X, yc, yr, Xh=None):
                                           np.arange(n, dtype=np.int64))):
                 ok = 0
     parts["partition"] = _h(np.int64(ok))
+    d = ms.split_descriptor(Xn, np.ascontiguousarray(yc[:n]), estimator=_FoldClf(), cv=5)
+    parts["descriptor"] = _h(np.frombuffer(
+        "|".join(f"{k}={d[k]}" for k in sorted(d)).encode("ascii"), dtype=np.uint8))
     return _fit(parts)
-
 
 
 # ---------------------------------------------------------------- lanes (2026-09-14 evening, workstream D, the doors)
