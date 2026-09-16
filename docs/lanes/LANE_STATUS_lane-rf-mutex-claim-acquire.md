@@ -11,6 +11,18 @@ nondeterminism.md` and `docs/lanes/LANE_STATUS_MECHANISM.md` on that branch). Th
 answers the five questions the addendum asked, names the repair, and carries the evidence
 for it.
 
+> **2026-09-16, measured on Apple after the sections below were written. THE
+> REPAIR IS NOT IN THE BINARY.** Building this branch with and without the
+> acquire load, and building the extratrees file with the line deleted, gives
+> byte-identical `__TEXT` and `__DATA`; a one-line arithmetic change in the
+> same function moves 270981 bytes, so the comparison can see a code change.
+> The compiler deletes an `Atomic.load` whose result is thrown away with
+> `_ =`. Sections 1 to 5 below argue the memory model and remain the argument
+> for what the repair SHOULD say; they are not a statement about what the
+> shipped binary does, and no claim here about the hole being closed has been
+> demonstrated on any column. The line has to be made to survive the optimizer
+> before any A/B of it means anything. See the Evidence section.
+
 ## The repair, in one paragraph
 
 Every cross-block mutex in this repository spun on an ACQUIRE load and then took the lock
@@ -149,23 +161,186 @@ The DEVIATION 2502 word store of the purity flag outside the lock
 (`builder_kernels_impl.mojo`) writes the value every merge writes and regression never
 marks, so it is inert for this defect; noted so nobody re-derives it.
 
-## Evidence
+## Evidence, Apple (Metal) and the binaries, 2026-09-16
 
-Filled in as the leg lands. Layout follows the earlier legs, outside the repo under
-`~/mojolearn-evidence/rf-mutex-claim-acquire/leg-N/remote/identity/`.
+Run on the shared M4 under `mac_slot.sh` (one core, `nice -n 19`,
+`MOJOLEARN_COMPILE_JOBS=1`, one Metal job at a time), from the worktree at
+`lane/rf-mutex-claim-acquire` `2e9d7dc65`. Logs and JSONs under
+`/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/460f8328-3642-45a3-a14f-579fc7e7363f/scratchpad`.
 
-| arm | binding | fits | moved | distinct |
-|---|---|---|---|---|
-| stock_prerepair (control, `-D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1`) | pending | | | |
-| claimfix (default) | pending | | | |
+### THE HEADLINE: the post-claim acquire load EMITS NO CODE
 
-Reading the table. The control must move, or the leg proves nothing about the repair. At
-the 4.3% to 5.3% rate the earlier legs measured for this fixture, 0/300 on the repaired arm
-has p under 1e-6 against "unchanged"; 0/100 would still leave p near 0.01 and would need a
-second leg. Digests of the two `.so` files must differ.
+The repair does not survive compilation. Built two ways, the arms are the same
+program.
 
-Apple. The repaired forest binding was built on this Mac at one core in identical mode to
-show the spelling legalizes on Metal (build log in the scratchpad, result recorded below
-when it finishes). The repair adds an ordering constraint and no arithmetic, so no Apple
-bit can move; an rf-reg spot check on the base fixture against the current reference is
-the confirmation, taken under the Metal lock.
+| pair | how the arms differ | bytes differing | `__TEXT` + `__DATA` |
+|---|---|---|---|
+| `_mojolearn_rf.so` fixed vs stock | `-D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1` | 54 | IDENTICAL |
+| `_mojolearn_trees.so` fixed vs stock | the acquire line DELETED from the source | 54 | IDENTICAL |
+| `_mojolearn_rf.so` fixed vs sabotage | one arithmetic line added | 270981 | DIFFERENT |
+
+The 54 differing bytes are the same three regions in both pairs and carry no
+code: the `mktemp` install-name suffix that `build_rf.sh` and `build_trees.sh`
+bake in (6 bytes), `LC_UUID` (16 bytes) and the ad-hoc code-signature slot in
+`__LINKEDIT` (32 bytes). Both files of each pair have the same length.
+
+The third row is the control and it is why the first two rows mean something.
+A one-line arithmetic change in the same function moves 270981 bytes, so the
+comparison can see a code change; it does not see this one.
+
+WHAT WAS MEASURED is the effect, not the mechanism: adding or removing the
+line produces byte-identical code and data, and the Metal AIR blobs live in
+`__TEXT`, so they are identical too. On the Apple column the repair is not
+narrow, it is ABSENT from the artifact.
+
+THE LIKELY CAUSE, not yet confirmed by reading emitted IR, is that
+`_ = Atomic.load[ordering = Ordering.ACQUIRE](mutex)` throws its result away,
+and a non-volatile atomic load whose value is dead and whose ordering is not
+sequentially consistent may be eliminated. Confirming that, and finding a
+spelling that survives (the value has to be consumed, or the ordering has to
+be attached to an operation that is kept), is the lane's next step. A stale
+compiler cache is excluded: the extratrees pair differ by FILE CONTENT, which
+the cache must key on, and the sabotage build of the same file family did
+change the binary.
+
+This was NOT caught by digest comparison, and it would not have been caught by
+the A/B leg either. `build_rf.sh` builds into a fresh `mktemp` directory and
+the compiler bakes that path into the install name, so two builds of the SAME
+source always have different sha256. The leg's guard
+(`tools/rf_nondeterminism/rf_claimfix_ab_body.template.sh`, the
+`DIGEST COLLISION -- arms are NOT independent, results VOID` branch) compares
+exactly those sha256 values, so it can never fire. Its two arms would have
+been one program run twice, and whatever it reported, moved or stable, would
+have said nothing about the repair. Compare `__TEXT` and `__DATA`, not the
+file digest.
+
+### What the identity comparison therefore says
+
+The Apple A/B was run in full before the binaries were compared, so it is
+recorded here, but it rests on two builds of one program and CANNOT fail. It
+is not evidence that the repair is inert on output; it is evidence of nothing.
+
+Nine rf lanes (`rf-clf`, `rf-reg`, `rf-clf-entropy-log2-noboot`,
+`rf-clf-balanced-parallel`, `rf-reg-poisson`, `rf-reg-gamma-ig`,
+`rf-score-weighted`, `par-forest`, `par-forest-pool`) on all nine fixtures,
+two repeats, `--diff`: `IDENTICAL=70` train, `IDENTICAL=140` infer and model,
+`IDENTICAL=70` batch. `rf-score-weighted` REFUSED all nine cells in both arms
+(it needs `_mojolearn_metrics.so`, not built in this worktree), so 9 cells
+rest on no hash.
+
+### Two Apple run-to-run movers, one on each arm, neither replicating
+
+Taken while the Mac was at load 20 to 25 with several agents:
+
+  - `rf-reg-gamma-ig/wide` MOVED on the stock arm: two fits of the same seed
+    gave `fbdbb762bf85ec73` and `f76e788124ef87d3`.
+  - `par-forest/denormal_ftz` REFUSED on the fixed arm, from the lane's own
+    check: `fit_forest predict_proba and plain predict_proba differ: 1236
+    bytes of 16384`.
+
+Replicated at six repeats on a quiet machine, both arms: all four cells
+STABLE and IDENTICAL across arms, `par-forest/denormal_ftz` settling on
+`9ee018b4ad7d8c6c`, the value the stock arm had already recorded. Neither
+event reproduced.
+
+NOTHING IS ATTRIBUTED TO THE SPELLING. One event landed on each arm, and the
+arms are the same program, so the spelling cannot be the variable. What the
+two events do show is that the Apple column moves run to run in these lanes,
+which contradicts this file's earlier sentence that the NVIDIA and Apple
+columns have "never shown a move". The rate is not established: one event in
+two repeats, then zero in six. `rf-reg-gamma-ig` fits `inverse_gaussian` with
+`max_features=None`, which resolves to a fraction of 1.0, so all 16 columns
+are merged through the mutex per node, and it is on the `wide` fixture; that
+is the same shape the MI300X legs named as their reproducer. That is a
+coincidence worth a powered run, not a result.
+
+### Binaries built, all identical tier, Apple, one core
+
+| file | spelling | sha256 |
+|---|---|---|
+| `_mojolearn_rf.so` | repaired (default) | `b3479092fed5a6c23749a9f1b120d51cfddfe1b7baf46aad5b06a1085f843727` |
+| `_mojolearn_rf.so` | `-D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1` | `2c501521b6459396209e33cdb6d79ddbf4e9b28938ecac5ec42a8b76e8619d70` |
+| `_mojolearn_rf.so` | repaired + scratch sabotage | `0696aad3ce81da9d25d8710e84ce1271dc03bccc551376939f5413911976e781` |
+| `_mojolearn_trees.so` | repaired (default) | `173ab5164db9b0f670bd4378bd1096fcf2492708daa555ccdb709e23eda7e1e0` |
+| `_mojolearn_trees.so` | acquire line deleted | `be3a27506a2950b8977fca5d09d39d2d98c25005aec0c7405c56f19d15ebcd4c` |
+| `_mojolearn.so` | repaired (base binding, kNN sites never reached) | `6edf210855760da43e37a65bdda8526fa80e7b8eb8c864d53a8b4dcf145b6b2d` |
+
+The define was seen on the compiler command line, not inferred: `build_rf.sh`
+was run under `bash -x` and the traced line reads
+`pixi run mojo build -j 1 --emit shared-lib --target-cpu apple-m1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1 ...`.
+It reached the compiler and changed nothing.
+
+### The sabotage: the check was made to fail first
+
+In a scratch build one line was added INSIDE `_publish_to_global`, immediately
+after the repaired claim, so that a null would indict either the fingerprint
+or the reachability of that block:
+
+    self.quesval = self.quesval + Scalar[Self.dtype](1.0)
+
+It moved 270981 bytes of the binary and `__TEXT` differs, which is the control
+the two inert pairs are read against. The source was restored from a byte copy
+(never `git checkout --`) and `git diff` is empty.
+
+### CPU host column: the repaired lines are not on it
+
+Not run, because it would be a pass that cannot fail, and the source says so.
+
+  - The rf CPU route is `bindings/_mojolearn_rf_host.mojo`, whose header says
+    "HOST ONLY. No DeviceContext, no kernel launch, no GPU", and whose fit is
+    `ensemble/host/rf_oracle.mojo::rf_host_fit`.
+  - `grep -c "Atomic\|compare_exchange\|mutex"` over that closure
+    (`_mojolearn_rf_host.mojo`, `ensemble/host/rf_oracle.mojo`,
+    `core/forest_host_predict.mojo`, `bindings/forest_export_binding.mojo`,
+    `bindings/forest_host_groves_binding.mojo`) returns 0 for every file. The
+    same grep on `ensemble/decisiontree/batched_levelalgo/split.mojo` returns
+    31, so the grep has teeth.
+  - `bindings/_mojolearn_trees_host.mojo` is 0 as well and does not import
+    `batched_levelalgo`.
+  - It could not have been selected here anyway: `python/mojolearn/_backend.py`
+    loads the host set only when `_CPU_ONLY is not None`, "so a box with a GPU
+    never serves host arithmetic under a GPU label".
+
+A digest experiment on the host binding was attempted and is NOT reported as
+evidence: its contrast arm failed. Three builds to one fixed `-o` gave one
+sha256 with and without the define, but the same experiment on the GPU binding
+ALSO gave one sha256, and the GPU binding is the arm that had to move. Two
+causes were found and both are recorded so the next session does not repeat
+them: the Bash tool runs zsh, where an unquoted `$flags` does not word-split,
+so the `-D` never reached argv on the first attempt; and after that was fixed
+the builds completed in seconds, which are compiler-cache hits. The byte
+comparison of `__TEXT` above replaces it and needs no such control.
+
+### kNN: the two fused sites are unreachable from the public surface
+
+Not run, for the same reason, and again from the source.
+
+  - `bindings/_mojolearn.mojo:234` is the only `knn_search(` call site and it
+    passes `KNN_METHOD_AUTO`. `python/mojolearn/neighbors.py:487` says the arm
+    "is NOT a parameter of this" surface.
+  - Under `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`,
+    `neighbors/impl/detail/knn_brute_force.mojo:1482` sets `want_fused = False`
+    unconditionally for AUTO (DEVIATION 509), and the launch at `:1560` is
+    guarded by `and want_fused`.
+  - Even under an explicit `KNN_METHOD_FUSED`, `fused_l2_knn.mojo:563` takes a
+    `gdx == 1` early path that never touches the mutex.
+
+So `neighbors/impl/detail/fused_l2_knn.mojo`'s two claim sites cannot be
+exercised by any kNN lane in the identical tier on any column, and a kNN
+identity comparison would have been a third check that cannot fail. DEVIATION
+106's sentence that the kNN producer and consumer "carry the same post-claim
+acquire load" is true of the text and says nothing about the shipped path.
+
+### Still owed
+
+  - THE REPAIR ITSELF. It must first be made to survive the optimizer. As
+    written it is deleted, so nothing downstream of it can be tested.
+  - The MI300X A/B (`tools/rf_nondeterminism/rf_claimfix_ab_body.template.sh`).
+    Blocked on Hot Aisle stock; leg-1 under
+    `~/mojolearn-evidence/rf-mutex-claim-acquire/leg-1/` records `exit=3`, no
+    box created and nothing spent. Its digest guard must be changed to compare
+    `__TEXT` and `__DATA` before it is run, or it will pass while running one
+    binary twice.
+  - `rf-score-weighted` on Apple, once `_mojolearn_metrics.so` is built.
+  - A powered run on `rf-reg-gamma-ig/wide`, the shape with the most mutex
+    traffic per node, to put a rate on the two Apple movers.
