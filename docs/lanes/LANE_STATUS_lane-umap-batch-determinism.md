@@ -65,7 +65,10 @@ changes, and it still moves.
 
 The 1.97 is not noise. The training embedding's clusters are about 11 units
 apart, so the row lands about a sixth of the way toward a different cluster.
-A downstream nearest-neighbor lookup on the embedding can answer differently.
+It is still a visibly different coordinate for the same row, returned by the
+same saved model, with no signal that anything changed. Whether a shift that
+size flips a downstream decision was NOT tested here, and on this fixture no
+query changed which training cluster it sits nearest to.
 
 ### The mechanisms, separated rather than listed
 
