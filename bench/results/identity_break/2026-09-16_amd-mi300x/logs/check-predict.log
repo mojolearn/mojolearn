@@ -1,0 +1,8 @@
+11840 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x132800000000, nodemask=1)
+check dbscan base predict EQUAL gpu d288a9b1293e5b4d379b87b68aa5e98e3e90253583225b35b95ab2c54a2867b5 host d288a9b1293e5b4d379b87b68aa5e98e3e90253583225b35b95ab2c54a2867b5
+check dbscan base identity_hash EQUAL gpu e6e720fcb54b180e host e6e720fcb54b180e
+check dbscan hashed predict EQUAL gpu 5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef host 5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef
+check dbscan hashed identity_hash EQUAL gpu 3a6472714f51d8ab host 3a6472714f51d8ab
+check dbscan ties predict EQUAL gpu acfe749ff986473bbc9cefc8facdb9d91a1d66a8bc1516fd842fe72915b31f6f host acfe749ff986473bbc9cefc8facdb9d91a1d66a8bc1516fd842fe72915b31f6f
+check dbscan ties identity_hash EQUAL gpu 63990f64c63d296b host 63990f64c63d296b
+gate verdict IDENTICAL (3 fixtures, 0 GPU columns, exit 0)

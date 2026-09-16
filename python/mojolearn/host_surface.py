@@ -228,6 +228,17 @@ CLASSICAL_RECORDED = (
     # column behind these cells is
     # bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu.
     "bench/results/classical_host/2026-09-16-nvidia-kmeans",
+    # The AMD column of the same six lanes, same nine fixtures, on a RunPod
+    # MI300X (gfx942): `gate verdict IDENTICAL (54 fixtures, exit 0)` and the
+    # predict-define sabotage arm caught on all 54 under --every-fixture. The
+    # AMD PREDICT recording from the same box is 3 of 36 and is deliberately
+    # NOT listed here: its `record` died on the fourth fixture with
+    # hipErrorOutOfMemory in dbscan_fit_core after four DBSCAN fits had
+    # succeeded, so it is kept, named partial, at
+    # bench/results/classical_host/2026-09-16-amd-predict-partial with the
+    # finding written up in
+    # bench/results/identity_break/2026-09-16_amd-mi300x/README.md.
+    "bench/results/classical_host/2026-09-16-amd-kmeans",
 )
 
 #: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
