@@ -389,6 +389,96 @@ where the cost profile is different by up to 45x per lane in either direction
 (section 1c). The Metal before/after is measured separately and reported with
 the column estimate.
 
+## 1h. THE METAL NUMBERS, WHICH ARE MUCH LESS IMPRESSIVE THAN THE CPU ONES
+
+The CPU table in 1g is the wrong number to quote at anyone asking what the
+Apple column costs, and the difference is not small. Measured on Metal, one
+fixture at two repeats, same route before and after:
+
+| lane | Metal before | Metal after | change |
+|---|---:|---:|---|
+| hdbscan | 45.7 s | **32.4 s** | 1.4x |
+| hdbscan-leaf | 47.8 s | **20.7 s** | 2.3x |
+| samba-untied-dropout-accum | 168.0 s | **135.5 s** | 1.2x |
+| byte-lm | 231.8 s | **242.0 s** | **none** |
+
+Against the record's per-fixture share (record seconds / 9), for the lanes
+with no same-route before:
+
+| lane | record share | Metal after | change |
+|---|---:|---:|---|
+| gbdt-parametric-losses | 189.0 s | **81.8 s** | 2.3x |
+| gbdt-nan-modes | 107.7 s | **76.0 s** | 1.4x |
+| gbdt-lossguide-newtoncosine | 93.1 s | **64.7 s** | 1.4x |
+| gbdt-pair-logit | 88.2 s | **58.4 s** | 1.5x |
+| mamba2-dtlimit | 92.8 s | **90.5 s** | none |
+| byte-lm-resident | 192.8 s | **170.7 s** | 1.1x |
+| samba | 106.1 s | **124.3 s** | **worse** |
+
+**byte-lm cutting three AdamW steps to one changed nothing on Metal** (231.8 s
+to 242.0 s, inside noise), and samba got slower. That is the section 1c result
+holding up under the intervention: those lanes' Metal cost is per-operation
+device overhead on a tiny model, so removing arithmetic removes nothing. The
+lanes that did move, GBDT and hdbscan, are exactly the ones that were fitting
+a genuinely large input.
+
+**Honest headline: the shrink takes roughly 20% off the Metal column, not a
+transformation.** The transformation is on the CPU column, where the same
+thirteen lanes now finish in 0.64 s to 18.6 s (one exception, 1g), which is
+where routine verification belongs anyway.
+
+### The caveat on every Metal number above
+
+These runs pair THIS tree's harness with the 0.8.6 wheel's interpreter, which
+is what supplies the Metal bindings. Where a lane uses an API added after the
+freeze, the pairing breaks: `spectral` read REFUSED with
+`SpectralClustering.__init__() got an unexpected keyword argument
+'prediction_data'` (DEVIATION 2860, merged after 0.8.6). **That is the
+measurement route, not the shrink**: spectral is STABLE on the CPU column with
+this tree's package and its sabotage arm fires. holtwinters' 1.58 s is
+similarly a same-route figure with no comparable before, since it and spectral
+were recorded as a single two-lane group (1817 s for the pair).
+
+## 1i. THE DURABLE GUARD: a moved fixture cannot be compared to a stale reference
+
+Regenerating `verify_reference/table.json` fixes today. It does not stop the
+next person shrinking a fixture and forgetting, so the check matters more than
+the regeneration.
+
+`build_table` now records `lane_revisions`, the harness revisions the table was
+generated against, and `stale_reference_lanes(table, harness)` returns every
+lane that still has cells in the table whose recorded revision is not the
+harness's. A table generated before the key existed carries no revision, which
+is not evidence of being current, so it reads stale. `_verify_all` drops those
+lanes from the comparison, names them, and refuses outright if that leaves
+nothing to check.
+
+**Watched it fail first, which is the only reason to trust it:**
+
+| case | result |
+|---|---|
+| today's shipped table | **13 STALE**, exactly the shrunk thirteen |
+| a table carrying the current revisions | `[]` |
+| a table with no cells for those lanes | `[]` (nothing to compare, not stale) |
+| one revision deliberately corrupted | `['hdbscan']` |
+| a selection mixing stale and clean lanes | stale dropped, clean kept, named in the log |
+| a selection where every lane is stale | refuses outright |
+
+### The table itself is NOT regenerated here, deliberately
+
+A regeneration today would not be my lane's change. The ref-level diff against
+a regenerated table shows 444 references lost (all thirteen shrunk lanes, none
+outside), 332 gained (eleven lanes other lanes merged since the table was last
+built), and **72 reference values changed across ten lanes this branch never
+touched** (metrics, spectral-precomputed, radius, holtwinters-multiplicative,
+the gmm-sample pair and others), because newer committed records now win over
+older ones. Carrying ten other lanes' reference changes inside this commit
+would be wrong, and the release regenerates the table as a normal step.
+
+So the thirteen references are **stale by design until the next release
+record**, and the guard above is what makes that safe: nothing compares
+against them in the meantime.
+
 <!-- TASK1-RESULTS -->
 
 ## 2. `par-*` leaves the release record's scope

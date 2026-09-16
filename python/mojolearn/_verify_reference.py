@@ -364,10 +364,44 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None):
         format=FORMAT,
         generated_by="python -m mojolearn verify --all --emit-reference",
         harness_sha256=sha256_file(harness.__file__),
+        #: THE LANE REVISIONS THIS TABLE WAS GENERATED AGAINST (2026-09-16,
+        #: lane/identity-fixtures-light). A lane whose fixture moves gets a new
+        #: LANE_REVISIONS entry in the harness; recording the revisions here is
+        #: what lets `stale_reference_lanes` below detect, mechanically, that a
+        #: reference predates the input it is supposed to describe. A table
+        #: generated before this key existed carries none, which reads as
+        #: "unknown" and therefore stale for any lane that has a revision.
+        lane_revisions=dict(getattr(harness, "LANE_REVISIONS", {}) or {}),
         fixtures=want_fix, heldout=want_held,
         records=[records[i] for i in used],
         cells=cells,
     )
+
+
+def stale_reference_lanes(table, harness):
+    """Lanes whose FIXTURE has moved but whose REFERENCE has not, sorted.
+
+    A reference hash describes one exact input. When a lane's fixture is
+    shrunk or otherwise changed, the harness bumps its `LANE_REVISIONS`
+    entry, and every hash recorded at the old input stops describing
+    anything this harness can produce. Comparing against it would fail for a
+    reason that has nothing to do with the user's machine, which is the worst
+    failure this tool has: it looks exactly like the identity claim being
+    false.
+
+    A lane is stale when the table still carries cells for it and the table's
+    recorded revision is not the harness's. A table generated before
+    `lane_revisions` was recorded carries no revision at all, which is not
+    evidence that it is current, so it counts as stale. A lane the table has
+    no cells for is not stale; there is nothing to compare against.
+    """
+    want = dict(getattr(harness, "LANE_REVISIONS", {}) or {})
+    if not want:
+        return []
+    have = table.get("lane_revisions") or {}
+    with_cells = {k.partition("/")[0] for k in table.get("cells", {})}
+    return sorted(lane for lane, rev in want.items()
+                  if lane in with_cells and have.get(lane) != rev)
 
 
 def write_table(table, path):
