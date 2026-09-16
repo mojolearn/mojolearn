@@ -185,6 +185,52 @@ its own L2 and a plain load can be served from a line cached before another
 XCD's holder wrote the slot back. That is plausible and unmeasured. The
 formal hole exists on every column.
 
+THE EMISSION, DISASSEMBLED (2026-09-16). The repair is only a repair if the
+fence reaches the instruction stream, and this file's previous spelling did
+not: `_ = Atomic.load[ordering = Ordering.ACQUIRE](mutex)` compiled to NOTHING
+on Metal AIR, PTX and GCN alike. So the fence carries its disassembly rather
+than an assertion.
+
+Apple, AIR read out of the shipped metallib. The fence sits between the claim's
+compare-exchange loop and the plain loads of `split[node]`'s fields, which is
+where the argument above requires it:
+
+    br i1 %1402, label %1403, label %1398
+  1403:
+    fence acquire
+    %.elt175 = getelementptr inbounds { i32, float, i32, float, i64, i64, i32, i32 }, ...
+    %.unpack176 = load float, float addrspace(1)* %.elt175, align 4
+
+gfx942, four spellings of one kernel, cross-compiled. STOCK AND DISCARD ARE
+BYTE-IDENTICAL in this region, which is the discarded load's inertness stated
+as a diff, and the fence adds exactly one instruction:
+
+    stock and discard:          fence:
+      s_or_b64 exec, ...          s_or_b64 exec, ...
+      v_mov_b32_e32 v0, 0         v_mov_b32_e32 v0, 0
+                                  buffer_inv sc0 sc1        <- the repair
+      global_load_dword v1, ...   global_load_dword v1, ...
+
+READ THAT DIFF CAREFULLY, BECAUSE ONE TOKEN DOES NOT DISCRIMINATE. There is a
+SECOND `buffer_inv sc0 sc1` earlier in the same kernel, immediately after the
+spin's `global_load_dword ... sc0 sc1`, and it is present in ALL FOUR ARMS
+INCLUDING STOCK. That one is the SPIN's acquire, which was never in doubt.
+The instruction that distinguishes the repair is the one AFTER the CAS loop
+exits and BEFORE the protected load. Anyone who greps this kernel for
+`buffer_inv sc0 sc1` alone will find it in the stock arm and conclude the
+repair was always there.
+
+What these excerpts are NOT. The gfx942 arms are CROSS-COMPILED and have never
+executed on gfx942 hardware. AIR is code GENERATION, not GPU machine code, and
+the stage that turns AIR into machine code is reached by neither. As of
+2026-09-16 an Apple A/B of the fence arm returned 81 of 81 cells refused at
+`Failed to create compute pipeline state (GPU machine code generation)`, with
+the stock arm refusing none, and that is UNEXPLAINED rather than explained: a
+concurrent-Metal window in that run landed on the stock arm, not the fence arm.
+An isolated single-pipeline probe against main is what settles it. Until it
+does, this deviation records that the fence EMITS and does not record that it
+RUNS on Apple.
+
 DEVIATION 107. `printSplits` (`:291-308`) is a debug printer built on
 `raft::linalg::writeOnlyUnaryOp` and is NOT implemented. Price of declining it:
 one debug aid, replaceable by a host-side copy and print at any call site
