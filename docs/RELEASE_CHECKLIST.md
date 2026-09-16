@@ -61,8 +61,10 @@ every other binding in `identical/` alone (DEVIATION 2490). The checker holds
 the pack and build lists to `_backend._TIERED` and `_MODULES`; a binding that
 drifted back into three tiers, or out of the wheel, goes red here.
 
-Since 0.8.6 the wheel also carries every host binding
-`python/mojolearn/host_surface.py` declares (ten, under `mojolearn/host/`),
+From 0.8.7 the wheel also carries every host binding
+`python/mojolearn/host_surface.py` declares (every family it lists, under
+`mojolearn/host/`; ask `--wheel-families` rather than quoting a count, which
+has read ten, then fifteen, then sixteen, then thirty-two),
 `mojolearn/reference_cards/`, a copy of `tools/identity_trace_diff.py` and
 `tools/identity_break.py`, and the three training GPU columns the manifest
 names under `mojolearn/identity_columns/<record>/` with a COMMIT witness. The
