@@ -1,0 +1,7 @@
+ok test_cpu_operations_are_the_python_sharded_drivers
+ok test_manifest_declares_the_par_lanes
+ok test_refusals_come_before_any_worker
+ok test_sharded_samba_sends_two_gradients_and_one_ordered_update_when_built
+SKIP: _mojolearn_preprocessing_host is not built
+ok test_sharded_scaler_equals_the_plain_fit_when_built
+5 passed

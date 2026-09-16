@@ -1,0 +1,723 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4",
+ "commit": "bfb8f725ab2b30a94e8596b407775095e37c2508",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  }
+ },
+ "cells": {
+  "par-boosting/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-kmeans/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver kmeans_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-gram/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-logistic/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver glm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-cd/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-svm/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-gp/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gp_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-dbscan/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver dbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-mlp/base": {
+   "verdict": "REFUSED",
+   "error": "RuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_parallel_worker.py\", line 343, in main\n    response = (True, execute(reques",
+   "hashes": [],
+   "parts": []
+  },
+  "par-samba/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "359834bee4b2789a",
+    "359834bee4b2789a"
+   ],
+   "parts": [
+    {
+     "logits": "c4edb4f61dd9eb23",
+     "params": "98a1e9aaeaa6d3a4"
+    },
+    {
+     "logits": "c4edb4f61dd9eb23",
+     "params": "98a1e9aaeaa6d3a4"
+    }
+   ],
+   "infer": [
+    "c663dd4766895890",
+    "c663dd4766895890"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "40a81f8c42e2256b",
+    "40a81f8c42e2256b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c663dd4766895890",
+    "c663dd4766895890"
+   ],
+   "batch": [
+    "09eefddb12772255",
+    "09eefddb12772255"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "par-byte-lm/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn_byte_lm.byte_lm_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_byte_lm; host bindings built here: _mojolearn_core_host, _mojolearn_mamba_host, _mojolearn_training_host, _mojolearn_transf",
+   "hashes": [],
+   "parts": []
+  },
+  "par-queries-knn/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4b0dd36744b84c37",
+    "4b0dd36744b84c37"
+   ],
+   "parts": [
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50",
+     "predict": "8977a96d816eac66",
+     "proba": "aee3a3584a2d98ad"
+    },
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50",
+     "predict": "8977a96d816eac66",
+     "proba": "aee3a3584a2d98ad"
+    }
+   ],
+   "infer": [
+    "8381d6badb2ee31b",
+    "8381d6badb2ee31b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f0b9be0fd408466b",
+    "f0b9be0fd408466b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8381d6badb2ee31b",
+    "8381d6badb2ee31b"
+   ],
+   "batch": [
+    "b0ee1057fca8171a",
+    "b0ee1057fca8171a"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "par-queries-radius/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b4fa4ebf9623f5d0",
+    "b4fa4ebf9623f5d0"
+   ],
+   "parts": [
+    {
+     "radius": "f4673749037f472a",
+     "counts": "5dcbe6139c3d2fde",
+     "dist": "8acc5d8cd5a72219",
+     "idx": "640380f9baa521f9"
+    },
+    {
+     "radius": "f4673749037f472a",
+     "counts": "5dcbe6139c3d2fde",
+     "dist": "8acc5d8cd5a72219",
+     "idx": "640380f9baa521f9"
+    }
+   ],
+   "infer": [
+    "3eb3a2ab621fbb97",
+    "3eb3a2ab621fbb97"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2ee81955e923d21f",
+    "2ee81955e923d21f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3eb3a2ab621fbb97",
+    "3eb3a2ab621fbb97"
+   ],
+   "batch": [
+    "cf44ff75b01d7995",
+    "cf44ff75b01d7995"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "par-reference-knn/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4b0dd36744b84c37",
+    "4b0dd36744b84c37"
+   ],
+   "parts": [
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50",
+     "predict": "8977a96d816eac66",
+     "proba": "aee3a3584a2d98ad"
+    },
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50",
+     "predict": "8977a96d816eac66",
+     "proba": "aee3a3584a2d98ad"
+    }
+   ],
+   "infer": [
+    "8381d6badb2ee31b",
+    "8381d6badb2ee31b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f0b9be0fd408466b",
+    "f0b9be0fd408466b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8381d6badb2ee31b",
+    "8381d6badb2ee31b"
+   ],
+   "batch": [
+    "73020445ac91c2f7",
+    "73020445ac91c2f7"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "par-reference-knn-reg/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "33e7da5c3fdd343c",
+    "33e7da5c3fdd343c"
+   ],
+   "parts": [
+    {
+     "predict": "9df86f515f2b5e69"
+    },
+    {
+     "predict": "9df86f515f2b5e69"
+    }
+   ],
+   "infer": [
+    "12b3c8b2763ae645",
+    "12b3c8b2763ae645"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7404b5d0a3a97d83",
+    "7404b5d0a3a97d83"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "12b3c8b2763ae645",
+    "12b3c8b2763ae645"
+   ],
+   "batch": [
+    "74278bda8031c8f1",
+    "74278bda8031c8f1"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "par-graph-agglomerative/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-graph-spectral/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-graph-umap/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-ordered-rmse/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver ordered_rmse_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-feature-freq/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-boosting-pointwise/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-byte-lm-model-pool/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn_byte_lm.byte_lm_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_byte_lm; host bindings built here: _mojolearn_core_host, _mojolearn_mamba_host, _mojolearn_training_host, _mojolearn_transf",
+   "hashes": [],
+   "parts": []
+  },
+  "par-byte-lm-offload/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn_byte_lm.byte_lm_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_byte_lm; host bindings built here: _mojolearn_core_host, _mojolearn_mamba_host, _mojolearn_training_host, _mojolearn_transf",
+   "hashes": [],
+   "parts": []
+  },
+  "par-samba-clip/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "387a63aafbcce06d",
+    "387a63aafbcce06d"
+   ],
+   "parts": [
+    {
+     "loss": "9c7d808a1f27a257",
+     "logits": "8f133a06c340115e",
+     "grads": "579c739eff0f3b16",
+     "params": "c3dc4e7e223db28e"
+    },
+    {
+     "loss": "9c7d808a1f27a257",
+     "logits": "8f133a06c340115e",
+     "grads": "579c739eff0f3b16",
+     "params": "c3dc4e7e223db28e"
+    }
+   ],
+   "infer": [
+    "3c42e52ff16765ef",
+    "3c42e52ff16765ef"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2807164675116cdb",
+    "2807164675116cdb"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3c42e52ff16765ef",
+    "3c42e52ff16765ef"
+   ],
+   "batch": [
+    "b76cef8b3c5cab10",
+    "b76cef8b3c5cab10"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "par-iforest/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver iforest_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-forest-pool/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn_rf.rf_classifier_fit_export yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_rf; host bindings built here: _mojolearn_core_host, _mojolearn_mamba_host, _mojolearn_training_host, _mojolearn_transformer_",
+   "hashes": [],
+   "parts": []
+  },
+  "par-gmm/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-resample/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver resample yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-hdbscan/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver hdbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-cholesky/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver cholesky_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-kernel-ridge/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-nystroem/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": []
+  },
+  "par-rbf-sampler/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: no CPU implementation of _mojolearn_kernel_methods.kernel_methods_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_kernel_methods; host bindings built here: _mojolearn_core_host, _mojolearn_mamba_host, _mojolearn_training_ho",
+   "hashes": [],
+   "parts": []
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1"
+ },
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.6",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gpc",
+   "gpc-multiclass",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables"
+  ],
+  "families": {
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "595ae3e8fd1d4f6b74f123936b2c81c93fda19dd443e4789bba68d82fe95bf97",
+    "size": 584536,
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "f32aad1fbbd0ed029ff0be31de1b46896a16cf3d1c8402edf042bab3506dbe59",
+    "size": 1057416,
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "ecface388c2fba715f99e76eeb88402bded321a439f2df4c9a2c834c61089c6a",
+    "size": 413688,
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "82b85807885f3f6ad194df7b3edc7c96cacfda613738de9a20dd3cef026a035f",
+    "size": 343232,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn",
+  "numpy": "2.4.4",
+  "python": "3.14.6",
+  "par_devices": "0",
+  "bindings": []
+ }
+}

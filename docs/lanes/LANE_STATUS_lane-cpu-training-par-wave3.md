@@ -13,10 +13,14 @@ Counts at this head, all read from the tree, not from prose:
 
     grep -o '@lane("par-[a-z0-9-]*")' tools/identity_break.py | wc -l   # 39
     python3 python/mojolearn/host_surface.py --covered-lanes \
-      | tr ',' '\n' | grep -c '^par-'                                    # 11
+      | tr ',' '\n' | grep -c '^par-'                                    # 13
 
-39 par lanes, 11 covered, 28 triaged below: **2 coverable now, 24 coverable
-after named work, 2 not coverable on a CPU column at all.**
+39 par lanes, 13 covered, 26 triaged below: **24 coverable after named work,
+2 not coverable on a CPU column at all.** The two this file called coverable
+now, par-samba and par-samba-clip, WERE covered on 2026-09-16 by
+lane/cpu-verifier-par-samba; section (a) records what that took and
+`docs/lanes/LANE_STATUS_lane-cpu-verifier-par-samba.md` carries the evidence.
+The count read 11 when this triage was written.
 
 ## How a par lane can be covered honestly
 
@@ -52,12 +56,17 @@ that and wave 3 keeps refusing it.
 `split` is where the work is actually divided. `record` is the committed GPU
 columns that carry the lane, which `--require-columns 4` has to clear.
 
-### (a) Coverable now, smallest first
+### (a) Coverable now, smallest first -- COVERED 2026-09-16
 
-| lane | driver | split | record | what it needs |
+Both lanes are covered; the rows below are what the triage asked for and what
+lane/cpu-verifier-par-samba did. The reading held: the driver's shape is
+par-mlp's, no Mojo changed, and the admission was the two names this table
+named. Evidence in `docs/lanes/LANE_STATUS_lane-cpu-verifier-par-samba.md`.
+
+| lane | driver | split | record | what it needed |
 |---|---|---|---|---|
-| par-samba | `ParallelNeuralTrainer` (`samba_gradient` per shard, `samba_update` folds) | Python, shape 2 above | 166-lane, 3 columns | pool admission only |
-| par-samba-clip | the same with `max_norm=0.5` | the same | 166-lane, 3 columns | the same admission |
+| par-samba | `ParallelNeuralTrainer` (`samba_gradient` per shard, `samba_update` folds) | Python, shape 2 above | 166-lane, 3 columns | pool admission only (done) |
+| par-samba-clip | the same with `max_norm=0.5` | the same | 166-lane, 3 columns | the same admission (done) |
 
 Both lanes send one `samba_gradient` request per logical shard from
 `self._pool = DevicePool(devices)`, which is not cooperative, exactly as
