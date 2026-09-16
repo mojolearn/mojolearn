@@ -2892,6 +2892,45 @@ def _(ml, X, yc, yr, Xh=None):
                                                           allow_endoftext=True), dtype=np.int32),))
 
 
+@lane("bpe-trainer")
+def _(ml, X, yc, yr, Xh=None):
+    """BpeVocabularyTrainer (python/mojolearn/tokenizer.py): TRAINING a
+    byte-level BPE vocabulary, where the tokenizer lane only applies one.
+
+    Host integers and tables -- counts, ids and one comparison -- with no
+    float anywhere in the selection, so this is NOT a cross-vendor claim and
+    there is no GPU column to owe: vocabulary training has no GPU path in any
+    library. What the cell says is that the same corpus and config produce
+    the same vocabulary BYTES on this box as on every other.
+
+    The corpus is the first 4,096 bytes of X viewed as bytes, the same
+    derivation the tokenizer lane uses, as ONE document. Both emitted formats
+    are hashed, because both are what a user ships beside a model: ours
+    (rank<TAB>hex) and the ecosystem's (tokenizer.json). `n_ties_broken` is
+    hashed too, and it is the part that matters most -- it is how a reader
+    can see the tie-break rule was REACHED on this fixture, without which the
+    sabotage below would be inert.
+
+    SABOTAGE: MOJOLEARN_BPE_TRAINER_SABOTAGE=1 reverses ONLY the tie-break
+    (largest (left_id, right_id) among the pairs at the top count instead of
+    smallest). MEASURED on this fixture, it moves `ranks`, `tokenizer_json`
+    and `n_ties_broken`, and leaves `n_tokens` and `n_merges` alone -- the
+    vocabulary still fills to vocab_size, it is filled with DIFFERENT tokens.
+    That is why the two artifact hashes are the load-bearing parts of this
+    cell and the counters are not: a cell that watched only the sizes would
+    call this sabotage inert. The Mojo trainer carries the same arm as a
+    build define, and `pixi run check-bpe-trainer-sabotage` is where it is
+    watched failing."""
+    raw = np.ascontiguousarray(X).tobytes()[:4096]
+    v = ml.tokenizer.BpeVocabularyTrainer(vocab_size=320, min_frequency=2).train([raw])
+    ranks = np.frombuffer(v.render_ranks().encode("ascii"), dtype=np.uint8)
+    tj = np.frombuffer(v.render_tokenizer_json().encode("ascii"), dtype=np.uint8)
+    return _fit(dict(ranks=_h(ranks), tokenizer_json=_h(tj),
+                     n_tokens=_h(np.int64(v.n_tokens)),
+                     n_merges=_h(np.int64(len(v.merges))),
+                     n_ties_broken=_h(np.int64(v.n_ties_broken))))
+
+
 @lane("cross-val")
 def _(ml, X, yc, yr, Xh=None):
     """cross_val_score, which had no lane: three unshuffled folds of the
