@@ -156,19 +156,16 @@ which thread computes a cell, never the sequence of values accumulated into
 it.
 
 **DEVIATION 1021 -- S11's operands are GATHERED per (batch, head), and
-`identical_gemm` is called rather than `identical_gemm_into`.** Contract S11
+GEMM uses stage-owned workspace.** Contract S11
 is one `gemm.fp32.v1` `OP_NT` cell per `(batch, head)` with `k = head_dim`,
 and the GEMM profile takes only CONTIGUOUS row-major operands (gemm contract
 section 2). `q_rope.out` is token-major `[M, n_heads*head_dim]` (contract
 section 9), so one head's `[L, head_dim]` block is strided, not contiguous.
 Three copy kernels materialize the operands and scatter the result. Copies
-are not seams (contract section 4's preamble). The `_into` form with a
-caller-owned workspace would save `B * n_heads` allocations and drains, and
-it is NOT used, because sizing a workspace for one plan and letting
-`choose_gemm_plan` pick another is an out-of-bounds write that a small shape
-does not show you -- it cost the gemm lane a run
-(`gemm_identical.mojo:1348-1356`). This profile publishes no timing number
-(contract section 11), so the cost buys the safety outright.
+are not seams (contract section 4's preamble). `LlamaDeviceStages` owns a
+reusable `GemmWorkspace`; each call sizes it using the dispatched shape.
+A growth wait keeps the old allocation alive until previous users complete.
+The caller retains the stages through its final completion wait.
 
 **DEVIATION 1022 -- the KV cache is REPACKED OUT OF PLACE at the new
 length.** Contract section 9 records `kv.k_cache` as `[B, n_kv, S, head_dim]`
@@ -301,7 +298,7 @@ from core.step_glue import (
 )
 
 from core.identity_trace import IdentityTrace
-from gemm.checks.gemm_identical import identical_gemm
+from gemm.checks.gemm_identical import GemmWorkspace
 
 # ORIENTATION NUMBERING: these are `gemm_oracle`'s, where
 # `OP_NN = 0, OP_NT = 1, OP_TN = 2`. They are NOT `bench/gemm_shapes.mojo`'s
@@ -1230,6 +1227,7 @@ struct LlamaDeviceStages(Movable):
     var qbh: DeviceBuffer[DType.float32]  # [L, head_dim]     (no tag)
     var kbh: DeviceBuffer[DType.float32]  # [s_max, head_dim] (no tag)
     var sbh: DeviceBuffer[DType.float32]  # [L, s_max]        (no tag)
+    var gemm_workspace: GemmWorkspace
     var attn_materialized: Bool
     """Whether `scores`, `masked`, `aexp` and `weights` hold the LAST call's
     attention stages. The eager path sets it; the fused path (which never
@@ -1281,6 +1279,7 @@ struct LlamaDeviceStages(Movable):
             )
         if window < 0:
             raise Error("llama: stages window must be >= 0 (0 = full causal)")
+        self.gemm_workspace = GemmWorkspace(ctx)
         self.b = b
         self.l = l
         self.s_max = s_max
@@ -2992,7 +2991,7 @@ def attention_eager_core(
             )
             step_count_sync()
             ctx.synchronize()
-            identical_gemm[False](
+            stages.gemm_workspace.run[False](
                 ctx,
                 stages.sbh,
                 stages.qbh,
@@ -3196,7 +3195,7 @@ def attention_eager_core(
                 )
                 step_count_sync()
                 ctx.synchronize()
-                identical_gemm[False](
+                stages.gemm_workspace.run[False](
                     ctx,
                     stages.qbh,
                     stages.sbh,
@@ -3310,21 +3309,21 @@ def llama_attention_forward(
     # Retain FP32 operands in every tier. The vendor fast route can select
     # TF32 projections, exceeding the block's unchanged accuracy contract.
     # IDENTICAL already uses this plan; its arithmetic remains unchanged.
-    identical_gemm[False](
+    stages.gemm_workspace.run[False](
         ctx, stages.q_proj, stages.norm1_out, w.w_q, m, qw, dm, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
         ctx, prefix + ".q_proj.out", stages.q_proj, m * qw
     )
     pc.tick(ctx, "fwd.q_proj", "proj_fwd")
-    identical_gemm[False](
+    stages.gemm_workspace.run[False](
         ctx, stages.k_proj, stages.norm1_out, w.w_k, m, kw, dm, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
         ctx, prefix + ".k_proj.out", stages.k_proj, m * kw
     )
     pc.tick(ctx, "fwd.k_proj", "proj_fwd")
-    identical_gemm[False](
+    stages.gemm_workspace.run[False](
         ctx, stages.v_proj, stages.norm1_out, w.w_v, m, kw, dm, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
@@ -3531,7 +3530,7 @@ def llama_attention_forward(
     # ---- o_proj (:280). `nn.Linear(n_heads*head_dim, d_model,
     #      bias=attention_bias)`, no bias.
     #      C[M, dm] = ctx[M, qw] . w_o[dm, qw]^T, `k = n_heads*head_dim`.
-    identical_gemm[False](
+    stages.gemm_workspace.run[False](
         ctx, stages.o_proj, stages.ctxv, w.w_o, m, dm, qw, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
@@ -3572,7 +3571,7 @@ def llama_mlp_forward(
     var pc = StepPhaseClock(ctx)
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
-    identical_gemm[False](
+    stages.gemm_workspace.run[False](
         ctx,
         stages.gate_proj,
         stages.norm2_out,
@@ -3586,7 +3585,7 @@ def llama_mlp_forward(
         ctx, prefix + ".gate_proj.out", stages.gate_proj, m * it
     )
     pc.tick(ctx, "fwd.gate_proj", "gateup_fwd")
-    identical_gemm[False](
+    stages.gemm_workspace.run[False](
         ctx,
         stages.up_proj,
         stages.norm2_out,
@@ -3647,7 +3646,7 @@ def llama_mlp_forward(
     #      profile; at `intermediate_size = 300` this one has `P = 3` with a
     #      ragged 44-element last leaf and one carry (contract section 3).
     #      Without that fixture the tree sits unexercised inside the block.
-    identical_gemm[False](
+    stages.gemm_workspace.run[False](
         ctx,
         stages.down_proj,
         stages.gated,

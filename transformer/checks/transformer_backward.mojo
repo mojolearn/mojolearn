@@ -36,7 +36,7 @@ from gemm.checks.gemm_backward import (
     gemm_backward_a_call,
     gemm_backward_b_call,
 )
-from gemm.checks.gemm_identical import identical_gemm
+from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from mamba.impl.modeling.modeling_mamba import pinned_mul
 from checks.numerics import (
@@ -1663,6 +1663,7 @@ def bwd_kv_slice_kernel(
 
 def _route_a(
     ctx: DeviceContext,
+    mut workspace: GemmWorkspace,
     mut out_buf: DeviceBuffer[DType.float32],
     mut dc: DeviceBuffer[DType.float32],
     mut other: DeviceBuffer[DType.float32],
@@ -1682,25 +1683,22 @@ def _route_a(
     through these entry points. An inert arm that is WIRED is worth more
     than one that is not, because the next profile may not be all-`OP_NT`.
 
-    **DEVIATION 1428: this calls the SYNCHRONIZING `identical_gemm`, not
-    `identical_gemm_backward_a_into`.** The `_into` form takes a
-    caller-owned workspace, and the forward device file uses the
-    synchronizing form throughout; mixing would be a second discipline in
-    one lane. **The cost is that gemm gate G7's workspace-sizing coverage is
-    NOT inherited**, and that cost is stated rather than hidden."""
+    The stage owner retains `workspace` until the caller's completion wait.
+    Workspace sizing follows the actual backward GEMM shape."""
     var call = gemm_backward_a_call(op, m, n, k)
     if call[4] == BWD_DC_LEFT:
-        identical_gemm(
+        workspace.run(
             ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
         )
         return
-    identical_gemm(
+    workspace.run(
         ctx, out_buf, other, dc, call[1], call[2], call[3], call[0]
     )
 
 
 def _route_b(
     ctx: DeviceContext,
+    mut workspace: GemmWorkspace,
     mut out_buf: DeviceBuffer[DType.float32],
     mut dc: DeviceBuffer[DType.float32],
     mut other: DeviceBuffer[DType.float32],
@@ -1722,11 +1720,11 @@ def _route_b(
     that these outputs MOVE under a change of batch composition."""
     var call = gemm_backward_b_call(op, m, n, k)
     if call[4] == BWD_DC_LEFT:
-        identical_gemm(
+        workspace.run(
             ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
         )
         return
-    identical_gemm(
+    workspace.run(
         ctx, out_buf, other, dc, call[1], call[2], call[3], call[0]
     )
 
@@ -1814,6 +1812,7 @@ struct LlamaBackwardStages(Movable):
     var tmp0: DeviceBuffer[DType.float32]  # [M, max(d_model, intermediate)]
     var tmp1: DeviceBuffer[DType.float32]
     var tmp2: DeviceBuffer[DType.float32]
+    var gemm_workspace: GemmWorkspace
     var head_a: DeviceBuffer[DType.float32]  # [L, head_dim]
     var head_b: DeviceBuffer[DType.float32]  # [s_max, head_dim]
     var head_c: DeviceBuffer[DType.float32]  # [L, s_max]
@@ -1841,6 +1840,7 @@ struct LlamaBackwardStages(Movable):
                 + " is smaller than L "
                 + String(l)
             )
+        self.gemm_workspace = GemmWorkspace(ctx)
         self.b = b
         self.l = l
         self.s_max = s_max
@@ -2080,9 +2080,8 @@ def bwd_attention_weight_grad(
     rests on the argument above and on gemm v1's own certificate, not on a
     fired arm.
 
-    `identical_gemm` SYNCHRONIZES internally, so `head_a`, `head_b` and
-    `head_c` must stay alive across it; they are `bst`'s fields and their
-    lifetime is the struct's."""
+    `head_a`, `head_b`, `head_c` and the GEMM workspace are stage-owned.
+    The caller keeps the stages alive through its completion wait."""
     var nh = dims.n_heads
     var nkv = dims.n_kv
     var hd = dims.head_dim
@@ -2138,7 +2137,7 @@ def bwd_attention_weight_grad(
             )
             step_count_sync()
             ctx.synchronize()
-            identical_gemm(
+            bst.gemm_workspace.run(
                 ctx, bst.head_c, bst.head_a, bst.head_b, l, s, hd, OP_NT
             )
             step_count_launch()
@@ -2214,7 +2213,7 @@ def bwd_attention_grads(
                 )
                 step_count_sync()
                 ctx.synchronize()
-                identical_gemm(
+                bst.gemm_workspace.run(
                     ctx, bst.head_a, bst.head_c, bst.head_b, l, hd, s, OP_NN
                 )
                 step_count_launch()
@@ -2286,7 +2285,7 @@ def bwd_attention_grads(
                     )
                     step_count_sync()
                     ctx.synchronize()
-                    identical_gemm(
+                    bst.gemm_workspace.run(
                         ctx,
                         bst.head_b,
                         bst.head_c,
@@ -2366,7 +2365,7 @@ def bwd_attention_grads(
                     )
                     step_count_sync()
                     ctx.synchronize()
-                    identical_gemm(
+                    bst.gemm_workspace.run(
                         ctx,
                         bst.head_b,
                         bst.head_c,
@@ -2858,12 +2857,12 @@ def llama_decoder_layer_backward_device(
     # STAGE 2-3. `down_proj`: forward `OP_NT` at `(m, dm, it)`. ROUTED.
     # =====================================================================
     _route_a(
-        ctx, bst.d_mlp_gated, bst.d_down_proj_out, w.w_down, OP_NT, m, dm, it
+        ctx, bst.gemm_workspace, bst.d_mlp_gated, bst.d_down_proj_out, w.w_down, OP_NT, m, dm, it
     )
     _rec(ctx, trace, prefix, 2, bst.d_mlp_gated, m * it)
     pc.tick(ctx, "grad.down_dA", "down_dA")
     _route_b(
-        ctx, bst.dw_down, bst.d_down_proj_out, fwd.gated, OP_NT, m, dm, it
+        ctx, bst.gemm_workspace, bst.dw_down, bst.d_down_proj_out, fwd.gated, OP_NT, m, dm, it
     )
     _rec(ctx, trace, prefix, 3, bst.dw_down, dm * it)
     pc.tick(ctx, "grad.down_dB", "down_dB")
@@ -2925,20 +2924,20 @@ def llama_decoder_layer_backward_device(
     # (gate is evaluated before up at LMLP:175).
     # =====================================================================
     _route_b(
-        ctx, bst.dw_gate, bst.d_gate_proj_out, fwd.norm2_out, OP_NT, m, it, dm
+        ctx, bst.gemm_workspace, bst.dw_gate, bst.d_gate_proj_out, fwd.norm2_out, OP_NT, m, it, dm
     )
     _rec(ctx, trace, prefix, 7, bst.dw_gate, it * dm)
     pc.tick(ctx, "grad.gate_dB", "gateup_dB")
     _route_b(
-        ctx, bst.dw_up, bst.d_up_proj_out, fwd.norm2_out, OP_NT, m, it, dm
+        ctx, bst.gemm_workspace, bst.dw_up, bst.d_up_proj_out, fwd.norm2_out, OP_NT, m, it, dm
     )
     _rec(ctx, trace, prefix, 8, bst.dw_up, it * dm)
     pc.tick(ctx, "grad.up_dB", "gateup_dB")
     _route_a(
-        ctx, bst.tmp0, bst.d_gate_proj_out, w.w_gate, OP_NT, m, it, dm
+        ctx, bst.gemm_workspace, bst.tmp0, bst.d_gate_proj_out, w.w_gate, OP_NT, m, it, dm
     )
     pc.tick(ctx, "grad.gate_dA", "gateup_dA")
-    _route_a(ctx, bst.tmp1, bst.d_up_proj_out, w.w_up, OP_NT, m, it, dm)
+    _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_up_proj_out, w.w_up, OP_NT, m, it, dm)
     pc.tick(ctx, "grad.up_dA", "gateup_dA")
     step_count_launch()
     ctx.enqueue_function[bwd_add2_kernel](
@@ -3025,10 +3024,10 @@ def llama_decoder_layer_backward_device(
     # =====================================================================
     # STAGE 15-16. `o_proj`: forward `OP_NT` at `(m, dm, qw)`. ROUTED.
     # =====================================================================
-    _route_a(ctx, bst.d_attn_ctx, bst.d_o_proj_out, w.w_o, OP_NT, m, dm, qw)
+    _route_a(ctx, bst.gemm_workspace, bst.d_attn_ctx, bst.d_o_proj_out, w.w_o, OP_NT, m, dm, qw)
     _rec(ctx, trace, prefix, 15, bst.d_attn_ctx, m * qw)
     pc.tick(ctx, "grad.o_dA", "proj_dA")
-    _route_b(ctx, bst.dw_o, bst.d_o_proj_out, fwd.ctxv, OP_NT, m, dm, qw)
+    _route_b(ctx, bst.gemm_workspace, bst.dw_o, bst.d_o_proj_out, fwd.ctxv, OP_NT, m, dm, qw)
     _rec(ctx, trace, prefix, 16, bst.dw_o, dm * qw)
     pc.tick(ctx, "grad.o_dB", "proj_dB")
 
@@ -3174,20 +3173,20 @@ def llama_decoder_layer_backward_device(
     # STAGE 29-32. The three input projections. ROUTED, plus THE ONE
     # THREE-TERM FAN-IN in this block, which IS order dependent.
     # =====================================================================
-    _route_b(ctx, bst.dw_q, bst.d_q_proj_out, fwd.norm1_out, OP_NT, m, qw, dm)
+    _route_b(ctx, bst.gemm_workspace, bst.dw_q, bst.d_q_proj_out, fwd.norm1_out, OP_NT, m, qw, dm)
     _rec(ctx, trace, prefix, 29, bst.dw_q, qw * dm)
     pc.tick(ctx, "grad.q_dB", "proj_dB")
-    _route_b(ctx, bst.dw_k, bst.d_k_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
+    _route_b(ctx, bst.gemm_workspace, bst.dw_k, bst.d_k_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
     _rec(ctx, trace, prefix, 30, bst.dw_k, kw * dm)
     pc.tick(ctx, "grad.k_dB", "proj_dB")
-    _route_b(ctx, bst.dw_v, bst.d_v_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
+    _route_b(ctx, bst.gemm_workspace, bst.dw_v, bst.d_v_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
     _rec(ctx, trace, prefix, 31, bst.dw_v, kw * dm)
     pc.tick(ctx, "grad.v_dB", "proj_dB")
-    _route_a(ctx, bst.tmp0, bst.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
+    _route_a(ctx, bst.gemm_workspace, bst.tmp0, bst.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
     pc.tick(ctx, "grad.q_dA", "proj_dA")
-    _route_a(ctx, bst.tmp1, bst.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
+    _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
     pc.tick(ctx, "grad.k_dA", "proj_dA")
-    _route_a(ctx, bst.tmp2, bst.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
+    _route_a(ctx, bst.gemm_workspace, bst.tmp2, bst.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
     pc.tick(ctx, "grad.v_dA", "proj_dA")
     step_count_launch()
     ctx.enqueue_function[bwd_add3_kernel](

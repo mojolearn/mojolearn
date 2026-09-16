@@ -6528,3 +6528,39 @@ def identical_gemm_workspace_max_floats(m: Int, n: Int, k: Int) -> Int:
     if w < 1:
         return 1
     return w
+
+
+struct GemmWorkspace(Movable):
+    """Reusable scratch for GEMMs on ONE in-order context/stream.
+
+    The owner must keep this object and all operands alive through its final
+    synchronize. Each call sizes against the actual dispatcher, including
+    decode shapes that grow across calls. Growth drains the old workspace
+    before replacing it; reuse adds no host wait. Do not share across streams.
+    The dispatched GEMM may still wait for its own plan-specific scratch.
+    """
+
+    var buffer: DeviceBuffer[DType.float32]
+
+    def __init__(out self, ctx: DeviceContext) raises:
+        step_count_device_alloc()
+        self.buffer = ctx.enqueue_create_buffer[DType.float32](1)
+
+    def run[allow_vendor: Bool = True](
+        mut self, ctx: DeviceContext,
+        mut c: DeviceBuffer[DType.float32],
+        mut a: DeviceBuffer[DType.float32],
+        mut b: DeviceBuffer[DType.float32],
+        m: Int, n: Int, k: Int, op: Int,
+    ) raises:
+        var required = identical_gemm_workspace_max_floats(m, n, k)
+        if required > len(self.buffer):
+            # Previous enqueued GEMMs may still use the allocation being
+            # replaced. This wait protects its lifetime, not its contents.
+            step_count_sync()
+            ctx.synchronize()
+            step_count_device_alloc()
+            self.buffer = ctx.enqueue_create_buffer[DType.float32](required)
+        identical_gemm_into[allow_vendor](
+            ctx, c, a, b, self.buffer, m, n, k, op
+        )
