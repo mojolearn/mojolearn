@@ -125,6 +125,59 @@ operations wait more than once per launch. The enqueue-only model is **20x to
 host round trip, not as a queued enqueue, which is exactly what makes the wait
 count and not the launch count the thing to attack.
 
+### 0.3 MEASURED, not traced: 1.52 waits per launch, and waits are 95% of the bill
+
+Sections 0.0 to 0.2 are source traces plus a microbenchmark. This one is the
+shipped path counting itself. `transformer/checks/transformer_backward_check.mojo`
+built with `-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1
+-D MOJOLEARN_ATTN_PHASE_TIMERS=1` and run under `MOJOLEARN_TRANSFORMER_TIMING=1`,
+alone under the Metal lock on the M4. It passed: `clause (a): PASS, 17 cases,
+37/37 stages bit-identical to the oracle on all 412172 cells`, so these counts
+come from a run that computed the right answers.
+
+Totals over the run, from `timing launches.* <n> count` and `timing syncs.*`,
+taking `fwd.*` and `grad.*` as the partition and ignoring the `gemm.*` overlay
+(which re-reports the same intervals by GEMM kind):
+
+| | count |
+|---|---:|
+| launches | **1241** |
+| waits | **1887** |
+| **waits per launch** | **1.52** |
+
+**There are half again as many waits as kernels on the shipped path.** Priced at
+section 0's constants, 1241 x 0.30 ms = 372 ms of enqueue against
+1887 x 4.15 ms = 7831 ms of waiting: **the waits are 95 percent of the modelled
+bill**. The summed non-GEMM intervals the same run reports are 10,330 ms, so the
+two-constant model accounts for 79 percent of the wall clock and under-predicts,
+which is the right direction.
+
+This independently replicates a number taken on a different vendor. The H100
+census in
+`bench/results/e1g/2026-09-11_190725-nvidia-h100-80gb-hbm3-step-breakdown/`
+records 1324 launches and 2021 synchronizes for one byte LM step, a ratio of
+**1.53** against this run's 1.52. The ratio is a property of OUR code, not of
+Metal; what Metal changes is the price of each wait.
+
+The worst offenders are not the arithmetic:
+
+| site | launches | waits | waits per launch |
+|---|---:|---:|---:|
+| `fwd.refuse_call` | 34 | **136** | **4.0** |
+| `grad.refuse_scan` | 17 | **68** | **4.0** |
+| every GEMM (`gemm.*` overlay) | 391 | 782 | 2.0 |
+| `bwd.mlp_through_oproj` | 357 | 527 | 1.5 |
+| `grad.norm1_kernels`, `grad.norm2_kernels` | 51 each | 51 each | 1.0 |
+
+The two refusal paths cost **four round trips per kernel**, the highest ratio in
+the file, and they are validation rather than arithmetic. `_refuse_nonfinite_device`
+(`transformer/impl/llama/modeling_llama.mojo:2562`) carries two synchronizes of
+its own at `:2579` and `:2583`. Every GEMM pays exactly two. Those three are the
+concrete, named entry points for the LANE_STATUS's first ranked lever, and none
+of them is a lane's claim.
+
+Raw log: `~/mojolearn-evidence/metal-launch-overhead-2026-09-16/transformer_block_phase_timers_m4.log`.
+
 ## 1. GBDT, the largest non-neural block of the Apple column
 
 Ten GBDT lanes total roughly **7,500 s**, about a quarter of the column
