@@ -178,8 +178,11 @@ bash tools/runpod_cpu_leg.sh --lane tokdet --vcpu 16 --lease 100 --build "" \
 - **Actual spend $0.2540**, billed 1,905 s from create to verified delete. The
   run phase itself was 1,763 s.
 - Results fetched to
-  `bench/results/runpod_cpu/2026-09-16_101422-tokdet/remote/leg_out`. Only
-  summaries came back; the trained vocabularies stayed on the box.
+  `/Users/andrewhendel/mojolearn-evidence/tokenizer-trainer-determinism/2026-09-16_101422-tokdet/remote/leg_out`,
+  outside the repo. Only summaries came back; the trained vocabularies stayed
+  on the box. `user_cmd.sh` in that directory is the FETCHED copy, in which the
+  presigned R2 URL is already redacted; the rendered copy that carried the real
+  URL was never written into the repo.
 - If a pod ever survives: `bash tools/runpod_cpu_leg.sh list`, then
   `reap <POD_ID>`.
 
