@@ -164,7 +164,10 @@ Four new, each watched failing first, plus one strengthened.
   shape this repository found six of on 2026-09-16.
 * `test_shipped_verifier_hashes_like_the_harness` now runs the harness with
   `--step-full` and asserts a `stepfull` part was actually compared, so the
-  verifier and the harness cannot drift apart on the newest part.
+  verifier and the harness cannot drift apart on the newest part. Run on
+  Metal over `mamba1,transformer,ols`: 1 passed in 27.16s (`drift.log`).
+  Without `--step-full` the harness column carries no `stepfull` key at all,
+  so the row lookup raises rather than passing quietly.
 
 155 tests in `test_host_surface.py` and 54 in `test_verify_all.py` pass.
 
