@@ -79,6 +79,26 @@ same saved model, with no signal that anything changed. Whether a shift that
 size flips a downstream decision was NOT tested here, and on this fixture no
 query changed which training cluster it sits nearest to.
 
+### Why the CPU host route answers for both paths
+
+The arms above ran on the host restatement, so it matters that it is not an
+approximation of the device spelling on these four couplings. It is not. The
+four expressions are character identical:
+
+| coupling | device | host |
+|---|---|---|
+| batch mean | `umap/transform.mojo:44` | `umap/host/umap_oracle.mojo:594` |
+| sigma floor | `:66` | `:614` |
+| batch maximum | `:141` | `:689` |
+| batch edge ordinal | `:146,154` | `:698,706` |
+| epoch count | `:224` | `:765` |
+
+The single textual difference is that the host counter reads `draw_epoch`
+where the device reads `epoch`, and `draw_epoch = epoch` unless
+`UMAP_ORACLE_HOST_SABOTAGE` is defined, which these runs did not define. So a
+batch coupling measured on the host is the same arithmetic the device runs,
+and the device arms are confirmation rather than a separate question.
+
 ### The mechanisms, separated rather than listed
 
 `tools/identity_break.py:4945-4968` declares four couplings. Running every arm
