@@ -204,12 +204,34 @@ def read_sample(path, n):
 # --------------------------------------------------------------- self-test
 
 
+def hf_model_type(d):
+    with open(os.path.join(d, "tokenizer.json")) as fh:
+        return json.load(fh)["model"].get("type", "BPE")
+
+
 def perturb_hf(src, dst, how):
     shutil.copytree(src, dst)
     p = os.path.join(dst, "tokenizer.json")
     with open(p) as fh:
         blob = json.load(fh)
     model = blob["model"]
+    # A Unigram model has no "merges" and stores its vocabulary as a list of
+    # [piece, score] pairs, so the BPE perturbations below would raise KeyError
+    # on it. Measured 2026-09-16: that crash took a COMPLETED pod matrix with
+    # it, which is why the caller also has to survive a failed self-test.
+    if model.get("type") == "Unigram":
+        v = model["vocab"]
+        if how == "bump_one_score":
+            i = len(v) // 2
+            v[i] = [v[i][0], v[i][1] - 1.0]
+        elif how == "drop_one_piece":
+            i = max(range(3, len(v)), key=lambda k: len(v[k][0]))
+            del v[i]
+        else:
+            raise ValueError("%s does not apply to a Unigram model" % how)
+        with open(p, "w") as fh:
+            json.dump(blob, fh)
+        return dst
     if how == "swap_two_vocab_ids":
         toks = sorted(model["vocab"], key=lambda t: model["vocab"][t])
         x, y = toks[-1], toks[-2]
@@ -270,7 +292,21 @@ CONTROLS = {
         ("swap_two_pieces", ["bytes", "struct"], "same pieces, different ids"),
         ("drop_one_piece", ["bytes", "struct", "tokenize"], "a piece genuinely gone"),
     ],
+    # A Unigram model carries scores, not merges, so it gets its own controls.
+    # Swapping two list entries is deliberately NOT one of them: it reorders the
+    # pairs without changing the piece->score map, so the struct layer would
+    # correctly stay silent and the control would assert nothing.
+    "hf_unigram": [
+        ("bump_one_score", ["bytes", "struct"], "one unigram score moved"),
+        ("drop_one_piece", ["bytes", "struct", "tokenize"], "a piece genuinely gone"),
+    ],
 }
+
+
+def controls_for(kind, d):
+    if kind == "sp":
+        return CONTROLS["sp"]
+    return CONTROLS["hf_unigram"] if hf_model_type(d) == "Unigram" else CONTROLS["hf"]
 
 
 def self_test(kind, d, lines, tmp):
@@ -296,7 +332,7 @@ def self_test(kind, d, lines, tmp):
         )
 
     # NEGATIVE CONTROLS ------------------------------------------------
-    for how, must_fire, why in CONTROLS[kind]:
+    for how, must_fire, why in controls_for(kind, d):
         dst = os.path.join(tmp, "perturbed_" + how)
         if os.path.exists(dst):
             shutil.rmtree(dst)

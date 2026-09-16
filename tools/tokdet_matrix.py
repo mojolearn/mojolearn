@@ -194,8 +194,20 @@ def main():
                  "--sample", sample, "--self-test", "--dir", runs[base_id]["dir"],
                  "--tmp", os.path.join(args.out, "_selftest_" + kind), "--json", j],
                 capture_output=True, text=True)
-            with open(j) as fh:
-                controls["selftest_" + kind] = json.load(fh)
+            # A self-test that CRASHES must not destroy a finished matrix.
+            # Measured 2026-09-16: it did exactly that on a rented pod, losing
+            # every unigram comparison after all the runs had already been paid
+            # for. A missing verdict is recorded as a failure, never skipped.
+            if os.path.exists(j):
+                with open(j) as fh:
+                    controls["selftest_" + kind] = json.load(fh)
+            else:
+                controls["selftest_" + kind] = {
+                    "passed": False,
+                    "error": "the self-test produced no JSON; treat every "
+                             "verdict in this matrix as unvalidated",
+                    "stderr": p.stderr[-2000:],
+                }
             print("selftest %s: %s" % (kind, "PASS" if p.returncode == 0 else "FAIL"),
                   flush=True)
 

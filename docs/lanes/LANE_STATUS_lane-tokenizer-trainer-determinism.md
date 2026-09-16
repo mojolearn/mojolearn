@@ -96,8 +96,38 @@ bash tools/runpod_cpu_leg.sh --lane tokdet --vcpu 16 --lease 100 --build "" \
   `docs/RUNPOD_CPU_LEG.md`, which is stale for 16 vCPU).
 - Created 06:14:26, bill starts there. Dead-man armed before the create;
   on-pod watchdog armed for 100 minutes.
-- **Must be verified deleted.** `bash tools/runpod_cpu_leg.sh list` should show
-  no `mojolearn-cpu-tokdet-*`; `reap <POD_ID>` if one survives.
+- **Deleted and verified gone**: HTTP 204, then GET returned 404, then absent
+  from the pod listing. Dead-man cancelled only after that.
+- **Actual spend $0.2540**, billed 1,905 s from create to verified delete. The
+  run phase itself was 1,763 s.
+- Results fetched to
+  `bench/results/runpod_cpu/2026-09-16_101422-tokdet/remote/leg_out`. Only
+  summaries came back; the trained vocabularies stayed on the box.
+- If a pod ever survives: `bash tools/runpod_cpu_leg.sh list`, then
+  `reap <POD_ID>`.
+
+## Open gap: the unigram thread axis
+
+Every unigram run on the pod completed, and then the harness crashed in its own
+self-test before computing a single comparison, so that axis has **no
+verdicts**. The cause was mine: the Hugging Face perturbations assumed a
+`merges` list, which a Unigram model does not have, and `tokdet_matrix.py` died
+on the missing JSON instead of recording a failed self-test. Both are fixed —
+Unigram models now have their own controls, and a self-test that produces no
+JSON is recorded as a failure that marks the matrix unvalidated rather than
+aborting it.
+
+It was **not** re-rented, deliberately: Hugging Face unigram is already
+disqualified at one thread, and SentencePiece unigram's thread behavior cannot
+change the build-or-pin recommendation. The one-thread unigram results stand.
+
+To close it (about 12 minutes on a pod, roughly $0.10):
+
+```sh
+cd $W   # render pod_cmd_real.sh as above, with the unigram matrix only
+bash tools/runpod_cpu_leg.sh --lane tokdetuni --vcpu 16 --lease 45 --build "" \
+    --cmd-file <scratch>/pod_cmd_real.sh --rent
+```
 
 ## Traps this lane already hit
 

@@ -304,7 +304,72 @@ reaches the trainer, so both knobs were checked before the runs were believed:
 - SentencePiece echoes the setting back in its own `trainer_spec`
   (`num_threads: 4`), so the value is accepted rather than silently dropped.
 
-PENDING — filled in from the pod leg.
+Box: 16 vCPU x86_64, Linux 5.15 glibc 2.35, CPython 3.14.7, `tokenizers`
+0.23.2, `sentencepiece` 0.2.2. The box cut its corpus from the same R2 enwik8
+and produced **byte-identical shards** to the Mac's, which is what makes the
+cross-architecture comparison below mean anything.
+
+**Hugging Face BPE is identical at every thread count.**
+
+| comparison | verdict |
+|---|---|
+| 1 vs 2 vs 4 vs 8 vs 16 threads | IDENTICAL |
+| repeats within t=2, t=4, t=8, t=16 | IDENTICAL |
+| corpus order, on x86 | IDENTICAL |
+| vocabulary 1,000 and 32,000, on x86 | IDENTICAL |
+| control (vocab+1) | DIFFERS |
+
+**SentencePiece BPE's vocabulary is thread-invariant.** This run predates the
+`model_prefix` fix, so its `sp.model` byte layer is contaminated and every
+SentencePiece byte row reads DIFFERS for that reason alone; those rows are not
+evidence of anything. The struct and tokenize layers are unaffected, and at
+every thread count from 1 to 16, and across repeats and orders, they report:
+identical piece set, identical piece→id map, identical sequence, zero score
+differences, zero tokenization differences.
+
+**The thread knob demonstrably engaged**, so the axis is not vacuous. Wall
+times at vocabulary 8,000: Hugging Face 7.8 s at one thread against 4.0 s at
+four; SentencePiece unigram 87.7 s at one thread against 42.4 s at sixteen.
+
+### Cross-architecture
+
+The same configuration, trained on Apple M4 arm64 and on x86_64 Linux from
+byte-identical shards, produces byte-identical Hugging Face BPE artifacts:
+
+| artifact | arm64 | x86_64 |
+|---|---|---|
+| `tokenizer.json` | `4724bad6ac72632c` | `4724bad6ac72632c` |
+| `vocab.json` | `52f3ce45d4a75f86` | `52f3ce45d4a75f86` |
+| `merges.txt` | `68bc8f9f5493ca43` | `68bc8f9f5493ca43` |
+
+So an HF BPE vocabulary is reproducible across architectures, not merely
+across runs on one machine.
+
+### One gap, and it is mine
+
+The unigram matrix on the pod produced **no verdicts**. Every unigram run
+completed — the timings are in `unigram_console.txt` — but the harness then
+crashed in its own self-test, because the Hugging Face perturbations assumed a
+`merges` list and a Unigram model has scores instead. `tokdet_matrix.py` then
+died on the missing file rather than recording a failed self-test, taking all
+the finished comparisons with it.
+
+Both bugs are fixed: Unigram models get their own controls, and a self-test
+that produces no JSON is now recorded as a failure that marks the matrix
+unvalidated instead of aborting it.
+
+The unigram **thread** axis is therefore unmeasured. It was not re-rented,
+because Hugging Face unigram is already disqualified at one thread and
+SentencePiece unigram's thread behavior cannot change the recommendation. The
+one-thread unigram results above stand on their own. The resume command is in
+the lane status file.
+
+### Cost
+
+Pod `5dd31t9s9o3j2k`, 16 vCPU at $0.48/hr, billed 1,905 s from create to
+verified delete: **$0.2540**. Deleted and verified gone (HTTP 204, then 404,
+then absent from the pod listing). Note $0.48/hr, not the $0.24 that
+`docs/RUNPOD_CPU_LEG.md` still claims.
 
 ## Reproducing
 
