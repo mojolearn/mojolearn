@@ -236,6 +236,19 @@ Deleted and verified gone (HTTP 204, then GET 404 after two 200s). Evidence:
 - The `sys.executable` probe reads `changed False child BASE` here too, the same Linux finding
   the AMD leg reported.
 
+**AMD leg 2 is a TOTAL LOSS, and the 130 lanes are still owed.** Hot Aisle MI300X, VM
+20c7ec81 (enc1-gpuvm012), 20:00:17 to 20:58:14, balance $37.09 to $34.35, so **$2.74 for zero
+cells**. The VM answered its polls until 20:32:11 and never again: no sentinel,
+`body_exit=<absent>`, the outer poll deadline fired at 20:57:27, and the fetch failed with
+`ssh: connect to host 23.183.40.76 port 22: Operation timed out`. The leg deleted the VM
+anyway and verified it gone (HTTP 204, then GET 404, `listed=no`; the account now shows 0 VMs
+and both slots free), which is the part that matters most when a box goes dark. Only the
+create, offering and vm_details JSONs came home.
+
+The lesson worth carrying: **a leg's column only leaves the box in the final fetch**, so a VM
+that stops answering costs the whole leg no matter how much of it ran. The harness writing the
+JSON after every lane protects against a bounded run, not against a dark box.
+
 Legs rent only from a CLEAN checkout: both runners refuse a dirty tree, so commit state-file
 edits before renting.
 
