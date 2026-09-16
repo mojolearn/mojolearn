@@ -1,6 +1,6 @@
 NOTE: --lanes scopes this diff to 7 lane(s); 0 other lane(s) the JSONs carry are not compared
 NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 9354 32-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gp_host', '_mojolearn_preprocessing_host'] commit=e87161dc8b813fb0510d95857664181c003936ae
-| lane/fixture                 | verdict    | arm64            | cpu-x86-x86_64   |
+| lane/fixture                 | verdict    | apple-m4         | cpu-x86-x86_64   |
 |------------------------------|------------|------------------|------------------|
 | gp-matern12/base             | IDENTICAL x2 | a54e340b4a22147f | a54e340b4a22147f |
 | gp-matern12/denormal         | IDENTICAL x2 | 6ca669d68732c77e | 6ca669d68732c77e |
@@ -29,15 +29,15 @@ NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 9354 32-Core Pr
 | gp-matern52-ard/odd          | IDENTICAL x2 | f05b1867f7b7d159 | f05b1867f7b7d159 |
 | gp-matern52-ard/ties         | IDENTICAL x2 | e7965892a63545e5 | e7965892a63545e5 |
 | gp-matern52-ard/wide         | IDENTICAL x2 | fd640b7c289a6327 | fd640b7c289a6327 |
-| gp-normalize-y/base          | ONE-COLUMN | REFUSED          | 295a3a943bb1e6c1 |
-| gp-normalize-y/denormal      | ONE-COLUMN | REFUSED          | 563ede6c2700528e |
-| gp-normalize-y/denormal_ftz  | ONE-COLUMN | REFUSED          | 563ede6c2700528e |
-| gp-normalize-y/dupes         | ONE-COLUMN | REFUSED          | 56127db3c25510e4 |
-| gp-normalize-y/hashed        | ONE-COLUMN | REFUSED          | b3faa0b97f15bcba |
-| gp-normalize-y/negative      | ONE-COLUMN | REFUSED          | c162a835d708df60 |
-| gp-normalize-y/odd           | ONE-COLUMN | REFUSED          | c3c46d3bdd248167 |
-| gp-normalize-y/ties          | ONE-COLUMN | REFUSED          | dcd3de359f3c2074 |
-| gp-normalize-y/wide          | ONE-COLUMN | REFUSED          | 3f637d262c88b131 |
+| gp-normalize-y/base          | IDENTICAL x2 | 295a3a943bb1e6c1 | 295a3a943bb1e6c1 |
+| gp-normalize-y/denormal      | IDENTICAL x2 | 563ede6c2700528e | 563ede6c2700528e |
+| gp-normalize-y/denormal_ftz  | IDENTICAL x2 | 563ede6c2700528e | 563ede6c2700528e |
+| gp-normalize-y/dupes         | IDENTICAL x2 | 56127db3c25510e4 | 56127db3c25510e4 |
+| gp-normalize-y/hashed        | IDENTICAL x2 | b3faa0b97f15bcba | b3faa0b97f15bcba |
+| gp-normalize-y/negative      | IDENTICAL x2 | c162a835d708df60 | c162a835d708df60 |
+| gp-normalize-y/odd           | IDENTICAL x2 | c3c46d3bdd248167 | c3c46d3bdd248167 |
+| gp-normalize-y/ties          | IDENTICAL x2 | dcd3de359f3c2074 | dcd3de359f3c2074 |
+| gp-normalize-y/wide          | IDENTICAL x2 | 3f637d262c88b131 | 3f637d262c88b131 |
 | gp-optimize-restarts/base    | IDENTICAL x2 | 4a28559715cdc8ec | 4a28559715cdc8ec |
 | gp-optimize-restarts/denormal | IDENTICAL x2 | 241145049e69737d | 241145049e69737d |
 | gp-optimize-restarts/denormal_ftz | IDENTICAL x2 | 241145049e69737d | 241145049e69737d |
@@ -66,9 +66,9 @@ NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 9354 32-Core Pr
 | gp/ties                      | IDENTICAL x2 | c92496318cb78403 | c92496318cb78403 |
 | gp/wide                      | IDENTICAL x2 | ca779c84b786d493 | ca779c84b786d493 |
 
-summary: IDENTICAL=54, ONE-COLUMN=9
+summary: IDENTICAL=63
 
-| lane/fixture                 | column | verdict      | arm64            | cpu-x86-x86_64   |
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-x86-x86_64   |
 |------------------------------|--------|--------------|------------------|------------------|
 | gp-matern12/base             | infer  | IDENTICAL x2 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 |
 | gp-matern12/base             | model  | IDENTICAL x2 | ea851543bc06b7ca | ea851543bc06b7ca |
@@ -151,33 +151,33 @@ summary: IDENTICAL=54, ONE-COLUMN=9
 | gp-matern52-ard/wide         | infer  | IDENTICAL x2 | 74c9cc4f5bcd42f7 | 74c9cc4f5bcd42f7 |
 | gp-matern52-ard/wide         | model  | IDENTICAL x2 | 07c08e717ae5f13a | 07c08e717ae5f13a |
 | gp-matern52-ard/wide         | batch  | IDENTICAL x2 | 25546aa3974473f3 | 25546aa3974473f3 |
-| gp-normalize-y/base          | infer  | ONE-COLUMN   | REFUSED          | 7c5123dc7a512038 |
-| gp-normalize-y/base          | model  | ONE-COLUMN   | REFUSED          | 988bc1c3b51246a4 |
-| gp-normalize-y/base          | batch  | ONE-COLUMN   | REFUSED          | 10f20ff36a173c93 |
-| gp-normalize-y/denormal      | infer  | ONE-COLUMN   | REFUSED          | c9c056f09a65ff3b |
-| gp-normalize-y/denormal      | model  | ONE-COLUMN   | REFUSED          | 7838eff1539fb489 |
-| gp-normalize-y/denormal      | batch  | ONE-COLUMN   | REFUSED          | 00079f14e3f462fc |
-| gp-normalize-y/denormal_ftz  | infer  | ONE-COLUMN   | REFUSED          | c9c056f09a65ff3b |
-| gp-normalize-y/denormal_ftz  | model  | ONE-COLUMN   | REFUSED          | 5f20cf42422bf2e9 |
-| gp-normalize-y/denormal_ftz  | batch  | ONE-COLUMN   | REFUSED          | 00079f14e3f462fc |
-| gp-normalize-y/dupes         | infer  | ONE-COLUMN   | REFUSED          | 3c0b639788527068 |
-| gp-normalize-y/dupes         | model  | ONE-COLUMN   | REFUSED          | db1cd41ce6fd1b37 |
-| gp-normalize-y/dupes         | batch  | ONE-COLUMN   | REFUSED          | cd8dc4dd4d12cb25 |
-| gp-normalize-y/hashed        | infer  | ONE-COLUMN   | REFUSED          | b77bf4a2d0da8736 |
-| gp-normalize-y/hashed        | model  | ONE-COLUMN   | REFUSED          | 78eb0a3ce16ce7c5 |
-| gp-normalize-y/hashed        | batch  | ONE-COLUMN   | REFUSED          | 83463eae32c0bbe9 |
-| gp-normalize-y/negative      | infer  | ONE-COLUMN   | REFUSED          | e8c9793a64ffecd4 |
-| gp-normalize-y/negative      | model  | ONE-COLUMN   | REFUSED          | f8b1eb8570f5e01b |
-| gp-normalize-y/negative      | batch  | ONE-COLUMN   | REFUSED          | d4b37ced285cc86d |
-| gp-normalize-y/odd           | infer  | ONE-COLUMN   | REFUSED          | e8873986c9e0f24f |
-| gp-normalize-y/odd           | model  | ONE-COLUMN   | REFUSED          | 767941378d3c368a |
-| gp-normalize-y/odd           | batch  | ONE-COLUMN   | REFUSED          | 290d32315445165d |
-| gp-normalize-y/ties          | infer  | ONE-COLUMN   | REFUSED          | 0e6c262796044cb8 |
-| gp-normalize-y/ties          | model  | ONE-COLUMN   | REFUSED          | 4af86e76b34e092c |
-| gp-normalize-y/ties          | batch  | ONE-COLUMN   | REFUSED          | d3aaf331f5414e4b |
-| gp-normalize-y/wide          | infer  | ONE-COLUMN   | REFUSED          | 13332a5abc671f44 |
-| gp-normalize-y/wide          | model  | ONE-COLUMN   | REFUSED          | 7aaddfff81162cc0 |
-| gp-normalize-y/wide          | batch  | ONE-COLUMN   | REFUSED          | f83ca2d738dfbae9 |
+| gp-normalize-y/base          | infer  | IDENTICAL x2 | 7c5123dc7a512038 | 7c5123dc7a512038 |
+| gp-normalize-y/base          | model  | IDENTICAL x2 | 988bc1c3b51246a4 | 988bc1c3b51246a4 |
+| gp-normalize-y/base          | batch  | IDENTICAL x2 | 10f20ff36a173c93 | 10f20ff36a173c93 |
+| gp-normalize-y/denormal      | infer  | IDENTICAL x2 | c9c056f09a65ff3b | c9c056f09a65ff3b |
+| gp-normalize-y/denormal      | model  | IDENTICAL x2 | 7838eff1539fb489 | 7838eff1539fb489 |
+| gp-normalize-y/denormal      | batch  | IDENTICAL x2 | 00079f14e3f462fc | 00079f14e3f462fc |
+| gp-normalize-y/denormal_ftz  | infer  | IDENTICAL x2 | c9c056f09a65ff3b | c9c056f09a65ff3b |
+| gp-normalize-y/denormal_ftz  | model  | IDENTICAL x2 | 5f20cf42422bf2e9 | 5f20cf42422bf2e9 |
+| gp-normalize-y/denormal_ftz  | batch  | IDENTICAL x2 | 00079f14e3f462fc | 00079f14e3f462fc |
+| gp-normalize-y/dupes         | infer  | IDENTICAL x2 | 3c0b639788527068 | 3c0b639788527068 |
+| gp-normalize-y/dupes         | model  | IDENTICAL x2 | db1cd41ce6fd1b37 | db1cd41ce6fd1b37 |
+| gp-normalize-y/dupes         | batch  | IDENTICAL x2 | cd8dc4dd4d12cb25 | cd8dc4dd4d12cb25 |
+| gp-normalize-y/hashed        | infer  | IDENTICAL x2 | b77bf4a2d0da8736 | b77bf4a2d0da8736 |
+| gp-normalize-y/hashed        | model  | IDENTICAL x2 | 78eb0a3ce16ce7c5 | 78eb0a3ce16ce7c5 |
+| gp-normalize-y/hashed        | batch  | IDENTICAL x2 | 83463eae32c0bbe9 | 83463eae32c0bbe9 |
+| gp-normalize-y/negative      | infer  | IDENTICAL x2 | e8c9793a64ffecd4 | e8c9793a64ffecd4 |
+| gp-normalize-y/negative      | model  | IDENTICAL x2 | f8b1eb8570f5e01b | f8b1eb8570f5e01b |
+| gp-normalize-y/negative      | batch  | IDENTICAL x2 | d4b37ced285cc86d | d4b37ced285cc86d |
+| gp-normalize-y/odd           | infer  | IDENTICAL x2 | e8873986c9e0f24f | e8873986c9e0f24f |
+| gp-normalize-y/odd           | model  | IDENTICAL x2 | 767941378d3c368a | 767941378d3c368a |
+| gp-normalize-y/odd           | batch  | IDENTICAL x2 | 290d32315445165d | 290d32315445165d |
+| gp-normalize-y/ties          | infer  | IDENTICAL x2 | 0e6c262796044cb8 | 0e6c262796044cb8 |
+| gp-normalize-y/ties          | model  | IDENTICAL x2 | 4af86e76b34e092c | 4af86e76b34e092c |
+| gp-normalize-y/ties          | batch  | IDENTICAL x2 | d3aaf331f5414e4b | d3aaf331f5414e4b |
+| gp-normalize-y/wide          | infer  | IDENTICAL x2 | 13332a5abc671f44 | 13332a5abc671f44 |
+| gp-normalize-y/wide          | model  | IDENTICAL x2 | 7aaddfff81162cc0 | 7aaddfff81162cc0 |
+| gp-normalize-y/wide          | batch  | IDENTICAL x2 | f83ca2d738dfbae9 | f83ca2d738dfbae9 |
 | gp-optimize-restarts/base    | infer  | IDENTICAL x2 | ef23636025bb9281 | ef23636025bb9281 |
 | gp-optimize-restarts/base    | model  | IDENTICAL x2 | 2d77ffc98991757b | 2d77ffc98991757b |
 | gp-optimize-restarts/base    | batch  | IDENTICAL x2 | 976899114f971572 | 976899114f971572 |
@@ -260,6 +260,6 @@ summary: IDENTICAL=54, ONE-COLUMN=9
 | gp/wide                      | model  | IDENTICAL x2 | 6de1e70ad300db07 | 6de1e70ad300db07 |
 | gp/wide                      | batch  | IDENTICAL x2 | d3e6783a8a000e56 | d3e6783a8a000e56 |
 
-summary (infer/model): IDENTICAL=108, ONE-COLUMN=18
-summary (batch): IDENTICAL=54, ONE-COLUMN=9
+summary (infer/model): IDENTICAL=126
+summary (batch): IDENTICAL=63
 summary (rlpair): 

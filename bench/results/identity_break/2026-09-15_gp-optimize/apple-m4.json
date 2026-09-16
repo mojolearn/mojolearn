@@ -2,8 +2,8 @@
  "mode": "identical",
  "repeats": 2,
  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
- "vendor": "arm64",
- "commit": "e05b5d3c6d54879a5205d6c9058c4d3c0d2b6af2",
+ "vendor": "apple-m4",
+ "commit": "2807d4ad7e70e038000b4219472385176cb32773",
  "commit_source": "git rev-parse HEAD",
  "heldout_seed": 1,
  "fixtures": {
@@ -462,58 +462,400 @@
    "batch_verdict": "STABLE"
   },
   "gp-normalize-y/base": {
-   "verdict": "REFUSED",
-   "error": "ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with\n    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh",
-   "hashes": [],
-   "parts": []
+   "verdict": "STABLE",
+   "hashes": [
+    "295a3a943bb1e6c1",
+    "295a3a943bb1e6c1"
+   ],
+   "parts": [
+    {
+     "alpha": "99ea2dee4e6d2896",
+     "L": "02bd406c9f990a9e",
+     "lml": "f680b96967ef824f",
+     "y_stats": "6181230773d43398",
+     "mean": "0a3bcf20f137a9ce",
+     "std": "28f14bb51d5d2208"
+    },
+    {
+     "alpha": "99ea2dee4e6d2896",
+     "L": "02bd406c9f990a9e",
+     "lml": "f680b96967ef824f",
+     "y_stats": "6181230773d43398",
+     "mean": "0a3bcf20f137a9ce",
+     "std": "28f14bb51d5d2208"
+    }
+   ],
+   "infer": [
+    "7c5123dc7a512038",
+    "7c5123dc7a512038"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "988bc1c3b51246a4",
+    "988bc1c3b51246a4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "7c5123dc7a512038",
+    "7c5123dc7a512038"
+   ],
+   "batch": [
+    "10f20ff36a173c93",
+    "10f20ff36a173c93"
+   ],
+   "batch_verdict": "STABLE"
   },
   "gp-normalize-y/ties": {
-   "verdict": "REFUSED",
-   "error": "ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with\n    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh",
-   "hashes": [],
-   "parts": []
+   "verdict": "STABLE",
+   "hashes": [
+    "dcd3de359f3c2074",
+    "dcd3de359f3c2074"
+   ],
+   "parts": [
+    {
+     "alpha": "7beef4788d8279fe",
+     "L": "ad07c62b4f7b82e9",
+     "lml": "5367004b6c047da0",
+     "y_stats": "5c96cd80880f6aec",
+     "mean": "16c8dedc29b88ec0",
+     "std": "a791fecae00e7a26"
+    },
+    {
+     "alpha": "7beef4788d8279fe",
+     "L": "ad07c62b4f7b82e9",
+     "lml": "5367004b6c047da0",
+     "y_stats": "5c96cd80880f6aec",
+     "mean": "16c8dedc29b88ec0",
+     "std": "a791fecae00e7a26"
+    }
+   ],
+   "infer": [
+    "0e6c262796044cb8",
+    "0e6c262796044cb8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4af86e76b34e092c",
+    "4af86e76b34e092c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0e6c262796044cb8",
+    "0e6c262796044cb8"
+   ],
+   "batch": [
+    "d3aaf331f5414e4b",
+    "d3aaf331f5414e4b"
+   ],
+   "batch_verdict": "STABLE"
   },
   "gp-normalize-y/hashed": {
-   "verdict": "REFUSED",
-   "error": "ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with\n    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh",
-   "hashes": [],
-   "parts": []
+   "verdict": "STABLE",
+   "hashes": [
+    "b3faa0b97f15bcba",
+    "b3faa0b97f15bcba"
+   ],
+   "parts": [
+    {
+     "alpha": "5cbd97cf1f7b908a",
+     "L": "946d09425efb81ba",
+     "lml": "64c03bce10a7d379",
+     "y_stats": "df1a1df4fee79f48",
+     "mean": "b422429e3b010653",
+     "std": "e7ebcdea4972bf71"
+    },
+    {
+     "alpha": "5cbd97cf1f7b908a",
+     "L": "946d09425efb81ba",
+     "lml": "64c03bce10a7d379",
+     "y_stats": "df1a1df4fee79f48",
+     "mean": "b422429e3b010653",
+     "std": "e7ebcdea4972bf71"
+    }
+   ],
+   "infer": [
+    "b77bf4a2d0da8736",
+    "b77bf4a2d0da8736"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "78eb0a3ce16ce7c5",
+    "78eb0a3ce16ce7c5"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b77bf4a2d0da8736",
+    "b77bf4a2d0da8736"
+   ],
+   "batch": [
+    "83463eae32c0bbe9",
+    "83463eae32c0bbe9"
+   ],
+   "batch_verdict": "STABLE"
   },
   "gp-normalize-y/wide": {
-   "verdict": "REFUSED",
-   "error": "ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with\n    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh",
-   "hashes": [],
-   "parts": []
+   "verdict": "STABLE",
+   "hashes": [
+    "3f637d262c88b131",
+    "3f637d262c88b131"
+   ],
+   "parts": [
+    {
+     "alpha": "9838313e745ebbfd",
+     "L": "59b7041f1a10bfbd",
+     "lml": "b0f25403a8be1053",
+     "y_stats": "66452123cae8da9d",
+     "mean": "2ce5ffb4d2bb9cf8",
+     "std": "ca03137acb0df93a"
+    },
+    {
+     "alpha": "9838313e745ebbfd",
+     "L": "59b7041f1a10bfbd",
+     "lml": "b0f25403a8be1053",
+     "y_stats": "66452123cae8da9d",
+     "mean": "2ce5ffb4d2bb9cf8",
+     "std": "ca03137acb0df93a"
+    }
+   ],
+   "infer": [
+    "13332a5abc671f44",
+    "13332a5abc671f44"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7aaddfff81162cc0",
+    "7aaddfff81162cc0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "13332a5abc671f44",
+    "13332a5abc671f44"
+   ],
+   "batch": [
+    "f83ca2d738dfbae9",
+    "f83ca2d738dfbae9"
+   ],
+   "batch_verdict": "STABLE"
   },
   "gp-normalize-y/denormal": {
-   "verdict": "REFUSED",
-   "error": "ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with\n    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh",
-   "hashes": [],
-   "parts": []
+   "verdict": "STABLE",
+   "hashes": [
+    "563ede6c2700528e",
+    "563ede6c2700528e"
+   ],
+   "parts": [
+    {
+     "alpha": "87348100684fad22",
+     "L": "375621676b406cb8",
+     "lml": "34cdd37e91b15adf",
+     "y_stats": "79ef631b6b3643ad",
+     "mean": "1ffe9cb55183d533",
+     "std": "bd583e86732471b2"
+    },
+    {
+     "alpha": "87348100684fad22",
+     "L": "375621676b406cb8",
+     "lml": "34cdd37e91b15adf",
+     "y_stats": "79ef631b6b3643ad",
+     "mean": "1ffe9cb55183d533",
+     "std": "bd583e86732471b2"
+    }
+   ],
+   "infer": [
+    "c9c056f09a65ff3b",
+    "c9c056f09a65ff3b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7838eff1539fb489",
+    "7838eff1539fb489"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c9c056f09a65ff3b",
+    "c9c056f09a65ff3b"
+   ],
+   "batch": [
+    "00079f14e3f462fc",
+    "00079f14e3f462fc"
+   ],
+   "batch_verdict": "STABLE"
   },
   "gp-normalize-y/denormal_ftz": {
-   "verdict": "REFUSED",
-   "error": "ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with\n    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh",
-   "hashes": [],
-   "parts": []
+   "verdict": "STABLE",
+   "hashes": [
+    "563ede6c2700528e",
+    "563ede6c2700528e"
+   ],
+   "parts": [
+    {
+     "alpha": "87348100684fad22",
+     "L": "375621676b406cb8",
+     "lml": "34cdd37e91b15adf",
+     "y_stats": "79ef631b6b3643ad",
+     "mean": "1ffe9cb55183d533",
+     "std": "bd583e86732471b2"
+    },
+    {
+     "alpha": "87348100684fad22",
+     "L": "375621676b406cb8",
+     "lml": "34cdd37e91b15adf",
+     "y_stats": "79ef631b6b3643ad",
+     "mean": "1ffe9cb55183d533",
+     "std": "bd583e86732471b2"
+    }
+   ],
+   "infer": [
+    "c9c056f09a65ff3b",
+    "c9c056f09a65ff3b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "5f20cf42422bf2e9",
+    "5f20cf42422bf2e9"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c9c056f09a65ff3b",
+    "c9c056f09a65ff3b"
+   ],
+   "batch": [
+    "00079f14e3f462fc",
+    "00079f14e3f462fc"
+   ],
+   "batch_verdict": "STABLE"
   },
   "gp-normalize-y/dupes": {
-   "verdict": "REFUSED",
-   "error": "ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with\n    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh",
-   "hashes": [],
-   "parts": []
+   "verdict": "STABLE",
+   "hashes": [
+    "56127db3c25510e4",
+    "56127db3c25510e4"
+   ],
+   "parts": [
+    {
+     "alpha": "bae345f5569ba006",
+     "L": "02bd406c9f990a9e",
+     "lml": "704be96816c492a8",
+     "y_stats": "6200c2aabdfea397",
+     "mean": "c84b922c45f5d862",
+     "std": "5577692a5b4c546d"
+    },
+    {
+     "alpha": "bae345f5569ba006",
+     "L": "02bd406c9f990a9e",
+     "lml": "704be96816c492a8",
+     "y_stats": "6200c2aabdfea397",
+     "mean": "c84b922c45f5d862",
+     "std": "5577692a5b4c546d"
+    }
+   ],
+   "infer": [
+    "3c0b639788527068",
+    "3c0b639788527068"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "db1cd41ce6fd1b37",
+    "db1cd41ce6fd1b37"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3c0b639788527068",
+    "3c0b639788527068"
+   ],
+   "batch": [
+    "cd8dc4dd4d12cb25",
+    "cd8dc4dd4d12cb25"
+   ],
+   "batch_verdict": "STABLE"
   },
   "gp-normalize-y/odd": {
-   "verdict": "REFUSED",
-   "error": "ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with\n    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh",
-   "hashes": [],
-   "parts": []
+   "verdict": "STABLE",
+   "hashes": [
+    "c3c46d3bdd248167",
+    "c3c46d3bdd248167"
+   ],
+   "parts": [
+    {
+     "alpha": "c80a04cd6e8d0f46",
+     "L": "5bf7024831e3bbca",
+     "lml": "fca822554645173b",
+     "y_stats": "a7c6bd52a10522a6",
+     "mean": "1ee1cbebae1efc62",
+     "std": "7510b7807cb1b4aa"
+    },
+    {
+     "alpha": "c80a04cd6e8d0f46",
+     "L": "5bf7024831e3bbca",
+     "lml": "fca822554645173b",
+     "y_stats": "a7c6bd52a10522a6",
+     "mean": "1ee1cbebae1efc62",
+     "std": "7510b7807cb1b4aa"
+    }
+   ],
+   "infer": [
+    "e8873986c9e0f24f",
+    "e8873986c9e0f24f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "767941378d3c368a",
+    "767941378d3c368a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e8873986c9e0f24f",
+    "e8873986c9e0f24f"
+   ],
+   "batch": [
+    "290d32315445165d",
+    "290d32315445165d"
+   ],
+   "batch_verdict": "STABLE"
   },
   "gp-normalize-y/negative": {
-   "verdict": "REFUSED",
-   "error": "ImportError: mojolearn: the base binding has no `all_finite_f32`; the compiled _mojolearn extension is older than this Python layer, or the identical set is not built. Rebuild it with\n    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh",
-   "hashes": [],
-   "parts": []
+   "verdict": "STABLE",
+   "hashes": [
+    "c162a835d708df60",
+    "c162a835d708df60"
+   ],
+   "parts": [
+    {
+     "alpha": "d09b2f28b16f837c",
+     "L": "440e3cd9e3d290ed",
+     "lml": "b00206d92824d997",
+     "y_stats": "58b2b45f5d932d2e",
+     "mean": "ec44b984575a978d",
+     "std": "2b7b926dd5323998"
+    },
+    {
+     "alpha": "d09b2f28b16f837c",
+     "L": "440e3cd9e3d290ed",
+     "lml": "b00206d92824d997",
+     "y_stats": "58b2b45f5d932d2e",
+     "mean": "ec44b984575a978d",
+     "std": "2b7b926dd5323998"
+    }
+   ],
+   "infer": [
+    "e8c9793a64ffecd4",
+    "e8c9793a64ffecd4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f8b1eb8570f5e01b",
+    "f8b1eb8570f5e01b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e8c9793a64ffecd4",
+    "e8c9793a64ffecd4"
+   ],
+   "batch": [
+    "d4b37ced285cc86d",
+    "d4b37ced285cc86d"
+   ],
+   "batch_verdict": "STABLE"
   },
   "gp-optimize/base": {
    "verdict": "STABLE",
@@ -2550,15 +2892,95 @@
  },
  "package": {
   "version": "0.8.5",
-  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-gp-optimizer/python/mojolearn",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-gpo-metal/python/mojolearn",
   "numpy": "2.5.2",
   "python": "3.14.7",
   "par_devices": "0",
   "bindings": [
    {
+    "module": "_mojolearn",
+    "sha256": "bfbe0ba1b8322e60ff1864514e2f58863b079d752154ed6536117256c96b1b98",
+    "size": 2597104
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "e68ff79b8edc9bab741a382180988e6b7a48e9b5e3f547968cfcdc248cf78045",
+    "size": 670336
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "14b1890cbab7552859b61a84341ec3f645260155e7fe17be96a8394ea3e98ce0",
+    "size": 3405872
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "5521958e132fbda7fb6332777ac6ae1f59711bf40f81f379023b0a8c58095daa",
+    "size": 3104664
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "a1d35f3e6ad6e5b5b9a4803b9a1f68d89ce23d7b956afbdd0b50de903acd9f6a",
+    "size": 6136544
+   },
+   {
     "module": "_mojolearn_gp",
-    "sha256": "6b0dd1d9832e82b1b32192d9f6821ad7f12050fe364590b2459af8f3b6108ba8",
+    "sha256": "0b4fa7dce1f1475a6bd5bcfead1d700a8c04d8e30201a5f9463dd54e884ef049",
     "size": 1686704
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "5f19efdc05c660746075fc7a7e53a116a3c544dd895bde9d443f4d65cc2b61c1",
+    "size": 955760
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "41962f89bb0c3356cda3e1e8e684324865bdd340cc7f72ac8361539cc3d0de00",
+    "size": 2708880
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "05dcf0dc4a26c54bb0f10f5ef3d4c8aaed89c4b42f883097906961d0a180b6cb",
+    "size": 3743968
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "7c0dee75f367fa13f8af907658d7d2980fa5a75021b43d671fc8ebe03a019341",
+    "size": 362112
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "6efe32d07694423a268c8dc0b57940d920916fd4ba08faf482ae35ff12c4b116",
+    "size": 1647504
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "2fc77e78f9d1ca8193a95cea2e0caccbaa45be3330817798790cf3fb638add4c",
+    "size": 1478400
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "c3d069d53935d9ef0456ddb3e7360f64eff4f21a108eaaaa74c274e3e11e656e",
+    "size": 1789696
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "ca27230430cf3f4a83b5f15093f41d84a3a8ea726b92a523a2b800208d71730a",
+    "size": 1555280
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "38880d102e03bb4ffdb8d1ed413d8f00fd592e57dda131077b51767aac40f249",
+    "size": 2708304
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "69f55a968e3dc50c45a9658a79efd4c6e45d9add5b3ac6e375f9c8e1574632c0",
+    "size": 1322048
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "e457ffb7d4a4bfb6c0f8a82ddf0d5703b34fdf9ceeb4760fd7106d61e7d6ede6",
+    "size": 607104
    }
   ]
  }

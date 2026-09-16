@@ -1,0 +1,89 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 2 lane(s); 163 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_mamba_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=bfb8f725ab2b30a94e8596b407775095e37c2508
+| lane/fixture                 | verdict    | cpu-apple-m4     | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| par-samba-clip/base          | IDENTICAL x4 | 387a63aafbcce06d | 387a63aafbcce06d | 387a63aafbcce06d | 387a63aafbcce06d |
+| par-samba-clip/denormal      | IDENTICAL x4 | 8c2ae3ff8e254f9b | 8c2ae3ff8e254f9b | 8c2ae3ff8e254f9b | 8c2ae3ff8e254f9b |
+| par-samba-clip/denormal_ftz  | IDENTICAL x4 | 374ecd21fbc5cb69 | 374ecd21fbc5cb69 | 374ecd21fbc5cb69 | 374ecd21fbc5cb69 |
+| par-samba-clip/dupes         | IDENTICAL x4 | b8ced390472a553d | b8ced390472a553d | b8ced390472a553d | b8ced390472a553d |
+| par-samba-clip/hashed        | IDENTICAL x4 | e963a3a21f0c5297 | e963a3a21f0c5297 | e963a3a21f0c5297 | e963a3a21f0c5297 |
+| par-samba-clip/negative      | IDENTICAL x4 | e2b57bbef5c259df | e2b57bbef5c259df | e2b57bbef5c259df | e2b57bbef5c259df |
+| par-samba-clip/odd           | IDENTICAL x4 | 387a63aafbcce06d | 387a63aafbcce06d | 387a63aafbcce06d | 387a63aafbcce06d |
+| par-samba-clip/ties          | IDENTICAL x4 | 9ccee51aa073aff8 | 9ccee51aa073aff8 | 9ccee51aa073aff8 | 9ccee51aa073aff8 |
+| par-samba-clip/wide          | IDENTICAL x4 | 53b13d6e08035dd3 | 53b13d6e08035dd3 | 53b13d6e08035dd3 | 53b13d6e08035dd3 |
+| par-samba/base               | IDENTICAL x4 | 359834bee4b2789a | 359834bee4b2789a | 359834bee4b2789a | 359834bee4b2789a |
+| par-samba/denormal           | IDENTICAL x4 | c04ab1019588d438 | c04ab1019588d438 | c04ab1019588d438 | c04ab1019588d438 |
+| par-samba/denormal_ftz       | IDENTICAL x4 | afc67288c7c3a521 | afc67288c7c3a521 | afc67288c7c3a521 | afc67288c7c3a521 |
+| par-samba/dupes              | IDENTICAL x4 | bbe199c298e7016f | bbe199c298e7016f | bbe199c298e7016f | bbe199c298e7016f |
+| par-samba/hashed             | IDENTICAL x4 | 78027e9d4a9ee36a | 78027e9d4a9ee36a | 78027e9d4a9ee36a | 78027e9d4a9ee36a |
+| par-samba/negative           | IDENTICAL x4 | 3cacebe716d76ff0 | 3cacebe716d76ff0 | 3cacebe716d76ff0 | 3cacebe716d76ff0 |
+| par-samba/odd                | IDENTICAL x4 | 359834bee4b2789a | 359834bee4b2789a | 359834bee4b2789a | 359834bee4b2789a |
+| par-samba/ties               | IDENTICAL x4 | f3eb2f9e54c68bf7 | f3eb2f9e54c68bf7 | f3eb2f9e54c68bf7 | f3eb2f9e54c68bf7 |
+| par-samba/wide               | IDENTICAL x4 | b9a6f11655fecdf2 | b9a6f11655fecdf2 | b9a6f11655fecdf2 | b9a6f11655fecdf2 |
+
+summary: IDENTICAL=18
+
+| lane/fixture                 | column | verdict      | cpu-apple-m4     | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| par-samba-clip/base          | infer  | IDENTICAL x4 | 3c42e52ff16765ef | 3c42e52ff16765ef | 3c42e52ff16765ef | 3c42e52ff16765ef |
+| par-samba-clip/base          | model  | IDENTICAL x4 | 2807164675116cdb | 2807164675116cdb | 2807164675116cdb | 2807164675116cdb |
+| par-samba-clip/base          | batch  | IDENTICAL x4 | b76cef8b3c5cab10 | b76cef8b3c5cab10 | b76cef8b3c5cab10 | b76cef8b3c5cab10 |
+| par-samba-clip/denormal      | infer  | IDENTICAL x4 | cf7f2ccb7812ed87 | cf7f2ccb7812ed87 | cf7f2ccb7812ed87 | cf7f2ccb7812ed87 |
+| par-samba-clip/denormal      | model  | IDENTICAL x4 | 4f2fc43b147d1be1 | 4f2fc43b147d1be1 | 4f2fc43b147d1be1 | 4f2fc43b147d1be1 |
+| par-samba-clip/denormal      | batch  | IDENTICAL x4 | 5396feefc8346a0a | 5396feefc8346a0a | 5396feefc8346a0a | 5396feefc8346a0a |
+| par-samba-clip/denormal_ftz  | infer  | IDENTICAL x4 | 5b9e3d287c536c7d | 5b9e3d287c536c7d | 5b9e3d287c536c7d | 5b9e3d287c536c7d |
+| par-samba-clip/denormal_ftz  | model  | IDENTICAL x4 | d55f9ae234ccc49c | d55f9ae234ccc49c | d55f9ae234ccc49c | d55f9ae234ccc49c |
+| par-samba-clip/denormal_ftz  | batch  | IDENTICAL x4 | a11c050920337e57 | a11c050920337e57 | a11c050920337e57 | a11c050920337e57 |
+| par-samba-clip/dupes         | infer  | IDENTICAL x4 | e698edca59d268ae | e698edca59d268ae | e698edca59d268ae | e698edca59d268ae |
+| par-samba-clip/dupes         | model  | IDENTICAL x4 | b008c852a628854e | b008c852a628854e | b008c852a628854e | b008c852a628854e |
+| par-samba-clip/dupes         | batch  | IDENTICAL x4 | fb2af36d443533b1 | fb2af36d443533b1 | fb2af36d443533b1 | fb2af36d443533b1 |
+| par-samba-clip/hashed        | infer  | IDENTICAL x4 | 36caeedd4f67d5b5 | 36caeedd4f67d5b5 | 36caeedd4f67d5b5 | 36caeedd4f67d5b5 |
+| par-samba-clip/hashed        | model  | IDENTICAL x4 | fafb34a8007e8a0c | fafb34a8007e8a0c | fafb34a8007e8a0c | fafb34a8007e8a0c |
+| par-samba-clip/hashed        | batch  | IDENTICAL x4 | cbe62bff3728b910 | cbe62bff3728b910 | cbe62bff3728b910 | cbe62bff3728b910 |
+| par-samba-clip/negative      | infer  | IDENTICAL x4 | 0c2d9b48bf8a7933 | 0c2d9b48bf8a7933 | 0c2d9b48bf8a7933 | 0c2d9b48bf8a7933 |
+| par-samba-clip/negative      | model  | IDENTICAL x4 | d4321cd95f3136a3 | d4321cd95f3136a3 | d4321cd95f3136a3 | d4321cd95f3136a3 |
+| par-samba-clip/negative      | batch  | IDENTICAL x4 | bf7953af6b60040b | bf7953af6b60040b | bf7953af6b60040b | bf7953af6b60040b |
+| par-samba-clip/odd           | infer  | IDENTICAL x4 | 3c42e52ff16765ef | 3c42e52ff16765ef | 3c42e52ff16765ef | 3c42e52ff16765ef |
+| par-samba-clip/odd           | model  | IDENTICAL x4 | 2807164675116cdb | 2807164675116cdb | 2807164675116cdb | 2807164675116cdb |
+| par-samba-clip/odd           | batch  | IDENTICAL x4 | b76cef8b3c5cab10 | b76cef8b3c5cab10 | b76cef8b3c5cab10 | b76cef8b3c5cab10 |
+| par-samba-clip/ties          | infer  | IDENTICAL x4 | 71932c1b2cb73896 | 71932c1b2cb73896 | 71932c1b2cb73896 | 71932c1b2cb73896 |
+| par-samba-clip/ties          | model  | IDENTICAL x4 | bc2ee9ab693e2300 | bc2ee9ab693e2300 | bc2ee9ab693e2300 | bc2ee9ab693e2300 |
+| par-samba-clip/ties          | batch  | IDENTICAL x4 | b34db70fee130cf0 | b34db70fee130cf0 | b34db70fee130cf0 | b34db70fee130cf0 |
+| par-samba-clip/wide          | infer  | IDENTICAL x4 | f234aa064f3bd4f1 | f234aa064f3bd4f1 | f234aa064f3bd4f1 | f234aa064f3bd4f1 |
+| par-samba-clip/wide          | model  | IDENTICAL x4 | de15105c83cd98c8 | de15105c83cd98c8 | de15105c83cd98c8 | de15105c83cd98c8 |
+| par-samba-clip/wide          | batch  | IDENTICAL x4 | a9b01c132c43de42 | a9b01c132c43de42 | a9b01c132c43de42 | a9b01c132c43de42 |
+| par-samba/base               | infer  | IDENTICAL x4 | c663dd4766895890 | c663dd4766895890 | c663dd4766895890 | c663dd4766895890 |
+| par-samba/base               | model  | IDENTICAL x4 | 40a81f8c42e2256b | 40a81f8c42e2256b | 40a81f8c42e2256b | 40a81f8c42e2256b |
+| par-samba/base               | batch  | IDENTICAL x4 | 09eefddb12772255 | 09eefddb12772255 | 09eefddb12772255 | 09eefddb12772255 |
+| par-samba/denormal           | infer  | IDENTICAL x4 | fb72fcf2fb2ad224 | fb72fcf2fb2ad224 | fb72fcf2fb2ad224 | fb72fcf2fb2ad224 |
+| par-samba/denormal           | model  | IDENTICAL x4 | 9fc72e4c424419cc | 9fc72e4c424419cc | 9fc72e4c424419cc | 9fc72e4c424419cc |
+| par-samba/denormal           | batch  | IDENTICAL x4 | 39efa7f425575919 | 39efa7f425575919 | 39efa7f425575919 | 39efa7f425575919 |
+| par-samba/denormal_ftz       | infer  | IDENTICAL x4 | f3e42b50f51378ce | f3e42b50f51378ce | f3e42b50f51378ce | f3e42b50f51378ce |
+| par-samba/denormal_ftz       | model  | IDENTICAL x4 | aa31d80002abbd6c | aa31d80002abbd6c | aa31d80002abbd6c | aa31d80002abbd6c |
+| par-samba/denormal_ftz       | batch  | IDENTICAL x4 | 3c10388ca139a76c | 3c10388ca139a76c | 3c10388ca139a76c | 3c10388ca139a76c |
+| par-samba/dupes              | infer  | IDENTICAL x4 | 2853920460831149 | 2853920460831149 | 2853920460831149 | 2853920460831149 |
+| par-samba/dupes              | model  | IDENTICAL x4 | 2316354c8dc29b3d | 2316354c8dc29b3d | 2316354c8dc29b3d | 2316354c8dc29b3d |
+| par-samba/dupes              | batch  | IDENTICAL x4 | 9c69d39f197def58 | 9c69d39f197def58 | 9c69d39f197def58 | 9c69d39f197def58 |
+| par-samba/hashed             | infer  | IDENTICAL x4 | cd09020cd23ba0bb | cd09020cd23ba0bb | cd09020cd23ba0bb | cd09020cd23ba0bb |
+| par-samba/hashed             | model  | IDENTICAL x4 | a7965a8a91b70d4e | a7965a8a91b70d4e | a7965a8a91b70d4e | a7965a8a91b70d4e |
+| par-samba/hashed             | batch  | IDENTICAL x4 | 514770006708e9a0 | 514770006708e9a0 | 514770006708e9a0 | 514770006708e9a0 |
+| par-samba/negative           | infer  | IDENTICAL x4 | 13993c81dbf7c04f | 13993c81dbf7c04f | 13993c81dbf7c04f | 13993c81dbf7c04f |
+| par-samba/negative           | model  | IDENTICAL x4 | a54857b10778d87a | a54857b10778d87a | a54857b10778d87a | a54857b10778d87a |
+| par-samba/negative           | batch  | IDENTICAL x4 | 7da5afd7a9e3d5e7 | 7da5afd7a9e3d5e7 | 7da5afd7a9e3d5e7 | 7da5afd7a9e3d5e7 |
+| par-samba/odd                | infer  | IDENTICAL x4 | c663dd4766895890 | c663dd4766895890 | c663dd4766895890 | c663dd4766895890 |
+| par-samba/odd                | model  | IDENTICAL x4 | 40a81f8c42e2256b | 40a81f8c42e2256b | 40a81f8c42e2256b | 40a81f8c42e2256b |
+| par-samba/odd                | batch  | IDENTICAL x4 | 09eefddb12772255 | 09eefddb12772255 | 09eefddb12772255 | 09eefddb12772255 |
+| par-samba/ties               | infer  | IDENTICAL x4 | a8df84421515d634 | a8df84421515d634 | a8df84421515d634 | a8df84421515d634 |
+| par-samba/ties               | model  | IDENTICAL x4 | dc26f60c944cedf6 | dc26f60c944cedf6 | dc26f60c944cedf6 | dc26f60c944cedf6 |
+| par-samba/ties               | batch  | IDENTICAL x4 | 71be58f89201f389 | 71be58f89201f389 | 71be58f89201f389 | 71be58f89201f389 |
+| par-samba/wide               | infer  | IDENTICAL x4 | 561cbc9176182841 | 561cbc9176182841 | 561cbc9176182841 | 561cbc9176182841 |
+| par-samba/wide               | model  | IDENTICAL x4 | c68ee79e31dc0e49 | c68ee79e31dc0e49 | c68ee79e31dc0e49 | c68ee79e31dc0e49 |
+| par-samba/wide               | batch  | IDENTICAL x4 | a45b112b42f1ed51 | a45b112b42f1ed51 | a45b112b42f1ed51 | a45b112b42f1ed51 |
+
+summary (infer/model): IDENTICAL=36
+summary (batch): IDENTICAL=18
+summary (rlpair): 
+require-columns 4 over ['par-samba', 'par-samba-clip']: OK

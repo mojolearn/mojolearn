@@ -730,6 +730,16 @@ TRAINING_LANE_NAMES = {
     # on CPU only at one device, where the GPU binding's range split is the
     # plain path; two devices refuse by name.
     "par-mlp": "the small MLP trained over ordered logical gradient shards",
+    # Wave 3 (lane/cpu-verifier-par-samba, 2026-09-16): the same driver over
+    # the Samba stack. ParallelNeuralTrainer sends one samba_gradient request
+    # per logical shard (two windows of (2, 17)) from the non-cooperative
+    # pool, and one samba_update that folds them in shard order with
+    # ordered_sum_gradients and steps the optimizer, on the training host
+    # binding with the mamba and transformer families' blocks. The clip lane
+    # adds the global norm (max_norm=0.5), the arithmetic the covered
+    # samba-untied-dropout-accum lane checks. One device only, as par-mlp.
+    "par-samba": "the Samba stack trained over ordered logical gradient shards",
+    "par-samba-clip": "the Samba stack trained over ordered logical gradient shards under a global norm clip",
     # The Embedding layer and IVFIndex (lane/cpu-training-embedding-ivf,
     # 2026-09-15). Embedding's gather and fold, both execution plans, the
     # padding row and the microbatch carry, through
@@ -1846,7 +1856,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "par-mlp",
-                        "samba", "samba-untied-dropout-accum"),
+                        "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
