@@ -1,0 +1,40 @@
+{
+  "commit": null,
+  "estimator": "AgglomerativeClustering",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "AMD EPYC 7742 64-Core Processor",
+    "family": "23",
+    "isa": [
+      "avx2",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "49",
+    "python": "3.14.7",
+    "release": "6.8.0-124-generic",
+    "stepping": "0",
+    "system": "Linux",
+    "vendor": "AuthenticAMD"
+  },
+  "kind": "negative",
+  "lane": "agglomerative",
+  "model_sha256": "573732d2cc0397a851d00f80ccddab68b4c3eca7645126b6b517b43e4b312b4c",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "3a6472714f51d8ab",
+    "predict": {
+      "dtype": "<i4",
+      "sha256": "5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+      "shape": [
+        256
+      ]
+    },
+    "seconds": 0.001385
+  },
+  "recorded_at": "2026-09-16T16:49:15+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "cuda",
+  "x_sha256": "847c388bfeba3f3c07afd7ef560fc8a4f09111dfa48339717efd190e64ce72cf"
+}

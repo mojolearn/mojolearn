@@ -10,25 +10,38 @@ loaded by path like the byte LM's, the forest's and the tokenizer's:
   `MLPInference`                the small 8-16-3 MLP's logits, from a
                                 `SmallMLPTrainer` checkpoint or its four
                                 weights
-  `TransformerBlockInference`   `TransformerBlock.forward` from a zero state
-                                (the stateless prefill, full causal or a
+  `TransformerBlockInference`   `TransformerBlock.forward` (full causal or a
                                 sliding window, ragged `lengths` included),
-                                from the block's nine named weights
-  `Mamba1BlockInference`,       the Mamba blocks' `forward` from a zero
-  `Mamba2BlockInference`,       state (ragged `lengths` included), from
-  `Mamba3BlockInference`        their named weights
+                                `allocate_state` and `step`, from the block's
+                                nine named weights
+  `Mamba1BlockInference`,       the Mamba blocks' `forward` (ragged
+  `Mamba2BlockInference`,       `lengths` included), `allocate_state` and
+  `Mamba3BlockInference`        `step`, from their named weights
                                 (lane/inference-neural-forward)
-  `SambaInference`              `SambaStack.forward`'s logits, from a
+  `SambaInference`              `SambaStack.forward`'s logits, plus
+                                `allocate_state` and `step`, from a
                                 `SambaStack.save_checkpoint` file or a
                                 config and its registry's weights
 
-None trains, and none can: no optimizer, loss, backward or decode
-cache is exported by the binding. Training stays on a GPU (and, for internal
+INCREMENTAL DECODING IS PUBLIC HERE SINCE lane/stateful-cpu-decoding
+(2026-09-16) and it is not a second model. A carried state, a `step` and a
+cache allocation were refused by name until then because the binding
+exported the fresh entries alone; it now exports the state-carrying ones as
+well, and each class reaches its GPU parent's own `_call`, so prefill and
+decode are ONE spelling. `tools/step_vs_full_check.py` measures on the CPU
+column that decoding a sequence one token at a time with a carried state is
+BITWISE the same sequence run as one fresh-state forward pass, position by
+position, and fires with the first differing position and both values when
+one carried cell is moved by one ULP.
+
+None trains, and none can: no optimizer, loss or backward is exported by
+the binding. Training stays on a GPU (and, for internal
 verification only, on the source reference host bindings). The arithmetic is
 the same host functions the reference bindings call for the same steps, so
 the answer is meant to be the GPU columns' bits; `tools/identity_break.py`'s
-`mlp`, `transformer` and `transformer-window` lanes measure that on a CPU
-column, where their held-out and batch cells run through these classes.
+`mlp`, `transformer`, `transformer-window` and `*-decode` lanes measure that
+on a CPU column, where their held-out and batch cells run through these
+classes.
 
 The binding is resolved on first use, so an install without it still
 imports and raises BY NAME when touched.
@@ -44,9 +57,8 @@ from ._mlp_impl import (
     _FILE_LIMIT, _FILE_SCHEMA, _NAMES, _SHAPES, _array, _batch, _canonical,
     _decode_state, _unique_object, _validate_state,
 )
-from ._transformer_impl import TransformerBlock, _batch_tokens
-from ._mamba_impl import Mamba1Block, Mamba2Block, Mamba3Block
-from ._mamba_impl import _batch_tokens as _mamba_batch_tokens, _f32_strict
+from ._transformer_impl import TransformerBlock
+from ._mamba_impl import Mamba1Block, Mamba2Block, Mamba3Block, _f32_strict
 from ._arrays import _addr, _addr_ro
 from ._bufcheck import le_bytes, probe
 from ._buffer import as_i32_c, frombytes
@@ -123,116 +135,75 @@ class MLPInference:
 class TransformerBlockInference(TransformerBlock):
     """Forward-only `TransformerBlock` on the CPU: the same constructor
     (`weights` by the nine names, `n_heads`, `n_kv_heads`, `head_dim`,
-    `window`) and the same weight checks, and `forward(x, lengths=None)`
-    from a zero state, which is `TransformerBlock.forward(x)` with
-    `state=None`. There is no output head in a block, so there are no
-    logits to expose; a model's logits are the caller's projection of this
-    output. A carried state, `step`, `allocate_state` and `backward` are
-    refused by name."""
+    `window`) and the same weight checks, and the block's whole INFERENCE
+    surface over the shipped neural binding -- `forward(x, lengths=None)`
+    from a zero state, `allocate_state(B, max_tokens)`, `forward(x, state)`
+    and `step(x, state)`. There is no output head in a block, so there are
+    no logits to expose; a model's logits are the caller's projection of
+    this output. Only `backward` is refused by name: the binding exports no
+    VJP.
+
+    NOTHING IS OVERRIDDEN HERE EXCEPT THE BINDING (lane/stateful-cpu-
+    decoding, 2026-09-16). Until that lane this class carried its own
+    `forward` plus three refusals, and the refusals were honest -- the
+    binding exported `transformer_forward_fresh` alone. It now exports
+    `transformer_forward` and `transformer_decode_step` as well, so the
+    parent's own `_call` is the arithmetic, which is the point: a decode
+    step is the prefill entry at L = 1 with the cache carried, ONE
+    spelling, and `tools/step_vs_full_check.py` measures on this column
+    that the two agree bitwise at every position."""
 
     def _extension(self):
         return _binding()
 
-    def forward(self, x, state=None, *, lengths=None):
-        what = "TransformerBlockInference.forward"
-        if state is not None:
-            raise ValueError(
-                f"mojolearn {what}: a carried state is not supported; this class runs "
-                "the stateless prefill only (TransformerBlock carries state on a GPU)")
-        x = _batch_tokens(x, what, self.d_model, False)
-        ext = self._extension()
-        if lengths is None:
-            return self._call_fresh(x, ext)
-        return _ragged.ragged_forward(lambda xp: self._call_fresh(xp, ext), x, None, lengths, "<f4", what)[0]
-
-    def _refuse(self, name):
-        raise NotImplementedError(
-            f"mojolearn TransformerBlockInference.{name}: inference is the stateless "
-            "forward only; decode steps, carried states and backward run on TransformerBlock")
-
-    def step(self, x, state):
-        self._refuse("step")
-
-    def allocate_state(self, batch_size, max_tokens):
-        self._refuse("allocate_state")
-
     def backward(self, x, grad_output):
-        self._refuse("backward")
+        raise NotImplementedError(
+            "mojolearn TransformerBlockInference.backward: inference is forward only; "
+            "the backward pass runs on TransformerBlock over a training binding")
 
 
 # ---------------------------------------------------------------- Mamba (lane/inference-neural-forward, 2026-09-15)
 
 class _RecurrentBlockInference:
     """Forward-only Mamba block on the CPU: the GPU class's constructor and
-    weight checks, and `forward(x, lengths=None)` from a zero state, which is
-    the GPU block's `forward(x)` with `state=None` (the final state is
-    discarded). Carrying a state, `step`, `allocate_state` and `backward`
-    are refused by name. The binding writes only `y`."""
+    weight checks, and the block's whole INFERENCE surface over the shipped
+    neural binding -- `forward(x, lengths=None)` from a zero state,
+    `allocate_state(B)`, `forward(x, state)` and `step(x, state)`. Only
+    `backward` is refused by name: the binding exports no VJP.
 
-    _ENTRY = None
+    NOTHING IS OVERRIDDEN HERE EXCEPT THE BINDING AND `backward`
+    (lane/stateful-cpu-decoding, 2026-09-16). Until that lane each class
+    reached an eleven- or twelve-address `*_forward_fresh` entry of its own
+    and refused `step`, `allocate_state` and a carried state, and the
+    refusals were honest -- the binding exported no state-carrying entry.
+    It now exports `mamba{1,2,3}_forward` and `mamba{1,2,3}_decode_step`
+    with the block classes' own contracts, so the parent's `_call` is the
+    arithmetic. The three block oracles run prefill and decode through ONE
+    call site (a decode step is the same oracle at l = 1 carrying the
+    state), and `tools/step_vs_full_check.py` measures on this column that
+    a step-by-step decode is bitwise the one-shot prefill at every
+    position."""
 
     def _extension(self):
         return _binding()
 
-    def _params(self, b, l):
-        return [b, l, self.d_model]
-
-    def _fresh(self, x, ext):
-        b, l = int(x.shape[0]), int(x.shape[1])
-        y = empty((b, l, self.d_model), "<f4")
-        addrs = [addr_ro(x, name="x")] + [addr_ro(w, name="weight") for w in self._w] + [addr(y, name="y")]
-        wrote = int(getattr(ext, self._ENTRY)(addrs, self._params(b, l)))
-        if wrote != b * l * self.d_model:
-            raise RuntimeError(f"mojolearn {type(self).__name__}: the binding wrote {wrote} cells")
-        return y
-
-    def forward(self, x, state=None, *, lengths=None):
-        what = type(self).__name__ + ".forward"
-        if state is not None:
-            raise ValueError(
-                f"mojolearn {what}: a carried state is not supported; this class runs the "
-                "zero-state prefill only (the GPU block carries state)")
-        x = _mamba_batch_tokens(x, what, self.d_model, False)
-        ext = self._extension()
-        if lengths is None:
-            return self._fresh(x, ext)
-        return _ragged.ragged_forward(lambda xp: self._fresh(xp, ext), x, None, lengths, "<f4", what)[0]
-
-    __call__ = forward
-
-    def _refuse(self, name):
-        raise NotImplementedError(
-            f"mojolearn {type(self).__name__}.{name}: inference is the zero-state forward only; "
-            "decode steps, carried states and backward run on the GPU block class")
-
-    def step(self, x, state):
-        self._refuse("step")
-
-    def allocate_state(self, batch_size):
-        self._refuse("allocate_state")
-
     def backward(self, x, grad_output):
-        self._refuse("backward")
+        raise NotImplementedError(
+            f"mojolearn {type(self).__name__}.backward: inference is forward only; "
+            "the backward pass runs on the GPU block class over a training binding")
 
 
 class Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block):
     """Forward-only `Mamba1Block` on the CPU, from its ten named weights."""
-    _ENTRY = "mamba1_forward_fresh"
 
 
 class Mamba2BlockInference(_RecurrentBlockInference, Mamba2Block):
     """Forward-only `Mamba2Block` on the CPU, from its nine named weights and
     `dt_limit` (default `(0.0, inf)`)."""
-    _ENTRY = "mamba2_forward_fresh"
-
-    def _params(self, b, l):
-        lo, hi = self.dt_limit
-        return [b, l, self.d_model, lo, hi]
 
 
 class Mamba3BlockInference(_RecurrentBlockInference, Mamba3Block):
     """Forward-only `Mamba3Block` on the CPU, from its nine named weights."""
-    _ENTRY = "mamba3_forward_fresh"
 
 
 # ---------------------------------------------------------------- Samba
@@ -242,11 +213,13 @@ class SambaInference:
     float32 logits out, from a `SambaStack.save_checkpoint` file
     (`from_checkpoint`) or a `SambaConfig` and the registry's weights by name.
     The arithmetic is the stack's training forward with no dropout: the
-    embedding gather, each block's zero-state forward in stack order
+    embedding gather, each block's forward in stack order
     (`Mamba3BlockInference`, `TransformerBlockInference`), the final RMSNorm
     and the tied or untied head, each over the shipped neural binding. The
-    weights are copied at construction. No optimizer, loss, state, step or
-    backward is reachable."""
+    weights are copied at construction. `allocate_state(B, max_tokens)`,
+    `forward(ids, state)` and `step(ids, state)` carry the decode state
+    (lane/stateful-cpu-decoding, 2026-09-16); no optimizer, loss or backward
+    is reachable."""
 
     def __init__(self, config, weights):
         from ._samba_impl import SambaConfig
@@ -317,19 +290,84 @@ class SambaInference:
         return as_i32_c(x, ndim=2, name="inputs")[0]
 
     def forward(self, inputs, state=None, *, lengths=None):
+        """`(B, L)` ids in, `(B, L, vocab)` float32 logits out.
+
+        `state=None` is the stateless forward, every block from a zero
+        state. Pass a `SambaState` (`allocate_state`) to carry the decode
+        state instead: every block's own state is read at entry and updated
+        in place, so a later `forward` or `step` on that state continues the
+        sequence (lane/stateful-cpu-decoding, 2026-09-16). `lengths` applies
+        to the stateless forward only."""
         what = "SambaInference.forward"
-        if state is not None:
-            raise ValueError(f"mojolearn {what}: a carried state is not supported; this class runs "
-                             "the stateless forward only (SambaStack carries state)")
         ids = self._ids(inputs)
         if lengths is not None:
+            if state is not None:
+                raise ValueError(f"mojolearn {what}: lengths= applies to the stateless "
+                                 "forward only; pass state=None")
             return _ragged.ragged_forward(self.forward, ids, None, lengths, "<i4", what)[0]
+        return self._run(ids, state, False, what)
+
+    logits = forward
+    __call__ = forward
+
+    def allocate_state(self, batch_size, max_tokens):
+        """The zero decode state for `batch_size` sequences of up to
+        `max_tokens` positions: one block state per layer, in stack order
+        (`Mamba3BlockInference.allocate_state(B)`,
+        `TransformerBlockInference.allocate_state(B, max_tokens)`). Every
+        piece is caller-owned and documented by its block class, exactly as
+        `SambaStack.allocate_state` hands them out."""
+        from ._samba_impl import SambaState
+        b, smax = int(batch_size), int(max_tokens)
+        if b < 1 or smax < 1:
+            raise ValueError("mojolearn.SambaInference.allocate_state: batch_size "
+                             "and max_tokens must be positive")
+        layers = []
+        for kind, blk in zip(self.config.layers, self._blocks):
+            layers.append(blk.allocate_state(b) if kind == "mamba3"
+                          else blk.allocate_state(b, smax))
+        return SambaState(b, smax, layers)
+
+    def step(self, inputs, state):
+        """One decode token per row: `(B,)` or `(B, 1)` ids in, `(B, vocab)`
+        float32 logits out, `state` updated in place. It is the stateful
+        `forward` at L = 1 with each block's `step`; the embedding, the
+        final RMSNorm and the head are the same three binding entries the
+        stateless forward calls, and they are per-token, so a step's logits
+        are the logits the one-shot forward writes at that position."""
+        what = "SambaInference.step"
+        if state is None:
+            raise ValueError("mojolearn.SambaInference.step: state is required "
+                             "(allocate_state(B, max_tokens) makes the fresh one)")
+        pb = probe(inputs)
+        if len(pb.shape) not in (1, 2) or (len(pb.shape) == 2 and pb.shape[1] != 1):
+            raise ValueError("mojolearn.SambaInference.step: inputs must be (B,) or "
+                             "(B, 1) integer ids")
+        rows = int(pb.shape[0])
+        ids = as_i32_c(inputs, ndim=None, name="inputs")[0].reshape((rows, 1))
+        out = self._run(ids, state, True, what)
+        return out.reshape((rows, self.config.vocab))
+
+    def _run(self, ids, state, step, what):
+        """The stack's arithmetic: the embedding gather, each block in stack
+        order, the final RMSNorm and the tied or untied head. ONE spelling
+        for the stateless forward, the stateful forward and the decode step
+        -- the only difference is what each block is handed."""
+        from ._samba_impl import SambaState
         c = self.config
         b, l = int(ids.shape[0]), int(ids.shape[1])
         if b < 1 or l < 1:
             raise ValueError(f"mojolearn {what}: B and L must be positive")
         if ids.min() < 0 or ids.max() >= c.vocab:
             raise ValueError(f"mojolearn {what}: inputs must be in [0, vocab)")
+        if state is not None:
+            if not isinstance(state, SambaState):
+                raise TypeError(f"mojolearn {what}: state must be a SambaState (allocate_state)")
+            if state.batch_size != b or len(state.layers) != len(c.layers):
+                raise ValueError(
+                    f"mojolearn {what}: the state holds {state.batch_size} rows and "
+                    f"{len(state.layers)} layers, the call has B = {b} and the stack "
+                    f"{len(c.layers)} layers")
         ext = _binding()
         n, d = b * l, c.d_model
         flat_ids = ids.reshape((n,))
@@ -337,8 +375,13 @@ class SambaInference:
         emb = self._w["embed.weight"]
         ext.embedding_forward([_addr(x), _addr_ro(emb), _addr_ro(flat_ids)], [n, c.vocab, d])
         x = x.reshape((b, l, d))
-        for blk in self._blocks:
-            x = blk.forward(x)
+        for i, blk in enumerate(self._blocks):
+            if state is None:
+                x = blk.forward(x)
+            elif step:
+                x = blk.step(x, state.layers[i])
+            else:
+                x = blk.forward(x, state.layers[i])
         xf = x.reshape((n, d))
         hn = empty((n, d), "<f4")
         ext.rms_norm_forward([_addr(hn), _addr_ro(xf), _addr_ro(self._w["norm_f.weight"])], [n, d, c.norm_eps])
@@ -347,19 +390,10 @@ class SambaInference:
         ext.linear_forward([_addr(logits), _addr_ro(hn), _addr_ro(head)], [n, c.vocab, d])
         return logits.reshape((b, l, c.vocab))
 
-    logits = forward
-    __call__ = forward
-
     def _refuse(self, name):
         raise NotImplementedError(
-            f"mojolearn SambaInference.{name}: inference is the stateless forward only; decode "
-            "steps, carried states, losses and training run on SambaStack")
-
-    def step(self, inputs, state):
-        self._refuse("step")
-
-    def allocate_state(self, batch_size, max_tokens):
-        self._refuse("allocate_state")
+            f"mojolearn SambaInference.{name}: inference is forward only; losses, "
+            "backward and training run on SambaStack")
 
     def loss(self, inputs, targets):
         self._refuse("loss")

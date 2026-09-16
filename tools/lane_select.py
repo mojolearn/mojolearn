@@ -128,6 +128,12 @@ _MOJO_IMPORT_RE = re.compile(r"^\s*(?:from\s+([a-zA-Z0-9_.]+)\s+import|import\s+
 #: edges it would have contributed were the ones dropped here.
 ENUMERATOR_MAX_BINDINGS = 3
 
+#: A package file extended (subclassed or patched) by more than this many
+#: others defines a base everything inherits, and "X extends it" then says
+#: nothing about which lane X belongs to. Measured 2026-09-16: 23 for
+#: `_mode.py` against 2 for the next, so the gap is not close.
+UNIVERSAL_BASE_MAX_EXTENDERS = 3
+
 
 #: PER-FILE RESULTS ARE MEMOIZED, because the map asks the same question of
 #: the same file once per lane. Without this, deriving the map parsed each
@@ -158,7 +164,8 @@ def _by_path(fn):
 def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
-    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED
+    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
+    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS
     for cache in _CACHES:
         cache.clear()
     _GIT_SHOW.clear()
@@ -166,6 +173,10 @@ def reset_caches():
     _ENUMERATORS = None
     _LANE_SOURCES = None
     _SOURCE_HASHED = None
+    _CONSTANTS = None
+    _EXTENDERS = None
+    _MOJO_CONFORMANCE = None
+    _MOJO_IMPORTERS = None
 
 
 @_by_path
@@ -325,19 +336,126 @@ def enumerator_files():
     return _ENUMERATORS
 
 
+@_by_path
+def _extends(rel):
+    """The names this file's top-level classes INHERIT from, and the names it
+    assigns an attribute on at module level.
+
+    Both are edges that run BACKWARDS along the import graph, and the map
+    followed imports forward only. `neural_inference.py` defines
+    `Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block)`: it imports
+    `_mamba_impl`, so `_mamba_impl` never reaches IT, and the mamba and samba
+    lanes were credited with three of the six lanes that file serves. Deleting
+    those wrappers' `forward` overrides is about as load-bearing as an edit to
+    that file gets, and the map called it none of their business.
+
+    Reported by lane/stateful-cpu-decoding 2026-09-16. An under-attribution is
+    silent and reads as a narrow PASS, which is the failure every other rule
+    here is written against."""
+    tree = _parse(rel)
+    out = set()
+    for node in (tree.body if tree else []):
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                name = getattr(base, "id", None) or getattr(base, "attr", None)
+                if name:
+                    out.add(name)
+        elif isinstance(node, ast.Assign):
+            # MONKEYPATCHING. `SomeClass.method = f` at module level rebinds
+            # behaviour on a class defined somewhere else entirely.
+            for target in node.targets:
+                if isinstance(target, ast.Attribute):
+                    owner = getattr(target.value, "id", None)
+                    if owner:
+                        out.add(owner)
+    return out
+
+
+_EXTENDERS = None
+
+
+def extenders():
+    """file -> the package files it extends, by subclassing or by patching a
+    class on. Built once over the package, then used to walk the import graph
+    BACKWARDS from a lane's closure."""
+    global _EXTENDERS
+    if _EXTENDERS is None:
+        symbols = _python_symbols(_python_files())
+        raw = {}
+        for rel in _python_files():
+            targets = set()
+            for name in _extends(rel):
+                for other in symbols.get(name, ()):
+                    if other != rel:
+                        targets.add(other)
+            if targets:
+                raw[rel] = targets
+        # A BASE EVERYTHING INHERITS IS NOT EVIDENCE ABOUT ONE LANE, the same
+        # argument that makes a whole-surface registry a sink. Measured on this
+        # tree 2026-09-16: `python/mojolearn/_mode.py` is extended by 23
+        # package files and the next most-extended is extended by 2, so every
+        # lane reached _mode.py, pulled in all 23, and the median file went
+        # from 32 lanes to 197. Nothing is lost by dropping it: a change to
+        # _mode.py itself still selects everything that imports it, and an
+        # extender is attributed by its own ordinary edges.
+        fan = {}
+        for targets in raw.values():
+            for rel in targets:
+                fan[rel] = fan.get(rel, 0) + 1
+        universal = {rel for rel, n in fan.items() if n > UNIVERSAL_BASE_MAX_EXTENDERS}
+        out = {}
+        for rel, targets in raw.items():
+            kept = targets - universal
+            if kept:
+                out[rel] = kept
+        _EXTENDERS = out
+    return _EXTENDERS
+
+
+def _extending_files(closure):
+    """Every package file that extends something in `closure`, transitively."""
+    edges = extenders()
+    out, changed = set(), True
+    while changed:
+        changed = False
+        for rel, targets in edges.items():
+            if rel in out or rel in closure:
+                continue
+            if targets & (closure | out):
+                out.add(rel)
+                changed = True
+    return out
+
+
 def _python_closure(seeds, sinks=()):
     """The package's own import closure of `seeds`. A sink is included but not
     followed: the walk stops at a registry rather than stepping through it into
     every other family."""
     out, stack = set(), list(seeds)
-    while stack:
-        rel = stack.pop()
-        if rel in out:
-            continue
-        out.add(rel)
-        if rel not in sinks:
-            stack.extend(_python_imports(rel))
-    return out
+    while True:
+        while stack:
+            rel = stack.pop()
+            if rel in out:
+                continue
+            out.add(rel)
+            if rel not in sinks:
+                stack.extend(_python_imports(rel))
+        # THE EDGE THAT RUNS BACKWARDS. A file that subclasses or patches a
+        # class in this closure can change what the lane computes even though
+        # nothing in the closure imports it.
+        #
+        # ITS IMPORTS ARE FOLLOWED TOO. Leaving them out was tried first and
+        # the whole-tree inversion check caught it: `mamba1` reached
+        # `neural_inference.py` without reaching the `_samba_impl` and
+        # `_transformer_impl` that file imports at module level, so "F imports
+        # B, therefore every lane reaching F reaches B" stopped holding. An
+        # invariant that holds over the WHOLE TREE is worth more than the few
+        # files it costs, and it cost nothing measurable here: the median file
+        # is 33 lanes either way.
+        fresh = _extending_files(out) - out
+        if not fresh:
+            return out
+        stack.extend(fresh)
 
 
 @_by_path
@@ -361,6 +479,67 @@ def _mojo_imports(rel):
             if os.path.exists(os.path.join(ROOT, cand)):
                 out.add(cand)
     return out
+
+
+_MOJO_TRAIT_RE = re.compile(r"^\s*trait\s+([A-Za-z_][A-Za-z0-9_]*)", re.M)
+_MOJO_STRUCT_RE = re.compile(
+    r"^\s*struct\s+[A-Za-z_0-9]+(?:\[[^\]]*\])?\s*\(([^)]*)\)", re.M)
+_MOJO_MAIN_RE = re.compile(r"^\s*(?:fn|def)\s+main\s*\(", re.M)
+
+
+@_by_path
+def is_standalone_program(rel):
+    """Does this Mojo source define its own `main`. Such a file is compiled on
+    its own and linked into no binding, so it cannot change what a lane
+    computes however much of the tree it names."""
+    return bool(_MOJO_MAIN_RE.search(_read(rel)))
+
+
+_MOJO_CONFORMANCE = None
+
+
+def mojo_conformance_edges():
+    """(conforming file, trait, declaring file) for every REPO trait.
+
+    THE MOJO ANALOGUE OF THE PYTHON SUBCLASS EDGE, and the reason it does not
+    need to be followed. In Python a subclass REPLACES behaviour for anyone who
+    constructs it, so the edge runs backwards along imports. In Mojo a struct
+    conforming to a trait is reached only when something parametrises on that
+    trait AND IS HANDED THAT STRUCT BY NAME, and naming a symbol from another
+    file requires importing it. So the dispatcher already imports the
+    implementation and the forward walk already has it.
+
+    Two exemptions, both DERIVED and both checked on this tree rather than
+    asserted:
+
+      * a file with its own `main` is a standalone program. All five files
+        that conform to a repo trait purely to TEST it have one, and none of
+        the seven shipped implementations does.
+      * the conforming file must actually IMPORT the trait's declaration.
+        `core/philox.mojo` and `mamba/host/gen/philox.mojo` each declare their
+        OWN `U32Stream` and neither imports the other, so matching the trait
+        by name alone invented an edge between two unrelated generators and
+        claimed 80 missing lanes."""
+    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS
+    if _MOJO_CONFORMANCE is None:
+        mojo = sorted(f for f in tracked_files() if f.endswith(".mojo"))
+        declared = {}
+        for rel in mojo:
+            for m in _MOJO_TRAIT_RE.finditer(_read(rel)):
+                declared.setdefault(m.group(1), set()).add(rel)
+        out = []
+        for rel in mojo:
+            if is_standalone_program(rel):
+                continue
+            imports = _mojo_imports(rel)
+            for m in _MOJO_STRUCT_RE.finditer(_read(rel)):
+                for base in m.group(1).split(","):
+                    name = base.strip().split("[")[0].strip()
+                    for decl in declared.get(name, ()):
+                        if decl != rel and decl in imports:
+                            out.append((rel, name, decl))
+        _MOJO_CONFORMANCE = sorted(set(out))
+    return _MOJO_CONFORMANCE
 
 
 def _mojo_closure(seeds):
@@ -831,6 +1010,85 @@ def tracked_files():
     return _TRACKED
 
 
+TESTS = os.path.join(PKG, "tests") + os.sep
+
+_IMPORT_OF = r"(?:^|\n)[^\S\n]*(?:from[^\S\n]+[.\w]*\b{0}\b|import[^\S\n]+[.\w]*\b{0}\b)"
+
+
+def test_module_inert(path):
+    """Why this test module cannot move a lane's bits, or None.
+
+    `_python_files()` already leaves `python/mojolearn/tests/` out of the map,
+    on the stated ground that a test cannot change what a lane computes. The
+    selector never acted on that, so every file under it read NOT ATTRIBUTABLE
+    and sent its lane to the full sweep: lane/kmeans-save ended at 212 partly
+    because of `tests/test_host_model_kmeans.py`.
+
+    The ground is only true while nothing outside the tests directory imports
+    the module, so that is what is checked, over the whole tracked tree rather
+    than over the lane corpus: an import from a build script or a tool would
+    still be an import. A test importing another test proves nothing, because
+    both are inert by the same argument.
+
+    This is deliberately NOT routed through `unreachable`, which asks a
+    different question and answers it conservatively: `python/mojolearn/` turns
+    up inside an f-string in `_backend.py` (`' needs python/mojolearn/'`
+    followed by a computed name), which is exactly the constructed-path shape
+    that rule must refuse."""
+    if not path.startswith(TESTS) or not path.endswith(".py"):
+        return None
+    module = os.path.basename(path)[:-3]
+    if len(module) < 4:
+        return None
+    # NOT AN IMPORT LINE. Attacked 2026-09-16 with
+    # `importlib.import_module('mojolearn.tests.test_host_model_kmeans')`,
+    # which an import-statement regex cannot see and which was called inert.
+    # The module NAME is searched instead, anywhere outside the tests
+    # directory, so a dynamic import, a `python -m` line in a script and a
+    # bare mention all count. Over-firing here only costs a sweep.
+    importers = []
+    for rel in sorted(tracked_files()):
+        if rel.startswith(TESTS) or _is_inert(rel) or rel in SELECTION_MACHINERY:
+            continue
+        if not rel.endswith((".py", ".sh", ".toml", ".yml", ".yaml", ".cfg", ".txt", ".in")):
+            continue
+        try:
+            if module in _read(rel):
+                importers.append(rel)
+        except OSError:
+            continue
+    if importers:
+        return None
+    return ("a test module: it is outside the map by construction, because a test cannot change "
+            "what a lane computes, and its name appears nowhere outside python/mojolearn/tests/")
+
+
+_MOJO_IMPORTERS = None
+
+
+def _mojo_importers(path):
+    """The tracked Mojo files that import `path`, by the same resolution the
+    forward walk uses."""
+    global _MOJO_IMPORTERS
+    if _MOJO_IMPORTERS is None:
+        out = {}
+        for rel in tracked_files():
+            if not rel.endswith(".mojo") or _is_inert(rel):
+                continue
+            if is_standalone_program(rel):
+                # A FILE WITH ITS OWN `main` IS A PROGRAM, and a program is
+                # compiled on its own and linked into no binding, so importing
+                # something does not put it in any lane's way. The same
+                # exemption the conformance edge needed, measured the same way.
+                # Without it the three new umap/checks files, which import each
+                # other, each made the others look reachable.
+                continue
+            for target in _mojo_imports(rel):
+                out.setdefault(target, set()).add(rel)
+        _MOJO_IMPORTERS = out
+    return _MOJO_IMPORTERS.get(path, set())
+
+
 def _reaching_corpus():
     """Every file some lane already reaches, plus the harness and the manifest.
 
@@ -905,6 +1163,39 @@ def _named_by_the_corpus(token, skip=(), whole=False):
     return out
 
 
+_JOINERS = frozenset({"join", "Path", "PurePosixPath", "open", "glob", "iglob", "rglob"})
+
+
+@_by_path
+def _path_join_roots(rel):
+    """String constants this Python file hands to a path-building call as its
+    FIRST argument: `os.path.join('bench', name)` yields 'bench'. A directory
+    named this way is being walked or built on, even though its name never
+    appears with a slash."""
+    tree = _parse(rel)
+    out = set()
+    for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+        if not isinstance(node, ast.Call):
+            continue
+        name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+        if name not in _JOINERS:
+            continue
+        for arg in node.args:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                out.add(arg.value.strip("/"))
+            elif isinstance(arg, ast.BinOp) and isinstance(arg.left, ast.Constant) \
+                    and isinstance(arg.left.value, str):
+                out.add(arg.left.value.strip("/"))
+    return out
+
+
+def _joined_with(directory, skip=()):
+    """The corpus files that hand `directory` to a path-building call."""
+    return [rel for rel in _reaching_corpus()
+            if rel.endswith(".py") and rel not in skip and not _is_inert(rel)
+            and rel not in SELECTION_MACHINERY and directory in _path_join_roots(rel)]
+
+
 def unreachable(path):
     """Why NOTHING can reach `path`, or None when something might.
 
@@ -932,6 +1223,15 @@ def unreachable(path):
         return None
     if path in reverse_map():
         return None
+    if path.endswith(".mojo") and _mojo_importers(path):
+        # IMPORTED BY SOMETHING, EVEN SOMETHING THE MAP DOES NOT HAVE. The
+        # corpus is what a lane reaches, and a chain of files the map is
+        # missing votes nowhere: `core/forest_inference_model.mojo` is
+        # imported by `bindings/forest_inference_binding.mojo`, which is
+        # itself outside the map, so nothing in the corpus named either and
+        # the model file read "nothing reaches it". A Mojo import is a
+        # compile-time fact and does not need the corpus to be believed.
+        return None
     stem = os.path.basename(path)
     tokens = [(path, False), (stem, False)]
     if "." in stem:
@@ -954,8 +1254,50 @@ def unreachable(path):
         hits = _named_by_the_corpus(token, skip={path}, whole=whole)
         if hits:
             return None
+    for part in dict.fromkeys(parts):
+        # A DIRECTORY NAMED WITHOUT ITS SLASH, as a bare string handed to a
+        # path join. Attacked 2026-09-16 with
+        # `os.path.join('armprobedir', name + '.bin')`: the slash tokens above
+        # see nothing and the file was called unreachable. Searched
+        # STRUCTURALLY rather than as text, because the bare word `umap` is
+        # also the name of a package module and of a family-table entry, and
+        # matching those would send every new file under umap/ to a sweep.
+        if _joined_with(part, skip={path}):
+            return None
     return ("nothing reaches it: no lane's derived source set contains this path, and no file "
             "that any lane DOES reach names it, its stem or any directory above it")
+
+
+_CONSTANTS = None
+
+
+def module_constants():
+    """Module-level `NAME = "literal"` bindings across the package, so a key
+    written as `_KMEANS_FORMAT` can be compared with one written as
+    `"mojolearn-kmeans-1"`. Best effort: a name that does not resolve is left
+    unresolved and simply has to be new."""
+    global _CONSTANTS
+    if _CONSTANTS is None:
+        out = {}
+        for rel in _python_files():
+            tree = _parse(rel)
+            for node in (tree.body if tree else []):
+                if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            out.setdefault(target.id, node.value.value)
+        _CONSTANTS = out
+    return _CONSTANTS
+
+
+def _key_value(node):
+    """What a dict key resolves to, or None when it cannot be resolved."""
+    if isinstance(node, ast.Constant):
+        return ("const", node.value)
+    if isinstance(node, ast.Name):
+        value = module_constants().get(node.id)
+        return ("const", value) if value is not None else ("name", node.id)
+    return None
 
 
 def _stmt_key(node):
@@ -983,6 +1325,18 @@ def _container_delta(old, new):
         nkeys = [ast.dump(k) for k in new.keys]
         kept = [k for k in nkeys if k in okeys]
         if kept != okeys or len(set(okeys)) != len(okeys):
+            return None
+        # TWO KEYS CAN BE DIFFERENT EXPRESSIONS AND THE SAME VALUE, and then
+        # the later one OVERRIDES the earlier and an existing lane's dispatch
+        # moves. Attacked 2026-09-16 with `"mojolearn-dbscan-" + "1"` beside
+        # `"mojolearn-dbscan-1"`, which was admitted as an addition. A key must
+        # be a literal or a bare name, and the values they resolve to must be
+        # distinct.
+        if any(not isinstance(k, (ast.Constant, ast.Name)) for k in new.keys):
+            return None
+        resolved = [_key_value(k) for k in new.keys]
+        seen = [v for v in resolved if v is not None]
+        if len(set(seen)) != len(seen):
             return None
         oval = dict(zip(okeys, old.values))
         added, changed = [], []
@@ -1162,13 +1516,22 @@ def _harness_segments(text):
     tree = _strip_docstrings(ast.parse(text))
     lanes, others = {}, []
     for node in tree.body:
-        names = [dec.args[0].value for dec in getattr(node, "decorator_list", [])
+        decorators = getattr(node, "decorator_list", [])
+        names = [dec.args[0].value for dec in decorators
                  if (isinstance(dec, ast.Call) and getattr(dec.func, "id", None) == "lane"
                      and dec.args and isinstance(dec.args[0], ast.Constant))]
         dump = ast.dump(node)
-        if names:
+        if names and len(names) == len(decorators):
             for name in names:
                 lanes[name] = dump
+        elif names:
+            # A LANE CARRYING A SECOND DECORATOR IS NOT A LANE BODY. The other
+            # decorator RUNS at import and can touch anything: a fixture table,
+            # a registry, another lane's defaults. Attacked 2026-09-16 with
+            # `@mutate_everything` above `@lane("beta")`, which was admitted as
+            # the one new lane. It goes to `others` now, so any change around
+            # it answers every lane.
+            others.append((getattr(node, "name", None), node, dump))
         else:
             others.append((getattr(node, "name", None), node, dump))
     return lanes, others
@@ -1300,6 +1663,11 @@ def select(paths, ref=None, sources=None):
                 lanes |= set(touched)
                 reasons[path] = f"harness diff touches only these lane bodies: {','.join(touched) or 'none'}"
             continue
+        why_test = test_module_inert(path)
+        if why_test:
+            inert.append(path)
+            reasons[path] = why_test
+            continue
         why_unreachable = unreachable(path)
         if why_unreachable:
             inert.append(path)
@@ -1311,7 +1679,14 @@ def select(paths, ref=None, sources=None):
                              "cannot move a lane's bits (tools/test_lane_select.py covers it)")
             continue
         if path in GLOBAL_PATHS or path in enumerator_files():
-            added = registry_lanes(ref, path, sources) if ref else None
+            if not ref:
+                fallback = True
+                unattributed.append(path)
+                reasons[path] = ("a registry of the whole binding surface. Whether this change is "
+                                 "an ADDITION can only be read from a diff, and no ref was given, "
+                                 "so: every lane. Use --changed-since to get the narrow answer")
+                continue
+            added = registry_lanes(ref, path, sources)
             if added is not None:
                 lanes |= set(added)
                 reasons[path] = (f"a whole-surface registry, but the diff only ADDS to it: every "
@@ -1382,6 +1757,33 @@ def selfcheck():
     return 1 if bad else 0
 
 
+def census(limit):
+    """The files the map credits with FEW lanes, which is where a missing edge
+    hides. A file serving six lanes that the map credits with three is the
+    shape to look for; that is exactly what `neural_inference.py` was on
+    2026-09-16, credited with mlp and the two transformer lanes while also
+    serving four mamba and two samba lanes through subclasses.
+
+    The two inversion checks in `tools/test_lane_select.py` are the
+    mechanical half of this and run over the whole tree. This is the half a
+    person reads."""
+    sources, _ = lane_sources()
+    rev = reverse_map(sources)
+    rows = sorted(((len(lanes), rel) for rel, lanes in rev.items() if len(lanes) <= limit),
+                  key=lambda r: (r[0], r[1]))
+    print(f"# {len(rows)} file(s) attributed to {limit} lane(s) or fewer, of {len(rev)} mapped")
+    for n, rel in rows:
+        defines = ""
+        if rel.endswith(".py"):
+            tree = _parse(rel)
+            names = [x.name for x in (tree.body if tree else [])
+                     if isinstance(x, (ast.ClassDef, ast.FunctionDef))]
+            defines = " defines " + ",".join(names[:6]) + ("..." if len(names) > 6 else "")
+        print(f"#   {n:>3} {rel}{defines}")
+    print(f"# {len(rows)} file(s); a file here that serves more lanes than this is a missing edge")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--changed-since", metavar="REF",
@@ -1397,6 +1799,9 @@ def main(argv=None):
     ap.add_argument("--json", default="", metavar="PATH", help="write the selection as JSON")
     ap.add_argument("--selfcheck", action="store_true", help="every lane maps to real files")
     ap.add_argument("--count", action="store_true", help="print the registry's lane count and exit")
+    ap.add_argument("--census", type=int, default=0, metavar="N",
+                    help="list the files the map attributes to N lanes or fewer, with what each "
+                         "file defines; a missing edge hides in a file credited with too few")
     args = ap.parse_args(argv)
 
     if args.count:
@@ -1404,6 +1809,8 @@ def main(argv=None):
         return 0
     if args.selfcheck:
         return selfcheck()
+    if args.census:
+        return census(args.census)
 
     sources, why = lane_sources()
     every = sorted(sources, key=list(sources).index)

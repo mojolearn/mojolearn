@@ -12,6 +12,7 @@ selector goes quiet, not merely if it errors.
     .pixi/envs/test/bin/python -m pytest tools/test_lane_select.py -q
     python3 tools/test_lane_select.py          # same checks, no pytest
 """
+import ast
 import os
 import re
 import sys
@@ -537,6 +538,53 @@ def test_a_path_nothing_reaches_selects_nothing():
         lane_select.reset_caches()
 
 
+def test_a_test_module_is_inert_unless_something_outside_the_tests_imports_it():
+    """A test cannot change what a lane computes, which is why
+    `_python_files()` leaves `python/mojolearn/tests/` out of the map. The
+    selector never acted on that, so every test file read NOT ATTRIBUTABLE and
+    sent its lane to the full sweep.
+
+    THE ARM THAT MUST DECLINE IS IN THE TREE, not synthesised.
+    `tools/transformer_fresh_prefill_check.py` and
+    `tools/transformer_transfer_check.py` both do
+    `from mojolearn.tests.test_transformer_surface import _weights`, so that
+    one test module is NOT inert while its neighbours are. If that import ever
+    goes away this test says so rather than quietly losing its control."""
+    tests = os.path.join(lane_select.ROOT, "python", "mojolearn", "tests")
+    names = sorted(n for n in os.listdir(tests) if n.endswith(".py"))
+    assert len(names) > 50, "the tests directory is not where this test thinks it is"
+
+    imported = "python/mojolearn/tests/test_transformer_surface.py"
+    assert lane_select.test_module_inert(imported) is None, (
+        "test_transformer_surface is imported by tools/transformer_fresh_prefill_check.py and "
+        "tools/transformer_transfer_check.py and must not be called inert. If that import is "
+        "gone, this control is gone with it and needs replacing, not deleting.")
+
+    inert = [n for n in names if lane_select.test_module_inert("python/mojolearn/tests/" + n)]
+    # The floor is HALF, not "nearly all". It was 124 of 125 while the check
+    # looked for import STATEMENTS; closing the dynamic-import hole by
+    # searching for the module NAME anywhere outside the tests directory took
+    # it to 91 of 125, because 33 modules are mentioned by a workflow, a script
+    # or a requirements file. That is the trade this rule is supposed to make.
+    # The floor exists to catch the rule dying, not to pin a number.
+    assert len(inert) > len(names) // 2, \
+        f"only {len(inert)} of {len(names)} test modules read inert; the rule stopped firing"
+
+    for rel in ("python/mojolearn/cluster.py", "python/mojolearn/host_surface.py",
+                "tools/identity_break.py", "pixi.toml"):
+        assert lane_select.test_module_inert(rel) is None, \
+            f"{rel} is not a test module and this rule must not touch it"
+
+
+def test_a_registry_with_no_ref_to_diff_against_still_falls_back():
+    """The narrow answer for a registry is read out of a DIFF. With no ref
+    there is no diff, so `--lanes-for-paths` on a registry must say every lane
+    and say why, rather than looking like the rule failed."""
+    sel = lane_select.select(["python/mojolearn/host_surface.py"])
+    assert sel["fallback"] is True
+    assert "no ref was given" in sel["reasons"]["python/mojolearn/host_surface.py"]
+
+
 def test_the_things_a_lane_does_reach_are_never_called_unreachable():
     """The controls. Every one of these is in some lane's closure or is
     resolved by name at load, and calling any of them unreachable would turn a
@@ -660,6 +708,354 @@ def test_the_source_hygiene_patterns_still_fire():
     import source_hygiene_check
 
     assert source_hygiene_check.self_test() == 0, "a source hygiene pattern no longer fires"
+
+
+# --------------------------------------------------------------------------
+# THE INVERSION CHECKS. Everything else here asks whether the map NARROWS
+# correctly. These ask whether it can narrow WRONGLY, which is the failure
+# that reads as a pass: a lane whose map is missing a file gets a green run
+# for a change that moved its bits. They are run over the WHOLE TREE rather
+# than against a case list, because the case list is what missed
+# `neural_inference.py` for eight months.
+# --------------------------------------------------------------------------
+
+def _lane_sets():
+    sources, _ = lane_select.lane_sources()
+    return sources, lane_select.reverse_map(sources)
+
+
+def test_every_lane_that_reaches_an_importer_reaches_what_it_imports():
+    """INVERSION 1. If F imports B then a lane reaching F executes B, so
+    lanes(F) must be a subset of lanes(B). A break here means the import walk
+    stopped somewhere it should not have."""
+    sources, rev = _lane_sets()
+    sinks = lane_select.enumerator_files()
+    bad = []
+    for f in lane_select._python_files():
+        if f in sinks:
+            continue
+        for b in lane_select._python_imports(f):
+            if b in sinks:
+                continue
+            missing = rev.get(f, set()) - rev.get(b, set())
+            if missing:
+                bad.append(f"{f} imports {b}, but {len(missing)} lane(s) reach the importer and "
+                           f"not the import, e.g. {sorted(missing)[:4]}")
+    assert not bad, "\n  ".join([""] + bad[:6])
+
+
+def test_every_lane_that_reaches_a_base_reaches_what_extends_it():
+    """INVERSION 2, and the one that was broken. If F subclasses or patches a
+    class in B then a lane reaching B can run F's override, so lanes(B) must
+    be a subset of lanes(F).
+
+    `python/mojolearn/neural_inference.py` defines
+    `Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block)`. It IMPORTS
+    `_mamba_impl`, so following imports forward never reached it from a mamba
+    lane, and the map credited it with `mlp`, `transformer` and
+    `transformer-window` while it also serves four mamba and two samba lanes.
+    Deleting those wrappers' `forward` overrides is about as load-bearing as
+    an edit to that file gets. Reported by lane/stateful-cpu-decoding."""
+    sources, rev = _lane_sets()
+    bad = []
+    for f, targets in lane_select.extenders().items():
+        for b in targets:
+            missing = rev.get(b, set()) - rev.get(f, set())
+            if missing:
+                bad.append(f"{f} extends {b}, but {len(missing)} lane(s) reach the base and not "
+                           f"the extender, e.g. {sorted(missing)[:4]}")
+    assert not bad, "\n  ".join([""] + bad[:6])
+
+
+def test_the_inversion_check_fails_when_the_backward_edge_is_removed():
+    """THE ARM THAT MUST FAIL. An inversion that holds no matter what the map
+    does is not a check. With the backward edge disabled, inversion 2 must
+    report `neural_inference.py` and the six lanes it was missing."""
+    real = lane_select._extending_files
+    lane_select._extending_files = lambda closure: set()
+    lane_select.reset_caches()
+    try:
+        sources, rev = _lane_sets()
+        broken = []
+        for f, targets in lane_select.extenders().items():
+            for b in targets:
+                if rev.get(b, set()) - rev.get(f, set()):
+                    broken.append(f)
+        assert "python/mojolearn/neural_inference.py" in broken, (
+            "with the backward edge removed the inversion did NOT flag neural_inference.py, so it "
+            f"is not what is holding the map together. flagged: {sorted(set(broken))[:5]}")
+        missing = rev.get("python/mojolearn/_mamba_impl.py", set()) \
+            - rev.get("python/mojolearn/neural_inference.py", set())
+        for lane in ("mamba1", "mamba2", "mamba2-dtlimit", "mamba3"):
+            assert lane in missing, f"{lane} was expected to be missing without the edge"
+    finally:
+        lane_select._extending_files = real
+        lane_select.reset_caches()
+
+
+def test_the_six_lanes_the_report_named_are_attributed():
+    """The worked example, kept as itself. `neural_inference.py` serves the
+    mamba and samba lanes and the map must say so."""
+    sources, rev = _lane_sets()
+    got = rev.get("python/mojolearn/neural_inference.py", set())
+    for lane in ("mamba1", "mamba2", "mamba2-dtlimit", "mamba3",
+                 "samba", "samba-untied-dropout-accum",
+                 "mlp", "transformer", "transformer-window"):
+        assert lane in got, f"neural_inference.py serves {lane} and the map does not say so"
+    assert len(got) < len(sources) // 2, \
+        f"neural_inference.py now claims {len(got)} of {len(sources)} lanes; the edge is too wide"
+
+
+def test_a_base_everything_inherits_is_not_evidence():
+    """The backward edge needs the same sink rule the forward one has.
+    `python/mojolearn/_mode.py` is extended by 23 package files against 2 for
+    the next most extended, and without excluding it every lane pulled in all
+    23: the median file went from 32 lanes to 197."""
+    # Counted per EXTENDING FILE, not per base NAME. `_classical_host.py`
+    # subclasses four different neighbors classes and is still one file;
+    # counting names made this test call `neighbors.py` universal while the
+    # implementation, correctly, did not.
+    counts = {}
+    symbols = lane_select._python_symbols(lane_select._python_files())
+    for rel in lane_select._python_files():
+        targets = {other for name in lane_select._extends(rel)
+                   for other in symbols.get(name, ()) if other != rel}
+        for other in targets:
+            counts[other] = counts.get(other, 0) + 1
+    universal = sorted(r for r, n in counts.items() if n > lane_select.UNIVERSAL_BASE_MAX_EXTENDERS)
+    assert universal, "no universal base was found at all; the threshold or the walk is broken"
+    edges = lane_select.extenders()
+    for rel, targets in edges.items():
+        for u in universal:
+            assert u not in targets, f"{rel} kept an edge to the universal base {u}"
+
+
+def test_the_mojo_conformance_inversion_holds_over_the_whole_tree():
+    """INVERSION 3, the Mojo side, and the answer is that there is no backward
+    edge to follow.
+
+    A Mojo under-attribution is worse than a Python one: a Python miss means a
+    lane's door was missed, a Mojo miss means the ARITHMETIC changed and no
+    cell was asked about it. The feared shape was a struct conforming to a
+    trait that a kernel dispatches on. Measured on this tree: 10 repo traits,
+    9 real conformance edges, and lanes(B) == lanes(F) on every one of them,
+    23 against 23 and 35 against 35. Mojo conformance is not Python
+    subclassing: a conforming struct is reached only when something
+    parametrises on the trait AND IS HANDED THAT STRUCT BY NAME, and naming a
+    symbol from another file requires importing it, so the forward walk
+    already has it."""
+    sources, rev = _lane_sets()
+    edges = lane_select.mojo_conformance_edges()
+    assert len(edges) >= 5, f"only {len(edges)} conformance edges found; the scan is broken"
+    bad = []
+    for f, trait, b in edges:
+        missing = rev.get(b, set()) - rev.get(f, set())
+        if missing:
+            bad.append(f"{f} conforms to {trait} declared in {b}, but {len(missing)} lane(s) "
+                       f"reach the declaration and not the implementation, e.g. {sorted(missing)[:4]}")
+    assert not bad, "\n  ".join([""] + bad[:6])
+
+
+def test_the_mojo_inversion_fires_when_an_implementation_is_cut_loose():
+    """THE ARM THAT MUST FAIL. An inversion with nothing to catch is not a
+    check, and this one holds today only because the forward walk reaches the
+    implementations. Cut ONE incoming import and it must fire.
+
+    The first attempt at this control was invalid and was caught by measuring
+    both sides: dropping every path matching `pointwise_hist2` also removed
+    the template that carries the lanes, so lanes(B) and lanes(F) fell
+    together and the inversion stayed silent at zero. A negative control whose
+    two arms move together proves nothing. This one removes a single edge and
+    asserts the dispatcher KEEPS its lanes while the implementation loses
+    them."""
+    victim = "gbdt/methods/kernel/pointwise_hist2_one_byte_7bit.mojo"
+    declarer = "gbdt/methods/kernel/compute_point_hist2_loop.mojo"
+    _, rev = _lane_sets()
+    before_b, before_f = len(rev.get(declarer, set())), len(rev.get(victim, set()))
+    assert before_b and before_f, "the baseline is already empty; this control cannot fire"
+
+    real = lane_select._mojo_imports
+    lane_select._mojo_imports = lambda rel: ({f for f in real(rel) if f != victim}
+                                             if rel != victim else real(rel))
+    lane_select.reset_caches()
+    try:
+        _, broken = _lane_sets()
+        assert len(broken.get(declarer, set())) == before_b, \
+            "the sabotage moved the DECLARER too, so the two arms move together and prove nothing"
+        assert not broken.get(victim, set()), "the sabotage did not detach the implementation"
+        fired = [f for f, _t, b in lane_select.mojo_conformance_edges()
+                 if broken.get(b, set()) - broken.get(f, set())]
+        assert victim in fired, f"the inversion did not name {victim}; it caught {fired[:4]}"
+    finally:
+        lane_select._mojo_imports = real
+        lane_select.reset_caches()
+
+
+def test_the_two_mojo_exemptions_are_the_ones_that_were_measured():
+    """Both exemptions on the conformance edge are derived, and both split this
+    tree exactly. A file with its own `main` is a standalone program; all the
+    files that conform to a repo trait purely to TEST it have one and none of
+    the shipped implementations does. And the conforming file must actually
+    IMPORT the declaration: `core/philox.mojo` and `mamba/host/gen/philox.mojo`
+    each declare their OWN `U32Stream` and neither imports the other, so
+    matching by trait name alone invented an edge and claimed 80 missing
+    lanes."""
+    for rel in ("checks/feature_tensor_check.mojo", "checks/newton_walker_check.mojo",
+                "checks/pointwise_loop_check.mojo", "ensemble/checks/core_primitives_check.mojo",
+                "ensemble/checks/philox_check.mojo"):
+        assert lane_select.is_standalone_program(rel), \
+            f"{rel} was a standalone program and is not any more; the exemption needs re-deriving"
+    for rel in ("gbdt/methods/kernel/pointwise_hist2_one_byte_7bit.mojo",
+                "gbdt/methods/leaves_estimation/pointwise_oracle.mojo",
+                "core/philox.mojo", "mamba/host/gen/philox.mojo"):
+        assert not lane_select.is_standalone_program(rel), \
+            f"{rel} became a standalone program; it would now be exempted wrongly"
+    a, b = "core/philox.mojo", "mamba/host/gen/philox.mojo"
+    assert b not in lane_select._mojo_imports(a) and a not in lane_select._mojo_imports(b), \
+        "the two philox files now import each other, so the name collision is a real edge"
+    pairs = {(f, b) for f, _t, b in lane_select.mojo_conformance_edges()}
+    assert (a, b) not in pairs and (b, a) not in pairs, \
+        "the philox name collision is back in the conformance graph"
+
+
+def test_a_mojo_file_something_imports_is_never_unreachable():
+    """A Mojo import is a compile-time fact and does not need the corpus to be
+    believed. `core/forest_inference_model.mojo` is imported by
+    `bindings/forest_inference_binding.mojo`, which is ITSELF outside the map,
+    so nothing in the corpus named either and the model file read "nothing
+    reaches it" while being part of a shipped binding's tree. An importer that
+    is a standalone program still does not count, which is what keeps three
+    new check files that import each other unreachable."""
+    for rel in ("core/forest_inference_model.mojo", "core/forest_inference_pool.mojo"):
+        assert lane_select._mojo_importers(rel), f"{rel} is imported by nothing; pick a new case"
+        assert lane_select.unreachable(rel) is None, \
+            f"{rel} is imported by a non-program and was still called unreachable"
+
+
+# --------------------------------------------------------------------------
+# THE ADVERSARIAL PASS, 2026-09-16. Everything above asks whether a rule
+# narrows when it should. These ask the question that costs a defect rather
+# than an afternoon: can a rule be made to report a NARROW answer for a change
+# that genuinely moves a cell. Four could. Each attack is kept beside the
+# control it must not break, because a fix that refuses everything passes the
+# attack and destroys the rule.
+# --------------------------------------------------------------------------
+
+def _harness_answer_pair(old, new):
+    ref, path = "<fake ref>", "<fake harness>"
+    lane_select._GIT_SHOW[f"{ref}:{path}"] = old
+    lane_select._read.cache[path] = new
+    try:
+        return lane_select.harness_lanes(ref, path)
+    finally:
+        lane_select._GIT_SHOW.pop(f"{ref}:{path}", None)
+        lane_select._read.cache.pop(path, None)
+
+
+def test_a_lane_carrying_a_second_decorator_is_not_a_lane_body():
+    """ATTACK. `@mutate_everything` above `@lane("beta")` was admitted as one
+    new lane. The other decorator RUNS at import and can touch a fixture
+    table, a registry or another lane's defaults."""
+    base = '@lane("alpha")\ndef _alpha():\n    return 1\n'
+    attacked = base + '\n\n@mutate_everything\n@lane("beta")\ndef _beta():\n    return 2\n'
+    assert _harness_answer_pair(base, attacked) is None, \
+        "a new lane carrying a second decorator was narrowed"
+    plain = base + '\n\n@lane("beta")\ndef _beta():\n    return 2\n'
+    assert _harness_answer_pair(base, plain) == ["beta"], \
+        "the fix broke the ordinary added lane, which is the whole point of the rule"
+
+
+def test_two_registry_keys_that_are_the_same_value_are_not_an_addition():
+    """ATTACK. `"mojolearn-dbscan-" + "1"` beside `"mojolearn-dbscan-1"` is a
+    different EXPRESSION and the same VALUE, so the later entry overrides the
+    earlier one and an existing lane's dispatch moves. It was admitted as an
+    addition."""
+    base = 'FORMATS = {\n    "mojolearn-dbscan-1": {"DBSCAN": HostDBSCAN},\n}\n'
+    attacked = base.replace("}\n", '    "mojolearn-dbscan-" + "1": {"DBSCAN": HostOther},\n}\n')
+    assert _registry_answer(attacked, base) is None, \
+        "a key equal in value to an existing one was admitted as an addition"
+    genuine = base.replace("}\n", '    "mojolearn-kmeans-1": {"KMeans": HostKMeans},\n}\n')
+    answer = _registry_answer(genuine, base)
+    assert answer and "kmeans" in answer, \
+        "the fix broke the ordinary additive entry, which is the whole point of the rule"
+
+
+def test_a_test_module_named_any_way_at_all_is_not_inert():
+    """ATTACK. `importlib.import_module('mojolearn.tests.test_host_model_kmeans')`
+    is invisible to an import-statement regex, and the module was called
+    inert. The NAME is searched now, anywhere outside the tests directory, so
+    a dynamic import, a `python -m` line and a bare mention all count. That
+    cost 33 modules of narrowing (124 of 125 down to 91 of 125) and is the
+    right trade: over-firing here costs a sweep, under-firing costs a defect."""
+    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
+    before = open(manifest, encoding="utf-8").read()
+    target = "python/mojolearn/tests/test_host_model_kmeans.py"
+    try:
+        lane_select.reset_caches()
+        assert lane_select.test_module_inert(target), f"{target} should be inert to begin with"
+        with open(manifest, "w") as fh:
+            fh.write(before + "\n_DYN = __import__('importlib').import_module("
+                     "'mojolearn.tests.test_host_model_kmeans')\n")
+        lane_select.reset_caches()
+        assert lane_select.test_module_inert(target) is None, \
+            "a test module imported dynamically by string was still called inert"
+    finally:
+        with open(manifest, "w") as fh:
+            fh.write(before)
+        lane_select.reset_caches()
+
+
+def test_a_directory_named_without_its_slash_still_counts():
+    """ATTACK. `os.path.join('armprobedir', name + '.bin')` names the
+    directory without ever writing a slash, so the path tokens saw nothing and
+    a file in it was called unreachable. Path-building calls are read
+    STRUCTURALLY, not as text, because the bare word `umap` is also a package
+    module and a family-table entry and matching those would send every new
+    file under `umap/` to a sweep."""
+    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
+    before = open(manifest, encoding="utf-8").read()
+    probe_dir = os.path.join(lane_select.ROOT, "armprobedir")
+    rel = "armprobedir/armprobefixture.bin"
+    os.makedirs(probe_dir, exist_ok=True)
+    try:
+        with open(os.path.join(lane_select.ROOT, rel), "w") as fh:
+            fh.write("x\n")
+        lane_select.reset_caches()
+        assert lane_select.unreachable(rel), f"{rel} should be unreachable to begin with"
+        with open(manifest, "w") as fh:
+            fh.write(before + "\nimport os as _o\n_ARM = _o.path.join('armprobedir', 'x' + '.bin')\n")
+        lane_select.reset_caches()
+        assert lane_select.unreachable(rel) is None, \
+            "a directory handed to os.path.join without a slash did not count as naming it"
+    finally:
+        with open(manifest, "w") as fh:
+            fh.write(before)
+        probe = os.path.join(lane_select.ROOT, rel)
+        if os.path.exists(probe):
+            os.unlink(probe)
+        if os.path.isdir(probe_dir) and not os.listdir(probe_dir):
+            os.rmdir(probe_dir)
+        lane_select.reset_caches()
+
+
+def test_no_docstring_is_read_back_at_run_time():
+    """The docstring rule rests on nothing consuming a docstring as a VALUE.
+    That is an absence claim, so it is checked rather than assumed: the only
+    `__doc__` in the package and the harness are ASSIGNMENTS in the kde, knn,
+    radius, gp and gmm registration loops, which are code and survive the
+    strip, plus argparse help."""
+    bad = []
+    pkg = os.path.join(lane_select.ROOT, lane_select.PKG)
+    paths = [os.path.join(pkg, n) for n in sorted(os.listdir(pkg)) if n.endswith(".py")]
+    paths.append(os.path.join(lane_select.ROOT, lane_select.HARNESS))
+    for path in paths:
+        tree = lane_select._parse(os.path.relpath(path, lane_select.ROOT))
+        for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+            if isinstance(node, ast.Attribute) and node.attr == "__doc__" \
+                    and isinstance(node.ctx, ast.Load):
+                bad.append(f"{os.path.relpath(path, lane_select.ROOT)}:{node.lineno}")
+    assert not bad, ("a docstring is READ as a value, so a docstring-only change can reach it: "
+                     f"{bad[:5]}")
 
 
 def _main():

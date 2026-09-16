@@ -202,7 +202,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
                 MOJOLEARN_IDENTITY_RLPAIR_SABOTAGE=1 MOJOLEARN_NUMERIC_MODE=identical \\
                   python3 tools/identity_break.py --lanes mamba1 --fixtures base --repeats 1
 
-THREE OPT-IN PARTS (2026-09-15), each its own JSON keys (`<part>`,
+FOUR OPT-IN PARTS (2026-09-15, the fourth 2026-09-16), each its own JSON keys (`<part>`,
 `<part>_verdict`, `<part>_error`, `<part>_notes`, `<part>_protocol`,
 `<part>_sabotage`) and its own `summary (<part>):` line of `--diff`,
 printed only where a column carries it. A run that does not pass the flag
@@ -276,6 +276,23 @@ BATCH_MOVED (a failure under IDENTICAL only), N/A, REFUSED.
             equal the row run alone at its own length, and every padding
             output must be exactly +0.0; next_bytes must equal the row alone.
             The batch part's sabotage switch sabotages this part too.
+
+    stepfull `--step-full`. THE DECODE IS THE PREFILL
+            (lane/stateful-cpu-decoding, 2026-09-16). One fresh-state
+            forward pass over a sequence of 16 positions, against the SAME
+            sequence decoded one token at a time through `allocate_state`
+            and `step` with the state carried, compared BITWISE POSITION BY
+            POSITION; a mismatch reports the first differing position and
+            both values, never a count. It asks the PUBLIC class, which on a
+            CPU column is the `*Inference` wrapper over the shipped neural
+            binding. It applies to the lanes with a decode state: the
+            Transformer (both windows), Mamba-1/2/3 and the Samba stack.
+            A model whose streaming path answers different bits from its
+            prefill is a different model wearing the same name, which no
+            cross-vendor statement about the prefill covers. The batch
+            part's sabotage switch sabotages this part too;
+            tools/step_vs_full_check.py carries the deeper arm, one ULP on
+            one carried cache cell.
 
 THE LANES, 178 (2026-09-14; 46 on 2026-09-13, pca-whiten the same night, 71
 on 2026-09-14 from the claim-surface census, logistic-multiclass and
@@ -6107,6 +6124,111 @@ _ragged_decl("n/a:driver-lane (the multi-GPU drivers take no lengths; the single
 RAGGED_DEFAULT = "n/a:no-sequence-axis"
 
 
+# ---------------------------------------------------------------- stepfull (lane/stateful-cpu-decoding, 2026-09-16)
+# THE DECODE IS THE PREFILL. A model that decodes one token at a time with a
+# carried state must answer, at every position, the bits the same model
+# answers when the whole sequence is run as one fresh-state forward pass. If
+# it does not, the streaming path is a different model wearing the same
+# name, and no cross-vendor statement about the prefill says anything about
+# what a user who streams actually gets.
+#
+# This part runs both, POSITION BY POSITION, through the PUBLIC class (the
+# `*Inference` wrappers on a CPU column, `_public_est` over
+# NEURAL_PUBLIC_PART_LANES). A mismatch is reported as the FIRST differing
+# position with both values, never a count. The hash is the full pass's
+# bytes, so it is the same bytes on every column where the equality holds
+# and `--diff` carries the cross-vendor statement.
+#
+# `tools/step_vs_full_check.py` is the same comparison outside the harness,
+# with a deeper fail-first arm: it moves ONE carried cache cell by ONE ULP
+# and requires the per-position check to fire. This part's own sabotage
+# (BATCH_SABOTAGE_ENV, as ragged's) perturbs the full pass so every hashed
+# cell MUST read BATCH_MOVED.
+
+#: rows and positions decoded one at a time
+STEPFULL_ROWS, STEPFULL_LENGTH = 2, 16
+
+STEPFULL = {}
+
+
+def _stepfull_decl(spec, *names):
+    for n in names:
+        if n in STEPFULL:
+            raise RuntimeError(f"identity_break: lane {n!r} has two stepfull declarations")
+        STEPFULL[n] = spec
+
+
+class _StepFullCall:
+    """One model's two runs of the same sequence. `full(x)` is ONE
+    fresh-state forward pass over all of it; `alloc()` makes the zero state
+    and `step(x_t, state)` decodes position t carrying it. Both outputs
+    have the positions on axis 1."""
+
+    def __init__(self, label, x, full, alloc, step):
+        self.label, self.x = label, np.ascontiguousarray(x)
+        self.full, self.alloc, self.step = full, alloc, step
+
+
+def _eval_stepfull(call, sabotage, digest):
+    whole = np.ascontiguousarray(np.asarray(call.full(call.x)))
+    if sabotage:
+        whole = _flip_first_float(whole)
+    state = call.alloc()
+    got = np.empty_like(whole)
+    for t in range(call.x.shape[1]):
+        one = np.asarray(call.step(np.ascontiguousarray(call.x[:, t:t + 1]), state))
+        one = np.ascontiguousarray(one).reshape(whole.shape[0], 1, -1)
+        if one.shape != whole[:, t:t + 1].shape or one.dtype != whole.dtype:
+            return (f"BATCH_MOVED:{call.label}: position {t} step "
+                    f"{one.dtype.str}{list(one.shape)} vs full "
+                    f"{whole.dtype.str}{list(whole[:, t:t + 1].shape)}")
+        got[:, t:t + 1] = one
+    for t in range(whole.shape[1]):
+        want = np.ascontiguousarray(whole[:, t:t + 1])
+        have = np.ascontiguousarray(got[:, t:t + 1])
+        if want.tobytes() != have.tobytes():
+            return (f"BATCH_MOVED:{call.label}: FIRST DIFFERING POSITION {t} of "
+                    f"{whole.shape[1]}: {_first_diff(want, have).replace('whole', 'full', 1)}")
+    digest.update(f"stepfull:{call.label}:{list(call.x.shape)}".encode())
+    whole = np.ascontiguousarray(whole)
+    digest.update(f"{whole.dtype.str}{whole.shape}".encode())
+    digest.update(whole.tobytes())
+    return None
+
+
+def _stepfull_block_spec(state_kw=None):
+    """A bare block: `forward(x)` against `allocate_state` + `step`."""
+    def spec(ml, blk, Xh, _kw=state_kw):
+        kw = dict(max_tokens=STEPFULL_LENGTH) if _kw == "kv" else {}
+        x = _seq(Xh, STEPFULL_ROWS, STEPFULL_LENGTH, blk.d_model)
+        return [_StepFullCall(
+            f"forward(x) vs allocate_state + step, L={STEPFULL_LENGTH}", x,
+            lambda a: blk.forward(np.ascontiguousarray(a)),
+            lambda: blk.allocate_state(STEPFULL_ROWS, **kw),
+            lambda a, st: blk.step(a, st))]
+    return spec
+
+
+def _stepfull_samba(ml, e, Xh):
+    """The stack's logits: `forward(ids)` against `allocate_state` + `step`.
+    `step` returns (B, vocab); the evaluator reshapes it to one position."""
+    ids = _ids(Xh, STEPFULL_ROWS, STEPFULL_LENGTH, vocab=e.config.vocab)
+    return [_StepFullCall(
+        f"forward(ids) vs allocate_state + step, L={STEPFULL_LENGTH}", ids,
+        lambda a: e.forward(np.ascontiguousarray(a)),
+        lambda: e.allocate_state(STEPFULL_ROWS, STEPFULL_LENGTH),
+        lambda a, st: e.step(a, st))]
+
+
+_stepfull_decl(_stepfull_block_spec(), "mamba1", "mamba2", "mamba3", "mamba2-dtlimit")
+_stepfull_decl(_stepfull_block_spec("kv"), "transformer", "transformer-window")
+_stepfull_decl(_stepfull_samba, "samba", "samba-untied-dropout-accum")
+_stepfull_decl("n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+               "par-samba", "par-samba-clip", "par-byte-lm", "par-byte-lm-model-pool", "par-byte-lm-offload")
+
+STEPFULL_DEFAULT = "n/a:no-decode-state"
+
+
 # ---------------------------------------------------------------- the opt-in parts, one runner
 
 #: part name -> (declarations, default, CLI flag, sabotage env)
@@ -6114,6 +6236,7 @@ EXTRA_PARTS = {
     "batchgrad": (BATCHGRAD, BATCHGRAD_DEFAULT, "batch_grad", BATCHGRAD_SABOTAGE_ENV),
     "batchscale": (BATCHSCALE, BATCHSCALE_DEFAULT, "batch_scale", BATCH_SABOTAGE_ENV),
     "ragged": (RAGGED, RAGGED_DEFAULT, "ragged", BATCH_SABOTAGE_ENV),
+    "stepfull": (STEPFULL, STEPFULL_DEFAULT, "step_full", BATCH_SABOTAGE_ENV),
 }
 
 
@@ -6125,6 +6248,11 @@ def _part_protocol(part, alone):
     if part == "batchscale":
         return dict(batches=list(SCALE_BATCHES), whole=SCALE_WHOLE, long_l=SCALE_LONG_L,
                     prefixes=list(SCALE_PREFIXES))
+    if part == "stepfull":
+        return dict(rows=STEPFULL_ROWS, length=STEPFULL_LENGTH,
+                    full="forward(x) from a zero state, one pass",
+                    stepped="allocate_state then step(x_t, state) at every position",
+                    compared="bitwise, position by position")
     return dict(lengths=list(RAGGED_LENGTHS), long_lengths=list(RAGGED_LONG_LENGTHS), padding="nan/vocab+7")
 
 
@@ -6154,6 +6282,8 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
                 moved = _eval_scale_rows(call, flip, digest)
             elif isinstance(call, _RaggedCall):
                 moved = _eval_ragged(call, flip, digest)
+            elif isinstance(call, _StepFullCall):
+                moved = _eval_stepfull(call, flip, digest)
             else:
                 raise TypeError(f"{part}: unknown call type {type(call).__name__}")
             if moved:
@@ -7634,6 +7764,10 @@ def main():
                     help="add the batchscale part: B in {1, 17, 64, 256} inside B = 1024, and long-L prefixes")
     ap.add_argument("--ragged", action="store_true",
                     help="add the ragged part: lengths= right-padded batches against each row alone")
+    ap.add_argument("--step-full", action="store_true",
+                    help="add the stepfull part: one fresh-state forward pass over a sequence against the "
+                         "same sequence decoded one token at a time with a carried state, compared bitwise "
+                         "position by position")
     ap.add_argument("--no-rlpair", action="store_true",
                     help="skip the rlpair part; the lanes that declare it record n/a:skipped (--no-rlpair)")
     ap.add_argument("--verbose", action="store_true")

@@ -40,6 +40,15 @@ python3 tools/verify_lanes.py --all --shards 16              # everything
 `--plan` prints what would run and stops. `--runner pods` prints one
 `tools/runpod_cpu_leg.sh` command per shard and rents nothing.
 
+`--changed-since REF` compares REF against YOUR WORKING TREE, which is what a
+lane wants: the change is what you have, not what is committed. It follows
+that pointing it at an old base from a much later tip measures the whole span
+between them and not the commit you had in mind. To ask what ONE landed commit
+affects, compare that commit against its own parent.
+
+Some paths still select every lane and should. `pixi.toml` pins the toolchain,
+and a toolchain change can move bits on every lane.
+
 ## Tier 1, ROUTINE: on a change, before merging
 
 Only the lanes the change can affect, on the CPU host route, small fixtures.
@@ -115,6 +124,31 @@ that reads IDENTICAL on the CPU route has not been checked less carefully
 than one that ran on Metal; it has been checked on the column that is cheap
 to run and easy to shard.
 
+## What stops the map narrowing WRONGLY
+
+Every rule above widens what returns a narrow answer. The map itself can fail
+the other way, and that failure is silent: a lane whose map is missing a file
+gets a green run for a change that moved its bits. Two inversions are checked
+over the WHOLE TREE, not against a case list, because a case list is what
+missed `python/mojolearn/neural_inference.py` and the six mamba and samba
+lanes it serves through subclasses.
+
+* if F imports B, a lane reaching F executes B, so lanes(F) is a subset of
+  lanes(B);
+* if F subclasses or patches a class in B, a lane reaching B can run F's
+  override, so lanes(B) is a subset of lanes(F);
+* the same question on the Mojo side, where a miss costs more because a Mojo
+  file IS the arithmetic: if F defines a struct conforming to a trait declared
+  in B, lanes(B) is a subset of lanes(F). It holds with no backward edge
+  needed, because Mojo conformance is not Python subclassing: a conforming
+  struct is reached only when something parametrises on the trait and is
+  handed that struct BY NAME, and naming a symbol from another file requires
+  importing it. The inversion stays in the tree so that remains true.
+
+`python3 tools/lane_select.py --census N` lists the files attributed to N
+lanes or fewer with what each defines. A missing edge hides in a file credited
+with too few.
+
 ## How the selector decides, and where it gives up
 
 `tools/lane_select.py` derives lane -> source files from declarations that
@@ -177,6 +211,11 @@ through a glob over its directory. See `tools/test_lane_select.py`.
   (the glob shape), and a one-word top-level directory is not searched at all
   because it is a word, not a path. The rule under-fires on a short or common
   file name, which is the safe direction.
+* a test module under `python/mojolearn/tests/`, when nothing outside that
+  directory imports it. `_python_files()` already leaves the directory out of
+  the map because a test cannot change what a lane computes; the import check
+  is what keeps that true, and it runs over the whole tracked tree, because an
+  import from a tool would still be an import.
 * a whole-surface registry whose diff only ADDS to it. Every old statement
   must be present and in order, either byte for byte or as the same assignment
   whose container grew or whose value changed under an unchanged key, and each

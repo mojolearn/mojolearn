@@ -410,6 +410,26 @@ That needs a GPU leg, and GPU legs are release-record only.
 four parts. It is served by `solver`, which does not ship, so unlike the 30 it
 needs a packaging decision as well as a recording.
 
+> **CORRECTION (lane/saved-model-reference-gaps, 2026-09-16).** The sentence
+> above is wrong about the route, and the code says so at
+> `python/mojolearn/_hierarchy_impl.py:176`: "The binding `predict` calls. The
+> FIT is `_mojolearn_solver`'s" and then `_BINDING = "_mojolearn_estimators"`.
+> Only the FIT is solver's. `AgglomerativeClustering.predict` calls
+> `_mojolearn_estimators.labeled_reference_predict`, and
+> `HostAgglomerativeClustering` inherits that same `_BINDING`, so its saved
+> model is served by the estimators host binding, which SHIPS. No packaging
+> decision was needed; the lane is declared in the estimators family now. The
+> same is true of `dbscan` (`python/mojolearn/density.py:178`).
+>
+> Two more things this section's reader should not carry away. First, the
+> `owed.json` files in the two 2026-09-15 lane records are STALE: both were
+> written before their own Apple/Metal columns were taken and still list
+> `apple-m4` as missing. Second, `spectral-precomputed` was never pending as
+> CODE. `_spectral_impl.py` fits, predicts and save/loads a precomputed
+> affinity, `identity_break.LANES` registers the lane, and both a CPU column
+> (9 fixtures) and a Metal column (2 fixtures) carry real digests for it. What
+> was owed there was a column, like the other three.
+
 ## 6. No silent exclusions
 
 Every one of the 32 families now carries a `wheel_note` saying why it does or
@@ -537,9 +557,11 @@ descending order of how much it would change:
    those lanes becomes publicly checkable only after the table is rebuilt.
 2. **A GPU record carrying `svc-poly`'s NVIDIA and AMD cells**, which is all
    that stands between it and the public set.
-3. **GPU recordings for `dbscan`, `agglomerative` and `spectral` predict**, the
-   implemented saved-model inference no gate covers (section 5). `spectral`'s
-   is now owed at the new 512-row size.
+3. ~~**GPU recordings for `dbscan`, `agglomerative` and `spectral` predict**~~
+   DONE (lane/saved-model-reference-gaps, 2026-09-16), and at the 512-row size
+   for `spectral`. All four are declared inference lanes now, so section 5's
+   owed list holds `kmeans` alone, which waits on a serialization format and
+   not on a box.
 4. **A dbscan fixture that actually clusters**, if its train cell is ever to
    carry weight: on wide and hashed every row lands in one cluster, so the
    sabotage has no label to flip (section 4).
@@ -575,4 +597,11 @@ descending order of how much it would change:
       zero wheel bytes; `svc-poly` stays a candidate on two columns
 - [ ] regenerate `verify_reference/table.json` for the thirteen shrunk lanes
       before any of them becomes publicly checkable
-- [ ] a GPU recording for dbscan, agglomerative and spectral predict
+- [x] a GPU recording for dbscan, agglomerative and spectral predict, and for
+      spectral-precomputed too: taken on a RunPod NVIDIA A100 (sm_80) by
+      lane/saved-model-reference-gaps, 2026-09-16, at
+      bench/results/classical_host/2026-09-16-nvidia-predict, 36 fixture
+      directories, `gate verdict IDENTICAL` on the CPU host route and
+      `EXPECTED MISMATCH SEEN` with an EMPTY `unmoved` list under
+      --every-fixture. It could not have been taken before: `record` itself
+      was raising AttributeError on main (see that lane's status file).
