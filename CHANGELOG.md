@@ -16,20 +16,46 @@ Linux legs are OWED before this heading reads published.
   each of the seventeen names the shipping family that serves its inference instead
   (preprocessing and kernel_methods through estimators, trees, rf and gbdt through forest,
   gp through gp_infer, arima and tsa through forecast, mamba, transformer and the training
-  forwards through neural, and so on) or says it is training-only. Two read OPEN rather than
-  settled, because they are an unmade decision and not a boundary: `resample`'s bootstrap,
-  permutation test and Monte Carlo integration, and the `tsa` family's `kpss_test`, all
-  compute an answer from a user's own data with no fitted model to save, so they fit neither
-  side of the saved-model inference boundary and refuse on a CPU-only install.
+  forwards through neural, and so on) or says it is training-only.
+- **The bootstrap, the permutation test, Monte Carlo integration and `kpss_test` now work on
+  a CPU-only install.** They were unreachable: each computes a statistic from the caller's
+  own data, trains no model and has nothing to save, so the saved-model inference boundary
+  never had a side for them to fall on and they refused on a laptop. The boundary exists to
+  keep CPU TRAINING OF MODELS internal, not to exclude analysis. The `resample` family now
+  ships, taking the wheels from fifteen host bindings to sixteen; its binding already
+  registered the three entries and no fit. `kpss_test` could not ship the same way, because
+  its family `tsa` holds `holtwinters_fit`, so `kpss_test_binding` moved into a new shared
+  module `bindings/kpss_host_test.mojo` that BOTH the tsa reference binding and the shipped
+  `forecast` inference binding register, the pattern `holtwinters_host_predict.mojo` set: the
+  `_mojolearn_tsa` route already falls back to the forecast binding on a CPU-only install, so
+  no fit ships and the two binaries answer through one source. `forecast_host_sabotage` now
+  also reports the KPSS arm.
+- **`verify --all` can no longer pass a run it did not perform.** On a CPU-only install with
+  stale bindings it printed `VERIFIED ... exit 0` while 288 of 332 cell parts REFUSED: the
+  user had checked 13 percent of what they believed they had. A refused part did not run, so
+  it is never evidence of success and no number of parts that did run makes up for it. Any
+  refusal now reads `INCOMPLETE` and exits 4, only a run with nothing refused may read
+  VERIFIED, and DIVERGENT is still read first because a wrong answer outranks an absent one.
+  The verdict line leads with what was checked: `verified 44 of 332 cell parts (0 divergent,
+  27 owed, 288 refused, 0 n/a)`. `docs/VERIFY.md` and `test_verdict_exit_codes` updated; the
+  new test was watched failing against the old code first. A healthy install is unaffected
+  (278 of 332, VERIFIED, exit 0).
 - The same file now records the two measured exposure gaps rather than leaving them in a
-  reader's head. `PUBLIC_REFERENCE_CANDIDATES` names 27 identity lanes that pass every static
+  reader's head. `PUBLIC_REFERENCE_CANDIDATES` names 30 identity lanes that pass every static
   condition for `public_reference_lanes()` (a real train reference on all nine fixtures, a
-  `cpu` column already in the shipped table, and every serving family already in the wheel, so
-  promoting them grows the wheel by nothing) and are not live only because no one has watched
-  them pass on a CPU-only install yet. `SAVED_MODEL_INFERENCE_OWED` names the saved-model
-  inference that IS implemented and that `mojolearn.host_model()` already dispatches but that
-  no gate covers: DBSCAN, AgglomerativeClustering and SpectralClustering `predict`, each
-  waiting on a GPU recording, and `KMeans.predict`, which has no save format yet.
+  `cpu` column in the shipped table, all nine fixtures on all three training GPU columns so
+  `--require-columns 4` can be met, and reachability from a binding that ships, so promoting
+  them grows the wheel by nothing). Measured on an Apple M4 CPU column at 9 fixtures and 2
+  repeats: 0 DIVERGENT and 26 of 27 IDENTICAL x4 on train across every fixture. They are held,
+  not live, until the fixture shrink publishes its scope, because these references ship in
+  the wheel's table and promoting a lane whose fixture then changes would ship a reference a
+  user's `verify` fails against. Two criteria of the list were wrong and a check caught each:
+  `svc-poly` rests on two columns and was dropped, and `kpss` was wrongly excluded by a rule
+  that demanded the declaring family ship when a shipped binding serves its route.
+  `SAVED_MODEL_INFERENCE_OWED` names the saved-model inference that IS implemented and that
+  `mojolearn.host_model()` already dispatches but that no gate covers: DBSCAN,
+  AgglomerativeClustering and SpectralClustering `predict`, each waiting on a GPU recording,
+  and `KMeans.predict`, which has no save format yet.
 
 - `ARIMA` takes exogenous regressors: `fit(y, exog)`, `forecast(steps, exog)` and
   `predict(start, end, exog)` (lane/arima-exog, for 0.8.7), regression with ARIMA errors as

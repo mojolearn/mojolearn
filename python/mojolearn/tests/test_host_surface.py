@@ -344,6 +344,10 @@ def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
         "byte_lm", "forest", "tokenizer", "neural", "core", "linalg", "estimators", "metrics", "svm", "forecast",
         "mixture_infer", "hdbscan_infer", "gp_infer",
         "embedding_infer", "ivf_search",
+        # lane/expose-inference-surface (2026-09-16): bootstrap, the
+        # permutation test and Monte Carlo integration train no model, so the
+        # inference boundary was never meant to exclude them.
+        "resample",
     }
     # The inference-only families ship; the reference families whose
     # scoring and prediction entries they carry do not.
@@ -481,12 +485,45 @@ def test_every_family_says_why_it_ships_or_does_not():
                 f"{f['family']}: a non-shipping family's note must start 'Does not ship'")
 
 
-def test_the_open_exclusions_are_named_as_open():
-    """The two exclusions that are an unmade decision rather than a settled
-    boundary say OPEN, so nobody reads them as decided."""
+def test_the_analysis_functions_are_reachable_on_a_cpu_only_install():
+    """Andrew's call (2026-09-16): the inference boundary keeps CPU TRAINING
+    OF MODELS internal; it was never meant to exclude analysis functions that
+    compute a statistic from the caller's own data. bootstrap, the permutation
+    test, Monte Carlo integration and kpss_test train no model, so each must be
+    reachable from a shipped binding rather than refusing on a laptop."""
     notes = host_surface.wheel_notes()
-    assert "OPEN" in notes["resample"], "resample's exclusion is an unmade decision; it must say OPEN"
-    assert "OPEN" in notes["tsa"], "kpss_test's exclusion is an unmade decision; it must say OPEN"
+    assert "OPEN" not in notes["resample"] and "OPEN" not in notes["tsa"], (
+        "these were decided; a note still reading OPEN would misreport the decision")
+
+    # resample ships, and its binding registers the three entries and no fit.
+    resample = host_surface.family("resample")
+    assert resample["ships_in_wheel"], "resample must ship; its functions train no model"
+    assert "_mojolearn_resample_host" in host_surface.wheel_bindings()
+    exported = _exports_in_source("resample")
+    for name in ("bootstrap", "permutation_test", "monte_carlo_integrate"):
+        assert name in exported, f"the resample binding does not register {name}"
+    assert [e for e in exported if e.endswith("_fit")] == [], "the resample binding registers a fit"
+
+    # kpss_test is served by the SHIPPED forecast binding, not by shipping the
+    # tsa family, which holds holtwinters_fit.
+    assert not host_surface.family("tsa")["ships_in_wheel"], "tsa holds holtwinters_fit; it must not ship"
+    forecast = host_surface.family("forecast")
+    assert forecast["ships_in_wheel"] and "kpss_test" in forecast["exports"]
+    assert "kpss_test" in _exports_in_source("forecast"), (
+        "the shipped forecast binding does not register kpss_test")
+    assert host_surface.inference_routes()["_mojolearn_tsa"] == "_mojolearn_forecast_host"
+
+    # ONE SOURCE: both bindings register kpss_test from the shared module, so
+    # the reference binary and the shipped binary cannot drift apart.
+    shared = "bindings/kpss_host_test.mojo"
+    assert (ROOT / shared).is_file(), f"{shared} is missing"
+    for binding in ("_mojolearn_tsa_host", "_mojolearn_forecast_host"):
+        src = _read(f"bindings/{binding}.mojo")
+        assert "from bindings.kpss_host_test import" in src, (
+            f"{binding} does not register kpss_test from the shared module")
+    assert "def kpss_test_binding(" not in _read("bindings/_mojolearn_tsa_host.mojo"), (
+        "the tsa binding still defines its own kpss_test_binding; the two binaries would drift")
+    assert shared in forecast["host_modules"]
 
 
 def test_public_reference_candidates_meet_every_condition_to_be_promoted():
@@ -512,13 +549,24 @@ def test_public_reference_candidates_meet_every_condition_to_be_promoted():
     outside = [l for l in candidates if l not in record]
     assert outside == [], f"candidates not diffed against TRAINING_GPU_COLUMNS: {outside}"
 
-    ships = {f["family"] for f in host_surface.FAMILIES if f["ships_in_wheel"]}
+    # Reachable from a SHIPPED binding, so promoting adds no binary to the
+    # wheel. Two ways to be reachable, and the second is not a loophole: a
+    # family that holds a fit stays a source build while a shipped
+    # inference-only binding serves its route (kpss through forecast, since
+    # lane/expose-inference-surface). Requiring the declaring family itself to
+    # ship would have rejected kpss, which a user can in fact call.
+    shipped_bindings = set(host_surface.wheel_bindings())
+    routes = host_surface.inference_routes()
     for lane in candidates:
-        serving = [f["family"] for f in host_surface.FAMILIES if lane in f["training_lanes"]]
+        serving = [f for f in host_surface.FAMILIES if lane in f["training_lanes"]]
         assert serving, f"{lane}: no family declares it as a training lane"
-        unshipped = [f for f in serving if f not in ships]
-        assert unshipped == [], (
-            f"{lane}: served by {unshipped}, which does not ship, so promoting it would grow the wheel")
+        for f in serving:
+            if f["ships_in_wheel"]:
+                continue
+            served_by = routes.get(f["routes"])
+            assert served_by in shipped_bindings, (
+                f"{lane}: declared by {f['family']}, which does not ship, and no shipped binding "
+                f"serves its route {f['routes']}; promoting it would grow the wheel")
 
 
 def test_saved_model_inference_owed_names_real_undeclared_lanes():

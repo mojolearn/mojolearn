@@ -159,7 +159,10 @@ def _counts(**kw):
 
 
 def test_verdict_exit_codes():
-    assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1))[0] == va.EXIT_VERIFIED
+    # a refused part did not run, so it costs the run its pass
+    # (lane/expose-inference-surface, 2026-09-16; it used to read VERIFIED)
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1))[0] == va.EXIT_CANNOT_RUN
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3))[0] == va.EXIT_VERIFIED
     assert va.verdict(_counts(IDENTICAL=5, DIVERGENT=1))[0] == va.EXIT_MISMATCH
     assert va.verdict(_counts(REFUSED=2, OWED=1))[0] == va.EXIT_CANNOT_RUN
     assert va.verdict(_counts(OWED=4, NA=1))[0] == va.EXIT_NO_REFERENCE
@@ -167,6 +170,39 @@ def test_verdict_exit_codes():
     assert (va.EXIT_VERIFIED, va.EXIT_MISMATCH, va.EXIT_USAGE, va.EXIT_REFUSED_FAST, va.EXIT_CANNOT_RUN,
             va.EXIT_NO_REFERENCE) == (_verify.EXIT_VERIFIED, _verify.EXIT_MISMATCH, _verify.EXIT_USAGE,
                                       _verify.EXIT_REFUSED_FAST, _verify.EXIT_CANNOT_RUN, _verify.EXIT_NO_REFERENCE)
+
+
+def test_a_run_that_refused_is_not_reported_as_verified():
+    """THE VERIFICATION THAT COULD NOT FAIL (lane/expose-inference-surface,
+    2026-09-16). Measured on an Apple M4 CPU-only install whose host bindings
+    were stale: 44 IDENTICAL parts, 288 REFUSED, and the public command
+    printed `RESULT: VERIFIED ... exit 0`. A user ran our verification, saw
+    VERIFIED, and had checked 13 percent of what they believed they checked.
+
+    A REFUSED part is a part that DID NOT RUN. It can never be evidence of
+    success, and no number of parts that did run makes up for it, so there is
+    no threshold below which refusals are tolerable. The run is INCOMPLETE and
+    exits non-zero; only a run with nothing refused may print VERIFIED."""
+    code, headline = va.verdict(_counts(IDENTICAL=44, REFUSED=288))
+    assert headline != "VERIFIED", "a run with refused parts must not print VERIFIED"
+    assert code != va.EXIT_VERIFIED, "a run with refused parts must not exit 0"
+    assert (code, headline) == (va.EXIT_CANNOT_RUN, "INCOMPLETE")
+
+    # one refused part is enough
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1)) == (va.EXIT_CANNOT_RUN, "INCOMPLETE")
+    # a run with nothing refused is still VERIFIED, and OWED and N/A do not spoil it
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3, NA=2)) == (va.EXIT_VERIFIED, "VERIFIED")
+    # a wrong answer still outranks an absent one
+    assert va.verdict(_counts(IDENTICAL=5, DIVERGENT=1, REFUSED=9))[0] == va.EXIT_MISMATCH
+
+
+def test_the_summary_says_how_much_of_the_run_was_actually_checked():
+    """`verified 44 of 332 parts` cannot be misread as `verified`."""
+    text = va.detail_line(_counts(IDENTICAL=44, REFUSED=288))
+    assert "44 of 332" in text, text
+    assert "288 refused" in text, text
+    clean = va.detail_line(_counts(IDENTICAL=332))
+    assert "332 of 332" in clean, clean
 
 
 def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():

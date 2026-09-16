@@ -3,334 +3,303 @@
 Andrew's question: **do we have algorithms that are built but not exposed to
 PyPI, and can we expose them?**
 
-Short answer. Almost everything a user would want to INFER with is already
-shipped and reachable; the gap is not in what the wheel carries, it is in what
-a user can CHECK. The wheel ships fifteen host families serving 79 declared
-inference lanes and seven forest kinds, and `python -m mojolearn verify --all`
-on a CPU-only install runs **nine lanes and four portable models**. Everything
-else the wheel ships is taken on faith. Twenty-seven more lanes pass every
-static condition for that list and would grow the wheel by nothing.
+Short answer. Two were, and they are now exposed. Otherwise almost everything
+a user would want to INFER with already shipped; the real gap was not what the
+wheel carries but **what a user can check**. The wheel ships host families
+serving 79 declared inference lanes and seven forest kinds, and
+`python -m mojolearn verify --all` on a CPU-only install ran **nine lanes and
+four portable models**. Everything else was taken on faith.
 
-This lane made the gaps explicit in the manifest and left the promotion itself
-behind a run that needs a host build. The machine was stopped mid-lane for
-load (53 MB free of 16 GB, load average 47), so the build half is parked below
-with exact commands.
+Three things came out of the lane: two genuinely unreachable functions are now
+shipped, a verification that could not fail is fixed, and 30 lanes are measured
+ready to quadruple the checkable surface at zero wheel cost, held only on the
+fixture shrink.
 
-## The three populations, counted
+## 1. The three populations, counted
 
-Read from the code, not the prose. Sources: `tools/identity_break.py` (the
-harness), `python/mojolearn/host_surface.py` (the manifest),
-`python/mojolearn/verify_reference/table.json` (what a wheel can judge
-against), `python/mojolearn/_classical_host.py` and `_forest_host.py` (the
-`host_model` door).
+Read from the code, not the prose.
 
-| population | count | what it is |
+| population | count | source |
 |---|---|---|
-| harness lanes | 176 | `@lane(...)` registrations in tools/identity_break.py |
-| host families | 32 | FAMILIES in the manifest |
-| saved-model formats | 28 | `mojolearn-*-N` strings; **all 28 are dispatched by `mojolearn.host_model()`** |
-| manifest covered (CPU training) lanes | 169 | `covered_lanes()` |
-| manifest inference lanes | 79 | `inference_lanes()`, equal to the classical gate's LANES |
-| forest kinds | 7 | `forest_kinds()` |
-| families that ship in the wheel | 15 of 32 | `wheel_families()` |
-| **lanes a CPU-only wheel user can verify** | **9** | `public_reference_lanes()` |
+| harness lanes | 176 | `@lane(...)` in `tools/identity_break.py` |
+| host families | 32 | `FAMILIES` in `host_surface.py` |
+| saved-model formats | 28 | **all 28 dispatched by `mojolearn.host_model()`** |
+| covered CPU training lanes | 169 | `covered_lanes()` |
+| declared inference lanes | 79 | `inference_lanes()` |
+| families shipping in the wheel | **16** of 32 (was 15) | `wheel_families()` |
+| **lanes a CPU wheel user can verify** | **9** | `public_reference_lanes()` |
 | portable models shipped | 4 | `verify_reference/models/` (179 KB) |
 
-The 83-lanes-with-no-public-inference figure from Sep 15 did not reproduce.
-Re-measured, the population that matters is different and smaller: 94 covered
-training lanes are served by a family that does not ship, and that is correct
-by design (training is internal). The real gap is the 9.
+The Sep 15 "83 lanes with no public CPU inference" figure did not reproduce.
+94 covered training lanes are served by families that do not ship, which is
+correct by design: training is internal. The number that mattered was the 9.
 
-### Nothing is missing from the `host_model` door
+**No format is missing from the door.** All 28 `mojolearn-*-N` formats resolve
+through `_classical_host._FORMATS` (28), `_forest_host` and `_gbdt_host`. There
+is nothing a user can `save()` that a CPU install cannot load.
 
-All 28 saved-model formats resolve. `_classical_host._FORMATS` dispatches 28
-of them across 31 `Host*` subclasses, `_forest_host` the forest pair, and
-`_gbdt_host` the boosting one. There is no format a user can write with
-`save()` that a CPU install cannot load. That part of "train on a GPU, infer
-anywhere" holds.
+## 2. Exposed: the two functions that were genuinely unreachable
 
-## Gap 1: shipped but unverifiable (the big one)
+Andrew's call, 2026-09-16. The inference boundary exists to keep CPU **training
+of models** internal so users train on a GPU and infer anywhere. These compute
+a statistic from the caller's own data, train no model, and have nothing to
+save, so the boundary never had a side for them to fall on and they refused on
+a CPU-only install. A user who installs a library with a time series module and
+finds `kpss_test` refusing on their laptop reasonably concludes it is broken.
 
-`public_reference_lanes()` is nine: gemm-pinned, kde, ols, ridge, knn, svc,
-pca, cholesky, tokenizer. A user who installs the wheel on a CPU box and runs
-`verify --all` exercises those nine and the four portable models. The other 70
-declared inference lanes, and every shipped family beyond the four the
-portable models touch, are asserted in the README and checked by nothing the
-user can run.
+- **`resample.bootstrap`, `resample.permutation_test`,
+  `resample.monte_carlo_integrate`.** The `resample` family now ships
+  (`ships_in_wheel=True`), taking the wheel from 15 host bindings to 16. Its
+  binding already registered the three entries **and no fit**, and `_backend`
+  already routed `_mojolearn_resample` to it, so shipping it was the whole
+  change.
+- **`kpss_test`.** Its family, `tsa`, holds `holtwinters_fit`, so shipping
+  that family would have shipped a fit. Instead `kpss_test_binding` moved into
+  a new shared module `bindings/kpss_host_test.mojo`, which **both** the tsa
+  reference binding and the shipped `forecast` inference binding register, so
+  the two binaries answer through one source and cannot drift. The
+  `_mojolearn_tsa` route already falls back to `_mojolearn_forecast_host` on a
+  CPU-only install, so `_tsa_impl.py` reaches it unchanged. This is the
+  established pattern (`holtwinters_host_predict.mojo`,
+  `mixture_host_scoring.mojo`).
 
-**27 lanes are addable at zero wheel cost.** Each one, measured:
+`forecast_host_sabotage` now also reports `KPSS_ORACLE_HOST_SABOTAGE`, so a
+sabotage build of the shipped binding is refused outside the gate whichever arm
+was raised.
+
+**Evidence: PENDING the prover run** (section 7). The functions must be seen
+refusing before the binding exists and running after, and their lanes must read
+IDENTICAL against the three GPU columns and DIVERGENT under sabotage.
+
+## 3. Fixed: a verification that could not fail
+
+Measured on an Apple M4 CPU-only install whose host bindings were stale:
+
+    | all | 13 | 44 | 0 | 0 | 288 | 0 |
+    RESULT: VERIFIED (44 identical, 0 divergent, 0 owed, 288 refused, 0 n/a). exit 0
+
+288 of 332 cell parts REFUSED and the public command printed **VERIFIED, exit
+0**. A user ran our verification, saw VERIFIED, and had checked 13 percent of
+what they believed they checked. It was documented policy
+(`docs/VERIFY.md` line 109) and asserted by `test_verdict_exit_codes`, which
+made it deliberate rather than defensible.
+
+A REFUSED part is a part that **did not run**. It can never be evidence of
+success, and no number of parts that did run makes up for it, so there is no
+threshold below which refusals are tolerable.
+
+- `verdict()` now reads DIVERGENT first (a wrong answer still outranks an
+  absent one), then **any** REFUSED gives `INCOMPLETE` and exit 4. Only a run
+  with nothing refused may print VERIFIED.
+- New `detail_line()` leads with how much of the run was checked:
+  `verified 44 of 332 cell parts (0 divergent, 27 owed, 288 refused, 0 n/a)`.
+- `docs/VERIFY.md` updated: the REFUSED row, the exit table, and a note on what
+  changed.
+
+**Seen failing first, as required.** Against the unmodified code the new tests
+failed with `AssertionError: a run with refused parts must not print VERIFIED`
+and `AttributeError: module 'mojolearn._verify_all' has no attribute
+'detail_line'`, and the old behavior printed plainly as
+`verdict(44 identical, 288 refused) = (0, 'VERIFIED')`.
+
+**Not over-strict.** On a healthy CPU-only install the same command still
+passes: `VERIFIED (verified 278 of 332 cell parts (0 divergent, 27 owed, 0
+refused, 27 n/a))`, exit 0.
+
+`identity`, the sibling command, does **not** share the flaw: its `_judge`
+treats any non-`IDENTICAL x4` verdict and any missing row as bad.
+
+## 4. Measured ready, and deliberately held: 30 lanes
+
+`PUBLIC_REFERENCE_CANDIDATES` in the manifest, with
+`--public-reference-candidates`. Each one:
 
 * is a lane `tools/identity_break.py` defines;
-* is in `record_covered_lanes()`, so it diffs against TRAINING_GPU_COLUMNS;
-* has a real (not `n/a`, not conflicted) train reference in the shipped
-  `table.json` on **all nine fixtures**, so it can read IDENTICAL, not OWED;
-* already carries a `cpu` column in that table, so a CPU box has reproduced
-  it at least once;
-* is served ONLY by families with `ships_in_wheel=True`, so an inference
-  wheel already has every binding it needs.
+* is in `record_covered_lanes()`;
+* has a real train reference in the shipped `table.json` on **all nine
+  fixtures**, so it can read IDENTICAL rather than OWED;
+* already carries a `cpu` column there;
+* has all nine fixtures on **all three** `TRAINING_GPU_COLUMNS`, so
+  `--require-columns 4` can be met;
+* is reachable from a binding that **ships**, so promoting adds no binary.
 
-They are now `PUBLIC_REFERENCE_CANDIDATES` in the manifest, with
-`--public-reference-candidates`:
+Promoting all 30 takes the checkable surface from 9 lanes to 39 and grows the
+wheel by **zero bytes**: the reference hashes are already shipped, they are
+simply never consulted because the lane is never run.
 
-    core        kmeans kmeans-random kmeans-array kmeans-weighted
-                kmeans-classic-pp kmeans-cosine knn-clf-distance
-                knn-reg-distance radius
-    estimators  dbscan dbscan-brute-l1 dbscan-weighted kde-weighted
-                pca-full-whiten ols-no-intercept ols-weighted
-                ridge-no-intercept logistic-l1 logistic-elasticnet
-                logistic-unpenalized-no-intercept
-    svm         svc-linear svc-poly svr svr-linear iforest iforest-tuned
-    metrics     umap
+**Measured, 2026-09-16 (the run, not the plan).** The 27-lane production column
+was taken on this Mac's CPU, 9 fixtures, 2 repeats, one core, and diffed
+against the three `TRAINING_GPU_COLUMNS` with `--require-columns 4` the way the
+CPU gate does it (`--owed-json`):
 
-Promoting all 27 takes `public_reference_lanes()` from 9 to 36 and the wheel
-grows by **zero bytes**: no new binary, no new model file, no new table entry.
-The reference hashes are already in the shipped table; they are simply never
-consulted, because the lane is never run.
+    summary: IDENTICAL=270
+    summary (infer/model): IDENTICAL=252, N/A=135, OWED=153
+    summary (batch):       IDENTICAL=153, N/A=45,  OWED=72
+    summary (owed): OWED=225; the next release record owes exactly these parts
 
-They are NOT promoted on this branch. The reason is the rule, not caution:
-nobody has watched them pass. Promoting a lane without that run would ship a
-claim no one has seen succeed, and would turn a user's `verify` into REFUSED
-or DIVERGENT if it were wrong. The run is parked below.
+- **Zero DIVERGENT, anywhere.**
+- **26 of 27 read IDENTICAL x4 on train across all nine fixtures** (234 cells
+  = 26 x 9), against the Apple, NVIDIA and AMD columns plus this CPU column.
+- The one exception is `svc-poly`, all 9 of its train cells, and it is exactly
+  the lane the column count had already removed from the list. Nothing else
+  was short on train.
+- The 225 OWED parts are infer, model and batch cells no committed GPU record
+  hashes yet (dbscan's three parts, the kmeans family's two, umap, svr, radius
+  and iforest's one). That is the ordinary state the gate absorbs, not a
+  disagreement; they are listed in `C_owed_cells.json`.
 
-## Gap 2: implemented saved-model inference that no gate covers
+Two notes against over-reading this. First, an earlier run of the same diff
+reported "261 short" because I omitted `--owed-json`, which the gate passes;
+that was my flag, not arithmetic. Second, a re-run of mine failed outright
+because zsh does not word-split `$GPUCOLS` and it tried to open all three
+column paths as one filename. The authoritative numbers above come from the
+chain, which runs under bash.
 
-`mojolearn.host_model()` loads and predicts from these today, and the manifest
-does not declare them, so no gate covers them and the README does not mention
-them. Now `SAVED_MODEL_INFERENCE_OWED` in the manifest,
-`--saved-model-inference-owed`:
+**Two of my own stated criteria were wrong and a check caught each.** Both
+corrections are now written into the file:
+
+- **`svc-poly` was dropped.** It met every criterion I had written and sat in
+  the list until the columns were counted: its cells rest on two columns only
+  (apple and cpu, from `2026-09-15_inference-svm`), so it can never meet
+  `--require-columns 4`. Its NVIDIA and AMD recordings are owed to the next
+  release record, as `CLASSICAL_RECORDED` already noted. Added the
+  three-GPU-column criterion.
+- **`kpss` was wrongly rejected.** My criterion said every declaring family
+  must ship; `kpss` is declared by `tsa`, which does not. But it is reachable
+  because the shipped `forecast` binding serves `_mojolearn_tsa`. Added the
+  route-served criterion.
+
+### HELD: the fixture shrink
+
+**Nothing is promoted on this branch.** Another agent is shrinking oversized
+fixtures and will publish `docs/lanes/FIXTURE_SHRINK_SCOPE.md` in three buckets
+(will change, leave big, undecided). That file **does not exist yet** — not in
+this worktree, not on `origin/main`, and there is no such branch. I cannot
+certify a lane is clear of a list I have not seen, so every candidate is
+effectively "undecided" and all 30 are held.
+
+This matters more than it sounds. These lanes' references ship **in the
+wheel's table**. Promoting a lane whose fixture then changes would ship a
+reference a user's `verify` fails against, breaking the exact command this lane
+exists to make trustworthy. An unpromoted lane with a stale reference is
+latent; a promoted one is a user-visible failure.
+
+**To finish**: read the scope list, promote the lanes in "leave big", hold the
+rest, and record which were held and why.
+
+## 5. Owed: implemented saved-model inference no gate covers
+
+`SAVED_MODEL_INFERENCE_OWED`, with `--saved-model-inference-owed`. Each is
+implemented and already dispatched by `mojolearn.host_model()`:
 
 | lane | state |
 |---|---|
-| `dbscan` | `DBSCAN.predict` shipped (DEVIATION 2740), `mojolearn-dbscan-1` dispatched; GPU recording owed |
-| `agglomerative` | `AgglomerativeClustering.predict` shipped, `mojolearn-agglomerative-1` dispatched; GPU recording owed |
+| `dbscan` | `DBSCAN.predict` shipped (DEVIATION 2740); GPU recording owed |
+| `agglomerative` | `AgglomerativeClustering.predict` shipped; GPU recording owed |
 | `spectral` | `SpectralClustering.predict` shipped (DEVIATION 2860); GPU recording owed |
-| `spectral-precomputed` | the same on a precomputed affinity; GPU recording owed |
-| `kmeans` | `KMeans.predict` shipped, but the class has **no `save`**, so there is no format to record |
+| `spectral-precomputed` | same on a precomputed affinity; GPU recording owed |
+| `kmeans` | `KMeans.predict` shipped, but the class has **no `save`** |
 
-Every one of the first four is waiting on exactly one thing: a recording made
-by `tools/classical_host_gate.py record` on a GPU box. That tool refuses a
-CPU-only install by design, so the host binding can never record its own
-answer as its own reference. This lane could not make them; they need a GPU
-leg, and GPU legs are release-record only.
+The first four wait on one thing: a recording from
+`tools/classical_host_gate.py record`, which refuses a CPU-only install by
+design so a host binding can never record its own answer as its own reference.
+That needs a GPU leg, and GPU legs are release-record only.
 
-`agglomerative` is worth calling out: its cells in `table.json` already carry
-a `cpu` column on train, infer, model and batch. A CPU box has reproduced its
-saved-model inference. It is served by the `solver` family, which does not
-ship, so unlike the 27 above it cannot be promoted without a packaging
-decision as well as a recording.
+`agglomerative` is worth noting: its cells already carry a `cpu` column on all
+four parts. It is served by `solver`, which does not ship, so unlike the 30 it
+needs a packaging decision as well as a recording.
 
-## Gap 3: silent exclusions, now written down
+## 6. No silent exclusions
 
-Seventeen families do not ship. Before this lane, fifteen of the seventeen
-gave no reason anywhere in the file; two carried a one-line comment. Every
-family now carries a `wheel_note` (`--wheel-notes`), and
-`test_every_family_says_why_it_ships_or_does_not` fails if one is missing,
-too short, or does not start with "Ships:" / "Does not ship".
+Every one of the 32 families now carries a `wheel_note` saying why it does or
+does not ship (`--wheel-notes`), enforced by
+`test_every_family_says_why_it_ships_or_does_not`, which fails on a missing or
+too-short note. Before this lane, 15 of the 17 non-shipping families gave no
+reason anywhere.
 
-Sixteen of the seventeen are settled and correct: the family holds a `fit`,
-and the inference a user actually needs is served by a shipping family
-(preprocessing and kernel_methods through `estimators`; trees, rf and gbdt
-through `forest`; gp through `gp_infer`; mixture through `mixture_infer`;
-hdbscan through `hdbscan_infer`; arima and tsa through `forecast`; embedding
-through `embedding_infer`; ivf through `ivf_search`; mamba, transformer and
-the MLP/Samba forwards through `neural`), or it is training-only by
-definition (`training`).
+Sixteen ship. The sixteen that do not each name the shipping family serving
+their inference (preprocessing and kernel_methods through `estimators`; trees,
+rf and gbdt through `forest`; gp through `gp_infer`; mixture through
+`mixture_infer`; hdbscan through `hdbscan_infer`; arima and tsa through
+`forecast`; embedding through `embedding_infer`; ivf through `ivf_search`;
+mamba, transformer and the MLP/Samba forwards through `neural`), or state they
+are training-only (`training`).
 
-**Two are not settled, and they are flagged OPEN in the file:**
+## 7. Evidence
 
-* `resample`: `bootstrap`, `permutation_test`, `monte_carlo_integrate`
-* `tsa`: `kpss_test`
+Host bindings built on this Mac at this commit, one core, `nice -n 19`,
+`MOJOLEARN_BUILD_JOBS=1`. **No Metal was taken and no GPU was used**; the lock
+was left free for other agents. Nothing was rented.
 
-These compute an answer from a user's own data and a user's own function, with
-no fitted model and nothing to save. They fit neither side of the saved-model
-inference boundary, so no shipped family carries them and they refuse on a
-CPU-only install. Whether an inference wheel should carry them is a decision
-for Andrew, not a boundary anyone drew. I did not expose them because doing so
-would require a new inference-only binding and a recording, and because the
-question is genuinely open.
+**Sabotage controls are real, not assumed.** Production and sabotage binaries
+differ byte for byte for all seven families; production bindings read back
+`sabotage=False` and sabotage bindings `sabotage=True`; and loading a sabotage
+binding without `MOJOLEARN_HOST_ALLOW_SABOTAGE=1` is refused by name (the guard
+was watched firing).
 
-## A finding worth Andrew's attention: `verify` can pass while refusing
+- `A_verify_before.log` — healthy CPU-only baseline, VERIFIED, 278 of 332.
+- `B_prod_run.log`, `cpu-candidates.json` — the 27 candidates, 9 fixtures, 2 repeats.
+- `C_diff_gpu.log`, `C_diff_gpu_owed.log`, `C_owed_cells.json` — candidates vs
+  the three GPU columns, `--require-columns 4`: **0 DIVERGENT, train
+  IDENTICAL=270, 225 OWED**, the only train shortfall being `svc-poly`.
+- `D_sab_run.log`, `E_diff_sab.log` — **PENDING**: the same lanes under sabotage.
+- `F_exposed_run.log`, `G_exposed_diff.log` — **PENDING**: kpss, bootstrap, permutation-test, monte-carlo vs the GPU columns.
+- `H_exposed_sab.log`, `I_exposed_sabdiff.log` — **PENDING**: those four under sabotage.
 
-Measured, not inferred. On a CPU-only install whose host bindings were stale,
-`verify --all --full` printed:
-
-    | all | 13 | 44 | 0 | 0 | 288 | 0 |
-    RESULT: VERIFIED (44 identical, 0 divergent, 0 owed, 288 refused, 0 n/a
-    cell parts). 17.7s. exit 0
-
-288 of 332 cell parts REFUSED and the verdict is VERIFIED, exit 0. This is
-documented behavior, not a bug hiding: `docs/VERIFY.md` line 109 says exit 0
-means "no part DIVERGENT and at least one IDENTICAL (OWED and REFUSED parts
-are counted, not passed)", and `test_verdict_exit_codes` asserts it. So it is
-a deliberate policy.
-
-It is still worth revisiting, and it matters more the moment the 27 candidates
-land: a user with a partial or broken install would get a green exit while
-four fifths of the surface never ran. I did not change it here, because
-changing exit semantics is a cross-cutting decision and not this lane's call.
-The options, cheapest first: keep exit 0 but print `VERIFIED (INCOMPLETE)` in
-the headline when any part REFUSED; or add `--strict` that exits non-zero on
-any REFUSED; or make REFUSED exit 4 outright, which would change CI.
-
-## What changed on this branch
-
-Static only. No kernel, no binding, no recording, no claim about arithmetic.
-
-* `python/mojolearn/host_surface.py`
-  * `wheel_note` on all 32 families, plus `wheel_notes()` and `--wheel-notes`.
-  * `PUBLIC_REFERENCE_CANDIDATES` (27 lanes) and
-    `public_reference_candidates()` / `--public-reference-candidates`.
-  * `SAVED_MODEL_INFERENCE_OWED` (5 lanes) and
-    `saved_model_inference_owed()` / `--saved-model-inference-owed`.
-  * `--public-reference-lanes`, and the four new keys in `as_dict()`.
-  * `public_reference_lanes()`' docstring now states the 9-against-79 gap.
-  * `markdown_table()` is deliberately UNCHANGED, so the marked spans in
-    SUPPORT_MATRIX.md and docs/BYTE_LM_CPU_TRAINING.md do not move.
-* `python/mojolearn/tests/test_host_surface.py`: five new tests.
-* `CHANGELOG.md`: one entry under Unreleased, marked for 0.8.7.
-
-Nothing on the frozen `release/0.8.6` path was touched. `db9047b9f` and
-`release/0.8.6` are untouched.
+All under `~/mojolearn-evidence/expose-inference/` (outside the repo).
 
 ### Gates
 
     docs_facts --check                      OK: 13 facts, 12 marked spans
     wheel_ci.py pins .                      OK: 56 build scripts
     wheel_ci.py inventory python/mojolearn  OK: 85 modules
+    check_ext_lists.py --host               OK, 16 bindings, read from the manifest everywhere
+    test_host_surface.py                    154 passed
 
-(Baseline taken on the clean tree before any edit, and again after; see the
-commit message for the after values.)
+`docs_facts --write` regenerated the `host_surface_table` spans in
+`SUPPORT_MATRIX.md` and `docs/BYTE_LM_CPU_TRAINING.md`, because `resample` now
+ships and `forecast` gained a class.
 
 ### Wheel size effect
 
-**Zero.** No binary, model file or table entry was added. Promoting all 27
-candidates later is also zero: every serving family already ships and every
-reference hash is already in `table.json`. For scale, the host binaries
-already in the wheel run 250 KB to 590 KB each (`_mojolearn_linalg_host.so`
-253,192 bytes and `_mojolearn_core_host.so` 584,536 bytes, built on this Mac
-at this commit).
+**One binding added**, `_mojolearn_resample_host.so`, for the three analysis
+functions. The other shipped host binaries run 250 KB to 750 KB on this Mac, so
+expect the same order. Everything else in this lane costs **zero bytes**: the
+false-VERIFIED fix is Python, and promoting the 30 candidates later adds no
+binary and no table entry.
 
-## NEEDS A BUILD, DEFERRED FOR MACHINE LOAD
+## 8. Not merged
 
-Stopped mid-flight on 2026-09-16 at 05:33 ET when the Mac hit 53 MB free RAM
-and load average 47. My build was killed; no process of mine survived; other
-agents' Mojo processes were left alone. `linalg` and `core` finished before
-the stop and are at
-`/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/hostbuild/prod/`
-(that path is session scratch and will not survive; rebuild rather than trust
-it).
+The branch is pushed and **not merged**. The false-VERIFIED fix and the two
+exposures are complete and standalone, but the promotion in section 4 is the
+lane's headline and it is held on a file that has not been published. Merging
+the settled parts alone is reasonable if Andrew wants them now.
 
-**Do not take the Metal lock. None of this needs a GPU.** One core, one
-process at a time, `MOJOLEARN_BUILD_JOBS=1`, `nice -n 19`.
-
-### Step 1: build the host families the candidates need (~90 s each)
-
-    cd /Users/andrewhendel/mojolearn-wt/lane-expose-inference
-    OUT=$HOME/mojolearn-evidence/expose-inference/hostprod && mkdir -p "$OUT"
-    for fam in core estimators svm metrics linalg tokenizer forest; do
-      MOJOLEARN_HOST_OUTDIR="$OUT" MOJOLEARN_BUILD_JOBS=1 \
-        nice -n 19 sh "bindings/build_${fam}_host.sh"
-    done
-
-`build_host_family.sh` never overwrites an existing output, so use a fresh
-directory. Never build into the shared checkout.
-
-### Step 2: the CPU-only install, without touching a GPU
-
-The worktree carries no GPU `.so` (they are gitignored build outputs), so with
-host bindings present the package selects the CPU-only path on its own and
-`mojolearn.vendor()` reads `cpu`. Confirmed on this box already.
-
-    cd /Users/andrewhendel/mojolearn-wt/lane-expose-inference/python
-    MOJOLEARN_HOST_DIR="$OUT" MOJOLEARN_NUMERIC_MODE=identical \
-      nice -n 19 python3 -c "import mojolearn as ml; print(ml.vendor())"   # cpu
-
-### Step 3: the proof, production build (expect IDENTICAL)
-
-    CAND=$(python3 ../python/mojolearn/host_surface.py --public-reference-candidates)
-    MOJOLEARN_HOST_DIR="$OUT" MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_CPU_THREADS=1 \
-      nice -n 19 python3 ../tools/identity_break.py --lanes "$CAND" --repeats 2 \
-      --json ~/mojolearn-evidence/expose-inference/cpu-candidates.json
-    nice -n 19 python3 ../tools/identity_break.py --diff \
-      $(python3 ../python/mojolearn/host_surface.py --training-gpu-columns) \
-      ~/mojolearn-evidence/expose-inference/cpu-candidates.json --require-columns 4
-
-Every candidate's train cell must read IDENTICAL x4 on all nine fixtures. A
-lane that does not is dropped from the list, not argued with.
-
-### Step 4: the sabotage, which must FAIL (this is the part that can fail)
-
-Build the same families with the sabotage define into a SEPARATE directory and
-re-run. Every candidate must move.
-
-    SAB=$HOME/mojolearn-evidence/expose-inference/hostsab && mkdir -p "$SAB"
-    for fam in core estimators svm metrics linalg; do
-      MOJOLEARN_HOST_OUTDIR="$SAB" MOJOLEARN_BUILD_JOBS=1 \
-        MOJOLEARN_BUILD_EXTRA_DEFINES="$(python3 python/mojolearn/host_surface.py --sabotage-build-defines $fam)" \
-        nice -n 19 sh "bindings/build_${fam}_host.sh"
-    done
-    MOJOLEARN_HOST_DIR="$SAB" MOJOLEARN_HOST_ALLOW_SABOTAGE=1 \
-      MOJOLEARN_NUMERIC_MODE=identical nice -n 19 python3 ../tools/identity_break.py \
-      --lanes "$CAND" --json ~/mojolearn-evidence/expose-inference/cpu-candidates-sab.json
-    nice -n 19 python3 ../tools/identity_break.py --diff \
-      ~/mojolearn-evidence/expose-inference/cpu-candidates.json \
-      ~/mojolearn-evidence/expose-inference/cpu-candidates-sab.json
-
-Run the sabotage arm BEFORE trusting the production arm. A diff that shows
-nothing moving means the sabotage did not reach these lanes, which invalidates
-the negative control rather than passing it.
-
-### Step 5: promote, then re-check the whole command
-
-Move the surviving lanes out of `PUBLIC_REFERENCE_CANDIDATES` into
-`public_reference_lanes()`, then:
-
-    cd /Users/andrewhendel/mojolearn-wt/lane-expose-inference/python
-    MOJOLEARN_HOST_DIR="$OUT" MOJOLEARN_NUMERIC_MODE=identical \
-      nice -n 19 python3 -m mojolearn verify --all --full
-
-and update the sentence in `docs/VERIFY.md` (line 39 spells the nine lanes out
-by hand) and the timing table (line 95 says "8 lanes, 9 fixtures, 4 models").
-`test_cpu_training_misc.py::test_identity_command_runs_public_reference_probes_on_a_cpu`
-and `test_verify_all.py::test_full_and_cpu_lane_sets` both read the list and
-must stay green.
-
-### Step 6: tests and gates
-
-    /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python -m pytest \
-      python/mojolearn/tests/test_host_surface.py \
-      python/mojolearn/tests/test_cpu_inference_boundary.py \
-      python/mojolearn/tests/test_cpu_training_misc.py -q
-    python3 tools/docs_facts.py --check
-    python3 packaging/wheel_ci.py pins .
-    python3 packaging/wheel_ci.py inventory python/mojolearn
+`release/0.8.6` and `db9047b9f` were never touched. No Metal job was run.
 
 ## Resume
 
-    git worktree list | grep expose-inference
     cd /Users/andrewhendel/mojolearn-wt/lane-expose-inference
-    git log --oneline -3          # branch lane/expose-inference-surface
+    git log --oneline -3                 # branch lane/expose-inference-surface
     python3 python/mojolearn/host_surface.py --public-reference-candidates
     python3 python/mojolearn/host_surface.py --saved-model-inference-owed
     python3 python/mojolearn/host_surface.py --wheel-notes
+    ls ~/mojolearn-evidence/expose-inference/
+
+To finish the promotion once `docs/lanes/FIXTURE_SHRINK_SCOPE.md` lands: move
+the cleared lanes from `PUBLIC_REFERENCE_CANDIDATES` into
+`public_reference_lanes()`, update `docs/VERIFY.md` line 38 (which spells the
+nine lanes out) and its timing table line 98 ("8 lanes, 9 fixtures, 4 models"),
+then re-run `verify --all --full` and the three gates.
 
 ## Done
 
-- [x] the three-population comparison, re-measured from code
-- [x] the gap list, with the reason each item is not exposed, in the file
+- [x] three-population comparison, re-measured from code
 - [x] `wheel_note` on all 32 families, test-enforced, no silent exclusion
-- [x] the two OPEN questions named as open (`resample`, `kpss_test`)
-- [x] 27 promotable lanes measured and recorded with their conditions
-- [x] gates green, branch pushed
-- [ ] **NEEDS A BUILD**: steps 1 to 6 above, then promote and merge
-- [ ] a decision from Andrew on `resample` and `kpss_test`
-- [ ] a GPU recording for dbscan, agglomerative and spectral predict (next
-      release record; not a lane of its own)
-- [ ] a decision on `verify` reading VERIFIED with REFUSED parts
-
-## Not merged, deliberately
-
-This branch is pushed but NOT merged. The manifest and test changes are green
-and standalone, but the lane's point is the promotion in step 5, and unrun
-code stays on its branch. Merging the documentation half alone is fine if
-Andrew wants it now; it changes no behavior.
+- [x] **exposed** resample's three functions and `kpss_test`, no fit shipped
+- [x] **fixed** the false VERIFIED, with the new test watched failing first
+- [x] 30 promotable lanes measured, with two of my own criteria corrected
+- [x] sabotage controls proven real before being relied on
+- [ ] the exposure and candidate proofs (running; section 7 placeholders)
+- [ ] **HELD**: promote once `FIXTURE_SHRINK_SCOPE.md` is published
+- [ ] a GPU recording for dbscan, agglomerative and spectral predict

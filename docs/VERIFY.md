@@ -65,10 +65,13 @@ Each part reads one state.
 | IDENTICAL | equal to the reference hash |
 | DIVERGENT | different from it, or this machine disagreed with itself between repeats, or batch invariance failed here |
 | OWED | no committed record carries this part yet, the record's own columns disagree at one commit, or the part changed after the record (a hash here against an `n/a` there, as when a lane gained a batch declaration); not a pass |
-| REFUSED | the lane or probe raised; the sentence is printed (for example a function with no CPU implementation, or a lane whose host binding this install lacks, refused by name) |
+| REFUSED | the lane or probe raised; the sentence is printed (for example a function with no CPU implementation, or a lane whose host binding this install lacks, refused by name). **A refused part did not run, so it is not a pass and it costs the whole run its pass**: any refusal makes the verdict INCOMPLETE and the exit non-zero |
 | N/A | the estimator has no such output (a transductive clusterer has no held-out answer) |
 
-The command prints a table per family and a verdict.
+The command prints a table per family and a verdict. The verdict line leads
+with how much of the run was actually checked, as in `verified 44 of 332 cell
+parts (0 divergent, 0 owed, 288 refused, 0 n/a)`, so a run that mostly refused
+cannot be misread as a run that passed.
 
 ## Flags
 
@@ -106,12 +109,17 @@ pieces, `--lanes a,b,...` a group at a time, or check one area with
 
 | exit | meaning |
 |---|---|
-| 0 | `VERIFIED`: no part DIVERGENT and at least one IDENTICAL (OWED and REFUSED parts are counted, not passed) |
-| 1 | `MISMATCH`: at least one part DIVERGENT |
+| 0 | `VERIFIED`: at least one part IDENTICAL, no part DIVERGENT, and **nothing REFUSED**. OWED and N/A parts are counted, not passed |
+| 1 | `MISMATCH`: at least one part DIVERGENT. A wrong answer outranks an absent one, so this is read before INCOMPLETE |
 | 2 | invalid usage |
 | 3 | refused: the process loaded a tier other than IDENTICAL |
-| 4 | cannot run: the import raised, the fixtures differ, or every judged part refused |
+| 4 | `INCOMPLETE`, or cannot run: **any** judged part REFUSED, or the import raised, or the fixtures differ. A part that did not run is not a part that passed, and there is no number of parts that did run which makes up for one that did not |
 | 5 | no reference: no table in this install, or every part OWED |
+
+Before 2026-09-16 one IDENTICAL part outranked any number of REFUSED ones, so
+an install missing most of its host bindings printed `VERIFIED, exit 0` having
+checked 44 of 332 parts. That is fixed; a run in that state now reads
+`RESULT: INCOMPLETE (verified 44 of 332 cell parts ...)` and exits 4.
 
 ## What a local run proves, and what it does not
 

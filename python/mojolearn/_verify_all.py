@@ -308,14 +308,36 @@ def summarize(rows, families):
 
 
 def verdict(counts):
-    """(exit code, headline) from the state counts of every judged part."""
+    """(exit code, headline) from the state counts of every judged part.
+
+    A REFUSED PART DID NOT RUN, so it is never evidence of success, and the
+    parts that did run do not make up for it. Until 2026-09-16 one IDENTICAL
+    part outranked any number of REFUSED ones, so a CPU-only install with
+    stale bindings printed `VERIFIED, exit 0` on 44 IDENTICAL and 288 REFUSED
+    parts: the user had checked 13 percent of what they believed they checked
+    (lane/expose-inference-surface). There is no threshold below which a part
+    that did not run counts as checked, so ANY refusal makes the run
+    INCOMPLETE and exits non-zero, and only a run with nothing refused may
+    print VERIFIED. A wrong answer still outranks an absent one, so DIVERGENT
+    is still read first.
+    """
     if counts[vref.DIVERGENT]:
         return EXIT_MISMATCH, "MISMATCH"
+    if counts[vref.REFUSED]:
+        return EXIT_CANNOT_RUN, "INCOMPLETE"
     if counts[vref.IDENTICAL]:
         return EXIT_VERIFIED, "VERIFIED"
-    if counts[vref.REFUSED]:
-        return EXIT_CANNOT_RUN, "CANNOT RUN"
     return EXIT_NO_REFERENCE, "NO REFERENCE"
+
+
+def detail_line(counts):
+    """The sentence under the verdict. It leads with how much of the run was
+    actually checked, so `verified 44 of 332 cell parts` cannot be misread as
+    `verified`."""
+    total = sum(counts[s] for s in vref.STATES)
+    return (f"verified {counts[vref.IDENTICAL]} of {total} cell parts "
+            f"({counts[vref.DIVERGENT]} divergent, {counts[vref.OWED]} owed, "
+            f"{counts[vref.REFUSED]} refused, {counts[vref.NA]} n/a)")
 
 
 def judge_rows(raw, table, families=None):
@@ -505,8 +527,7 @@ def cmd_verify_all(args):
         c = dict(c)
         c["lanes"] = len(c["lanes"])
         fams.append((fam, c))
-    detail = (f"{counts['IDENTICAL']} identical, {counts['DIVERGENT']} divergent, {counts['OWED']} owed, "
-              f"{counts['REFUSED']} refused, {counts['N/A']} n/a cell parts")
+    detail = detail_line(counts)
     harness_sha = vref.sha256_file(harness_file)
     report = dict(
         format="mojolearn.verify-all-report.v1", verdict=headline, exit=code, detail=detail,

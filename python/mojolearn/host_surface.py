@@ -1322,7 +1322,8 @@ FAMILIES = (
         classes=("ExponentialSmoothing", "kpss_test"),
         display="Holt-Winters",
         host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo",
-                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo"),
+                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo",
+                      "bindings/kpss_host_test.mojo"),
         exports=(
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
             "tsa_host_sabotage", "tsa_vendor", "holtwinters_fit",
@@ -1330,11 +1331,12 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only. ExponentialSmoothing forecasts and predicts in sample from "
-            "a saved model through the shipped forecast binding. OPEN: kpss_test computes a statistic "
-            "from a user's series with no saved model, so no shipped family carries it and it refuses "
-            "on a CPU-only install; whether it belongs in an inference wheel is an unmade decision, "
-            "not a settled exclusion."
+            "Does not ship: training-only, because this binding holds holtwinters_fit. "
+            "ExponentialSmoothing forecasts and predicts in sample from a saved model through the "
+            "shipped forecast binding, and since lane/expose-inference-surface (2026-09-16) "
+            "kpss_test is served from there too (bindings/kpss_host_test.mojo, registered by both "
+            "bindings), so nothing a user calls is stranded behind this family. Andrew's call: "
+            "kpss_test trains no model, so the inference boundary was never meant to exclude it."
         ),
         ships_in_wheel=False,
     ),
@@ -1910,14 +1912,17 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship. OPEN, and the one exclusion here that is not obviously right: bootstrap, "
-            "permutation_test and monte_carlo_integrate compute an answer from a user's own data and "
-            "a user's own function, with no fitted model and nothing to save, so they fit neither "
-            "side of the saved-model inference boundary and no shipped family carries them. They "
-            "refuse on a CPU-only install. Whether an inference wheel should carry them is an unmade "
-            "decision, not a settled exclusion."
+            "Ships: bootstrap, permutation_test and monte_carlo_integrate compute an answer from a "
+            "user's own data and a user's own function. They train no model and there is nothing to "
+            "save, so the saved-model inference boundary never had a side for them to fall on and "
+            "they used to refuse on a CPU-only install, which is indefensible for cheap analysis "
+            "functions a user calls on their laptop. Andrew's call (2026-09-16, "
+            "lane/expose-inference-surface): the boundary exists to keep CPU TRAINING OF MODELS "
+            "internal, not to exclude analysis. This binding registers the three entries and no "
+            "fit, and _backend already routes _mojolearn_resample here, so shipping it is the whole "
+            "change."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # lane/cpu-training-mamba (2026-09-15): the Mamba blocks' host
@@ -2166,22 +2171,28 @@ FAMILIES = (
         inference_lanes=("arima", "arima-011", "arima-seasonal-c", "holtwinters", "holtwinters-multiplicative",
                          "arima-exog", "arima-exog-seasonal"),
         forest_kinds=(),
-        classes=("ARIMA", "ExponentialSmoothing"),
+        classes=("ARIMA", "ExponentialSmoothing", "kpss_test"),
         display=("batched ARIMA prediction, in sample and out of sample, and forecasts, with or without"
                  " exogenous regressors, and Holt-Winters"
                  " forecasts and in-sample one-step predictions, additive and multiplicative"),
         host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict.mojo",
-                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo"),
+                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo",
+                      "tsa/checks/kpss_oracle.mojo", "bindings/kpss_host_test.mojo"),
         exports=(
             "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
             "arima_predict", "arima_forecast", "tsa_vendor", "holtwinters_forecast",
-            "holtwinters_predict",
+            "holtwinters_predict", "kpss_test",
         ),
         gate="tools/classical_host_gate.py and tools/identity_break.py",
         wheel_note=(
             "Ships: inference-only binding serving _mojolearn_arima and _mojolearn_tsa, predict and "
-            "forecast from saved ARIMA and Holt-Winters models; neither fit ships."
+            "forecast from saved ARIMA and Holt-Winters models; neither fit ships. Since "
+            "lane/expose-inference-surface (2026-09-16) it also carries kpss_test, which trains no "
+            "model at all: it computes a statistic from the caller's own series, so it belongs on "
+            "the shipped side, and registering it here puts it there without shipping the tsa "
+            "family's holtwinters_fit. Both bindings register it from bindings/kpss_host_test.mojo, "
+            "so they answer through one source."
         ),
         ships_in_wheel=True,
     ),
@@ -2287,9 +2298,21 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
 #:     so it can read IDENTICAL rather than OWED;
 #:   * already carries a `cpu` column in that table, so some CPU box has
 #:     reproduced it once;
-#:   * is served ONLY by families with ships_in_wheel=True, so an inference
-#:     wheel already has every binding it needs and adding it grows the wheel
-#:     by nothing.
+#:   * has all nine fixtures on ALL THREE of TRAINING_GPU_COLUMNS, so the
+#:     `identity` command's `--require-columns 4` can be met. This condition
+#:     was added after the fact: `svc-poly` met every other one and was in
+#:     this list until the columns were counted, and its cells turned out to
+#:     rest on two columns only (apple and cpu, from
+#:     2026-09-15_inference-svm; its NVIDIA and AMD recordings are owed to the
+#:     next release record, as CLASSICAL_RECORDED already notes). It rejoins
+#:     this list the day a record carries those two columns;
+#:   * is reachable from a binding that SHIPS, so promoting it adds no binary
+#:     to the wheel. Either the declaring family ships, or a shipped
+#:     inference-only binding serves its route: `kpss` is declared by `tsa`,
+#:     which holds holtwinters_fit and stays a source build, while the shipped
+#:     `forecast` binding serves `_mojolearn_tsa` and registers `kpss_test`.
+#:     Requiring the declaring family itself to ship would wrongly reject a
+#:     lane a user can call.
 #:
 #: They are NOT live yet, and the reason is not a policy one: nothing has run
 #: them through `verify --all` on a CPU-only install at this commit. Promoting
@@ -2308,10 +2331,23 @@ PUBLIC_REFERENCE_CANDIDATES = (
     "dbscan", "dbscan-brute-l1", "dbscan-weighted", "kde-weighted", "pca-full-whiten",
     "ols-no-intercept", "ols-weighted", "ridge-no-intercept", "logistic-l1",
     "logistic-elasticnet", "logistic-unpenalized-no-intercept",
-    # svm (SVC, SVR, isolation forest)
-    "svc-linear", "svc-poly", "svr", "svr-linear", "iforest", "iforest-tuned",
+    # svm (SVC, SVR, isolation forest). `svc-poly` is NOT here: it rests on
+    # two columns (apple and cpu) and cannot meet --require-columns 4 until a
+    # record carries its NVIDIA and AMD cells.
+    "svc-linear", "svr", "svr-linear", "iforest", "iforest-tuned",
     # metrics (the saved UMAP embedding's transform)
     "umap",
+    # The analysis functions exposed by lane/expose-inference-surface
+    # (2026-09-16, Andrew's call): they train no model, so the inference
+    # boundary never had a side for them, and they now run on a CPU-only
+    # install through the shipped resample binding and the shipped forecast
+    # binding's kpss_test. Each has a train reference on all nine fixtures
+    # with all three GPU columns, so each can read IDENTICAL x4 rather than
+    # OWED. They are here rather than live for the same reason as the rest:
+    # the fixture shrink (docs/lanes/FIXTURE_SHRINK_SCOPE.md) has not
+    # published its scope, and a lane whose fixture is about to change would
+    # ship a reference a user's `verify` then fails against.
+    "kpss", "bootstrap", "permutation-test", "monte-carlo",
 )
 
 #: Saved-model CPU inference that IS implemented and that

@@ -57,6 +57,7 @@ from bindings.holtwinters_host_predict import (
     holtwinters_forecast_binding,
     holtwinters_predict_binding,
 )
+from bindings.kpss_host_test import KPSS_ORACLE_HOST_SABOTAGE, kpss_test_binding
 
 
 def forecast_host_numeric_mode_binding() raises -> PythonObject:
@@ -83,8 +84,13 @@ def forecast_host_column_binding() raises -> PythonObject:
 def forecast_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary flips the lowest bit of every prediction on
     purpose (MOJOLEARN_HOST_SABOTAGE, MOJOLEARN_ARIMA_PREDICT_SABOTAGE or
-    MOJOLEARN_HW_PREDICT_SABOTAGE)."""
-    return PythonObject(ARIMA_ORACLE_PREDICT_SABOTAGE or HW_PREDICT_SABOTAGE)
+    MOJOLEARN_HW_PREDICT_SABOTAGE), or walks the KPSS series sums descending
+    (KPSS_ORACLE_HOST_SABOTAGE, since lane/expose-inference-surface): one
+    read-back over every arm this binary carries, so a sabotage build of it
+    is refused outside the gate whichever arm was raised."""
+    return PythonObject(
+        ARIMA_ORACLE_PREDICT_SABOTAGE or HW_PREDICT_SABOTAGE or KPSS_ORACLE_HOST_SABOTAGE
+    )
 
 
 def arima_vendor_binding() raises -> PythonObject:
@@ -119,6 +125,11 @@ def PyInit__mojolearn_forecast_host() abi("C") -> PythonObject:
         module.def_function[tsa_vendor_binding]("tsa_vendor")
         module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
         module.def_function[holtwinters_predict_binding]("holtwinters_predict")
+        # The KPSS stationarity test (lane/expose-inference-surface,
+        # 2026-09-16). It trains no model, so it belongs on the shipped side;
+        # the `_mojolearn_tsa` route reaches it here when the reference
+        # binding, which holds holtwinters_fit, is not built.
+        module.def_function[kpss_test_binding]("kpss_test")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_forecast_host: ", error))
