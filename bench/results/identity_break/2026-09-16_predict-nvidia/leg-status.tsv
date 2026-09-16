@@ -1,0 +1,21 @@
+build-base	0	43
+build-estimators	0	47
+build-solver	0	29
+build-metrics	0	56
+record	1	0
+byhand-build-estimators-host	0	15	byhand
+identity	0	14
+identity-batch-sabotage	1	3
+diff-batch-sabotage	1	0
+diff-vs-metal-transductive	1	1
+diff-vs-metal-spectral	1	0
+build-estimators-host	2	0
+build-metrics-host	2	0
+check	1	1
+build-estimators-host-sabotage	2	0
+build-metrics-host-sabotage	2	0
+sabotage-every-fixture	2	1
+byhand-build-metrics-host	0	18	byhand
+sabotage-every-lane	2	0
+byhand-build-estimators-host-sabotage	0	14	byhand
+byhand-build-metrics-host-sabotage	0	17	byhand

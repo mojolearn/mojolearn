@@ -85,8 +85,14 @@ def test_binding_exports_no_training_entry(binding):
     names = {n for n in dir(binding) if not n.startswith("_")}
     assert names == {"neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
                      "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
-                     "mamba1_forward_fresh", "mamba2_forward_fresh", "mamba3_forward_fresh",
+                     "transformer_forward", "transformer_decode_step",
+                     "mamba1_forward_fresh", "mamba1_forward", "mamba1_decode_step",
+                     "mamba2_forward_fresh", "mamba2_forward", "mamba2_decode_step",
+                     "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",
                      "embedding_forward", "rms_norm_forward", "linear_forward"}, names
+    # the decode cache is here (lane/stateful-cpu-decoding); training is not
+    assert not [n for n in names if "backward" in n or "loss" in n or "optim" in n
+                or n.endswith("_fit") or "train" in n], names
 
 
 def test_mlp_logits_shape_rows_alone_and_checkpoint(binding):
@@ -178,13 +184,10 @@ def test_transformer_forward_rows_ragged_and_refusals(binding):
             assert yr[i:i + 1, :n].tobytes() == alone.tobytes(), (window, i)
             assert not yr[i, n:].any()
     blk = ml.TransformerBlockInference(tw, n_heads=2, n_kv_heads=1)
-    with pytest.raises(ValueError, match="carried state is not supported"):
-        blk.forward(np.zeros((1, 2, 32), np.float32), state=object())
-    for call in (lambda: blk.step(np.zeros((1, 1, 32), np.float32), None),
-                 lambda: blk.allocate_state(1, 4),
-                 lambda: blk.backward(np.zeros((1, 2, 32), np.float32), np.zeros((1, 2, 32), np.float32))):
-        with pytest.raises(NotImplementedError, match="stateless forward only"):
-            call()
+    with pytest.raises(NotImplementedError, match="inference is forward only"):
+        blk.backward(np.zeros((1, 2, 32), np.float32), np.zeros((1, 2, 32), np.float32))
+    with pytest.raises(ValueError, match="state is required"):
+        blk.step(np.zeros((1, 1, 32), np.float32), None)
     with pytest.raises(ValueError, match="d_model must equal n_heads"):
         ml.TransformerBlockInference(tw, n_heads=3)
 
@@ -258,11 +261,85 @@ def test_mamba_forward_rows_prefix_ragged_and_refusals(binding, kind, cls, kw):
     for i, n in enumerate(lengths):
         assert yr[i:i + 1, :n].tobytes() == np.asarray(blk.forward(np.ascontiguousarray(x[i:i + 1, :n]))).tobytes()
         assert not yr[i, n:].any()
-    with pytest.raises(ValueError, match="carried state is not supported"):
-        blk.forward(x, state=object())
-    for call in (lambda: blk.step(x[:, :1], None), lambda: blk.allocate_state(1), lambda: blk.backward(x, x)):
-        with pytest.raises(NotImplementedError, match="zero-state forward only"):
-            call()
+    with pytest.raises(NotImplementedError, match="inference is forward only"):
+        blk.backward(x, x)
+    with pytest.raises(ValueError, match="state is required"):
+        blk.step(np.ascontiguousarray(x[:, :1]), None)
+
+
+# ---------------------------------------------------------------- the decode surface (lane/stateful-cpu-decoding)
+
+def _step_equals_full(model, x, alloc, as_position):
+    """One fresh-state forward pass over the whole sequence against the same
+    sequence decoded one position at a time with a carried state, BITWISE
+    per position. Returns None or the first differing position."""
+    full = np.asarray(model.forward(np.ascontiguousarray(x)))
+    state = alloc()
+    for t in range(x.shape[1]):
+        one = as_position(model.step(np.ascontiguousarray(x[:, t:t + 1]), state))
+        if np.ascontiguousarray(full[:, t:t + 1]).tobytes() != np.ascontiguousarray(one).tobytes():
+            return t, np.ascontiguousarray(full[:, t:t + 1]), np.ascontiguousarray(one)
+    return None
+
+
+def test_transformer_decode_equals_the_prefill(binding):
+    """THE DECODE IS THE PREFILL. A carried state, step and allocate_state
+    were refused by name until lane/stateful-cpu-decoding, because the
+    binding exported the fresh entry alone."""
+    tw = _block_weights()
+    x = np.random.default_rng(23).standard_normal((2, 12, 32)).astype(np.float32)
+    for window in (0, 8):
+        blk = ml.TransformerBlockInference(tw, n_heads=2, n_kv_heads=1, window=window)
+        bad = _step_equals_full(blk, x, lambda: blk.allocate_state(2, 12), np.asarray)
+        assert bad is None, (window, bad)
+
+
+@pytest.mark.parametrize("kind,cls,kw", _MAMBA)
+def test_mamba_decode_equals_the_prefill(binding, kind, cls, kw):
+    blk = getattr(ml, cls)(_mamba_weights(kind), **kw)
+    x = np.random.default_rng(23).standard_normal((2, 12, 32)).astype(np.float32)
+    assert _step_equals_full(blk, x, lambda: blk.allocate_state(2), np.asarray) is None
+
+
+@pytest.mark.parametrize("tied", (True, False))
+def test_samba_decode_equals_the_forward(binding, tied):
+    cfg = _samba_config(tied)
+    inf = ml.SambaInference(cfg, _samba_weights(cfg))
+    ids = np.random.default_rng(23).integers(0, 256, (2, 12)).astype(np.int32)
+    bad = _step_equals_full(inf, ids, lambda: inf.allocate_state(2, 12),
+                            lambda o: np.asarray(o).reshape(2, 1, cfg.vocab))
+    assert bad is None, bad
+    # the stateful forward is the same state machine as step
+    state = inf.allocate_state(2, 12)
+    full = np.asarray(inf.forward(ids))
+    head = np.asarray(inf.forward(np.ascontiguousarray(ids[:, :5]), state))
+    assert head.tobytes() == np.ascontiguousarray(full[:, :5]).tobytes()
+    tail = np.asarray(inf.forward(np.ascontiguousarray(ids[:, 5:]), state))
+    assert tail.tobytes() == np.ascontiguousarray(full[:, 5:]).tobytes()
+
+
+def test_one_ulp_in_the_cache_moves_a_position(binding):
+    """The comparison above CAN fail: one ULP on one cached value moves a
+    later position. v_cache cell 7 is named because a single ULP in a single
+    cached component is often absorbed (k_cache absorbs it at all of the
+    first thirty-two cells here), and an arm that absorbs its own
+    perturbation is indistinguishable from a pass."""
+    tw = _block_weights()
+    x = np.random.default_rng(3).standard_normal((2, 12, 32)).astype(np.float32)
+    blk = ml.TransformerBlockInference(tw, n_heads=2, n_kv_heads=1)
+    full = np.asarray(blk.forward(np.ascontiguousarray(x)))
+    state = blk.allocate_state(2, 12)
+    moved = None
+    for t in range(12):
+        if t == 6:
+            u = np.asarray(state.v_cache).reshape(-1).view(np.uint32)
+            before = int(u[7])
+            u[7] = before + 1
+            assert int(np.asarray(state.v_cache).reshape(-1).view(np.uint32)[7]) == before + 1
+        one = np.asarray(blk.step(np.ascontiguousarray(x[:, t:t + 1]), state))
+        if moved is None and np.ascontiguousarray(full[:, t:t + 1]).tobytes() != one.tobytes():
+            moved = t
+    assert moved == 6, moved
 
 
 def _samba_config(tied=True):
@@ -294,11 +371,13 @@ def test_samba_forward_rows_ragged_and_refusals(binding, tied):
         assert not yr[i, n:].any()
     with pytest.raises(ValueError, match=r"\[0, vocab\)"):
         inf.forward(np.full((1, 2), 256, np.int32))
-    with pytest.raises(ValueError, match="carried state is not supported"):
+    with pytest.raises(TypeError, match="state must be a SambaState"):
         inf.forward(ids, state=object())
-    for name in ("step", "allocate_state", "loss", "train_step"):
-        with pytest.raises(NotImplementedError, match="stateless forward only"):
+    for name in ("loss", "train_step"):
+        with pytest.raises(NotImplementedError, match="inference is forward only"):
             getattr(inf, name)(None, None)
+    with pytest.raises(ValueError, match="state is required"):
+        inf.step(ids[:, 0], None)
     w = _samba_weights(cfg)
     w.pop("norm_f.weight")
     with pytest.raises(ValueError, match="weight dict mismatch"):

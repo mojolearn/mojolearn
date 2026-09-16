@@ -40,12 +40,43 @@ reads published.
   this one. It costs a measured 3.07x on a request above ten thousand queries and 1.43x below
   it (lane/umap-batch-fix, 2026-09-16).
 
+- **Incremental decoding is public on the CPU: `allocate_state`, a carried `state` and `step`
+  on `TransformerBlockInference`, `Mamba1/2/3BlockInference` and `SambaInference`**
+  (lane/stateful-cpu-decoding). They refused those three by name because the shipped neural
+  host binding exported the fresh-state entries alone; it now also exports
+  `transformer_forward`, `transformer_decode_step` and `mamba{1,2,3}_forward` /
+  `mamba{1,2,3}_decode_step`, over the SAME host functions the fresh entries already call
+  with the caller's state instead of a constructed zero. The wrappers therefore stop
+  overriding `forward` and inherit the block classes' own call path, so prefill and decode
+  are one spelling. Only `backward` (and Samba's `loss` and `train_step`) stays refused.
+  What is claimed and measured, not assumed: decoding a sequence one token at a time with a
+  carried state is BITWISE the same sequence run as one fresh-state forward pass, at every
+  position, for the Transformer at both windows, Mamba-1, Mamba-2, Mamba-3 and the Samba
+  stack. `tools/step_vs_full_check.py` is that comparison with a fail-first arm (one ULP on
+  one carried cache cell must move a position), and `tools/identity_break.py --step-full` is
+  the same question as a recorded part on eight lanes, whose hashes read IDENTICAL between
+  the CPU column and the Apple column.
 - Every host family now says in `python/mojolearn/host_surface.py` why it does or does not
   ship in the wheels (`wheel_note`, `--wheel-notes`), so an exclusion is never silent
   (lane/expose-inference-surface, for 0.8.7). That entry read "fifteen families ship and
   seventeen do not", each of the seventeen naming the shipping family that served its
   inference instead; lane/ship-cpu-host-families then shipped all thirty-two, so every note
   now begins "Ships:" and none of them names an exclusion.
+- **`DBSCAN.predict`, `AgglomerativeClustering.predict` and `SpectralClustering.predict` are
+  declared inference lanes now, with a GPU reference recording behind them**
+  (lane/saved-model-reference-gaps). All three shipped on 2026-09-15 and no gate covered any of
+  them: `mojolearn.host_model()` dispatched the saved files and nothing said what the answer
+  should be. The reason was not policy. `tools/classical_host_gate.py record`, the only tool that
+  can make such a recording, had been raising `AttributeError` on main since `--lane-rule-only`
+  was added, before it ran a line of work, so nobody could have produced one. The four lanes
+  (`dbscan`, `agglomerative`, `spectral`, `spectral-precomputed`) are recorded on nine fixtures
+  each at `bench/results/classical_host/2026-09-16-nvidia-predict`, taken on an NVIDIA A100
+  (sm_80), and the saved models are re-predicted from the CPU host bindings on two architectures,
+  x86-64 and arm64, both reading `gate verdict IDENTICAL (36 fixtures, exit 0)`. The
+  predict-only sabotage build is caught on all 36 cells on both, with an empty `unmoved` list.
+  Two NVIDIA identity columns and a retaken Apple Metal column are at
+  `bench/results/identity_break/2026-09-16_predict-nvidia`; the AMD recording is owed at the next
+  release record.
 - **The bootstrap, the permutation test, Monte Carlo integration and `kpss_test` now work on
   a CPU-only install.** They were unreachable: each computes a statistic from the caller's
   own data, trains no model and has nothing to save, so the saved-model inference boundary
@@ -596,6 +627,49 @@ reads published.
   every train cell it ran and IDENTICAL x4 or N/A on the infer and model cells. On a CPU-only
   install only the lanes with a CPU training path run. `--check` resolves the harness, the
   columns and the witness and runs nothing. Exit codes follow `verify`. Needs numpy.
+- **The Apple silicon backend is now stated in the third paragraph of README.md, which is the
+  PyPI long description for both wheels** (`packaging/macos/build_release_wheel.sh` copies it
+  into `python/`, `packaging/linux/pack_wheel.py` reads it from the repository root), and the
+  PyPI summary line in `python/pyproject.toml` names Apple silicon, NVIDIA and AMD by vendor.
+  It was buried two thirds of the way down the file. The paragraph is a capability claim, that
+  one Mojo source builds for Metal, CUDA and HIP so the tree and classical estimators fit on an
+  M-series GPU, and it says in the same breath that the optional `fast` tier is not the
+  bitwise-identical default and promises no repeatability at all, so a reader cannot come away
+  thinking the accelerated tree training is the certified thing.
+- **The Apple tree speed ratio is withdrawn from README.md and ENGINEERING_RULES.md, and no
+  tree speed claim replaces it.** Both files said ExtraTrees measured a range against
+  scikit-learn on all ten M4 cores at covtype 581k, framed as the win that earns the `fast`
+  tier its place. The range is a splice of two rows of a deleted file
+  (`bench/results/WINDOW_2026-08-22_extratrees-batched.md`, removed by `e08cda5bc` on
+  2026-09-04, six days before `92928a2cd` wrote the sentence), it reports speedup where
+  `bench/OPPONENT_REFERENCE.md` reports its inverse so the same digits mean the opposite thing
+  in two files of this repository, its own source was already superseded by a later addendum
+  and by three later Apple covtype windows reading 1.04x slower, 1.13x slower and 1.12x
+  faster, covtype is neither of the two datasets a training-speed claim requires and is below
+  the million-row floor, and `bench/OPPONENT_REFERENCE.md`'s "Rows never to quote" section
+  covers both `bench/results/fast_speed/mac-*` and our own fast and deterministic arms on any
+  vendor. On the qualifying datasets the standing is the reverse of the withdrawn claim, ours
+  over theirs where lower is better, extra trees 1.53x of scikit-learn on taxi and 1.63x on
+  Istella-S (slower, and its fast arm returns the identical arm's hash in the same time),
+  random forest 0.29x and 0.14x, symmetric trees 0.44x and 0.30x of CatBoost with no XGBoost
+  oblivious grower to check against. The tier rule is unchanged; what changes is that it now
+  rests on the structural argument, tree fitting calls no BLAS while the classical families
+  do, and a qualifying Apple measurement is recorded as owed.
+- **`KMeans` can be saved and loaded, so a k-means model fitted on a GPU predicts on a machine
+  with none.** `KMeans.predict` and `KMeans.transform` already shipped and
+  `mojolearn/host/_mojolearn_core_host.so` already exported both, but the class had no `save`,
+  so there was no file for `mojolearn.host_model()` to open and the whole train-here,
+  infer-there route stopped at serialization; `host_surface.py`'s own gap registry said so.
+  `save` writes the format `mojolearn-kmeans-1` through the same deterministic npz writer
+  every other portable model uses, and `mojolearn.host_model(path)` returns a `HostKMeans`
+  bound to the core host binding. ONE format covers every k-means lane: the metric and the
+  start are members of the file rather than tags of their own. The fit's own `labels_` travels
+  with the centroids, because it is what `predict` on the training rows must equal. A file of
+  another format or another estimator, a truncated one, one whose centroid count disagrees
+  with its dimensionality, one whose metric name disagrees with its code member, and one whose
+  arrays are at another dtype are each refused by name rather than loaded into a plausible
+  wrong answer. What is still owed for `kmeans` is the GPU recording under
+  `bench/results/classical_host/`, as for `dbscan`, `agglomerative` and `spectral`.
 
 ## 0.8.5 (published 2026-09-14)
 

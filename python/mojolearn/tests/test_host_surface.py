@@ -616,7 +616,10 @@ def test_command_line_prints_the_exposure_surface(capsys):
     assert host_surface.main(["--wheel-notes"]) == 0
     assert "resample:" in capsys.readouterr().out
     assert host_surface.main(["--saved-model-inference-owed"]) == 0
-    assert "spectral:" in capsys.readouterr().out
+    # lane/saved-model-reference-gaps (2026-09-16) recorded spectral, dbscan
+    # and agglomerative and declared them, which left kmeans: the one owed
+    # entry that waits on a serialization format rather than on a box.
+    assert "kmeans:" in capsys.readouterr().out
 
 
 def _lane_revisions():
@@ -667,18 +670,56 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
         f"public lanes not diffed against the release record: {sorted(trained - set(host_surface.record_covered_lanes()))}"
     )
 
+    # THE TABLE'S OWN REVISIONS, not merely "this lane has a revision entry"
+    # (lane/inference-coverage-complete, 2026-09-16). `stale` means the
+    # reference DESCRIBES DIFFERENT BYTES from the ones this harness makes,
+    # which is a statement about the shipped table, and the table records the
+    # revisions it was generated against. Asking only `lane in revisions`
+    # cannot see a regeneration: a lane that gains a LANE_REVISIONS entry
+    # would be barred from the public set FOREVER, because that entry never
+    # goes away and the last assertion below then requires it to stay
+    # pending. This is the same rule `_verify_reference.stale_reference_lanes`
+    # applies at verify time, restated here against the source so the manifest
+    # and the tool cannot drift apart. A table generated before the
+    # `lane_revisions` key existed carries none, which is not evidence that it
+    # is current, so it counts as stale.
+    table_revisions = table.get("lane_revisions") or {}
+    stale = {lane for lane, rev in revisions.items()
+             if lane in with_cells and table_revisions.get(lane) != rev}
+
+    wrong_reason = []
     for lane, why in host_surface.PUBLIC_PENDING_LANES.items():
         assert lane in covered, f"{lane} is held back but is not a covered lane at all"
         if why == "stale reference":
             assert lane in revisions, f"{lane}: no LANE_REVISIONS entry, so its reference is not stale; let it in"
+            # Three outcomes, and the reason must name the right one. When a
+            # release regenerates the table, a lane either keeps cells at the
+            # current revision (promote it, once a run has been watched to
+            # read IDENTICAL for it) or loses them, because every record that
+            # carried it predates the fixture change (its reason becomes
+            # `no reference`, and what is owed is a re-record, not a promotion).
+            if lane not in stale:
+                wrong_reason.append(
+                    f"{lane}: NOT stale. "
+                    + (f"the table carries cells at the current revision {revisions[lane]!r}, so the hold no "
+                       f"longer applies: promote it once a CPU-only `verify --all` has been watched to read "
+                       f"IDENTICAL for it, as the promotion rule requires"
+                       if lane in with_cells else
+                       f"the table carries NO cell for it at all, so its reason is 'no reference' and what is "
+                       f"owed is a record at the current fixture revision {revisions[lane]!r}"))
         elif why == "no reference":
-            assert lane not in with_cells, f"{lane}: the shipped table does carry cells for it; let it in"
+            if lane in with_cells:
+                wrong_reason.append(f"{lane}: the shipped table DOES carry cells for it; let it in")
         elif why == "own record":
             assert lane in host_surface.TRAINING_FIX_LANES, f"{lane}: not a TRAINING_FIX_LANES lane"
         elif why.startswith("measured"):
             assert lane in with_cells, f"{lane}: held back on a measurement but the table has no cell to measure"
         else:
             raise AssertionError(f"{lane}: {why!r} is not a reason this test knows how to check")
+
+    assert wrong_reason == [], (
+        "these lanes are held back for a reason the shipped table no longer supports:\n  "
+        + "\n  ".join(wrong_reason))
 
     # A prefix-excluded lane is never in the public set, so it cannot become
     # public carrying a stale reference and it must not be required in
@@ -689,7 +730,7 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
     # reject.
     excluded = {lane for lane in revisions
                 if lane.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES)}
-    moved = sorted(set(revisions) - set(host_surface.PUBLIC_PENDING_LANES)
+    moved = sorted(stale - set(host_surface.PUBLIC_PENDING_LANES)
                    - host_only - excluded)
     assert moved == [], (
         f"these lanes moved past the shipped reference and they are still public: {moved}. "

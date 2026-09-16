@@ -1,0 +1,237 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "4c8f0d46215bc3db80c8fde8e2ca81b661d111ae",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  }
+ },
+ "cells": {
+  "spectral/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "112c7b0d7556a6ff",
+    "112c7b0d7556a6ff"
+   ],
+   "parts": [
+    {
+     "labels": "1cb161ee18b229cb"
+    },
+    {
+     "labels": "1cb161ee18b229cb"
+    }
+   ],
+   "infer": [
+    "a7f3488317ff571e",
+    "a7f3488317ff571e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "3e34622ced4d3c60",
+    "3e34622ced4d3c60"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a7f3488317ff571e",
+    "a7f3488317ff571e"
+   ],
+   "batch": [
+    "fedcfcc1f97d1520",
+    "fedcfcc1f97d1520"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "spectral/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3976be59c005d8f8",
+    "3976be59c005d8f8"
+   ],
+   "parts": [
+    {
+     "labels": "65742d587a8ec95b"
+    },
+    {
+     "labels": "65742d587a8ec95b"
+    }
+   ],
+   "infer": [
+    "3a3fc8018ebcbca3",
+    "3a3fc8018ebcbca3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ad1e356159f986fd",
+    "ad1e356159f986fd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3a3fc8018ebcbca3",
+    "3a3fc8018ebcbca3"
+   ],
+   "batch": [
+    "fa770a3b846ea54d",
+    "fa770a3b846ea54d"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "spectral-precomputed/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8df6d51dbff9ddaf",
+    "8df6d51dbff9ddaf"
+   ],
+   "parts": [
+    {
+     "affinity": "2af13e58feeebe1b",
+     "labels": "42a7520046a8772a"
+    },
+    {
+     "affinity": "2af13e58feeebe1b",
+     "labels": "42a7520046a8772a"
+    }
+   ],
+   "infer": [
+    "bb2835f47f32e74d",
+    "bb2835f47f32e74d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6b04b89cfa623e45",
+    "6b04b89cfa623e45"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "bb2835f47f32e74d",
+    "bb2835f47f32e74d"
+   ],
+   "batch": [
+    "403839d9afb03ede",
+    "403839d9afb03ede"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "spectral-precomputed/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "32ed236da838cb22",
+    "32ed236da838cb22"
+   ],
+   "parts": [
+    {
+     "affinity": "cc43a67c7ffdc20d",
+     "labels": "5bf357bb9a5b8394"
+    },
+    {
+     "affinity": "cc43a67c7ffdc20d",
+     "labels": "5bf357bb9a5b8394"
+    }
+   ],
+   "infer": [
+    "77b660ca4b2a42e2",
+    "77b660ca4b2a42e2"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ea7aeb5dfe06471c",
+    "ea7aeb5dfe06471c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "77b660ca4b2a42e2",
+    "77b660ca4b2a42e2"
+   ],
+   "batch": [
+    "eba1461e59f20122",
+    "eba1461e59f20122"
+   ],
+   "batch_verdict": "STABLE"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-1",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-1-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-1-1",
+  "mamba2-dtlimit": "seqlen-8-1"
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/Users/andrewhendel/mojolearn-wt/saved-model-reference-gaps/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.13.15",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "044baa5da29878205dab9e7148259eb60def465584536cfd9f5f12d7ce5750c5",
+    "size": 2761120
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "4d1d3d7f79ac43e2c80769117c4895b197801399d7308873afebe8e5c0b2f650",
+    "size": 3985064
+   }
+  ]
+ }
+}
