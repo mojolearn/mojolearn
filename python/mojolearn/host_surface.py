@@ -200,6 +200,18 @@ CLASSICAL_RECORDED = (
     # svr-linear, recorded on the M4's Metal set on all nine fixtures. The
     # NVIDIA and AMD recordings are owed to the next release record.
     "bench/results/classical_host/2026-09-15-apple-m4-svm",
+    # lane/saved-model-reference-gaps (2026-09-16): dbscan, agglomerative,
+    # spectral and spectral-precomputed, the four predicts that shipped on
+    # 2026-09-15 with no recording at all, on all nine fixtures each. Recorded
+    # on a RunPod NVIDIA A100 (sm_80), which is the first recording in this
+    # list taken anywhere but the M4; `check` on the same box read
+    # `gate verdict IDENTICAL (36 fixtures, exit 0)` and the predict-only
+    # sabotage host set read `EXPECTED MISMATCH SEEN` with `unmoved` EMPTY
+    # under --every-fixture, so every one of the 36 cells was watched to fail
+    # before it was believed. The Apple and AMD recordings are owed to the
+    # next release record; the identity columns behind these cells are
+    # bench/results/identity_break/2026-09-16_predict-nvidia.
+    "bench/results/classical_host/2026-09-16-nvidia-predict",
 )
 
 #: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),

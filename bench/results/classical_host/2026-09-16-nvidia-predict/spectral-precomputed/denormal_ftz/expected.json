@@ -1,0 +1,40 @@
+{
+  "commit": null,
+  "estimator": "SpectralClustering",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "AMD EPYC 7742 64-Core Processor",
+    "family": "23",
+    "isa": [
+      "avx2",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "49",
+    "python": "3.14.7",
+    "release": "6.8.0-124-generic",
+    "stepping": "0",
+    "system": "Linux",
+    "vendor": "AuthenticAMD"
+  },
+  "kind": "denormal_ftz",
+  "lane": "spectral-precomputed",
+  "model_sha256": "0df4233607620b15fb2a6424902ea82f66e323bb2facd330e424ee80b5e6aeb3",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "7cd8401e0437ce89",
+    "predict": {
+      "dtype": "<i4",
+      "sha256": "a8eb3613683dd7e5328717ce6192b380188e7cabd7c016d2d0d631753217e950",
+      "shape": [
+        256
+      ]
+    },
+    "seconds": 0.080281
+  },
+  "recorded_at": "2026-09-16T16:49:19+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "cuda",
+  "x_sha256": "4e4a32ec62cf73fd1bd2f5ffa0a6be6345aaae4392587c3c784e9121b407d664"
+}
