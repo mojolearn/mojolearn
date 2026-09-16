@@ -8,22 +8,38 @@ It claimed nothing about the cause and said so: one card, one process, no
 instrumentation, no replication. This lane was opened to find the leak.
 
 **There is no leak of the size that reading needs, and the card was not
-192 GB.** It was 360.4 MiB.
+192 GB.** It had 360.4 MiB free before this library was imported, because
+another tenant of the same physical card held 178.6 GiB of it.
 
-## The three readings that settle it
+The refusals REPRODUCE on a RunPod MI300X. They do NOT reproduce on a
+dedicated DigitalOcean MI325X of the same architecture, and they do NOT
+reproduce on a dedicated NVIDIA RTX 4090 with an EIGHTH of the memory. The
+free-memory trend on both dedicated cards is bounded: +1.000 MiB per fit on
+gfx942 and exactly 0.000 on sm_89, against the 190 GB the MI300X refusals
+would have needed.
 
-Two boxes, both AMD gfx942, both terminated and verified gone (HTTP 404).
+## The readings that settle it
 
-| | DigitalOcean MI325X, droplet 601157435 | RunPod MI300X, pod o3paueazuvo87t |
-|---|---|---|
-| cards in `/sys/class/drm` | 1 | **8**, and the one the container owns is `card33` (PCI `0000:85:00.0`), not `card0` |
-| device memory free before `import mojolearn` | 260689.6 MiB of 261824.0 | **360.4 MiB of 196592.0** |
-| held by a process outside this container | none | **178.6 GiB**, kfd pid 4109547 |
-| `identity_break`, the three DBSCAN lanes | `cells=27 stable=27 moved=0 refused=0` | two sub-cells `REFUSED`, both `hipErrorOutOfMemory` |
-| `identity_break`, the original six predict lanes | not run | `cells=54 stable=54 moved=0`, `dbscan/base` model and `dbscan-brute-l1/negative` batch `REFUSED` |
-| `classical_host_gate.py record` | not run | **died**, `hipErrorOutOfMemory` in `labeled_reference_predict` |
-| one `wide` fit, 36,000,000 edges | 0.44 s | **31.21 s** |
-| device memory across 54 fits in one process | 285.8 MiB to a 1.5 GiB plateau | unreadable, the card was already full |
+Three boxes, all terminated and VERIFIED gone (HTTP 404).
+
+| | RunPod MI300X, pod o3paueazuvo87t | DigitalOcean MI325X, droplet 601157435 | RunPod RTX 4090, pod iphu8b1kxgrg4d |
+|---|---|---|---|
+| arch, device memory | gfx942, 192 GB | gfx942, 256 GB | sm_89, **24 GB** |
+| cards in `/sys/class/drm` | **8**, and the one the container owns is `card33` (PCI `0000:85:00.0`), not `card0` | 1 | a 512 MiB amdgpu display device beside the 4090 |
+| device memory used before `import mojolearn` | **196231.6 MiB of 196592.0**, so 360.4 MiB free | 285.8 MiB of 261824.0 | 1.0 MiB of 24564.0 |
+| held by a process outside this container | **178.6 GiB**, kfd pid 4109547 | none | none |
+| `identity_break`, the three DBSCAN lanes | two sub-cells `REFUSED`, both `hipErrorOutOfMemory` | `cells=27 stable=27 moved=0 refused=0` | `cells=27 stable=27 moved=0 refused=0` |
+| `identity_break`, the original six predict lanes | `cells=54 stable=54 moved=0`, `dbscan/base` model and `dbscan-brute-l1/negative` batch `REFUSED` | not run | not run |
+| `classical_host_gate.py record` | **died**, `hipErrorOutOfMemory` in `labeled_reference_predict` | not run | not run |
+| one `wide` fit, 36,000,000 edges | **31.21 s** | 0.44 s | 0.66 s |
+| 54 probe fits in one process | unreadable, the card was already full | `refused=0`, a 1.5 GiB plateau | **`refused=0`, 398.0 MiB, ONE distinct value** |
+| device memory per fit, warm | unreadable | **+1.000 MiB** | **0.000 MiB** |
+
+The 4090 is the tight-budget control the lane was told to take. It has an
+EIGHTH of the MI300X's memory and a third of the A100's, it ran the same 54
+fits in one process, and `nvidia-smi` reported exactly 398.0 MiB after every
+one of them. That flat line is not an unproved flat line: the self check moved
+it by +397.0 MiB across the first fit before any arm was allowed to run.
 
 The full transcript is
 `~/mojolearn-evidence/amd-dbscan-oom/runpod-mi300x-card-was-full.txt`.
@@ -79,6 +95,7 @@ on every path:
 | `algorithm='brute'` (no ball cover) | +1.000 |
 | `sample_weight` (the weighted `ja1` scratch) | +1.000 |
 | `base` (687,484 edges) against `negative` (5,034,848 edges) | +1.000 either way |
+| the same four arms on an NVIDIA RTX 4090 | **0.000, 398.0 MiB throughout** |
 
 **A residual that does not move when the code path changes and does not move
 when the edge count changes by a factor of seven is not a buffer `dbscan/`
@@ -90,11 +107,17 @@ What is per-call and identical across all four paths is the
 _dbscan_fit_run` constructs fresh inside every call, and MAX's own bookkeeping
 behind it.
 
+**And it is zero on NVIDIA.** The same four arms on the RTX 4090 read one
+distinct used-memory value, 398.0 MiB, across 55, 33, 25 and 7 fits. The DBSCAN
+source is the same source on both vendors, so a residual that is 1.000 MiB per
+fit on gfx942 and 0.000 on sm_89 is below `dbscan/`, in the ROCm half of the
+runtime or in what the binding's per-call `DeviceContext()` costs there.
+
 At 1 MiB per fit a 256 GB card is about 250,000 fits from caring, and a
 release record is a few thousand. **It is not what refused on the MI300X**,
 which needed 190 GB, not 1 MiB. It is written down here because it had not
-flattened by fit 25 and nobody has looked at it, not because this lane thinks
-it matters yet.
+flattened by fit 25, because it is vendor-asymmetric, and because nobody has
+looked at it, not because this lane thinks it matters yet.
 
 ## What was considered and deliberately not changed
 
@@ -138,13 +161,17 @@ a trend rather than a stopping point. It refuses to report before it has shown
 it can move: the self check reads the device before any GPU work, runs one fit,
 reads again, and prints PROBE CANNOT MOVE and exits 3 under the floor.
 
-**That gate fired on a paid box and was right to.** On the RunPod pod the sysfs
-reader was watching `/sys/class/drm/card0` while the container owned `card33`,
-so it read a stranger's counter, saw it never move, and refused every arm
-rather than writing a flat line into a file. The flat line would have been
-indistinguishable from a clean allocator. The reader now asks `rocm-smi`, which
-enumerates the devices the container actually owns, and the floor is on the
-absolute movement because on a shared card the figure can fall across our fit.
+**That gate fired on two paid boxes and was right both times.** On the RunPod
+MI300X the sysfs reader was watching `/sys/class/drm/card0` while the container
+owned `card33`, and on the RunPod 4090 it was watching a 512 MiB amdgpu display
+device that sits beside the NVIDIA card. Both times it read a counter that was
+not ours, saw it never move, and refused every arm rather than writing a flat
+line into a file. **Those flat lines would have been indistinguishable from a
+clean allocator, and one of them would have been reported as the answer.** The
+reader now asks `nvidia-smi` and `rocm-smi`, which enumerate the devices the
+container actually owns, and falls back to sysfs only where neither exists. The
+floor is on the absolute movement, because on a shared card the figure can fall
+across our fit; it fell by 12031.2 MiB across the first fit on the MI300X.
 
 It was rehearsed on the Mac against a stub before either box: with nothing
 allocated it printed PROBE CANNOT MOVE and exited 3 without running an arm,
@@ -159,9 +186,11 @@ Two boxes, both destroyed and verified gone by HTTP 404.
 
 | box | what it answered | minutes |
 |---|---|---|
-| DigitalOcean `gpu-mi325x1-256gb`, droplet 601157435 | the control: 54 fits, `refused=0`, a 1.5 GiB plateau | 6 |
+| DigitalOcean `gpu-mi325x1-256gb`, droplet 601157435 | the AMD control: 54 fits, `refused=0`, a 1.5 GiB plateau, +1.000 MiB per fit | 6 |
 | RunPod `AMD Instinct MI300X OAM`, pod o3paueazuvo87t | the reproduction, and the card that was already full | 12 |
+| RunPod `NVIDIA GeForce RTX 4090`, pod iphu8b1kxgrg4d | the tight-budget control: 24 GB, 54 fits, `refused=0`, 398.0 MiB flat | 14 |
 
-Ten RunPod NVIDIA specs answered "There are no instances currently available"
-and billed nothing; nothing was pinned, which is why there was an AMD box at
-all.
+Twenty RunPod NVIDIA create attempts answered "There are no instances
+currently available" and billed nothing before one 4090 landed; nothing was
+pinned, which is why there was a box at all. Hot Aisle was not tried: it
+returned quantity 0 on every spec all day.
