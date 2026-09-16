@@ -268,14 +268,25 @@ def test_the_self_test_perturbation_is_not_inert():
     assert "values_changed" in src, "the report must say how many values were perturbed"
 
 
-def _doc(vendor, device, device_class, cells, commit="a809d92f2"):
-    """A minimal evidence document, the shape `verify --all --json` writes."""
-    return dict(format="mojolearn.verify-all-report.v1",
+def _doc(vendor, device, device_class, cells, commit="a809d92f2", verdict="VERIFIED"):
+    """A minimal evidence document, the shape `verify --all --json` writes.
+
+    A cell is `(lane, fixture, part, value)` or `(lane, fixture, part, value,
+    state)`; `state` is the verdict THAT document reached about that cell
+    against its own reference table, which `--compare` carries up rather than
+    absorbing into its agreement count."""
+    rows = []
+    for c in cells:
+        l, f, pt, v = c[:4]
+        rows.append(dict(lane=l, fixture=f, part=pt, value=v,
+                         state=(c[4] if len(c) > 4 else "IDENTICAL")))
+    return dict(format="mojolearn.verify-all-report.v1", verdict=verdict,
+                detail="verified %d of %d cell parts" % (len(rows), len(rows)),
                 device=dict(mojolearn_version="0.8.5", commit=commit, vendor=vendor,
                             device_class=device_class, device=device, cpu_model="cpu-x",
                             platform="p", python="3.14.6"),
                 bindings=[dict(module="m", sha256="d" * 64, size=1)],
-                cells=[dict(lane=l, fixture=f, part=p, value=v) for l, f, p, v in cells])
+                cells=rows)
 
 
 _BASE_CELLS = [("ols", "base", "train", "3d1d7c30b12d9872"),
@@ -430,6 +441,44 @@ def test_compare_does_not_fold_two_different_n_a_reasons_together():
     assert r["n_a"] == 0 and r["n_a_differing"] == 1 and r["differ"] == 0
     assert r["verdict"] == "INCOMPLETE" and r["exit"] == va.EXIT_CANNOT_RUN
     assert "different n/a reasons" in va.format_compare(r).lower()
+
+
+def test_compare_does_not_absorb_a_divergence_into_its_agreement_count():
+    """THE SAME DEFECT `verdict()` WAS FIXED FOR, ONE LEVEL UP. Until
+    2026-09-16 `verify --all` returned VERIFIED as soon as one part read
+    IDENTICAL, before it looked at REFUSED, so a CPU-only install printed
+    `VERIFIED, exit 0` over 44 identical and 288 refused parts. A comparer
+    reaches the same place through agreement: two parties can hold the same
+    hash for a cell that one of them already judged DIVERGENT against its own
+    table. They agree, and they agree on an answer recorded as wrong."""
+    cells = [("ols", "base", "train", "3d1d7c30b12d9872", "IDENTICAL"),
+             ("ols", "base", "infer", "2546a13c03838433", "DIVERGENT")]
+    a = _doc("metal", "Apple M2", "apple", cells, verdict="MISMATCH")
+    b = _doc("cuda", "RTX 4090", "nvidia", cells, verdict="MISMATCH")
+    r = va.compare_documents(a, b, "a.json", "b.json")
+    assert r["differ"] == 0, "the two documents really do hold the same bits"
+    assert r["agree"] == 1 and r["agreed_divergent"] == 1, (
+        "the divergent cell must not be counted as a plain agreement")
+    assert r["verdict"] == "AGREED ON A DIVERGENT ANSWER"
+    assert r["exit"] == va.EXIT_MISMATCH, "a wrong answer outranks an absent one, as in verdict()"
+    text = va.format_compare(r)
+    assert "ols/base infer" in text and "judged DIVERGENT" in text
+    assert "RESULT: AGREE." not in text
+    # and each document's own verdict is shown next to the agreement
+    assert text.count("MISMATCH") >= 2, "both documents' own verdicts must be printed"
+
+
+def test_compare_shows_each_document_s_own_verdict_about_its_own_run():
+    """Two parties can agree while one of them checked a fraction of what a
+    reader assumes. The only honest place for that is beside the agreement."""
+    a = _doc("metal", "Apple M2", "apple", _BASE_CELLS, commit="aaa", verdict="INCOMPLETE")
+    b = _doc("cuda", "RTX 4090", "nvidia", _BASE_CELLS, commit="bbb", verdict="VERIFIED")
+    r = va.compare_documents(a, b, "a.json", "b.json")
+    assert r["verdict"] == "AGREE"
+    assert r["provenance"]["own_verdict_a"] == "INCOMPLETE"
+    assert r["provenance"]["own_verdict_b"] == "VERIFIED"
+    text = va.format_compare(r)
+    assert "its own verdict" in text and "INCOMPLETE" in text
 
 
 def test_compare_prints_every_differing_cell_or_says_how_many_it_hid():

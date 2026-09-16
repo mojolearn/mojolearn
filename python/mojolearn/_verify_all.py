@@ -803,10 +803,10 @@ def _read_cells(doc, label):
     mismatch disappears. A document with two rows for one cell part is not a
     document this command will read.
     """
-    problems, out, seen = [], {}, {}
+    problems, out, states, seen = [], {}, {}, {}
     if not isinstance(doc, dict):
-        return out, [f"{label}: not an evidence document (top level is "
-                     f"{type(doc).__name__}, expected an object)"]
+        return out, states, [f"{label}: not an evidence document (top level is "
+                             f"{type(doc).__name__}, expected an object)"]
     fmt = doc.get("format")
     if fmt != COMPARE_INPUT_FORMAT:
         problems.append(f"{label}: format is {fmt!r}, expected {COMPARE_INPUT_FORMAT!r}. "
@@ -816,7 +816,7 @@ def _read_cells(doc, label):
         problems.append(f"{label}: has no `cells`, so there is nothing to compare")
         rows = []
     if not isinstance(rows, list):
-        return out, problems + [f"{label}: `cells` is {type(rows).__name__}, expected a list"]
+        return out, states, problems + [f"{label}: `cells` is {type(rows).__name__}, expected a list"]
     for i, r in enumerate(rows):
         if not isinstance(r, dict):
             problems.append(f"{label}: cells[{i}] is {type(r).__name__}, expected an object")
@@ -828,7 +828,8 @@ def _read_cells(doc, label):
             continue
         seen[key] = i
         out[key] = r.get("value")
-    return out, problems
+        states[key] = r.get("state")
+    return out, states, problems
 
 
 def compare_documents(a, b, label_a="A", label_b="B"):
@@ -863,10 +864,22 @@ def compare_documents(a, b, label_a="A", label_b="B"):
     * a duplicated cell row makes the whole document unreadable, because
       last-wins would let one party paste the other's answer over their own;
     * two documents that are byte-identical are ONE document passed twice,
-      which compares nothing.
+      which compares nothing;
+    * a cell both sides carry the SAME hash for, which either side judged
+      DIVERGENT against its reference table, is an agreement on an answer one
+      of them already recorded as wrong.
+
+    AGREE IS THE LAST OUTCOME TRIED, and that ordering is the point. On
+    2026-09-16 `verdict()` was fixed for the same defect one level down: it
+    returned VERIFIED as soon as ONE part read IDENTICAL, before it looked at
+    REFUSED, so a CPU-only install printed `VERIFIED, exit 0` over 44
+    identical and 288 refused parts. There is no number of agreements that
+    makes up for one problem, here either. A wrong answer outranks an absent
+    one, so the exit-1 outcomes are read before the exit-4 ones, exactly as
+    `verdict()` reads DIVERGENT before REFUSED.
     """
-    ca, pa_ = _read_cells(a, label_a)
-    cb, pb_ = _read_cells(b, label_b)
+    ca, sa, pa_ = _read_cells(a, label_a)
+    cb, sb, pb_ = _read_cells(b, label_b)
     problems = pa_ + pb_
 
     def _sortkey(k):
@@ -876,22 +889,30 @@ def compare_documents(a, b, label_a="A", label_b="B"):
     # of an unreadable file produces a cell count, and a cell count next to a
     # complaint is exactly the shape a reader skims as a result.
     shared = [] if problems else sorted(set(ca) & set(cb), key=_sortkey)
-    agree, differ, moved, uncomputed, na, na_differ = [], [], [], [], [], []
+    agree, differ, moved, uncomputed, na, na_differ, agreed_div = [], [], [], [], [], [], []
     for key in shared:
         va_, vb_ = ca[key], cb[key]
         ka, kb = _value_kind(va_), _value_kind(vb_)
         row = dict(lane=key[0], fixture=key[1], part=key[2], a=va_, b=vb_,
-                   kind_a=ka, kind_b=kb)
+                   kind_a=ka, kind_b=kb, state_a=sa.get(key), state_b=sb.get(key))
         if "moved" in (ka, kb):
             moved.append(row)
         elif "missing" in (ka, kb):
             uncomputed.append(row)
         elif ka == "n/a" and kb == "n/a":
             (na if va_ == vb_ else na_differ).append(row)
-        elif va_ == vb_:
-            agree.append(row)
-        else:
+        elif va_ != vb_:
             differ.append(row)
+        elif vref.DIVERGENT in (sa.get(key), sb.get(key)):
+            # THE TWO PARTIES AGREE AND AT LEAST ONE OF THEM JUDGED THESE VERY
+            # BITS WRONG. `verify --all` was fixed on 2026-09-16 to stop
+            # letting parts that did run outrank parts that did not; the same
+            # defect reaches this command through agreement, so a divergence
+            # either side recorded is carried up rather than absorbed into the
+            # agreement count.
+            agreed_div.append(row)
+        else:
+            agree.append(row)
     only_a = [] if problems else sorted(set(ca) - set(cb), key=_sortkey)
     only_b = [] if problems else sorted(set(cb) - set(ca), key=_sortkey)
 
@@ -912,6 +933,14 @@ def compare_documents(a, b, label_a="A", label_b="B"):
         bindings_a=[x.get("sha256") for x in ((a.get("bindings") or []) if isinstance(a, dict) else [])],
         bindings_b=[x.get("sha256") for x in ((b.get("bindings") or []) if isinstance(b, dict) else [])],
         independent=(not same_device) and (not same_class) and (not same_document),
+        # each document's OWN verdict about its own run, carried through
+        # unchanged. Two parties can agree with each other while one of them
+        # checked a fraction of what the reader assumes, and the only honest
+        # place to see that is next to the agreement.
+        own_verdict_a=(a.get("verdict") if isinstance(a, dict) else None),
+        own_verdict_b=(b.get("verdict") if isinstance(b, dict) else None),
+        own_detail_a=(a.get("detail") if isinstance(a, dict) else None),
+        own_detail_b=(b.get("detail") if isinstance(b, dict) else None),
     )
 
     if problems:
@@ -922,6 +951,8 @@ def compare_documents(a, b, label_a="A", label_b="B"):
         verdict_, code = "MISMATCH", EXIT_MISMATCH
     elif moved:
         verdict_, code = "SELF-CONTRADICTED", EXIT_MISMATCH
+    elif agreed_div:
+        verdict_, code = "AGREED ON A DIVERGENT ANSWER", EXIT_MISMATCH
     elif only_a or only_b or uncomputed or na_differ:
         verdict_, code = "INCOMPLETE", EXIT_CANNOT_RUN
     elif agree:
@@ -932,9 +963,11 @@ def compare_documents(a, b, label_a="A", label_b="B"):
                 labels=dict(a=label_a, b=label_b), provenance=prov, problems=problems,
                 agree=len(agree), differ=len(differ), n_a=len(na), moved=len(moved),
                 uncomputed=len(uncomputed), n_a_differing=len(na_differ),
+                agreed_divergent=len(agreed_div),
                 only_in_a=[list(k) for k in only_a], only_in_b=[list(k) for k in only_b],
                 differing=differ, agreeing=agree, self_contradicted=moved,
-                not_computed=uncomputed, n_a_differing_cells=na_differ)
+                not_computed=uncomputed, n_a_differing_cells=na_differ,
+                agreed_divergent_cells=agreed_div)
 
 
 def _cell_lines(title, rows, la, lb, limit=40):
@@ -968,6 +1001,11 @@ def format_compare(r):
         mark = "" if av == bv else "   <- differs"
         lines.append(f"  {name:<22} {av[:34]:<34} {bv[:34]}{mark}")
     lines.append(f"  {'bindings hashed':<22} {len(p['bindings_a']):<34} {len(p['bindings_b'])}")
+    lines.append(f"  {'its own verdict':<22} {str(p['own_verdict_a'])[:34]:<34} "
+                 f"{str(p['own_verdict_b'])[:34]}")
+    for lbl, key in ((la, "own_detail_a"), (lb, "own_detail_b")):
+        if p.get(key):
+            lines.append(f"    {lbl}: {p[key]}")
     lines.append("")
     if p["same_document"]:
         lines.append("THESE TWO FILES ARE BYTE-IDENTICAL. That is one document handed over twice,")
@@ -984,11 +1022,15 @@ def format_compare(r):
         lines.append("than two genuinely different vendors would give.")
     lines.append("")
     lines.append(f"  agree {r['agree']}   differ {r['differ']}   self-contradicted {r['moved']}   "
-                 f"neither computed {r['uncomputed']}")
+                 f"neither computed {r['uncomputed']}   agreed on a divergence "
+                 f"{r['agreed_divergent']}")
     lines.append(f"  n/a agreed {r['n_a']}   n/a differing {r['n_a_differing']}   "
                  f"only in {la}: {len(r['only_in_a'])}   only in {lb}: {len(r['only_in_b'])}")
     if r["differing"]:
         lines += _cell_lines("DIFFERING CELLS", r["differing"], la, lb)
+    if r["agreed_divergent_cells"]:
+        lines += _cell_lines("AGREED, BUT ONE SIDE JUDGED THESE VERY BITS DIVERGENT",
+                             r["agreed_divergent_cells"], la, lb)
     if r["self_contradicted"]:
         lines += _cell_lines("SELF-CONTRADICTED CELLS, a box that disagreed with ITSELF",
                              r["self_contradicted"], la, lb)
@@ -1018,6 +1060,12 @@ def format_compare(r):
                      f"{r['moved']} cell")
         lines.append("part(s) record a box that gave two different answers for the same fit. Two")
         lines.append("documents agreeing on that agree the claim is false, which is not a pass.")
+    elif r["verdict"] == "AGREED ON A DIVERGENT ANSWER":
+        lines.append(f"RESULT: AGREED ON A DIVERGENT ANSWER. The two documents match on every")
+        lines.append(f"shared cell, but {r['agreed_divergent']} of them carry a hash that one side "
+                     "judged DIVERGENT")
+        lines.append("against its own reference table. Two machines reaching the same wrong answer")
+        lines.append("is a finding, not a pass.")
     elif r["verdict"] == "SAME DOCUMENT":
         lines.append("RESULT: SAME DOCUMENT. The two files are byte-identical, so nothing was")
         lines.append("compared. A document cannot corroborate itself.")
