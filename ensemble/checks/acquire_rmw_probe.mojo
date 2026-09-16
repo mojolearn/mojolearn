@@ -159,9 +159,17 @@ def _acquire_kernel(
     payload.unsafe_store(0, v + Int32(1))
     Atomic.store[ordering = Ordering.RELEASE](mutex, Int32(0))
 
+
 def _run_acquire(ctx: DeviceContext) raises -> Int:
     """Guarded at the CALL, not at the definition: Mojo rejects a
-    module-scope `comptime if`, which is what failed to parse on leg 13."""
+    module-scope `comptime if`, which is what failed to parse on leg 13.
+
+    KNOWN LIMITATION, stated rather than papered over: `_acquire_kernel` is
+    DEFINED unconditionally, so on a column that cannot legalize an acquire
+    ordering on an RMW (Apple, per DEVIATION 106) this file may fail to build
+    for a reason that has nothing to do with the measurement. On gfx942 the
+    ordering is MEASURED to legalize (leg 13 built and ran the acqcas binding),
+    which is the column this probe is for."""
     comptime if not PROBE_ACQUIRE:
         return -1
     var mtx = ctx.enqueue_create_buffer[DType.int32](1)
