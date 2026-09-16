@@ -63,6 +63,17 @@ Read the four weight lines together: the pair is equal where the kernel reads
 it at step 1 and apart by `2.000e-03` after it, so **the lane had exactly one
 step and therefore exactly zero opportunities to see the exchange**.
 
+**A REAL SABOTAGE BUILD ALREADY SHOWED THIS, and nobody acted on it.**
+`docs/lanes/LANE_STATUS_lane-metal-launch-overhead.md` section 4.1 records a
+build of `training/byte_lm.mojo` whose block copy actually EXCHANGED `norm1_w`
+and `norm2_w`. Against it, `byte-lm/base` read **IDENTICAL x2** while
+`byte-lm-resident` diverged, and the paragraph beside that result says in so
+many words that "the shrunken one-step cell is blind to this whole defect
+class". That is a compiled sabotage, not a data perturbation, so it is
+stronger evidence than anything in this lane, and it sat on main. It is now
+cited and marked fixed there. The floor is what turns that observation into
+something the next change has to walk past.
+
 **Two controls make the arm worth reading**, and both are new here. The
 exchange is applied through `state_dict()` / `load_state_dict()` on ONE
 trainer, so the AdamW moments and the step count carry exactly as they do in
