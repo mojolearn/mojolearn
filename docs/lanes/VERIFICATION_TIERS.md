@@ -156,10 +156,34 @@ Two more kinds of path select nothing, and each says which it is:
   in order, and each addition must be an undecorated `def` with a new name,
   constant defaults and no mention in any existing lane's code.
 
-Both of these WIDEN what returns a narrow answer, so both are tested from the
-failing side first: seven code-change pairs must compare different before six
-docstring pairs may compare equal, and eight harness edits must answer every
-lane. See `tools/test_lane_select.py`.
+ALL OF THESE WIDEN what returns a narrow answer, which is the dangerous
+direction: a subtly wrong rule turns a real change into "nothing affected",
+and that costs a defect where an over-broad sweep only costs time. So each is
+tested from the failing side first. Seven code-change pairs must compare
+different before six docstring pairs may compare equal. Eight harness edits
+must answer every lane. Seven registry edits must answer every lane, among
+them an entry removed, a reorder, an edited body, a new bare statement and a
+decorated class. And a probe file that reads unreachable must go back to
+falling back the moment a file every lane reaches names it, by path or only
+through a glob over its directory. See `tools/test_lane_select.py`.
+
+* a path NOTHING REACHES: no lane's derived source set contains it, and no
+  file that any lane DOES reach names it, its stem or any directory above it.
+  The corpus is the map itself, because for a lane to reach a file something
+  in that lane's closure has to name it; `pixi.toml`, a CI workflow and a
+  contribution gate all name `umap/checks` and none of them is in any lane's
+  closure. Corpus files are searched with docstrings and comments stripped, a
+  directory counts only when what follows it is not another path component
+  (the glob shape), and a one-word top-level directory is not searched at all
+  because it is a word, not a path. The rule under-fires on a short or common
+  file name, which is the safe direction.
+* a whole-surface registry whose diff only ADDS to it. Every old statement
+  must be present and in order, either byte for byte or as the same assignment
+  whose container grew or whose value changed under an unchanged key, and each
+  new statement must be an import of a module a lane already reaches, an
+  undecorated def with a new name, or an undecorated class with a new name
+  whose body is a docstring, defs and assignments. The addition is attributed
+  through the files that define the names it mentions.
 
 Only prose and evidence paths select nothing unconditionally.
 
