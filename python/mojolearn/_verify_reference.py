@@ -61,8 +61,28 @@ CLASSES = ("apple", "nvidia", "amd", "cpu")
 VENDOR_CLASS = {"metal": "apple", "cuda": "nvidia", "hip": "amd", "cpu": "cpu"}
 
 _COMMIT = re.compile(r"^[0-9a-f]{7,40}$")
-#: file and directory name tokens of runs that are not evidence of the claim
-_EXCLUDED_NAME_TOKENS = ("sabotage", "partial", "probe", "unfixed", "post-merge-smoke")
+#: Tokens of runs that are not evidence of the claim, matched against the
+#: WHOLE PATH because each marks a whole DIRECTORY of such runs:
+#: `2026-09-14_kmeans-sqrt-fix/unfixed/` holds columns taken with the bug still
+#: present, and admitting those would feed known-wrong hashes into the table.
+_EXCLUDED_PATH_TOKENS = ("partial", "probe", "unfixed", "post-merge-smoke")
+#: `sabotage` is matched against the FILE NAME ALONE (2026-09-16,
+#: lane/sabotage-evidence). A negative control is recorded BESIDE the clean
+#: column it is a control for, in one record directory, and naming that
+#: directory after what it records is the obvious thing to do. Matching the
+#: whole path therefore refused clean columns for their neighbor's sin, and
+#: refused them SILENTLY: two committed ones,
+#: `2026-09-15_ties-sabotage/x86-runpod/cpu-x86.json` and
+#: `2026-09-15_metrics-sabotage-coverage/cpu-prod.json`, were being discarded
+#: with no error to read. A sabotage build also declares itself in its own
+#: metadata, `host.families[*].sabotage` and the `*_sabotage` flags checked
+#: below, which is the stronger test and still refuses it. Measured over the
+#: 495 committed columns: 220 admitted before, 222 after, NOTHING newly
+#: refused, and no column carrying a sabotage signal admitted
+#: (`tests/test_verify_reference_admit.py`).
+_EXCLUDED_BASENAME_TOKENS = ("sabotage",)
+#: the whole vocabulary, for readers and for anything that wants to report it
+_EXCLUDED_NAME_TOKENS = _EXCLUDED_PATH_TOKENS + _EXCLUDED_BASENAME_TOKENS
 #: n/a values that describe the RUN, not the estimator
 _SKIPPED_NA = ("n/a:skipped", "n/a:UNDECLARED")
 
@@ -209,7 +229,9 @@ def _commit_time(root, commit, cache):
 def admit(j, path):
     """None when the column is admissible, else the reason it is not."""
     low = path.lower()
-    if any(tok in low for tok in _EXCLUDED_NAME_TOKENS):
+    base = os.path.basename(low)
+    if any(tok in low for tok in _EXCLUDED_PATH_TOKENS) or any(
+            tok in base for tok in _EXCLUDED_BASENAME_TOKENS):
         return "sabotage, partial, probe, unfixed or smoke run (by name)"
     if not isinstance(j, dict) or not isinstance(j.get("cells"), dict):
         return "not an identity_break column"
