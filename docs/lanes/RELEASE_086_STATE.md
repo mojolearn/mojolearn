@@ -28,6 +28,28 @@ identity lanes recorded in it, disagrees with the ratio above: they reran 6 perc
 disagree, and nobody has established why" further down this file. Read that section before
 treating either ratio as a statement about the machine's state.
 
+**AND THE LEAK IS BACK, LARGER, MEASURED 2026-09-15 21:32: `AGXCommandQueue = 4509`.** At rest
+this machine reads 34 to 41; the worst seen in the earlier degraded window was one process
+holding 1211 and climbing to 2491. The only Metal work running was the Apple chunk00-rest
+process, alive 53 minutes over 17 lanes, burning CPU (13:51 and advancing, so not deadlocked)
+and 41 minutes into a single lane (`spectral`) against 923 s for the slowest lane of chunk 00.
+That is the documented failure mode exactly: one process crossing the machine's ~512 queue
+limit WITHIN ITS OWN LIFETIME degrades lane by lane, and the queues come back only when the
+process exits.
+
+The mitigation already in force, one process per chunk, is right but the **chunk is too big**.
+Chunks 01 to 06 are 30-lane chunks, larger than the 23-lane chunk that produced this reading,
+so each would degrade at least as badly. `scripts/run_apple_groups.sh` runs any lane list in
+small groups (default 6), each its own process under the Metal lock, printing the queue count
+before and after every group so the next session can see the leak rather than infer it. Parts
+merge cleanly because the machine, wheel and harness are identical, which is already proven
+between `chunk00-rerun` and `chunk00-rest` on all twelve `MERGE_SAME` keys and all 23 binding
+digests.
+
+The running chunk was NOT cancelled: it is an owed run, its 17 finished lanes are already on
+disk (the harness writes after every lane), and whether to restart its remaining six lanes in
+a fresh process is a decision to take deliberately, not silently at the keyboard.
+
 ## Branch and commits
 
 - `release/0.8.6` at the commit that adds this file (with the macOS runtime-environment
