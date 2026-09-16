@@ -2,7 +2,7 @@ NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS
 NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
 NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
 NOTE: --lanes scopes this diff to 2 lane(s); 163 other lane(s) the JSONs carry are not compared
-NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_mamba_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=78fa7b7c0687e938ee5b9390d4d7c78d2047d3a2
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_mamba_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=fc02bdf404aabc93f049618a895be502b26c1f34
 | lane/fixture                 | verdict    | cpu-apple-m4     | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 |
 |------------------------------|------------|------------------|------------------|------------------|------------------|
 | par-samba-clip/base          | IDENTICAL x4 | 387a63aafbcce06d | 387a63aafbcce06d | 387a63aafbcce06d | 387a63aafbcce06d |

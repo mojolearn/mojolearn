@@ -35,8 +35,10 @@ in all four columns: par-samba/base `359834bee4b2789a`, par-samba/denormal
 `c04ab1019588d438`, par-samba-clip/base `387a63aafbcce06d`,
 par-samba-clip/denormal `8c2ae3ff8e254f9b`.
 
-This column was taken at commit 78fa7b7c0, the commit that carries the
-change, so the evidence and the code it verifies are the same tree.
+This column was taken at the merge commit fc02bdf40, after
+lane/host-path-resolution changed host binding resolution under this branch:
+every column here loads through MOJOLEARN_HOST_DIR, so it was re-taken on
+the merged tree and reproduces the same bytes.
 
 ## The negative controls
 

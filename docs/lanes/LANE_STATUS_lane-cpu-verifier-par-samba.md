@@ -66,7 +66,8 @@ Apple M4, one core, through the shared CPU slots; nine fixtures, two
 repeats; host bindings core, training, mamba and transformer built
 IDENTICAL, and a second set with `-D MOJOLEARN_HOST_SABOTAGE=1`. Committed
 under `bench/results/identity_break/2026-09-16_cpu-par-samba/`. The
-production column was taken at 78fa7b7c0, the commit carrying the change;
+production column was taken at the merge commit fc02bdf40, re-run after
+lane/host-path-resolution changed host binding resolution under this branch;
 the controls ran at bfb8f725a with the same two lines in place.
 
 - **Four columns, production.** `require-columns 4 over ['par-samba',
