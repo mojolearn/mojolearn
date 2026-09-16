@@ -136,57 +136,59 @@ def _run(
     return got
 
 
-comptime if PROBE_ACQUIRE:
+def _acquire_kernel(
+    mutex: MutPointer[Int32, MutAnyOrigin],
+    payload: MutPointer[Int32, MutAnyOrigin],
+):
+    """THE PROPOSED SPELLING: the CLAIM itself carries ACQUIRE."""
+    if Int(thread_idx.x) != 0:
+        return
+    var guard = 0
+    while guard < SPINS:
+        guard += 1
+        if Atomic.load[ordering = Ordering.ACQUIRE](mutex) != Int32(0):
+            continue
+        var expected = Int32(0)
+        if Atomic.compare_exchange[
+            success_ordering = Ordering.ACQUIRE,
+            failure_ordering = Ordering.RELAXED,
+            weak=True,
+        ](mutex, expected, Int32(1)):
+            break
+    var v = payload.unsafe_load(0)
+    payload.unsafe_store(0, v + Int32(1))
+    Atomic.store[ordering = Ordering.RELEASE](mutex, Int32(0))
 
-    def _acquire_kernel(
-        mutex: MutPointer[Int32, MutAnyOrigin],
-        payload: MutPointer[Int32, MutAnyOrigin],
-    ):
-        """THE PROPOSED SPELLING: the CLAIM itself carries ACQUIRE."""
-        if Int(thread_idx.x) != 0:
-            return
-        var guard = 0
-        while guard < SPINS:
-            guard += 1
-            if Atomic.load[ordering = Ordering.ACQUIRE](mutex) != Int32(0):
-                continue
-            var expected = Int32(0)
-            if Atomic.compare_exchange[
-                success_ordering = Ordering.ACQUIRE,
-                failure_ordering = Ordering.RELAXED,
-                weak=True,
-            ](mutex, expected, Int32(1)):
-                break
-        var v = payload.unsafe_load(0)
-        payload.unsafe_store(0, v + Int32(1))
-        Atomic.store[ordering = Ordering.RELEASE](mutex, Int32(0))
-
-    def _run_acquire(ctx: DeviceContext) raises -> Int:
-        var mtx = ctx.enqueue_create_buffer[DType.int32](1)
-        var pay = ctx.enqueue_create_buffer[DType.int32](1)
-        ctx.enqueue_memset(mtx, Int32(0))
-        ctx.enqueue_memset(pay, Int32(0))
-        ctx.synchronize()
-        ctx.enqueue_function[_acquire_kernel](
-            mtx.unsafe_ptr(), pay.unsafe_ptr(), grid_dim=BLOCKS, block_dim=BLOCK
-        )
-        ctx.synchronize()
-        var host = ctx.enqueue_create_host_buffer[DType.int32](1)
-        ctx.enqueue_copy(dst_buf=host, src_buf=pay)
-        ctx.synchronize()
-        var got = Int(host.unsafe_ptr().unsafe_load(0))
-        print(
-            "acquire: got "
-            + String(got)
-            + " want "
-            + String(BLOCKS)
-            + " shortfall "
-            + String(BLOCKS - got)
-        )
-        _ = mtx^
-        _ = pay^
-        _ = host^
-        return got
+def _run_acquire(ctx: DeviceContext) raises -> Int:
+    """Guarded at the CALL, not at the definition: Mojo rejects a
+    module-scope `comptime if`, which is what failed to parse on leg 13."""
+    comptime if not PROBE_ACQUIRE:
+        return -1
+    var mtx = ctx.enqueue_create_buffer[DType.int32](1)
+    var pay = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(mtx, Int32(0))
+    ctx.enqueue_memset(pay, Int32(0))
+    ctx.synchronize()
+    ctx.enqueue_function[_acquire_kernel](
+        mtx.unsafe_ptr(), pay.unsafe_ptr(), grid_dim=BLOCKS, block_dim=BLOCK
+    )
+    ctx.synchronize()
+    var host = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=host, src_buf=pay)
+    ctx.synchronize()
+    var got = Int(host.unsafe_ptr().unsafe_load(0))
+    print(
+        "acquire: got "
+        + String(got)
+        + " want "
+        + String(BLOCKS)
+        + " shortfall "
+        + String(BLOCKS - got)
+    )
+    _ = mtx^
+    _ = pay^
+    _ = host^
+    return got
 
 
 def main() raises:
@@ -197,9 +199,7 @@ def main() raises:
 
     var relaxed = _run(ctx, "relaxed", False)
 
-    var acquired = -1
-    comptime if PROBE_ACQUIRE:
-        acquired = _run_acquire(ctx)
+    var acquired = _run_acquire(ctx)
 
     # THE SABOTAGE. Without it, "relaxed was exact" is indistinguishable from
     # "nothing contended", and the whole probe would report OK for a cell that
@@ -236,7 +236,7 @@ def main() raises:
             + " HERE, not proof the edge is formally established; a rare"
             + " window may need more contention to show."
         )
-    comptime if PROBE_ACQUIRE:
+    if PROBE_ACQUIRE:
         if acquired >= BLOCKS:
             print("ACQUIRE CLAIM EXACT: the acquire-ordering RMW compiles, runs, and loses nothing.")
         else:
