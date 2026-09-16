@@ -165,11 +165,12 @@ def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
     global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
-    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS
+    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES
     for cache in _CACHES:
         cache.clear()
     _GIT_SHOW.clear()
     _TRACKED = None
+    _PYTHON_FILES = None
     _ENUMERATORS = None
     _LANE_SOURCES = None
     _SOURCE_HASHED = None
@@ -259,21 +260,68 @@ def _code_names(fn, module_globals, seen=None):
     return out
 
 
+_PYTHON_FILES = None
+
+
 def _python_files():
     """Every tracked Python file of the package, excluding its test modules
-    (a test cannot change a lane's bits)."""
+    (a test cannot change a lane's bits).
+
+    MEMOIZED: `_python_imports` asks for this listing once per package file to
+    tell a module name from a class name, and the `os.listdir` behind it is
+    the whole cost of that loop."""
+    global _PYTHON_FILES
+    if _PYTHON_FILES is not None:
+        return _PYTHON_FILES
     out = []
     base = os.path.join(ROOT, PKG)
     for name in sorted(os.listdir(base)):
         if name.endswith(".py"):
             out.append(os.path.join(PKG, name))
+    _PYTHON_FILES = out
+    return out
+
+
+def _public_rebindings(files):
+    """name -> the package module `python/mojolearn/__init__.py` binds it FROM.
+
+    A lane body writes `ml.UMAP`, and that attribute is bound by
+    `__init__.py:147`, `from .umap import UMAP`, which executes
+    python/mojolearn/umap.py, which is `from ._umap_impl import UMAP` and
+    nothing else. Seeding only the file that DEFINES a class walks straight
+    past that door: `umap.py`, `neural_network.py` and `language_model.py`
+    were in no lane's map, and a change to one of them rebinds the public name
+    every lane of that family calls.
+
+    ONLY THROUGH `__init__.py`. Treating every `from .X import N` in the
+    package as a binding of N was measured and is far too wide: it took the
+    median file from 29 lanes to 60 and `neural_inference.py` from 21 to all
+    212, because every impl module imports its neighbours. The package's own
+    `__init__` is the one place that says which module the PUBLIC name comes
+    from, which is the only rebinding a lane's `ml.<Name>` can go through."""
+    out = {}
+    listing = set(files)
+    init = os.path.join(PKG, "__init__.py")
+    tree = _parse(init)
+    for node in (tree.body if tree is not None else ()):
+        if not (isinstance(node, ast.ImportFrom) and node.level and node.module):
+            continue
+        rel = os.path.join(PKG, node.module.split(".")[0] + ".py")
+        if rel not in listing or rel == init:
+            continue
+        for alias in node.names:
+            if alias.name != "*":
+                out.setdefault(alias.name, set()).add(rel)
     return out
 
 
 def _python_symbols(files):
     """symbol -> files that define it: every top-level class and def, plus
-    each file's own module name, so `ml.linalg` and `ml.metrics` resolve."""
+    each file's own module name, so `ml.linalg` and `ml.metrics` resolve, plus
+    the public door `__init__.py` binds the name from (`_public_rebindings`)."""
     index = {}
+    for name, rels in _public_rebindings(files).items():
+        index.setdefault(name, set()).update(rels)
     for rel in files:
         tree = _parse(rel)
         if tree is None:
@@ -308,9 +356,20 @@ def _python_imports(rel):
             for alias in node.names:
                 if alias.name.startswith("mojolearn."):
                     names.add(alias.name.split(".")[1])
+    # AGAINST THE LISTING, NEVER `os.path.exists`. This asks whether a name a
+    # file imports is itself a package module, and an imported name is often a
+    # CLASS. On the macOS checkout the filesystem is case-insensitive, so
+    # `from ._umap_impl import UMAP` answered yes to python/mojolearn/UMAP.py
+    # and `from ._hdbscan_impl import HDBSCAN` to python/mojolearn/HDBSCAN.py.
+    # Neither path is tracked. The map carried two files that exist only on
+    # this laptop, HDBSCAN.py holding 24 lanes, while the real hdbscan.py and
+    # umap.py, which are the public doors `__init__.py` binds those names
+    # from, were in no lane's map at all. On the Linux boxes that run the CPU
+    # column the same map is a different map.
+    listing = set(_python_files())
     for name in names:
         cand = os.path.join(PKG, name + ".py")
-        if os.path.exists(os.path.join(ROOT, cand)):
+        if cand in listing:
             out.add(cand)
     return out
 
@@ -458,6 +517,37 @@ def _python_closure(seeds, sinks=()):
         stack.extend(fresh)
 
 
+def _mojo_module_files(dotted, rel):
+    """Every repository file one Mojo import could mean, resolved against the
+    repository root AND against the importing file's OWN DIRECTORY.
+
+    THE IMPORTER'S DIRECTORY IS ON THE INCLUDE PATH. Every binding is built
+    with `-I . -I bindings` (bindings/build_rf.sh:123, build_trees.sh:134,
+    build_gbdt.sh:268), so `bindings/_mojolearn_rf.mojo` writing
+    `from forest_inference_binding import forest_prepare_gpu_binding` means
+    `bindings/forest_inference_binding.mojo`, which is compiled into the
+    shipped `.so`. Resolving against the root alone found no such file and
+    dropped the import as one of the toolchain's own, so the whole resident
+    forest inference tree (`bindings/forest_inference_binding.mojo` ->
+    `core/forest_inference_model.mojo` -> `core/forest_inference.mojo`) was in
+    no lane's map while being a shipped surface.
+
+    This is not a new rule for this tree: `tools/bincache.py:198`, written for
+    the binding cache and against the same compiler, searches
+    `list(roots) + [importer.parent]` for exactly this reason.
+
+    `from max.gpu.host import ...` still resolves to nothing under either root
+    and is still dropped, which is what makes the toolchain fall out."""
+    parts = dotted.split(".")
+    out = set()
+    for base in ("", os.path.dirname(rel)):
+        for cand in (os.path.join(base, *parts) + ".mojo",
+                     os.path.join(base, *parts, "__init__.mojo")):
+            if os.path.exists(os.path.join(ROOT, cand)):
+                out.add(cand)
+    return out
+
+
 @_by_path
 def _mojo_imports(rel):
     """The repository's own Mojo imports of one file. `from cluster.impl.kmeans
@@ -473,11 +563,7 @@ def _mojo_imports(rel):
         m = _MOJO_IMPORT_RE.match(line)
         if not m:
             continue
-        dotted = m.group(1) or m.group(2)
-        parts = dotted.split(".")
-        for cand in (os.path.join(*parts) + ".mojo", os.path.join(*parts, "__init__.mojo")):
-            if os.path.exists(os.path.join(ROOT, cand)):
-                out.add(cand)
+        out |= _mojo_module_files(m.group(1) or m.group(2), rel)
     return out
 
 
@@ -589,28 +675,47 @@ def _mojo_import_symbols(rel):
         m = re.match(r"^\s*from\s+([A-Za-z0-9_.]+)\s+import\s+(.+)$", line)
         if not m:
             continue
-        parts = m.group(1).split(".")
-        files = {c for c in (os.path.join(*parts) + ".mojo", os.path.join(*parts, "__init__.mojo"))
-                 if os.path.exists(os.path.join(ROOT, c))}
+        files = _mojo_module_files(m.group(1), rel)
         if not files:
             continue                         # the toolchain's own modules, not ours
         for name in m.group(2).split(","):
-            name = name.strip().split(" as ")[0].strip()
-            if name and name != "*":
-                out.setdefault(name, set()).update(files)
+            # THE LOCAL NAME, WHICH IS THE ALIAS WHEN THERE IS ONE. An export's
+            # body is searched for these names, and the body writes what the
+            # import BOUND. `bindings/_mojolearn_metrics.mojo:56` is
+            # `from umap.estimator import fit_transform as umap_fit_transform`
+            # and `umap_fit_transform_binding` calls `umap_fit_transform`.
+            # Recording `fit_transform` made `\bfit_transform\b` miss it (the
+            # underscore before `fit` is a word character), so the whole umap
+            # tree was invisible to the per-export scan and reached the `umap`
+            # lane only because the metrics HOST family happens to list
+            # umap/graph.mojo among its host modules. `par-graph-umap`, which
+            # runs the same fit across devices and is not in that family, was
+            # credited with none of it.
+            parts = [p.strip() for p in name.strip().split(" as ")]
+            local = parts[-1] if len(parts) > 1 else parts[0]
+            if local and local != "*":
+                out.setdefault(local, set()).update(files)
     return out
 
 
 @_by_path
 def _binding_exports(rel):
     """export name -> the binding function implementing it, from the
-    `module.def_function[impl]("name")` registrations a binding ends with."""
+    `module.def_function[impl]("name")` registrations a binding ends with.
+
+    THE IMPL MAY BE PARAMETRIZED. `def_function[forest_prepare_gpu_binding[True]]`
+    and `def_function[rf_classifier_fit_binding[False]]` are the ordinary
+    spelling in the forest bindings, and requiring a bare identifier dropped 35
+    exports across five bindings, among them `rf_classifier_fit`,
+    `et_classifier_fit` and `forest_prepare_gpu`. A dropped export is not a
+    wide answer: the lane still HITS other exports, so the per-export branch
+    runs and the dropped export's whole tree is simply absent."""
     try:
         text = _read(rel)
     except OSError:
         return {}
-    return {m.group(2): m.group(1) for m in
-            re.finditer(r"def_function\[\s*([A-Za-z0-9_]+)\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
+    return {m.group(2): m.group(1) for m in re.finditer(
+        r"def_function\[\s*([A-Za-z0-9_]+)\s*(?:\[[^\[\]]*\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
 
 
 #: Calls that RESOLVE a binding by name, and the assignment targets that hold
@@ -762,7 +867,38 @@ def lane_sources():
                 syms = _mojo_import_symbols(src)
                 seeds = set()
                 for export in hit:
-                    body = blocks.get(exports[export], "")
+                    # THE EXPORT'S BODY IS NOT ONLY THE FUNCTION NAMED. An
+                    # export reaches a Mojo file two ways this scan used to
+                    # miss, and both are the ordinary spelling here:
+                    #  * the impl is IMPORTED, not defined in the binding file.
+                    #    `def_function[forest_prepare_gpu_binding[True]]` names
+                    #    a function in bindings/forest_inference_binding.mojo,
+                    #    so `blocks.get` returned "" and the export
+                    #    contributed nothing at all.
+                    #  * the impl calls a helper DEFINED IN THE SAME FILE which
+                    #    is where the imported symbol appears.
+                    #    `rf_predict_proba_gpu_parallel_binding` calls the
+                    #    file-local `_rf_predict_gpu_parallel`, and only that
+                    #    helper names `forest_predict_gpu`.
+                    # Both are closed here: the export's name is resolved as an
+                    # imported symbol in its own right, and the bodies are
+                    # followed through the file's own functions.
+                    bodies, seen, stack = [], set(), [exports[export]]
+                    while stack:
+                        name = stack.pop()
+                        if name in seen:
+                            continue
+                        seen.add(name)
+                        seeds |= syms.get(name, set())
+                        body = blocks.get(name)
+                        if body is None:
+                            continue
+                        bodies.append(body)
+                        for other in blocks:
+                            if other not in seen and re.search(
+                                    r"\b%s\b" % re.escape(other), body):
+                                stack.append(other)
+                    body = "\n".join(bodies)
                     for sym, files in syms.items():
                         if re.search(r"\b%s\b" % re.escape(sym), body):
                             seeds |= files
