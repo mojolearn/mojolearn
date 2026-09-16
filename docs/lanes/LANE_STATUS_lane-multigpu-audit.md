@@ -65,6 +65,61 @@ admitted by a driver's type check but have no dedicated lane** (see (a3)).
 Seven further named refusals sit INSIDE families that have a path; they are
 listed under "Named refusals" and are not counted as (b).
 
+## THE DENOMINATOR: count the registry, never a grep
+
+**If you have quoted a lane coverage percentage today, check its denominator
+before you quote it again.** `grep -c '@lane(' tools/identity_break.py` returns
+**176**. The harness registers **199** on main and **210** on this branch. The
+23 missing lanes are registered by module-level loops, so no grep for the
+decorator can see them:
+
+    gmm-random-init-sample  gmm-sample
+    gp-matern12  gp-matern32  gp-matern52-ard
+    gp-optimize  gp-optimize-restarts  gp-sample-y  gp-sample-y-normalize
+    kde-cosine-minkowski  kde-epanechnikov-l1  kde-exponential-chebyshev
+    kde-linear-cosine  kde-tophat-sqeuclidean
+    knn-chebyshev  knn-cosine  knn-manhattan  knn-minkowski-p3  knn-rbc
+    knn-sqeuclidean
+    radius-chebyshev  radius-manhattan  radius-minkowski-p3
+
+Reproduce the list, do not trust this one:
+
+    python3 -c "import importlib.util,sys,re; src=open('tools/identity_break.py').read(); s=importlib.util.spec_from_file_location('ib','tools/identity_break.py'); m=importlib.util.module_from_spec(s); sys.modules['ib']=m; s.loader.exec_module(m); lit=set(re.findall(r'@lane\(\"([^\"]+)\"\)', src)); print(len(m.LANES), len(lit)); print(sorted(n for n in m.LANES if n not in lit))"
+
+### Three legitimate numbers and one artifact
+
+| number | what it is | use it for |
+|---|---|---|
+| **199** on main, **210** here | the REGISTRY, `len(identity_break.LANES)` | the denominator of every coverage percentage |
+| 166, 136, 47, 192 | the lanes a particular record or sweep RAN | describing that run, never as a total |
+| **176** | the count of literal `@lane(` decorators | nothing. It is a grep artifact |
+
+192 is the third figure in circulation and it is legitimate but is NOT a total:
+`docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md` uses it for the lanes
+its timing sweep ran ("NVIDIA finished 192 of 192", "AMD stopped at 162 of
+192"), the same kind of number as the `2026-09-14_166-lanes` record's name.
+
+### Reconciliation, per effort
+
+- **`tools/verification_matrix.py` (origin/lane/verification-matrix) is already
+  correct** and needs no fix. It states "199 lanes (160 single-device, 39
+  `par-*`)" and it `exec_module`s the harness rather than grepping it. Its
+  numbers will move to 210 and 50 `par-*` when this branch merges: its "28
+  `par-*` lanes with no CPU verifier" becomes 39, and its count of lanes
+  missing a two-device column grows by eleven. That is arithmetic on new
+  lanes, not an error in it.
+- **`docs/lanes/SABOTAGE_AUDIT_2026-09-16.md` (origin/lane/sabotage-audit)
+  states its denominator as 176**: "THE QUESTION, asked of all 176
+  `tools/identity_break.py` lanes." The 23 lanes above were outside the
+  question as it was asked. Its owner should re-ask it of the registry and say
+  whether any of the 23 were covered incidentally; this file does not claim
+  they were all missed, only that the denominator omits them. The 23 are not
+  exotic: they are kernel, metric and kernel-hyperparameter variants of kde,
+  knn, radius and gp, which is exactly the population a negative-control audit
+  cares about.
+- **This file** quoted 176 as the total in its first version and is corrected
+  above.
+
 ## (a) Has a multi-GPU path (44)
 
 Mechanism is read from the pool the driver opens.
@@ -338,9 +393,13 @@ columns they were never claimed to have. Verified, not assumed:
 They are also outside `public_reference_lanes()`, which is a literal list, so
 they cannot reach a wheel user's verify surface either.
 
-### Condition 1, and a correction to "write the cells as OWED"
+### Condition 1: these cells are SHORT, never OWED (settled)
 
-The instruction was to declare the lanes and write their GPU cells as OWED.
+The original instruction was to declare the lanes and write their GPU cells as
+OWED. **That instruction was withdrawn on 2026-09-16 and this is the settled
+answer**, written out here because the next person will have the same instinct
+and should find the answer already in the file rather than rediscovering it.
+
 **The harness cannot mark these OWED, and it should not.** `_owed_status` in
 `tools/identity_break.py` derives OWED rather than taking a hand-written list,
 and its first requirement is a CPU column:
@@ -406,9 +465,15 @@ that do not exist here and that I am not authorized to build:
     cd <worktree>/python && python3 -m mojolearn.tests.test_host_surface
     cd <worktree>/python && python3 -m mojolearn.tests.test_cpu_training_par_classical
 
-**DEFERRED, asking before running:** both need
-`MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh` first, which is a
-37-binding build and far past a cooled machine's one core. The one assertion of
+**DEFERRED, and the answer came back: do NOT build on this Mac.** Both need
+`MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh` first, a 37-binding
+build. Refused on 2026-09-16: the machine was at 5.19 GB of 6.14 GB swap with
+free memory in the tens of megabytes, and a compile is the memory event that
+crashes it. Reading and counting are not. Whoever picks this up has three
+acceptable routes and should not invent a fourth: ride a build another lane is
+doing anyway, run the two tests on a RunPod CPU pod where the build is cheap
+and parallel (`tools/runpod_cpu_leg.sh`), or leave them deferred, which is
+acceptable on the reasoning below. The one assertion of
 `test_host_surface` that bears on this change,
 `test_covered_lanes_are_identity_break_lanes` (every covered lane is a lane
 identity_break defines), is satisfied by construction: this branch adds lanes
