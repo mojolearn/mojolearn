@@ -346,6 +346,62 @@ hides in a file credited with too few, and `neural_inference.py` at three
 lanes was exactly that shape. A census at 3 is in
 `/Users/andrewhendel/mojolearn-evidence/lane-selector-2026-09-16/census_3.txt`.
 
+### The Mojo side: measured, and the answer is no backward edge
+
+A Mojo under-attribution is worse than a Python one. A Python miss means a
+lane's door was missed; a Mojo miss means the ARITHMETIC changed and no cell
+was asked about it.
+
+10 repo traits, 14 conforming files, 9 real conformance edges after two
+exemptions, and lanes(declaration) equals lanes(implementation) on every one:
+23 against 23 for the block-scan and scan-by-key elements, 35 against 35 for
+all five `pointwise_hist2` templates and the leaves-estimation oracle. Mojo
+conformance is not Python subclassing. A conforming struct is reached only
+when something parametrises on the trait AND IS HANDED THAT STRUCT BY NAME,
+and naming a symbol from another file requires importing it, so the forward
+walk already has it. The inversion is in the tree so it stays true.
+
+Both exemptions are derived and both split this tree exactly:
+
+* a file with its own `main` is a standalone program. All five files that
+  conform to a repo trait purely to TEST it have one; none of the nine shipped
+  implementations does.
+* the conforming file must IMPORT the declaration. `core/philox.mojo` and
+  `mamba/host/gen/philox.mojo` each declare their own `U32Stream` and neither
+  imports the other, so matching by trait name alone invented an edge and
+  claimed 80 missing lanes.
+
+The first negative control was INVALID and said so by its arms moving
+together: dropping every path matching `pointwise_hist2` also removed the
+template carrying the lanes, so both sides fell and the inversion stayed
+silent at zero. The control now cuts ONE import and requires the declarer to
+keep its 35 lanes while the implementation loses them.
+
+`@parameter if is_defined[...]` is not a file-attribution question: it selects
+a branch INSIDE a file that is attributed already, and a `-D` define changes
+which branch runs, not which file. The same goes for an `@always_inline`
+helper passed as a parameter, which the caller has to name and therefore
+import.
+
+### One real gap the Mojo pass found
+
+`unreachable` searched only the corpus, which is what a lane already reaches,
+so a chain of files the map is missing voted nowhere.
+`core/forest_inference_model.mojo` is imported by
+`bindings/forest_inference_binding.mojo`, itself outside the map, and the
+model file read "nothing reaches it" while being part of a shipped binding's
+tree. A Mojo import is a compile-time fact and does not need the corpus to be
+believed, so any Mojo file a non-program imports now falls back.
+
+### Owed to a person, not to another rule
+
+`core/forest_inference.mojo` is imported by `bindings/_mojolearn_rf.mojo` and
+`bindings/_mojolearn_trees.mojo` and is in NO lane's map. That is not a
+backward edge; it is the per-export seeding declining to follow an inference
+path no lane's door calls by name. It may be correct and it may be a
+forward-walk gap. It wants the census read by a person rather than a hurried
+rule, which is the same reason the census at 3 is owed a human pass.
+
 ### The one path left, and why it stays
 
 `pixi.toml` pins the toolchain. A toolchain change can move bits on every
