@@ -97,12 +97,16 @@ Two consequences for the plan:
 |---|---|---|---|
 | 1 | Corpus to vocabulary | **CPU only** (no GPU path exists in any implementation) | Being built. Claim is cross-ARCHITECTURE, not cross-vendor |
 | 2 | Text to tokens | Host integers | **Done**, has an identity lane |
-| 3 | **Data ordering** (shuffle, sharding, batching) | Host | **UNVERIFIED — check whether a lane exists** |
+| 3 | **Data ordering** (shuffle, sharding, batching) | Host, caller-owned | **No identity lane, by design. The trainer does not order data at all** |
 | 4 | Training kernels | GPU | Proven on TINY fixtures; **unproven over thousands of steps**. The real gap |
 | 5 | Checkpoint save and reload | Both | Partially proven: model cells hash saved bytes, reload equality checked per lane, **never across a long run** |
 | 6 | Inference | Both | Largely proven; 182 real batch parts, 17 named n/a, 0 undeclared |
 
-**Link 3 is the one nobody has looked at and it is as load-bearing as any kernel.** If the example order, the shuffle seed handling or the shard assignment varies between runs or between machines, the model differs no matter how perfect the arithmetic is. Before the LLM run, establish whether a deterministic data-ordering lane exists and build one if it does not.
+**Link 3, checked Sep 16 and better than it first looked.** There is no identity lane for data ordering, and the absence is real (verified with a control: the same grep finds 5 matches for a lane known to exist). But that is **by design, not an oversight**. `_byte_lm_impl.py:428` states it outright: *"This class does not fetch/reorder a corpus."* Ordering is the caller's, and the trainer instead takes a bounded `data_schedule` descriptor recording the **corpus and actual token-order SHA256, the batch offsets and the planned steps**, with `next_batch_index` equal to `completed_steps`. `test_byte_lm_surface.py` asserts that tampering with those offsets is rejected.
+
+So the link is **outside our boundary but pinned by a recorded hash**, which is the right shape: we do not own the data pipeline, and we refuse to pretend otherwise, while making the ordering that was used auditable after the fact.
+
+**The owed item is therefore publication, not verification.** Any reproduction recipe must ship the `data_schedule` alongside the weights, or a reader cannot reproduce the run however perfect our kernels are. A reader who has the corpus hash, the token-order hash, the batch offsets and the seed can; one who has only the weights cannot. Put it in the model card and in the evidence document.
 
 **Link 5 matters more under the replication design** than it would otherwise, because that design restarts from checkpoints repeatedly. A checkpoint that does not round-trip bit-exactly makes every replicated segment meaningless, and it would look exactly like a vendor disagreement.
 
