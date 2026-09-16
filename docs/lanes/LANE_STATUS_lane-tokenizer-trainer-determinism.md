@@ -16,8 +16,10 @@ none should be written on this branch.**
 - Falsification gate passes for both trainers, in both directions (an exact
   copy compares identical; six one-at-a-time perturbations each trip the layer
   they must). Never trust a verdict from this harness without it.
-- Local axes (repeats, vocabulary size, corpus order) measured at one core.
-- Thread-count axis and the unigram trainers measured on one rented CPU pod.
+- Local axes (repeats, vocabulary size, corpus order) measured at one core,
+  for BPE and unigram, both trainers.
+- Thread-count axis measured on one rented CPU pod, which also repeats every
+  other axis on x86 so each axis has one coherent column.
 - Gates run clean on this branch: `docs_facts --check` (13 facts),
   `packaging/wheel_ci.py pins .` (56 build scripts),
   `packaging/wheel_ci.py inventory python/mojolearn` (85 modules).
@@ -114,3 +116,22 @@ bash tools/runpod_cpu_leg.sh --lane tokdet --vcpu 16 --lease 100 --build "" \
 - A shuffled-sample control is **not** a differing arm when
   `input_sentence_size` exceeds the corpus sentence count. Check the line count
   before treating it as evidence.
+- **A float64 ulp is a no-op on a float32 field.** Perturbing a SentencePiece
+  `score` by one float64 ulp rounds straight back to the same float32 on
+  storage, so the file never changes and the control reports "identical" while
+  proving nothing. Re-read the stored value and assert it actually moved before
+  letting the verdict count. Done correctly, both layers see a 1-ulp float32
+  move (delta 9.54e-07).
+- **Do not generalize a trainer from one model type.** Hugging Face is the
+  reproducible one at BPE and the *unreproducible* one at unigram;
+  SentencePiece is the reverse. Measure each model type.
+
+## What was found
+
+| trainer / model | bitwise reproducible? |
+|---|---|
+| HF `tokenizers` 0.23.2 BPE | yes, on every axis measured |
+| HF `tokenizers` 0.23.2 unigram | **no** — scores wobble, 2 of 54,417 held-out lines retokenize |
+| `sentencepiece` 0.2.2 BPE, full corpus | yes (corpus order moves `.model` bytes, not the vocabulary) |
+| `sentencepiece` 0.2.2 BPE, sampled | **no**, and unpinnable — no `random_seed` in 0.2.2 |
+| `sentencepiece` 0.2.2 unigram | yes |

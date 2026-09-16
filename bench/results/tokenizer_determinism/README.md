@@ -66,6 +66,16 @@ The two reordering perturbations fired bytes and struct while leaving
 tokenization untouched. That is the "different spelling, same result" case,
 and the comparison distinguishes it rather than collapsing it.
 
+**How small a difference can it see?** Down to one float32 ulp. A single score
+in a trained SentencePiece model was moved by one ulp
+(`-10.3556652 → -10.3556662`, delta 9.54e-07) and both the byte and struct
+layers caught it. That control is only meaningful because the probe itself was
+verified first: an earlier attempt moved the score by one *float64* ulp, which
+rounds straight back to the same float32 on storage, so the file never changed
+and the control reported "identical" while proving nothing. The probe now
+re-reads the stored value and asserts it actually moved before the verdict is
+allowed to count.
+
 Beyond the file-level controls, the matrix trains **end-to-end control arms
 that must differ** (a vocabulary size off by one), so the whole
 train-then-compare pipeline is exercised, not only a file the harness edited
@@ -107,6 +117,17 @@ One core, `RAYON_NUM_THREADS=1`, fresh process per run, M4 arm64.
 All three artifacts (`tokenizer.json`, `vocab.json`, `merges.txt`) are
 byte-identical across every one of these runs. Hugging Face embeds no paths
 or timestamps, so byte equality is meaningful straight out of the box.
+
+**And the stability is structural, not luck.** A serializer that happened to
+iterate a hash map in a stable order would give byte-identical files today and
+stop doing so on a library upgrade, so it matters which one this is. Measured
+on a trained artifact: the vocabulary is written in strict **id order**, ids
+contiguous `0..n-1`, in both `tokenizer.json` and `vocab.json`, and that order
+is demonstrably **not** alphabetical (the keys are not sorted), which is what
+would otherwise confound the check. `merges.txt` preserves training order,
+most frequent merge first (`Ġ t`, `h e`, `Ġ a`). So the serializer imposes a
+total order on output rather than inheriting one from an iteration order, and
+the byte equality rests on that rather than on a coincidence.
 
 Notably, **corpus order does not reach the result at all** for HF: forward,
 reversed and rotated shard lists produce byte-identical artifacts.
@@ -174,10 +195,74 @@ Because 0.2.2 exposes no `random_seed`, **this cannot be pinned from the
 API.** The only way to keep SentencePiece reproducible is to never use the
 sampling path: train on the whole corpus, with `input_sentence_size=0`.
 
+## Findings: the unigram trainers
+
+One core, one thread, 16 MB, fresh process per run, M4 arm64. Unigram scores
+with floating-point EM, so this is where float accumulation would be expected
+to show. It does show — but not in the trainer the reasoning would predict.
+
+| trainer | two runs, identical settings | verdict |
+|---|---|---|
+| `sentencepiece` 0.2.2 unigram | `sp.model`, `sp.vocab` | IDENTICAL |
+| HF `tokenizers` 0.23.2 unigram | `tokenizer.json`, `unigram.json` | **DIFFER** |
+
+It is the opposite way round from BPE: Hugging Face is the reproducible one at
+BPE and the unreproducible one at unigram.
+
+**What differs in HF unigram is the scores, not the vocabulary.** The token
+set is identical — zero tokens appear in one run and not the other — and
+1,953 of 8,000 entries (24.4%) disagree on their log-probability:
+
+| statistic | value |
+|---|---|
+| median absolute delta | 1.78e-15 |
+| maximum absolute delta | 0.0054 |
+| deltas above 1e-3 | 39 |
+| deltas above 1e-2 | 0 |
+
+That is float-accumulation noise, not a different answer.
+
+**Does it reach the tokenization?** Almost never, but not never. On 54,417
+held-out lines (5.5 MB, disjoint from the training slice):
+
+- total token count identical: 1,840,337 both ways
+- **2 lines** tokenize to different **pieces**
+- 281 lines agree on pieces but differ in **ids**, because equal scores get
+  ordered differently
+
+The two genuine differences are an exact tie, a run of dashes regrouping:
+
+```
+A: - - ---- ---- ---- ---- ---- -    ---- ---- ---- ---- ----
+B: - - ---- ---- ---- ---- ---- ---- -    ---- ---- ---- ----
+```
+
+This is the finding the brief asked to be separated, and it lands between the
+two clean cases. It is not "the files differ but everything tokenizes
+identically" — 2 lines in 54,417 really do tokenize differently, and 281 more
+get different ids. For a bitwise-reproducibility claim, "almost always the
+same" is a failure, not a pass.
+
+The comparison was not blind when it reported 2: the same comparison on a
+genuinely different vocabulary (this unigram model against the BPE model)
+flags 47,441 of the same 54,417 lines.
+
 ## Thread count, and the unigram trainers
 
-Run on one rented RunPod CPU pod, because one core per agent on the shared Mac
-means a trainer spinning up every core cannot be measured there.
+Run on one rented RunPod CPU pod (16 vCPU, `runpod/base:1.3.1-ubuntu2204`,
+$0.48/hr), because one core per agent on the shared Mac means a trainer
+spinning up every core cannot be measured there.
+
+**First, the knob is real.** A thread axis is worthless if the setting never
+reaches the trainer, so both knobs were checked before the runs were believed:
+
+- The Hugging Face native module `tokenizers.abi3.so` contains
+  `RAYON_NUM_THREADS`, `RAYON_RS_NUM_CPUS`, `TOKENIZERS_PARALLELISM` and
+  `rayon-core`, so the trainer does parallelize through rayon and reads that
+  variable. Each run is a fresh process, because rayon builds its global pool
+  once, on first use, and reads the variable at that moment.
+- SentencePiece echoes the setting back in its own `trainer_spec`
+  (`num_threads: 4`), so the value is accepted rather than silently dropped.
 
 PENDING — filled in from the pod leg.
 
