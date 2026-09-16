@@ -246,6 +246,19 @@ def check(src=None, path=HARNESS):
     lanes = _lane_functions(tree)
     bad = []
 
+    # A @floor that is not on a lane enforces nothing and looks like it does.
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        has_floor = any(isinstance(d, ast.Call) and getattr(d.func, "id", None) == "floor"
+                        for d in node.decorator_list)
+        has_lane = any(isinstance(d, ast.Call) and getattr(d.func, "id", None) == "lane"
+                       for d in node.decorator_list)
+        if has_floor and not has_lane:
+            bad.append(f"line {node.lineno}: a @floor() that is not on an @lane() function. Nothing "
+                       f"enforces it, and it reads as though something does.")
+
+    seen_why = {}
     for name, fn in sorted(lanes.items()):
         floors, problems = _declared_floors(fn)
         bad += [f"{name}: {p}" for p in problems]
@@ -288,6 +301,13 @@ def check(src=None, path=HARNESS):
                         f"{name}: {rule} does not read the floored local `{dim}`; it is "
                         f"`{ast.unparse(expr)}`. A literal at the site means the fixture can be cut without "
                         f"touching `{dim} = {value}` or the reason above it.")
+            # A reason copied from another floor is a reason about another
+            # lane, which is how the number and the measurement come apart.
+            if why in seen_why:
+                bad.append(f"{name}: the reason for {dim} is copied word for word from "
+                           f"{seen_why[why]}. A floor's reason is about THIS lane's fixture; if the "
+                           f"measurement really is shared, say which lane it was taken on.")
+            seen_why[why] = f"{name}'s {dim} floor"
             if value < lo:
                 bad.append(
                     f"{name}: REFUSED, {dim} = {value} is BELOW the floor of {lo}.\n"
@@ -361,6 +381,40 @@ MUTATIONS = (
 )
 
 
+#: Two rules cannot be reached by mutating the real harness one line at a time,
+#: so they are watched on a source written to break exactly them. Each entry is
+#: (label, source, a fragment the refusal must contain).
+SYNTHETIC = (
+    ("a @floor() that is not on a lane function",
+     '''
+LANE_REVISIONS = {}
+UNFLOORED_REVISED_LANES = {}
+
+@floor(rows=(10, "a perfectly good reason citing docs/lanes/SOMETHING.md and the date 2026-09-16"))
+def not_a_lane(ml, X, yc, yr, Xh=None):
+    rows = 10
+    return X[:rows]
+''', "not on an @lane() function"),
+    ("a reason copied word for word from another floor",
+     '''
+LANE_REVISIONS = {}
+UNFLOORED_REVISED_LANES = {}
+
+@lane("a")
+@floor(rows=(10, "measured on 2026-09-16, see docs/lanes/SOMETHING.md, this is the shared sentence"))
+def _(ml, X, yc, yr, Xh=None):
+    rows = 10
+    return X[:rows]
+
+@lane("b")
+@floor(rows=(10, "measured on 2026-09-16, see docs/lanes/SOMETHING.md, this is the shared sentence"))
+def _(ml, X, yc, yr, Xh=None):
+    rows = 10
+    return X[:rows]
+''', "copied word for word"),
+)
+
+
 def self_test(path=HARNESS):
     src = open(path).read()
     ok = True
@@ -384,6 +438,16 @@ def self_test(path=HARNESS):
         else:
             print(f"    NOT REFUSED. This check cannot see {label}; every other verdict it gives is "
                   f"worth less for it. All violations seen: {got}")
+            ok = False
+    for label, source, fragment in SYNTHETIC:
+        got = check(source, path)
+        hit = [g for g in got if fragment in g]
+        print(f"\n# SYNTHETIC: {label}")
+        if hit:
+            for line in hit:
+                print("    REFUSED " + line.replace("\n", "\n    "))
+        else:
+            print(f"    NOT REFUSED. All violations seen: {got}")
             ok = False
     return ok
 

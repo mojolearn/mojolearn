@@ -856,7 +856,9 @@ LANE_REVISIONS = {
 
 def floor(**dims):
     """Declare a fixture floor on the lane below. Each keyword is a dimension
-    (`steps`, `rows`, `observations`, `seqlen`) and a `(minimum, why)` pair.
+    (`steps`, `rows`, `observations`, `batch`, `seqlen`) and a
+    `(minimum, why)` pair, written out in full so the number and the reason
+    cannot be separated.
     This records; `tools/fixture_floors.py` enforces, from the source, so the
     check needs no numpy and no bindings and runs in the cheapest gate."""
     def deco(fn):
