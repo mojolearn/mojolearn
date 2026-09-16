@@ -1,0 +1,793 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""FOUR KINDS OF BITWISE-IDENTITY VERIFICATION, PER LANE AND PER SHIPPED ALGORITHM.
+
+    python3 tools/verification_matrix.py            # print the matrix
+    python3 tools/verification_matrix.py --write    # rewrite docs/VERIFICATION_MATRIX.md
+    python3 tools/verification_matrix.py --check    # fail when the committed doc is stale
+    python3 tools/verification_matrix.py --json     # the whole thing as data
+
+Andrew's question, 2026-09-16: "for every algorithm we ship, do we have all
+four kinds of bitwise-identity verification?" This tool answers it by READING
+THE TREE. Nothing here is typed in by hand; every cell names the file it came
+from, and re-running it after a merge produces the new answer rather than a
+stale one. It is not a CI gate and is not meant to run per commit. It runs
+occasionally, to prove we do what we say.
+
+THE FOUR KINDS
+
+  gpu        a recorded GPU column carries a cell for the lane. Columns are
+             admitted by `python/mojolearn/_verify_reference.admit`, the same
+             rule the shipped reference table uses: identical mode, a real
+             commit, the default fixture size, one device, and NOT a
+             sabotage, partial, probe or smoke run. The value is how many of
+             the three device classes (apple, nvidia, amd) carry it.
+  cpu        a CPU verifier reproduces the GPU bytes for the lane. Declared
+             by `python/mojolearn/host_surface.py`, which is the one source
+             of the CPU surface: `covered_lanes()` for training and each
+             family's `inference_lanes` for prediction from a saved model.
+             CORROBORATED when an admitted CPU column also carries the cell.
+  sabotage   a negative control that HAS BEEN SEEN to make this lane's bytes
+             move. See the next section; this is the cell that is easy to
+             fake and the one this tool is most careful about.
+  batch      a batch-invariance declaration in `tools/identity_break.py`'s
+             BATCH table: either a real part (a function building the calls)
+             or an explicit `n/a:<reason>`. An undeclared lane is a gap; the
+             harness itself records such a lane as `n/a:UNDECLARED`.
+
+SABOTAGE: "EXISTS" AND "SEEN TO FAIL" ARE DIFFERENT CLAIMS
+
+This tool refuses to report a sabotage as present because a define exists or
+because a document says an arm was added. We shipped sabotage that COULD NOT
+FAIL more than once (the metrics oracle's old arm, the SVM ties arm, a
+Holt-Winters pair whose two flips cancelled, a spectral column that was
+trivial), plus a rental guard that matched its own wrapper and a tripwire
+written as a rule rather than as code. So the only thing counted as proof
+here is a committed pair of columns whose HASHES DIFFER:
+
+  seen(build)    a sabotage-built column (a host binding built with
+                 MOJOLEARN_HOST_SABOTAGE or a family's own define, which the
+                 column records in `host.families[*].sabotage`, or a build
+                 named in the file name) disagrees with a clean column of the
+                 same device class, in the same or the parent record
+                 directory, on at least one part of this lane's cells.
+                 This is the real negative control: the ARITHMETIC moved.
+  seen(harness)  the move is only under a harness switch
+                 (`batch_sabotage` and its friends, which perturb the
+                 harness's own whole-batch evaluation). That proves the batch
+                 PROBE can fail. It says nothing about the implementation,
+                 so it is reported separately and never counted as a build
+                 sabotage.
+  declared      the lane's family declares a sabotage define in
+                 host_surface.py, but no committed column pair moves this
+                 lane. The switch exists. Nobody has watched it fail HERE.
+  none          no declared define reaches the lane and no pair moves it.
+
+A sabotage column whose cells REFUSE rather than move is not counted. A
+refusal is a build that did not run, not arithmetic that changed.
+
+THE ALGORITHM AXIS, WHICH IS THE POINT
+
+A lane census answers "are our lanes covered". It cannot answer "are our
+ALGORITHMS covered", because an algorithm with no lane at all has no row to
+be missing from. So the public surface is enumerated independently, from
+`__all__` of `python/mojolearn/__init__.py` and of every public submodule it
+names, and lanes are mapped ONTO it by walking each lane body's AST for
+references rooted at the harness's `ml` handle (`ml.RandomForestClassifier`,
+`ml.training.SGD`, `T = ml.training; T.SGD`, and
+`from mojolearn.<mod> import <name>`). An algorithm no lane references is
+reported first, by name.
+
+An algorithm counts as having a kind when AT LEAST ONE of its lanes has it,
+which is the claim "we verify this algorithm that way". Per-lane detail is in
+the lane table below it, so a partly covered algorithm is still visible.
+
+WHAT THIS TOOL DOES NOT PROVE. That a lane's fixtures reach every branch, that
+a recorded column was honest, that a sabotage arm is a GOOD one (an arm that
+moves a lane may still leave the interesting path alone), or anything at all
+about FAST. It counts evidence that exists in the tree.
+"""
+import argparse
+import ast
+import collections
+import glob
+import importlib.util
+import json
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DOC = "docs/VERIFICATION_MATRIX.md"
+
+#: device classes a GPU column can be
+GPU_CLASSES = ("apple", "nvidia", "amd")
+#: the cell parts a column carries per lane/fixture
+PARTS = ("train", "infer", "model", "batch")
+#: harness switches: they perturb the harness's own evaluation, not a build
+HARNESS_FLAGS = ("batch_sabotage", "rlpair_sabotage", "batchgrad_sabotage",
+                 "batchscale_sabotage", "ragged_sabotage")
+#: a file name that says "this column is a sabotage build"
+SAB_NAME = re.compile(r"sabotage|(^|[-_.])g?sab([-_.]|$)")
+
+#: public names that are not an algorithm: process metadata, tier switches,
+#: result containers and option lists. Listed here BY NAME so the exclusion
+#: can be argued with rather than hidden in a heuristic.
+NOT_ALGORITHMS = frozenset({
+    "__version__", "numeric_mode", "set_numeric_mode", "vendor", "gpu_arch",
+    "gpu_arch_how", "Array", "select_d",
+    "linalg.numeric_mode", "linalg.require_identical", "linalg.profile",
+    "linalg.PROFILE", "linalg.PROFILE_FAMILY", "linalg.PROFILE_VERSION",
+    "training.numeric_mode_used", "training.vendor_used",
+    "resample.BootstrapResult", "resample.PermutationTestResult",
+    "resample.MonteCarloResult", "resample.STATISTICS", "resample.METHODS",
+    "resample.ALTERNATIVES", "resample.INTEGRANDS",
+    # Caller-owned state containers (DEVIATION 792), not algorithms. A block
+    # RETURNS one from `allocate_state`; nobody computes with it directly. Their
+    # buffers are hashed through their block's own lanes and named field by
+    # field in the rlpair part's state table in tools/identity_break.py.
+    "Mamba1State", "Mamba2State", "Mamba3State", "TransformerState",
+    "mamba.Mamba1State", "mamba.Mamba2State", "mamba.Mamba3State",
+    "transformer.TransformerState",
+})
+
+
+def load(path, name):
+    spec = importlib.util.spec_from_file_location(name, os.path.join(ROOT, path))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# ------------------------------------------------------------------ columns
+
+def record_root(rel):
+    """The record directory a column belongs to: the component directly under
+    bench/results/<tree>/. A sabotage ARM lives in a subdirectory of it, and
+    its clean partner lives at the root, so the two must be told apart."""
+    parts = rel.split(os.sep)
+    return os.sep.join(parts[:4]) if len(parts) > 4 else os.path.dirname(rel)
+
+
+def sabotage_signals(j, rel):
+    """(is_sabotage, kind). `kind` is 'build' when a BUILD was sabotaged and
+    'harness' when only a harness switch was on."""
+    flags = [k for k, v in j.items() if k.endswith("_sabotage") and v]
+    host_sab = any((f or {}).get("sabotage")
+                   for f in ((j.get("host") or {}).get("families") or {}).values()
+                   if isinstance(f, dict))
+    base = os.path.basename(rel).lower()
+    parent = os.path.basename(os.path.dirname(rel)).lower()
+    by_name = bool(SAB_NAME.search(base))
+    # an arm subdirectory (".../<record>/batch-sabotage/x.json"), never the
+    # record directory itself, whose name may mention the lane that made it
+    if not by_name and "sabotage" in parent and os.path.dirname(rel) != record_root(rel):
+        by_name = True
+    if not (flags or host_sab or by_name):
+        return False, None
+    # A host binding that READS BACK sabotage is a sabotage BUILD, whatever
+    # else is on. Otherwise, flags that are all harness switches mean the
+    # harness perturbed its own evaluation and no build was touched. A name
+    # that says sabotage with neither is a family-define build (the GP
+    # gradient, the ARIMA exogenous arm, the GBDT CTR arm), which no generic
+    # read-back reports.
+    if host_sab:
+        return True, "build"
+    if flags and all(f in HARNESS_FLAGS for f in flags):
+        return True, "harness"
+    return True, "build"
+
+
+def part_value(cell, part):
+    """What the column carries for one part of one cell, or None."""
+    if not isinstance(cell, dict):
+        return None
+    vals = cell.get("hashes") if part == "train" else cell.get(part)
+    if not vals:
+        return None
+    return tuple(vals)
+
+
+def read_columns(verify_reference):
+    """Every identity_break column committed under bench/results/."""
+    cols = []
+    for path in sorted(glob.glob(os.path.join(ROOT, "bench/results/**/*.json"), recursive=True)):
+        try:
+            with open(path) as fh:
+                j = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(j, dict) or not isinstance(j.get("cells"), dict):
+            continue
+        rel = os.path.relpath(path, ROOT)
+        sab, kind = sabotage_signals(j, rel)
+        cols.append(dict(
+            rel=rel, dirn=os.path.dirname(rel), root=record_root(rel),
+            vendor=j.get("vendor") or "", commit=(j.get("commit") or "")[:12],
+            cls=verify_reference.device_class(j.get("vendor"), path),
+            sabotage=sab, sab_kind=kind,
+            admit=verify_reference.admit(j, path),
+            cells=j["cells"]))
+    return cols
+
+
+def gpu_coverage(cols):
+    """lane -> {device class: one record path}, from ADMITTED clean columns."""
+    out = collections.defaultdict(dict)
+    for c in cols:
+        if c["admit"] is not None or c["cls"] not in GPU_CLASSES:
+            continue
+        for key in c["cells"]:
+            out[key.split("/", 1)[0]].setdefault(c["cls"], c["rel"])
+    return out
+
+
+def cpu_recorded(cols):
+    """lane -> one admitted CPU column path that carries it."""
+    out = {}
+    for c in cols:
+        if c["admit"] is not None or c["cls"] != "cpu":
+            continue
+        for key in c["cells"]:
+            out.setdefault(key.split("/", 1)[0], c["rel"])
+    return out
+
+
+def sabotage_moves(cols):
+    """lane -> {'build': [(part, sabotage path, clean path, same_commit)], ...}
+
+    A sabotage column is paired with a clean column of the SAME DEVICE CLASS,
+    preferring the same directory and the same commit, then the parent
+    directory, then the record root. A pair whose commits differ is kept but
+    marked, because two commits can differ for reasons that are not the
+    sabotage."""
+    clean = [c for c in cols if not c["sabotage"]]
+    moves = collections.defaultdict(lambda: collections.defaultdict(list))
+    unpaired = []
+    for s in (c for c in cols if c["sabotage"]):
+        here = [c for c in clean if c["cls"] == s["cls"] and c["dirn"] == s["dirn"]]
+        near = [c for c in clean if c["cls"] == s["cls"]
+                and c["dirn"] in (os.path.dirname(s["dirn"]), s["root"])]
+        pool = here + near
+        same = [c for c in pool if c["commit"] and c["commit"] == s["commit"]]
+        partners = same or pool
+        if not partners:
+            unpaired.append(s["rel"])
+            continue
+        base = partners[0]
+        same_commit = base["commit"] == s["commit"] and bool(s["commit"])
+        for key, cell in s["cells"].items():
+            other = base["cells"].get(key)
+            if other is None:
+                continue
+            lane = key.split("/", 1)[0]
+            for part in PARTS:
+                a, b = part_value(cell, part), part_value(other, part)
+                if a and b and a != b:
+                    moves[lane][s["sab_kind"]].append(
+                        (part, s["rel"], base["rel"], same_commit))
+    return moves, unpaired
+
+
+# ------------------------------------------------- the public algorithm surface
+
+def module_all(path):
+    try:
+        tree = ast.parse(open(path).read())
+    except (OSError, SyntaxError):
+        return []
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets):
+            try:
+                return list(ast.literal_eval(node.value))
+            except ValueError:
+                return []
+    return []
+
+
+def package_index():
+    """(kinds, aliases) over the package's top level. `aliases` catches
+    `LanguageModelTrainer = SmallByteLanguageModelTrainer` and its two peers:
+    without it an alias reads as an algorithm with no lane, when the lanes of
+    the class it names cover it exactly."""
+    kinds, aliases = {}, {}
+    for path in sorted(glob.glob(os.path.join(ROOT, "python/mojolearn/*.py"))):
+        try:
+            tree = ast.parse(open(path).read())
+        except (OSError, SyntaxError):
+            continue
+        rel = os.path.relpath(path, ROOT)
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                kinds.setdefault(node.name, ("class", rel))
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                kinds.setdefault(node.name, ("function", rel))
+            elif (isinstance(node, ast.Assign) and len(node.targets) == 1
+                  and isinstance(node.targets[0], ast.Name)
+                  and isinstance(node.value, ast.Name)):
+                aliases.setdefault(node.targets[0].id, node.value.id)
+    return kinds, aliases
+
+
+def public_surface():
+    """The shipped surface as {name: (kind, where, target)}, name being a
+    top-level export or `<submodule>.<export>`, and `target` the real class
+    or function it names (itself, unless it is an alias)."""
+    index, aliases = package_index()
+    top = module_all(os.path.join(ROOT, "python/mojolearn/__init__.py"))
+    surface = {}
+    modules = []
+
+    def resolve(export, fallback):
+        target = aliases.get(export, export)
+        kind, where = index.get(target, ("name", fallback))
+        return kind, where, target
+
+    for name in top:
+        sub = os.path.join(ROOT, f"python/mojolearn/{name}.py")
+        if os.path.exists(sub) and name not in index:
+            modules.append(name)
+            for export in module_all(sub):
+                surface[f"{name}.{export}"] = resolve(export, f"python/mojolearn/{name}.py")
+            continue
+        surface[name] = resolve(name, "python/mojolearn/__init__.py")
+    # `metrics` is `_metrics_impl` imported under that name (__init__.py)
+    impl = os.path.join(ROOT, "python/mojolearn/_metrics_impl.py")
+    if "metrics" in top and os.path.exists(impl):
+        modules.append("metrics")
+        surface.pop("metrics", None)
+        for node in ast.parse(open(impl).read()).body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith("_"):
+                surface[f"metrics.{node.name}"] = (
+                    "function", "python/mojolearn/_metrics_impl.py", node.name)
+    for m in modules:
+        surface.pop(m, None)
+    return surface, sorted(set(modules))
+
+
+def harness_references(harness):
+    """Public names `tools/identity_break.py` reaches OUTSIDE any lane body.
+
+    Two paths reach a public name without a lane body naming it, and both are
+    real verification:
+
+      the CPU inference routing. `_public_est` swaps the fitted estimator for
+      `SambaInference`, `Mamba1BlockInference` and their peers on a CPU
+      column, so those classes answer the infer, reload and batch cells of the
+      lanes in `NEURAL_PUBLIC_PART_LANES`.
+
+      the opt-in parts. The batchgrad part calls
+      `training.accumulate_grads` and `training.accumulation_is_aligned`
+      through the same `T = ml.training` alias the lanes use.
+
+    Counting either as "no lane at all" would be wrong, and counting either as
+    a lane of its own would be wrong too. They get their own bucket."""
+    import inspect
+    src = open(os.path.join(ROOT, "tools/identity_break.py")).read()
+    lane_lines = set()
+    for fn in harness.LANES.values():
+        try:
+            lines, start = inspect.getsourcelines(fn)
+        except (OSError, TypeError):
+            continue
+        lane_lines.update(range(start, start + len(lines)))
+    tree = ast.parse(src)
+    alias = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Attribute):
+            v = node.value
+            if isinstance(v.value, ast.Name) and v.value.id == "ml":
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        alias[t.id] = v.attr
+    refs = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute) or getattr(node, "lineno", 0) in lane_lines:
+            continue
+        base = node.value
+        if isinstance(base, ast.Name):
+            if base.id == "ml":
+                refs.add(node.attr)
+            elif base.id in alias:
+                refs.add(node.attr)
+                refs.add(f"{alias[base.id]}.{node.attr}")
+        elif (isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name)
+              and base.value.id == "ml"):
+            refs.add(node.attr)
+            refs.add(f"{base.attr}.{node.attr}")
+    return refs
+
+
+def host_family_classes(surface_mod):
+    """Public class or function name -> the host families that serve it."""
+    out = collections.defaultdict(list)
+    for fam in surface_mod.FAMILIES:
+        for name in fam.get("classes", ()):
+            out[name].append(fam["family"])
+    return out
+
+
+def lane_references(src):
+    """Public names one lane body reaches, rooted at the harness's `ml`."""
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return set()
+    alias = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Attribute):
+            v = node.value
+            if isinstance(v.value, ast.Name) and v.value.id == "ml":
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        alias[t.id] = v.attr
+    refs = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            base = node.value
+            if isinstance(base, ast.Name):
+                if base.id == "ml":
+                    refs.add(node.attr)
+                elif base.id in alias:
+                    refs.add(node.attr)
+                    refs.add(f"{alias[base.id]}.{node.attr}")
+            elif (isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name)
+                  and base.value.id == "ml"):
+                refs.add(node.attr)
+                refs.add(f"{base.attr}.{node.attr}")
+        elif isinstance(node, ast.ImportFrom) and (node.module or "").startswith("mojolearn"):
+            sub = node.module.split(".", 1)[1] if "." in node.module else ""
+            for a in node.names:
+                refs.add(a.name)
+                if sub:
+                    refs.add(f"{sub}.{a.name}")
+    return refs
+
+
+# ------------------------------------------------------------------- verdicts
+
+def lane_rows(harness, surface_mod, cols):
+    gpu = gpu_coverage(cols)
+    cpu_seen = cpu_recorded(cols)
+    moves, unpaired = sabotage_moves(cols)
+    covered = set(surface_mod.covered_lanes())
+    inference = set()
+    family_of = {}
+    define_of = {}
+    for fam in surface_mod.FAMILIES:
+        for lane in fam.get("training_lanes", ()):
+            family_of.setdefault(lane, fam["family"])
+            define_of.setdefault(lane, fam.get("sabotage_define"))
+        for lane in fam.get("inference_lanes", ()):
+            inference.add(lane)
+            family_of.setdefault(lane, fam["family"])
+            define_of.setdefault(lane, fam.get("sabotage_define"))
+
+    rows = {}
+    for lane in sorted(harness.LANES):
+        spec = harness.BATCH.get(lane, "n/a:UNDECLARED")
+        if isinstance(spec, str):
+            batch = "n/a" if not spec.startswith("n/a:UNDECLARED") else "UNDECLARED"
+            batch_why = spec
+        else:
+            batch = "part"
+            batch_why = ""
+        m = moves.get(lane, {})
+        build = m.get("build", [])
+        harness_moves = m.get("harness", [])
+        if build:
+            sab = "seen(build)"
+        elif harness_moves:
+            sab = "seen(harness)"
+        elif define_of.get(lane):
+            sab = "declared"
+        else:
+            sab = "none"
+        cpu_kind = ("training" if lane in covered else
+                    "inference" if lane in inference else "")
+        rows[lane] = dict(
+            lane=lane,
+            two_device=lane.startswith("par-"),
+            gpu=sorted(gpu.get(lane, {})),
+            gpu_where=gpu.get(lane, {}),
+            cpu=cpu_kind,
+            cpu_recorded=cpu_seen.get(lane, ""),
+            family=family_of.get(lane, ""),
+            sabotage=sab,
+            sabotage_define=define_of.get(lane) or "",
+            sabotage_parts=sorted({p for p, *_ in build}),
+            sabotage_where=build[0][1] if build else (harness_moves[0][1] if harness_moves else ""),
+            sabotage_same_commit=bool(build and build[0][3]),
+            batch=batch, batch_why=batch_why,
+            batch_seen=bool([p for p, *_ in (build + harness_moves) if p == "batch"]),
+        )
+    return rows, unpaired
+
+
+def has_four(row):
+    return (bool(row["gpu"]) and bool(row["cpu"])
+            and row["sabotage"] == "seen(build)" and row["batch"] in ("part", "n/a"))
+
+
+def algorithm_rows(harness, lanes, surface, harness_refs, family_of):
+    refs = {}
+    import inspect
+    for lane, fn in harness.LANES.items():
+        try:
+            refs[lane] = lane_references(inspect.getsource(fn))
+        except (OSError, TypeError):
+            refs[lane] = set()
+    algos = {}
+    for name, (kind, where, target) in sorted(surface.items()):
+        if name in NOT_ALGORITHMS or kind == "module":
+            continue
+        short = name.split(".")[-1]
+        want = {name, short, target}
+        mine = sorted(l for l, r in refs.items() if want & r)
+        rowset = [lanes[l] for l in mine]
+        algos[name] = dict(
+            name=name, kind=kind, where=where, lanes=mine,
+            alias=target if target != short else "",
+            routed=bool(want & harness_refs),
+            host_family=",".join(family_of.get(short) or family_of.get(target) or []),
+            gpu=sorted({c for r in rowset for c in r["gpu"]}),
+            cpu=sorted({r["cpu"] for r in rowset if r["cpu"]}),
+            sabotage=("seen(build)" if any(r["sabotage"] == "seen(build)" for r in rowset)
+                      else "seen(harness)" if any(r["sabotage"] == "seen(harness)" for r in rowset)
+                      else "declared" if any(r["sabotage"] == "declared" for r in rowset)
+                      else "none" if rowset else ""),
+            batch=("part" if any(r["batch"] == "part" for r in rowset)
+                   else "n/a" if any(r["batch"] == "n/a" for r in rowset)
+                   else "UNDECLARED" if rowset else ""),
+            four=bool(rowset) and any(has_four(r) for r in rowset),
+        )
+    return algos
+
+
+# ------------------------------------------------------------------ rendering
+
+def render(data):
+    L, A = data["lanes"], data["algorithms"]
+    lanes = [L[k] for k in sorted(L)]
+    algos = [A[k] for k in sorted(A)]
+    no_lane = [a for a in algos if not a["lanes"] and not a["routed"]]
+    routed_only = [a for a in algos if not a["lanes"] and a["routed"]]
+    out = []
+    w = out.append
+    w("# The verification matrix")
+    w("")
+    w("GENERATED. Do not edit by hand. `python3 tools/verification_matrix.py --write`")
+    w("rebuilds it from the tree, and `--check` fails when this file is stale.")
+    w("Every number below is read from `tools/identity_break.py`,")
+    w("`python/mojolearn/host_surface.py` and the committed columns under")
+    w("`bench/results/`. The tool's own docstring says how each cell is decided.")
+    w("")
+    w("The four kinds, for one lane:")
+    w("")
+    w("1. **gpu**, a recorded GPU column carries the lane, on 1, 2 or 3 of the")
+    w("   device classes apple, nvidia and amd.")
+    w("2. **cpu**, a CPU verifier covers the lane, for training or for inference")
+    w("   from a saved model, as `host_surface.py` declares it.")
+    w("3. **sabotage**, a negative control that HAS BEEN SEEN to move this lane's")
+    w("   bytes in a committed pair of columns. `declared` means a define exists")
+    w("   and nobody has watched it fail here. `seen(harness)` means only the")
+    w("   harness's own batch switch moved, which proves the probe can fail and")
+    w("   says nothing about the implementation.")
+    w("4. **batch**, a declared batch-invariance part, or a named `n/a:<reason>`.")
+    w("")
+    w("## The numbers")
+    w("")
+    w(f"- Lanes: **{len(lanes)}** ({sum(1 for r in lanes if not r['two_device'])} single-device, "
+      f"{sum(1 for r in lanes if r['two_device'])} `par-*` multi-GPU drivers).")
+    w(f"- Shipped algorithms enumerated from the public API: **{len(algos)}**.")
+    w(f"- Shipped algorithms with ALL FOUR kinds on at least one lane: "
+      f"**{sum(1 for a in algos if a['four'])}** of {len(algos)}.")
+    w(f"- Shipped algorithms with NO IDENTITY LANE AT ALL: **{len(no_lane)}**.")
+    w(f"- Shipped algorithms with no lane of their own, but reached by the harness's")
+    w(f"  CPU inference routing: **{len(routed_only)}**.")
+    w("")
+    w("Per kind, over the algorithms:")
+    w("")
+    w("| kind | algorithms that have it | missing |")
+    w("|---|---|---|")
+    for label, key in (("gpu column", "gpu"), ("cpu verifier", "cpu"),
+                       ("sabotage seen to move a build", "sabotage"),
+                       ("batch part or named n/a", "batch")):
+        if key == "sabotage":
+            have = sum(1 for a in algos if a["sabotage"] == "seen(build)")
+        elif key == "batch":
+            have = sum(1 for a in algos if a["batch"] in ("part", "n/a"))
+        else:
+            have = sum(1 for a in algos if a[key])
+        w(f"| {label} | {have} | {len(algos) - have} |")
+    w("")
+    w("Per kind, over the lanes:")
+    w("")
+    w("| kind | lanes that have it | missing |")
+    w("|---|---|---|")
+    g3 = sum(1 for r in lanes if len(r["gpu"]) == 3)
+    w(f"| gpu column (any class) | {sum(1 for r in lanes if r['gpu'])} | "
+      f"{sum(1 for r in lanes if not r['gpu'])} |")
+    w(f"| gpu column on all three classes | {g3} | {len(lanes) - g3} |")
+    w(f"| cpu verifier declared | {sum(1 for r in lanes if r['cpu'])} | "
+      f"{sum(1 for r in lanes if not r['cpu'])} |")
+    w(f"| sabotage seen to move a build | {sum(1 for r in lanes if r['sabotage'] == 'seen(build)')} | "
+      f"{sum(1 for r in lanes if r['sabotage'] != 'seen(build)')} |")
+    w(f"| batch part or named n/a | {sum(1 for r in lanes if r['batch'] in ('part', 'n/a'))} | "
+      f"{sum(1 for r in lanes if r['batch'] not in ('part', 'n/a'))} |")
+    w(f"| ALL FOUR | {sum(1 for r in lanes if has_four(r))} | "
+      f"{sum(1 for r in lanes if not has_four(r))} |")
+    w("")
+    w("Sabotage, split by what was actually watched:")
+    w("")
+    w("| verdict | lanes | what it means |")
+    w("|---|---|---|")
+    for v, meaning in (("seen(build)", "a sabotage BUILD moved the bytes; a real negative control"),
+                       ("seen(harness)", "only the harness batch switch moved; the probe can fail, the build is unproven"),
+                       ("declared", "the family declares a define; no committed pair moves this lane"),
+                       ("none", "no define reaches the lane and nothing has moved it")):
+        w(f"| {v} | {sum(1 for r in lanes if r['sabotage'] == v)} | {meaning} |")
+    w("")
+
+    w("## Shipped algorithms with no identity lane at all")
+    w("")
+    if not no_lane:
+        w("None.")
+    else:
+        w("These are the most important gaps. An algorithm with no lane cannot")
+        w("be missing a cell, so a lane census hides it entirely. `host family`")
+        w("names the CPU host family that serves the class, where one does, which")
+        w("means a CPU path exists and only the identity lane is missing.")
+        w("")
+        w("| algorithm | kind | host family | defined in |")
+        w("|---|---|---|---|")
+        for a in no_lane:
+            w(f"| `{a['name']}` | {a['kind']} | {a['host_family'] or '-'} | `{a['where']}` |")
+        w("")
+        w("The saved-model host inference surface (`HostForest`, `HostGBDT`,")
+        w("`host_model`, `host_predict`, `host_predict_proba`) has no identity_break")
+        w("lane on purpose. It is measured by `tools/forest_host_gate.py` and")
+        w("`tools/classical_host_gate.py` against committed recordings instead:")
+        w(f"{data['forest_recordings']} under `bench/results/forest_host/` and")
+        w(f"{data['classical_recordings']} classical recording directories named in")
+        w("`host_surface.py`. That is a different gate, not a missing one, but it is")
+        w("also not one of the four kinds counted here.")
+    w("")
+    w("### Reached by the harness, with no lane of their own")
+    w("")
+    w("`tools/identity_break.py` reaches these outside any lane body. `_public_est`")
+    w("swaps the fitted estimator for the public CPU inference class on a CPU")
+    w("column, so those answer the infer, reload and batch cells of the lanes named")
+    w("in `NEURAL_PUBLIC_PART_LANES` (" + ", ".join(data["neural_public_lanes"]) + ");")
+    w("the batchgrad part calls the accumulation helpers the same way.")
+    w("They are verified, but no lane carries their name.")
+    w("")
+    if not routed_only:
+        w("None.")
+    else:
+        w("| algorithm | kind | host family | defined in |")
+        w("|---|---|---|---|")
+        for a in routed_only:
+            w(f"| `{a['name']}` | {a['kind']} | {a['host_family'] or '-'} | `{a['where']}` |")
+    w("")
+
+    w("## The algorithm matrix")
+    w("")
+    w("`gpu` is the device classes that carry any of the algorithm's lanes.")
+    w("A blank cell means no lane of this algorithm has that kind.")
+    w("")
+    w("| algorithm | lanes | gpu | cpu | sabotage | batch | all four |")
+    w("|---|---|---|---|---|---|---|")
+    for a in algos:
+        lane_txt = str(len(a["lanes"])) if a["lanes"] else ("routed" if a["routed"] else "**0**")
+        name = f"`{a['name']}`" + (f" (alias of `{a['alias']}`)" if a["alias"] else "")
+        w(f"| {name} | {lane_txt} | {','.join(a['gpu'])} | {','.join(a['cpu'])} | "
+          f"{a['sabotage']} | {a['batch']} | {'yes' if a['four'] else 'NO'} |")
+    w("")
+
+    w("## The lane matrix")
+    w("")
+    w("| lane | gpu | cpu | sabotage | sabotage evidence | batch | all four |")
+    w("|---|---|---|---|---|---|---|")
+    for r in lanes:
+        ev = r["sabotage_where"]
+        if ev and not r["sabotage_same_commit"] and r["sabotage"] == "seen(build)":
+            ev += " (clean partner at another commit)"
+        w(f"| {r['lane']} | {','.join(r['gpu']) or '-'} | {r['cpu'] or '-'} | {r['sabotage']} | "
+          f"{'`' + ev + '`' if ev else '-'} | {r['batch']}{(' ' + r['batch_why']) if r['batch'] == 'n/a' else ''} | "
+          f"{'yes' if has_four(r) else 'NO'} |")
+    w("")
+
+    w("## Lanes missing each kind, by name")
+    w("")
+    for label, pred in (
+            ("No GPU column at all", lambda r: not r["gpu"]),
+            ("GPU column on fewer than three classes", lambda r: 0 < len(r["gpu"]) < 3),
+            ("No CPU verifier declared", lambda r: not r["cpu"]),
+            ("Sabotage not seen to move a build", lambda r: r["sabotage"] != "seen(build)"),
+            ("Batch undeclared", lambda r: r["batch"] == "UNDECLARED")):
+        hit = [r for r in lanes if pred(r)]
+        w(f"**{label}: {len(hit)}**")
+        w("")
+        w("> " + (", ".join(r["lane"] for r in hit) if hit else "none"))
+        w("")
+
+    w("## Public names not counted as algorithms")
+    w("")
+    w("Listed by name in `NOT_ALGORITHMS` in the tool, so the exclusion can be")
+    w("argued with rather than hidden in a heuristic. These are process metadata,")
+    w("tier switches, result containers, option lists and the caller-owned state")
+    w("containers a block returns from `allocate_state`, whose buffers are hashed")
+    w("through their block's own lanes.")
+    w("")
+    w("> " + ", ".join(f"`{n}`" for n in data["not_algorithms"]))
+    w("")
+    if data["unpaired"]:
+        w("## Sabotage columns this tool could not pair")
+        w("")
+        w("A sabotage column with no clean partner of the same device class in")
+        w("its own, parent or record directory. Its evidence is not counted.")
+        w("")
+        for p in data["unpaired"]:
+            w(f"- `{p}`")
+        w("")
+    return "\n".join(out) + "\n"
+
+
+def build():
+    harness = load("tools/identity_break.py", "_vm_identity_break")
+    surface_mod = load("python/mojolearn/host_surface.py", "_vm_host_surface")
+    verify_reference = load("python/mojolearn/_verify_reference.py", "_vm_verify_reference")
+    cols = read_columns(verify_reference)
+    lanes, unpaired = lane_rows(harness, surface_mod, cols)
+    surface, modules = public_surface()
+    algos = algorithm_rows(harness, lanes, surface,
+                           harness_references(harness),
+                           host_family_classes(surface_mod))
+    forest_root = os.path.join(ROOT, getattr(surface_mod, "FOREST_RECORDED_ROOT", ""))
+    return dict(lanes=lanes, algorithms=algos, unpaired=unpaired,
+                columns=len(cols), modules=modules,
+                not_algorithms=sorted(NOT_ALGORITHMS),
+                forest_recordings=len(glob.glob(os.path.join(forest_root, "*"))),
+                classical_recordings=len(getattr(surface_mod, "CLASSICAL_RECORDED", ())),
+                neural_public_lanes=list(getattr(harness, "NEURAL_PUBLIC_PART_LANES", ())))
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--write", action="store_true", help=f"rewrite {DOC}")
+    ap.add_argument("--check", action="store_true", help=f"fail when {DOC} is stale")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args()
+    data = build()
+    if args.json:
+        print(json.dumps(data, indent=2, sort_keys=True, default=list))
+        return 0
+    text = render(data)
+    path = os.path.join(ROOT, DOC)
+    if args.write:
+        with open(path, "w") as fh:
+            fh.write(text)
+        print(f"wrote {DOC}: {len(data['lanes'])} lanes, {len(data['algorithms'])} algorithms, "
+              f"{data['columns']} columns read")
+        return 0
+    if args.check:
+        try:
+            have = open(path).read()
+        except OSError:
+            print(f"verification_matrix: {DOC} is missing; run --write", file=sys.stderr)
+            return 1
+        if have != text:
+            print(f"verification_matrix: {DOC} is STALE; run --write", file=sys.stderr)
+            return 1
+        print(f"verification_matrix OK: {DOC} matches the tree "
+              f"({len(data['lanes'])} lanes, {len(data['algorithms'])} algorithms)")
+        return 0
+    sys.stdout.write(text)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
