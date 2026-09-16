@@ -263,6 +263,26 @@ so the loss becomes minutes instead of an hour. Leg 3 skips leg 1's 62 lanes and
 2400 s of identity time like the others, which fits roughly 60 lanes, so a fourth AMD leg is
 expected for the remainder of the 130.
 
+**Rent the spec that has stock, and keep the vendor label.** Leg 3's first attempt sat in a
+stock-wait loop: `MOJOLEARN_HOTAISLE_SPEC=8core` read `quantity 0` while the offering list
+showed `1x MI300X cpu_cores=13 ram=224GB quantity=1` at the same 299 cents an hour. Renting
+`13core` is the same single MI300X and the same gfx942, so the column keeps the vendor label
+`amd-mi300x-gfx942` and still merges with leg 1. **That label is not cosmetic**: `MERGE_SAME`
+includes `vendor`, so finishing the AMD column on DigitalOcean's MI325X instead would produce
+`amd-mi325x-gfx942`, which CANNOT merge with leg 1, and neither part covers all 192 lanes
+alone. Falling back to the MI325X therefore means re-recording all 192 AMD lanes there and
+discarding leg 1, which is several more legs. Wait for MI300X stock before taking that trade.
+
+**A guard that could never pass.** The first relaunch refused itself with "another hotaisle leg
+is alive" while no leg was running. The check was
+`ps -eo command | grep -q "[h]otaisle_leg.sh"`, and the `[h]` trick only stops grep matching
+its own process; it does nothing about the ENCLOSING wrapper, whose command line quotes the
+script name several times. So the guard matched itself and would have refused every rental
+forever. This is the mirror of the usual trap: not a check that cannot fail, but one that
+cannot pass. The authoritative signals are the ones the leg script maintains itself, the slot
+directories `/tmp/mojolearn-hotaisle-slot.*` (released on exit, even after a kill) and the VM
+count from the API, and those are what the guard tests now.
+
 Legs rent only from a CLEAN checkout: both runners refuse a dirty tree, so commit state-file
 edits before renting.
 
