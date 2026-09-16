@@ -833,14 +833,19 @@ _CPU_ONLY = None
 
 
 def host_binding_path():
-    """Where the CPU inference binding lives on this install."""
-    return os.path.join(_pkg_dir(), "host", "_mojolearn_byte_lm_host.so")
+    """Where the CPU inference binding lives on this install. THROUGH
+    `host_module_path`, like every other door onto a host binding: until
+    lane/host-path-resolution (2026-09-16) this built its own path from the
+    package directory and was one of four answers that did not follow
+    MOJOLEARN_HOST_DIR."""
+    return host_module_path("_mojolearn_byte_lm_host")
 
 
 def forest_host_binding_path():
     """Where the CPU forest inference binding lives on this install (the
-    forest host lane, 2026-09-13, `_forest_host.py`)."""
-    return os.path.join(_pkg_dir(), "host", "_mojolearn_forest_host.so")
+    forest host lane, 2026-09-13, `_forest_host.py`). Through
+    `host_module_path`, as above."""
+    return host_module_path("_mojolearn_forest_host")
 
 
 def host_binding_built():
@@ -867,7 +872,18 @@ def host_dir():
 
 def host_module_path(basename):
     """The file a host binding of `basename` (`_mojolearn_<family>_host`)
-    loads from."""
+    loads from.
+
+    THE ONE RESOLUTION PATH. `load_host_module` below, the two helpers
+    above, and the byte LM and forest INFERENCE doors
+    (`_byte_lm_host.binary_path`, `_forest_host.binary_path`, each after its
+    own named-binary variable) all answer from here, so one directory
+    setting moves every host binding together. Two of them resolved
+    independently until lane/host-path-resolution (2026-09-16), and under
+    MOJOLEARN_HOST_DIR the training door opened while the inference door
+    looked in the package directory: it refused there when the package had
+    no host set, and silently served the package's own binding when it
+    did."""
     return os.path.join(host_dir(), basename + ".so")
 
 
