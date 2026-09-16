@@ -7,13 +7,15 @@ Short answer. Two were, and they are now exposed. Otherwise almost everything
 a user would want to INFER with already shipped; the real gap was not what the
 wheel carries but **what a user can check**. The wheel ships host families
 serving 79 declared inference lanes and seven forest kinds, and
-`python -m mojolearn verify --all` on a CPU-only install ran **nine lanes and
-four portable models**. Everything else was taken on faith.
+`python -m mojolearn verify --all` on a CPU-only install ran, **before this
+lane, nine lanes and four portable models**. Everything else was taken on
+faith. It now runs 39.
 
 Three things came out of the lane: two genuinely unreachable functions are now
-shipped, a verification that could not fail is fixed, and 30 lanes are measured
-ready to quadruple the checkable surface at zero wheel cost, held only on the
-fixture shrink.
+shipped, a verification that could not fail is fixed, and the checkable surface
+went from **9 lanes to 39** at zero wheel cost. The promotion was held until the
+fixture shrink published its scope and released once none of the thirty turned
+out to be among the thirteen shrunk lanes.
 
 ## 1. The three populations, counted
 
@@ -27,7 +29,7 @@ Read from the code, not the prose.
 | covered CPU training lanes | 169 | `covered_lanes()` |
 | declared inference lanes | 79 | `inference_lanes()` |
 | families shipping in the wheel | **16** of 32 (was 15) | `wheel_families()` |
-| **lanes a CPU wheel user can verify** | **9** | `public_reference_lanes()` |
+| **lanes a CPU wheel user can verify** | **39** (was 9) | `public_reference_lanes()` |
 | portable models shipped | 4 | `verify_reference/models/` (179 KB) |
 
 The Sep 15 "83 lanes with no public CPU inference" figure did not reproduce.
@@ -155,7 +157,7 @@ refused, 27 n/a))`, exit 0.
 `identity`, the sibling command, does **not** share the flaw: its `_judge`
 treats any non-`IDENTICAL x4` verdict and any missing row as bad.
 
-## 4. Measured ready, and deliberately held: 30 lanes
+## 4. Promoted: the checkable surface goes from 9 lanes to 39
 
 `PUBLIC_REFERENCE_CANDIDATES` in the manifest, with
 `--public-reference-candidates`. Each one:
@@ -279,14 +281,26 @@ corrections are now written into the file:
   because the shipped `forecast` binding serves `_mojolearn_tsa`. Added the
   route-served criterion.
 
-### HELD: the fixture shrink
+### The hold, and its release
 
-**Nothing is promoted on this branch.** Another agent is shrinking oversized
-fixtures and will publish `docs/lanes/FIXTURE_SHRINK_SCOPE.md` in three buckets
-(will change, leave big, undecided). That file **does not exist yet** — not in
-this worktree, not on `origin/main`, and there is no such branch. I cannot
-certify a lane is clear of a list I have not seen, so every candidate is
-effectively "undecided" and all 30 are held.
+The promotion was held until the fixture shrink published its scope, and that
+hold was the right call for a concrete reason: these references ship **in the
+wheel's table**, so promoting a lane whose fixture then moved would have
+shipped a reference a user's `verify` fails against, breaking the exact command
+this lane exists to make trustworthy.
+
+`docs/lanes/FIXTURE_SHRINK_SCOPE.md` landed at `e2bb9e541`, shrinking thirteen
+lanes. **None of the thirty is among the thirteen** (checked, not eyeballed;
+nor is any of the nine already-live lanes), so the evidence taken before the
+shrink still stands. It was re-checked anyway on the merged harness, which had
+gained 202 lines: `ols-no-intercept` and `kpss` both reproduce their recorded
+hashes exactly. The thirty are now promoted.
+
+One consequence worth flagging beyond this lane: the shrink did **not**
+regenerate `python/mojolearn/verify_reference/table.json`, so the shipped table
+still carries old-size references for the thirteen. No live or promoted lane is
+among them, so nothing a user runs is affected today, but the table owes a
+regeneration before any shrunk lane becomes publicly checkable.
 
 This matters more than it sounds. These lanes' references ship **in the
 wheel's table**. Promoting a lane whose fixture then changes would ship a
@@ -294,8 +308,10 @@ reference a user's `verify` fails against, breaking the exact command this lane
 exists to make trustworthy. An unpromoted lane with a stale reference is
 latent; a promoted one is a user-visible failure.
 
-**To finish**: read the scope list, promote the lanes in "leave big", hold the
-rest, and record which were held and why.
+**`svc-poly` is the one lane NOT promoted**, and not for an arithmetic reason:
+its cells rest on two columns (apple and cpu), so it cannot meet
+`--require-columns 4`. It stays in `PUBLIC_REFERENCE_CANDIDATES` and joins the
+public set the day a record carries its NVIDIA and AMD cells.
 
 ## 5. Owed: implemented saved-model inference no gate covers
 
@@ -365,6 +381,21 @@ was watched firing).
   one cell unchanged**. The sabotage run was bound to the sabotage binaries by
   SHA-256, the newly built resample and forecast ones included.
 
+- `J_verify_after.log` — **the promoted surface end to end**, the run a user
+  would make. `python -m mojolearn verify --all --full` on the CPU-only
+  install, 39 lanes x 9 fixtures plus the 4 portable models:
+
+      | all | 43 | 1065 | 0 | 158 | 0 | 189 |
+      RESULT: VERIFIED (verified 1065 of 1412 cell parts
+             (0 divergent, 158 owed, 0 refused, 189 n/a)). 523.7s. exit 0
+
+  **1065 IDENTICAL, 0 DIVERGENT, 0 REFUSED**, against 278 of 332 cell parts
+  before the promotion. It exercises both halves of this lane at once: the
+  verdict line now says how much was checked, and because nothing refused the
+  VERIFIED is an honest one rather than the old exit 0 over a run that mostly
+  did not happen. 523.7s, which is why `docs/VERIFY.md` now says 8.7 minutes
+  rather than the 20 I had guessed.
+
 All under `~/mojolearn-evidence/expose-inference/` (outside the repo).
 
 ### Gates
@@ -387,16 +418,16 @@ expect the same order. Everything else in this lane costs **zero bytes**: the
 false-VERIFIED fix is Python, and promoting the 30 candidates later adds no
 binary and no table entry.
 
-## 8. Merged, with the promotion still held
+## 8. Merged, promotion included
 
-Merged to main. Everything on the branch is run and verified, and the one part
-that is not proven is not on it: the 30 candidate promotions are held in
-`PUBLIC_REFERENCE_CANDIDATES`, not live, so nothing unproven ships. What lands
-is the two exposures (proven refusing before, running after, IDENTICAL x4 on
-36 of 36 train cells and DIVERGENT on 36 of 36 under sabotage), the
-false-VERIFIED fix (its test watched failing against the old code first, and a
-healthy install still VERIFIED), the reasons on all 32 families, and the
-measurement behind the held promotion.
+Merged to main. Everything on the branch is run and verified. What lands is the
+two exposures (proven refusing before, running after, IDENTICAL x4 on 36 of 36
+train cells and DIVERGENT on 36 of 36 under sabotage), the false-VERIFIED fix
+(its test watched failing against the old code first, and a healthy install
+still VERIFIED), the reasons on all 32 families, and the promotion of thirty
+lanes measured 0 DIVERGENT with their sabotage arm seen to move. The only lane
+left unpromoted is `svc-poly`, and it stays a candidate because it rests on two
+columns, not because of anything about its arithmetic.
 
 Two behaviour changes a reader should know landed:
 
@@ -421,11 +452,22 @@ touched, no Metal job was run, and nothing was rented.
     python3 python/mojolearn/host_surface.py --wheel-notes
     ls ~/mojolearn-evidence/expose-inference/
 
-To finish the promotion once `docs/lanes/FIXTURE_SHRINK_SCOPE.md` lands: move
-the cleared lanes from `PUBLIC_REFERENCE_CANDIDATES` into
-`public_reference_lanes()`, update `docs/VERIFY.md` line 38 (which spells the
-nine lanes out) and its timing table line 98 ("8 lanes, 9 fixtures, 4 models"),
-then re-run `verify --all --full` and the three gates.
+The promotion is done, so nothing here is owed to it. What is still owed, in
+descending order of how much it would change:
+
+1. **Regenerate `python/mojolearn/verify_reference/table.json`** for the
+   thirteen lanes the fixture shrink moved. The shrink did not, so the shipped
+   table still carries old-size references for them. No live or promoted lane
+   is among the thirteen, so nothing a user runs is wrong today, but any of
+   those lanes becomes publicly checkable only after the table is rebuilt.
+2. **A GPU record carrying `svc-poly`'s NVIDIA and AMD cells**, which is all
+   that stands between it and the public set.
+3. **GPU recordings for `dbscan`, `agglomerative` and `spectral` predict**, the
+   implemented saved-model inference no gate covers (section 5). `spectral`'s
+   is now owed at the new 512-row size.
+4. **A dbscan fixture that actually clusters**, if its train cell is ever to
+   carry weight: on wide and hashed every row lands in one cluster, so the
+   sabotage has no label to flip (section 4).
 
 ## Done
 
@@ -435,11 +477,17 @@ then re-run `verify --all --full` and the three gates.
 - [x] **fixed** the false VERIFIED, with the new test watched failing first
 - [x] 30 promotable lanes measured, with two of my own criteria corrected
 - [x] sabotage controls proven real before being relied on
+- [x] the promoted surface run end to end as a user would: VERIFIED, 1065 of
+      1412 cell parts, 0 divergent, 0 refused, in 523.7 s
 - [x] the exposure proof: refused before, ran after, IDENTICAL x4 on 36 of 36
       train cells, and DIVERGENT on 36 of 36 under sabotage
 - [x] the candidate proof: 0 DIVERGENT, 26 of 27 IDENTICAL x4 on train
 - [x] pinned down the six sabotage-insensitive dbscan train cells: degenerate
       clusterings (wide and hashed put all 6000 rows in one cluster), and a
       correction to my own first, wrong diagnosis of them
-- [ ] **HELD**: promote once `FIXTURE_SHRINK_SCOPE.md` is published
+- [x] **promoted**: 30 lanes joined `public_reference_lanes()` once the shrink
+      published its scope, taking the checkable CPU surface from 9 to 39 for
+      zero wheel bytes; `svc-poly` stays a candidate on two columns
+- [ ] regenerate `verify_reference/table.json` for the thirteen shrunk lanes
+      before any of them becomes publicly checkable
 - [ ] a GPU recording for dbscan, agglomerative and spectral predict

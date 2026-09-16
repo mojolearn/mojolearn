@@ -2285,15 +2285,36 @@ def public_reference_lanes():
     Full CPU training verification uses source bindings and covered_lanes().
     These probes need only public inference dependencies, including linalg.
 
-    THIS LIST IS WHAT A USER CAN CHECK, and it is much smaller than what the
-    wheel ships (lane/expose-inference-surface, 2026-09-16). The wheels carry
-    fifteen host families serving 79 declared inference lanes and seven forest
-    kinds; `python -m mojolearn verify --all` on a CPU-only install runs these
-    nine lanes and the four portable models. Every other shipped surface is
-    taken on faith there. PUBLIC_REFERENCE_CANDIDATES below names the lanes
-    measured to be addable and says what each still owes.
+    THIS LIST IS WHAT A USER CAN CHECK (lane/expose-inference-surface,
+    2026-09-16). It was nine lanes, against sixteen shipped host families
+    serving 79 declared inference lanes and seven forest kinds, so almost
+    everything the wheel carried was taken on faith. Thirty lanes were measured
+    against the three GPU columns on an Apple M4 CPU column, 9 fixtures and 2
+    repeats, read 0 DIVERGENT with their sabotage arm moving, and were promoted
+    here, taking the checkable surface to 39 lanes for ZERO extra wheel bytes:
+    every one is served by a binding that already ships and every reference
+    hash is already in the shipped table, it was simply never consulted.
+
+    The promotion waited for the fixture shrink (docs/lanes/FIXTURE_SHRINK_SCOPE.md,
+    landed at e2bb9e541) because these references ship in the wheel's table and
+    a lane whose fixture moved would ship a reference a user's `verify` then
+    fails against. None of the thirty is among the thirteen shrunk lanes, which
+    is why the evidence taken before the shrink still stands; it was re-checked
+    on the merged harness.
     """
-    return ["gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky"] + list(PUBLIC_HOST_ONLY_LANES)
+    return [
+        # the original eight
+        "gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky",
+        # promoted 2026-09-16 (lane/expose-inference-surface), measured below
+        "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted", "kmeans-classic-pp",
+        "kmeans-cosine", "knn-clf-distance", "knn-reg-distance", "radius",
+        "dbscan", "dbscan-brute-l1", "dbscan-weighted", "kde-weighted", "pca-full-whiten",
+        "ols-no-intercept", "ols-weighted", "ridge-no-intercept", "logistic-l1",
+        "logistic-elasticnet", "logistic-unpenalized-no-intercept",
+        "svc-linear", "svr", "svr-linear", "iforest", "iforest-tuned",
+        "umap",
+        "kpss", "bootstrap", "permutation-test", "monte-carlo",
+    ] + list(PUBLIC_HOST_ONLY_LANES)
 
 
 #: Public reference lanes of a shipped host family with no GPU path to cover,
@@ -2340,30 +2361,13 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
 #: day that run reads IDENTICAL for it and the sabotage host build reads
 #: DIVERGENT for it.
 PUBLIC_REFERENCE_CANDIDATES = (
-    # core (k-NN, radius neighbors, k-means)
-    "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted", "kmeans-classic-pp",
-    "kmeans-cosine", "knn-clf-distance", "knn-reg-distance", "radius",
-    # estimators (density, decomposition, linear, logistic, DBSCAN)
-    "dbscan", "dbscan-brute-l1", "dbscan-weighted", "kde-weighted", "pca-full-whiten",
-    "ols-no-intercept", "ols-weighted", "ridge-no-intercept", "logistic-l1",
-    "logistic-elasticnet", "logistic-unpenalized-no-intercept",
-    # svm (SVC, SVR, isolation forest). `svc-poly` is NOT here: it rests on
-    # two columns (apple and cpu) and cannot meet --require-columns 4 until a
-    # record carries its NVIDIA and AMD cells.
-    "svc-linear", "svr", "svr-linear", "iforest", "iforest-tuned",
-    # metrics (the saved UMAP embedding's transform)
-    "umap",
-    # The analysis functions exposed by lane/expose-inference-surface
-    # (2026-09-16, Andrew's call): they train no model, so the inference
-    # boundary never had a side for them, and they now run on a CPU-only
-    # install through the shipped resample binding and the shipped forecast
-    # binding's kpss_test. Each has a train reference on all nine fixtures
-    # with all three GPU columns, so each can read IDENTICAL x4 rather than
-    # OWED. They are here rather than live for the same reason as the rest:
-    # the fixture shrink (docs/lanes/FIXTURE_SHRINK_SCOPE.md) has not
-    # published its scope, and a lane whose fixture is about to change would
-    # ship a reference a user's `verify` then fails against.
-    "kpss", "bootstrap", "permutation-test", "monte-carlo",
+    # `svc-poly` is the only one left, and it is here rather than promoted for
+    # a reason that is not about its arithmetic: its cells rest on TWO columns
+    # (apple and cpu, from 2026-09-15_inference-svm), so it cannot meet
+    # `--require-columns 4`. CLASSICAL_RECORDED already notes that its NVIDIA
+    # and AMD recordings are owed to the next release record; it joins
+    # `public_reference_lanes()` the day a record carries them.
+    "svc-poly",
 )
 
 #: Saved-model CPU inference that IS implemented and that
@@ -2386,7 +2390,10 @@ SAVED_MODEL_INFERENCE_OWED = {
     "spectral": "SpectralClustering.predict shipped with lane/spectral-predict (DEVIATION 2860, "
                 "docs/lanes/DESIGN_spectral_predict_2026-09-15.md) and mojolearn-spectral-1 is "
                 "dispatched; the GPU recording is owed. Training-row agreement is measured, not "
-                "promised (0.9874), which is a property of the Nystrom extension, not a defect.",
+                "promised (0.9874), which is a property of the Nystrom extension, not a defect. "
+                "NOTE: this lane was shrunk from 2000 rows to 512 by the fixture shrink "
+                "(e2bb9e541), so the recording is owed AT THE NEW SIZE and any cell taken before "
+                "that commit is superseded.",
     "spectral-precomputed": "The same predict on a precomputed affinity, the same saved "
                             "mojolearn-spectral-1 file, the caller passing the (n_new, n_train) "
                             "affinity instead of the fit's k-NN graph; the GPU recording is owed.",

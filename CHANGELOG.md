@@ -40,8 +40,24 @@ Linux legs are OWED before this heading reads published.
   27 owed, 288 refused, 0 n/a)`. `docs/VERIFY.md` and `test_verdict_exit_codes` updated; the
   new test was watched failing against the old code first. A healthy install is unaffected
   (278 of 332, VERIFIED, exit 0).
+- **What a CPU-only wheel user can verify goes from 9 lanes to 39, for zero extra wheel
+  bytes.** `public_reference_lanes()` gained thirty lanes: k-means and its starts, the k-NN,
+  radius and kernel-density variants, DBSCAN, the linear, ridge, logistic and decomposition
+  lanes, SVC, SVR, the isolation forest, the saved UMAP embedding's transform, and the four
+  analysis functions this release exposes. Every one was measured on an Apple M4 CPU column
+  at 9 fixtures and 2 repeats against the Apple, NVIDIA and AMD columns: 0 DIVERGENT, and
+  their sabotage arm seen to move rather than assumed. Nothing was added to the wheel,
+  because each is served by a binding it already carried and each reference hash was already
+  in the shipped table, merely never consulted. The promotion waited for the fixture shrink
+  (`e2bb9e541`) to publish its scope, since these references ship in the wheel's table and a
+  lane whose fixture moved would ship a reference a user's `verify` then fails against; none
+  of the thirty is among the thirteen shrunk lanes. `svc-poly` is the one lane not promoted,
+  because its cells rest on two columns and cannot meet `--require-columns 4`. Measured end
+  to end on the CPU-only install afterwards, `verify --all --full` reads
+  `VERIFIED (verified 1065 of 1412 cell parts (0 divergent, 158 owed, 0 refused, 189 n/a))`
+  in 523.7 s, against 278 of 332 before.
 - The same file now records the two measured exposure gaps rather than leaving them in a
-  reader's head. `PUBLIC_REFERENCE_CANDIDATES` names 30 identity lanes that pass every static
+  reader's head. `PUBLIC_REFERENCE_CANDIDATES` names the identity lanes that pass every static
   condition for `public_reference_lanes()` (a real train reference on all nine fixtures, a
   `cpu` column in the shipped table, all nine fixtures on all three training GPU columns so
   `--require-columns 4` can be met, and reachability from a binding that ships, so promoting

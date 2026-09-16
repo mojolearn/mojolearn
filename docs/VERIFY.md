@@ -36,10 +36,17 @@ requires equal values.
   per constructor value that selects a different numeric path, the linalg
   and metrics functions, and the multi-GPU drivers on one device).
 - **On a CPU-only install** the public CPU reference lanes run
-  (`host_surface.public_reference_lanes()`: gemm-pinned, kde, ols, ridge,
-  knn, svc, pca, cholesky, and tokenizer, which loads the synthetic
-  vocabulary mojolearn trains itself), fitted inside the verifier's
-  reference scope.
+  (`host_surface.public_reference_lanes()`, 39 of them), fitted inside the
+  verifier's reference scope. They cover k-means and its starts, the k-NN,
+  radius and kernel-density variants, DBSCAN, the linear, ridge, logistic and
+  decomposition lanes, SVC, SVR and the isolation forest, the saved UMAP
+  embedding's transform, the pinned GEMM and the Cholesky solve, the KPSS
+  test, the bootstrap, the permutation test and Monte Carlo integration, and
+  tokenizer, which loads the synthetic vocabulary mojolearn trains itself.
+  Thirty of the 39 were added on 2026-09-16 after being measured IDENTICAL
+  against the Apple, NVIDIA and AMD columns with their sabotage arm seen to
+  move; the wheel grew by nothing, because every one is served by a binding it
+  already carried.
 - **Portable models** run on every install: small models trained on a GPU
   and saved, shipped in `mojolearn/verify_reference/models/` (a random
   forest, a symmetric boosting model, a linear regression and a PCA, 179 KB
@@ -95,7 +102,7 @@ fixture would hash different bytes.
 
 | install | `--quick` | `--full` |
 |---|---|---|
-| CPU-only, Apple M4, one core | 2 s | 7 s (8 lanes, 9 fixtures, 4 models) |
+| CPU-only, Apple M4, one core | 2 s | 8.7 min, measured (39 lanes, 9 fixtures, 4 models) |
 | CPU-only, x86 Linux (AMD EPYC, 8 vCPU) | 2 s | 6 to 12 s |
 | Metal, Apple M4 | 12 s (26 lanes, base fixture) | more than an hour (about 180 lanes x 9 fixtures) |
 
