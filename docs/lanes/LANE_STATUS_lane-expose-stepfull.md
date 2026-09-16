@@ -38,10 +38,15 @@ else in the tree depends on the part.
 One command, no GPU, no binding:
 `python -m mojolearn verify --all --emit-reference <path>`.
 
-    {"bytes": 585190, "cells": 1656, "classes_agreeing": {"1": 687, "2": 705,
-     "3": 3136, "4": 2105}, "conflicts": 0, "parts": 6633, "records": 86}
+    {"bytes": 574344, "cells": 1638, "classes_agreeing": {"1": 669, "2": 705,
+     "3": 3100, "4": 2087}, "conflicts": 0, "parts": 6561, "records": 86}
 
-86 records, 1656 cells, 0 conflicts, as the earlier measurement said.
+86 records, 0 conflicts, as the earlier measurement said. That measurement
+said 1656 cells and this branch first produced exactly 1656; the 18 missing
+here are `umap` and `par-graph-umap`, dropped by `lane/umap-batch-fix`, which
+merged to main mid-lane and gave both a new `LANE_REVISIONS` entry. Their
+cells describe bytes this build no longer produces, which is the mechanism
+working, not a loss.
 
 **The `PARTS` change moves nothing else.** Regenerating the SAME records twice,
 once without `stepfull` in `PARTS` and once with it, the delta is: **added 9,
@@ -100,16 +105,25 @@ restore was checked by hash: `3f1ac41f0012...4635` before and after.
 
 | | before | after |
 |---|---|---|
-| lanes a CPU-only `verify --all` SELECTS | 122 | 122 |
-| of those, lanes it can actually COMPARE | 109 (13 dropped as stale) | **122** (none stale) |
+| lanes a CPU-only `verify --all` SELECTS | 122 | 121 |
+| of those, lanes it can actually COMPARE | 107 (15 dropped as stale) | **121** (none stale) |
 | decode lanes exposing `stepfull` to a user, GPU install | 0 | **8** |
 | decode lanes exposing `stepfull`, CPU-only install | 0 | **5** |
+
+The one lane the public set LOSES is `umap`, and it is not this lane's doing:
+`lane/umap-batch-fix` made `UMAP.transform` row separable, so every umap hash
+in every committed record describes bytes this build no longer produces. It
+merged holding umap back as `stale reference`; measured against the
+regenerated table its cells are gone entirely, so its reason here is
+`no reference` and what it owes is a RECORD. Against MAIN's shipped table
+fifteen lanes now read stale, umap and par-graph-umap included; after the
+regeneration, none do.
 
 The five are `transformer`, `transformer-window`, `mamba1`, `mamba2` and
 `mamba3`. The other three (`mamba2-dtlimit`, `samba`,
 `samba-untied-dropout-accum`) are not in `public_reference_lanes()` yet; see
-below. On a full CPU-only run the new part contributes 1098 rows: **5**
-compared against a real hash, **1053** a declared `N/A`, and **40** OWED.
+below. On a full CPU-only run the new part contributes 1089 rows: **5**
+compared against a real hash, **1044** a declared `N/A`, and **40** OWED.
 
 **The 40 OWED are honest and are what is owed.** The only committed record
 carrying `stepfull` ran the BASE fixture only, so the five public decode lanes
@@ -127,7 +141,9 @@ regenerating the table is what makes it fire. It fired, and the split is the
 one it predicted.
 
 * **NINE lost every cell**, because every record that carried them predates
-  this morning's fixture shrink: `holtwinters`, `gbdt-nan-modes`,
+  this morning's fixture shrink (TEN counting `umap`, whose entry arrived
+  from `lane/umap-batch-fix` mid-lane and whose cause is an arithmetic change
+  rather than a shrink): `holtwinters`, `gbdt-nan-modes`,
   `gbdt-parametric-losses`, `gbdt-lossguide-newtoncosine`, `gbdt-pair-logit`,
   `hdbscan`, `hdbscan-leaf`, `byte-lm`, `byte-lm-resident`. Their reason is
   now `no reference` and what they owe is a RECORD.

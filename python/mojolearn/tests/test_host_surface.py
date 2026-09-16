@@ -737,8 +737,18 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
         "these lanes are held back for a reason the shipped table no longer supports:\n  "
         + "\n  ".join(wrong_reason))
 
-    moved = sorted(stale - set(host_surface.PUBLIC_PENDING_LANES) - host_only)
+    # A prefix-excluded lane is never in the public set, so it cannot become
+    # public carrying a stale reference and it must not be required in
+    # PUBLIC_PENDING_LANES, which only admits COVERED lanes (the loop above).
+    # The case first arose with par-graph-umap (lane/umap-batch-fix,
+    # 2026-09-16), the first `par-` lane to get a LANE_REVISIONS entry: the
+    # assertion demanded an entry that the same test's own loop would then
+    # reject.
+    excluded = {lane for lane in revisions
+                if lane.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES)}
+    moved = sorted(stale - set(host_surface.PUBLIC_PENDING_LANES)
+                   - host_only - excluded)
     assert moved == [], (
-        f"these lanes' fixtures moved past the shipped reference and they are still public: {moved}. "
+        f"these lanes moved past the shipped reference and they are still public: {moved}. "
         "Add them to PUBLIC_PENDING_LANES as 'stale reference' until the release regenerates the table"
     )
