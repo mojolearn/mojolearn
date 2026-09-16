@@ -93,6 +93,49 @@ cannot be misread as a run that passed.
 | `--no-models` | skip the portable models |
 | `--json` | one JSON report on stdout, progress on stderr |
 | `--reference-table PATH` | compare against another table |
+| `--self-test` | show that this verifier can fail (below) |
+| `--json-out PATH` | with `--all`: also write the evidence document to PATH |
+
+## Can you watch it fail?
+
+A verifier that only ever passes proves nothing. `verify --self-test` lets you
+see the comparison catch a wrong answer, on your machine, in your installation:
+
+    python -m mojolearn verify --self-test
+
+It runs one lane twice through the ordinary comparison, the same code path that
+judges every other lane. Once on the untouched fixture, which must read
+IDENTICAL, and once with every value of the input's first column moved up by
+one ULP, which must read DIVERGENT. The perturbation is real arithmetic at run
+time, not a printed verdict, so it needs no special build; the lane computes
+correctly over an input whose last bits differ, and the comparison is what
+notices. Exit 0 only if **both** arms behave, so a comparison stuck on either
+answer fails it.
+
+Two commands, then, and the passing one means something because the other one
+can fail.
+
+## The evidence document
+
+`--json` (and `--json-out PATH`) emits the run as data rather than a verdict,
+for a reader who did not run it and should not have to take a word on trust:
+
+- **every cell**, with the hash computed here, the hash expected, the verdict
+  and the wall time, so a run can be audited or two runs diffed;
+- **what produced the numbers**: the version and commit, and the sha256 and
+  size of every binding actually loaded, host bindings included;
+- **where each reference came from**: the committed column, its vendor and the
+  commit it was recorded at, as a path under `bench/results/identity_break/`
+  that you can open in this repository and re-run;
+- **the self-test result**, in the same document, so one artifact shows both
+  that the comparison caught a deliberately wrong answer and that the real
+  lanes matched;
+- **counts that cannot be misread**: lanes checked and skipped with the reason
+  for each, portable models counted separately, and cell parts compared and
+  refused.
+
+The human report and the JSON are rendered from the same object, so they cannot
+drift into describing different runs.
 
 ## How long it takes
 

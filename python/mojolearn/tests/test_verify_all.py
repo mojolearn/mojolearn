@@ -205,6 +205,69 @@ def test_the_summary_says_how_much_of_the_run_was_actually_checked():
     assert "332 of 332" in clean, clean
 
 
+def test_the_self_test_cannot_pass_with_a_broken_comparator(monkeypatch):
+    """`verify --self-test` exists so a user can WATCH the comparison fail, and
+    it is worth nothing unless it would notice a comparator that cannot fail.
+
+    It is two-sided on purpose: the untouched arm must read IDENTICAL and the
+    perturbed arm DIVERGENT. A comparator stuck on IDENTICAL passes the first
+    and fails the second; one stuck on DIVERGENT does the reverse. Both stubs
+    are exercised here, because a self-test that passes with a broken
+    comparator is the same defect one level up (lane/expose-inference-surface,
+    2026-09-16).
+
+    This runs no lane: the two arms are fed to the same judging code the real
+    self-test uses, which is where the property lives.
+    """
+    table = vref.load_table()
+    ent = vref.entry(table, va.SELF_TEST_LANE, va.SELF_TEST_FIXTURE, "train")
+    assert ent and isinstance(ent.get("ref"), str) and not ent["ref"].startswith("n/a"), (
+        "the shipped table must carry a real train reference for the self-test lane, or the "
+        "self-test has nothing to disagree with")
+    ref = ent["ref"]
+    wrong = ("0" if ref[0] != "0" else "1") + ref[1:]
+
+    def arms(clean_value, dirty_value):
+        rows = [dict(lane=va.SELF_TEST_LANE, fixture=va.SELF_TEST_FIXTURE, part="train",
+                     value=v, error=None) for v in (clean_value, dirty_value)]
+        judged = va.judge_rows(rows, table)
+        return judged[0]["state"], judged[1]["state"]
+
+    # honest comparator: the real arms behave as the self-test demands
+    assert arms(ref, wrong) == (vref.IDENTICAL, vref.DIVERGENT)
+
+    # stuck on IDENTICAL: the perturbed arm no longer diverges, so the
+    # self-test's second condition fails
+    monkeypatch.setattr(vref, "judge", lambda value, ent, error=None: (vref.IDENTICAL, ""))
+    clean, dirty = arms(ref, wrong)
+    assert dirty != vref.DIVERGENT, "the stub did not take effect"
+    assert not (clean == vref.IDENTICAL and dirty == vref.DIVERGENT), (
+        "a comparator stuck on IDENTICAL would satisfy the self-test; it must not")
+
+    # stuck on DIVERGENT: the untouched arm no longer matches, so the first
+    # condition fails
+    monkeypatch.setattr(vref, "judge", lambda value, ent, error=None: (vref.DIVERGENT, "stub"))
+    clean, dirty = arms(ref, wrong)
+    assert clean != vref.IDENTICAL
+    assert not (clean == vref.IDENTICAL and dirty == vref.DIVERGENT), (
+        "a comparator stuck on DIVERGENT would satisfy the self-test; it must not")
+
+
+def test_the_self_test_perturbation_is_not_inert():
+    """The perturbation must actually change the answer, or the perturbed arm
+    reads IDENTICAL and the self-test proves nothing. The FIRST version of it
+    moved a single value, `X[0, 0]`, by one ULP, and that was measured INERT
+    for this lane: `ols` fits 20,000 x 16 and one last-bit change in one of
+    320,000 inputs never reached the rounded coefficients. This holds the
+    replacement to being column-wide, so nobody shrinks it back by accident.
+    """
+    src = (Path(va.__file__).read_text(encoding="utf-8"))
+    assert "Xp[:, 0] = np.nextafter" in src, (
+        "the self-test perturbation is no longer column-wide; a single-value one-ULP change was "
+        "measured inert for this lane and would make the perturbed arm pass by accident")
+    assert "values_changed" in src, "the report must say how many values were perturbed"
+
+
 def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
     """The table's own references, judged as if this box produced them,
     verify; flip one character of one shipped hash and the same rows read

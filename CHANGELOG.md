@@ -40,6 +40,28 @@ Linux legs are OWED before this heading reads published.
   27 owed, 288 refused, 0 n/a)`. `docs/VERIFY.md` and `test_verdict_exit_codes` updated; the
   new test was watched failing against the old code first. A healthy install is unaffected
   (278 of 332, VERIFIED, exit 0).
+- **`python -m mojolearn verify --self-test`: a user can now watch the verifier fail.** Reading
+  VERIFIED meant trusting, unseen, that we wrote an honest table and a real comparison. The
+  self-test runs one lane twice through the ordinary comparison path, untouched (must read
+  IDENTICAL) and with every value of the input's first column moved up one ULP (must read
+  DIVERGENT). The perturbation is real arithmetic at run time, so it needs no sabotage build
+  and no second binding, and exit 0 requires BOTH arms, so a comparison stuck on either answer
+  fails it. Proven against a deliberately broken comparator in both directions, and that is
+  now a test rather than a one-off. The two-sided design earned itself immediately: the first
+  perturbation moved a single value and was measured INERT for this lane, so the self-test
+  reported NOT TRUSTWORTHY instead of passing quietly; a one-sided version would have shipped
+  green. The size used is the smallest measured to move the hash, pinned by a test.
+- **`verify --json` and `--json-out PATH` emit evidence rather than a verdict**, rendered from
+  the same object as the human report so the two cannot drift. Per cell: the hash computed on
+  this machine, the hash expected, the verdict and the wall time. Plus the version and commit,
+  the sha256 and size of every binding actually loaded (host bindings included), the device,
+  CPU, OS and Python, the committed column each reference came from as an openable path under
+  `bench/results/identity_break/`, the self-test result in the same artifact, and lane counts
+  kept separate from cell-part counts. Three defects were found by reading the output rather
+  than assuming: the binding provenance was EMPTY on a CPU-only install (host bindings load
+  under `mojolearn._host.*`, which the scanner did not look at), per-cell timings were dropped
+  by `judge_rows`, and the lane counts first read "6 checked of 2 requested" because the
+  portable models were folded in with the harness lanes.
 - **What a CPU-only wheel user can verify goes from 9 lanes to 39, for zero extra wheel
   bytes.** `public_reference_lanes()` gained thirty lanes: k-means and its starts, the k-NN,
   radius and kernel-density variants, DBSCAN, the linear, ridge, logistic and decomposition

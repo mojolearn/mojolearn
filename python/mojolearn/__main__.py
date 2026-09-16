@@ -64,7 +64,8 @@ def _wants_suite(args):
     flags is given, else the pinned k-means card as before."""
     return bool(getattr(args, "all", False) or getattr(args, "quick", False)
                 or getattr(args, "full", False) or getattr(args, "lanes", "")
-                or getattr(args, "emit_models", None))
+                or getattr(args, "emit_models", None)
+                or getattr(args, "self_test", False))
 
 
 def _verify_dispatch(args):
@@ -124,6 +125,20 @@ def build_parser():
                         "cell that moves on this box (default %(default)s)")
     v.add_argument("--no-models", dest="no_models", action="store_true",
                    help="with --all: skip the portable models")
+    v.add_argument("--self-test", dest="self_test", action="store_true",
+                   help="SHOW THAT THIS VERIFIER CAN FAIL. Runs one lane twice "
+                        "through the ordinary comparison, once untouched and "
+                        "once with a single input value moved by one ULP, and "
+                        "requires the first to read IDENTICAL and the second "
+                        "DIVERGENT. The perturbation is real arithmetic at run "
+                        "time, not a printed verdict, and it needs no sabotage "
+                        "build. Exit 0 only if the comparison both reproduced "
+                        "the reference and caught the wrong answer")
+    v.add_argument("--json-out", dest="json_out", metavar="PATH", default=None,
+                   help="with --all: also write the full evidence document "
+                        "(per-cell hashes computed here and expected, per-lane "
+                        "timings, the sha256 of every binding loaded, and the "
+                        "committed column each reference came from) to PATH")
     v.add_argument("--reference-table", dest="reference_table", metavar="PATH",
                    default=None,
                    help="with --all: compare against this table instead of "

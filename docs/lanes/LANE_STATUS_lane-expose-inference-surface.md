@@ -313,6 +313,64 @@ its cells rest on two columns (apple and cpu), so it cannot meet
 `--require-columns 4`. It stays in `PUBLIC_REFERENCE_CANDIDATES` and joins the
 public set the day a record carries its NVIDIA and AMD cells.
 
+## 4b. A verifier a user can watch fail, and evidence instead of a verdict
+
+A user who runs `verify` and reads VERIFIED is trusting two things they cannot
+see: that we wrote an honest table, and that the comparison is real. That is
+the same defect we spent the week finding in our own code, sitting in the
+public command.
+
+**`python -m mojolearn verify --self-test`** runs one lane twice through the
+ordinary comparison, the same `run_cell` -> `judge_rows` -> `judge` path every
+real lane takes. Untouched must read IDENTICAL; with every value of the input's
+first column moved up one ULP it must read DIVERGENT. The perturbation is real
+arithmetic at run time, so it needs no sabotage build and no second binding.
+Measured on this Mac:
+
+    untouched   3d1d7c30b12d9872  vs reference 3d1d7c30b12d9872  -> IDENTICAL
+    perturbed   dd42c9b607526efe  vs reference 3d1d7c30b12d9872  -> DIVERGENT
+
+**It is two-sided on purpose, and that caught my own mistake on the first run.**
+The first perturbation moved a SINGLE value, `X[0, 0]`, by one ULP, and the
+hash did not move: `ols` fits 20,000 x 16, and one last-bit change in one of
+320,000 inputs never reaches the rounded coefficients. I had written a
+self-test that could not fail. The clean/perturbed pair reported
+`THE VERIFIER IS NOT TRUSTWORTHY ON THIS MACHINE` instead of passing quietly. A
+one-sided version would have gone green and shipped a lie. The replacement size
+is measured, not chosen: `X[0,0]` one ULP inert, `y[0]` one ULP inert,
+`X[:, 0]` one ULP moves it, and a test pins it column-wide so nobody shrinks it
+back by accident.
+
+**Proven it would catch a broken comparator**, which is the property it exists
+for. Stubbed to always return IDENTICAL, the perturbed arm fails; stubbed to
+always return DIVERGENT, the clean arm fails; and the JSON records
+`passed: false` carrying both differing hashes. Both directions are now a test
+(`test_the_self_test_cannot_pass_with_a_broken_comparator`) rather than
+something I did once by hand.
+
+### The evidence document
+
+`--json` and `--json-out PATH` emit the run as data, rendered from the SAME
+object as the human report so the two cannot drift. Per cell: the hash computed
+here, the hash expected, the verdict, the wall time. Plus what produced the
+numbers, where each reference came from as a path under
+`bench/results/identity_break/`, the self-test result in the same artifact, and
+lane counts separate from cell-part counts.
+
+**Two defects of my own, found by looking at the output rather than assuming:**
+
+- **The binding provenance was empty on exactly the install it matters for.**
+  `binding_artifacts()` scans `sys.modules` for `mojolearn._mojolearn*`, but
+  host bindings load under `mojolearn._host.*`, so a CPU-only run reported
+  **0 bindings** and answered nothing about which binary produced the numbers.
+  Now 9, with sha256 and size.
+- **Per-cell timings were dropped.** `judge_rows` rebuilds each row and lost the
+  `seconds` I attached, so every cell read `None`. Now populated.
+- And the lane counts first read **"6 checked of 2 requested"**, because the
+  four portable models were folded in with the harness lanes. That is precisely
+  the misreadable count the block exists to prevent; they are counted
+  separately now.
+
 ## 5. Owed: implemented saved-model inference no gate covers
 
 `SAVED_MODEL_INFERENCE_OWED`, with `--saved-model-inference-owed`. Each is
@@ -479,6 +537,16 @@ descending order of how much it would change:
 - [x] sabotage controls proven real before being relied on
 - [x] the promoted surface run end to end as a user would: VERIFIED, 1065 of
       1412 cell parts, 0 divergent, 0 refused, in 523.7 s
+- [x] **`verify --self-test`**: a user can watch the comparison catch a wrong
+      answer, two-sided so a comparator stuck on either verdict fails it,
+      proven against a broken comparator in both directions and pinned by tests
+- [x] **the evidence document** (`--json`, `--json-out`): per-cell computed and
+      expected hashes with timings, binding sha256s, the committed column each
+      reference came from as an openable path, the self-test in the same
+      artifact, and counts that cannot be misread
+- [x] three defects in my own evidence work found by reading the output:
+      empty binding provenance on a CPU-only install, dropped per-cell
+      timings, and "6 checked of 2 requested"
 - [x] the exposure proof: refused before, ran after, IDENTICAL x4 on 36 of 36
       train cells, and DIVERGENT on 36 of 36 under sabotage
 - [x] the candidate proof: 0 DIVERGENT, 26 of 27 IDENTICAL x4 on train
