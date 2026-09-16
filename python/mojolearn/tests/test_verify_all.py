@@ -783,7 +783,9 @@ def test_shipped_verifier_hashes_like_the_harness():
     if not lanes:
         selected = list(va.host_surface().public_reference_lanes())
         # CAP IT ON AN APPLE GPU. This asked for every public reference lane in
-        # one process, which was 9 and is 39 since the 2026-09-16 promotion, and
+        # one process. That was 9; the 2026-09-16 promotion made it 39 and
+        # lane/ship-cpu-host-families took it to 122, read from the registry
+        # rather than written down here, and
         # `identity_break.refuse_routine_apple_column` refuses more than 24 in
         # one Metal process because a full Apple column is a per-release
         # artifact. The parity this test checks is per lane, so a subset proves

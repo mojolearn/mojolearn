@@ -243,6 +243,7 @@ watched before the code that catches it existed:
 | `AGREE` | 0 | every shared cell part carries the same hash, both sides computed it, and none is present in only one document |
 | `MISMATCH` | 1 | at least one cell part differs; every differing cell is named with **both** values |
 | `SELF-CONTRADICTED` | 1 | a cell part reads `MOVED`, `BATCH_MOVED` or `RELOAD-MOVED`, meaning that box gave two different answers for one fit. Two documents carrying the same such string hold the same text and agree only that the claim is false |
+| `AGREED ON A DIVERGENT ANSWER` | 1 | both sides hold the same hash for a cell that one of them judged DIVERGENT against its own reference table. Two machines reaching the same wrong answer is a finding, not a pass |
 | `INCOMPLETE` | 4 | nothing differs, but the runs did not cover the same ground: a cell in only one document, a cell **neither** side computed (`value` null, where the probe raised), or two different `n/a` reasons |
 | `SAME DOCUMENT` | 4 | the two files are byte-identical. That is one document handed over twice, and it can only agree with itself |
 | `MALFORMED` | 2 | a file is not an evidence document, or names one cell part twice. A duplicated row would otherwise let a party paste the other's answer over their own and hide the loss |
@@ -255,12 +256,25 @@ identity. Nothing is ever summarized as a bare count; every differing,
 self-contradicted, uncomputed and one-sided cell is printed by name, and a
 truncated listing says how many it hid.
 
+`AGREE` is the **last** outcome tried, and the exit-1 outcomes are read before
+the exit-4 ones. That ordering is the same one `verify --all`'s own verdict
+carries: a wrong answer outranks an absent one, and no number of parts that did
+run makes up for one that did not. Each document's own verdict and detail line
+are printed beside the comparison, because two parties can agree while one of
+them checked a fraction of what a reader assumes.
+
 Every path out of the command prints exactly one `RESULT:` line and returns a
 code from that table, including a crash, so an empty output or a failed
 invocation can never be read as a pass. It dispatches **before** the import and
 numeric-tier checks: under `MOJOLEARN_NUMERIC_MODE=fast` every other check
 refuses with exit 3 and `--compare` still runs, because a third party has none
 of our bindings.
+
+The comparer takes its lanes from the two documents and never enumerates,
+greps or imports a lane list of its own, so it cannot grow a second idea of
+what the lane set is. Where a lane list **is** needed, as in `--cross-check`,
+it is read from the registry by import, the same way `tools/lane_select.py`
+and `tools/verification_matrix.py` read it.
 
 ## The evidence document
 

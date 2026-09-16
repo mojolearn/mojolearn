@@ -125,8 +125,9 @@ it**, which is not a pass, and `--cross-check` stays the explicit door.
 
 `test_shipped_verifier_hashes_like_the_harness` fits
 `public_reference_lanes()` in one process. That was 9 lanes; the 2026-09-16
-promotion made it **39**, over the 24-lane Apple cap, so the test became
-unrunnable on any Mac with a GPU build. It still passed on CPU-only, which is
+promotion made it 39 and lane/ship-cpu-host-families took it to **122**, far
+over the 24-lane Apple cap, so the test became unrunnable on any Mac with a GPU
+build. It still passed on CPU-only, which is
 why it went unseen until a Metal tree ran it. Fixed by capping the list on an
 Apple GPU; the parity it checks is per lane, so a subset proves the same thing.
 Confirmed both ways: fails at 39 on Metal, passes capped (30s), and passes
@@ -151,33 +152,132 @@ manufacture that. But the evidence document makes it unnecessary: two people on
 different hardware each run `verify --all --json-out mine.json`, swap files,
 and run `verify --compare`. If the hashes match they have demonstrated the
 claim **to each other**, with us absent. That is stronger than anything we can
-publish about ourselves, and it cost one pure function over two JSON files —
-no GPU, no bindings, no network.
+publish about ourselves, and it cost one pure function over two JSON files, no
+GPU, no bindings, no network.
 
-**Three outcomes, not two.** A cell present in one document and missing from
-the other is INCOMPARABLE, never an agreement. Counting absence as a match is
-exactly how a comparer becomes unable to fail, and this one exists for
-adversarial use, so that is the worst possible place for it. A part both sides
-record as `n/a` is an absence they agreed on, counted separately.
+### The only interesting question is how it could agree wrongly
 
-**Measured, all four behaviours seen rather than assumed:**
+A comparer has one failure mode, and it is not reporting a mismatch that is not
+there. It is reporting agreement where two machines never computed the same
+bits. This command exists to be pointed at us, so that is the whole of the
+work. Five such routes were found, and **each was watched producing `AGREE,
+exit 0` on the shipped code before the code that catches it existed**
+(`ARM0_the_unfixed_side.txt`, the comparer as it stood at `bb579ecb8`, run on
+the same files the fixed one is run on):
 
-    two vendors, same hashes   -> AGREE, exit 0, "two independent machines"
-    one cell altered           -> MISMATCH, exit 1, names ols/base infer and BOTH values
-    a cell in only one doc     -> INCOMPLETE, exit 4, "Absence is not agreement"
-    both docs the same device  -> AGREE but WARNS it shows repeatability, not identity
+| the forgery | pre-fix | post-fix |
+|---|---|---|
+| two real runs where 24 cells' `value` is null, because the probe RAISED on both boxes | `AGREE` exit 0, 73 agreements | `INCOMPLETE` exit 4, all 24 named |
+| one document copied under a second name | `AGREE` exit 0 | `SAME DOCUMENT` exit 4 |
+| the losing row appended a second time carrying the other party's value | `AGREE` exit 0 | `MALFORMED` exit 2, both rows named |
+| both documents recording `MOVED` for a cell | `AGREE` exit 0 | `SELF-CONTRADICTED` exit 1 |
+| both holding the same hash for a cell one of them judged `DIVERGENT` | `AGREE` exit 0 | `AGREED ON A DIVERGENT ANSWER` exit 1 |
 
-It also runs with no numeric mode, no host bindings and no GPU set, which is
-the point: a third party has none of ours. `--compare` dispatches before the
-import and tier checks for that reason.
+The duplicated-row arm is a **working forgery** against the old code: the hash
+in `dupB.json` was flipped, and appending the honest row after it was enough to
+make the mismatch disappear before anything was compared, because the dict
+build was last-wins.
 
-Five tests encode those properties.
+The null arm is the one that matters most, because it needed no forgery at all.
+Two ordinary `verify --quick` runs on this box produce it, and 24 of the 73
+"agreements" were lanes that ran on neither side.
+
+### Held against the CLI, not just the function
+
+The exit code is the interface: two parties compare in a script and what the
+script branches on is `$?`. `test_cli_compare_exit_codes_are_what_a_stranger_scripts_against`
+runs six pairs through the real process and asserts the code and a distinctive
+token in stdout, under **both** `MOJOLEARN_NUMERIC_MODE=identical` and `fast`,
+and asserts `RESULT: AGREE` appears in none of the non-zero cases. `fast` is in
+there because every other check refuses with exit 3 under it, measured side by
+side in `arms_9_to_12.txt`; `--compare` dispatches before that gate because a
+third party has none of our bindings.
+
+Every path out prints exactly one `RESULT:` line and returns a documented code,
+including a crash, which is caught so it cannot exit 1 and be read as MISMATCH.
+A truncated file, a non-JSON file and JSON that is not an evidence document
+each refuse by name.
+
+### It inherits the verdict fix rather than reproducing its bug
+
+`87085a5eb` fixed `verdict()` the same morning: it returned VERIFIED as soon as
+ONE part read IDENTICAL, before it looked at REFUSED, so a CPU-only install
+printed `VERIFIED, exit 0` over 44 identical and 288 refused parts. A comparer
+reaches the same place through agreement, so two properties are now explicit:
+
+* **`AGREE` is the last outcome tried.** No number of agreements outranks one
+  problem.
+* **The exit-1 outcomes are read before the exit-4 ones**, exactly as
+  `verdict()` reads DIVERGENT before REFUSED: a wrong answer outranks an
+  absent one.
+
+Each document's own verdict and detail line are printed beside the comparison,
+because two parties can agree while one of them checked a fraction of what a
+reader assumes. `ARM3.txt` shows the whole chain on this box: each run's own
+verdict is `INCOMPLETE (verified 48 of 80 cell parts ... 24 refused)`, and the
+comparison on top of two of those is `INCOMPLETE` as well, not a pass.
+
+### No second lane set
+
+`compare_documents` takes its lanes from the two documents. It never
+enumerates, greps or imports a lane list, so it cannot grow a second idea of
+what the lane set is, which is how one afternoon produced four different lane
+totals. Where a lane list **is** needed, `--cross-check` reads it from the
+registry by import (`host_surface.FAMILIES` against `harness.LANES`), the same
+way `tools/lane_select.py` and `tools/verification_matrix.py` read it. Asked
+after the 2026-09-16 merges: registry 211 lanes, `public_reference_lanes()`
+122, wheel bindings 32, cross-check intersection **79**. The 79 is unchanged by
+the thirty-two-family merge because it counts declared *inference* lanes.
+
+### Numbers printed, never counted
+
+Every differing, self-contradicted, uncomputed, one-sided and differently-`n/a`
+cell is printed by name with both values, and a truncated listing says how many
+it hid rather than stopping quietly.
+
+## What this box could not produce
+
+**A genuinely independent pair.** Both documents in the proof come from this
+one Mac, so every real `AGREE` here carries the `WARNING: both documents
+describe the SAME device ... repeatability, not cross-hardware identity` that
+the command prints for exactly this case. The cross-vendor path is exercised in
+the unit tests and the mismatch arms, not on two real machines. Manufacturing a
+second party would defeat the only thing this command is for, so it is left
+owed rather than faked.
+
+**A complete install.** `python/mojolearn/host` in this worktree is a SYMLINK
+to `~/mojolearn-evidence/expose-inference/hostprod`, another lane's build of
+**10 of the 32** host families. Nothing there is committed and nothing should
+be. Its `_mojolearn_forecast_host.so` was checked against the `kpss_test` entry
+`87085a5eb` moved into `bindings/kpss_host_test.mojo` that morning: it carries
+it, so this copy is current for what main changed, not stale. The probe that
+said otherwise was `nm -gU | grep -c kpss`, which returns nothing for Mojo
+entries and would have put "stale" into the record; the import probe was
+validated first against `holtwinters`, a name known to be present, before its
+answer about `kpss_test` was believed.
+
+So the 49 agreeing cell parts are a statement about the comparer, not about
+mojolearn's coverage. The 24 refusals in the same run are the missing
+`identical` GPU binding in this worktree.
 
 ## Owed
 
+- [ ] Two documents from two genuinely different machines. Nothing on one Mac
+      can stand in for it.
 - [ ] A run on a **properly built GPU install**, where far more than 5 of 24
-      lanes compare. This box cannot produce it without hours of Metal.
-- [ ] The main checkout's Metal bindings are two days stale; anything using
-      them for `arima`, `svm` or `gpc` will mislead until rebuilt.
+      lanes cross-check. This box cannot produce it without hours of Metal.
 - [ ] `--cross-check` is not yet in the evidence document as a live third
       check, only as a recorded "not run, and how to run it".
+
+## Evidence
+
+`~/mojolearn-evidence/verify-cross-check/compare-proof-2026-09-16/`
+
+| file | what it holds |
+|---|---|
+| `ARM0_the_unfixed_side.txt` | the five forgeries against `bb579ecb8`, all `AGREE` exit 0 |
+| `ARMS_all.txt` | the same files through the fixed command, arms 1, 2, 4 to 8, 13 |
+| `ARM3.txt` | two real runs, each `INCOMPLETE` itself, compared to `INCOMPLETE` |
+| `arms_9_to_12.txt` | the `fast` tier contrast, truncated file, non-JSON, not an evidence document |
+| `partyA.json`, `partyB.json` | two real `verify --quick` documents from this box |
+| `cleanA/B`, `flippedB`, `shortB`, `dupB`, `movedA/B`, `divA/B`, `cleanA_copy` | the arms |
