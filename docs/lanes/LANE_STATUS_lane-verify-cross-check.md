@@ -277,7 +277,8 @@ mojolearn's coverage. The 24 refusals in the same run are the missing
 |---|---|
 | `ARM0_the_unfixed_side.txt` | the five forgeries against `bb579ecb8`, all `AGREE` exit 0 |
 | `ARMS_all.txt` | the same files through the fixed command, arms 1, 2, 4 to 8, 13 |
-| `ARM3.txt` | two real runs, each `INCOMPLETE` itself, compared to `INCOMPLETE` |
+| `arm3.txt` | two real runs, each `INCOMPLETE` itself, compared to `INCOMPLETE` |
+| `EXIT_CODES_from_main.txt` | all eight outcomes run UNPIPED from main 2b76f7125, exit codes as documented |
 | `arms_9_to_12.txt` | the `fast` tier contrast, truncated file, non-JSON, not an evidence document |
 | `partyA.json`, `partyB.json` | two real `verify --quick` documents from this box |
 | `cleanA/B`, `flippedB`, `shortB`, `dupB`, `movedA/B`, `divA/B`, `cleanA_copy` | the arms |
