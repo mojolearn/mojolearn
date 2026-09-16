@@ -639,7 +639,10 @@ def _identical_build():
 
 
 def _run_cli(argv, env_extra=None):
-    env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical", **(env_extra or {}))
+    # env_extra OVERRIDES rather than collides: a caller pinning the tier
+    # itself (`--compare` must work under `fast`) is exactly what it is for
+    env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
+    env.update(env_extra or {})
     return subprocess.run([sys.executable, "-m", "mojolearn"] + argv, capture_output=True, text=True,
                           env=env, cwd=str(PKG.parent))
 
