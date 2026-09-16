@@ -341,6 +341,54 @@ genuinely needs its size" result. The two paths only the full fixture
 reaches are **the A=4 aligned accumulation split** and **the first cosine
 step of the warmup schedule**.
 
+## 1g. THE SHRINK, AND THE ONE GATE IT HAD TO PASS
+
+Thirteen lanes shrunk and merged to main (f4e589395). The rule was mechanical
+and per lane: cut the fixture, run the family's sabotage host build **at the
+new size**, and require the cell to read DIVERGENT. An arm that went inert
+meant stepping the size back up until it fired again. **No lane ships at a
+size whose arm did not fire.**
+
+The arms were confirmed live at the ORIGINAL sizes first (all eight candidate
+families, DIVERGENT x8), so a firing arm at the new size is not an artifact of
+the change. Runs on the CPU host route, one core, `nice -n 19`,
+`MOJOLEARN_NUMERIC_MODE=identical` set explicitly so a run cannot silently
+refuse before the first fit and produce nothing. Production set and sabotage
+twin built from this tree for all thirteen families.
+
+| lane | production | CPU after | sabotage arm |
+|---|---|---:|---|
+| `holtwinters` | STABLE | **0.64 s** | DIVERGENT |
+| `spectral` | STABLE | **3.01 s** | DIVERGENT |
+| `hdbscan-leaf` | STABLE | **3.47 s** | DIVERGENT |
+| `byte-lm-resident` | STABLE | **3.68 s** | DIVERGENT |
+| `byte-lm` | STABLE | **4.22 s** | DIVERGENT |
+| `gbdt-lossguide-newtoncosine` | STABLE | **6.44 s** | DIVERGENT |
+| `gbdt-parametric-losses` | STABLE | **7.16 s** | DIVERGENT |
+| `hdbscan` | STABLE | **8.65 s** | DIVERGENT |
+| `samba` | STABLE | **10.75 s** | DIVERGENT |
+| `gbdt-pair-logit` | STABLE | **11.61 s** | DIVERGENT |
+| `samba-untied-dropout-accum` | STABLE | **17.77 s** | DIVERGENT |
+| `gbdt-nan-modes` | STABLE | **18.61 s** | DIVERGENT |
+| `mamba2-dtlimit` | STABLE | **79.15 s** | DIVERGENT |
+
+**Twelve of thirteen are under 30 s. One is not, and it is worth naming.**
+`mamba2-dtlimit` at 79.15 s barely moved: the untouched `mamba2` lane costs
+75.19 s on the same route, so cutting its sequence length from 16 to 8 bought
+almost nothing. Its input was already 1024 floats; what is slow is the mamba
+host binding itself, not the fixture. That is a lane where the honest answer
+is that shrinking the fixture is the wrong tool, and the cost belongs to
+whoever owns that binding.
+
+### What this does NOT claim
+
+These are CPU-host-route seconds for ONE fixture at two repeats. They are the
+right numbers for "can this still fail and how cheap is the check", and they
+are NOT the Apple column's seconds: the record runs nine fixtures on Metal,
+where the cost profile is different by up to 45x per lane in either direction
+(section 1c). The Metal before/after is measured separately and reported with
+the column estimate.
+
 <!-- TASK1-RESULTS -->
 
 ## 2. `par-*` leaves the release record's scope
