@@ -681,6 +681,28 @@ def cmd_verify_all(args):
                        f"this machine generates different fixture bytes than the record for {bad_fix} "
                        f"(numpy {device['numpy']}); no cell would be comparable")
 
+    # A LANE WHOSE FIXTURE MOVED PAST ITS REFERENCE IS NOT COMPARABLE
+    # (2026-09-16, lane/identity-fixtures-light). A reference hash describes
+    # one exact input. When a lane's fixture changes, the harness bumps its
+    # LANE_REVISIONS entry and every hash taken at the old input stops
+    # describing anything this harness can produce. Comparing anyway would
+    # report DIVERGENT for a reason that has nothing to do with the user's
+    # machine, which is the worst failure this tool has: it looks exactly like
+    # the identity claim being false. These lanes are dropped from the
+    # comparison and named, so the run is short of coverage (which the
+    # verdict reflects) rather than quietly wrong.
+    stale = [l for l in vref.stale_reference_lanes(table, harness) if l in lanes]
+    if stale:
+        log(f"# STALE REFERENCE, not compared ({len(stale)}): {', '.join(stale)}")
+        log("#   their fixture moved (identity_break LANE_REVISIONS) past the reference this table "
+            "carries; the next release record regenerates it")
+        lanes = [l for l in lanes if l not in stale]
+        if not lanes:
+            return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN",
+                           f"every selected lane has a stale reference ({', '.join(stale)}): each one's "
+                           "fixture moved past the hash this table carries, so no cell would be "
+                           "comparable; regenerate with --emit-reference from a current record")
+
     families = family_map(lanes)
     raw = []
     from ._cpu_reference import reference_training

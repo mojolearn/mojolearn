@@ -106,3 +106,25 @@ full-column Apple run of more than `APPLE_COLUMN_LANE_LIMIT` lanes unless
 on a rented CPU pod, bitwise equal to Metal, in parallel, about $0.24/hour.
 See ENGINEERING_RULES.md section 12, docs/RELEASE_CHECKLIST.md section 5b and
 docs/VERIFY.md.
+
+## G. The thirteen references are stale by design, and that is now guarded
+
+`verify_reference/table.json` still carries references taken at the OLD sizes
+for all thirteen lanes. It is **not** regenerated here on purpose: a
+regeneration today also carries 72 changed reference values across ten lanes
+this branch never touched (newer committed records winning over older ones),
+which is not this lane's change to make, and the release regenerates the table
+as a normal step.
+
+What makes that safe is a check rather than a memo. `build_table` now records
+`lane_revisions`, and `_verify_reference.stale_reference_lanes()` returns any
+lane whose fixture has moved past the reference the table carries. A table
+generated before that key existed records no revision, which counts as stale.
+`_verify_all` drops those lanes from the comparison, names them, and refuses
+outright if nothing comparable is left. It was watched failing first: against
+today's table it names exactly these thirteen, it goes quiet against a table
+carrying current revisions, and it catches a single corrupted revision.
+
+So nothing compares against the stale references in the meantime, and the next
+person who shrinks a fixture and forgets to regenerate gets a refusal instead
+of a DIVERGENT that looks like our identity claim being false.
