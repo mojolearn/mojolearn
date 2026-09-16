@@ -344,6 +344,29 @@ is recorded a second time on AMD. Two recordings separate a reproducible instabi
 one-off, and the rerun is the evidence either way. A cell that moves is not eligible for the
 shipped record until that question is settled.
 
+### The decision rule, fixed in advance (coordinator, 2026-09-15 evening)
+
+Written down before the evidence arrives so it is not decided under time pressure. The trigger
+is AMD leg 3's AUTHORITATIVE fetched column, not the mid-run snapshot.
+
+1. **If the fetched column reads STABLE**, the MOVED was an artifact of the mid-run snapshot.
+   Say so explicitly, quoting BOTH readings (the snapshot's two hashes and the fetched column's),
+   and continue. A snapshot artifact earns one sentence in the record, not silence.
+2. **If the fetched column reads MOVED, that is a release blocker. STOP before the pack.** Do
+   not regenerate the reference table, do not pack the Linux wheel, do not repack macOS. Report
+   with the lane's hash from EVERY column of EVERY record on main, and name the column that
+   stands ALONE rather than naming a vendor. A cell that moves between two recordings on one
+   vendor is worse than a cell that differs across vendors, because it means our own output is
+   not reproducible on one machine.
+3. **Either way: do not drop the lane, do not mark it n/a, and do not exclude it from the diff
+   to get a clean sheet.** If 0.8.6 ships with a known moving cell, that is Andrew's decision
+   made with the evidence in front of him, never a packing choice.
+
+Budget attached to the same decision: leg 4 is approved. **A fifth AMD leg is not**: if the
+lane count says one is needed, report the count first and wait. Spend so far is about $10.20
+(NVIDIA $5.14, AMD $2.10 plus $2.74 lost to the dark box, CPU $0.20), Hot Aisle balance $34.25
+against a 500 cent floor.
+
 Legs rent only from a CLEAN checkout: both runners refuse a dirty tree, so commit state-file
 edits before renting.
 
