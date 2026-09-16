@@ -324,6 +324,23 @@ class Runner:
             del m
         except BaseException as exc:          # noqa: BLE001 -- a raise is data
             err = "".join(traceback.format_exception_only(type(exc), exc)).strip()
+            # A PROBE THAT IS BROKEN MUST NOT LOOK LIKE A FINDING. A wrong
+            # keyword or a renamed attribute would make every fit "raise" and
+            # the JSON would read exactly like a reproduction of an
+            # out-of-memory column. These types are never how an estimator
+            # refuses data or how a device reports exhaustion, so the first one
+            # ends the run loudly instead of filling a file.
+            if isinstance(exc, (TypeError, AttributeError, NameError,
+                                ImportError, KeyError, IndexError)):
+                self.rows.append(dict(i=self.index + 1, arm=arm, lane=lane,
+                                      fixture=kind, ok=False, error=err,
+                                      probe_broken=True))
+                raise SystemExit(
+                    "THE PROBE IS BROKEN, NOT THE FIT: the first call into the "
+                    "estimator raised %s, which is how this file gets the API "
+                    "wrong and not how a fit runs out of memory. Refusing to "
+                    "record 54 rows that would read as a reproduction.\n  %s"
+                    % (type(exc).__name__, err))
         wall = time.time() - t0
         used1, _ = self.reader.read()
         self.index += 1
