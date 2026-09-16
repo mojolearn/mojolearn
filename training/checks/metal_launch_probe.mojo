@@ -158,6 +158,28 @@ def main() raises:
         t1 = Int(perf_counter_ns())
         s_d2h_only.append(_report("d2h_only", rep, n, t0, t1))
 
+    # batch_k: K launches per synchronize. This is the lever the lane
+    # exists to size. If a submit-and-wait round trip is a fixed price,
+    # per-launch cost falls as 1/K and every removed synchronize is worth
+    # one whole round trip.
+    for rep in range(repeats):
+        for kk in range(6):
+            var k = 1 << kk
+            var iters = n // k
+            var b0 = Int(perf_counter_ns())
+            for _ in range(iters):
+                for j in range(k):
+                    _launch(ctx, one, 1, Float32(j))
+                ctx.synchronize()
+            var b1 = Int(perf_counter_ns())
+            var total_us = Float64(b1 - b0) / 1000.0
+            print(
+                "probe batch_k k", k, "rep", rep, "iters", iters,
+                "launches", iters * k, "total_us", total_us,
+                "per_launch_us", total_us / Float64(iters * k),
+                "per_sync_us", total_us / Float64(iters),
+            )
+
     _summary("launch_only", n, s_launch_only)
     _summary("launch_sync", n, s_launch_sync)
     _summary("launch_d2h_sync", n, s_launch_d2h)

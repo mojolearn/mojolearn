@@ -656,6 +656,113 @@ def train_copy_range_kernel(
     dst.unsafe_store(Int(dst_off) + i, src.unsafe_load(Int(src_off) + i))
 
 
+def train_copy_nine_kernel(
+    flat: MutPointer[Float32, MutAnyOrigin],
+    t0: MutPointer[Float32, MutAnyOrigin],
+    t1: MutPointer[Float32, MutAnyOrigin],
+    t2: MutPointer[Float32, MutAnyOrigin],
+    t3: MutPointer[Float32, MutAnyOrigin],
+    t4: MutPointer[Float32, MutAnyOrigin],
+    t5: MutPointer[Float32, MutAnyOrigin],
+    t6: MutPointer[Float32, MutAnyOrigin],
+    t7: MutPointer[Float32, MutAnyOrigin],
+    t8: MutPointer[Float32, MutAnyOrigin],
+    base_off: Int32,
+    c0: Int32, c1: Int32, c2: Int32, c3: Int32, c4: Int32,
+    c5: Int32, c6: Int32, c7: Int32, c8: Int32,
+    total_in: Int32,
+    to_flat: Int32,
+):
+    """Nine `train_copy_range_kernel` launches in ONE, for one byte LM block.
+
+    **NO ARITHMETIC. NOT ONE FLOAT OPERATION**, exactly as
+    `train_copy_range_kernel`. The value read is the value stored, bit for
+    bit. The two kernels differ only in how a thread finds its pair of
+    addresses, so a fused block moves the same bytes as nine separate ones
+    by construction rather than by a check that happens to pass.
+
+    The nine ranges of a block are CONSECUTIVE in the flat buffer, so the
+    concatenated index `i` maps to `base_off + i` with no table: the caller
+    passes the nine element counts and the kernel walks them to find which
+    tensor owns `i` and its index inside that tensor. `to_flat` picks the
+    direction: 0 unpacks the flat buffer into the nine, 1 packs the nine
+    into the flat buffer.
+
+    **A WRONG OFFSET IS STILL THE DANGEROUS DEFECT**, and it still gives
+    plausible, in-bounds, wrong numbers that are identical on all three
+    vendors. The round trip in `train_step_check` clause (f) is the
+    assertion, and the byte LM identity lane is the second one.
+    """
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(total_in):
+        return
+    # Walk the nine counts. `which` is the owning tensor and `local` its
+    # index inside it; the sequential form avoids nine levels of nesting.
+    var local = i
+    var which = -1
+    if local < Int(c0):
+        which = 0
+    if which < 0:
+        local -= Int(c0)
+    if which < 0 and local < Int(c1):
+        which = 1
+    if which < 0:
+        local -= Int(c1)
+    if which < 0 and local < Int(c2):
+        which = 2
+    if which < 0:
+        local -= Int(c2)
+    if which < 0 and local < Int(c3):
+        which = 3
+    if which < 0:
+        local -= Int(c3)
+    if which < 0 and local < Int(c4):
+        which = 4
+    if which < 0:
+        local -= Int(c4)
+    if which < 0 and local < Int(c5):
+        which = 5
+    if which < 0:
+        local -= Int(c5)
+    if which < 0 and local < Int(c6):
+        which = 6
+    if which < 0:
+        local -= Int(c6)
+    if which < 0 and local < Int(c7):
+        which = 7
+    if which < 0:
+        local -= Int(c7)
+    if which < 0 and local < Int(c8):
+        which = 8
+    if which < 0:
+        # Unreachable while `total_in` is the sum of the nine counts. Write
+        # nothing rather than guess: a missed element leaves the stale value
+        # the identity lane compares, which is a divergence it can see.
+        return
+    var p = t0
+    if which == 1:
+        p = t1
+    elif which == 2:
+        p = t2
+    elif which == 3:
+        p = t3
+    elif which == 4:
+        p = t4
+    elif which == 5:
+        p = t5
+    elif which == 6:
+        p = t6
+    elif which == 7:
+        p = t7
+    elif which == 8:
+        p = t8
+    var flat_index = Int(base_off) + i
+    if Int(to_flat) != 0:
+        flat.unsafe_store(flat_index, p.unsafe_load(local))
+    else:
+        p.unsafe_store(local, flat.unsafe_load(flat_index))
+
+
 def train_ulp_perturb_kernel(
     buf: MutPointer[Float32, MutAnyOrigin],
     index: Int32,
@@ -1307,6 +1414,57 @@ def _copy_into(
         Int32(src_off),
         Int32(count),
         grid_dim=(_grid(count), 1, 1),
+        block_dim=(TRAIN_TPB, 1, 1),
+    )
+
+
+def _copy_nine(
+    ctx: DeviceContext,
+    mut flat: DeviceBuffer[DType.float32],
+    mut t0: DeviceBuffer[DType.float32],
+    mut t1: DeviceBuffer[DType.float32],
+    mut t2: DeviceBuffer[DType.float32],
+    mut t3: DeviceBuffer[DType.float32],
+    mut t4: DeviceBuffer[DType.float32],
+    mut t5: DeviceBuffer[DType.float32],
+    mut t6: DeviceBuffer[DType.float32],
+    mut t7: DeviceBuffer[DType.float32],
+    mut t8: DeviceBuffer[DType.float32],
+    base_off: Int,
+    counts: List[Int],
+    to_flat: Bool,
+) raises:
+    """One launch where `_copy_into` took nine. Same bytes, same order.
+
+    `counts` is the nine element counts in flat-buffer order, and the nine
+    ranges they describe must be CONSECUTIVE in `flat` from `base_off`,
+    which is how `byte_offsets` and `train_offsets` lay a block out. The
+    caller derives the counts from consecutive offsets, so their sum
+    telescopes to the length of the slab and the layout cannot drift apart
+    from the argument.
+    """
+    if len(counts) != 9:
+        raise Error("block copy takes exactly nine ranges, got " + String(len(counts)))
+    var total = 0
+    for j in range(9):
+        if counts[j] < 0:
+            raise Error("block copy range " + String(j) + " has a negative count")
+        total += counts[j]
+    if total < 1:
+        return
+    step_count_launch()
+    ctx.enqueue_function[train_copy_nine_kernel](
+        flat.unsafe_ptr(),
+        t0.unsafe_ptr(), t1.unsafe_ptr(), t2.unsafe_ptr(),
+        t3.unsafe_ptr(), t4.unsafe_ptr(), t5.unsafe_ptr(),
+        t6.unsafe_ptr(), t7.unsafe_ptr(), t8.unsafe_ptr(),
+        Int32(base_off),
+        Int32(counts[0]), Int32(counts[1]), Int32(counts[2]),
+        Int32(counts[3]), Int32(counts[4]), Int32(counts[5]),
+        Int32(counts[6]), Int32(counts[7]), Int32(counts[8]),
+        Int32(total),
+        Int32(1) if to_flat else Int32(0),
+        grid_dim=(_grid(total), 1, 1),
         block_dim=(TRAIN_TPB, 1, 1),
     )
 
