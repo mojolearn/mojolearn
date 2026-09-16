@@ -85,3 +85,63 @@ cannot be one until the gate declares them. That is a code gap, not just a
 recording gap, and it is this lane's first change.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+## The defect that explains why nothing had been recorded
+
+`tools/classical_host_gate.py record` was DEAD on main, and had been since
+`--lane-rule-only` was added by lane/ties-sabotage on 2026-09-15:
+
+```
+if args.lane_rule_only and not args.every_fixture:
+AttributeError: 'Namespace' object has no attribute 'lane_rule_only'
+```
+
+That flag is declared on the `check` subparser only, so a `record` Namespace
+never carries it, and `main()` read it unguarded ahead of every other refusal.
+`record` therefore raised before `do_record` ran a line, on any box, for any
+lane. It is why `SAVED_MODEL_INFERENCE_OWED` could say "waiting on ONE thing, a
+GPU recording" for four lanes and nobody could produce one: the tool that makes
+a recording could not start.
+
+It was found the only way it could be found, by a rented GPU box refusing.
+The fix is `getattr(args, 'lane_rule_only', None)`. Both sides were watched:
+the unfixed tool raises here too, and the fixed one reaches the estimator's
+`fit` (`~/mojolearn-evidence/saved-model-reference-gaps/record-crash-proof.txt`),
+while `check --expect-mismatch --lane-rule-only dbscan` still refuses the flag
+without `--every-fixture`.
+
+## The NVIDIA column
+
+`bench/results/identity_break/2026-09-16_predict-nvidia/`. One RunPod RTX 2000
+Ada Generation, sm_89, $0.24/h, seven minutes billed, pod deleted and verified
+gone (HTTP 404). **No spec was pinned**: the runner's default RTX 4090 answered
+"There are no instances currently available" and nothing was billed for it, so
+the leg was re-driven over a list of NVIDIA specs in price order until one
+created. That list, not a pin, is what kept this lane off the starvation that
+cost a Hot Aisle leg thirty minutes this morning.
+
+    cells=54 stable=54 moved=0 refused=0
+    infer: stable=54   model: stable=54   batch: stable=54
+
+Six lanes, nine fixtures, two repeats. Against the Apple/Metal and x86 CPU
+columns of the two 2026-09-15 lane records:
+
+| lanes | verdict |
+|---|---|
+| dbscan, dbscan-brute-l1, dbscan-weighted, agglomerative | IDENTICAL x3 on all 32 infer/model parts and all 16 batch parts those columns carry; the other five fixtures are ONE-COLUMN, because those columns ran four |
+| spectral-precomputed | IDENTICAL x3 on base and ties, IDENTICAL x2 on the other seven |
+| spectral | ONE-COLUMN on all nine, and NOT a divergence |
+
+`spectral`'s two older columns were excluded by the diff tool's own
+`LANE_REVISIONS`, which prints "hashed ... spectral ... at an older lane
+revision; its cells there are not compared and read as absent". The lane was
+shrunk from 2000 rows to 512 at `e2bb9e541`, and
+`git merge-base --is-ancestor e2bb9e541 0a6957015` answers NO, so neither the
+CPU column (`0a6957015`) nor the Metal column (`b886dbc97`) was taken at the
+published size. **This NVIDIA column is the first spectral column that is**, and
+spectral's Apple and CPU columns are owed again, which nothing had recorded.
+
+The batch part's negative control fired on every lane:
+`MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1` gives `BATCH_MOVED=6 of 6`, each naming
+the element that moved (`dbscan/base ... whole 0x00000001 vs alone 0x00000000`).
+
