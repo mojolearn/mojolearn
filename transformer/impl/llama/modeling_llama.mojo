@@ -761,7 +761,7 @@ def _download(
     return out^
 
 
-def _zeros(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+def _zeros[wait: Bool = True](ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
@@ -769,8 +769,9 @@ def _zeros(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
     step_count_launch()
     dev.enqueue_fill(Float32(0.0))
-    step_count_sync()
-    ctx.synchronize()
+    comptime if wait:
+        step_count_sync()
+        ctx.synchronize()
     return dev^
 
 
@@ -1296,43 +1297,49 @@ struct LlamaDeviceStages(Movable):
         var it = dims.intermediate
         var nh = dims.n_heads
         var nkv = dims.n_kv
-        self.norm1_sumsq = _zeros(ctx, m)
-        self.norm1_out = _zeros(ctx, m * dm)
-        self.q_proj = _zeros(ctx, m * qw)
-        self.k_proj = _zeros(ctx, m * kw)
-        self.v_proj = _zeros(ctx, m * kw)
-        self.q_rope = _zeros(ctx, m * qw)
-        self.k_rope = _zeros(ctx, m * kw)
+        self.norm1_sumsq = _zeros[False](ctx, m)
+        self.norm1_out = _zeros[False](ctx, m * dm)
+        self.q_proj = _zeros[False](ctx, m * qw)
+        self.k_proj = _zeros[False](ctx, m * kw)
+        self.v_proj = _zeros[False](ctx, m * kw)
+        self.q_rope = _zeros[False](ctx, m * qw)
+        self.k_rope = _zeros[False](ctx, m * kw)
         var sc = self.s_cap
         var cells = b * nh * l * sc
         var sbh_n = l * sc
         if lean:
             cells = 1
             sbh_n = 1
-        self.k_cache = _zeros(ctx, b * nkv * sc * hd)
-        self.v_cache = _zeros(ctx, b * nkv * sc * hd)
-        self.scores = _zeros(ctx, cells)
-        self.masked = _zeros(ctx, cells)
-        self.amax = _zeros(ctx, b * nh * l)
-        self.aexp = _zeros(ctx, cells)
-        self.denom = _zeros(ctx, b * nh * l)
-        self.weights = _zeros(ctx, cells)
-        self.ctxv = _zeros(ctx, m * qw)
-        self.o_proj = _zeros(ctx, m * dm)
-        self.residual1 = _zeros(ctx, m * dm)
-        self.norm2_sumsq = _zeros(ctx, m)
-        self.norm2_out = _zeros(ctx, m * dm)
-        self.gate_proj = _zeros(ctx, m * it)
-        self.up_proj = _zeros(ctx, m * it)
-        self.silu_out = _zeros(ctx, m * it)
-        self.gated = _zeros(ctx, m * it)
-        self.down_proj = _zeros(ctx, m * dm)
-        self.residual2 = _zeros(ctx, m * dm)
-        self.qbh = _zeros(ctx, l * hd)
-        self.kbh = _zeros(ctx, sc * hd)
-        self.sbh = _zeros(ctx, sbh_n)
+        self.k_cache = _zeros[False](ctx, b * nkv * sc * hd)
+        self.v_cache = _zeros[False](ctx, b * nkv * sc * hd)
+        self.scores = _zeros[False](ctx, cells)
+        self.masked = _zeros[False](ctx, cells)
+        self.amax = _zeros[False](ctx, b * nh * l)
+        self.aexp = _zeros[False](ctx, cells)
+        self.denom = _zeros[False](ctx, b * nh * l)
+        self.weights = _zeros[False](ctx, cells)
+        self.ctxv = _zeros[False](ctx, m * qw)
+        self.o_proj = _zeros[False](ctx, m * dm)
+        self.residual1 = _zeros[False](ctx, m * dm)
+        self.norm2_sumsq = _zeros[False](ctx, m)
+        self.norm2_out = _zeros[False](ctx, m * dm)
+        self.gate_proj = _zeros[False](ctx, m * it)
+        self.up_proj = _zeros[False](ctx, m * it)
+        self.silu_out = _zeros[False](ctx, m * it)
+        self.gated = _zeros[False](ctx, m * it)
+        self.down_proj = _zeros[False](ctx, m * dm)
+        self.residual2 = _zeros[False](ctx, m * dm)
+        self.qbh = _zeros[False](ctx, l * hd)
+        self.kbh = _zeros[False](ctx, sc * hd)
+        self.sbh = _zeros[False](ctx, sbh_n)
         self.attn_materialized = False
         self.attn_estash_cells = 0
+
+        # All 29 buffers are owned by self through this fence. Preserve every
+        # zero fill, but submit them together instead of waiting per buffer.
+        # See docs/NEURAL_METAL_DECODE.md for the lifetime boundary.
+        step_count_sync()
+        ctx.synchronize()
 
 
 def ensure_attention_stage_capacity(

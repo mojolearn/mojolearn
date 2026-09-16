@@ -40,8 +40,8 @@ result. It is the only download these helpers perform.
 
 `DeviceScanScratch` holds the partials buffer and its pinned host mirror
 so a step that runs ten scans allocates nothing per scan and waits twice
-per scan instead of four times. The free functions keep the allocate-per-
-call form for callers that scan once.
+per scan. The free nonfinite scan uses an owning host List and one wait;
+the free negative scan retains its pinned staging and four waits.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -187,8 +187,6 @@ def device_first_nonfinite(
     var blocks = _scan_blocks(n)
     step_count_device_alloc()
     var part = ctx.enqueue_create_buffer[DType.int32](blocks)
-    step_count_sync()
-    ctx.synchronize()
     step_count_launch()
     ctx.enqueue_function[nonfinite_partial_kernel](
         part.unsafe_ptr(),
@@ -197,20 +195,20 @@ def device_first_nonfinite(
         grid_dim=(blocks, 1, 1),
         block_dim=(SCAN_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
-    step_count_host_alloc()
-    var host = ctx.enqueue_create_host_buffer[DType.int32](blocks)
-    step_count_sync()
-    ctx.synchronize()
+    # The owning host List and device partials survive the single fence.
+    # Same-stream kernel -> copy ordering needs no intermediate host waits.
+    var host = List[Int32](length=blocks, fill=NONFINITE_NONE)
     step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
     step_count_sync()
     ctx.synchronize()
-    var best = _fold_partials(host, blocks)
+    var best = NONFINITE_NONE
+    for i in range(blocks):
+        if host[i] < best:
+            best = host[i]
     _ = host^
     _ = part^
-    return best
+    return -1 if best == NONFINITE_NONE else Int(best)
 
 
 def device_first_negative(
