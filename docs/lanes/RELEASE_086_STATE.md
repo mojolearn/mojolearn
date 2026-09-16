@@ -249,6 +249,20 @@ The lesson worth carrying: **a leg's column only leaves the box in the final fet
 that stops answering costs the whole leg no matter how much of it ran. The harness writing the
 JSON after every lane protects against a bounded run, not against a dark box.
 
+**AMD leg 3 runs with that fixed.** Two new scripts,
+`scripts/record_body_uploading.template.sh` and `scripts/make_record_body_uploading.sh`, are
+the same leg body plus a best-effort uploader: the column JSON is PUT to R2 every 120 s and
+once more when the run ends, through a short-lived presigned WRITE url that lands only in the
+body file. Every curl in it may fail and the run never depends on it; the ssh fetch stays the
+primary path. **If a box goes dark again, the partial column is in the `mojolearn-data`
+bucket** at `releases/0.8.6/partials/amd-leg-3.json`, recoverable with
+
+    sh tools/dataset_store.sh pull releases/0.8.6/partials/amd-leg-3.json <dest>
+
+so the loss becomes minutes instead of an hour. Leg 3 skips leg 1's 62 lanes and is bounded at
+2400 s of identity time like the others, which fits roughly 60 lanes, so a fourth AMD leg is
+expected for the remainder of the 130.
+
 Legs rent only from a CLEAN checkout: both runners refuse a dirty tree, so commit state-file
 edits before renting.
 
