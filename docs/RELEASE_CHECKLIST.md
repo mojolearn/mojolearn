@@ -176,6 +176,27 @@ pass its three output directories and the proofs directory through the
 attached and checked. Use `none` first to see the workflow's own checks
 without uploading.
 
+## 5b. The Apple identity column (THE ONE TIME IT IS TAKEN)
+
+The Apple column is recorded HERE, at the release, and nowhere else.
+Between releases it is not taken at all: routine verification goes on a
+rented CPU pod, which is bitwise equal to Metal, in parallel, at about
+$0.24/hour (`tools/runpod_cpu_leg.sh`). ENGINEERING_RULES.md section 12 has
+the reasoning; `tools/identity_break.py` enforces it and will REFUSE a
+full-column Apple run without the variable below.
+
+```sh
+# on the release Mac, one Metal job at a time, through the slot helper
+MOJOLEARN_APPLE_RELEASE_RECORD=<version> MOJOLEARN_NUMERIC_MODE=identical \
+  bash mac_slot.sh metal python3 tools/identity_break.py --json apple-m4.json
+```
+
+Budget more than seven hours for a full pass and do not start it behind other
+GPU work: it takes the Metal lock for its whole life and every other GPU job
+on the machine waits. The record runs `record_lanes()`; the `par-*` lanes are
+out of scope by declaration (`RECORD_EXCLUDED_PREFIXES`) and their two-device
+claim is made by the dedicated multi-GPU legs instead.
+
 ## 6. Publish macOS (on the release Mac, 30 to 60 minutes)
 
 ```sh

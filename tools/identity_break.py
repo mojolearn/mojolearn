@@ -751,7 +751,136 @@ LANES = {}
 #:              _tokenizer_synthetic.py). Host integer code, so one hash per
 #:              cell on every device class; the GPU columns are owed at the
 #:              next release record.
-LANE_REVISIONS = {"tokenizer": "synthetic-vocab-1"}
+#:   hdbscan, hdbscan-leaf  rows-4000-1 / rows-2000-1: the fixture row count
+#:              came down from 6000 (2026-09-16, lane/identity-fixtures-light).
+#:              6000 was inherited from the dbscan lane, not chosen. Measured
+#:              across 6000/4000/3000/2000/1500/1000/750, the Boruvka round
+#:              count these lanes HASH holds at 5 down to 4000 (excess-of-mass)
+#:              and to 2000 (leaf), and falls to 4 below, so each lane sits at
+#:              the smallest size that still reaches the fifth merge round.
+#:              Every committed column hashed the 6000-row fit, so those cells
+#:              read OWED to the next record rather than DIVERGENT.
+#: THE 2026-09-16 SHRINK (lane/identity-fixtures-light). Eleven more lanes had
+#: their fixture cut so a bitwise check stops costing a workload's time. Every
+#: committed column hashed the OLD input, so each entry here makes those cells
+#: read OWED to the next record instead of DIVERGENT against different bytes.
+#: The cut is per lane and the arithmetic knobs (tree counts, depths, losses,
+#: optimizer settings, seasonal period) are untouched; what came down is INPUT
+#: SIZE and STEP COUNT.
+LANE_REVISIONS = {
+    "tokenizer": "synthetic-vocab-1",
+    # rows: these lanes fitted the full 20,000 x 16 fixture
+    "gbdt-parametric-losses": "rows-1500-1",
+    "gbdt-nan-modes": "rows-1500-1",
+    "gbdt-lossguide-newtoncosine": "rows-1500-1",
+    "gbdt-pair-logit": "rows-1500-1",
+    # rows: O(n^2) neighbourhood work
+    "hdbscan": "rows-4000-1",
+    "hdbscan-leaf": "rows-2000-1",
+    "spectral": "rows-512-1",
+    # observations: 128 still carries many periods of the seasonal 12
+    "holtwinters": "obs-128-1",
+    # training steps: 3 AdamW steps -> 1
+    "byte-lm": "steps-1-1",
+    "byte-lm-resident": "steps-1-1",
+    "samba": "steps-1-1",
+    "samba-untied-dropout-accum": "steps-1-1",
+    # sequence length: the (2, 16, 32) slab -> (2, 8, 32)
+    "mamba2-dtlimit": "seqlen-8-1",
+}
+
+
+# ---------------------------------------------------------------- record scope
+# WHAT A RELEASE RECORD COVERS, and how often the Apple column may be taken.
+# Both were implicit before 2026-09-16 (lane/identity-fixtures-light): the
+# record's scope was "every lane this file defines", and how often to run the
+# Apple column was prose in a handoff. Both are stated here, in code, because
+# a rule that is not code is not a check.
+
+#: LANES A RELEASE RECORD DOES NOT COVER. Every `par-*` lane, for three
+#: measured reasons:
+#:   1. COST OUT OF PROPORTION. The `par-*` lanes were the whole remaining AMD
+#:      gap for 0.8.6: 28 of the 30 lanes that column never reached. The owed
+#:      lanes are a contiguous tail starting exactly at `par-arima`, and two
+#:      further 60-minute Hot Aisle leases got past none of them.
+#:   2. SEVERAL CANNOT BE COVERED HONESTLY AT ALL.
+#:      docs/lanes/LANE_STATUS_lane-cpu-training-par-wave3.md: par-byte-lm-
+#:      model-pool and par-byte-lm-offload compare host arithmetic with itself
+#:      under a pooled label, and 21 more are cooperative families whose split
+#:      lives inside the GPU binding with no host restatement.
+#:   3. IN A RECORD THEY ARE NOT EVEN THE TWO-DEVICE CLAIM. `_par_devices()`
+#:      defaults to device 0, so every `par-*` cell in a release record is a
+#:      ONE-device run. The drivers' actual claim, that two devices hash equal
+#:      to one, is made by the dedicated two-device legs, not by the record.
+#: This excludes them from a FULL-COLUMN run only. `--lanes` names lanes
+#: explicitly and is never filtered, so the two-device par legs and the CPU
+#: identity gate are unaffected.
+RECORD_EXCLUDED_PREFIXES = ("par-",)
+
+
+def record_excluded_lanes():
+    """The lanes a full-column release record does not run, sorted. Derived
+    from LANES at call time, never hand-listed."""
+    return sorted(n for n in LANES if n.startswith(RECORD_EXCLUDED_PREFIXES))
+
+
+def record_lanes():
+    """The lanes a full-column release record DOES run."""
+    return [n for n in LANES if not n.startswith(RECORD_EXCLUDED_PREFIXES)]
+
+
+#: THE APPLE COLUMN RUNS ONCE PER PyPI RELEASE, NEVER ROUTINELY.
+#:
+#: WHY. There is exactly ONE Mac with ONE GPU; only one Metal job may run at a
+#: time; it cannot be rented or parallelized. So an Apple column serializes
+#: behind every other GPU need on the machine and blocks all of it. A full
+#: pass measured over SEVEN HOURS on 2026-09-16 and was stopped at 125 of 158
+#: lanes.
+#:
+#: WHAT TO DO INSTEAD. The rented CPU column is BITWISE EQUAL to Metal, so
+#: routine and occasional verification belongs on a RunPod CPU pod at about
+#: $0.24/hour, in parallel, with small fixtures (tools/runpod_cpu_leg.sh,
+#: docs/RUNPOD_CPU_LEG.md). The only question the Apple column uniquely
+#: answers is whether the METAL BACKEND agrees, and that is a per-release
+#: question. Local Metal is for a lane proving its OWN new cells, one job at a
+#: time through the slot helper, never a full column.
+#:
+#: The guard below refuses a full-column Apple run unless this names the
+#: release it is being recorded for, for example
+#: MOJOLEARN_APPLE_RELEASE_RECORD=0.8.7.
+APPLE_RELEASE_RECORD_ENV = "MOJOLEARN_APPLE_RELEASE_RECORD"
+
+#: More lanes than this in ONE Apple process is a column, not a lane check.
+APPLE_COLUMN_LANE_LIMIT = 24
+
+
+def _is_apple_gpu(host):
+    """True on a Mac running the GPU (Metal) build. `host` is truthy only on
+    a CPU-only install, where this rule does not apply at all."""
+    return sys.platform == "darwin" and not host
+
+
+def refuse_routine_apple_column(lanes, host, env=None):
+    """The Apple column is a per-release artifact. Returns a refusal message
+    for a full-column Apple run outside a release, else ''."""
+    env = os.environ if env is None else env
+    if not _is_apple_gpu(host) or len(lanes) <= APPLE_COLUMN_LANE_LIMIT:
+        return ""
+    if env.get(APPLE_RELEASE_RECORD_ENV, "").strip():
+        return ""
+    return (
+        f"REFUSING: {len(lanes)} lanes in one Apple (Metal) process is a COLUMN, and the Apple "
+        f"column is recorded ONCE PER PyPI RELEASE, never routinely.\n"
+        f"  There is one Mac with one GPU, one Metal job at a time, and it cannot be rented or "
+        f"parallelized, so an Apple column blocks every other GPU need on this machine. A full "
+        f"pass measured over seven hours.\n"
+        f"  FOR ROUTINE VERIFICATION, use the rented CPU column, which is bitwise equal to Metal: "
+        f"tools/runpod_cpu_leg.sh (about $0.24/hour, runs in parallel). See docs/RUNPOD_CPU_LEG.md.\n"
+        f"  FOR ONE LANE's own cells, pass --lanes with at most {APPLE_COLUMN_LANE_LIMIT} lanes and "
+        f"take the Metal slot through mac_slot.sh.\n"
+        f"  IF THIS REALLY IS THE RELEASE RECORD, name the release: "
+        f"{APPLE_RELEASE_RECORD_ENV}=<version>."
+    )
 
 
 def stale_revision_lanes(record):
@@ -994,13 +1123,13 @@ def _(ml, X, yc, yr, Xh=None):
     # eigenpairs, degree scaling and centroids out of the fit and moves no
     # train byte; infer is predict on 256 held-out rows, the Nystrom
     # extension and the fit's k-means assignment (DEVIATION 2860).
-    m = ml.SpectralClustering(n_clusters=4, random_state=3, prediction_data=True).fit(X[:2000, :4])
+    m = ml.SpectralClustering(n_clusters=4, random_state=3, prediction_data=True).fit(X[:512, :4])
     return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("holtwinters")
 def _(ml, X, yc, yr, Xh=None):
-    series = (np.cumsum(X[:512, 0]) + 50.0).astype(np.float32)
+    series = (np.cumsum(X[:128, 0]) + 50.0).astype(np.float32)
     series = series - series.min() + 1.0     # positive, for the multiplicative path
     m = ml.ExponentialSmoothing(series, seasonal="additive", seasonal_periods=12).fit()
     # ExponentialSmoothing takes endog in the constructor and has no
@@ -1392,8 +1521,8 @@ def _(ml, X, yc, yr, Xh=None):
     named, _ = _byte_lm_params(shape)
     m = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
                                          shape=shape)
-    ids = _ids(X, 3 * shape.batch, shape.length + 1)
-    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(3)]
+    ids = _ids(X, 1 * shape.batch, shape.length + 1)
+    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(1)]
     return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(m.parameters_)),
                      logits=_h(np.asarray(m.logits(ids[:2, :-1])))),
                 m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))
@@ -1497,9 +1626,9 @@ def _(ml, X, yc, yr, Xh=None):
     surface is open. The checkpoint is the model column."""
     cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
-    ids = _ids(X, 6, 17)
+    ids = _ids(X, 2, 17)
     losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2, :-1], ids[2 * k:2 * k + 2, 1:])["loss"])
-              for k in range(3)]
+              for k in range(1)]
     params = m.parameters()
     return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
                      params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
@@ -1658,6 +1787,7 @@ def _(ml, X, yc, yr, Xh=None):
     """The ten losses no lane above fits, eight trees of depth four each:
     four take a mandatory parameter; CrossEntropy takes a probability
     target; the rest a positive target."""
+    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim (2026-09-16)
     y = _pos(yr)
     fits = {
         "Quantile": dict(), "MAE": dict(), "LogLinQuantile": dict(), "MAPE": dict(), "Poisson": dict(),
@@ -1679,6 +1809,7 @@ def _(ml, X, yc, yr, Xh=None):
     """NewtonCosine, the child-hessian and split-gain and leaf-count
     thresholds, column subsampling, random strength, Bernoulli bootstrap,
     gradient leaves with three iterations: one Lossguide fit."""
+    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim (2026-09-16)
     m = ml.GradientBoosting(n_estimators=20, max_leaves=32, grow_policy="Lossguide", loss="Logloss",
                             score_function="NewtonCosine", min_child_hessian=1.0, min_split_gain=0.01,
                             min_data_in_leaf=8, feature_fraction=0.5, random_strength=1.0,
@@ -1874,6 +2005,7 @@ def _(ml, X, yc, yr, Xh=None):
     """nan_mode Min and Max on a fixture that actually carries NaN
     (_with_nan); on a NaN-free column the quantizer collapses both to
     Forbidden, which is why no lane above could reach them."""
+    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim (2026-09-16)
     Xn = _with_nan(X)
     lo = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Min").fit(Xn, yc)
     hi = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Max").fit(Xn, yc)
@@ -1948,6 +2080,7 @@ def _(ml, X, yc, yr, Xh=None):
     `pairs` and `pairs_weight` (every third generated-style pair of the first
     40 queries, hashed weights), so both input paths are hashed. Predict is
     row-wise, so the held-out probe and the batch part apply."""
+    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim; 178 query groups remain (2026-09-16)
     g = _rank_groups(X.shape[0])
     rel = _relevance(yr)
     m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="PairLogit").fit(X, rel, group_id=g)
@@ -2046,8 +2179,8 @@ def _(ml, X, yc, yr, Xh=None):
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
     blk = ml.Mamba2Block(w, dt_limit=(0.01, 0.1))
-    parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
-    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+    parts = _block_fit(blk, _seq(X, 2, 8, dm), _seq(X, 2, 8, dm, skip=1024), {})
+    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 8, dm))),))
 
 
 @lane("transformer-window")
@@ -2075,8 +2208,8 @@ def _(ml, X, yc, yr, Xh=None):
     named, _ = _byte_lm_params(shape)
     m = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
                                          shape=shape, resident=True, step_result="lean")
-    ids = _ids(X, 3 * shape.batch, shape.length + 1)
-    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(3)]
+    ids = _ids(X, 1 * shape.batch, shape.length + 1)
+    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(1)]
     # The exported gradient of the last step, flat and per tensor. Hash the
     # ARRAYS: `export_gradients()` returns a dict holding a nested dict, and
     # `np.asarray` of a dict is a zero-dimensional object array whose bytes
@@ -2095,7 +2228,7 @@ def _(ml, X, yc, yr, Xh=None):
     s = ml.SmallByteLanguageModelTrainer(_byte_lm_params(shape)[0],
                                          data_schedule={"dataset": "identity_break", "order": "sequential"},
                                          shape=shape)
-    for k in range(3):
+    for k in range(1):
         stateless = s.train_step(ids[2 * k:2 * k + 2])
     _same_bytes("resident export_gradients()['flat_gradients']", flat,
                 "stateless train_step()['flat_gradients']", np.asarray(stateless["flat_gradients"]))
@@ -2132,9 +2265,9 @@ def _(ml, X, yc, yr, Xh=None):
                          tie_embeddings=False, dropout=0.1)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3, max_norm=1.0, accumulation_steps=4,
                       lr_schedule=ml.training.WarmupCosineLR(1e-3, warmup_steps=2, total_steps=8, min_lr=1e-5))
-    ids = _ids(X, 96, 17)
+    ids = _ids(X, 32, 17)
     losses = [np.float64(m.train_step(ids[32 * k:32 * k + 32, :-1], ids[32 * k:32 * k + 32, 1:])["loss"])
-              for k in range(3)]
+              for k in range(1)]
     params = m.parameters()
     return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
                      params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
@@ -2900,7 +3033,14 @@ def _(ml, X, yc, yr, Xh=None):
     held-out rows (hdbscan.pyx:1264, predict.cuh:220-262), then
     membership_vector on the same rows and all_points_membership_vectors
     (hdbscan.pyx:1180, :1114, soft_clustering.cuh:385-627, DEVIATION 1616)."""
-    m = ml.HDBSCAN(min_cluster_size=5, prediction_data=True).fit(X[:6000, :4])
+    # 4000 rows, not 6000 (2026-09-16, lane/identity-fixtures-light). The row
+    # count is a fixture size, not a claim, and 6000 was inherited from the
+    # dbscan lane rather than chosen. MEASURED across 6000/4000/3000/2000/
+    # 1500/1000/750: the Boruvka round count, which this lane HASHES, holds at
+    # 5 down to 4000 and falls to 4 at 3000, so 4000 is the smallest size that
+    # still reaches the fifth merge round. Below it the lane would hash a
+    # structurally different fit. Costs 2.9 s instead of 6.4 s to build.
+    m = ml.HDBSCAN(min_cluster_size=5, prediction_data=True).fit(X[:4000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
                 m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
@@ -2913,8 +3053,14 @@ def _(ml, X, yc, yr, Xh=None):
     min_samples below min_cluster_size and allow_single_cluster, the
     other selection arm and the two knobs that change which condensed
     clusters become labels."""
+    # 2000 rows, not 6000 (2026-09-16, lane/identity-fixtures-light), by the
+    # same measurement as the hdbscan lane above. The leaf arm holds its
+    # Boruvka round count at 5 all the way down to 2000 and falls to 4 at
+    # 1500, so 2000 is its floor; it keeps 19 clusters and 37 condensed
+    # clusters there, a structure with plenty left to disagree about. Costs
+    # 0.7 s instead of 6.2 s to build.
     m = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf", allow_single_cluster=True,
-                   prediction_data=True).fit(X[:6000, :4])
+                   prediction_data=True).fit(X[:2000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
                 m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
@@ -3887,7 +4033,16 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """fit_hdbscan on the hdbscan lane's configuration (the neighbors and
     hierarchy row drivers under _par_devices()), held to the plain fit's
-    labels and core distances."""
+    labels and core distances.
+
+    ROWS: this lane keeps 6000 while the plain hdbscan lane came down to 4000
+    (2026-09-16, lane/identity-fixtures-light). Deliberate, and it breaks
+    nothing: this lane builds BOTH sides of its own comparison at the same
+    size, so `_same_bytes` below still compares like with like. It was left
+    alone because `par-*` is out of the release record's scope
+    (RECORD_EXCLUDED_PREFIXES), so shrinking it would buy no column time while
+    costing another hash revision. "The hdbscan lane's configuration" means
+    its estimator settings, not its row count."""
     from mojolearn.parallel_classical import fit_hdbscan
     par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
     plain = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
@@ -6364,6 +6519,19 @@ def _run_reference(args):
     lanes = [n for n in lanes if n not in skip]
     if skip:
         print(f"# SKIPPED on request: {sorted(skip)}")
+    # THE RELEASE RECORD'S SCOPE (RECORD_EXCLUDED_PREFIXES, above). A
+    # FULL-COLUMN run leaves these out. `--lanes` names lanes explicitly and is
+    # never filtered here, so the two-device par legs and the CPU identity
+    # gate, which both pass --lanes, are unaffected.
+    if not args.lanes:
+        out_of_scope = [n for n in lanes if n.startswith(RECORD_EXCLUDED_PREFIXES)]
+        if out_of_scope:
+            lanes = [n for n in lanes if n not in out_of_scope]
+            print(f"# OUT OF RECORD SCOPE ({len(out_of_scope)} lanes): {sorted(out_of_scope)}")
+    # THE APPLE COLUMN IS RECORDED ONCE PER PyPI RELEASE, NEVER ROUTINELY.
+    _apple_refusal = refuse_routine_apple_column(lanes, host)
+    if _apple_refusal:
+        raise SystemExit(_apple_refusal)
     fixtures = [f for f in FIXTURES if not args.fixtures or f in args.fixtures.split(",")]
     data = {f: fixture(f) for f in fixtures}
     held = {f: heldout(f) for f in fixtures}
