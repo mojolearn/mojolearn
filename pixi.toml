@@ -1110,6 +1110,20 @@ check-kde = "mojo run -I . kde/checks/kde_check.mojo"
 # preconditions and the pre-tokenizer reach arms. Host integers and tables
 # only -- no device, no float, so there is no IDENTICAL arm to run.
 check-tokenizer = "sh tokenizer/tools/gen_unicode_table.sh && python3 python/mojolearn/_tokenizer_synthetic.py build/tokenizer_synthetic && mojo run -I . tokenizer/checks/tokenizer_check.mojo"
+# THE VOCABULARY TRAINER GATE (the BPE trainer lane, 2026-09-16). The Mojo
+# trainer (tokenizer/train/bpe_train.mojo) against an independent Python
+# implementation of the same stated algorithm (python/mojolearn/
+# _bpe_trainer.py), FILE BYTE FOR FILE BYTE, in both output formats: ours
+# (rank<TAB>hex) and the ecosystem's (tokenizer.json). Host integers only --
+# vocabulary training has no GPU path anywhere, so there is no vendor column;
+# the property is that the same corpus and config give the same vocabulary
+# bytes on any machine. The gate also asserts the tie-break was REACHED
+# (n_ties_broken > 0), without which the sabotage arm below is inert.
+check-bpe-trainer = "sh tokenizer/tools/gen_unicode_table.sh && python3 python/mojolearn/_bpe_trainer.py build/bpe_trainer && mojo run -I . tokenizer/checks/trainer_check.mojo"
+# THE NEGATIVE CONTROL, which must be SEEN TO FAIL. Reverses ONLY the
+# tie-break, so a fixture that never reaches a tie leaves it INERT and the
+# run reports that rather than passing quietly.
+check-bpe-trainer-sabotage = "sh tokenizer/tools/gen_unicode_table.sh && python3 python/mojolearn/_bpe_trainer.py build/bpe_trainer && mojo run -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1 -I . tokenizer/checks/trainer_check.mojo"
 # THE METRIC LANE, 2026-09-01. `CosineExpanded`, `LpUnexpanded` and
 # `weights='distance'`: the eight implemented DistanceType values against a
 # float32 second spelling and a float64 reference computed a third way,

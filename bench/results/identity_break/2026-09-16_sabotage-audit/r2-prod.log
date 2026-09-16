@@ -1,0 +1,21 @@
+# vendor=cpu-apple-m4 commit=f78a0accb1f68f50fafb362404718076c5275e6b (git rev-parse HEAD) host.cpu_model='Apple M4' host.column=cpu host.families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_linalg_host', '_mojolearn_resample_host']
+# identity_break  mode=identical  2026-09-16 05:42:04  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             |
+|------------------------|------------------|------------------|
+| gemm-pinned            | 931036cbc84c1ce0 | 8ddd60b67526c1b1 |
+| gemm-pinned batch      | 85316c17ab632377 | f78018508fcdfa72 |
+| gemm-transposed        | ddc8b55e6cddf5de | e13a4a9f5dad6f79 |
+| gemm-transposed batch  | a06324eb1ab8f7cd | d8743261f9c7c6aa |
+| bootstrap              | e667d4d38362620d | 530b26bb09ee258a |
+| bootstrap batch        | cbde033336be3e1e | e1decff8099fa142 |
+| permutation-test       | 408ab7719820a671 | 82777b8257df6db9 |
+| permutation-test batch | b7e7c03b9f400ef8 | bec37fa614e5f274 |
+| monte-carlo            | a357a971a19d7a8d | d01e1c76c3f79545 |
+
+cells=10 stable=10 moved=0 refused=0
+infer: n/a=10
+model: n/a=10
+batch: stable=8 n/a=2
+n/a: bootstrap infer n/a:function, bootstrap model n/a:no-save, gemm-pinned infer n/a:function, gemm-pinned model n/a:no-save, gemm-transposed infer n/a:function, gemm-transposed model n/a:no-save, monte-carlo batch n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against), monte-carlo infer n/a:function, monte-carlo model n/a:no-save, permutation-test infer n/a:function, permutation-test model n/a:no-save
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-sabaudit/r2-prod.json
