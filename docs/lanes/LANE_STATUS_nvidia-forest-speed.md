@@ -11,6 +11,16 @@ that our forest speed on NVIDIA was never missing.
 No GPU was rented. **Spend for this lane: $0.00.** Section 6 says what a box
 would still buy and what it would cost, so that call can be made separately.
 
+**TIER. Every one of our numbers here is the IDENTICAL arm**, and every cell
+is labelled with the `FSPEED-HEADER mode=` it was recorded under. Our FAST
+arm is not measured, tuned or compared in this lane, per the standing rule
+(`forget-our-own-fast-tier`, Andrew 2026-09-12). The opponents are quoted at
+their own fastest configurations, which is the comparison that pays. The one
+place `FAST` appears against a number below is the container label on cuML's
+Aug 28 cell, which is the mojolearn tier the harness ran under and does not
+change cuML's own configuration. Section 5f says what this lane would owe
+the deferred trees fast-path lane, which is nothing.
+
 ---
 
 ## 1. The comparison the lane was opened on compares two different benchmarks
@@ -139,8 +149,11 @@ opponent here`).
 ExtraTrees has no GPU opponent at all: `bench/speed/forest_speed_arm.py`
 runs the `et` lane ours-only, and LightGBM's `extra_trees` arm is recorded
 INVALID in `OPPONENT_REFERENCE.md` (181 s / 227 s single samples, plus a
-build refusal). Our ET cells, FAST tier, Aug 28: 4349 ms at 1M, 7316 at 2M,
-14826 at 5M.
+build refusal). Our ET cells on H100, IDENTICAL, five rounds each: HIGGS 1M
+3313.5 ms and 2M 6099.4 ms (Sep 10,
+`h100_2026-09-10/speed/baseline.et.higgs.r*.ours.log`), Istella 1M 6044.5 ms
+(Sep 11, `h100_2026-09-11_istella/speed/baseline.et.istella.r1000000.ours.log`).
+There is nothing to compare them against.
 
 ---
 
@@ -335,6 +348,25 @@ unreplicated. A predicted 2.8% with three structural blockers in front of it
 is not worth a build, so **no "after" measurement exists and no flag was
 added.** That is the lane's answer.
 
+### 5f. Nothing is owed to the deferred trees fast-path lane
+
+Asked explicitly: would subtraction help our FAST arm more than our IDENTICAL
+arm? No, and the reason is that the blocker is not a numeric-tier property.
+
+There is one forest builder and one column sampler. `sampled_column_at` is a
+single `@always_inline` body that both `sample_features_kernel` and the fused
+`phase_setup_kernel` import rather than restate
+(`kernels/builder_kernels.mojo:303-308`,
+`kernels/builder_kernels_impl.mojo:730-731`). The tier difference in
+`ensemble/randomforest.mojo` is that FAST never enqueues the FTZ features
+kernel (`:1272`, `:2451`); it is not a different sampler, a different
+histogram layout or a different growth algorithm. So the 18.1% column-overlap
+ceiling, the ten-column residency window and the in-place `pdf_to_cdf` all
+apply identically to FAST.
+
+**This lane therefore hands the deferred fast-path lane nothing**, and no
+FAST number was taken to establish that.
+
 ---
 
 ## 6. Where forest speed work should go instead
@@ -391,6 +423,9 @@ was to report rather than spend. That call is left open.
   lower than RF's, not higher: it has no bin histogram to subtract, and its
   one random threshold per node and feature is redrawn per node, so there is
   nothing a parent could hand a child even if the columns matched.
+- **Our FAST arm is not measured here at all**, by the standing rule. If a
+  future lane wants a forest FAST number it must take its own; none is
+  quoted or implied above.
 - **One-box, one-vendor.** No AMD or Apple column was taken; none was needed,
   because the blocker is in the host-side algorithm and is vendor-neutral.
 
