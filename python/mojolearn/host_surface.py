@@ -200,6 +200,18 @@ CLASSICAL_RECORDED = (
     # svr-linear, recorded on the M4's Metal set on all nine fixtures. The
     # NVIDIA and AMD recordings are owed to the next release record.
     "bench/results/classical_host/2026-09-15-apple-m4-svm",
+    # lane/saved-model-reference-gaps (2026-09-16): dbscan, agglomerative,
+    # spectral and spectral-precomputed, the four predicts that shipped on
+    # 2026-09-15 with no recording at all, on all nine fixtures each. Recorded
+    # on a RunPod NVIDIA A100 (sm_80), which is the first recording in this
+    # list taken anywhere but the M4; `check` on the same box read
+    # `gate verdict IDENTICAL (36 fixtures, exit 0)` and the predict-only
+    # sabotage host set read `EXPECTED MISMATCH SEEN` with `unmoved` EMPTY
+    # under --every-fixture, so every one of the 36 cells was watched to fail
+    # before it was believed. The Apple and AMD recordings are owed to the
+    # next release record; the identity columns behind these cells are
+    # bench/results/identity_break/2026-09-16_predict-nvidia.
+    "bench/results/classical_host/2026-09-16-nvidia-predict",
 )
 
 #: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
@@ -1192,6 +1204,10 @@ FAMILIES = (
             "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler", "pca-full-whiten",
             "kde-tophat-sqeuclidean", "kde-epanechnikov-l1", "kde-exponential-chebyshev",
             "kde-linear-cosine", "kde-cosine-minkowski", "kde-weighted",
+            # lane/saved-model-reference-gaps (2026-09-16): DBSCAN.predict and
+            # AgglomerativeClustering.predict from a saved model, both through
+            # `labeled_reference_predict` on this binding (DEVIATION 2740).
+            "dbscan", "agglomerative",
         ),
         forest_kinds=(),
         classes=(
@@ -1258,7 +1274,11 @@ FAMILIES = (
         # umap-pca, 2026-09-15). Its answer depends on the query batch by the
         # transform's contract, so the claim is the GPU's bytes for the same
         # batch; `inference_display` says so in the README sentence.
-        inference_lanes=("umap",),
+        # SpectralClustering.predict joins it (lane/saved-model-reference-gaps,
+        # 2026-09-16, DEVIATION 2860): the Nystrom extension from a saved
+        # `prediction_data=True` fit, through `spectral_predict` on this
+        # binding, for both affinities the estimator accepts.
+        inference_lanes=("umap", "spectral", "spectral-precomputed"),
         inference_display="UMAP transform of a saved embedding (the GPU's bytes for the same query batch; a row's embedding depends on the batch it is asked in)",
         forest_kinds=(),
         classes=(
@@ -2494,29 +2514,25 @@ PUBLIC_REFERENCE_CANDIDATES = (
 #: reference. Every entry here is therefore waiting on ONE thing, a GPU
 #: recording, not on code. They are listed so the gap is in the file rather
 #: than only in the reader's head.
+#:
+#: lane/saved-model-reference-gaps (2026-09-16) emptied this list of the four
+#: entries it took a GPU box for: `dbscan`, `agglomerative`, `spectral` and
+#: `spectral-precomputed` are declared inference lanes now, recorded at
+#: bench/results/classical_host/2026-09-16-nvidia-predict. That lane also
+#: found WHY none of them had a recording: `classical_host_gate.py record`
+#: had been raising AttributeError on main since `--lane-rule-only` was added,
+#: ahead of every other refusal, so the tool that makes a recording could not
+#: start. `kmeans` is left, and lane/kmeans-save gave it the `save` it was
+#: missing, so it is now waiting on the same one thing the other four were.
 SAVED_MODEL_INFERENCE_OWED = {
-    "dbscan": "DBSCAN.predict shipped with lane/inference-transductive-predict (DEVIATION 2740) "
-              "and mojolearn-dbscan-1 is in _classical_host._FORMATS; the GPU recording under "
-              "bench/results/classical_host/ is owed.",
-    "agglomerative": "AgglomerativeClustering.predict shipped with the same lane and "
-                     "mojolearn-agglomerative-1 is dispatched; the GPU recording is owed.",
-    "spectral": "SpectralClustering.predict shipped with lane/spectral-predict (DEVIATION 2860, "
-                "docs/lanes/DESIGN_spectral_predict_2026-09-15.md) and mojolearn-spectral-1 is "
-                "dispatched; the GPU recording is owed. Training-row agreement is measured, not "
-                "promised (0.9874), which is a property of the Nystrom extension, not a defect. "
-                "NOTE: this lane was shrunk from 2000 rows to 512 by the fixture shrink "
-                "(e2bb9e541), so the recording is owed AT THE NEW SIZE and any cell taken before "
-                "that commit is superseded.",
-    "spectral-precomputed": "The same predict on a precomputed affinity, the same saved "
-                            "mojolearn-spectral-1 file, the caller passing the (n_new, n_train) "
-                            "affinity instead of the fit's k-NN graph; the GPU recording is owed.",
     "kmeans": "KMeans.predict and KMeans.transform shipped with lane/kmeans-predict, and "
               "lane/kmeans-save (2026-09-16) gave the class `save` and `load`: "
               "mojolearn-kmeans-1 is in _classical_host._FORMATS and host_model returns a "
               "HostKMeans on _mojolearn_core_host. What is left is the GPU recording under "
-              "bench/results/classical_host/, as for dbscan, agglomerative and spectral. The "
-              "one format carries every k-means lane (the metric and the start are members of "
-              "the file, not tags of their own), so the kmeans, kmeans-random, kmeans-array, "
+              "bench/results/classical_host/, as it was for dbscan, agglomerative and "
+              "spectral until lane/saved-model-reference-gaps took theirs. The one format "
+              "carries every k-means lane (the metric and the start are members of the file, "
+              "not tags of their own), so the kmeans, kmeans-random, kmeans-array, "
               "kmeans-weighted, kmeans-sqrt and kmeans-classic-pp lanes all load through it.",
 }
 

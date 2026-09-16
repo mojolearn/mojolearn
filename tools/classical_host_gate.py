@@ -89,6 +89,29 @@ def _approximate_predict(e, X):
         membership_vector(e, X[:, :4]), all_points_membership_vectors(e))
 
 
+#: Lanes whose probe needs the fixture KIND beside the held-out rows
+#: (lane/saved-model-reference-gaps, 2026-09-16). Every other probe is called
+#: `probe(model, Xh)`; these are called `probe(model, Xh, kind)`.
+KIND_PROBES = ('spectral-precomputed',)
+
+
+def _spectral_precomputed_probe(e, X, kind):
+    """identity_break's `spectral-precomputed` infer probe: predict on the
+    affinity of the held-out rows to that lane's 1000 training rows, under
+    `_cross_affinity`'s rule with the training matrix's threshold.
+
+    identity_break stashes the matrix on the FITTED estimator
+    (`_identity_heldout_affinity`); a model reloaded from disk carries no fit
+    rows at all for a precomputed affinity, so this rebuilds it from the
+    fixture instead of reading the attribute. `do_record` requires the hash it
+    produces to equal identity_break's own, which is what would catch a
+    rebuild that did not reproduce those bytes.
+    """
+    ib = identity_tool()
+    P = ib.fixture(kind)[0][:1000, :4]
+    return (e.predict(ib._cross_affinity(X[:, :4], P)),)
+
+
 #: The surfaces every ARIMA lane adds beside its identity probe.
 _ARIMA_EXTRAS = {
     'predict_in_sample': lambda e, X: e.predict(0, e.n_obs_),
@@ -374,6 +397,19 @@ LANES = {
                  {'predict': lambda e, X: e.predict(X)}),
     'svr': ('SVR', lambda e, X: (e.predict(X),), {}),
     'svr-linear': ('SVR', lambda e, X: (e.predict(X),), {}),
+    # lane/saved-model-reference-gaps (2026-09-16): the saved-model route of
+    # the three predicts that shipped on 2026-09-15 and that no gate covered.
+    # DBSCAN and AgglomerativeClustering are DEVIATION 2740
+    # (lane/inference-transductive-predict), SpectralClustering is DEVIATION
+    # 2860 (lane/spectral-predict). Each probe is its identity_break lane's
+    # infer probe, on the first four columns of the held-out rows.
+    'dbscan': ('DBSCAN', lambda e, X: (e.predict(X[:, :4]),), {}),
+    'agglomerative': ('AgglomerativeClustering', lambda e, X: (e.predict(X[:, :4]),), {}),
+    'spectral': ('SpectralClustering', lambda e, X: (e.predict(X[:, :4]),), {}),
+    # The precomputed arm predicts on an (n_new, n_train) affinity, not on
+    # rows, so its probe is built from the fixture as well as the held-out
+    # draw; see KIND_PROBES.
+    'spectral-precomputed': ('SpectralClustering', _spectral_precomputed_probe, {}),
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'logistic': 'predict_proba', 'pca': 'transform',
@@ -396,7 +432,9 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'nystroem': 'transform', 'rbf-sampler': 'transform',
                'ivf': 'search_distances', 'ivf-euclidean': 'search_distances', 'embedding': 'forward', 'ivf-extend': 'search_distances',
                'svc-linear': 'decision_function', 'svc-poly': 'decision_function',
-               'svr': 'predict', 'svr-linear': 'predict'}
+               'svr': 'predict', 'svr-linear': 'predict',
+               'dbscan': 'predict', 'agglomerative': 'predict',
+               'spectral': 'predict', 'spectral-precomputed': 'predict'}
 PROBE_NAMES.update({lane: {'NearestNeighbors': 'kneighbors_distances', 'KNeighborsClassifier': 'predict',
                            'KNeighborsRegressor': 'predict', 'RadiusNeighbors': 'radius_neighbors_counts',
                            'KernelDensity': 'score_samples', 'IsolationForest': 'score_samples',
@@ -457,17 +495,18 @@ def held_out(ib, kind, lane=None):
     return Xh, sha256_bytes(Xh.tobytes())
 
 
-def digests_for(lane, model, Xh, ib):
+def digests_for(lane, model, Xh, ib, kind):
     """Every surface's `(sha256, dtype, shape)`, the identity_break hash of
     the identity probe, and the seconds spent."""
     _, probe, extras = LANES[lane]
     out = {}
     started = time.perf_counter()
-    outputs = probe(model, Xh)
+    outputs = probe(model, Xh, kind) if lane in KIND_PROBES else probe(model, Xh)
     out['identity_hash'] = ib._h(*outputs)
     out[PROBE_NAMES[lane]] = dict(zip(('sha256', 'dtype', 'shape'), digest_prediction(outputs[0])))
     for name, fn in extras.items():
-        out[name] = dict(zip(('sha256', 'dtype', 'shape'), digest_prediction(fn(model, Xh))))
+        extra = fn(model, Xh, kind) if lane in KIND_PROBES else fn(model, Xh)
+        out[name] = dict(zip(('sha256', 'dtype', 'shape'), digest_prediction(extra)))
     out['seconds'] = round(time.perf_counter() - started, 6)
     return out
 
@@ -509,7 +548,7 @@ def do_record(args):
                 print(f'gate: lane {lane} fitted {type(model).__name__}, not {estimator}', file=sys.stderr)
                 return 2
             Xh, x_sha = held_out(ib, kind, lane)
-            gpu = digests_for(lane, model, Xh, ib)
+            gpu = digests_for(lane, model, Xh, ib, kind)
             # The identity_break probe on the fitted model must agree with
             # the tool's own infer cell for this fit, or the probe here is
             # not that column's.
@@ -521,7 +560,7 @@ def do_record(args):
             model_path = directory / 'model.npz'
             model.save(str(model_path))
             back = type(model).load(str(model_path))
-            reload = digests_for(lane, back, Xh, ib)
+            reload = digests_for(lane, back, Xh, ib, kind)
             for key in gpu:
                 if key == 'seconds':
                     continue
@@ -631,7 +670,7 @@ def do_check(args):
             return 2
         try:
             model = host_model(str(model_path))
-            got = digests_for(lane, model, Xh, ib)
+            got = digests_for(lane, model, Xh, ib, kind)
         except Exception as exc:
             print(f'gate: {directory} host predict failed: {type(exc).__name__}: {exc}', file=sys.stderr)
             return 2
@@ -733,7 +772,15 @@ def main():
     chk.add_argument('--lane-rule-only', action='append', default=[], metavar='LANE',
                      help='with --every-fixture, this lane keeps the --every-lane rule, by name (repeatable)')
     args = parser.parse_args()
-    if args.lane_rule_only and not args.every_fixture:
+    # `--lane-rule-only` belongs to the CHECK subparser only, so a `record`
+    # Namespace has no such attribute and reading it unguarded raised
+    # AttributeError before do_record ran a line. That is how the four predict
+    # lanes came to have no recording: the tool that makes one had been
+    # unusable since the flag was added (lane/ties-sabotage, 2026-09-15), and
+    # the crash is in main(), ahead of every other refusal, so it reached a
+    # rented GPU box on 2026-09-16 and cost it its recording phase
+    # (lane/saved-model-reference-gaps).
+    if getattr(args, 'lane_rule_only', None) and not args.every_fixture:
         parser.error('--lane-rule-only needs --every-fixture')
     if args.command == 'record':
         return do_record(args)

@@ -1,0 +1,143 @@
+NOTE: column apple-m4 hashed byte-lm, byte-lm-resident, gbdt-lossguide-newtoncosine, gbdt-nan-modes, gbdt-pair-logit, gbdt-parametric-losses, hdbscan, hdbscan-leaf, holtwinters, mamba2-dtlimit, samba, samba-untied-dropout-accum, spectral, tokenizer at an older lane revision (LANE_REVISIONS); its 2 cell(s) there are not compared and read as absent
+NOTE: column cpu-amd-epyc-9754-128-core-processor hashed byte-lm, byte-lm-resident, gbdt-lossguide-newtoncosine, gbdt-nan-modes, gbdt-pair-logit, gbdt-parametric-losses, hdbscan, hdbscan-leaf, holtwinters, mamba2-dtlimit, samba, samba-untied-dropout-accum, spectral, tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 2 lane(s); 4 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9754-128-core-processor is a CPU column: cpu_model='AMD EPYC 9754 128-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_metrics_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host'] commit=0a6957015651d05a9dff94668ac843b8202a3c23
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '5061056b118d07d0'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '5061056b118d07d0'}
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': 'a8c3d1a560b5cabb'}
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'e4b16c115962dfcd'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': 'e4b16c115962dfcd'}
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '9dc786ade4574aff'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '9dc786ade4574aff'}
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '45b539a3f66ce25d'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '45b539a3f66ce25d'}
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': '32ea0bbed60b8e6c'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '32ea0bbed60b8e6c'}
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    apple-m4: None
+    cpu-amd-epyc-9754-128-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': 'd52a1af18a3c2f1c'}
+| lane/fixture                 | verdict    | apple-m4         | cpu-amd-epyc-9754-128-core-processor | nvidia-nvidia-rtx-2000-ada-gene-sm_89 |
+|------------------------------|------------|------------------|------------------|------------------|
+| spectral-precomputed/base    | IDENTICAL x3 | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf |
+| spectral-precomputed/denormal | IDENTICAL x2 | (not run)        | 134d1fdd8654374a | 134d1fdd8654374a |
+| spectral-precomputed/denormal_ftz | IDENTICAL x2 | (not run)        | 134d1fdd8654374a | 134d1fdd8654374a |
+| spectral-precomputed/dupes   | IDENTICAL x2 | (not run)        | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf |
+| spectral-precomputed/hashed  | IDENTICAL x2 | (not run)        | fafd67318e66c8e9 | fafd67318e66c8e9 |
+| spectral-precomputed/negative | IDENTICAL x2 | (not run)        | 6231ccf8fca2283f | 6231ccf8fca2283f |
+| spectral-precomputed/odd     | IDENTICAL x2 | (not run)        | bbe40df82c9e623a | bbe40df82c9e623a |
+| spectral-precomputed/ties    | IDENTICAL x3 | 32ed236da838cb22 | 32ed236da838cb22 | 32ed236da838cb22 |
+| spectral-precomputed/wide    | IDENTICAL x2 | (not run)        | ebeb9c5c4008a66d | ebeb9c5c4008a66d |
+| spectral/base                | ONE-COLUMN | (not run)        | (not run)        | 112c7b0d7556a6ff |
+| spectral/denormal            | ONE-COLUMN | (not run)        | (not run)        | 96081e4016bb85b3 |
+| spectral/denormal_ftz        | ONE-COLUMN | (not run)        | (not run)        | 96081e4016bb85b3 |
+| spectral/dupes               | ONE-COLUMN | (not run)        | (not run)        | 112c7b0d7556a6ff |
+| spectral/hashed              | ONE-COLUMN | (not run)        | (not run)        | 63111a283f247f0c |
+| spectral/negative            | ONE-COLUMN | (not run)        | (not run)        | 0ae906c32d701fe3 |
+| spectral/odd                 | ONE-COLUMN | (not run)        | (not run)        | c8c26f83355366a6 |
+| spectral/ties                | ONE-COLUMN | (not run)        | (not run)        | 3976be59c005d8f8 |
+| spectral/wide                | ONE-COLUMN | (not run)        | (not run)        | a65623b09f32292e |
+
+summary: IDENTICAL=9, ONE-COLUMN=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-amd-epyc-9754-128-core-processor | nvidia-nvidia-rtx-2000-ada-gene-sm_89 |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| spectral-precomputed/base    | infer  | IDENTICAL x3 | bb2835f47f32e74d | bb2835f47f32e74d | bb2835f47f32e74d |
+| spectral-precomputed/base    | model  | IDENTICAL x3 | 6b04b89cfa623e45 | 6b04b89cfa623e45 | 6b04b89cfa623e45 |
+| spectral-precomputed/base    | batch  | IDENTICAL x3 | 403839d9afb03ede | 403839d9afb03ede | 403839d9afb03ede |
+| spectral-precomputed/denormal | infer  | IDENTICAL x2 | (not run)        | 7cd8401e0437ce89 | 7cd8401e0437ce89 |
+| spectral-precomputed/denormal | model  | IDENTICAL x2 | (not run)        | 0df4233607620b15 | 0df4233607620b15 |
+| spectral-precomputed/denormal | batch  | IDENTICAL x2 | (not run)        | 600fc84e875132a6 | 600fc84e875132a6 |
+| spectral-precomputed/denormal_ftz | infer  | IDENTICAL x2 | (not run)        | 7cd8401e0437ce89 | 7cd8401e0437ce89 |
+| spectral-precomputed/denormal_ftz | model  | IDENTICAL x2 | (not run)        | 0df4233607620b15 | 0df4233607620b15 |
+| spectral-precomputed/denormal_ftz | batch  | IDENTICAL x2 | (not run)        | 600fc84e875132a6 | 600fc84e875132a6 |
+| spectral-precomputed/dupes   | infer  | IDENTICAL x2 | (not run)        | bb2835f47f32e74d | bb2835f47f32e74d |
+| spectral-precomputed/dupes   | model  | IDENTICAL x2 | (not run)        | 6b04b89cfa623e45 | 6b04b89cfa623e45 |
+| spectral-precomputed/dupes   | batch  | IDENTICAL x2 | (not run)        | 403839d9afb03ede | 403839d9afb03ede |
+| spectral-precomputed/hashed  | infer  | IDENTICAL x2 | (not run)        | 3aed3a887e2b0c41 | 3aed3a887e2b0c41 |
+| spectral-precomputed/hashed  | model  | IDENTICAL x2 | (not run)        | 57673edfae833da5 | 57673edfae833da5 |
+| spectral-precomputed/hashed  | batch  | IDENTICAL x2 | (not run)        | f37e31ace943997d | f37e31ace943997d |
+| spectral-precomputed/negative | infer  | IDENTICAL x2 | (not run)        | 423f584e1c5cce33 | 423f584e1c5cce33 |
+| spectral-precomputed/negative | model  | IDENTICAL x2 | (not run)        | 8ff2c152fc6fba9f | 8ff2c152fc6fba9f |
+| spectral-precomputed/negative | batch  | IDENTICAL x2 | (not run)        | 43d927a591f2c6fa | 43d927a591f2c6fa |
+| spectral-precomputed/odd     | infer  | IDENTICAL x2 | (not run)        | dce8f63e8bca9703 | dce8f63e8bca9703 |
+| spectral-precomputed/odd     | model  | IDENTICAL x2 | (not run)        | c9fda73cee1e07c0 | c9fda73cee1e07c0 |
+| spectral-precomputed/odd     | batch  | IDENTICAL x2 | (not run)        | b7fdd3972dd692b3 | b7fdd3972dd692b3 |
+| spectral-precomputed/ties    | infer  | IDENTICAL x3 | 77b660ca4b2a42e2 | 77b660ca4b2a42e2 | 77b660ca4b2a42e2 |
+| spectral-precomputed/ties    | model  | IDENTICAL x3 | ea7aeb5dfe06471c | ea7aeb5dfe06471c | ea7aeb5dfe06471c |
+| spectral-precomputed/ties    | batch  | IDENTICAL x3 | eba1461e59f20122 | eba1461e59f20122 | eba1461e59f20122 |
+| spectral-precomputed/wide    | infer  | IDENTICAL x2 | (not run)        | c0ba56eeb5dcea34 | c0ba56eeb5dcea34 |
+| spectral-precomputed/wide    | model  | IDENTICAL x2 | (not run)        | 710be55734b0c960 | 710be55734b0c960 |
+| spectral-precomputed/wide    | batch  | IDENTICAL x2 | (not run)        | 73a372dffb458803 | 73a372dffb458803 |
+| spectral/base                | infer  | ONE-COLUMN   | (not run)        | (not run)        | a7f3488317ff571e |
+| spectral/base                | model  | ONE-COLUMN   | (not run)        | (not run)        | 3e34622ced4d3c60 |
+| spectral/base                | batch  | ONE-COLUMN   | (not run)        | (not run)        | fedcfcc1f97d1520 |
+| spectral/denormal            | infer  | ONE-COLUMN   | (not run)        | (not run)        | 2afcfda3fa76f90f |
+| spectral/denormal            | model  | ONE-COLUMN   | (not run)        | (not run)        | 508b97806e7b4642 |
+| spectral/denormal            | batch  | ONE-COLUMN   | (not run)        | (not run)        | a34a571fd486b72b |
+| spectral/denormal_ftz        | infer  | ONE-COLUMN   | (not run)        | (not run)        | 2afcfda3fa76f90f |
+| spectral/denormal_ftz        | model  | ONE-COLUMN   | (not run)        | (not run)        | dbaf9dde2a1654b4 |
+| spectral/denormal_ftz        | batch  | ONE-COLUMN   | (not run)        | (not run)        | a34a571fd486b72b |
+| spectral/dupes               | infer  | ONE-COLUMN   | (not run)        | (not run)        | a7f3488317ff571e |
+| spectral/dupes               | model  | ONE-COLUMN   | (not run)        | (not run)        | 3e34622ced4d3c60 |
+| spectral/dupes               | batch  | ONE-COLUMN   | (not run)        | (not run)        | fedcfcc1f97d1520 |
+| spectral/hashed              | infer  | ONE-COLUMN   | (not run)        | (not run)        | 0227830c9fd1fe3e |
+| spectral/hashed              | model  | ONE-COLUMN   | (not run)        | (not run)        | dbca01a677a6db83 |
+| spectral/hashed              | batch  | ONE-COLUMN   | (not run)        | (not run)        | 62a05c74d9804ffb |
+| spectral/negative            | infer  | ONE-COLUMN   | (not run)        | (not run)        | 9125742811a1c301 |
+| spectral/negative            | model  | ONE-COLUMN   | (not run)        | (not run)        | f530608624dd3f0b |
+| spectral/negative            | batch  | ONE-COLUMN   | (not run)        | (not run)        | bf7af370b26728ba |
+| spectral/odd                 | infer  | ONE-COLUMN   | (not run)        | (not run)        | 39fdef517641e388 |
+| spectral/odd                 | model  | ONE-COLUMN   | (not run)        | (not run)        | 5b584f9ad9a4334f |
+| spectral/odd                 | batch  | ONE-COLUMN   | (not run)        | (not run)        | 3b67216c0796907b |
+| spectral/ties                | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a3fc8018ebcbca3 |
+| spectral/ties                | model  | ONE-COLUMN   | (not run)        | (not run)        | ad1e356159f986fd |
+| spectral/ties                | batch  | ONE-COLUMN   | (not run)        | (not run)        | fa770a3b846ea54d |
+| spectral/wide                | infer  | ONE-COLUMN   | (not run)        | (not run)        | 586e97f6021ef95f |
+| spectral/wide                | model  | ONE-COLUMN   | (not run)        | (not run)        | a985160042099a54 |
+| spectral/wide                | batch  | ONE-COLUMN   | (not run)        | (not run)        | 1669b42120ecc80a |
+
+summary (infer/model): IDENTICAL=18, ONE-COLUMN=18
+summary (batch): IDENTICAL=9, ONE-COLUMN=9
+summary (rlpair): 

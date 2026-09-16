@@ -1,0 +1,197 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 4 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7713-64-core-processor is a CPU column: cpu_model='AMD EPYC 7713 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_solver_host'] commit=bd9ef2eee4c4ebeb16112cb647828320b593aedc
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    arm64: None
+    cpu-amd-epyc-7713-64-core-processor: None
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    arm64: None
+    cpu-amd-epyc-7713-64-core-processor: None
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    arm64: None
+    cpu-amd-epyc-7713-64-core-processor: None
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    arm64: None
+    cpu-amd-epyc-7713-64-core-processor: None
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    arm64: None
+    cpu-amd-epyc-7713-64-core-processor: None
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    arm64: None
+    cpu-amd-epyc-7713-64-core-processor: None
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': 'a8c3d1a560b5cabb'}
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    arm64: None
+    cpu-amd-epyc-7713-64-core-processor: None
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '9dc786ade4574aff'}
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    arm64: None
+    cpu-amd-epyc-7713-64-core-processor: None
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '45b539a3f66ce25d'}
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    arm64: None
+    cpu-amd-epyc-7713-64-core-processor: None
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': '32ea0bbed60b8e6c'}
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    arm64: None
+    cpu-amd-epyc-7713-64-core-processor: None
+    nvidia-nvidia-rtx-2000-ada-gene-sm_89: {'X': 'd52a1af18a3c2f1c'}
+| lane/fixture                 | verdict    | arm64            | cpu-amd-epyc-7713-64-core-processor | nvidia-nvidia-rtx-2000-ada-gene-sm_89 |
+|------------------------------|------------|------------------|------------------|------------------|
+| agglomerative/base           | IDENTICAL x3 | ad11b976bfbfc20b | ad11b976bfbfc20b | ad11b976bfbfc20b |
+| agglomerative/denormal       | IDENTICAL x3 | b05982504c7e8646 | b05982504c7e8646 | b05982504c7e8646 |
+| agglomerative/denormal_ftz   | ONE-COLUMN | (not run)        | (not run)        | b05982504c7e8646 |
+| agglomerative/dupes          | IDENTICAL x3 | ad11b976bfbfc20b | ad11b976bfbfc20b | ad11b976bfbfc20b |
+| agglomerative/hashed         | ONE-COLUMN | (not run)        | (not run)        | 196c79a60c16166c |
+| agglomerative/negative       | ONE-COLUMN | (not run)        | (not run)        | 795f9975eb5ed985 |
+| agglomerative/odd            | ONE-COLUMN | (not run)        | (not run)        | c747a33eff11bbe1 |
+| agglomerative/ties           | IDENTICAL x3 | 7dea8a094150b8a9 | 7dea8a094150b8a9 | 7dea8a094150b8a9 |
+| agglomerative/wide           | ONE-COLUMN | (not run)        | (not run)        | 24b2baa4533fb568 |
+| dbscan-brute-l1/base         | IDENTICAL x3 | 0e71495be68d20c8 | 0e71495be68d20c8 | 0e71495be68d20c8 |
+| dbscan-brute-l1/denormal     | IDENTICAL x3 | 21d5ea1c72f42a78 | 21d5ea1c72f42a78 | 21d5ea1c72f42a78 |
+| dbscan-brute-l1/denormal_ftz | ONE-COLUMN | (not run)        | (not run)        | 21d5ea1c72f42a78 |
+| dbscan-brute-l1/dupes        | IDENTICAL x3 | 0e71495be68d20c8 | 0e71495be68d20c8 | 0e71495be68d20c8 |
+| dbscan-brute-l1/hashed       | ONE-COLUMN | (not run)        | (not run)        | eeb466d17ea9bfdc |
+| dbscan-brute-l1/negative     | ONE-COLUMN | (not run)        | (not run)        | 06e83e9f6128fb04 |
+| dbscan-brute-l1/odd          | ONE-COLUMN | (not run)        | (not run)        | 4b20175965069a15 |
+| dbscan-brute-l1/ties         | IDENTICAL x3 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 |
+| dbscan-brute-l1/wide         | ONE-COLUMN | (not run)        | (not run)        | d17808b4b9261d5d |
+| dbscan-weighted/base         | IDENTICAL x3 | 3aa7f30692765cf2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 |
+| dbscan-weighted/denormal     | IDENTICAL x3 | d3c48a5338826d18 | d3c48a5338826d18 | d3c48a5338826d18 |
+| dbscan-weighted/denormal_ftz | ONE-COLUMN | (not run)        | (not run)        | d3c48a5338826d18 |
+| dbscan-weighted/dupes        | IDENTICAL x3 | 3aa7f30692765cf2 | 3aa7f30692765cf2 | 3aa7f30692765cf2 |
+| dbscan-weighted/hashed       | ONE-COLUMN | (not run)        | (not run)        | d17808b4b9261d5d |
+| dbscan-weighted/negative     | ONE-COLUMN | (not run)        | (not run)        | bb6bd31e075693e9 |
+| dbscan-weighted/odd          | ONE-COLUMN | (not run)        | (not run)        | 6a9b77cffd9e2493 |
+| dbscan-weighted/ties         | IDENTICAL x3 | 525addc009cffb40 | 525addc009cffb40 | 525addc009cffb40 |
+| dbscan-weighted/wide         | ONE-COLUMN | (not run)        | (not run)        | d17808b4b9261d5d |
+| dbscan/base                  | IDENTICAL x3 | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b |
+| dbscan/denormal              | IDENTICAL x3 | 9c0b3563fc16b652 | 9c0b3563fc16b652 | 9c0b3563fc16b652 |
+| dbscan/denormal_ftz          | ONE-COLUMN | (not run)        | (not run)        | 9c0b3563fc16b652 |
+| dbscan/dupes                 | IDENTICAL x3 | 64df251bd00de81b | 64df251bd00de81b | 64df251bd00de81b |
+| dbscan/hashed                | ONE-COLUMN | (not run)        | (not run)        | d17808b4b9261d5d |
+| dbscan/negative              | ONE-COLUMN | (not run)        | (not run)        | bb6bd31e075693e9 |
+| dbscan/odd                   | ONE-COLUMN | (not run)        | (not run)        | 54d129f45630ea84 |
+| dbscan/ties                  | IDENTICAL x3 | b7535355c1581603 | b7535355c1581603 | b7535355c1581603 |
+| dbscan/wide                  | ONE-COLUMN | (not run)        | (not run)        | d17808b4b9261d5d |
+
+summary: IDENTICAL=16, ONE-COLUMN=20
+
+| lane/fixture                 | column | verdict      | arm64            | cpu-amd-epyc-7713-64-core-processor | nvidia-nvidia-rtx-2000-ada-gene-sm_89 |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| agglomerative/base           | infer  | IDENTICAL x3 | 3a6472714f51d8ab | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| agglomerative/base           | model  | IDENTICAL x3 | 9bb9f86300c44f5f | 9bb9f86300c44f5f | 9bb9f86300c44f5f |
+| agglomerative/base           | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| agglomerative/denormal       | infer  | IDENTICAL x3 | 2b2d3f329eec69f7 | 2b2d3f329eec69f7 | 2b2d3f329eec69f7 |
+| agglomerative/denormal       | model  | IDENTICAL x3 | 0749a7721feb2709 | 0749a7721feb2709 | 0749a7721feb2709 |
+| agglomerative/denormal       | batch  | IDENTICAL x3 | a2740d2ed4d74812 | a2740d2ed4d74812 | a2740d2ed4d74812 |
+| agglomerative/denormal_ftz   | infer  | ONE-COLUMN   | (not run)        | (not run)        | 2b2d3f329eec69f7 |
+| agglomerative/denormal_ftz   | model  | ONE-COLUMN   | (not run)        | (not run)        | 60f83b3658dd10ab |
+| agglomerative/denormal_ftz   | batch  | ONE-COLUMN   | (not run)        | (not run)        | a2740d2ed4d74812 |
+| agglomerative/dupes          | infer  | IDENTICAL x3 | 3a6472714f51d8ab | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| agglomerative/dupes          | model  | IDENTICAL x3 | 9bb9f86300c44f5f | 9bb9f86300c44f5f | 9bb9f86300c44f5f |
+| agglomerative/dupes          | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| agglomerative/hashed         | infer  | ONE-COLUMN   | (not run)        | (not run)        | 26e420cf82c51709 |
+| agglomerative/hashed         | model  | ONE-COLUMN   | (not run)        | (not run)        | a18b7b9941cdcfc6 |
+| agglomerative/hashed         | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| agglomerative/negative       | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| agglomerative/negative       | model  | ONE-COLUMN   | (not run)        | (not run)        | 573732d2cc0397a8 |
+| agglomerative/negative       | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| agglomerative/odd            | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| agglomerative/odd            | model  | ONE-COLUMN   | (not run)        | (not run)        | dc518a35765a3b5c |
+| agglomerative/odd            | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| agglomerative/ties           | infer  | IDENTICAL x3 | d161892b4ef55128 | d161892b4ef55128 | d161892b4ef55128 |
+| agglomerative/ties           | model  | IDENTICAL x3 | 64a8cd1101ec17ba | 64a8cd1101ec17ba | 64a8cd1101ec17ba |
+| agglomerative/ties           | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| agglomerative/wide           | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| agglomerative/wide           | model  | ONE-COLUMN   | (not run)        | (not run)        | 921238d7a4940b9c |
+| agglomerative/wide           | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| dbscan-brute-l1/base         | infer  | IDENTICAL x3 | 291d58b2feb4ae4e | 291d58b2feb4ae4e | 291d58b2feb4ae4e |
+| dbscan-brute-l1/base         | model  | IDENTICAL x3 | 619ee7c70d1194cb | 619ee7c70d1194cb | 619ee7c70d1194cb |
+| dbscan-brute-l1/base         | batch  | IDENTICAL x3 | df8d83ccb3f26700 | df8d83ccb3f26700 | df8d83ccb3f26700 |
+| dbscan-brute-l1/denormal     | infer  | IDENTICAL x3 | 3a6472714f51d8ab | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| dbscan-brute-l1/denormal     | model  | IDENTICAL x3 | 8506a36c8f053030 | 8506a36c8f053030 | 8506a36c8f053030 |
+| dbscan-brute-l1/denormal     | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| dbscan-brute-l1/denormal_ftz | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| dbscan-brute-l1/denormal_ftz | model  | ONE-COLUMN   | (not run)        | (not run)        | 2355a0495915c885 |
+| dbscan-brute-l1/denormal_ftz | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| dbscan-brute-l1/dupes        | infer  | IDENTICAL x3 | 291d58b2feb4ae4e | 291d58b2feb4ae4e | 291d58b2feb4ae4e |
+| dbscan-brute-l1/dupes        | model  | IDENTICAL x3 | 619ee7c70d1194cb | 619ee7c70d1194cb | 619ee7c70d1194cb |
+| dbscan-brute-l1/dupes        | batch  | IDENTICAL x3 | df8d83ccb3f26700 | df8d83ccb3f26700 | df8d83ccb3f26700 |
+| dbscan-brute-l1/hashed       | infer  | ONE-COLUMN   | (not run)        | (not run)        | d1549d3aba82ee07 |
+| dbscan-brute-l1/hashed       | model  | ONE-COLUMN   | (not run)        | (not run)        | 348e1dd4f2d4f25e |
+| dbscan-brute-l1/hashed       | batch  | ONE-COLUMN   | (not run)        | (not run)        | 829b11013d9ad8d2 |
+| dbscan-brute-l1/negative     | infer  | ONE-COLUMN   | (not run)        | (not run)        | d1fc6b1b88e17ea6 |
+| dbscan-brute-l1/negative     | model  | ONE-COLUMN   | (not run)        | (not run)        | bce417cc6e526ff3 |
+| dbscan-brute-l1/negative     | batch  | ONE-COLUMN   | (not run)        | (not run)        | f7e7d24690d3107e |
+| dbscan-brute-l1/odd          | infer  | ONE-COLUMN   | (not run)        | (not run)        | 1bec30ca0af7cd26 |
+| dbscan-brute-l1/odd          | model  | ONE-COLUMN   | (not run)        | (not run)        | de8d884e6f24a87b |
+| dbscan-brute-l1/odd          | batch  | ONE-COLUMN   | (not run)        | (not run)        | e01e7d990906951f |
+| dbscan-brute-l1/ties         | infer  | IDENTICAL x3 | 63990f64c63d296b | 63990f64c63d296b | 63990f64c63d296b |
+| dbscan-brute-l1/ties         | model  | IDENTICAL x3 | d68a5069f692910e | d68a5069f692910e | d68a5069f692910e |
+| dbscan-brute-l1/ties         | batch  | IDENTICAL x3 | be9e40c554329827 | be9e40c554329827 | be9e40c554329827 |
+| dbscan-brute-l1/wide         | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| dbscan-brute-l1/wide         | model  | ONE-COLUMN   | (not run)        | (not run)        | 0a40d6dc52184ff0 |
+| dbscan-brute-l1/wide         | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| dbscan-weighted/base         | infer  | IDENTICAL x3 | 29d206737766caf0 | 29d206737766caf0 | 29d206737766caf0 |
+| dbscan-weighted/base         | model  | IDENTICAL x3 | 0db3aac99393d616 | 0db3aac99393d616 | 0db3aac99393d616 |
+| dbscan-weighted/base         | batch  | IDENTICAL x3 | f7e7d24690d3107e | f7e7d24690d3107e | f7e7d24690d3107e |
+| dbscan-weighted/denormal     | infer  | IDENTICAL x3 | 3a6472714f51d8ab | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| dbscan-weighted/denormal     | model  | IDENTICAL x3 | 0c1ef67464dfa955 | 0c1ef67464dfa955 | 0c1ef67464dfa955 |
+| dbscan-weighted/denormal     | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| dbscan-weighted/denormal_ftz | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| dbscan-weighted/denormal_ftz | model  | ONE-COLUMN   | (not run)        | (not run)        | 64b59d15319ec18c |
+| dbscan-weighted/denormal_ftz | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| dbscan-weighted/dupes        | infer  | IDENTICAL x3 | 29d206737766caf0 | 29d206737766caf0 | 29d206737766caf0 |
+| dbscan-weighted/dupes        | model  | IDENTICAL x3 | 0db3aac99393d616 | 0db3aac99393d616 | 0db3aac99393d616 |
+| dbscan-weighted/dupes        | batch  | IDENTICAL x3 | f7e7d24690d3107e | f7e7d24690d3107e | f7e7d24690d3107e |
+| dbscan-weighted/hashed       | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| dbscan-weighted/hashed       | model  | ONE-COLUMN   | (not run)        | (not run)        | 22074f6988a2878e |
+| dbscan-weighted/hashed       | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| dbscan-weighted/negative     | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| dbscan-weighted/negative     | model  | ONE-COLUMN   | (not run)        | (not run)        | fd44ca1342fbd3c5 |
+| dbscan-weighted/negative     | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| dbscan-weighted/odd          | infer  | ONE-COLUMN   | (not run)        | (not run)        | 22e3872de99d04f6 |
+| dbscan-weighted/odd          | model  | ONE-COLUMN   | (not run)        | (not run)        | 2c5e1b04c08b5d97 |
+| dbscan-weighted/odd          | batch  | ONE-COLUMN   | (not run)        | (not run)        | ca397a1032011cd9 |
+| dbscan-weighted/ties         | infer  | IDENTICAL x3 | 9c8a2ca10937b6b1 | 9c8a2ca10937b6b1 | 9c8a2ca10937b6b1 |
+| dbscan-weighted/ties         | model  | IDENTICAL x3 | cca8baca73f60bac | cca8baca73f60bac | cca8baca73f60bac |
+| dbscan-weighted/ties         | batch  | IDENTICAL x3 | 1b1361f65f9b5250 | 1b1361f65f9b5250 | 1b1361f65f9b5250 |
+| dbscan-weighted/wide         | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| dbscan-weighted/wide         | model  | ONE-COLUMN   | (not run)        | (not run)        | 12450128a5b4be8b |
+| dbscan-weighted/wide         | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| dbscan/base                  | infer  | IDENTICAL x3 | e6e720fcb54b180e | e6e720fcb54b180e | e6e720fcb54b180e |
+| dbscan/base                  | model  | IDENTICAL x3 | c36812c6260e7ee6 | c36812c6260e7ee6 | c36812c6260e7ee6 |
+| dbscan/base                  | batch  | IDENTICAL x3 | f7e7d24690d3107e | f7e7d24690d3107e | f7e7d24690d3107e |
+| dbscan/denormal              | infer  | IDENTICAL x3 | 3a6472714f51d8ab | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| dbscan/denormal              | model  | IDENTICAL x3 | af8f5b102930fc66 | af8f5b102930fc66 | af8f5b102930fc66 |
+| dbscan/denormal              | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| dbscan/denormal_ftz          | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| dbscan/denormal_ftz          | model  | ONE-COLUMN   | (not run)        | (not run)        | ea374d169392e62d |
+| dbscan/denormal_ftz          | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| dbscan/dupes                 | infer  | IDENTICAL x3 | e6e720fcb54b180e | e6e720fcb54b180e | e6e720fcb54b180e |
+| dbscan/dupes                 | model  | IDENTICAL x3 | c36812c6260e7ee6 | c36812c6260e7ee6 | c36812c6260e7ee6 |
+| dbscan/dupes                 | batch  | IDENTICAL x3 | f7e7d24690d3107e | f7e7d24690d3107e | f7e7d24690d3107e |
+| dbscan/hashed                | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| dbscan/hashed                | model  | ONE-COLUMN   | (not run)        | (not run)        | 22074f6988a2878e |
+| dbscan/hashed                | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| dbscan/negative              | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| dbscan/negative              | model  | ONE-COLUMN   | (not run)        | (not run)        | 6211d942d0c33fa2 |
+| dbscan/negative              | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+| dbscan/odd                   | infer  | ONE-COLUMN   | (not run)        | (not run)        | 22e3872de99d04f6 |
+| dbscan/odd                   | model  | ONE-COLUMN   | (not run)        | (not run)        | 8f762291a36100db |
+| dbscan/odd                   | batch  | ONE-COLUMN   | (not run)        | (not run)        | ca397a1032011cd9 |
+| dbscan/ties                  | infer  | IDENTICAL x3 | 63990f64c63d296b | 63990f64c63d296b | 63990f64c63d296b |
+| dbscan/ties                  | model  | IDENTICAL x3 | 7c766eb707695149 | 7c766eb707695149 | 7c766eb707695149 |
+| dbscan/ties                  | batch  | IDENTICAL x3 | be9e40c554329827 | be9e40c554329827 | be9e40c554329827 |
+| dbscan/wide                  | infer  | ONE-COLUMN   | (not run)        | (not run)        | 3a6472714f51d8ab |
+| dbscan/wide                  | model  | ONE-COLUMN   | (not run)        | (not run)        | 12450128a5b4be8b |
+| dbscan/wide                  | batch  | ONE-COLUMN   | (not run)        | (not run)        | a8e67882b424a053 |
+
+summary (infer/model): IDENTICAL=32, ONE-COLUMN=40
+summary (batch): IDENTICAL=16, ONE-COLUMN=20
+summary (rlpair): 
