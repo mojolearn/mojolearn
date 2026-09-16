@@ -163,10 +163,10 @@ fi
 case "$VENDOR" in
   amd) NAME=mojolearn-extra-amd; REGION=tor1; SIZE=gpu-mi325x1-256gb; IMAGE=188571990
        BODY_VENDOR=amd;    COLUMN=amd;    GPU_LABEL=amd-mi325x
-       SMI_CMD='rocm-smi --showproductname' ;;
+       SMI_CMD='rocm-smi --showproductname; echo "-- free VRAM at acceptance --"; rocm-smi --showmeminfo vram' ;;
   nv)  NAME=mojolearn-extra-nv;  REGION=nyc2; SIZE=gpu-h100x1-80gb;   IMAGE=236925144
        BODY_VENDOR=nvidia; COLUMN=nvidia; GPU_LABEL=nvidia-h100
-       SMI_CMD='nvidia-smi --query-gpu=name,driver_version --format=csv,noheader' ;;
+       SMI_CMD='nvidia-smi --query-gpu=name,driver_version,memory.total,memory.used,memory.free --format=csv,noheader' ;;
   # DEVIATION 2614: CPU-only droplets for the byte LM CPU inference leg. Stock
   # Ubuntu, no GPU, so the GPU gates are forced off, each CPU vendor takes its
   # own lock, and list_live counts only a droplet with this leg's own name, so a
