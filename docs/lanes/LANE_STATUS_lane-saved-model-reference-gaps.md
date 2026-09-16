@@ -145,3 +145,91 @@ The batch part's negative control fired on every lane:
 `MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1` gives `BATCH_MOVED=6 of 6`, each naming
 the element that moved (`dbscan/base ... whole 0x00000001 vs alone 0x00000000`).
 
+
+## The recording, which is the deliverable
+
+`bench/results/classical_host/2026-09-16-nvidia-predict/`, 36 fixture
+directories (four lanes x nine fixtures), recorded on a RunPod NVIDIA
+A100-SXM4-80GB (sm_80). Its own README has the detail. The verdicts:
+
+| arm | verdict |
+|---|---|
+| `check`, x86-64 host bindings on the recording box | `gate verdict IDENTICAL (36 fixtures, exit 0)` |
+| `check`, arm64 host bindings on the M4 | `gate verdict IDENTICAL (36 fixtures, exit 0)` |
+| sabotage, `--every-fixture`, x86-64 | `EXPECTED MISMATCH SEEN`, `unmoved` EMPTY |
+| sabotage, `--every-lane`, x86-64 | `EXPECTED MISMATCH SEEN`, `unmoved` EMPTY |
+| sabotage, `--every-fixture`, arm64 | `EXPECTED MISMATCH SEEN`, `unmoved` EMPTY |
+
+`unmoved` EMPTY is the sentence that matters. The rule the lane was given was
+that each recorded cell's check must be seen to FAIL before its PASS is
+believed, and `--every-fixture` is the only rule that asks that of every cell
+rather than of one per lane. All 36 moved, named individually in the reports.
+
+The second NVIDIA column (A100 sm_80) came off the same box. Over all six
+lanes and nine fixtures, against the RTX 2000 Ada sm_89 column and the Metal
+column of the same tree:
+
+    summary: IDENTICAL=54
+    summary (infer/model): IDENTICAL=108
+    summary (batch): IDENTICAL=54
+
+## What it cost, and the two things that nearly wasted it
+
+Four rental attempts, three of which billed nothing.
+
+1. **Nothing was pinned, and that is why there is a box at all.** The runner's
+   default RTX 4090 answered "There are no instances currently available", and
+   so did the RTX 2000 Ada, the A6000, the 4090 again and the A100 PCIe on the
+   second round. The A100 SXM answered. A leg that had pinned one spec would
+   have starved, which is what happened to a Hot Aisle leg this morning.
+2. **The first box lost its recording phase to the `record` crash above**, and
+   its host builds to a second defect: this lane's body exports
+   `MOJOLEARN_GPU_ARCHS` for the GPU builds, and
+   `bindings/build_host_family.sh` refuses a Linux CPU build that carries one.
+   All four host builds exited 2 in zero seconds and took the check and both
+   sabotage arms with them. Both are fixed in
+   `tools/saved_model_predict_nvidia_leg.sh` (`env -u MOJOLEARN_GPU_ARCHS`),
+   along with the commit witness the runner does not write for this payload
+   and the two diff phases that cannot run on a box `git archive` gave no
+   `bench/results/` to.
+3. A third box was killed by SIGTERM two minutes into its payload and billed
+   three minutes for nothing. Its pod was terminated cleanly and verified
+   gone. The leg is launched through `os.setsid` now so a signal aimed at the
+   harness's background tasks cannot reach it.
+
+Billed: about seven minutes of RTX 2000 Ada at $0.24/h, three minutes of the
+same for nothing, and about ten minutes of A100 SXM at $1.59/h. Every pod was
+deleted and verified gone (HTTP 404), and the account listed no live pod at
+the end.
+
+## Verification scope
+
+`python3 tools/lane_select.py --changed-since origin/main` reads:
+
+    # python/mojolearn/host_surface.py: declares the CPU surface itself: every lane
+    # tools/classical_host_gate.py: NOT ATTRIBUTABLE: no lane's derived source set names it, so every lane
+    # FALLING BACK TO EVERY LANE.
+    # 212 of 212 lanes selected
+
+That is a full sweep and it was NOT run on the Mac, which is the rule. What
+ran instead is this lane's own six lanes, on two NVIDIA columns and a Metal
+column, plus its four gate lanes on two CPU host architectures, plus
+`test_host_surface` (155 passed) and `docs_facts --check`. No Mojo source was
+changed by this lane, so no other lane's cells can have moved.
+
+Two checks in this lane were watched failing before they were trusted:
+`test_inference_lanes_are_classical_gate_lanes` fails when one lane is dropped
+from the gate table, and `test_recordings_and_columns_exist` fails on a
+one-character change to the recording's path.
+
+## Still owed
+
+* The AMD recording and AMD identity cells, at the next release record. AMD
+  was left alone entirely, by instruction.
+* `spectral`'s x86 CPU identity column at the 512-row size. Its Apple column
+  was retaken here; the CPU one was not, and the 2026-09-15 one is superseded.
+* `kmeans` stays the one entry in `SAVED_MODEL_INFERENCE_OWED`, and it waits
+  on a serialization format, not on a box.
+* `tools/lane_select.py` cannot attribute `tools/classical_host_gate.py` to
+  any lane, so a change there falls back to all 212. That is the selector
+  lane's map, not this one's, and it is written down rather than fixed here.
