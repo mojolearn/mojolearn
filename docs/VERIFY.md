@@ -80,6 +80,39 @@ with how much of the run was actually checked, as in `verified 44 of 332 cell
 parts (0 divergent, 0 owed, 288 refused, 0 n/a)`, so a run that mostly refused
 cannot be misread as a run that passed.
 
+## What the CPU training bindings are for
+
+Every wheel since 2026-09-16 carries all thirty-two host (CPU) bindings, the
+sixteen training ones included, so that the lanes above can be re-run on the
+machine you installed on. **They exist to check the claim, not to train your
+models.**
+
+- **Verification.** `verify --all` fits each lane on your CPU and compares the
+  bits against what Apple, NVIDIA and AMD recorded. That is the whole reason a
+  fit is in the wheel at all.
+- **Small data, and reproducibility.** The fixtures are 20,000 rows by 16
+  columns. A fit at that size is a check you can read the result of in seconds,
+  and it gives the same bits on every machine, this year and next.
+- **Air-gapped checking.** No network, no dataset, no second machine and no
+  GPU. A box that can never reach one of our GPUs can still hold us to the
+  claim.
+
+**They are not a CPU training engine and they are not tuned for speed.** A host
+binding is a device kernel restated as a serial host loop so that it produces
+the device's bits exactly; it is single-threaded by construction, because a
+reduction whose order depends on a thread count does not give one answer.
+Timing one against a GPU fit, or against another library's threaded CPU fit,
+measures that choice and nothing else, so please do not file it as a
+performance bug. To train a model, train it on a supported GPU and load it
+anywhere; `verify --all` checks that path too, with the portable models.
+
+This is also why ordinary CPU `fit` still refuses. The bindings ship, but
+`mojolearn.LinearRegression().fit(...)` on a CPU-only install raises by name
+and tells you to train on a GPU and load the saved model. The verifier reaches
+them through a private scope of its own
+(`python/mojolearn/_cpu_reference.py`), so shipping the binaries widened what
+you can CHECK and changed nothing about what the library will train for you.
+
 ## Flags
 
 | flag | effect |

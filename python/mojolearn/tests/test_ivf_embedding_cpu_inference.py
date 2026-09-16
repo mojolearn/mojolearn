@@ -45,7 +45,10 @@ def test_inference_families_ship_and_carry_no_training():
     ):
         f = host_surface.family(fam)
         assert f["ships_in_wheel"] and f["routes"] is None and f["serves"] == (route,)
-        assert not host_surface.family(reference)["ships_in_wheel"]
+        # The reference binding ships too since lane/ship-cpu-host-families
+        # (2026-09-16); what this family still guarantees is a binary with no
+        # build or backward in it, asserted by name below.
+        assert host_surface.family(reference)["ships_in_wheel"]
         names = _registered(host_surface.binding_source(fam))
         assert served in names
         for name in forbidden:

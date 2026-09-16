@@ -77,7 +77,9 @@ def test_manifest_declares_both_families():
         assert fam["routes"] == route
         assert host_surface.routed_modules()[route] == f"{route}_host"
         assert fam["training_lanes"] == lanes
-        assert not fam["ships_in_wheel"], "a training-only host family must not ship in the inference wheel"
+        # Ships since lane/ship-cpu-host-families (2026-09-16): a wheel that
+        # leaves the fit out cannot check the lane that hashes the fit.
+        assert fam["ships_in_wheel"], "a host family with covered lanes must ship, or the lanes are unverifiable"
         assert (ROOT / host_surface.build_shim(name)).is_file()
         for lane in lanes:
             assert lane in host_surface.covered_lanes()
