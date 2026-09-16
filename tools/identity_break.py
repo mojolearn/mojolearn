@@ -109,8 +109,9 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             (the tokenizer in records before 2026-09-15, when
             GPT2Tokenizer.encode_batch gave it documents as rows), optimizer-step and training-step (the batch IS the
             arithmetic of a step), no-model (a trainer lane that returns
-            no estimator) and batch-dependent-by-contract (UMAP.transform,
-            whose module says query batching may change results). A method
+            no estimator). batch-dependent-by-contract was UMAP.transform's
+            reason until lane/umap-batch-fix made the transform row
+            separable and turned the exemption into a part. A method
             that refuses a batch of one BY NAME (the coordinate descent
             predict, mirroring cuML's cdPredict) is held to that refusal and
             its rows are asked in the smallest admitted batch instead
@@ -784,6 +785,17 @@ LANES = {}
 #: The cut is per lane and the arithmetic knobs (tree counts, depths, losses,
 #: optimizer settings, seasonal period) are untouched; what came down is INPUT
 #: SIZE and STEP COUNT.
+#: AN ARITHMETIC CHANGE STALES A REFERENCE THE SAME WAY, and this dict is
+#: where it has to be said (lane/umap-batch-fix, 2026-09-16). Every entry
+#: above is an INPUT that moved. `umap` and `par-graph-umap` are the first
+#: entries where the input is unchanged and the TRANSFORM moved: its sigma
+#: floor, edge schedule, negative-sample counter and refinement epoch count
+#: are per row now rather than per request, so every committed umap and
+#: par-graph-umap cell hashes arithmetic this harness no longer performs. The
+#: mechanism is the one that is needed either way, a column whose revision is
+#: not this one carrying NO cell for the lane, so those cells read OWED to the
+#: next record instead of DIVERGENT on a user's machine. `umap` also joins
+#: host_surface.PUBLIC_PENDING_LANES as `stale reference` until that record.
 LANE_REVISIONS = {
     "tokenizer": "synthetic-vocab-1",
     # rows: these lanes fitted the full 20,000 x 16 fixture
@@ -811,6 +823,9 @@ LANE_REVISIONS = {
     "samba-untied-dropout-accum": "steps-3-1",
     # sequence length: the (2, 16, 32) slab -> (2, 8, 32)
     "mamba2-dtlimit": "seqlen-8-1",
+    # arithmetic, not input: UMAP.transform is row separable now
+    "umap": "transform-row-separable-1",
+    "par-graph-umap": "transform-row-separable-1",
 }
 
 
@@ -5137,30 +5152,52 @@ _batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "p
 # (gaussian_process/checks/sample_y.mojo, DEVIATION 2793)
 _batch_decl("n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
             "gp-sample-y", "gp-sample-y-normalize")
-# UMAP.transform is batch-dependent BY ITS OWN CONTRACT: umap/transform.mojo's
-# module docstring says "Query batching may change results (global sigma
-# floor, edge weighting and RNG ordinals)", and the part measured it on the
-# M4 (base fixture, 2026-09-14 night: held-out row 0 alone 0xbfb692af against
-# 0xbf99e1c6 in the batch of 64). A BATCH_MOVED there is the documented
-# algorithm, not a defect, so the part records the reason instead of failing
-# every IDENTICAL run; the infer column still hashes the whole-batch transform.
-# The four batch couplings, read 2026-09-15 (the CPU host restatement,
-# umap/host/umap_oracle.mojo:594,614,689,698,706, carries the same four):
-#   1. the sigma floor 0.001 * mean over EVERY query's neighbor distances
-#      (transform.mojo:44,66);
-#   2. the edge schedule scales each weight by the maximum over the whole
-#      batch (:141, used at :147);
-#   3. the negative-sample counter hashes the batch-local edge ordinal
-#      row * k + j (:146,154), so a row's draws depend on its position;
-#   4. with n_epochs == 0 the epoch count is 100 or 30 by n_queries (:224);
-#      the lanes pass n_epochs=8, so this one is not reached here.
-# cuML's transform couples a batch the same ways (runner.cuh:549-554 epochs
-# by inputs.n, fuzzy_simpl_set/naive.cuh:168 the mean_dist sigma floor,
-# optimize_batch_kernel.cuh:267 Philox seeded by the batch COO row), and
-# its docstring says "the transform() function is stochastic" (umap.pyx:1475).
-_batch_decl("n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, "
-            ":141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same)",
-            "umap", "par-graph-umap")
+# UMAP.transform WAS batch-dependent by its own contract, and until
+# lane/umap-batch-fix (2026-09-16) these two lanes carried a batch EXEMPTION
+# saying so. It named four couplings, all of which are now per row
+# (umap/transform.mojo and the CPU host restatement
+# umap/host/umap_oracle.mojo, which stays character identical to it):
+#   1. the sigma floor 0.001 * mean was over EVERY query's neighbor
+#      distances and is now over the row's own k;
+#   2. the edge schedule scaled each weight by the maximum over the whole
+#      batch and now uses the row's own maximum;
+#   3. the negative-sample counter hashed the batch-local edge ordinal
+#      row * k + j, so a row's draws depended on its POSITION in the request,
+#      and is now keyed on a hash of the row's own k neighbor indices;
+#   4. with n_epochs == 0 the epoch count was 100 or 30 by n_queries and is
+#      now 100 at every size. The lanes pass n_epochs=8, so this one was
+#      never reached in any recorded column.
+# So the exemption becomes a PART. A BATCH_MOVED here is now a defect, and it
+# is the arm that would catch any of the four coming back. The claim it
+# encodes was measured bitwise on the CPU host route and on Metal, both routes
+# agreeing to the last bit, by umap/checks/batch_determinism_check.mojo,
+# umap/checks/batch_determinism_device_check.mojo and
+# umap/checks/batch_epoch_cliff_check.mojo.
+# This is a deliberate divergence from cuML, whose transform couples a batch
+# the same four ways (runner.cuh:549-554 epochs by inputs.n,
+# fuzzy_simpl_set/naive.cuh:168 the mean_dist sigma floor,
+# optimize_batch_kernel.cuh:267 Philox seeded by the batch COO row) and whose
+# docstring says "the transform() function is stochastic" (umap.pyx:1475).
+# The standing rule is not to reproduce a reference library's bug.
+
+
+def _batch_umap(ml, e, Xh):
+    """UMAP.transform, each row alone against the whole request."""
+    return [_BatchRows("transform", np.ascontiguousarray(Xh[:64, :8]),
+                       lambda r: (e.transform(r),))]
+
+
+def _batch_par_graph_umap(ml, e, Xh):
+    """The same arm through the parallel graph surface, whose transform is a
+    free function over the fitted graph rather than a method."""
+    from mojolearn.parallel_graph import transform_umap
+    return [_BatchRows("transform_umap", np.ascontiguousarray(Xh[:64, :8]),
+                       lambda r: (transform_umap(e, np.ascontiguousarray(r),
+                                                 devices=_par_devices()),))]
+
+
+_batch_decl(_batch_umap, "umap")
+_batch_decl(_batch_par_graph_umap, "par-graph-umap")
 _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "kernel-ridge")
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "nystroem")
 _batch_decl(_rows_calls("score_samples", "predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gmm")

@@ -710,6 +710,22 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
         elif why == "no reference":
             if lane in with_cells:
                 wrong_reason.append(f"{lane}: the shipped table DOES carry cells for it; let it in")
+        elif why == "unwatched":
+            # THE ONE REASON A REGENERATION CANNOT CLEAR BY ITSELF
+            # (lane/expose-stepfull, 2026-09-16). It says the static
+            # conditions are all met and only the watched CPU-only run is
+            # owed, so it is checked against exactly that: the table must
+            # carry cells for the lane AT THE CURRENT REVISION. A lane that
+            # loses its cells, or whose fixture moves again, cannot hide
+            # here; it falls back to `no reference` or `stale reference`.
+            if lane not in with_cells:
+                wrong_reason.append(f"{lane}: held back as 'unwatched', but the shipped table carries "
+                                    "NO cell for it, so its reason is 'no reference' and what is owed "
+                                    "is a record, not a run")
+            elif lane in stale:
+                wrong_reason.append(f"{lane}: held back as 'unwatched', but its fixture has moved past "
+                                    f"the shipped reference ({revisions.get(lane)!r}), so its reason is "
+                                    "'stale reference' and a run would prove nothing")
         elif why == "own record":
             assert lane in host_surface.TRAINING_FIX_LANES, f"{lane}: not a TRAINING_FIX_LANES lane"
         elif why.startswith("measured"):
@@ -721,9 +737,19 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
         "these lanes are held back for a reason the shipped table no longer supports:\n  "
         + "\n  ".join(wrong_reason))
 
-    moved = sorted(stale - set(host_surface.PUBLIC_PENDING_LANES) - host_only)
+    # A prefix-excluded lane is never in the public set, so it cannot become
+    # public carrying a stale reference and it must not be required in
+    # PUBLIC_PENDING_LANES, which only admits COVERED lanes (the loop above).
+    # The case first arose with par-graph-umap (lane/umap-batch-fix,
+    # 2026-09-16), the first `par-` lane to get a LANE_REVISIONS entry: the
+    # assertion demanded an entry that the same test's own loop would then
+    # reject.
+    excluded = {lane for lane in revisions
+                if lane.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES)}
+    moved = sorted(stale - set(host_surface.PUBLIC_PENDING_LANES)
+                   - host_only - excluded)
     assert moved == [], (
-        f"these lanes' fixtures moved past the shipped reference and they are still public: {moved}. "
+        f"these lanes moved past the shipped reference and they are still public: {moved}. "
         "Add them to PUBLIC_PENDING_LANES as 'stale reference' until the release regenerates the table"
     )
 

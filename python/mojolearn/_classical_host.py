@@ -340,8 +340,9 @@ class HostExponentialSmoothing(_HostBound, ExponentialSmoothing):
 
 class HostUMAP(_HostBound, UMAP):
     """A saved UMAP embedding on the metrics host binding. `transform`
-    answers the GPU's bytes for the same query batch; the answer for a row
-    depends on the batch it is asked in (umap/transform.mojo)."""
+    answers the GPU's bytes for a row whatever else is asked in the same
+    batch: since lane/umap-batch-fix (2026-09-16) a batch of N is the
+    concatenation of N batches of one (umap/transform.mojo)."""
     _HOST_ARRAYS = ("_transform_training", "_transform_embedding")
 
 
