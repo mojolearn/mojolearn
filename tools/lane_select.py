@@ -958,6 +958,194 @@ def unreachable(path):
             "that any lane DOES reach names it, its stem or any directory above it")
 
 
+def _stmt_key(node):
+    """A statement's IDENTITY, so two revisions can be aligned without using
+    line numbers. An assignment is keyed by the name it binds, so a registry
+    table that GREW is the same statement rather than a different one."""
+    if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+            and isinstance(node.targets[0], ast.Name):
+        return ("assign", node.targets[0].id)
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return ("def", node.name)
+    return ("stmt", ast.dump(node))
+
+
+def _container_delta(old, new):
+    """The elements ADDED to, and CHANGED in, a container literal, or None when
+    the change is not of that shape.
+
+    Every old element must still be there, IN ORDER. A removal, a reorder or a
+    replaced key is not an addition and gets nothing from this."""
+    if type(old) is not type(new):
+        return None
+    if isinstance(old, ast.Dict):
+        okeys = [ast.dump(k) for k in old.keys]
+        nkeys = [ast.dump(k) for k in new.keys]
+        kept = [k for k in nkeys if k in okeys]
+        if kept != okeys or len(set(okeys)) != len(okeys):
+            return None
+        oval = dict(zip(okeys, old.values))
+        added, changed = [], []
+        for key, value in zip(nkeys, new.values):
+            if key not in oval:
+                added.append((key, value))
+            elif ast.dump(oval[key]) != ast.dump(value):
+                changed.append((key, value))
+        return added, changed
+    if isinstance(old, (ast.Tuple, ast.List, ast.Set)):
+        odumps = [ast.dump(e) for e in old.elts]
+        ndumps = [ast.dump(e) for e in new.elts]
+        kept = [d for d in ndumps if d in odumps]
+        if kept != odumps:
+            return None
+        return [(None, e) for e, d in zip(new.elts, ndumps) if d not in odumps], []
+    return None
+
+
+def _admissible_addition(node, old_keys, corpus):
+    """May this brand-new top-level statement be admitted.
+
+    An added statement at module level can mutate a registry, shadow a name or
+    run a decorator, so only three shapes are allowed: an import of a module
+    some lane ALREADY reaches, so nothing new is pulled into the process; an
+    undecorated def with a new name; and an undecorated class with a new name
+    whose body is only a docstring, defs and assignments of names. A class body
+    executes when it is defined, which is why its contents are checked rather
+    than assumed."""
+    if isinstance(node, ast.ImportFrom):
+        if not node.module:
+            return False
+        cand = os.path.join(PKG, node.module.split(".")[0] + ".py")
+        return cand in corpus
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return not node.decorator_list and ("def", node.name) not in old_keys
+    if isinstance(node, ast.ClassDef):
+        if node.decorator_list or ("def", node.name) in old_keys:
+            return False
+        for item in node.body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Pass)):
+                continue
+            if isinstance(item, ast.Assign) and all(isinstance(t, ast.Name) for t in item.targets):
+                continue
+            return False
+        return True
+    return False
+
+
+def _lanes_named_by(nodes, sources, rev):
+    """The lanes the added or changed material can reach: the lanes that reach
+    the file defining each identifier it names, plus any lane it names outright,
+    plus any lane whose name occurs inside a string it carries.
+
+    Returns None when a name cannot be placed at all, because an addition this
+    cannot attribute is an addition this must not narrow."""
+    # A NAME DEFINED IN A REGISTRY SAYS NOTHING ABOUT ONE LANE. `_HostBound` is
+    # defined in `_classical_host.py` itself, and that file is reached by every
+    # lane by construction, so resolving the new class's base through it
+    # attributed the addition to all 212. Registries are dropped from this
+    # resolution for exactly the reason their edges are dropped from the map.
+    sinks = enumerator_files() | {MANIFEST}
+    symbols = {name: files - sinks for name, files in
+               _python_symbols(_python_files()).items()}
+    every = set(sources)
+    lanes, unknown = set(), []
+    for node in nodes:
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Name) or isinstance(sub, ast.Attribute):
+                name = getattr(sub, "id", None) or getattr(sub, "attr", None)
+                if name in every:
+                    lanes.add(name)
+                    continue
+                files = symbols.get(name)
+                if files:
+                    for rel in files:
+                        lanes |= rev.get(rel, set())
+                elif name and not name.startswith("__"):
+                    unknown.append(name)
+            elif isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                text = sub.value
+                if text in every:
+                    lanes.add(text)
+                    continue
+                hit = {n for n in every if n in text}
+                if hit:
+                    lanes |= hit
+                elif os.path.isfile(os.path.join(ROOT, text)):
+                    lanes |= rev.get(text, set())
+    return sorted(lanes) if lanes else None
+
+
+def registry_lanes(ref, path, sources=None):
+    """The lanes an ADDITIVE change to a whole-surface registry can reach, or
+    None for every lane.
+
+    `host_surface.py` and `_classical_host.py` name the entire binding surface,
+    so the map drops their per-lane edges and any change to them selects
+    everything. That is right for an arbitrary edit and wrong for an addition
+    that names one estimator: lane/kmeans-save added an import, a `HostKMeans`
+    class and one `_FORMATS` entry, and got 212 of 212.
+
+    ADDITIVE IS VERIFIED. Every old top-level statement must still be present
+    and in order, either byte for byte or as the same assignment whose
+    container literal only GREW or whose value changed under an unchanged key.
+    Everything else, including a removal, a reorder, an edited function body or
+    a new bare statement, returns None."""
+    if sources is None:
+        sources, _ = lane_sources()
+    rev = reverse_map(sources)
+    old_text = _git_show(ref, path)
+    if old_text is None:
+        return None
+    try:
+        old_tree = _strip_docstrings(ast.parse(old_text))
+        new_tree = _strip_docstrings(ast.parse(_read(path)))
+    except (OSError, SyntaxError):
+        return None
+    old_keys = [_stmt_key(n) for n in old_tree.body]
+    new_keys = [_stmt_key(n) for n in new_tree.body]
+    if len(set(old_keys)) != len(old_keys) or len(set(new_keys)) != len(new_keys):
+        return None                         # a repeated key cannot be aligned honestly
+    kept = [k for k in new_keys if k in set(old_keys)]
+    if kept != old_keys:
+        return None                         # something was removed or reordered
+    old_by_key = dict(zip(old_keys, old_tree.body))
+    touched = []
+    for key, node in zip(new_keys, new_tree.body):
+        if key not in old_by_key:
+            if not _admissible_addition(node, set(old_keys), set(rev)):
+                return None
+            touched.append(node)
+            continue
+        before = old_by_key[key]
+        if ast.dump(before) == ast.dump(node):
+            continue
+        if key[0] != "assign":
+            return None                     # an edited body reaches anything
+        delta = _container_delta(before.value, node.value)
+        if delta is None:
+            return None
+        added, changed = delta
+        for element_key, value in added + changed:
+            touched.append(value)
+            if element_key is not None:
+                # THE KEY IS ATTRIBUTION TOO. A registry keyed by lane name
+                # says which lane an entry is about more directly than its
+                # value does.
+                touched.append(_key_node(before, node, element_key))
+    return _lanes_named_by([t for t in touched if t is not None], sources, rev)
+
+
+def _key_node(before, after, dumped_key):
+    """The key expression matching `dumped_key`, so the key of a changed entry
+    is attributed as well as its value. A table keyed by lane name is the
+    common case and the key is the whole of the attribution."""
+    for node in (after.value, before.value):
+        for k in getattr(node, "keys", []) or []:
+            if ast.dump(k) == dumped_key:
+                return k
+    return None
+
+
 def _harness_segments(text):
     """`identity_break.py` as (lane -> its dumped definition) and the dumped
     list of every OTHER top-level statement.
@@ -1122,12 +1310,14 @@ def select(paths, ref=None, sources=None):
             reasons[path] = ("the selection machinery itself: it decides which lanes run and "
                              "cannot move a lane's bits (tools/test_lane_select.py covers it)")
             continue
-        if path in GLOBAL_PATHS:
-            fallback = True
-            unattributed.append(path)
-            reasons[path] = "declares the CPU surface itself: every lane"
-            continue
-        if path in enumerator_files():
+        if path in GLOBAL_PATHS or path in enumerator_files():
+            added = registry_lanes(ref, path, sources) if ref else None
+            if added is not None:
+                lanes |= set(added)
+                reasons[path] = (f"a whole-surface registry, but the diff only ADDS to it: every "
+                                 f"existing statement is present and in order, and what was added "
+                                 f"names {len(added)} lane(s)")
+                continue
             fallback = True
             unattributed.append(path)
             reasons[path] = ("a registry of the whole binding surface, so the map drops its "

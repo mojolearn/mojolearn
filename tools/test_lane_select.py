@@ -494,6 +494,174 @@ def test_the_new_narrow_answers_are_narrow_for_the_right_reason():
     assert not sel["fallback"], "the harness against its own HEAD should not fall back"
 
 
+#: A path whose blast radius is empty, and the one thing that would change
+#: that. `unreachable` is the rule that saved lane/umap-batch-determinism and
+#: lane/discarded-atomic-audit from a 212-lane sweep.
+def test_a_path_nothing_reaches_selects_nothing():
+    """A file no lane's map contains and that nothing a lane reaches NAMES
+    cannot move a cell. Written in a temporary directory inside the tree so
+    both halves are exercised for real."""
+    probe_dir = os.path.join(lane_select.ROOT, "armprobedir")
+    src = "armprobedir/armprobesource.mojo"
+    fixture = "armprobedir/armprobefixture.bin"
+    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
+    before = open(manifest, encoding="utf-8").read()
+    os.makedirs(probe_dir, exist_ok=True)
+    try:
+        for rel in (src, fixture):
+            with open(os.path.join(lane_select.ROOT, rel), "w") as fh:
+                fh.write("# probe\n")
+        lane_select.reset_caches()
+        for rel in (src, fixture):
+            assert lane_select.unreachable(rel), f"{rel} should be unreachable and is not"
+
+        # THE ARM THAT MUST FALL BACK. A file the map DOES contain now names the
+        # source by path and the DIRECTORY by a glob. The fixture is named by
+        # nothing but that glob, which is the case a data file a lane reads
+        # sits in.
+        with open(manifest, "w") as fh:
+            fh.write(before + f"\n_ARM_PROBE_SOURCE = {src!r}\n_ARM_PROBE_GLOB = 'armprobedir/' + '*'\n")
+        lane_select.reset_caches()
+        for rel in (src, fixture):
+            assert not lane_select.unreachable(rel), \
+                f"{rel} is named by a file every lane reaches and was still called unreachable"
+    finally:
+        with open(manifest, "w") as fh:
+            fh.write(before)
+        for rel in (src, fixture):
+            path = os.path.join(lane_select.ROOT, rel)
+            if os.path.exists(path):
+                os.unlink(path)
+        if os.path.isdir(probe_dir) and not os.listdir(probe_dir):
+            os.rmdir(probe_dir)
+        lane_select.reset_caches()
+
+
+def test_the_things_a_lane_does_reach_are_never_called_unreachable():
+    """The controls. Every one of these is in some lane's closure or is
+    resolved by name at load, and calling any of them unreachable would turn a
+    real change into nothing affected."""
+    for rel in ("cluster/host/kmeans_oracle.mojo", "python/mojolearn/cluster.py",
+                "bindings/_mojolearn.mojo", "gemm/host/gemm_oracle.mojo",
+                "tools/identity_break.py", "python/mojolearn/host_surface.py",
+                "mamba/checks/mamba_fixture.mojo", "embedding/checks/embedding_oracle.mojo",
+                "umap/impl/umap.mojo", "core/step_glue.mojo", "bench/oracle.txt",
+                "ensemble/decisiontree/batched_levelalgo/split.mojo", "training/byte_lm.mojo"):
+        assert not lane_select.unreachable(rel), f"{rel} was called unreachable"
+
+
+#: A miniature whole-surface registry, and the changes to it that must and
+#: must not narrow.
+REGISTRY_BASE = '''from .cluster import KMeans
+from .density import DBSCAN
+
+
+class Base:
+    pass
+
+
+class HostDBSCAN(Base):
+    _ARRAYS = ("labels_",)
+
+
+def binary_path():
+    return "x"
+
+
+FORMATS = {
+    "mojolearn-dbscan-1": {"DBSCAN": HostDBSCAN},
+}
+'''
+
+REGISTRY_ADDITIVE = '''from .cluster import KMeans
+from .density import DBSCAN
+
+
+class Base:
+    pass
+
+
+class HostDBSCAN(Base):
+    _ARRAYS = ("labels_",)
+
+
+class HostKMeans(Base, KMeans):
+    _ARRAYS = ("cluster_centers_",)
+
+
+def binary_path():
+    return "x"
+
+
+FORMATS = {
+    "mojolearn-dbscan-1": {"DBSCAN": HostDBSCAN},
+    "mojolearn-kmeans-1": {"KMeans": HostKMeans},
+}
+'''
+
+#: Each must answer every lane. Ordered so the failing arm runs first.
+REGISTRY_MUST_FALL_BACK = (
+    ("an entry removed",
+     REGISTRY_ADDITIVE.replace('    "mojolearn-dbscan-1": {"DBSCAN": HostDBSCAN},\n', "")),
+    ("an existing function body edited",
+     REGISTRY_ADDITIVE.replace('    return "x"', '    return "y"')),
+    ("an existing class edited",
+     REGISTRY_ADDITIVE.replace('    _ARRAYS = ("labels_",)', '    _ARRAYS = ("labels_", "core_")')),
+    ("a new bare module-level statement beside the addition",
+     REGISTRY_ADDITIVE.replace("FORMATS = {", "SIDE_EFFECT = [n for n in ()]\n\nFORMATS = {")),
+    ("a decorated new class",
+     REGISTRY_ADDITIVE.replace("class HostKMeans(", "@staticmethod\nclass HostKMeans(")),
+    ("a new class whose body runs something",
+     REGISTRY_ADDITIVE.replace('    _ARRAYS = ("cluster_centers_",)',
+                               "    for _ in range(1):\n        pass")),
+    ("an existing key pointed at something else",
+     REGISTRY_ADDITIVE.replace('"mojolearn-dbscan-1": {"DBSCAN": HostDBSCAN}',
+                               '"mojolearn-dbscan-2": {"DBSCAN": HostDBSCAN}')),
+)
+
+
+def _registry_answer(new_text, old_text=REGISTRY_BASE):
+    ref, path = "<fake ref>", "<fake registry>"
+    lane_select._GIT_SHOW[f"{ref}:{path}"] = old_text
+    lane_select._read.cache[path] = new_text
+    try:
+        return lane_select.registry_lanes(ref, path)
+    finally:
+        lane_select._GIT_SHOW.pop(f"{ref}:{path}", None)
+        lane_select._read.cache.pop(path, None)
+
+
+def test_a_registry_change_that_is_not_purely_additive_still_selects_every_lane():
+    """THE ARM THAT MUST FAIL, first. A registry names the whole binding
+    surface, so anything but a verified addition has to stay wide."""
+    for label, text in REGISTRY_MUST_FALL_BACK:
+        assert _registry_answer(text) is None, \
+            f"{label}: a registry change that is not an addition was narrowed"
+
+
+def test_an_additive_registry_entry_selects_what_it_names():
+    """lane/kmeans-save added an import, a Host class and one FORMATS entry to
+    two whole-surface registries and got 212 of 212. An addition is attributed
+    through the files that define the names it mentions."""
+    answer = _registry_answer(REGISTRY_ADDITIVE)
+    assert answer, "a purely additive registry entry was not narrowed at all"
+    assert "kmeans" in answer, f"the addition names KMeans and did not select kmeans: {answer[:8]}"
+    for unrelated in ("mamba1", "transformer", "tokenizer", "gbdt-rmse"):
+        assert unrelated not in answer, \
+            f"an addition naming KMeans selected {unrelated}; it is not narrowing"
+
+
+def test_the_source_hygiene_patterns_still_fire():
+    """The discarded-atomic grep lives next door and its own self-test is what
+    makes it worth running; a pattern that matches nothing reads exactly like a
+    clean tree. `git grep -E` is POSIX ERE and has no `\\s`, which is how the
+    first spelling of it passed while checking nothing."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import source_hygiene_check
+
+    assert source_hygiene_check.self_test() == 0, "a source hygiene pattern no longer fires"
+
+
 def _main():
     failures = 0
     for name, fn in sorted(globals().items()):
