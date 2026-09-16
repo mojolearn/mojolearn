@@ -5246,6 +5246,10 @@ _batch_decl("n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measur
             "per-sample silhouette_samples is asked on metrics-classification)", "metrics")
 _batch_decl(_batch_silhouette_chunks, "metrics-classification")
 _batch_decl(_batch_cross_val, "cross-val")
+# The fold PARTITION is metadata, not an inference call: the lane fits nothing
+# and asks nothing for a row's answer, so there is no batch axis to vary
+# (lane/data-ordering-determinism, 2026-09-16).
+_batch_decl("n/a:function", "cross-val-folds")
 _batch_decl(_batch_bootstrap_lane, "bootstrap")
 _batch_decl(_batch_permutation_lane, "permutation-test")
 _batch_decl("n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form "

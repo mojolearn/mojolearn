@@ -144,25 +144,91 @@ nothing hashes the order a GBDT fit consumed.
 
 ## Arms, and what was made to fail
 
-`/Users/andrewhendel/mojolearn-evidence/data-ordering-determinism/link3_probe.py`,
-one core, `nice -n 19`, all thread knobs 1.
+Apple M4, one core, `nice -n 19`, every thread knob 1, through
+`mac_slot.sh`. Evidence in
+`/Users/andrewhendel/mojolearn-evidence/data-ordering-determinism/`.
 
 | arm | what it does | on the tree as found | after the fix |
 |---|---|---|---|
-| A | both sabotage switches on | **FAIL, 0 of 9 parts moved (INERT)** | PASS, 8 parts move, `partition` holds |
-| B | label-preserving rotation of all 2048 rows | 0 of 4 index hashes move, 4 of 4 content hashes move | unchanged, and now asserted by a test |
+| A | both sabotage switches on | **INERT, 0 of 9 parts moved: the control cannot fail** | FIRES, 8 parts move, `partition` holds |
+| B | label-preserving rotation of all 2048 rows | 0 of 4 index hashes move, 4 of 4 content hashes move | unchanged, now asserted by a test |
 | C | free permutation | KFold indices immovable, stratified move | unchanged |
-| D | `split_descriptor` under arm B's permutation | n/a, function did not exist | `X_sha256` and `sha256` MOVE, `fold_assignment_sha256` and `y_sha256` hold |
+| D | `split_descriptor` under arm B's permutation | n/a, the function did not exist | `X_sha256` and `sha256` MOVE, `fold_assignment_sha256` and `y_sha256` hold |
 
-Two more checks that can fail:
+Arm A is reproducible on demand and both sides run in ONE process
+(`arm_a_unfixed_vs_fixed.txt`): the draft module is read out of commit
+`1ca393961` as an untracked byte copy, so no tracked file is edited to run a
+sabotage and no `git checkout --` can eat the lane's own work.
 
-* **Inert by default.** `_default_folds` compared against the HEAD module
-  over 381 label-shape and split-count combinations including the four
-  stratified shapes and three KFold sizes the existing tests cover: **381
+**The configuration axis was moved, not just the order axis inside one
+configuration** (`link3_config_sweep.py`). A neighbouring lane proved a
+trainer reproducible across five axes that all lived inside a single
+configuration, and the claim broke the moment the configuration moved. This
+sweep varies row count (48, 97, 512, 2048), class count (2, 3, 4), class
+balance (balanced, 90/10, 60/30/7/3) and split count (2, 3, 4, 5) on both
+branches: **118 real cells, in every one the index hash HELD and the content
+hash MOVED, 0 unexpected.** The gap is structural, not an artifact of one
+shape.
+
+The sweep's last configuration is a deliberate UNIFORM control, every row
+identical. There the content hash cannot move either, and the sweep reports
+those 8 cells as PROVES NOTHING rather than counting them as passes. That is
+the standing warning made into an assertion: a fixture whose rows do not
+differ makes a permutation invisible and every claim about it vacuous.
+
+**Nine-fixture coverage of the lane itself** (`--repeats 2`, mode
+`identical`): production `cells=9 stable=9 moved=0 refused=0`, sabotage
+`cells=9 stable=9 moved=0 refused=0`, and all nine cells differ between the
+two arms.
+
+| fixture | production | sabotage |
+|---|---|---|
+| base | ca4add859c436aa0 | 3509fc989915b148 |
+| ties | 9d838dfccfb54c97 | 500cfd3aceba5dfb |
+| hashed | adf138d3b8c64057 | b00667e7593b1d54 |
+| wide | ef04aa56f60ca125 | a2aab5287b2d91a1 |
+| denormal | 0ada8df2433db5ed | b9a84573f819b1eb |
+| denormal_ftz | b9268c17c9ed51bb | a9cd7247a69d5653 |
+| dupes | 5557de5adf470f18 | e4cb5ed2e508ac31 |
+| odd | e8d616ca46196f80 | 3fc538094f9b9a5d |
+| negative | 537992e0decac938 | baf34c47037625b8 |
+
+Three more checks that can fail:
+
+* **Inert by default.** `_default_folds` compared against the pre-change
+  module over 381 label-shape and split-count combinations: **381
   comparisons, 0 differing.** Wiring the control changed no production fold.
+  The sklearn reference tests agree: 19 passed with scikit-learn 1.9.0 on the
+  path, including the two that hold `_default_folds` to `KFold` and
+  `StratifiedKFold` index for index.
 * **One switch is not enough.** Either environment variable alone leaves the
   folds alone, mirroring `_backend.py`, which refuses a sabotage build unless
   `MOJOLEARN_HOST_ALLOW_SABOTAGE=1`. Asserted in the test file.
+* **The docstring-only edits cannot reach a cell.** `_byte_lm_impl.py`,
+  `_mlp_impl.py` and `ensemble.py` were parsed with every docstring stripped
+  and compared against `origin/main`: identical ASTs. `model_selection.py`
+  was run through the same check as the CONTROL and came back DIFFERENT, so
+  the check discriminates. No lane hashes `source_sha256` or `run_metadata`,
+  so nothing observes those files' bytes either.
+
+## Why this was not run as a full sweep
+
+`tools/verify_lanes.py --changed-since origin/main` printed **FALLING BACK TO
+EVERY LANE**, 212 of 212, because `tools/identity_break.py` changed and the
+new test file is not attributable to any lane. That is a full sweep and is
+Tier 2 work for a rented CPU, not for this Mac, so it was not run and must
+not be reported as a narrow run. The fallback is conservative rather than
+correct here: the `identity_break` diff is ONE additive hunk that touches no
+existing lane body, and the three library files it could not attribute are
+docstring-only by the AST check above. The real blast radius is the three
+lanes the selector attributes to `model_selection.py`, which were run:
+`cross-val`, `cross-val-folds`, `ivf-extend`.
+
+`cross-val` and `ivf-extend` both read REFUSED on this install, for missing
+CPU entry points (`gather_rows_bytes` and `ivf_numeric_mode`) unrelated to
+this change, which is exactly the situation that motivated a fold lane
+needing no binding: `cross-val-folds` produced a cell on all nine fixtures on
+the same install where `cross-val` could not produce one at all.
 
 ## Files
 
@@ -179,7 +245,11 @@ Two more checks that can fail:
 
 * No GPU column and none owed: every part of this lane is host Python with no
   float arithmetic, so there is nothing for a vendor to disagree about. The
-  cell will appear on the next CPU column that runs `cross-val-folds`.
+  cell will appear on the next CPU column that runs `cross-val-folds`. Its
+  `infer`, `model` and `batch` parts are declared `n/a:function`, so the lane
+  adds no UNDECLARED part to the batch census.
+* The full 212-lane sweep the selector asked for was NOT run; see above for
+  why, and for the narrower set that was.
 * Nothing hashes the row order a forest, GBDT, k-means or `resample` fit
   consumed. `split_descriptor` covers cross-validation only. Extending the
   same descriptor to `fit` is a larger change and was not opened, per the
