@@ -523,6 +523,39 @@ for leg 5 at 2400 s against leg 6 at 2900 s rather than assumed.
 - The lane is NOT dropped, NOT marked n/a and NOT excluded from the diff. Whether 0.8.6 ships
   with a known moving cell is Andrew's call with the finished record in front of him.
 
+### The Apple overnight estimate, lane aware: about 10.6 hours
+
+A single mean is misleading here because the lane costs are bimodal. Measured over the first ten
+one-lane groups: **heavy lanes average 538 s** (n=6; `byte-lm` alone took 1995 s, `mamba1` 429 s)
+and **light lanes average 25 s** (n=4; `byte-lm-host-train` took 2 s). Of the 148 lanes left, 67
+match the heavy shapes (`byte-lm*`, `mamba*`, `samba`, `transformer`, `par-*`, `gp*`, `umap`,
+`gbdt*`) and 81 are light.
+
+| estimate | value | why it misleads |
+|---|---|---|
+| flat mean (333 s) | 13.7 h | the 2 s lanes drag the mean into fiction |
+| median (64 s) | 2.6 h | ignores that most of what REMAINS is heavy |
+| **lane aware** | **about 10.6 h** | uses the measured heavy and light means against the actual remainder |
+
+Still to come among the heavy: mamba2, mamba3, transformer, samba, and a long run of `gbdt-*`.
+**10.6 hours is the figure to quote**, and it is the number that makes cutting the Apple column's
+scope a real question rather than a patience problem.
+
+### A fourth check that could not fail: "partial_uploaded bytes=" with no bytes
+
+Leg 5's box logged `partial_uploaded bytes=` every 120 s for 28 minutes while **no JSON existed**
+in `/root/gemm_leg_out/identity/`. The uploader I added reads:
+
+    upload() { [ -s "$JSON" ] || return 0; curl ... ; }
+    ( while :; do sleep 120; if upload; then log "partial_uploaded bytes=$(wc -c < "$JSON" ...)"; fi; done ) &
+
+`upload` returns **success** when the file does not exist, so the success line prints on every
+no-op, and `wc -c` of a missing file leaves the byte count empty. A success message for work that
+did not happen is the same failure as the guard that could never pass and the tripwire written as
+prose: it is the fourth tonight. The fix is one line, `[ -s "$JSON" ] || return 1`, so a missing
+column reports nothing rather than reporting success, and the empty `bytes=` should have been
+read as a symptom the moment it appeared rather than at minute 28.
+
 ## Lessons from tonight: a check that is not code is not a check
 
 Three failures in one night, and they are the same failure wearing different clothes. Read them
