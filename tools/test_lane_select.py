@@ -830,6 +830,108 @@ def test_a_base_everything_inherits_is_not_evidence():
             assert u not in targets, f"{rel} kept an edge to the universal base {u}"
 
 
+def test_the_mojo_conformance_inversion_holds_over_the_whole_tree():
+    """INVERSION 3, the Mojo side, and the answer is that there is no backward
+    edge to follow.
+
+    A Mojo under-attribution is worse than a Python one: a Python miss means a
+    lane's door was missed, a Mojo miss means the ARITHMETIC changed and no
+    cell was asked about it. The feared shape was a struct conforming to a
+    trait that a kernel dispatches on. Measured on this tree: 10 repo traits,
+    9 real conformance edges, and lanes(B) == lanes(F) on every one of them,
+    23 against 23 and 35 against 35. Mojo conformance is not Python
+    subclassing: a conforming struct is reached only when something
+    parametrises on the trait AND IS HANDED THAT STRUCT BY NAME, and naming a
+    symbol from another file requires importing it, so the forward walk
+    already has it."""
+    sources, rev = _lane_sets()
+    edges = lane_select.mojo_conformance_edges()
+    assert len(edges) >= 5, f"only {len(edges)} conformance edges found; the scan is broken"
+    bad = []
+    for f, trait, b in edges:
+        missing = rev.get(b, set()) - rev.get(f, set())
+        if missing:
+            bad.append(f"{f} conforms to {trait} declared in {b}, but {len(missing)} lane(s) "
+                       f"reach the declaration and not the implementation, e.g. {sorted(missing)[:4]}")
+    assert not bad, "\n  ".join([""] + bad[:6])
+
+
+def test_the_mojo_inversion_fires_when_an_implementation_is_cut_loose():
+    """THE ARM THAT MUST FAIL. An inversion with nothing to catch is not a
+    check, and this one holds today only because the forward walk reaches the
+    implementations. Cut ONE incoming import and it must fire.
+
+    The first attempt at this control was invalid and was caught by measuring
+    both sides: dropping every path matching `pointwise_hist2` also removed
+    the template that carries the lanes, so lanes(B) and lanes(F) fell
+    together and the inversion stayed silent at zero. A negative control whose
+    two arms move together proves nothing. This one removes a single edge and
+    asserts the dispatcher KEEPS its lanes while the implementation loses
+    them."""
+    victim = "gbdt/methods/kernel/pointwise_hist2_one_byte_7bit.mojo"
+    declarer = "gbdt/methods/kernel/compute_point_hist2_loop.mojo"
+    _, rev = _lane_sets()
+    before_b, before_f = len(rev.get(declarer, set())), len(rev.get(victim, set()))
+    assert before_b and before_f, "the baseline is already empty; this control cannot fire"
+
+    real = lane_select._mojo_imports
+    lane_select._mojo_imports = lambda rel: ({f for f in real(rel) if f != victim}
+                                             if rel != victim else real(rel))
+    lane_select.reset_caches()
+    try:
+        _, broken = _lane_sets()
+        assert len(broken.get(declarer, set())) == before_b, \
+            "the sabotage moved the DECLARER too, so the two arms move together and prove nothing"
+        assert not broken.get(victim, set()), "the sabotage did not detach the implementation"
+        fired = [f for f, _t, b in lane_select.mojo_conformance_edges()
+                 if broken.get(b, set()) - broken.get(f, set())]
+        assert victim in fired, f"the inversion did not name {victim}; it caught {fired[:4]}"
+    finally:
+        lane_select._mojo_imports = real
+        lane_select.reset_caches()
+
+
+def test_the_two_mojo_exemptions_are_the_ones_that_were_measured():
+    """Both exemptions on the conformance edge are derived, and both split this
+    tree exactly. A file with its own `main` is a standalone program; all the
+    files that conform to a repo trait purely to TEST it have one and none of
+    the shipped implementations does. And the conforming file must actually
+    IMPORT the declaration: `core/philox.mojo` and `mamba/host/gen/philox.mojo`
+    each declare their OWN `U32Stream` and neither imports the other, so
+    matching by trait name alone invented an edge and claimed 80 missing
+    lanes."""
+    for rel in ("checks/feature_tensor_check.mojo", "checks/newton_walker_check.mojo",
+                "checks/pointwise_loop_check.mojo", "ensemble/checks/core_primitives_check.mojo",
+                "ensemble/checks/philox_check.mojo"):
+        assert lane_select.is_standalone_program(rel), \
+            f"{rel} was a standalone program and is not any more; the exemption needs re-deriving"
+    for rel in ("gbdt/methods/kernel/pointwise_hist2_one_byte_7bit.mojo",
+                "gbdt/methods/leaves_estimation/pointwise_oracle.mojo",
+                "core/philox.mojo", "mamba/host/gen/philox.mojo"):
+        assert not lane_select.is_standalone_program(rel), \
+            f"{rel} became a standalone program; it would now be exempted wrongly"
+    a, b = "core/philox.mojo", "mamba/host/gen/philox.mojo"
+    assert b not in lane_select._mojo_imports(a) and a not in lane_select._mojo_imports(b), \
+        "the two philox files now import each other, so the name collision is a real edge"
+    pairs = {(f, b) for f, _t, b in lane_select.mojo_conformance_edges()}
+    assert (a, b) not in pairs and (b, a) not in pairs, \
+        "the philox name collision is back in the conformance graph"
+
+
+def test_a_mojo_file_something_imports_is_never_unreachable():
+    """A Mojo import is a compile-time fact and does not need the corpus to be
+    believed. `core/forest_inference_model.mojo` is imported by
+    `bindings/forest_inference_binding.mojo`, which is ITSELF outside the map,
+    so nothing in the corpus named either and the model file read "nothing
+    reaches it" while being part of a shipped binding's tree. An importer that
+    is a standalone program still does not count, which is what keeps three
+    new check files that import each other unreachable."""
+    for rel in ("core/forest_inference_model.mojo", "core/forest_inference_pool.mojo"):
+        assert lane_select._mojo_importers(rel), f"{rel} is imported by nothing; pick a new case"
+        assert lane_select.unreachable(rel) is None, \
+            f"{rel} is imported by a non-program and was still called unreachable"
+
+
 # --------------------------------------------------------------------------
 # THE ADVERSARIAL PASS, 2026-09-16. Everything above asks whether a rule
 # narrows when it should. These ask the question that costs a defect rather

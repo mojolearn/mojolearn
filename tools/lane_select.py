@@ -165,6 +165,7 @@ def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
     global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
+    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS
     for cache in _CACHES:
         cache.clear()
     _GIT_SHOW.clear()
@@ -174,6 +175,8 @@ def reset_caches():
     _SOURCE_HASHED = None
     _CONSTANTS = None
     _EXTENDERS = None
+    _MOJO_CONFORMANCE = None
+    _MOJO_IMPORTERS = None
 
 
 @_by_path
@@ -476,6 +479,67 @@ def _mojo_imports(rel):
             if os.path.exists(os.path.join(ROOT, cand)):
                 out.add(cand)
     return out
+
+
+_MOJO_TRAIT_RE = re.compile(r"^\s*trait\s+([A-Za-z_][A-Za-z0-9_]*)", re.M)
+_MOJO_STRUCT_RE = re.compile(
+    r"^\s*struct\s+[A-Za-z_0-9]+(?:\[[^\]]*\])?\s*\(([^)]*)\)", re.M)
+_MOJO_MAIN_RE = re.compile(r"^\s*(?:fn|def)\s+main\s*\(", re.M)
+
+
+@_by_path
+def is_standalone_program(rel):
+    """Does this Mojo source define its own `main`. Such a file is compiled on
+    its own and linked into no binding, so it cannot change what a lane
+    computes however much of the tree it names."""
+    return bool(_MOJO_MAIN_RE.search(_read(rel)))
+
+
+_MOJO_CONFORMANCE = None
+
+
+def mojo_conformance_edges():
+    """(conforming file, trait, declaring file) for every REPO trait.
+
+    THE MOJO ANALOGUE OF THE PYTHON SUBCLASS EDGE, and the reason it does not
+    need to be followed. In Python a subclass REPLACES behaviour for anyone who
+    constructs it, so the edge runs backwards along imports. In Mojo a struct
+    conforming to a trait is reached only when something parametrises on that
+    trait AND IS HANDED THAT STRUCT BY NAME, and naming a symbol from another
+    file requires importing it. So the dispatcher already imports the
+    implementation and the forward walk already has it.
+
+    Two exemptions, both DERIVED and both checked on this tree rather than
+    asserted:
+
+      * a file with its own `main` is a standalone program. All five files
+        that conform to a repo trait purely to TEST it have one, and none of
+        the seven shipped implementations does.
+      * the conforming file must actually IMPORT the trait's declaration.
+        `core/philox.mojo` and `mamba/host/gen/philox.mojo` each declare their
+        OWN `U32Stream` and neither imports the other, so matching the trait
+        by name alone invented an edge between two unrelated generators and
+        claimed 80 missing lanes."""
+    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS
+    if _MOJO_CONFORMANCE is None:
+        mojo = sorted(f for f in tracked_files() if f.endswith(".mojo"))
+        declared = {}
+        for rel in mojo:
+            for m in _MOJO_TRAIT_RE.finditer(_read(rel)):
+                declared.setdefault(m.group(1), set()).add(rel)
+        out = []
+        for rel in mojo:
+            if is_standalone_program(rel):
+                continue
+            imports = _mojo_imports(rel)
+            for m in _MOJO_STRUCT_RE.finditer(_read(rel)):
+                for base in m.group(1).split(","):
+                    name = base.strip().split("[")[0].strip()
+                    for decl in declared.get(name, ()):
+                        if decl != rel and decl in imports:
+                            out.append((rel, name, decl))
+        _MOJO_CONFORMANCE = sorted(set(out))
+    return _MOJO_CONFORMANCE
 
 
 def _mojo_closure(seeds):
@@ -999,6 +1063,32 @@ def test_module_inert(path):
             "what a lane computes, and its name appears nowhere outside python/mojolearn/tests/")
 
 
+_MOJO_IMPORTERS = None
+
+
+def _mojo_importers(path):
+    """The tracked Mojo files that import `path`, by the same resolution the
+    forward walk uses."""
+    global _MOJO_IMPORTERS
+    if _MOJO_IMPORTERS is None:
+        out = {}
+        for rel in tracked_files():
+            if not rel.endswith(".mojo") or _is_inert(rel):
+                continue
+            if is_standalone_program(rel):
+                # A FILE WITH ITS OWN `main` IS A PROGRAM, and a program is
+                # compiled on its own and linked into no binding, so importing
+                # something does not put it in any lane's way. The same
+                # exemption the conformance edge needed, measured the same way.
+                # Without it the three new umap/checks files, which import each
+                # other, each made the others look reachable.
+                continue
+            for target in _mojo_imports(rel):
+                out.setdefault(target, set()).add(rel)
+        _MOJO_IMPORTERS = out
+    return _MOJO_IMPORTERS.get(path, set())
+
+
 def _reaching_corpus():
     """Every file some lane already reaches, plus the harness and the manifest.
 
@@ -1132,6 +1222,15 @@ def unreachable(path):
     if path.startswith(PKG + os.sep) or path.startswith("bindings" + os.sep):
         return None
     if path in reverse_map():
+        return None
+    if path.endswith(".mojo") and _mojo_importers(path):
+        # IMPORTED BY SOMETHING, EVEN SOMETHING THE MAP DOES NOT HAVE. The
+        # corpus is what a lane reaches, and a chain of files the map is
+        # missing votes nowhere: `core/forest_inference_model.mojo` is
+        # imported by `bindings/forest_inference_binding.mojo`, which is
+        # itself outside the map, so nothing in the corpus named either and
+        # the model file read "nothing reaches it". A Mojo import is a
+        # compile-time fact and does not need the corpus to be believed.
         return None
     stem = os.path.basename(path)
     tokens = [(path, False), (stem, False)]
