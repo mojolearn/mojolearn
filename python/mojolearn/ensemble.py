@@ -620,6 +620,19 @@ class GradientBoosting(NumericModeMixin):
         (`binarizations_manager.cpp:106-115`): one-hot when the cardinality
         is small enough, target statistics (CTRs) otherwise.
 
+        THE CTR PATH IS THE ONE PLACE A FIT READS YOUR ROW ORDER, and the
+        caveat belongs here rather than only in the native source
+        (`gbdt/data/permutation.mojo`, lane/data-ordering-determinism
+        2026-09-16). CatBoost shuffles the learn pool at load whenever there
+        are categorical features and no time column
+        (`preprocess.cpp:161-199`); that is CPU-side preparation upstream of
+        everything in `catboost/cuda`, and this implementation does not have
+        it. So the ordered statistics are computed over the rows AS YOU HAND
+        THEM IN. Rows sorted by target are the worst case: every row's
+        statistic then reads its own neighborhood, which is a different and
+        worse estimator, not a slower one. Shuffle before fitting, and record
+        the order you used; with no `cat_features` none of this is reached.
+
     od_type : {'None', 'IncToDec', 'Iter'}, optional
         The overfitting detector. LEAVING IT UNSET IS NOT THE SAME AS
         'None': their `Load` (`overfitting_detector_options.cpp:24-32`)
