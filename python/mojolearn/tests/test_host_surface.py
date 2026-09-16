@@ -457,3 +457,112 @@ def test_command_line_prints_the_gaps_7_wiring(capsys):
     assert capsys.readouterr().out.strip() == host_surface.GBDT_CTR_MODELS_DIR
     assert host_surface.main(["--sabotage-build-defines", "tokenizer"]) == 0
     assert capsys.readouterr().out.strip() == host_surface.sabotage_build_defines("tokenizer")
+
+
+# ------------------------------------------------- the exposure surface
+# lane/expose-inference-surface (2026-09-16): a family that does not ship,
+# and a surface that is built but not reachable, must say so IN THE FILE.
+
+
+def test_every_family_says_why_it_ships_or_does_not():
+    """No silent exclusion: every family carries a `wheel_note`, and a family
+    that does not ship says what serves its inference instead, or that it is
+    training-only, or that the question is open."""
+    missing = [f["family"] for f in host_surface.FAMILIES if not (f.get("wheel_note") or "").strip()]
+    assert missing == [], f"families with no wheel_note: {missing}"
+    assert set(host_surface.wheel_notes()) == set(host_surface.families())
+    for f in host_surface.FAMILIES:
+        note = f["wheel_note"]
+        assert len(note) > 60, f"{f['family']}: the wheel_note is too short to be a reason: {note!r}"
+        if f["ships_in_wheel"]:
+            assert note.startswith("Ships:"), f"{f['family']}: a shipping family's note must start 'Ships:'"
+        else:
+            assert note.startswith("Does not ship"), (
+                f"{f['family']}: a non-shipping family's note must start 'Does not ship'")
+
+
+def test_the_open_exclusions_are_named_as_open():
+    """The two exclusions that are an unmade decision rather than a settled
+    boundary say OPEN, so nobody reads them as decided."""
+    notes = host_surface.wheel_notes()
+    assert "OPEN" in notes["resample"], "resample's exclusion is an unmade decision; it must say OPEN"
+    assert "OPEN" in notes["tsa"], "kpss_test's exclusion is an unmade decision; it must say OPEN"
+
+
+def test_public_reference_candidates_meet_every_condition_to_be_promoted():
+    """Each candidate is a real lane, is diffed against the record columns,
+    is served only by shipping families, and is not already live. A candidate
+    that fails one of these could not be promoted by the run that is owed."""
+    candidates = host_surface.public_reference_candidates()
+    assert candidates, "the candidate list is empty"
+    assert len(set(candidates)) == len(candidates), "a lane is named twice"
+
+    text = _read("tools/identity_break.py")
+    defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
+    defined |= set(re.findall(r'^lane\("([a-z0-9-]+)"\)\(', text, re.M))
+    defined |= _loop_registered_lanes(text)
+    unknown = [l for l in candidates if l not in defined]
+    assert unknown == [], f"candidates unknown to tools/identity_break.py: {unknown}"
+
+    live = set(host_surface.public_reference_lanes())
+    already = [l for l in candidates if l in live]
+    assert already == [], f"candidates that are already public reference lanes: {already}"
+
+    record = set(host_surface.record_covered_lanes())
+    outside = [l for l in candidates if l not in record]
+    assert outside == [], f"candidates not diffed against TRAINING_GPU_COLUMNS: {outside}"
+
+    ships = {f["family"] for f in host_surface.FAMILIES if f["ships_in_wheel"]}
+    for lane in candidates:
+        serving = [f["family"] for f in host_surface.FAMILIES if lane in f["training_lanes"]]
+        assert serving, f"{lane}: no family declares it as a training lane"
+        unshipped = [f for f in serving if f not in ships]
+        assert unshipped == [], (
+            f"{lane}: served by {unshipped}, which does not ship, so promoting it would grow the wheel")
+
+
+def test_saved_model_inference_owed_names_real_undeclared_lanes():
+    """Each owed entry is a real lane, is NOT a declared inference lane (or it
+    would be gated already), and names a saved-model format the classical host
+    door dispatches, or says why there is no format yet."""
+    owed = host_surface.saved_model_inference_owed()
+    assert owed, "the owed list is empty"
+    declared = set(host_surface.inference_lanes())
+    text = _read("tools/identity_break.py")
+    defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
+    defined |= set(re.findall(r'^lane\("([a-z0-9-]+)"\)\(', text, re.M))
+    defined |= _loop_registered_lanes(text)
+    host_src = _read("python/mojolearn/_classical_host.py")
+    # The format STRINGS are defined in the impl modules (density.py,
+    # _spectral_impl.py, _hierarchy_impl.py) and _classical_host.py dispatches
+    # them by SYMBOL. host_surface.py is excluded on purpose: it carries these
+    # notes, and a search that found its own text would pass whatever it said.
+    package = ROOT / "python" / "mojolearn"
+    defines = "\n".join(p.read_text(encoding="utf-8") for p in sorted(package.glob("*.py"))
+                        if p.name != "host_surface.py")
+    for lane, why in owed.items():
+        assert lane in defined, f"{lane}: not a lane tools/identity_break.py defines"
+        assert lane not in declared, f"{lane}: already a declared inference lane; drop it from the owed list"
+        assert len(why) > 60, f"{lane}: the reason is too short: {why!r}"
+        fmt = re.search(r"mojolearn-[a-z]+-\d", why)
+        if fmt:
+            assert f'"{fmt.group(0)}"' in defines, (
+                f"{lane}: the note names {fmt.group(0)}, which no module under python/mojolearn defines")
+            symbol = "_" + fmt.group(0).split("-")[1].upper() + "_FORMAT"
+            assert re.search(rf"^\s+{symbol}: \{{", host_src, re.M), (
+                f"{lane}: _classical_host._FORMATS does not dispatch {symbol}, so mojolearn.host_model "
+                f"would refuse such a file and the note's claim is wrong")
+        else:
+            assert "no `save`" in why or "serialization format" in why, (
+                f"{lane}: names no dispatched format and does not say why there is none")
+
+
+def test_command_line_prints_the_exposure_surface(capsys):
+    assert host_surface.main(["--public-reference-lanes"]) == 0
+    assert capsys.readouterr().out.strip() == ",".join(host_surface.public_reference_lanes())
+    assert host_surface.main(["--public-reference-candidates"]) == 0
+    assert capsys.readouterr().out.strip() == ",".join(host_surface.public_reference_candidates())
+    assert host_surface.main(["--wheel-notes"]) == 0
+    assert "resample:" in capsys.readouterr().out
+    assert host_surface.main(["--saved-model-inference-owed"]) == 0
+    assert "spectral:" in capsys.readouterr().out

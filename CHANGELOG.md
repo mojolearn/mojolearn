@@ -10,6 +10,27 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- Every host family now says in `python/mojolearn/host_surface.py` why it does or does not
+  ship in the wheels (`wheel_note`, `--wheel-notes`), so an exclusion is never silent
+  (lane/expose-inference-surface, for 0.8.7). Fifteen families ship and seventeen do not;
+  each of the seventeen names the shipping family that serves its inference instead
+  (preprocessing and kernel_methods through estimators, trees, rf and gbdt through forest,
+  gp through gp_infer, arima and tsa through forecast, mamba, transformer and the training
+  forwards through neural, and so on) or says it is training-only. Two read OPEN rather than
+  settled, because they are an unmade decision and not a boundary: `resample`'s bootstrap,
+  permutation test and Monte Carlo integration, and the `tsa` family's `kpss_test`, all
+  compute an answer from a user's own data with no fitted model to save, so they fit neither
+  side of the saved-model inference boundary and refuse on a CPU-only install.
+- The same file now records the two measured exposure gaps rather than leaving them in a
+  reader's head. `PUBLIC_REFERENCE_CANDIDATES` names 27 identity lanes that pass every static
+  condition for `public_reference_lanes()` (a real train reference on all nine fixtures, a
+  `cpu` column already in the shipped table, and every serving family already in the wheel, so
+  promoting them grows the wheel by nothing) and are not live only because no one has watched
+  them pass on a CPU-only install yet. `SAVED_MODEL_INFERENCE_OWED` names the saved-model
+  inference that IS implemented and that `mojolearn.host_model()` already dispatches but that
+  no gate covers: DBSCAN, AgglomerativeClustering and SpectralClustering `predict`, each
+  waiting on a GPU recording, and `KMeans.predict`, which has no save format yet.
+
 - `ARIMA` takes exogenous regressors: `fit(y, exog)`, `forecast(steps, exog)` and
   `predict(start, end, exog)` (lane/arima-exog, for 0.8.7), regression with ARIMA errors as
   cuML's. `beta` is packed after `mu`, the regressors are differenced beside `y`, `beta` is
