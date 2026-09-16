@@ -9,7 +9,33 @@ The three branches are `lane/rf-score-weighted-nondeterminism` (the diagnosis),
 `lane/rf-mutex-claim-acquire` (the repair, inline), and `fix/amd-merge-ordering` (the
 repair as a portable helper, plus a model checker and a device check).
 
-**REVISED TWICE LATER THE SAME DAY, and the second revision partly undoes the first.
+## WHAT IS PROVED, WHAT IS NOT, AND WHAT MERGED
+
+**This repair MERGED to `main` on 2026-09-16. The MECHANISM WAS NOT DEMONSTRATED. Those
+two sentences are both true and the merge does not soften the second one.**
+
+| claim | status |
+|---|---|
+| The stock protocol is formally invalid | **PROVED**, by the C++ release-sequence argument (section 1) and a bounded model check with a printed counterexample and a negative control that was observed to fail |
+| The acquire fence closes it | **PROVED** as an argument, same rule |
+| The fence reaches the instruction stream on all three columns | **MEASURED**. `fence acquire` in disassembled Metal AIR, `fence.acq_rel.sys` in emitted PTX, and a differing gfx942 code object |
+| The shipped spin load's acquire is real on all three columns | **MEASURED** (section 0.25) |
+| Six hand-written claim sites are now one | **DONE**, and checkable in one line: `git grep -n compare_exchange` over `*.mojo` outside `bench/results` returns exactly ONE hit |
+| The fix stops the forest moving on MI300X | **AN EFFECT, REPLICATED TWICE**, control 7/300 then 6/300 against 0/300, for the acquire compare-exchange spelling (section 0.2) |
+| **WHY the forest moves, at the primitive** | **NOT DEMONSTRATED.** The primitive check has returned a NULL TWICE, at 4096 claims with a widened critical section. It is the wrong instrument |
+| No bit moves on any column with the repair in | **UNPROVEN.** Both Apple builds skipped the build gate and compared nothing |
+| ExtraTrees and fused kNN | **ENTIRELY UNMEASURED.** They carry the same protocol and are repaired by the same argument, not by any measurement of them |
+
+**Why it merged without the mechanism.** The repair is formally correct, provably emits,
+and collapses six copies to one. The mechanism hunt needs a new probe and is open-ended.
+0.8.5 carries this defect in PUBLIC on MI300X at 1% to 5% of fits with the default
+`max_features`, so waiting protects nobody while leaving a known bug shipped. The
+mechanism work continues on **`lane/rf-mutex-mechanism`**, unmerged, with the owed list
+in section 5 intact. It is not on the release's critical path.
+
+---
+
+**REVISED TWICE ON 2026-09-16, and the second revision partly undoes the first.
 Read section 0 before anything else.**
 
 1. The first version of this file recommended a repair that **DOES NOT EMIT**. The
@@ -492,6 +518,19 @@ Still owed:
 - `lane/rf-mutex-claim-acquire`'s Apple build proves the SOURCE compiles. It does not prove
   the ordering reached the binary, and section 0 shows it did not.
 - None of the three has measured ExtraTrees or fused kNN.
+- **A zero from a probe that did not run is not a zero.** Four separate things bit this
+  lane in one day and all four are the same failure class. A `grep -c` over a command
+  that produced nothing returns 0. An unquoted `$defs` in zsh does not word-split, so
+  every `-D` silently never reaches the compiler and both arms are the same program. A
+  whole-file digest over a binary carrying a fresh `mktemp` install name always differs,
+  so the guard can never report VOID. And, for the next person disassembling an AMD code
+  object: **`llvm-objdump` with an `amdgcn` triple does NOT disassemble the GPU code
+  object embedded in a HOST ELF.** It produces nothing, `grep -c buffer_inv` counts 0,
+  and that 0 is indistinguishable from the instruction being absent. Extract the embedded
+  code object first (scan `__TEXT,__const` or `.rodata` for the `\x7fELF` magic), or use
+  the differential build of section 0.25, which needs no disassembler at all. Every one
+  of these was caught by a control that was made to FAIL first, and none of them would
+  have been caught without one.
 - The four traced divergences support a lost-candidate reading. They do not by themselves
   identify a unique cause. What makes that reading strong is structural rather than
   statistical. A correct merge is a maximum over a total order and does not depend on
