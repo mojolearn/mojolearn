@@ -2461,8 +2461,11 @@ def bwd_attention_eager_stages(
         grid_dim=(_grid(b * nh * l), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 18, bst.attn_zdot, b * nh * l)
     step_count_launch()
     ctx.enqueue_function[bwd_softmax_ds_kernel](
@@ -2475,8 +2478,11 @@ def bwd_attention_eager_stages(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 19, bst.d_attn_masked, cells)
 
     # =====================================================================
@@ -2496,8 +2502,11 @@ def bwd_attention_eager_stages(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 20, bst.d_attn_scores, cells)
 
     # =====================================================================
@@ -2512,8 +2521,11 @@ def bwd_attention_eager_stages(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 21, bst.d_qk_cell, cells)
 
     # =====================================================================
@@ -2833,8 +2845,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 0, bst.in_d_residual2, m * dm)
     _rec(ctx, trace, prefix, 1, bst.d_down_proj_out, m * dm)
     pc.tick(ctx, "grad.residual2_copy")
@@ -2874,8 +2889,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * it), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 4, bst.d_silu_out, m * it)
     _rec(ctx, trace, prefix, 5, bst.d_up_proj_out, m * it)
     pc.tick(ctx, "grad.gate_mul")
@@ -2893,8 +2911,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * it), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 6, bst.d_gate_proj_out, m * it)
     pc.tick(ctx, "grad.silu")
 
@@ -2928,8 +2949,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 9, bst.d_norm2_out, m * dm)
     pc.tick(ctx, "grad.gateup_fanin")
 
@@ -2975,8 +2999,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 13, bst.d_residual1, m * dm)
     pc.tick(ctx, "grad.residual1_add")
     step_count_launch()
@@ -2987,8 +3014,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 14, bst.d_o_proj_out, m * dm)
     pc.tick(ctx, "grad.o_copy")
 
@@ -3088,8 +3118,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * kw), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 25, bst.d_k_rope, m * kw)
     _rec(ctx, trace, prefix, 26, bst.d_v_proj_out, m * kw)
     pc.tick(ctx, "grad.kv_slice")
@@ -3128,8 +3161,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * kw), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 27, bst.d_q_proj_out, m * qw)
     _rec(ctx, trace, prefix, 28, bst.d_k_proj_out, m * kw)
     pc.tick(ctx, "grad.rope")
@@ -3163,8 +3199,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 32, bst.d_norm1_out, m * dm)
     pc.tick(ctx, "grad.qkv_fanin")
 
@@ -3223,8 +3262,11 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+    # statement is a trace record. `IdentityTrace.record_device` returns
+    # at once when tracing is off; when it is on it enqueues its OWN copy
+    # behind this kernel on the same in-order context and drains AFTER
+    # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 36, bst.d_x, m * dm)
     pc.tick(ctx, "grad.x_add")
     timing_tick(ctx, ton, tk, "bwd.after_attention")
