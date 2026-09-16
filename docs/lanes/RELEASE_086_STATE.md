@@ -448,6 +448,35 @@ What must NOT be drawn: no claim about the machine's state, in either direction,
 not evidence that the leak lane's 2.2x to 2.7x is wrong. There is still no pre-slowdown Metal
 GBDT timing anywhere, so no healthy per-fit figure is claimed here either.
 
+### A live reading, 2026-09-15 21:32: 4509 queues under the identity harness
+
+`ioclasscount AGXCommandQueue` read **4509** while the Apple `chunk00-rest` process (pid 15198,
+one python running the wheel's `_identity_break.py` over a 23-lane chunk) was 41 minutes into a
+single lane and 53 minutes into its own life, CPU still advancing. **At rest this machine reads
+34 to 41.** No other Metal work was running, and the earlier degraded window's worst reading was
+one process holding 1211 and climbing to 2491.
+
+What it supports:
+
+- It is direct evidence for the **per-process accumulation** reading. The count belongs to one
+  long-lived process, and queues come back when that process exits, not before.
+- It **identifies the identity harness as a shape that DOES accumulate**, which is the question
+  the leak lane left open and could not answer from its own side: that lane's `gbdt_direct.py`
+  fits, which take a `DeviceContext` per call, held flat at 34 across eleven fits in two
+  processes. So the likelier culprit is a long-lived or concurrently held context, not per-call
+  creation.
+
+What it does NOT do:
+
+- It does **not** retroactively explain the 6 percent figure above. Those seven lanes still
+  reran 6 percent faster rather than 2.2x to 2.7x, and that disagreement stays unexplained.
+- It does not identify the offending allocation. Nothing here names a line of code.
+
+Arithmetic worth carrying: 4509 queues over 17 lanes is roughly **265 queues per lane**, against
+a degradation threshold near 512, which is why a 23-lane chunk degrades and why the remaining
+work runs in groups of two lanes per process (`scripts/run_apple_groups.sh`), with the queue
+count read around every group so a short process's behavior is measured rather than assumed.
+
 **The fourth column.** The diff wants a CPU column at the wheel's build commit, and the last
 record shipped only the three GPU columns, so this release takes one. It runs on a box with no
 GPU over the 159 lanes `python/mojolearn/host_surface.py --covered-lanes` names, and the four
