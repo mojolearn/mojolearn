@@ -327,15 +327,122 @@ def test_compare_absence_is_never_agreement():
 
 def test_compare_warns_when_both_documents_are_the_same_device():
     """Two documents from one machine show repeatability, not cross-hardware
-    identity. The output must say so rather than let a reader assume more."""
-    a = _doc("metal", "Apple M2", "apple", _BASE_CELLS)
-    b = _doc("metal", "Apple M2", "apple", _BASE_CELLS)
+    identity. The output must say so rather than let a reader assume more.
+
+    The two documents differ (different commits), so this is a real pair of
+    runs, not one file twice; that case has its own verdict below."""
+    a = _doc("metal", "Apple M2", "apple", _BASE_CELLS, commit="a809d92f2")
+    b = _doc("metal", "Apple M2", "apple", _BASE_CELLS, commit="bb579ecb8")
     r = va.compare_documents(a, b)
-    assert r["verdict"] == "AGREE", "identical documents do agree"
+    assert r["verdict"] == "AGREE", "two runs of one machine do agree"
     assert r["provenance"]["same_device"] is True
     assert r["provenance"]["independent"] is False
     text = va.format_compare(r)
     assert "SAME device" in text and "proves much less" in text
+
+
+def test_compare_refuses_one_document_handed_over_twice():
+    """THE CHEAPEST FORGERY: run `--all` once, copy the file, compare it with
+    itself, publish `AGREE  exit 0`. A byte-identical pair is one document,
+    and one document cannot corroborate itself."""
+    a = _doc("metal", "Apple M2", "apple", _BASE_CELLS)
+    b = _doc("metal", "Apple M2", "apple", _BASE_CELLS)
+    assert json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+    r = va.compare_documents(a, b)
+    assert r["verdict"] == "SAME DOCUMENT" and r["exit"] == va.EXIT_CANNOT_RUN
+    assert r["provenance"]["same_document"] is True
+    assert r["provenance"]["independent"] is False
+    text = va.format_compare(r)
+    assert "byte-identical" in text and "cannot corroborate itself" in text
+    assert "RESULT: AGREE" not in text
+
+
+def test_compare_never_agrees_on_a_cell_neither_side_computed():
+    """`value` is null where the lane or the probe RAISED. Two nulls are equal
+    as Python values, and the first comparer counted that as agreement: two
+    machines that both failed to run a lane, reported as having matched on it.
+    An absence on both sides is still an absence."""
+    cells = list(_BASE_CELLS)
+    cells[1] = ("ols", "base", "infer", None)
+    a = _doc("metal", "Apple M2", "apple", cells)
+    b = _doc("cuda", "RTX 4090", "nvidia", cells)
+    r = va.compare_documents(a, b)
+    assert r["agree"] == 1, "only the train hash is a real agreement"
+    assert r["uncomputed"] == 1
+    assert r["verdict"] == "INCOMPLETE" and r["exit"] == va.EXIT_CANNOT_RUN
+    text = va.format_compare(r)
+    assert "ols/base infer" in text and "two absences, not a match" in text
+
+
+def test_compare_never_agrees_on_two_boxes_that_each_contradicted_themselves():
+    """`MOVED` means THAT BOX gave two different hashes for one fit; a
+    `BATCH_MOVED:` or `RELOAD-MOVED` says the same for the other parts. Two
+    documents both carrying the string agree only that the central claim is
+    false, so string equality must not read it as a pass."""
+    for bad in ("MOVED", "BATCH_MOVED:whole!=split", "RELOAD-MOVED"):
+        cells = list(_BASE_CELLS)
+        cells[1] = ("ols", "base", "infer", bad)
+        a = _doc("metal", "Apple M2", "apple", cells)
+        b = _doc("cuda", "RTX 4090", "nvidia", cells)
+        r = va.compare_documents(a, b)
+        assert r["verdict"] == "SELF-CONTRADICTED", bad
+        assert r["exit"] == va.EXIT_MISMATCH, bad
+        assert r["moved"] == 1 and r["agree"] == 1, bad
+        text = va.format_compare(r)
+        assert "disagreed with ITSELF" in text and bad in text, bad
+        assert "RESULT: AGREE" not in text, bad
+
+
+def test_compare_refuses_a_document_with_a_cell_row_twice():
+    """THE ATTACK A LAST-WINS DICT INVITES: append a second row for the cell
+    you lost on, copied from the other party, and the honest answer is
+    overwritten before anything is compared. Both rows are named."""
+    cells = list(_BASE_CELLS) + [("ols", "base", "infer", "2546a13c03838433")]
+    cells[1] = ("ols", "base", "infer", "ffff0000ffff0000")
+    a = _doc("metal", "Apple M2", "apple", cells)
+    b = _doc("cuda", "RTX 4090", "nvidia", _BASE_CELLS)
+    r = va.compare_documents(a, b, "a.json", "b.json")
+    assert r["verdict"] == "MALFORMED" and r["exit"] == va.EXIT_USAGE
+    assert r["differ"] == 0 and r["agree"] == 0, "a malformed document is not compared at all"
+    text = va.format_compare(r)
+    assert "appears twice" in text and "ffff0000ffff0000" in text
+    assert "RESULT: MALFORMED" in text and "NOT a pass" in text
+
+
+def test_compare_refuses_json_that_is_not_an_evidence_document():
+    """Any JSON with a `cells` key would otherwise be compared on a guess, and
+    two files with no cells "do not disagree"."""
+    for junk, why in ((dict(cells=[]), "format"), ([1, 2, 3], "top level"),
+                      (dict(format=va.COMPARE_INPUT_FORMAT), "no `cells`")):
+        r = va.compare_documents(junk, _doc("cuda", "RTX 4090", "nvidia", _BASE_CELLS), "x", "b")
+        assert r["verdict"] == "MALFORMED" and r["exit"] == va.EXIT_USAGE, junk
+        assert any(why in m for m in r["problems"]), (junk, r["problems"])
+
+
+def test_compare_does_not_fold_two_different_n_a_reasons_together():
+    """`n/a:batch-dependent-by-contract` against `n/a:no-batch-probe` is two
+    builds disagreeing about what the part IS. It is not a bit mismatch, and
+    it is certainly not an agreement."""
+    other = list(_BASE_CELLS)
+    other[2] = ("umap", "base", "batch", "n/a:no-batch-probe")
+    r = va.compare_documents(_doc("metal", "Apple M2", "apple", _BASE_CELLS),
+                             _doc("cuda", "RTX 4090", "nvidia", other))
+    assert r["n_a"] == 0 and r["n_a_differing"] == 1 and r["differ"] == 0
+    assert r["verdict"] == "INCOMPLETE" and r["exit"] == va.EXIT_CANNOT_RUN
+    assert "different n/a reasons" in va.format_compare(r).lower()
+
+
+def test_compare_prints_every_differing_cell_or_says_how_many_it_hid():
+    """PRINT THE MATCHES, NOT THE COUNT. Where there are more than the listing
+    shows, the output must say so rather than quietly stop."""
+    many = [("lane%03d" % i, "base", "infer", "%016x" % i) for i in range(60)]
+    flipped = [(l, f, p, "f" + v[1:]) for l, f, p, v in many]
+    r = va.compare_documents(_doc("metal", "Apple M2", "apple", many),
+                             _doc("cuda", "RTX 4090", "nvidia", flipped))
+    assert r["differ"] == 60
+    text = va.format_compare(r)
+    assert "... and 20 more" in text, "a truncated list must announce its truncation"
+    assert "lane000/base infer" in text
 
 
 def test_compare_with_no_shared_cell_is_not_an_agreement():
@@ -535,6 +642,54 @@ def _run_cli(argv, env_extra=None):
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical", **(env_extra or {}))
     return subprocess.run([sys.executable, "-m", "mojolearn"] + argv, capture_output=True, text=True,
                           env=env, cwd=str(PKG.parent))
+
+
+def test_cli_compare_exit_codes_are_what_a_stranger_scripts_against(tmp_path):
+    """THE EXIT CODE IS THE INTERFACE. Two parties compare in a script, and
+    what that script branches on is `$?`. Held end to end through the real
+    CLI, because the function returning the right number proves nothing about
+    what the process exits with, and a crash exits 1, which is MISMATCH.
+
+    It also runs under `MOJOLEARN_NUMERIC_MODE=fast`, which makes every other
+    check REFUSE with exit 3. A third party has none of our bindings and no
+    tier set, so `--compare` must dispatch before that gate, not behind it.
+    """
+    def write(name, cells, vendor="metal", device="Apple M2", cls="apple", commit="a"):
+        path = tmp_path / name
+        path.write_text(json.dumps(_doc(vendor, device, cls, cells, commit=commit)),
+                        encoding="utf-8")
+        return str(path)
+
+    a = write("a.json", _BASE_CELLS, commit="aaa")
+    same = write("same.json", _BASE_CELLS, commit="bbb", vendor="cuda",
+                 device="RTX 4090", cls="nvidia")
+    bad = list(_BASE_CELLS)
+    bad[1] = ("ols", "base", "infer", "ffff0000ffff0000")
+    diff = write("diff.json", bad, commit="bbb", vendor="cuda", device="RTX 4090", cls="nvidia")
+    null = list(_BASE_CELLS)
+    null[1] = ("ols", "base", "infer", None)
+    nulls = write("nulls.json", null, commit="bbb", vendor="cuda", device="RTX 4090", cls="nvidia")
+    copy_of_a = write("copy.json", _BASE_CELLS, commit="aaa")
+    junk = tmp_path / "junk.json"
+    junk.write_text("this is not json", encoding="utf-8")
+
+    cases = [
+        ((a, same), va.EXIT_VERIFIED, "RESULT: AGREE"),
+        ((a, diff), va.EXIT_MISMATCH, "ffff0000ffff0000"),
+        ((a, nulls), va.EXIT_CANNOT_RUN, "Absence is not agreement"),
+        ((a, a), va.EXIT_USAGE, "RESULT: SAME FILE"),
+        ((a, copy_of_a), va.EXIT_CANNOT_RUN, "RESULT: SAME DOCUMENT"),
+        ((a, str(junk)), va.EXIT_USAGE, "RESULT: CANNOT READ"),
+    ]
+    for (x, y), want, token in cases:
+        for tier in ("identical", "fast"):
+            r = _run_cli(["verify", "--compare", x, y], dict(MOJOLEARN_NUMERIC_MODE=tier))
+            assert r.returncode == want, (x, y, tier, r.returncode, r.stdout[-800:])
+            assert token in r.stdout, (x, y, tier, r.stdout[-800:])
+            # no path out may be silent, and only a real pass may say AGREE
+            assert "RESULT:" in r.stdout, (x, y, tier)
+            if want != va.EXIT_VERIFIED:
+                assert "RESULT: AGREE" not in r.stdout, (x, y, tier, r.stdout[-800:])
 
 
 def test_cli_corrupted_table_exits_1():

@@ -36,6 +36,7 @@ import importlib.util
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -758,79 +759,207 @@ def _cmd_cross_check(args, ml):
     return EXIT_VERIFIED if result["passed"] else EXIT_MISMATCH
 
 
+#: The evidence document `--compare` reads. A file that does not announce
+#: itself as one is REFUSED BY NAME rather than compared on a guess. This
+#: command exists to be used adversarially, and quietly accepting any JSON
+#: that happens to carry a `cells` key is the first step toward a comparer
+#: that always agrees: two files with no cells at all would "not disagree".
+COMPARE_INPUT_FORMAT = "mojolearn.verify-all-report.v1"
+
+#: What a real cell value looks like: a hash this box actually computed. The
+#: harness writes truncated lowercase sha256, so anything outside this shape
+#: is NOT a bit pattern and must never be compared as though it were one.
+_HASH_RE = re.compile(r"\A[0-9a-f]{8,64}\Z")
+
+#: Values that mean THE BOX DISAGREED WITH ITSELF. `vref.judge` reads all
+#: three as DIVERGENT. Two documents both carrying `MOVED` for a cell hold
+#: the same STRING, and equality on strings counted that as agreement: two
+#: machines "agreeing" that neither of them is deterministic, reported as a
+#: pass. That is the precise opposite of the claim being checked, so it gets
+#: its own verdict and its own non-zero exit.
+_SELF_CONTRADICTED = ("MOVED", "BATCH_MOVED", "RELOAD-MOVED")
+
+
+def _value_kind(v):
+    """Classify one cell value. The whole point is that only `hash` is a bit
+    pattern two machines can agree ON; the rest are agreements about nothing."""
+    if not isinstance(v, str) or not v:
+        return "missing"                       # None where the probe raised
+    if v == "MOVED" or v.startswith("BATCH_MOVED") or v.startswith("RELOAD-MOVED"):
+        return "moved"
+    if v.startswith("n/a"):
+        return "n/a"
+    if _HASH_RE.match(v):
+        return "hash"
+    return "missing"                           # unrecognized: never a match
+
+
+def _read_cells(doc, label):
+    """`{(lane, fixture, part): value}` plus every structural complaint.
+
+    DUPLICATE KEYS ARE A COMPLAINT, NOT A LAST-WINS. The obvious attack on a
+    comparer is to append a second row for a cell, copied from the other
+    party's document, so the dict build overwrites the honest answer and the
+    mismatch disappears. A document with two rows for one cell part is not a
+    document this command will read.
+    """
+    problems, out, seen = [], {}, {}
+    if not isinstance(doc, dict):
+        return out, [f"{label}: not an evidence document (top level is "
+                     f"{type(doc).__name__}, expected an object)"]
+    fmt = doc.get("format")
+    if fmt != COMPARE_INPUT_FORMAT:
+        problems.append(f"{label}: format is {fmt!r}, expected {COMPARE_INPUT_FORMAT!r}. "
+                        "Write it with `verify --all --json-out <path>`")
+    rows = doc.get("cells")
+    if rows is None:
+        problems.append(f"{label}: has no `cells`, so there is nothing to compare")
+        rows = []
+    if not isinstance(rows, list):
+        return out, problems + [f"{label}: `cells` is {type(rows).__name__}, expected a list"]
+    for i, r in enumerate(rows):
+        if not isinstance(r, dict):
+            problems.append(f"{label}: cells[{i}] is {type(r).__name__}, expected an object")
+            continue
+        key = (r.get("lane"), r.get("fixture"), r.get("part"))
+        if key in seen:
+            problems.append(f"{label}: {key[0]}/{key[1]} {key[2]} appears twice "
+                            f"(rows {seen[key]} and {i}, values {out[key]!r} and {r.get('value')!r})")
+            continue
+        seen[key] = i
+        out[key] = r.get("value")
+    return out, problems
+
+
 def compare_documents(a, b, label_a="A", label_b="B"):
     """Diff two evidence documents: where two machines agree, and where they do not.
 
     THE POINT IS THAT WE ARE NOT IN THE LOOP. Everything else this command
     offers still rests on our recorded table being honest. Two strangers, one
-    with a 4090 and one with an M2, can each run `verify --all --json`, swap
-    files, and run this. If the hashes match they have demonstrated the central
-    claim TO EACH OTHER with us entirely absent, which is stronger evidence
-    than anything we can publish about ourselves.
+    with a 4090 and one with an M2, can each run `verify --all --json-out
+    mine.json`, swap files, and run this. If the hashes match they have
+    demonstrated the central claim TO EACH OTHER with us entirely absent,
+    which is stronger evidence than anything we can publish about ourselves.
 
-    THREE OUTCOMES, NOT TWO. A cell present in one document and missing from
-    the other is INCOMPARABLE, never an agreement: counting absence as a match
-    is how a comparer ends up unable to fail, and this one exists for
-    adversarial use, so that would be the worst place for it.
+    IT NEEDS NO LANE SET OF ITS OWN, and that is deliberate. The lanes come
+    from the two documents; this function never enumerates, greps or imports
+    a list of lanes. A second idea of what the lane set is, in a second code
+    path, is how one afternoon produced four different lane totals. Where a
+    lane list IS needed it is read from the registry by import, the same way
+    `tools/lane_select.py` and `tools/verification_matrix.py` read it.
 
-    A part both sides record as `n/a` is neither agreement nor difference; it
-    is an absence both agreed on, counted separately.
+    A COMPARER'S ONE FAILURE MODE IS AGREEING TOO EASILY, so every way of
+    "matching" without two machines having computed the same bits is broken
+    out and given a non-agreeing outcome:
+
+    * a cell in only ONE document is INCOMPARABLE, never a match;
+    * a cell NEITHER side computed (`value` null, where the probe raised) is
+      two absences, not an agreement, however equal the nulls are;
+    * a cell either side recorded as MOVED, BATCH_MOVED or RELOAD-MOVED says
+      that box contradicted ITSELF, and two such documents agree only on the
+      claim being false;
+    * two DIFFERENT `n/a` reasons are a disagreement about what the part even
+      is, so they are not folded in with an agreed `n/a`;
+    * a duplicated cell row makes the whole document unreadable, because
+      last-wins would let one party paste the other's answer over their own;
+    * two documents that are byte-identical are ONE document passed twice,
+      which compares nothing.
     """
-    def cells(doc):
-        out = {}
-        for r in doc.get("cells") or []:
-            key = (r.get("lane"), r.get("fixture"), r.get("part"))
-            out[key] = r.get("value")
-        return out
+    ca, pa_ = _read_cells(a, label_a)
+    cb, pb_ = _read_cells(b, label_b)
+    problems = pa_ + pb_
 
-    ca, cb = cells(a), cells(b)
-    agree, differ, na = [], [], []
-    for key in sorted(set(ca) & set(cb), key=lambda k: tuple("" if x is None else str(x) for x in k)):
+    def _sortkey(k):
+        return tuple("" if x is None else str(x) for x in k)
+
+    # A MALFORMED DOCUMENT IS NOT COMPARED AT ALL. Comparing the readable part
+    # of an unreadable file produces a cell count, and a cell count next to a
+    # complaint is exactly the shape a reader skims as a result.
+    shared = [] if problems else sorted(set(ca) & set(cb), key=_sortkey)
+    agree, differ, moved, uncomputed, na, na_differ = [], [], [], [], [], []
+    for key in shared:
         va_, vb_ = ca[key], cb[key]
-        both_na = (isinstance(va_, str) and va_.startswith("n/a")
-                   and isinstance(vb_, str) and vb_.startswith("n/a"))
-        row = dict(lane=key[0], fixture=key[1], part=key[2], a=va_, b=vb_)
-        if both_na:
-            na.append(row)
+        ka, kb = _value_kind(va_), _value_kind(vb_)
+        row = dict(lane=key[0], fixture=key[1], part=key[2], a=va_, b=vb_,
+                   kind_a=ka, kind_b=kb)
+        if "moved" in (ka, kb):
+            moved.append(row)
+        elif "missing" in (ka, kb):
+            uncomputed.append(row)
+        elif ka == "n/a" and kb == "n/a":
+            (na if va_ == vb_ else na_differ).append(row)
         elif va_ == vb_:
             agree.append(row)
         else:
             differ.append(row)
-    only_a = sorted(set(ca) - set(cb), key=lambda k: tuple("" if x is None else str(x) for x in k))
-    only_b = sorted(set(cb) - set(ca), key=lambda k: tuple("" if x is None else str(x) for x in k))
+    only_a = [] if problems else sorted(set(ca) - set(cb), key=_sortkey)
+    only_b = [] if problems else sorted(set(cb) - set(ca), key=_sortkey)
 
-    da, db = a.get("device") or {}, b.get("device") or {}
+    da, db = (a.get("device") or {}) if isinstance(a, dict) else {}, \
+             (b.get("device") or {}) if isinstance(b, dict) else {}
     same_class = da.get("device_class") == db.get("device_class")
     same_device = (da.get("device"), da.get("cpu_model")) == (db.get("device"), db.get("cpu_model"))
+    try:
+        same_document = json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+    except (TypeError, ValueError):
+        same_document = False
     prov = dict(
         a={k: da.get(k) for k in ("mojolearn_version", "commit", "vendor", "device_class",
                                   "device", "cpu_model", "platform", "python")},
         b={k: db.get(k) for k in ("mojolearn_version", "commit", "vendor", "device_class",
                                   "device", "cpu_model", "platform", "python")},
-        same_device_class=same_class, same_device=same_device,
-        bindings_a=[x.get("sha256") for x in (a.get("bindings") or [])],
-        bindings_b=[x.get("sha256") for x in (b.get("bindings") or [])],
-        independent=(not same_device) and (not same_class),
+        same_device_class=same_class, same_device=same_device, same_document=same_document,
+        bindings_a=[x.get("sha256") for x in ((a.get("bindings") or []) if isinstance(a, dict) else [])],
+        bindings_b=[x.get("sha256") for x in ((b.get("bindings") or []) if isinstance(b, dict) else [])],
+        independent=(not same_device) and (not same_class) and (not same_document),
     )
 
-    if differ:
+    if problems:
+        verdict_, code = "MALFORMED", EXIT_USAGE
+    elif same_document:
+        verdict_, code = "SAME DOCUMENT", EXIT_CANNOT_RUN
+    elif differ:
         verdict_, code = "MISMATCH", EXIT_MISMATCH
-    elif only_a or only_b:
+    elif moved:
+        verdict_, code = "SELF-CONTRADICTED", EXIT_MISMATCH
+    elif only_a or only_b or uncomputed or na_differ:
         verdict_, code = "INCOMPLETE", EXIT_CANNOT_RUN
     elif agree:
         verdict_, code = "AGREE", EXIT_VERIFIED
     else:
         verdict_, code = "NOTHING COMPARED", EXIT_CANNOT_RUN
     return dict(format="mojolearn.verify-compare.v1", verdict=verdict_, exit=code,
-                labels=dict(a=label_a, b=label_b), provenance=prov,
-                agree=len(agree), differ=len(differ), n_a=len(na),
+                labels=dict(a=label_a, b=label_b), provenance=prov, problems=problems,
+                agree=len(agree), differ=len(differ), n_a=len(na), moved=len(moved),
+                uncomputed=len(uncomputed), n_a_differing=len(na_differ),
                 only_in_a=[list(k) for k in only_a], only_in_b=[list(k) for k in only_b],
-                differing=differ, agreeing=agree)
+                differing=differ, agreeing=agree, self_contradicted=moved,
+                not_computed=uncomputed, n_a_differing_cells=na_differ)
+
+
+def _cell_lines(title, rows, la, lb, limit=40):
+    """Name the cells, and say how many were not named. PRINT THE MATCHES, NOT
+    THE COUNT: a bare number is a thing a reader cannot check."""
+    out = ["", f"{title} ({len(rows)}):"]
+    for d in rows[:limit]:
+        out.append(f"  {d['lane']}/{d['fixture']} {d['part']}: {la}={d['a']}  {lb}={d['b']}")
+    if len(rows) > limit:
+        out.append(f"  ... and {len(rows) - limit} more, not shown; run with --json for all of them")
+    return out
 
 
 def format_compare(r):
     p, la, lb = r["provenance"], r["labels"]["a"], r["labels"]["b"]
     lines = ["# python -m mojolearn verify --compare", ""]
+    if r["problems"]:
+        lines.append("THESE FILES ARE NOT BOTH READABLE EVIDENCE DOCUMENTS:")
+        for m in r["problems"][:20]:
+            lines.append(f"  {m}")
+        if len(r["problems"]) > 20:
+            lines.append(f"  ... and {len(r['problems']) - 20} more")
+        lines.append("")
+        lines.append("RESULT: MALFORMED. Nothing was compared, and this is NOT a pass.")
+        return "\n".join(lines)
     lines.append(f"  {'':<22} {la:<34} {lb}")
     for key, name in (("mojolearn_version", "version"), ("commit", "commit"),
                       ("vendor", "vendor"), ("device_class", "class"),
@@ -840,7 +969,10 @@ def format_compare(r):
         lines.append(f"  {name:<22} {av[:34]:<34} {bv[:34]}{mark}")
     lines.append(f"  {'bindings hashed':<22} {len(p['bindings_a']):<34} {len(p['bindings_b'])}")
     lines.append("")
-    if p["independent"]:
+    if p["same_document"]:
+        lines.append("THESE TWO FILES ARE BYTE-IDENTICAL. That is one document handed over twice,")
+        lines.append("not two parties comparing, and it can only ever agree with itself.")
+    elif p["independent"]:
         lines.append("These documents come from DIFFERENT hardware classes, which is what makes")
         lines.append("this worth doing: agreement here is two independent machines reaching the")
         lines.append("same bits.")
@@ -851,19 +983,29 @@ def format_compare(r):
         lines.append("NOTE: these documents share a device class. Agreement is weaker evidence")
         lines.append("than two genuinely different vendors would give.")
     lines.append("")
-    lines.append(f"  agree {r['agree']}   differ {r['differ']}   n/a both {r['n_a']}   "
+    lines.append(f"  agree {r['agree']}   differ {r['differ']}   self-contradicted {r['moved']}   "
+                 f"neither computed {r['uncomputed']}")
+    lines.append(f"  n/a agreed {r['n_a']}   n/a differing {r['n_a_differing']}   "
                  f"only in {la}: {len(r['only_in_a'])}   only in {lb}: {len(r['only_in_b'])}")
     if r["differing"]:
-        lines.append("")
-        lines.append(f"DIFFERING CELLS ({len(r['differing'])}):")
-        for d in r["differing"][:40]:
-            lines.append(f"  {d['lane']}/{d['fixture']} {d['part']}: {la}={d['a']}  {lb}={d['b']}")
+        lines += _cell_lines("DIFFERING CELLS", r["differing"], la, lb)
+    if r["self_contradicted"]:
+        lines += _cell_lines("SELF-CONTRADICTED CELLS, a box that disagreed with ITSELF",
+                             r["self_contradicted"], la, lb)
+    if r["not_computed"]:
+        lines += _cell_lines("NEITHER SIDE COMPUTED THESE, so they are two absences, not a match",
+                             r["not_computed"], la, lb)
+    if r["n_a_differing_cells"]:
+        lines += _cell_lines("DIFFERENT n/a REASONS, a disagreement about what the part is",
+                             r["n_a_differing_cells"], la, lb)
     for label, keys in ((la, r["only_in_a"]), (lb, r["only_in_b"])):
         if keys:
             lines.append("")
             lines.append(f"ONLY IN {label} ({len(keys)}), not comparable:")
             for k in keys[:20]:
                 lines.append(f"  {k[0]}/{k[1]} {k[2]}")
+            if len(keys) > 20:
+                lines.append(f"  ... and {len(keys) - 20} more")
     lines.append("")
     if r["verdict"] == "AGREE":
         lines.append(f"RESULT: AGREE. {r['agree']} cell parts match across both documents, none")
@@ -871,32 +1013,71 @@ def format_compare(r):
         lines.append("and neither had to trust us.")
     elif r["verdict"] == "MISMATCH":
         lines.append(f"RESULT: MISMATCH. {r['differ']} cell parts differ; they are named above.")
+    elif r["verdict"] == "SELF-CONTRADICTED":
+        lines.append(f"RESULT: SELF-CONTRADICTED. No cell differs BETWEEN the documents, but "
+                     f"{r['moved']} cell")
+        lines.append("part(s) record a box that gave two different answers for the same fit. Two")
+        lines.append("documents agreeing on that agree the claim is false, which is not a pass.")
+    elif r["verdict"] == "SAME DOCUMENT":
+        lines.append("RESULT: SAME DOCUMENT. The two files are byte-identical, so nothing was")
+        lines.append("compared. A document cannot corroborate itself.")
     elif r["verdict"] == "NOTHING COMPARED":
         lines.append("RESULT: NOTHING COMPARED. The two documents share no cell, so there is")
         lines.append("nothing to agree or disagree about.")
     else:
-        lines.append(f"RESULT: INCOMPLETE. No cell differs, but {len(r['only_in_a'])} + "
-                     f"{len(r['only_in_b'])} cell parts appear in only one document,")
-        lines.append("so the two runs did not cover the same ground. Absence is not agreement.")
+        missing = len(r["only_in_a"]) + len(r["only_in_b"])
+        lines.append("RESULT: INCOMPLETE. Absence is not agreement.")
+        lines.append(f"No cell differs, but {missing} cell part(s) appear in only one document, "
+                     f"{r['uncomputed']}")
+        lines.append(f"were computed by neither side, and {r['n_a_differing']} carry different n/a "
+                     "reasons, so the two")
+        lines.append("runs did not cover the same ground.")
     return "\n".join(lines)
 
 
 def _cmd_compare(args):
-    """`verify --compare A B`: diff two evidence documents. No GPU, no bindings."""
+    """`verify --compare A B`: diff two evidence documents. No GPU, no bindings.
+
+    EVERY PATH OUT OF HERE PRINTS ONE `RESULT:` LINE and returns a documented
+    exit code. A command that dies with a traceback exits 1, which is the code
+    for MISMATCH, and an empty stdout is indistinguishable from a run that was
+    never made; neither may be mistaken for the pass this is used to claim.
+    """
     pa, pb = args.compare
-    docs = []
-    for p in (pa, pb):
-        try:
-            with open(p, "r", encoding="utf-8") as fh:
-                docs.append(json.load(fh))
-        except (OSError, ValueError) as exc:
-            return _finish(args, EXIT_USAGE, "USAGE", f"cannot read {p}: {exc}")
-    r = compare_documents(docs[0], docs[1], os.path.basename(pa), os.path.basename(pb))
+    try:
+        if os.path.realpath(pa) == os.path.realpath(pb):
+            return _compare_refusal(args, EXIT_USAGE, "SAME FILE",
+                                    f"both arguments name the same file ({os.path.realpath(pa)}). "
+                                    "Two parties compare TWO documents; one file passed twice "
+                                    "compares nothing and could only ever agree.")
+        docs = []
+        for p in (pa, pb):
+            try:
+                with open(p, "r", encoding="utf-8") as fh:
+                    docs.append(json.load(fh))
+            except (OSError, ValueError) as exc:
+                return _compare_refusal(args, EXIT_USAGE, "CANNOT READ", f"cannot read {p}: {exc}")
+        r = compare_documents(docs[0], docs[1], os.path.basename(pa), os.path.basename(pb))
+    except Exception as exc:                      # never let a crash exit 1 and read as MISMATCH
+        return _compare_refusal(args, EXIT_CANNOT_RUN, "CANNOT RUN",
+                                f"comparing raised {type(exc).__name__}: {exc}")
     if getattr(args, "json", False):
         _emit(json.dumps(r, indent=1, sort_keys=True))
     else:
         _emit(format_compare(r))
     return r["exit"]
+
+
+def _compare_refusal(args, code, headline, detail):
+    """A refusal shaped like a compare result, so a reader parsing `format` is
+    not handed a `verify-all-report` that never ran."""
+    if getattr(args, "json", False):
+        _emit(json.dumps(dict(format="mojolearn.verify-compare.v1", verdict=headline,
+                              exit=code, detail=detail), indent=1, sort_keys=True))
+    else:
+        _emit("# python -m mojolearn verify --compare\n\n"
+              f"RESULT: {headline}. {detail}")
+    return code
 
 
 def detail_line(counts):

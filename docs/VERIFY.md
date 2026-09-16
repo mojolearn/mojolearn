@@ -190,17 +190,37 @@ If the hashes match, two people have demonstrated the claim **to each other**,
 with us entirely absent. That is stronger than anything we can publish about
 ourselves, and it needs no GPU, no bindings and no network to run.
 
-Three outcomes, not two, because absence is not agreement:
+### A comparer's one failure mode is agreeing too easily
+
+This command is meant to be pointed at us, so the interesting question is not
+whether it says `AGREE` when two honest documents match. It is every way of
+getting `AGREE` **without** two machines having computed the same bits. Each
+one below is its own outcome with its own exit code, and each was built and
+watched before the code that catches it existed:
 
 | result | exit | meaning |
 |---|---|---|
-| `AGREE` | 0 | every shared cell matches, and none is present in only one document |
-| `MISMATCH` | 1 | at least one cell differs; both values are printed |
-| `INCOMPLETE` | 4 | nothing differs, but the two runs did not cover the same cells |
+| `AGREE` | 0 | every shared cell part carries the same hash, both sides computed it, and none is present in only one document |
+| `MISMATCH` | 1 | at least one cell part differs; every differing cell is named with **both** values |
+| `SELF-CONTRADICTED` | 1 | a cell part reads `MOVED`, `BATCH_MOVED` or `RELOAD-MOVED`, meaning that box gave two different answers for one fit. Two documents carrying the same such string hold the same text and agree only that the claim is false |
+| `INCOMPLETE` | 4 | nothing differs, but the runs did not cover the same ground: a cell in only one document, a cell **neither** side computed (`value` null, where the probe raised), or two different `n/a` reasons |
+| `SAME DOCUMENT` | 4 | the two files are byte-identical. That is one document handed over twice, and it can only agree with itself |
+| `MALFORMED` | 2 | a file is not an evidence document, or names one cell part twice. A duplicated row would otherwise let a party paste the other's answer over their own and hide the loss |
+| `SAME FILE` / `CANNOT READ` | 2 | both arguments are one path, or a file is missing or not JSON |
 
-A cell recorded `n/a` by both sides is an absence they agreed on, counted
-separately from agreement. And if both documents describe the same device, the
-output says so: that shows repeatability, not cross-hardware identity.
+A cell recorded with the **same** `n/a` reason by both sides is an absence they
+agreed on, counted separately from agreement. If both documents describe the
+same device the output says so: that shows repeatability, not cross-hardware
+identity. Nothing is ever summarized as a bare count; every differing,
+self-contradicted, uncomputed and one-sided cell is printed by name, and a
+truncated listing says how many it hid.
+
+Every path out of the command prints exactly one `RESULT:` line and returns a
+code from that table, including a crash, so an empty output or a failed
+invocation can never be read as a pass. It dispatches **before** the import and
+numeric-tier checks: under `MOJOLEARN_NUMERIC_MODE=fast` every other check
+refuses with exit 3 and `--compare` still runs, because a third party has none
+of our bindings.
 
 ## The evidence document
 
