@@ -57,3 +57,7 @@ jobs:
           print("\n".join(bad) or "ok: only light-checks (and the daily issue bot) start by themselves")
           sys.exit(1 if bad else 0)
           PY
+      - name: Scheduler and checkpoint regressions (CPU only, no bindings)
+        run: |
+          /tmp/yaml-venv/bin/pip install --quiet pytest==8.3.5 numpy==2.2.6
+          /tmp/yaml-venv/bin/python -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py
