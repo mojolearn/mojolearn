@@ -21,6 +21,22 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- **Incremental decoding is public on the CPU: `allocate_state`, a carried `state` and `step`
+  on `TransformerBlockInference`, `Mamba1/2/3BlockInference` and `SambaInference`**
+  (lane/stateful-cpu-decoding). They refused those three by name because the shipped neural
+  host binding exported the fresh-state entries alone; it now also exports
+  `transformer_forward`, `transformer_decode_step` and `mamba{1,2,3}_forward` /
+  `mamba{1,2,3}_decode_step`, over the SAME host functions the fresh entries already call
+  with the caller's state instead of a constructed zero. The wrappers therefore stop
+  overriding `forward` and inherit the block classes' own call path, so prefill and decode
+  are one spelling. Only `backward` (and Samba's `loss` and `train_step`) stays refused.
+  What is claimed and measured, not assumed: decoding a sequence one token at a time with a
+  carried state is BITWISE the same sequence run as one fresh-state forward pass, at every
+  position, for the Transformer at both windows, Mamba-1, Mamba-2, Mamba-3 and the Samba
+  stack. `tools/step_vs_full_check.py` is that comparison with a fail-first arm (one ULP on
+  one carried cache cell must move a position), and `tools/identity_break.py --step-full` is
+  the same question as a recorded part on eight lanes, whose hashes read IDENTICAL between
+  the CPU column and the Apple column.
 - Every host family now says in `python/mojolearn/host_surface.py` why it does or does not
   ship in the wheels (`wheel_note`, `--wheel-notes`), so an exclusion is never silent
   (lane/expose-inference-surface, for 0.8.7). That entry read "fifteen families ship and
