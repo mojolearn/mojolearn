@@ -387,14 +387,30 @@ expect the same order. Everything else in this lane costs **zero bytes**: the
 false-VERIFIED fix is Python, and promoting the 30 candidates later adds no
 binary and no table entry.
 
-## 8. Not merged
+## 8. Merged, with the promotion still held
 
-The branch is pushed and **not merged**. The false-VERIFIED fix and the two
-exposures are complete and standalone, but the promotion in section 4 is the
-lane's headline and it is held on a file that has not been published. Merging
-the settled parts alone is reasonable if Andrew wants them now.
+Merged to main. Everything on the branch is run and verified, and the one part
+that is not proven is not on it: the 30 candidate promotions are held in
+`PUBLIC_REFERENCE_CANDIDATES`, not live, so nothing unproven ships. What lands
+is the two exposures (proven refusing before, running after, IDENTICAL x4 on
+36 of 36 train cells and DIVERGENT on 36 of 36 under sabotage), the
+false-VERIFIED fix (its test watched failing against the old code first, and a
+healthy install still VERIFIED), the reasons on all 32 families, and the
+measurement behind the held promotion.
 
-`release/0.8.6` and `db9047b9f` were never touched. No Metal job was run.
+Two behaviour changes a reader should know landed:
+
+- **The wheels gain a sixteenth host binding**, `_mojolearn_resample_host.so`,
+  so the bootstrap, the permutation test and Monte Carlo integration work on a
+  CPU-only install. `kpss_test` needs no new binding; it is served from the
+  already-shipped forecast binding.
+- **`verify --all` exits 4 and prints INCOMPLETE** where it used to print
+  VERIFIED and exit 0, whenever any judged part refused. That is the point of
+  the change, but it will turn a previously green partial install red, which is
+  the correct reading of a run that did not happen.
+
+Marked for 0.8.7 in the CHANGELOG. `release/0.8.6` and `db9047b9f` were never
+touched, no Metal job was run, and nothing was rented.
 
 ## Resume
 
