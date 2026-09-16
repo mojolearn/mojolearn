@@ -94,7 +94,20 @@ cannot be misread as a run that passed.
 | `--json` | one JSON report on stdout, progress on stderr |
 | `--reference-table PATH` | compare against another table |
 | `--self-test` | show that this verifier can fail (below) |
+| `--cross-check [quick\|default\|all]` | compare your GPU against your CPU (below) |
 | `--json-out PATH` | with `--all`: also write the evidence document to PATH |
+
+The three checks answer different questions, and are worth more together than
+separately:
+
+1. **`--cross-check`**, your GPU against your CPU. Trusts nobody: you generated
+   both sides on your own machine.
+2. **`--all`**, your machine against our recorded columns. Trusts our table,
+   which is auditable because the raw columns are committed under
+   `bench/results/identity_break/` and the document names the exact file and
+   commit each reference came from.
+3. **`--self-test`**, which shows the comparison can fail at all. Without it the
+   first two are checks nobody has watched fail.
 
 ## Can you watch it fail?
 
@@ -114,6 +127,47 @@ answer fails it.
 
 Two commands, then, and the passing one means something because the other one
 can fail.
+
+## Your GPU against your CPU
+
+The strongest of the three checks, because it requires trusting **nobody**:
+
+    python -m mojolearn verify --cross-check
+
+Comparing your machine against our recorded columns asks you to believe we
+recorded honestly. This asks you to believe nothing. Each lane is fitted once
+on your GPU, then the same fitted model is asked for the same held-out answer
+twice: from the GPU estimator, and from the saved model reloaded through the
+CPU host binding. You generated both sides, on two genuinely different pieces
+of hardware in your own box, and what it demonstrates is exactly the claim the
+library makes. It also works on any GPU mojolearn supports, not only the three
+vendors we happened to record.
+
+There is **one digest implementation**, the harness's own, used for both sides,
+so there is no second comparison path that could drift from the first. The only
+difference between the two arms is which binding answers.
+
+It compares two different things, where the lane has both:
+
+- **`infer`** is cross-vendor identity: same input, different hardware, same
+  bits.
+- **`batch`** is batch invariance: same row, different batch neighbours, same
+  bits. That is a different axis, and the one that bites a serving system
+  batching dynamically: a prediction that changes with traffic is a real
+  problem. A lane that declares `n/a` for batch keeps its `n/a`.
+
+**Scope.** The intersection is every lane with both a shipped GPU path and a
+shipped host family, and that is **all 79 declared inference lanes: every one
+is reachable from a binding the wheel already carries.** `quick` is one lane
+per family on the base fixture, seconds. The default is up to 24 lanes,
+minutes, capped because one Apple Metal process may not run a full column
+outside a release, which `tools/identity_break.py` enforces rather than merely
+advising. `all` runs the whole intersection, and on Apple is refused by that
+same rule. `--lanes` and `--fixtures` narrow or widen any of them.
+
+**On a CPU-only install it says so and exits 4.** There is no second piece of
+hardware to compare against, so the cross-check did not run: that is neither a
+pass nor a failure, and it is never silently skipped.
 
 ## The evidence document
 

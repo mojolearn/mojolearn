@@ -487,6 +487,277 @@ def _cmd_self_test(args, ml):
     return EXIT_VERIFIED if result["passed"] else EXIT_MISMATCH
 
 
+#: One Apple Metal process may run at most this many lanes before
+#: `identity_break.refuse_routine_apple_column` refuses it: a full column is a
+#: per-release artifact, not something a routine command takes. The cross-check
+#: respects it rather than tripping over it, so the default is capped here.
+APPLE_LANE_CAP = 24
+
+
+def cross_check_lanes(harness, scope="default"):
+    """The lanes a GPU-against-CPU cross-check runs, and what it leaves out.
+
+    The intersection is every lane with BOTH a shipped GPU path and a shipped
+    host family, which is ALL 79 declared inference lanes: every one is
+    reachable from a binding the wheel already carries.
+
+    THE TIER IS THE POINT. A verification nobody runs proves nothing, so the
+    default has to be something a user will actually sit through, while doing
+    visibly enough work that the number of checks is impressive on its face:
+
+      quick    one lane per family, base fixture. Seconds, for someone in a
+               hurry or wiring this into CI.
+      default  up to APPLE_LANE_CAP lanes, base fixture. Minutes. Capped
+               because one Apple Metal process may not run more than that
+               without naming a release, which is enforced in identity_break
+               rather than advisory.
+      all      the whole intersection. On Apple this is REFUSED by that same
+               rule, deliberately; on NVIDIA and AMD it runs.
+    """
+    hs = host_surface()
+    shipped = set(hs.wheel_bindings())
+    routes = hs.inference_routes()
+    per_family, every = {}, []
+    for f in hs.FAMILIES:
+        reachable = f["ships_in_wheel"] or routes.get(f["routes"]) in shipped
+        for lane in f["inference_lanes"]:
+            if not reachable or lane not in harness.LANES:
+                continue
+            every.append(lane)
+            per_family.setdefault(f["family"], lane)
+    every = sorted(set(every))
+    representative = sorted(set(per_family.values()))
+    if scope == "quick":
+        chosen = representative
+    elif scope == "all":
+        chosen = every
+    else:
+        # the representatives first, so every family is covered even if the cap
+        # bites, then fill up to the cap in lane order
+        chosen = list(representative)
+        for lane in every:
+            if len(chosen) >= APPLE_LANE_CAP:
+                break
+            if lane not in chosen:
+                chosen.append(lane)
+        chosen = sorted(chosen[:APPLE_LANE_CAP])
+    return chosen, every, dict(per_family)
+
+
+def cross_check(harness, ml, lanes, fixtures, log=None):
+    """THEIR GPU AGAINST THEIR CPU, on the user's own machine.
+
+    The strongest of the three checks, because it requires trusting NOBODY.
+    Comparing against our shipped table asks the user to believe we recorded
+    honestly; this asks them to believe nothing. They generate both sides
+    themselves, on two genuinely different pieces of hardware in their own
+    box, and what it demonstrates is exactly the claim: the same computation
+    yields the same bits on different hardware. It also works on any GPU we
+    support, not only the three vendors we happened to record, which answers
+    "I do not own an H100".
+
+    ONE DIGEST, SO THE TWO SIDES CANNOT DRIFT. The lane is fitted ONCE on the
+    GPU. `fit.probe(gpu_estimator)` gives one answer and
+    `fit.probe(host_model(saved))` the other, both hashed by the harness's own
+    `_h`. There is no second comparison path and no second digest to disagree
+    with the first; the only difference between the arms is which binding
+    answers.
+
+    AND THE BINDING THAT ANSWERED IS THE ONE NAMED. `_probe_fit_host` learned
+    this the hard way: a forest sabotage column once read IDENTICAL on a
+    RunPod pod because the binding actually loaded was not the one asked for,
+    so the check was comparing a thing against itself. The same guard is kept
+    here.
+    """
+    import tempfile
+    from . import _backend
+    log = log or (lambda s: None)
+    vendor = _backend.vendor()
+    if vendor == "cpu":
+        return dict(ran=False, vendor=vendor, lanes=[],
+                    reason=("no GPU in this installation, so there is no second piece of hardware "
+                            "to compare against. This is not a pass and not a failure: the "
+                            "cross-check did not run. `verify --all` still checks this machine "
+                            "against the recorded columns, and `--self-test` still shows the "
+                            "comparison can fail."))
+    from ._forest_host import host_model, binary_path
+    rows, agree, differ, skipped = [], 0, 0, {}
+    for lane in lanes:
+        for fx in fixtures:
+            t0 = time.time()
+            X, yc, yr = harness.fixture(fx)
+            held = harness.heldout(fx)
+            try:
+                fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+            except Exception as exc:
+                skipped[lane] = f"the lane raised: {type(exc).__name__}: {exc}"[:200]
+                continue
+            if not callable(fit.probe):
+                skipped[lane] = f"no out-of-sample probe ({fit.probe})"
+                continue
+            sl = harness._save_load(fit.est)
+            if sl is None:
+                skipped[lane] = "the estimator has no save/load, so the CPU side has nothing to load"
+                continue
+            save, _load, suffix = sl
+            try:
+                gpu_est = harness._public_est(lane, fit.est)
+                pair = {"infer": [harness._h(*fit.probe(gpu_est)), None]}
+                # THE BATCH PART TOO, where the lane has one. Batch invariance is
+                # a DIFFERENT AXIS from cross-vendor identity: cross-vendor asks
+                # "same input, different hardware, same bits", batch invariance
+                # asks "same row, different batch neighbours, same bits". A
+                # serving system batches dynamically, so a user whose prediction
+                # changes with traffic has a real problem, and this is the one
+                # place they can test both at once on their own machine. A lane
+                # that declares `n/a` for batch keeps its n/a; inventing a
+                # comparison there would be a check that cannot fail.
+                gb, gerr = harness._probe_batch(fit, lane, ml, held.copy(), harness.BATCH_ALONE, False)
+                if gerr is None and isinstance(gb, str) and not gb.startswith("n/a"):
+                    pair["batch"] = [gb, None]
+                elif isinstance(gb, str) and gb.startswith("n/a"):
+                    pair["batch"] = [gb, gb]        # declared absent on both sides
+                with tempfile.TemporaryDirectory(prefix="mojolearn_cross_") as tmp:
+                    path = os.path.join(tmp, f"{lane}{suffix}")
+                    getattr(fit.est, save)(path)
+                    host = host_model(path)
+                    bound = getattr(getattr(host, "_binding", None), "__file__", None)
+                    if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
+                            os.path.realpath(bound) != os.path.realpath(binary_path())):
+                        raise RuntimeError(f"the host binding that answered is {bound}, not "
+                                           f"{binary_path()}; this would compare a thing to itself")
+                    pair["infer"][1] = harness._h(*fit.probe(host))
+                    if "batch" in pair and pair["batch"][1] is None:
+                        hfit = harness.Fit({})
+                        hfit.est = host
+                        hfit.probe = fit.probe
+                        hb, herr = harness._probe_batch(hfit, lane, ml, held.copy(),
+                                                        harness.BATCH_ALONE, False)
+                        pair["batch"][1] = hb if herr is None else f"raised: {herr}"[:120]
+            except Exception as exc:
+                skipped[lane] = f"{type(exc).__name__}: {exc}"[:200]
+                continue
+            secs = round(time.time() - t0, 3)
+            verdicts = []
+            for part, (g, c) in sorted(pair.items()):
+                na = isinstance(g, str) and g.startswith("n/a")
+                same = (g == c)
+                if not na:
+                    agree += same
+                    differ += (not same)
+                rows.append(dict(lane=lane, fixture=fx, part=part, gpu=g, cpu=c,
+                                 agree=None if na else same, na=na, seconds=secs))
+                verdicts.append(f"{part}={'n/a' if na else ('agree' if same else 'DIFFER')}")
+            # streamed per lane: it shows the run is alive, and it is itself
+            # evidence that work happened. A verification that returns instantly
+            # invites the suspicion this whole command exists to remove.
+            log(f"  {lane:<26} {fx:<8} {' '.join(verdicts):<28} {secs:6.2f}s")
+    # NOTHING COMPARED IS NOT A MISMATCH. The first run of this printed
+    # "MISMATCH. 0 of 0 cells differ", which is self-contradictory: no cell was
+    # compared, so nothing differed and nothing agreed. Reporting a result
+    # about hashes that were never computed is the same defect as VERIFIED over
+    # a refused run (lane/verify-cross-check, 2026-09-16).
+    return dict(ran=True, vendor=vendor, device_class=vref.VENDOR_CLASS.get(vendor),
+                lanes=sorted({r['lane'] for r in rows}), fixtures=list(fixtures),
+                compared=len(rows), agree=agree, differ=differ,
+                skipped=skipped, cells=rows,
+                passed=(differ == 0) if rows else None)
+
+
+def format_cross_check(r):
+    lines = ["# python -m mojolearn verify --cross-check", ""]
+    if not r["ran"]:
+        lines.append("NOT RUN: " + r["reason"])
+        return "\n".join(lines)
+    lines.append(f"Fitted each lane ONCE on this machine's GPU ({r['vendor']}), then asked the same")
+    lines.append("fitted model for the same held-out answer twice: from the GPU estimator, and from")
+    lines.append("the saved model reloaded through the CPU host binding. Same digest both times.")
+    lines.append("")
+    lines.append("`infer` is cross-vendor identity: same input, different hardware, same bits.")
+    lines.append("`batch` is batch invariance: same row, different batch neighbours, same bits --")
+    lines.append("a different axis, and the one that bites a serving system batching dynamically.")
+    lines.append("")
+    for c in r["cells"]:
+        if c.get("na"):
+            lines.append(f"  {c['lane']:<26} {c['fixture']:<8} {c['part']:<6} n/a  {c['gpu']}")
+            continue
+        lines.append(f"  {c['lane']:<26} {c['fixture']:<8} {c['part']:<6} "
+                     f"gpu={c['gpu']}  cpu={c['cpu']}  {'agree' if c['agree'] else 'DIFFER'}")
+    lines.append("")
+    if r["skipped"]:
+        lines.append(f"Not compared ({len(r['skipped'])}):")
+        for lane, why in sorted(r["skipped"].items()):
+            lines.append(f"  {lane}: {why}")
+        lines.append("")
+    if r["passed"] is None:
+        lines.append("RESULT: NOTHING COMPARED. No lane produced a GPU answer and a CPU answer, so")
+        lines.append("there is nothing to agree or disagree about. This is not a pass and not a")
+        lines.append("failure; the reasons are listed above.")
+    elif r["passed"]:
+        asked = len(r["lanes"]) + len(r["skipped"])
+        lines.append(f"RESULT: YOUR GPU AND YOUR CPU AGREE on {r['agree']} of {r['agree']} compared "
+                     f"cell parts,")
+        # THE SKIPPED COUNT RIDES WITH THE VERDICT. A confident headline over a
+        # run that compared 5 of 24 lanes is a pass whose scope is much smaller
+        # than it looks, which is the failure this command exists to remove.
+        lines.append(f"across {len(r['lanes'])} of {asked} lanes"
+                     + (f" ({len(r['skipped'])} SKIPPED, listed above)" if r["skipped"] else "")
+                     + f" and {len(r['fixtures'])} fixture(s), in {r.get('elapsed_s', 0):.1f}s.")
+        if r["skipped"]:
+            lines.append("A skipped lane was NOT checked. This agreement covers only the lanes")
+            lines.append("named above, and says nothing about the ones that did not run.")
+        lines.append("You generated both sides on two different pieces of hardware in this machine,")
+        lines.append("so this result depends on trusting nobody: not our recorded columns, not us.")
+    else:
+        lines.append(f"RESULT: MISMATCH. {r['differ']} of {r['compared']} cells differ between this")
+        lines.append("machine's GPU and its CPU. The differing hashes are above and in --json.")
+    return "\n".join(lines)
+
+
+def _cmd_cross_check(args, ml):
+    """`verify --cross-check [fast|all]`: this machine's GPU against its CPU."""
+    json_out = getattr(args, "json", False)
+    log = (lambda s: _emit(s, sys.stderr)) if json_out else _emit
+    scope = getattr(args, "cross_check", None) or "default"
+    started = time.time()
+    try:
+        harness = load_harness()
+    except (FileNotFoundError, CannotRun) as exc:
+        return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
+
+    chosen, every, per_family = cross_check_lanes(harness, scope)
+    asked = [x for x in (getattr(args, "lanes", "") or "").split(",") if x]
+    if asked:
+        unknown = [l for l in asked if l not in every]
+        if unknown:
+            _emit(f"USAGE: --lanes names lanes outside the cross-check intersection: {unknown}; "
+                  f"the intersection is {len(every)} lanes", sys.stderr)
+            return EXIT_USAGE
+        chosen = [l for l in every if l in asked]
+    fixtures = [x for x in (getattr(args, "fixtures", "") or "").split(",") if x] or ["base"]
+    bad = [f for f in fixtures if f not in harness.FIXTURES]
+    if bad:
+        _emit(f"USAGE: --fixtures names fixtures the harness does not define: {bad}", sys.stderr)
+        return EXIT_USAGE
+
+    log(f"# cross-check ({scope}): {len(chosen)} of {len(every)} intersection lanes x "
+        f"{len(fixtures)} fixture(s)")
+    result = cross_check(harness, ml, chosen, fixtures, log=log)
+    result.update(scope=scope, intersection=len(every), intersection_lanes=every,
+                  representative_of=per_family, elapsed_s=round(time.time() - started, 2),
+                  apple_lane_cap=APPLE_LANE_CAP)
+    if json_out:
+        _emit(json.dumps(dict(format="mojolearn.verify-cross-check.v1", **result),
+                         indent=1, sort_keys=True))
+    else:
+        _emit(format_cross_check(result))
+    if not result["ran"] or result["passed"] is None:
+        # no GPU, or no lane produced both answers: nothing was compared, which
+        # is CANNOT RUN rather than a verdict about hashes never computed
+        return EXIT_CANNOT_RUN
+    return EXIT_VERIFIED if result["passed"] else EXIT_MISMATCH
+
+
 def detail_line(counts):
     """The sentence under the verdict. It leads with how much of the run was
     actually checked, so `verified 44 of 332 cell parts` cannot be misread as
@@ -629,6 +900,8 @@ def cmd_verify_all(args):
         return _cmd_emit_models(args, ml)
     if getattr(args, "self_test", False):
         return _cmd_self_test(args, ml)
+    if getattr(args, "cross_check", None):
+        return _cmd_cross_check(args, ml)
 
     try:
         table_file = getattr(args, "reference_table", None) or vref.table_path()
@@ -775,6 +1048,32 @@ def cmd_verify_all(args):
         report["self_test"] = self_test(harness, ml, table)
     except Exception as exc:
         report["self_test"] = dict(passed=None, error=f"{type(exc).__name__}: {exc}"[:200])
+
+    # THE THIRD CHECK, in the same artifact (lane/verify-cross-check,
+    # 2026-09-16). A reader's agent should see all three at once, because they
+    # answer different questions and only together mean much:
+    #   1 this machine's GPU against its own CPU  -- trusts nobody
+    #   2 this machine against our recorded columns -- trusts the table, which
+    #     is auditable because the raw columns are committed
+    #   3 the self-test -- shows the comparison can fail at all
+    # On a CPU-only install (1) records that it did not run and why, which is
+    # not a pass; it is never silently omitted.
+    # IT IS NOT RUN IMPLICITLY, and that is a deliberate reversal. Folding a
+    # cross-check into every --all seemed right (one artifact, all three
+    # checks) until the shape of it was clear: on a GPU box it makes a
+    # documented command ACQUIRE THE GPU as a side effect. Two runs at once, or
+    # a run beside a gate, would then contend for the single Metal device --
+    # the concurrency that previously returned NaN, constant and zero outputs
+    # in two lanes. A command that quietly grabs a scarce device is the hidden
+    # coupling this lane exists to remove, so --all records that the
+    # cross-check was not run AND HOW TO RUN IT, which is not a pass, and
+    # `verify --cross-check` stays the explicit door.
+    report["cross_check"] = dict(
+        ran=False, passed=None, scope=None,
+        reason=("not run: --all does not take the GPU implicitly, because that would make this "
+                "command contend for the single GPU with any other run. Use "
+                "`python -m mojolearn verify --cross-check` to compare this machine's GPU "
+                "against its CPU; on a CPU-only install that will say so rather than skip."))
 
     if json_out:
         _emit(json.dumps(report, indent=1, sort_keys=True))

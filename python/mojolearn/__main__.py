@@ -65,7 +65,8 @@ def _wants_suite(args):
     return bool(getattr(args, "all", False) or getattr(args, "quick", False)
                 or getattr(args, "full", False) or getattr(args, "lanes", "")
                 or getattr(args, "emit_models", None)
-                or getattr(args, "self_test", False))
+                or getattr(args, "self_test", False)
+                or getattr(args, "cross_check", None))
 
 
 def _verify_dispatch(args):
@@ -135,6 +136,24 @@ def build_parser():
                         "and it needs no sabotage build. Exit 0 only if the "
                         "comparison both reproduced the reference and caught "
                         "the wrong answer")
+    v.add_argument("--cross-check", dest="cross_check", nargs="?", const="default",
+                   choices=("quick", "default", "all"), default=None,
+                   help="COMPARE YOUR GPU AGAINST YOUR CPU, on this machine. Fits "
+                        "each lane once on the GPU, then asks the same fitted "
+                        "model for the same held-out answer twice: from the GPU "
+                        "estimator, and from the saved model reloaded through the "
+                        "CPU host binding. It requires trusting nobody, because "
+                        "you generated both sides on two different pieces of "
+                        "hardware. It compares the infer part (cross-vendor "
+                        "identity) and, where the lane has one, the batch part "
+                        "(batch invariance, a different axis). 'quick' is one "
+                        "lane per family on the base fixture, seconds; the "
+                        "default is up to 24 lanes, minutes, capped because one "
+                        "Apple Metal process may not run a full column outside "
+                        "a release; 'all' is the whole 79-lane intersection and "
+                        "is refused on Apple by that same rule. --lanes and "
+                        "--fixtures widen or narrow any of them. On a CPU-only "
+                        "install it says so rather than silently skipping")
     v.add_argument("--json-out", dest="json_out", metavar="PATH", default=None,
                    help="with --all: also write the full evidence document "
                         "(per-cell hashes computed here and expected, per-lane "

@@ -268,6 +268,90 @@ def test_the_self_test_perturbation_is_not_inert():
     assert "values_changed" in src, "the report must say how many values were perturbed"
 
 
+def _cross(pairs, vendor="metal"):
+    """The cross-check's own accounting over (lane, part, gpu, cpu) tuples."""
+    rows, agree, differ = [], 0, 0
+    for lane, part, g, c in pairs:
+        na = isinstance(g, str) and g.startswith("n/a")
+        same = (g == c)
+        if not na:
+            agree += same
+            differ += (not same)
+        rows.append(dict(lane=lane, fixture="base", part=part, gpu=g, cpu=c,
+                         agree=None if na else same, na=na, seconds=0.1))
+    return dict(ran=True, vendor=vendor, device_class="apple",
+                lanes=sorted({r["lane"] for r in rows}), fixtures=["base"],
+                compared=len(rows), agree=agree, differ=differ, skipped={},
+                cells=rows, passed=(differ == 0) if rows else None, elapsed_s=0.2)
+
+
+def test_cross_check_reports_a_mismatch_and_names_both_hashes():
+    """The cross-check is worth nothing if it can only ever agree. A perturbed
+    side must read DIFFER and BOTH hashes must appear, so a reader can see
+    which two values disagreed rather than taking `MISMATCH` on trust."""
+    good = _cross([("ols", "infer", "2546a13c03838433", "2546a13c03838433"),
+                   ("ols", "batch", "aaaa1111bbbb2222", "aaaa1111bbbb2222")])
+    assert good["passed"] is True and good["differ"] == 0
+
+    bad = _cross([("ols", "infer", "2546a13c03838433", "2546a13c03838433"),
+                  ("ols", "batch", "aaaa1111bbbb2222", "ffff9999eeee8888")])
+    assert bad["passed"] is False and bad["differ"] == 1
+    text = va.format_cross_check(bad)
+    assert "DIFFER" in text
+    assert "aaaa1111bbbb2222" in text and "ffff9999eeee8888" in text, (
+        "both differing hashes must be printed, or the mismatch cannot be inspected")
+
+
+def test_cross_check_nothing_compared_is_not_a_mismatch():
+    """`compared == 0` once printed `MISMATCH. 0 of 0 cells differ`, which is
+    self-contradictory: nothing was compared, so nothing differed and nothing
+    agreed. Reporting a verdict about hashes never computed is the same defect
+    as VERIFIED over a refused run (lane/verify-cross-check, 2026-09-16)."""
+    empty = _cross([])
+    assert empty["passed"] is None, "an empty run must not read as a failure"
+    text = va.format_cross_check(empty)
+    assert "NOTHING COMPARED" in text
+    assert "MISMATCH" not in text, "an empty run must never report a mismatch"
+
+
+def test_cross_check_on_a_cpu_only_install_says_so_and_does_not_pass():
+    """No GPU means no second piece of hardware, so the check did not run.
+    That is neither a pass nor a failure, and must never be a silent skip."""
+    r = dict(ran=False, vendor="cpu", lanes=[],
+             reason="no GPU in this installation, so there is no second piece of hardware to "
+                    "compare against. This is not a pass and not a failure: the cross-check "
+                    "did not run.")
+    text = va.format_cross_check(r)
+    assert "NOT RUN" in text
+    assert "not a pass" in text
+    assert "AGREE" not in text, "a CPU-only install must not print an agreement"
+
+
+def test_cross_check_batch_na_is_respected_not_invented():
+    """A lane declaring `n/a` for batch keeps it. Inventing a comparison there
+    would be a check that cannot fail."""
+    r = _cross([("umap", "infer", "1111222233334444", "1111222233334444"),
+                ("umap", "batch", "n/a:batch-dependent-by-contract",
+                 "n/a:batch-dependent-by-contract")])
+    assert r["compared"] == 2 and r["agree"] == 1, "the n/a part must not be counted as agreement"
+    assert r["passed"] is True
+    assert "n/a" in va.format_cross_check(r)
+
+
+def test_cross_check_scope_tiers_respect_the_apple_lane_cap():
+    """The default must not exceed what one Apple Metal process may run:
+    identity_break refuses a full column outside a release, in code."""
+    assert va.APPLE_LANE_CAP == 24
+    harness = va.load_harness()
+    quick, every, per_family = va.cross_check_lanes(harness, "quick")
+    default, _, _ = va.cross_check_lanes(harness, "default")
+    every_lanes, _, _ = va.cross_check_lanes(harness, "all")
+    assert set(quick) == set(per_family.values()), "quick is one lane per family"
+    assert len(default) <= va.APPLE_LANE_CAP, "the default would be refused on Apple"
+    assert len(quick) <= len(default) <= len(every_lanes)
+    assert set(default) <= set(every), "the default must stay inside the intersection"
+
+
 def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
     """The table's own references, judged as if this box produced them,
     verify; flip one character of one shipped hash and the same rows read
@@ -404,7 +488,18 @@ def test_shipped_verifier_hashes_like_the_harness():
     _, vendor = build
     lanes = os.environ.get("MOJOLEARN_VERIFY_ALL_DRIFT_LANES", "").strip()
     if not lanes:
-        lanes = ",".join(va.host_surface().public_reference_lanes())
+        selected = list(va.host_surface().public_reference_lanes())
+        # CAP IT ON AN APPLE GPU. This asked for every public reference lane in
+        # one process, which was 9 and is 39 since the 2026-09-16 promotion, and
+        # `identity_break.refuse_routine_apple_column` refuses more than 24 in
+        # one Metal process because a full Apple column is a per-release
+        # artifact. The parity this test checks is per lane, so a subset proves
+        # exactly the same thing; asking for a column here only made the test
+        # unrunnable on any Mac with a GPU build (it still passes on a CPU-only
+        # install, which is why this went unseen until a Metal tree ran it).
+        if sys.platform == "darwin" and vendor != "cpu":
+            selected = selected[:va.APPLE_LANE_CAP]
+        lanes = ",".join(selected)
     with tempfile.TemporaryDirectory() as tmp:
         column = os.path.join(tmp, "column.json")
         argv = [str(ROOT / "tools" / "identity_break.py"), "--json", column, "--fixtures", "base",
