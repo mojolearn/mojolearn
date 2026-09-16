@@ -264,6 +264,36 @@ The other three rules, also against landed commits:
 
 None of the three moved.
 
+### The adversarial pass: can a rule say NARROW for a change that moves a cell
+
+This is the direction that costs a defect rather than an afternoon, and the
+33 tests before it did not cover it: they all asked whether a rule narrows
+when it should. Four rules could be made to narrow for a change that genuinely
+reaches a lane. All four are fixed and each attack is a test kept beside the
+control it must not break.
+
+| attack | was | now |
+|---|---|---|
+| `@mutate_everything` above `@lane("beta")` | one lane | every lane |
+| `"mojolearn-dbscan-" + "1"` beside `"mojolearn-dbscan-1"` | additive | every lane |
+| `importlib.import_module('mojolearn.tests.test_host_model_kmeans')` | inert | falls back |
+| `os.path.join('armprobedir', name)` | unreachable | falls back |
+
+The second is the one worth reading: two keys that are different EXPRESSIONS
+and the same VALUE mean the later entry overrides the earlier, so an EXISTING
+lane's dispatch moves under what looks like an addition.
+
+A fifth was checked and is clean. The docstring rule rests on nothing
+consuming a docstring as a value, which is an absence claim, so a test now
+walks for a `__doc__` load rather than taking it on trust. The only `__doc__`
+in the harness are assignments in the kde, knn, radius, gp and gmm
+registration loops, which are code and survive the strip.
+
+One fix cost real narrowing: searching for a test module's NAME rather than
+for an import statement took the tests rule from 124 of 125 inert to 91 of
+125, because 33 are named by a workflow or a script. That is the trade the
+rule is for. Over-firing costs a sweep; under-firing costs a defect.
+
 ### The one path left, and why it stays
 
 `pixi.toml` pins the toolchain. A toolchain change can move bits on every
