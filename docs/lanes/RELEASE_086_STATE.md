@@ -478,6 +478,31 @@ the finding IS that the two disagree.
 scalers suggested. The remaining set is heavy with `par-*`, neural and byte-LM lanes, so 6.8 h is
 the current estimate and not a ceiling.
 
+### The lease cannot be extended, but about 800 s of every lease was going unused
+
+Asked whether the 30 owed `par-*` lanes could be consolidated into one long leg instead of ten
+short ones, since each rental repays VM creation, wheel install and image pull before it records
+anything.
+
+**They cannot.** The cap is enforced code, not a docstring (`tools/hotaisle_leg.sh:319-321`):
+
+    if [ "$MINUTES" -gt 60 ]; then
+      echo "--minutes $MINUTES REFUSED: 60 is the maximum lease (a second leg, never an extension)" >&2; exit 2
+    fi
+
+The rest of the arithmetic follows from it: `DEADLINE_EPOCH = LEG_START + MINUTES * 60`, and
+`WORK_SECONDS = DEADLINE_EPOCH - FETCH_RESERVE - now` with `FETCH_RESERVE` 240 s, which is why
+the remote bound prints as about **3203 s**. The on-box watchdog is armed at 3569 s. So a longer
+body cannot buy recording time; it would only run past the leg's own poll deadline, where the
+outer poll fires, the fetch takes whatever exists and the VM is deleted.
+
+**What IS available, and was being wasted:** the body's own `timeout -k 30 @IDSECS@` has been
+2400 s against a ~3203 s remote bound, so roughly **800 s of every paid lease went unused**. At
+about 800 s a `par-*` lane that is one whole extra lane per rental. Leg 6 onward uses
+`IDSECS` near 2900 s, which keeps a few hundred seconds of margin so the identity process still
+exits before the poll deadline and the fetch happens normally. Lanes per dollar will be reported
+for leg 5 at 2400 s against leg 6 at 2900 s rather than assumed.
+
 ### The contested lane, in plain words (Andrew's decision, 2026-09-15)
 
 `rf-score-weighted` has **two AMD recordings that differ**, and both stay in the record.
