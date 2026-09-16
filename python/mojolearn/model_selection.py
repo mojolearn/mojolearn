@@ -8,6 +8,7 @@ Fold indices are host metadata; all learning stays with the GPU estimator.
 import copy
 import math
 import numbers
+import os
 import warnings
 from ._array import Array
 from ._buffer import _materialize, _native, empty
@@ -15,6 +16,43 @@ from ._arrays import _addr, _addr_ro
 from ._labels import is_bool, flatten_labels
 
 __all__ = ['cross_val_score']
+
+#: THE DORMANT NEGATIVE CONTROL for the fold assignment (lane/data-ordering-
+#: determinism, 2026-09-16). Fold assignment is the one data-ordering decision
+#: mojolearn owns end to end -- which row is trained on and which is held out,
+#: in which fold, in what order -- and `identity_break`'s `cross-val-folds`
+#: lane hashes it. A cell that cannot be seen to move is not evidence, so this
+#: is the switch that moves it.
+#:
+#: BOTH variables are required, for the reason `_backend.py` refuses a sabotage
+#: binding outside the gate: a switch that quietly returns wrong answers on one
+#: env var is a footgun. No build script, no workflow and no gate sets either
+#: one; only the lane's own sabotage arm does.
+#:
+#: WHAT IT DOES, and why this shape. It rotates the row-to-fold assignment by
+#: ONE position. Every fold keeps its size, train and test stay disjoint, train
+#: stays exactly the complement, and every row is still held out exactly once --
+#: so every invariant a partition check could test still passes and the answer
+#: is simply a DIFFERENT partition. That is the failure class
+#: `core/shuffle_iterator.mojo` names in its header: a wrong permutation is
+#: still a perfectly uniform-looking permutation, and nothing downstream can
+#: attribute the difference. A sabotage that broke an invariant would be caught
+#: by the invariant and would prove nothing about the hash.
+_FOLD_ORDER_SABOTAGE = 'MOJOLEARN_FOLD_ORDER_SABOTAGE'
+
+
+def _sabotage_fold_order(tests):
+    """`tests` unchanged, or with the row-to-fold assignment rotated by one."""
+    if (os.environ.get(_FOLD_ORDER_SABOTAGE) != '1'
+            or os.environ.get('MOJOLEARN_HOST_ALLOW_SABOTAGE') != '1'):
+        return tests
+    rows = [row for test in tests for row in test]
+    rows = rows[1:] + rows[:1]
+    rotated, at = [], 0
+    for test in tests:
+        rotated.append(rows[at:at + len(test)])
+        at += len(test)
+    return rotated
 
 
 def _indices(value, n, name):
