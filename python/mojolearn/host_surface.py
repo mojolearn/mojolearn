@@ -1271,15 +1271,17 @@ FAMILIES = (
         training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
                         "metrics-fowlkes-mallows"),
         # UMAP.transform from a saved embedding (lane/inference-forecast-
-        # umap-pca, 2026-09-15). Its answer depends on the query batch by the
-        # transform's contract, so the claim is the GPU's bytes for the same
-        # batch; `inference_display` says so in the README sentence.
+        # umap-pca, 2026-09-15). Its answer depended on the query batch by the
+        # transform's contract until lane/umap-batch-fix (2026-09-16) made all
+        # four couplings per row, so the claim is now the GPU's bytes for a
+        # row whatever else is asked with it; `inference_display` says so in
+        # the README sentence.
         # SpectralClustering.predict joins it (lane/saved-model-reference-gaps,
         # 2026-09-16, DEVIATION 2860): the Nystrom extension from a saved
         # `prediction_data=True` fit, through `spectral_predict` on this
         # binding, for both affinities the estimator accepts.
         inference_lanes=("umap", "spectral", "spectral-precomputed"),
-        inference_display="UMAP transform of a saved embedding (the GPU's bytes for the same query batch; a row's embedding depends on the batch it is asked in)",
+        inference_display="UMAP transform of a saved embedding (the GPU's bytes for a row, whatever else is asked in the same batch)",
         forest_kinds=(),
         classes=(
             "SpectralClustering", "UMAP",
@@ -2366,6 +2368,13 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #:                     one that comes from a run rather than from a static
 #:                     condition, and it carries what the run said.
 PUBLIC_PENDING_LANES = {
+    # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
+    # change. UMAP.transform became row separable, so every umap hash in the
+    # shipped table describes bytes this build no longer produces. Without
+    # this entry a user's CPU-only `verify --all` reads DIVERGENT for umap on
+    # a machine that is fine. It leaves the day the next release record is
+    # taken, with the rest of the `stale reference` block.
+    "umap": "stale reference",
     "holtwinters": "stale reference",
     "spectral": "stale reference",
     "gbdt-nan-modes": "stale reference",

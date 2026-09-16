@@ -59,11 +59,13 @@ class UMAP(NumericModeMixin):
     and mode from the last successful fit. It computes query-to-training
     neighbors, memberships, weighted initialization and seeded refinement
     against the frozen training embedding. Default refinement is 100 epochs
-    (30 above 10,000 queries), or max(1, n_epochs//3) when explicitly set;
+    at every request size, or max(1, n_epochs//3) when explicitly set;
     learning rate is learning_rate/4; repulsion_strength and
     negative_sample_rate apply to both fit and transform. Query batching
-    can change results. This path has its own qualification requirements;
-    existing fit certificates do not certify transform or reference RNG bits.
+    does NOT change results: a batch of N returns the same bytes as N calls
+    of one row (lane/umap-batch-fix, 2026-09-16). This path has its own
+    qualification requirements; existing fit certificates do not certify
+    transform or reference RNG bits.
     Supervised UMAP and alternate metrics/init are unsupported.
 
     `embedding_` and every returned embedding are `_array.Array`s of float32
@@ -174,11 +176,14 @@ class UMAP(NumericModeMixin):
         Parameter or mode changes require a successful refit. Later edits of
         public embedding_ or the original X do not alter the retained model.
 
-        The answer for a row depends on the other rows in the same call (the
-        batch mean sigma floor, the batch maximum edge weight and the
-        batch-position negative-sample draws of umap/transform.mojo), so the
-        bitwise promise across devices, and from a saved model on a CPU, is
-        for the same query batch.
+        The answer for a row does NOT depend on the other rows in the same
+        call. The sigma floor's mean, the edge-weight scale and the
+        negative-sample counter are all per row, and the refinement epoch
+        count does not read the request size, so a batch of N returns the
+        same bytes as N calls of one row, on every device alike
+        (umap/transform.mojo, and lane/umap-batch-fix, 2026-09-16, which
+        measured all four couplings closed on the CPU host route and on
+        Metal).
         """
         if not hasattr(self, "_transform_training"):
             raise ValueError("UMAP transform requires a successful fit")
@@ -225,14 +230,15 @@ class UMAP(NumericModeMixin):
         that is public inference through the metrics host binding
         (`mojolearn.host_model(path)` or `UMAP.load(path)`).
 
-        THE RESULT DEPENDS ON THE QUERY BATCH, by the transform's contract
-        (umap/transform.mojo): the sigma floor is a mean over every query's
-        neighbor distances, each edge weight is scaled by the maximum over
-        the batch, the negative-sample draws are keyed by a row's position in
-        the batch, and with n_epochs unset the epoch count depends on the
-        number of queries. A loaded model on a CPU answers the GPU's bytes
-        for the SAME query batch; a row asked alone, or in a different
-        batch, may embed differently on every device alike."""
+        THE RESULT DOES NOT DEPEND ON THE QUERY BATCH. Until
+        lane/umap-batch-fix (2026-09-16) it did, four ways: the sigma floor
+        was a mean over every query's neighbor distances, each edge weight
+        was scaled by the maximum over the batch, the negative-sample draws
+        were keyed by a row's position in the batch, and with n_epochs unset
+        the epoch count fell from 100 to 30 above ten thousand queries. All
+        four read one row now, so a loaded model on a CPU answers the GPU's
+        bytes for a row whatever else is asked with it, and a row asked
+        alone embeds exactly as it does in a batch."""
         if not hasattr(self, "_transform_training"):
             raise ValueError("UMAP save requires a successful fit")
         from . import _serialize
@@ -259,7 +265,8 @@ class UMAP(NumericModeMixin):
     def load(cls, path):
         """Load an embedding saved by `save`. The result transforms new
         rows against the saved training rows and embedding; it does not
-        refit. Transform results depend on the query batch (see `save`)."""
+        refit. Transform results do not depend on the query batch (see
+        `save`)."""
         from . import _serialize
         from .decomposition import _check_saved_by, _restore_mode
         arrays = _serialize.read_npz(path, _UMAP_FORMAT)
