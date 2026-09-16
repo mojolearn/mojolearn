@@ -277,6 +277,25 @@ class MemoryReader:
             return int(cells[ui]), int(cells[ti])
         return None
 
+    @staticmethod
+    def host_rss():
+        """Process RSS and peak RSS in bytes, or (0, 0) where /proc is not
+        readable. Recorded BESIDE the device figure, never instead of it:
+        `enqueue_create_host_buffer` is PINNED host memory and a failed
+        hipHostMalloc also reports hipErrorOutOfMemory, so a flat VRAM line
+        over a climbing RSS line is a different finding from two flat lines."""
+        rss = hwm = 0
+        try:
+            with open("/proc/self/status") as fh:
+                for line in fh:
+                    if line.startswith("VmRSS:"):
+                        rss = int(line.split()[1]) * 1024
+                    elif line.startswith("VmHWM:"):
+                        hwm = int(line.split()[1]) * 1024
+        except OSError:
+            pass
+        return rss, hwm
+
     def read(self):
         v = self._read(self.kind)
         if v is None:
@@ -311,6 +330,7 @@ class Runner:
         X = self.data(kind)
         w = self.W if lane == "dbscan-weighted" else None
         used0, total = self.reader.read()
+        rss0, _ = self.reader.host_rss()
         t0 = time.time()
         err = None
         n_clusters = None
@@ -343,6 +363,7 @@ class Runner:
                     % (type(exc).__name__, err))
         wall = time.time() - t0
         used1, _ = self.reader.read()
+        rss1, hwm1 = self.reader.host_rss()
         self.index += 1
         row = dict(i=self.index, arm=arm, lane=lane, fixture=kind,
                    kw={k: v for k, v in kw.items()},
@@ -351,15 +372,17 @@ class Runner:
                        .get(kind),
                    used_before=used0, used_after=used1,
                    delta=used1 - used0, total=total,
+                   rss_before=rss0, rss_after=rss1, rss_peak=hwm1,
                    wall_s=round(wall, 3), n_clusters=n_clusters,
                    ok=err is None, error=err)
         self.rows.append(row)
         if not self.quiet:
             print("FIT %3d %-10s %-16s %-13s %-3s used %7.1f -> %7.1f MiB "
-                  "(delta %+8.1f) free %8.1f  %6.2fs %s"
+                  "(delta %+8.1f) free %8.1f rss %7.1f  %6.2fs %s"
                   % (row["i"], arm, lane, kind, "ok" if err is None else "RAISE",
                      used0 / 2**20, used1 / 2**20, (used1 - used0) / 2**20,
-                     (total - used1) / 2**20 if total else float("nan"), wall,
+                     (total - used1) / 2**20 if total else float("nan"),
+                     rss1 / 2**20, wall,
                      "" if err is None else err.splitlines()[-1][:80]),
                   flush=True)
         return row

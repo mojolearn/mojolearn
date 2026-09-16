@@ -104,9 +104,17 @@ say "host=$(tr '\n' ' ' < "$OUT/logs/cpu.txt" | cut -c1-160)"
 # `labeled_reference_predict` in the same family; the base family is what
 # `import mojolearn` needs. Nothing else is built, because nothing else is
 # fitted here.
+# MOJOLEARN_REPRO=1 also builds solver and metrics and runs the ORIGINAL
+# commands, which need the agglomerative and spectral lanes. The MI325X leg ran
+# without it and read refused=0 on all 54; the reproduction attempt needs the
+# process to be the same SHAPE as the one that refused, not just the same fits.
 BUILD="env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=$JOBS"
 run build-base       $BUILD sh bindings/build.sh            || say "BUILD FAILED: bindings/build.sh"
 run build-estimators $BUILD sh bindings/build_estimators.sh || say "BUILD FAILED: bindings/build_estimators.sh"
+if [ "${MOJOLEARN_REPRO:-0}" = 1 ]; then
+    run build-solver  $BUILD sh bindings/build_solver.sh  || say "BUILD FAILED: bindings/build_solver.sh"
+    run build-metrics $BUILD sh bindings/build_metrics.sh || say "BUILD FAILED: bindings/build_metrics.sh"
+fi
 
 IB="env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python"
 say "vendor=$($IB pixi run python -c 'import mojolearn; print(mojolearn.vendor())' 2>&1 | tail -1)"
@@ -114,6 +122,24 @@ $IB pixi run python "$PROBE" --out /dev/null --fixture-digest > "$OUT/logs/fixtu
 say "fixture_digests_written=$(wc -l < "$OUT/logs/fixture-digest.log")"
 
 P="$IB pixi run python $PROBE"
+
+# ================================== 0. THE ORIGINAL COMMANDS, BEFORE ANYTHING
+# A leak lives inside ONE process, so a probe in its own process cannot
+# reproduce a failure that needed six lanes in one. These are the two commands
+# that refused on the RunPod MI300X, byte for byte from
+# tools/predict_kmeans_amd_leg.sh, and they run FIRST so that a box which dies
+# early has answered the only question that matters: does it reproduce.
+if [ "${MOJOLEARN_REPRO:-0}" = 1 ]; then
+    run identity-full $IB pixi run python tools/identity_break.py \
+        --lanes dbscan,dbscan-brute-l1,dbscan-weighted,agglomerative,spectral,spectral-precomputed \
+        --repeats 2 --vendor "amd-repro" --json "$OUT/json/identity-full.json"
+    grep -E '^cells=|^summary|REFUSED|hipError|out of memory' \
+        "$OUT/logs/identity-full.log" 2>/dev/null | head -30 >> "$G"
+    run record-predict $IB pixi run python tools/classical_host_gate.py record \
+        bench/results/classical_host/2026-09-16-amd-dbscan-oom-repro \
+        --lanes dbscan,agglomerative,spectral,spectral-precomputed
+    tail -25 "$OUT/logs/record-predict.log" >> "$G" 2>/dev/null
+fi
 
 # =========================================================== 1. THE ORDER TEST
 # `wide` is 36,000,000 edges at eps=0.9, the largest neighbourhood any fixture
@@ -128,6 +154,9 @@ arm cold $P --out "$OUT/json/cold.json" --arm cold --self-check-fixture wide
 # repeats: 54 fits, the same 54 the AMD column ran, with memory read around
 # each one and no stop at the first raise.
 arm seq $P --out "$OUT/json/seq.json" --arm seq --repeats 2
+# 108 fits in one process: twice the original's length, because "it did not
+# refuse in 54" and "it does not refuse" are not the same sentence.
+arm seq-long $P --out "$OUT/json/seq-long.json" --arm seq --repeats 4
 
 # ================================================= 3. THE PER FIT LEAK, ALONE
 # One shape, fitted 24 times. The shape cannot change, so a climb is a per fit
