@@ -68,12 +68,25 @@ def test_unfitted_kmeans_refuses_save():
             mojolearn.KMeans().save(os.path.join(tmp, "m.npz"))
 
 
-def test_the_registry_no_longer_reports_a_missing_format():
-    """The gap note must not still say the class has no `save`."""
+def test_kmeans_is_a_declared_inference_lane_and_no_longer_owed():
+    """lane/kmeans-save put `mojolearn-kmeans-1` in the classical host door;
+    lane/classical-host-recordings (2026-09-16) declared the six fitted
+    k-means lanes and recorded them, so `kmeans` left the owed registry.
+
+    The assertion that would catch a regression is the pair: the lanes are
+    DECLARED (so the gate covers them) and they are NOT owed (so nothing
+    claims a recording is still missing). Dropping one k-means lane from
+    `host_surface` fails the first; re-adding a `kmeans` note to
+    SAVED_MODEL_INFERENCE_OWED fails the second.
+    """
     from mojolearn import host_surface
-    why = host_surface.saved_model_inference_owed()["kmeans"]
-    assert "no `save`" not in why
-    assert "mojolearn-kmeans-1" in why
+    declared = host_surface.inference_lanes()
+    for lane in ("kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
+                 "kmeans-sqrt", "kmeans-classic-pp"):
+        assert lane in declared, f"{lane} is not a declared inference lane"
+    # kmeans-cosine has no fitted model to save: its fit is refused by name.
+    assert "kmeans-cosine" not in declared
+    assert "kmeans" not in host_surface.saved_model_inference_owed()
 
 
 # ------------------------------------------------------------- round trip

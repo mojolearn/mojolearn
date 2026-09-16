@@ -577,8 +577,14 @@ def test_saved_model_inference_owed_names_real_undeclared_lanes():
     would be gated already), and names a saved-model format the classical host
     door dispatches, or says why there is no format yet."""
     owed = host_surface.saved_model_inference_owed()
-    assert owed, "the owed list is empty"
+    # The list may be empty, and since lane/classical-host-recordings
+    # (2026-09-16) took the k-means recording it IS. It was asserted non-empty
+    # until then, which would have made emptying it a test failure rather than
+    # the closing of the gap. What must hold is the SHAPE of any entry that is
+    # there, checked below, and the invariant that no DECLARED lane is listed.
     declared = set(host_surface.inference_lanes())
+    assert not (set(owed) & declared), (
+        f"owed lanes that are already declared inference lanes: {sorted(set(owed) & declared)}")
     text = _read("tools/identity_break.py")
     defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
     defined |= set(re.findall(r'^lane\("([a-z0-9-]+)"\)\(', text, re.M))
@@ -617,9 +623,12 @@ def test_command_line_prints_the_exposure_surface(capsys):
     assert "resample:" in capsys.readouterr().out
     assert host_surface.main(["--saved-model-inference-owed"]) == 0
     # lane/saved-model-reference-gaps (2026-09-16) recorded spectral, dbscan
-    # and agglomerative and declared them, which left kmeans: the one owed
-    # entry that waits on a serialization format rather than on a box.
-    assert "kmeans:" in capsys.readouterr().out
+    # and agglomerative; lane/classical-host-recordings (2026-09-16) recorded
+    # the six k-means lanes, and the list is empty. The flag must still EXIT 0
+    # and print nothing rather than fail, so an empty gap reads as an empty
+    # gap and not as a broken command. The exit code above is the assertion;
+    # this one is that it printed no lane.
+    assert capsys.readouterr().out.strip() == ""
 
 
 def _lane_revisions():

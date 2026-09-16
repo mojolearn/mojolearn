@@ -62,6 +62,34 @@ reads published.
   seventeen do not", each of the seventeen naming the shipping family that served its
   inference instead; lane/ship-cpu-host-families then shipped all thirty-two, so every note
   now begins "Ships:" and none of them names an exclusion.
+- **The six k-means lanes are declared inference lanes now, with a GPU reference recording
+  behind them, and `SAVED_MODEL_INFERENCE_OWED` is EMPTY** (lane/classical-host-recordings).
+  `lane/kmeans-save` gave `KMeans` a `save` and a `load` the day before and put
+  `mojolearn-kmeans-1` in the classical host door; nothing carried the lanes into
+  `tools/classical_host_gate.py`, so no recording could exist for them, which is the same code
+  gap the four predict lanes had. `kmeans`, `kmeans-random`, `kmeans-array`, `kmeans-weighted`,
+  `kmeans-sqrt` and `kmeans-classic-pp` are recorded on nine fixtures each at
+  `bench/results/classical_host/2026-09-16-nvidia-kmeans`, taken on an NVIDIA A100-SXM4-80GB
+  (sm_80). `kmeans-cosine` is not among them and must not be: its fit is refused by name, so
+  there is no model to save. The saved models are re-predicted from the CPU host bindings on
+  both architectures, x86-64 and arm64, each reading `gate verdict IDENTICAL (54 fixtures,
+  exit 0)`. Beside the identity pair each recorded fixture carries `labels` and
+  `predict_training_rows`: the claim that a fit's own final assignment survives a file and a
+  change of machine, which holds on all 54.
+  **The negative control for that gate did not exist until this lane.** The family define's
+  only k-means arm was in `host_accumulate`, which only the FIT walks, so a saved model's
+  `predict` and `transform` could not be moved by it; rehearsed on a CPU recording before any
+  box was rented, `check --expect-mismatch --every-fixture` read `SABOTAGE NOT CAUGHT ON
+  FIXTURES` with all 54 in `unmoved`. `MOJOLEARN_KMEANS_PREDICT_SABOTAGE` moves both halves of
+  the pair and the family define moves the transform half, which is deliberate: an arm that
+  moves `predict` makes `tools/identity_break.py`'s own `predict(X) == labels_` assertion raise,
+  and that lane's cells would read REFUSED instead of DIVERGENT. Both arms now read `EXPECTED
+  MISMATCH SEEN` with an empty `unmoved` on both architectures.
+  The same box retook the k-means identity arms `lane/kmeans-save` had to leave owed (its
+  sabotage build had exited 127, so every cell of its control read REFUSED) and took
+  `spectral`'s x86 CPU identity column at the published 512-row size, which
+  `lane/saved-model-reference-gaps` left owed; both are at
+  `bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu`.
 - **`DBSCAN.predict`, `AgglomerativeClustering.predict` and `SpectralClustering.predict` are
   declared inference lanes now, with a GPU reference recording behind them**
   (lane/saved-model-reference-gaps). All three shipped on 2026-09-15 and no gate covered any of

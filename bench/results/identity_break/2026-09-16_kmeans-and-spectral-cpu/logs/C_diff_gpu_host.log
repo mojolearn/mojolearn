@@ -1,0 +1,39 @@
+| lane/fixture                 | verdict    | nvidia-nvidia-a100-sxm4-80gb-sm_80 | nvidia-nvidia-a100-sxm4-80gb-sm_80 |
+|------------------------------|------------|------------------|------------------|
+| kmeans-array/base            | IDENTICAL x2 | 37ab2f0355ef716a | 37ab2f0355ef716a |
+| kmeans-classic-pp/base       | IDENTICAL x2 | e6648c8209c562ac | e6648c8209c562ac |
+| kmeans-cosine/base           | IDENTICAL x2 | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-random/base           | IDENTICAL x2 | 2bab0cda9f319dbb | 2bab0cda9f319dbb |
+| kmeans-sqrt/base             | IDENTICAL x2 | 8864be3c295d6c4a | 8864be3c295d6c4a |
+| kmeans-weighted/base         | IDENTICAL x2 | 5080fbf55610f54e | 5080fbf55610f54e |
+| kmeans/base                  | IDENTICAL x2 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+
+summary: IDENTICAL=7
+
+| lane/fixture                 | column | verdict      | nvidia-nvidia-a100-sxm4-80gb-sm_80 | nvidia-nvidia-a100-sxm4-80gb-sm_80 |
+|------------------------------|--------|--------------|------------------|------------------|
+| kmeans-array/base            | infer  | IDENTICAL x2 | ae9509c50c75d2bc | ae9509c50c75d2bc |
+| kmeans-array/base            | model  | IDENTICAL x2 | ce0dcf87ec776455 | ce0dcf87ec776455 |
+| kmeans-array/base            | batch  | IDENTICAL x2 | 4b1022a4b98908d1 | 4b1022a4b98908d1 |
+| kmeans-classic-pp/base       | infer  | IDENTICAL x2 | e44226a81eebb7a8 | e44226a81eebb7a8 |
+| kmeans-classic-pp/base       | model  | IDENTICAL x2 | 55fd7b42b82bed5a | 55fd7b42b82bed5a |
+| kmeans-classic-pp/base       | batch  | IDENTICAL x2 | a710fad38f112c1c | a710fad38f112c1c |
+| kmeans-cosine/base           | infer  | N/A          | n/a:function     | n/a:function     |
+| kmeans-cosine/base           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/base           | batch  | N/A          | n/a:fit-refused  | n/a:fit-refused  |
+| kmeans-random/base           | infer  | IDENTICAL x2 | 45d941e241fdba4f | 45d941e241fdba4f |
+| kmeans-random/base           | model  | IDENTICAL x2 | 7f934305a96d1b77 | 7f934305a96d1b77 |
+| kmeans-random/base           | batch  | IDENTICAL x2 | 41f3015cf8e0680a | 41f3015cf8e0680a |
+| kmeans-sqrt/base             | infer  | IDENTICAL x2 | 58a73ee6f884f892 | 58a73ee6f884f892 |
+| kmeans-sqrt/base             | model  | IDENTICAL x2 | 0effed928846f9bd | 0effed928846f9bd |
+| kmeans-sqrt/base             | batch  | IDENTICAL x2 | 50d831d9342c295e | 50d831d9342c295e |
+| kmeans-weighted/base         | infer  | IDENTICAL x2 | 33403bafb4259ce4 | 33403bafb4259ce4 |
+| kmeans-weighted/base         | model  | IDENTICAL x2 | e8b41924fc98f304 | e8b41924fc98f304 |
+| kmeans-weighted/base         | batch  | IDENTICAL x2 | bd21da2a20bcf33f | bd21da2a20bcf33f |
+| kmeans/base                  | infer  | IDENTICAL x2 | 3d50c4c50bf078b2 | 3d50c4c50bf078b2 |
+| kmeans/base                  | model  | IDENTICAL x2 | 355598f468300bee | 355598f468300bee |
+| kmeans/base                  | batch  | IDENTICAL x2 | ce34789a012168b5 | ce34789a012168b5 |
+
+summary (infer/model): IDENTICAL=12, N/A=2
+summary (batch): IDENTICAL=6, N/A=1
+summary (rlpair): 

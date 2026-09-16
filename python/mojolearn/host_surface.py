@@ -212,6 +212,33 @@ CLASSICAL_RECORDED = (
     # next release record; the identity columns behind these cells are
     # bench/results/identity_break/2026-09-16_predict-nvidia.
     "bench/results/classical_host/2026-09-16-nvidia-predict",
+    # lane/classical-host-recordings (2026-09-16): the six FITTED k-means
+    # lanes, the last entry SAVED_MODEL_INFERENCE_OWED had, on all nine
+    # fixtures each. Recorded on a RunPod NVIDIA A100-SXM4-80GB (sm_80) and
+    # checked on BOTH host architectures: `gate verdict IDENTICAL (54
+    # fixtures, exit 0)` on the box's x86-64 bindings AND on the M4's arm64
+    # ones, so a model fitted on an A100 answers predict and transform with
+    # the A100's bits on a machine with no GPU. Both sabotage host sets, the
+    # family define and MOJOLEARN_KMEANS_PREDICT_SABOTAGE, read `EXPECTED
+    # MISMATCH SEEN` with `unmoved` EMPTY under --every-fixture on both
+    # architectures. The family define had NO arm on this side of the
+    # library until that lane added one, and its --every-fixture arm read
+    # `SABOTAGE NOT CAUGHT` on all 54 when it was first rehearsed. The Apple
+    # and AMD recordings are owed to the next release record; the identity
+    # column behind these cells is
+    # bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu.
+    "bench/results/classical_host/2026-09-16-nvidia-kmeans",
+    # The AMD column of the same six lanes, same nine fixtures, on a RunPod
+    # MI300X (gfx942): `gate verdict IDENTICAL (54 fixtures, exit 0)` and the
+    # predict-define sabotage arm caught on all 54 under --every-fixture. The
+    # AMD PREDICT recording from the same box is 3 of 36 and is deliberately
+    # NOT listed here: its `record` died on the fourth fixture with
+    # hipErrorOutOfMemory in dbscan_fit_core after four DBSCAN fits had
+    # succeeded, so it is kept, named partial, at
+    # bench/results/classical_host/2026-09-16-amd-predict-partial with the
+    # finding written up in
+    # bench/results/identity_break/2026-09-16_amd-mi300x/README.md.
+    "bench/results/classical_host/2026-09-16-amd-kmeans",
 )
 
 #: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
@@ -1111,16 +1138,24 @@ FAMILIES = (
         # The neighbors and density inference lane (2026-09-15) adds every
         # k-NN metric, the ball cover, the distance-weighted vote and mean
         # and RadiusNeighbors on its four metrics, all from a saved model.
+        # lane/classical-host-recordings (2026-09-16): the six FITTED k-means
+        # lanes, from a saved `mojolearn-kmeans-1` file through `HostKMeans`
+        # on this binding (`kmeans_predict` and `kmeans_transform`, the
+        # arithmetic of cluster/host/kmeans_oracle.mojo). One format carries
+        # every metric and every start. `kmeans-cosine` is NOT an inference
+        # lane: its fit is refused by name, so there is no model to save.
         inference_lanes=("knn", "knn-clf", "knn-reg", "knn-sqeuclidean", "knn-manhattan",
                          "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
                          "knn-clf-distance", "knn-reg-distance", "radius", "radius-manhattan",
-                         "radius-chebyshev", "radius-minkowski-p3"),
+                         "radius-chebyshev", "radius-minkowski-p3",
+                         "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
+                         "kmeans-sqrt", "kmeans-classic-pp"),
         forest_kinds=(),
         classes=(
             "NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans",
             "RadiusNeighbors",
         ),
-        display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting and radius neighbors",
+        display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting, radius neighbors and k-means assignment and distances",
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
             "cluster/host/kmeans_oracle.mojo",
@@ -1138,8 +1173,8 @@ FAMILIES = (
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Ships: k-NN, radius-neighbor and k-means inference from a saved model, fifteen inference "
-            "lanes."
+            "Ships: k-NN, radius-neighbor and k-means inference from a saved model, twenty-one "
+            "inference lanes."
         ),
         ships_in_wheel=True,
     ),
@@ -2407,7 +2442,14 @@ PUBLIC_PENDING_LANES = {
     "hdbscan-leaf": "no reference",
     "mamba2-dtlimit": "unwatched",
     "samba": "unwatched",
-    "samba-untied-dropout-accum": "unwatched",
+    # lane/shrink-floors (2026-09-16) put this lane in identity_break's
+    # LANE_REVISIONS as "steps-3-1", so its fixture has moved past the hash
+    # the shipped table carries and a run would prove nothing. The reason is
+    # "stale reference", not "unwatched", and the test that checks these
+    # reasons against the harness FAILED on main saying exactly that. Found
+    # by lane/classical-host-recordings merging main; it is not this lane's
+    # change and it leaves this dict at the next release record.
+    "samba-untied-dropout-accum": "stale reference",
     "byte-lm": "no reference",
     "byte-lm-resident": "no reference",
     "metrics-fowlkes-mallows": "unwatched",
@@ -2553,19 +2595,17 @@ PUBLIC_REFERENCE_CANDIDATES = (
 #: found WHY none of them had a recording: `classical_host_gate.py record`
 #: had been raising AttributeError on main since `--lane-rule-only` was added,
 #: ahead of every other refusal, so the tool that makes a recording could not
-#: start. `kmeans` is left, and lane/kmeans-save gave it the `save` it was
-#: missing, so it is now waiting on the same one thing the other four were.
-SAVED_MODEL_INFERENCE_OWED = {
-    "kmeans": "KMeans.predict and KMeans.transform shipped with lane/kmeans-predict, and "
-              "lane/kmeans-save (2026-09-16) gave the class `save` and `load`: "
-              "mojolearn-kmeans-1 is in _classical_host._FORMATS and host_model returns a "
-              "HostKMeans on _mojolearn_core_host. What is left is the GPU recording under "
-              "bench/results/classical_host/, as it was for dbscan, agglomerative and "
-              "spectral until lane/saved-model-reference-gaps took theirs. The one format "
-              "carries every k-means lane (the metric and the start are members of the file, "
-              "not tags of their own), so the kmeans, kmeans-random, kmeans-array, "
-              "kmeans-weighted, kmeans-sqrt and kmeans-classic-pp lanes all load through it.",
-}
+#: start.
+#:
+#: lane/classical-host-recordings (2026-09-16) took the last one. `kmeans`,
+#: `kmeans-random`, `kmeans-array`, `kmeans-weighted`, `kmeans-sqrt` and
+#: `kmeans-classic-pp` are declared inference lanes now, recorded at
+#: bench/results/classical_host/2026-09-16-nvidia-kmeans, so THE LIST IS
+#: EMPTY. Empty means every saved-model inference the classical host door
+#: dispatches is also a declared, gated and recorded inference lane; it does
+#: NOT mean nothing is left to implement. A new `save` that ships without a
+#: recording belongs here, with the reason, rather than nowhere.
+SAVED_MODEL_INFERENCE_OWED = {}
 
 
 def public_reference_candidates():
