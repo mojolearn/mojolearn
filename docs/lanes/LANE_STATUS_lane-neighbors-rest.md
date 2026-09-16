@@ -162,3 +162,61 @@ after the restart). Build once, one core:
 over the two queries) are not in the TSV and were not attempted; they are
 pure host bookkeeping over calls that already exist, and scipy is not a
 dependency, so the return type would have to be decided first.
+
+## DROPPED 2026-09-16. Still owed, and deliberately not taken.
+
+This lane was picked up on 2026-09-16 to close its owed evidence and was
+**dropped without recording anything.** Nothing here changed; the branch is
+exactly as the 2026-09-15 session left it.
+
+**Why it was dropped.** Metal is the scarcest resource we have, one machine and
+one GPU shared by every agent, and a lane's Metal time is for proving that
+lane's OWN NEW CELLS rather than working through a backlog of owed columns lane
+by lane. Item 2's tests were the only part of this lane's owed work that needed
+the GPU, and they were not worth another lock acquisition while a fixture-shrink
+lane needed it.
+
+**The x86 CPU column cannot be taken the way step 3 below describes.** That step
+rents a RunPod CPU pod, and renting was not permitted in that session. A local
+substitute was prepared and NOT run: the Apple M4's own host route (`identical/`
+moved aside, `MOJOLEARN_HOST_DIR` pointed at the core host binding), which is a
+genuinely independent arithmetic path from Metal and would make the diff a real
+two-column claim. **It would NOT discharge the x86 column**, which stays owed to
+a CPU pod or the release record.
+
+### Still owed, unchanged
+
+1. The CPU column and the sabotage column (step 3 below).
+2. The host gate check, green in production and mismatching on every fixture
+   under the sabotage host set.
+3. **Item 2 (`kneighbors(X=None)`) is STILL UNMEASURED.**
+   `python/mojolearn/tests/test_knn_self_query.py` has never run. Note its
+   suite SKIPS itself when no k-NN binding loads (`_binding_works()` swallows
+   the exception), so a green-looking run that reports skips is NOT a pass:
+   whoever runs it must confirm the tests actually executed.
+4. The NVIDIA and AMD columns, to the next release record.
+
+### Item 2's open question, answered in writing
+
+Step 2 below asks for a decision: add an identity lane, or record in writing
+that the equality test is the claim. **Recorded here: no new lane is needed.**
+Read the code (`kneighbors`, `query_is_train = X is None`): when `X is None` the
+query matrix IS the fitted index, handed to the SAME search call, and the only
+additions are a search at `k + 1` and integer selection among slots the search
+already returned. No new float arithmetic exists for a lane to hash, so a lane
+would hash the existing search twice and could not fail independently. The
+bit-for-bit equality test against the manual construction is the claim. This is
+a decision on the record, not a measurement: the test still has to RUN.
+
+### A correction to this file
+
+The reason given above for stopping on 2026-09-15 ("the M4's Metal command
+queue was leaking, AGXCommandQueue 6754 against a limit of 512, every fit
+roughly 20x slow") is **wrong and should not be repeated.** Those queues belong
+to an Apple SYSTEM SERVICE, not to our processes; measured directly, one of our
+lanes held a single queue while DockHelper held thousands, and with our own
+lane holding the GPU on 2026-09-16 the count read 1. The committed Apple column
+is unaffected: its trustworthiness rests on the three independent checks named
+in its README (two full runs agreeing byte for byte, 29,415 of 29,415 cells
+against the host oracle, every recorded model reloading equal), not on any
+claim about the machine's health.
