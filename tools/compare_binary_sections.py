@@ -38,8 +38,46 @@ import sys
 SKIP_SEGMENTS = {"__LINKEDIT"}
 
 
+def is_elf(path):
+    with open(path, "rb") as fh:
+        return fh.read(4) == b"\x7fELF"
+
+
+def elf_sections(path):
+    """Return {(",ELF"), section): (size, sha256)} for an ELF file, via readelf.
+
+    The Linux half of this tool. `readelf -S -W` lists the sections and
+    `readelf -x <name>` hex dumps one. Sections carrying build paths and build
+    ids are skipped by name for the same reason __LINKEDIT is on Mach-O.
+    """
+    skip = {".comment", ".note.gnu.build-id", ".gnu_debuglink"}
+    listing = subprocess.run(
+        ["readelf", "-S", "-W", path], capture_output=True, text=True, check=True
+    ).stdout
+    names = []
+    for line in listing.splitlines():
+        m = re.match(r"\s*\[\s*\d+\]\s+(\S+)\s+(\S+)\s+\S+\s+\S+\s+([0-9a-fA-F]+)", line)
+        if m and m.group(2) != "NULL" and m.group(1) not in skip:
+            names.append((m.group(1), int(m.group(3), 16)))
+    result = {}
+    for name, size in names:
+        dump = subprocess.run(
+            ["readelf", "-x", name, path], capture_output=True, text=True
+        ).stdout
+        body = []
+        for line in dump.splitlines():
+            m = re.match(r"^\s+0x[0-9a-fA-F]+\s+((?:[0-9a-fA-F]{2,8}\s+){1,4})", line)
+            if m:
+                body.append(m.group(1).strip())
+        blob = " ".join(body).encode()
+        result[("ELF", name)] = (size, hashlib.sha256(blob).hexdigest())
+    return result
+
+
 def sections(path):
-    """Return {(segment, section): (size, sha256)} for a Mach-O file."""
+    """Return {(segment, section): (size, sha256)}, Mach-O or ELF."""
+    if is_elf(path):
+        return elf_sections(path)
     out = subprocess.run(
         ["otool", "-l", path], capture_output=True, text=True, check=True
     ).stdout
