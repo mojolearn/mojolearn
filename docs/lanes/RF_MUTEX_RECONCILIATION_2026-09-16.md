@@ -9,10 +9,15 @@ The three branches are `lane/rf-score-weighted-nondeterminism` (the diagnosis),
 `lane/rf-mutex-claim-acquire` (the repair, inline), and `fix/amd-merge-ordering` (the
 repair as a portable helper, plus a model checker and a device check).
 
-**REVISED LATER THE SAME DAY. The first version of this file recommended a repair that
-DOES NOT EMIT. The reasoning survives intact. The spelling does not, and neither does the
-A/B evidence that was thought to support it. Section 0 is the correction and it should be
-read before anything else.**
+**REVISED TWICE LATER THE SAME DAY, and the second revision partly undoes the first.
+Read section 0 before anything else.**
+
+1. The first version of this file recommended a repair that **DOES NOT EMIT**. The
+   reasoning survives intact; the spelling does not. The repair is now an ACQUIRE FENCE.
+2. The first revision then said the replicated A/B effect could not have been the repair
+   working. **That was wrong**, because it applied a measurement of the non-emitting
+   spelling to legs that compiled a different, emitting one. Section 0.2.
+3. The shipped spin load was audited on all three columns and is **fine**. Section 0.25.
 
 ---
 
@@ -61,21 +66,38 @@ read-modify-write, not only on a compare-exchange.
 
 ### 0.2 What this does to the evidence
 
-**The replicated A/B effect is no longer explained by the repair. Say it plainly.**
+**TWO SPELLINGS WERE BEING CONFLATED, INCLUDING BY AN EARLIER DRAFT OF THIS FILE.
+Separating them changes the verdict, so it is spelled out rather than quietly edited.**
 
-`lane/rf-score-weighted-nondeterminism` legs 13 and 14 reported a control moving 7/300 and
-then 6/300 against a repaired arm of 0/300 twice. That contrast cannot be the repair
-working, because the repair emitted nothing. What remains is the alternative that lane
-explicitly refused to rule out and wrote down in its own status file, that a different
-codegen perturbs timing enough to hide a 2% to 5% race. The effect is real and it is
-**UNEXPLAINED**. It is not evidence for the ordering repair and it must not be quoted as
-if it were.
+- **The DISCARDED ACQUIRE LOAD.** Carried by `lane/rf-mutex-claim-acquire` and by
+  `fix/amd-merge-ordering`. Emits NOTHING. **Its A/B never ran at all**, because the
+  `rf-claimfix-ab` leg never obtained a box (section 7). So there is no A/B evidence for
+  this spelling, and there never was.
+- **The ACQUIRE COMPARE-EXCHANGE.** Carried by `lane/rf-score-weighted-nondeterminism` as
+  `-D MOJOLEARN_RF_ACQUIRE_CAS=1`, verified on that branch as
+  `success_ordering = Ordering.ACQUIRE`. **This one DOES emit**, measured 2026-09-16:
+  the PTX reads `atom.acquire.sys.global.cas.b32` where the stock arm reads
+  `atom.relaxed.sys.global.cas.b32`, and the gfx942 embedded code objects differ.
+  Evidence in the spin-acquire log directory.
 
-One part of that is still open and section 3.2 says how it gets settled. Legs 13 and 14
-compiled the ACQUIRE-CAS spelling, `Atomic.compare_exchange[success_ordering =
-Ordering.ACQUIRE, ...]`, which is a different spelling from the discarded load and which
-has its own reason to emit. Whether it did is a question the same section comparison
-answers, and it is now owed and cheap.
+**So legs 13 and 14 compared two genuinely different programs, and the test arm carried a
+real ordering change on the claim.** Their control moved 7/300 and then 6/300 against
+0/300 twice. That is a real contrast between two real programs and it is consistent with
+the ordering repair working. An earlier draft of this file said that contrast "cannot be
+the repair working". That was wrong. It was inherited from a measurement of the DISCARDED
+LOAD and applied to legs that compiled something else.
+
+What remains true, and is the reason this is still not a mechanism. The confound
+`lane/rf-score-weighted-nondeterminism` named in its own status file is untouched: any
+instruction added at the claim perturbs timing, and a 0/300 is consistent with hiding a 2%
+to 5% race as well as with closing it. The primitive-level check that would separate those
+has now returned a NULL twice (section 4.2.1). So legs 13 and 14 are the strongest
+evidence on this defect, they are an EFFECT, and the mechanism is still not demonstrated.
+
+The practical consequence for what ships is good. The one spelling that was ever A/B'd on
+a device, and that emitted when it was, is the acquire compare-exchange. The fence is its
+portable equivalent, reaching the same edge by the release-sequence rule, and it is the
+spelling Apple will accept.
 
 ### 0.25 THE SHIPPED SPIN LOAD IS FINE. Asked, measured, answered NO
 
@@ -429,9 +451,11 @@ PAID since the first version of this file:
   all three columns.** Section 0.25.
 - ~~One NVIDIA build of `core/device_mutex_check.mojo`.~~ **DONE**, cross-compiled
   locally for `sm_90a`, and its PTX read. Still never RUN on NVIDIA silicon.
+- ~~Whether the acquire-CAS spelling of legs 13 and 14 emits.~~ **DONE, it emits.**
+  Section 0.2. Those legs compared two real programs, which makes them the strongest
+  evidence on this defect and corrects an earlier draft of this file.
 
 Still owed:
-
 1. **A contention pattern that actually reaches the window.** This is now the blocker,
    and two nulls at the primitive say the current check is not it. The forest reaches it
    at 1% to 5% of fits and the primitive does not reach it in 4096 claims, which is
@@ -439,25 +463,21 @@ Still owed:
    pattern (many nodes, real payload structs, cross-XCD block placement) than like a
    single hot counter. A check built to resemble the forest's publish is the next
    instrument, not more rounds of this one.
-2. **Whether the acquire-CAS spelling of legs 13 and 14 emits.** One section comparison,
-   no box needed, since the arms cross-compile locally. If it does not, those legs
-   compared one program with itself and their 0/300 arms are void. If it does, their
-   arms were two real programs and the effect is still not the ordering repair.
-3. **A forest A/B at the spelling that ships,** with the section guard in place of the
+2. **A forest A/B at the spelling that ships,** with the section guard in place of the
    whole-file digest.
-4. **An rf identity cell with the repair in.** The fence adds an ordering constraint and
+3. **An rf identity cell with the repair in.** The fence adds an ordering constraint and
    no arithmetic, so no bit should move, and that is an argument rather than a
    measurement. Both Apple builds so far were taken with the build gate skipped and
    compared nothing.
-5. **ExtraTrees and fused kNN have no measurement at all.** Both carry the identical
+4. **ExtraTrees and fused kNN have no measurement at all.** Both carry the identical
    protocol. Note the asymmetry `fix/amd-merge-ordering` records. The kNN `-2 -> -1`
    consumer has a single consumer, which restricts the interleavings, so a matching
    spelling there is not independent proof of the same failure. The kNN producer at
    `:729` has multiple producers and the argument applies to it directly.
-6. **An emission audit of every other discarded atomic in the repository.** Section 0 is
+5. **An emission audit of every other discarded atomic in the repository.** Section 0 is
    a general fact about this compiler, not a fact about mutexes, and nothing has checked
    whether the same mistake is spelled anywhere else.
-7. **A run of `core/device_mutex_check.mojo` on NVIDIA silicon.** It now builds for
+6. **A run of `core/device_mutex_check.mojo` on NVIDIA silicon.** It now builds for
    `sm_90a` and has never executed there.
 
 ---
