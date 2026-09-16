@@ -230,17 +230,33 @@ read $36.65 before AMD leg 2 (floor 500 cents) against 299 cents an hour for the
 leg cannot exceed it.
 
 **The fourth column.** The diff wants a CPU column at the wheel's build commit, and the last
-record shipped only the three GPU columns, so this release takes one. It comes from the same
-final wheel installed from R2, on a box with no GPU, over the 154 lanes that
-`python/mojolearn/host_surface.py --record-covered-lanes` names. The other 38 harness lanes
-have no CPU training path, which is why the four column diff is scoped to those 154 (the
-gate's own diff scopes the same way). New scripts beside the leg scripts:
-`scripts/cpu_record_body.template.sh` and `scripts/make_cpu_record_body.sh`. The body refuses
-unless the installed package reads back `vendor() == cpu`, runs the lanes as 8 sharded
-processes through `tools/cpu_identity_gate_check.py run-column` (each shard is the venv's
-python running the checkout harness, which the body proves byte equal to the wheel's
-`_identity_break.py`, and run-column merges the parts itself), then applies the gate's own
-`column` judgement to the merged JSON.
+record shipped only the three GPU columns, so this release takes one. It runs on a box with no
+GPU over the 159 lanes `python/mojolearn/host_surface.py --covered-lanes` names, and the four
+column diff is then scoped to the 154 of those that `--record-covered-lanes` names (the five
+left out are embedding, embedding-sort, ivf, ivf-euclidean and kmeans-sqrt; the 38 harness
+lanes outside the covered list have no CPU training path at all). The CPU gate scopes its own
+diff exactly this way.
+
+*Attempt 1 took the column from the installed release wheel and that cannot work.* Pod
+zz5ylla3sgkejs, $0.0187, deleted and verified gone. Everything about the wheel checked out on
+the box (sha256 equal to R2, `vendor()` reads cpu, harness byte equal to the checkout's
+`tools/identity_break.py`, `identity --check` and `verify --quick` exit 0, 15 wheel bindings
+declared), but of 1386 cells only 639 read STABLE and 747 read REFUSED, by name: "no host
+binding covers `_mojolearn_rf`" and "`_mojolearn_trees`". The wheel ships the 15 wheel
+families; the manifest declares 32, and the CPU gate builds all 32 from source. The `par-*`
+lanes refused for the same reason underneath: `_parallel_pool` takes its CPU reference route
+only when those host bindings exist. This is not a defect in the wheel, which ships what
+`--wheel-families` names; it is the wrong source for this column.
+
+*Attempt 2 builds the column the way the gate does.* All 32 host families compiled from
+db9047b9f in a detached worktree (`scratchpad/wt-cpu-column`), 16 vCPU, 120 minute lease, the
+159 covered lanes as 16 sharded processes through `tools/cpu_identity_gate_check.py
+run-column`, which merges the parts itself. The body refuses unless the package reads back
+`vendor() == cpu`, reads every one of the 32 bindings back as the kernel matrix's cpu column
+first, and ends with the gate's own `column` judgement of the merged JSON. Script:
+`scripts/cpu_column_body.template.sh`. The wheel based scripts
+(`scripts/cpu_record_body.template.sh`, `scripts/make_cpu_record_body.sh`) stay as the record
+of attempt 1.
 
 Local `release/0.8.6` sat at db9047b9f while this work was pushed to `origin/release/0.8.6`
 from the branch `fix/release-post-record-allowlist`. The local branch is now fast-forwarded to
