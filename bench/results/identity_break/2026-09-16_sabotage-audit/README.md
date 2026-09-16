@@ -58,3 +58,34 @@ written up in `docs/lanes/SABOTAGE_AUDIT_2026-09-16.md`.
 The ninth is `tsvd/ties model`, which is different. The base fixture moves and
 the integer `ties` fixture does not, so that arm is fixture inert rather than
 structurally unreachable.
+
+## Round 2, the two single-arm families (same session, same Mac, one core)
+
+`linalg` and `resample` are the two families whose sabotage define reaches
+EXACTLY ONE `comptime if` site, so they are the ones most likely to carry an
+arm that cannot fire. Both were built production and sabotage into the same
+two directories as round 1 (`so_sha256.txt` now lists eight binaries, eight
+distinct hashes). Builds took 15, 13, 17 and 17 seconds.
+
+| file | what |
+|---|---|
+| `r2-prod.json`, `r2-sab.json` | the two columns, 5 lanes, base and ties |
+| `sabotage_moves_round2.txt` | every cell part, production against sabotage |
+| `r2-prod.log`, `r2-sab.log` | the harness output |
+| `build.linalg.*.log`, `build.resample.*.log` | the four builds |
+
+14 cell parts moved, 4 did not.
+
+| lane | base | ties |
+|---|---|---|
+| `bootstrap`, `permutation-test` | train and batch MOVED | train and batch MOVED |
+| `monte-carlo` | train MOVED | train MOVED |
+| `gemm-pinned`, `gemm-transposed` | train and batch MOVED | train and batch UNMOVED |
+
+THE FINDING. `gemm/host/gemm_oracle.mojo`'s arm walks each accumulation leaf
+descending instead of ascending. An order perturbation cannot change a sum
+whose values add exactly, and `ties` is integer valued, so the arm is inert
+there. That site is the only arm `linalg`, `mamba` and `transformer` reach and
+one of two for `training` and `neural`, so on `ties` those five families have
+no working negative control. Written up as finding 1 of
+`docs/lanes/SABOTAGE_AUDIT_2026-09-16.md`.

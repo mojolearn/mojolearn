@@ -1,0 +1,685 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4",
+ "commit": "f78a0accb1f68f50fafb362404718076c5275e6b",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  }
+ },
+ "cells": {
+  "gemm-pinned/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "931036cbc84c1ce0",
+    "931036cbc84c1ce0"
+   ],
+   "parts": [
+    {
+     "small": "27f3a0d05477091c",
+     "wide": "27f3a0d05477091c"
+    },
+    {
+     "small": "27f3a0d05477091c",
+     "wide": "27f3a0d05477091c"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "85316c17ab632377",
+    "85316c17ab632377"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gemm-pinned/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8ddd60b67526c1b1",
+    "8ddd60b67526c1b1"
+   ],
+   "parts": [
+    {
+     "small": "6f8a2b85cb2530cb",
+     "wide": "6f8a2b85cb2530cb"
+    },
+    {
+     "small": "6f8a2b85cb2530cb",
+     "wide": "6f8a2b85cb2530cb"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "f78018508fcdfa72",
+    "f78018508fcdfa72"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gemm-transposed/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ddc8b55e6cddf5de",
+    "ddc8b55e6cddf5de"
+   ],
+   "parts": [
+    {
+     "nt": "09f41f906692ce86",
+     "tn": "4b0e922e09b27581"
+    },
+    {
+     "nt": "09f41f906692ce86",
+     "tn": "4b0e922e09b27581"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a06324eb1ab8f7cd",
+    "a06324eb1ab8f7cd"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "gemm-transposed/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e13a4a9f5dad6f79",
+    "e13a4a9f5dad6f79"
+   ],
+   "parts": [
+    {
+     "nt": "925749a17d475996",
+     "tn": "35131e71cce744c0"
+    },
+    {
+     "nt": "925749a17d475996",
+     "tn": "35131e71cce744c0"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "d8743261f9c7c6aa",
+    "d8743261f9c7c6aa"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "bootstrap/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e667d4d38362620d",
+    "e667d4d38362620d"
+   ],
+   "parts": [
+    {
+     "mean": "12503a210da2eca8",
+     "std": "8d6ca0bd5851082d",
+     "quantile": "9273128fae95ba95",
+     "trimmed": "fb1ce06f27525754",
+     "pearson": "a9ae07f2cd3f223a",
+     "diff": "008d7239dc7cf2c1",
+     "r_first": "dea63ec9de50df10"
+    },
+    {
+     "mean": "12503a210da2eca8",
+     "std": "8d6ca0bd5851082d",
+     "quantile": "9273128fae95ba95",
+     "trimmed": "fb1ce06f27525754",
+     "pearson": "a9ae07f2cd3f223a",
+     "diff": "008d7239dc7cf2c1",
+     "r_first": "dea63ec9de50df10"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "cbde033336be3e1e",
+    "cbde033336be3e1e"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "bootstrap/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "530b26bb09ee258a",
+    "530b26bb09ee258a"
+   ],
+   "parts": [
+    {
+     "mean": "6589e53c77acdf7c",
+     "std": "b94dda3a05950e19",
+     "quantile": "8661ab6a899a8395",
+     "trimmed": "7f4ce1e871a45005",
+     "pearson": "6281046265a27453",
+     "diff": "e82e88a2877d70b9",
+     "r_first": "29a2bbce37c9a711"
+    },
+    {
+     "mean": "6589e53c77acdf7c",
+     "std": "b94dda3a05950e19",
+     "quantile": "8661ab6a899a8395",
+     "trimmed": "7f4ce1e871a45005",
+     "pearson": "6281046265a27453",
+     "diff": "e82e88a2877d70b9",
+     "r_first": "29a2bbce37c9a711"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "e1decff8099fa142",
+    "e1decff8099fa142"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "permutation-test/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "408ab7719820a671",
+    "408ab7719820a671"
+   ],
+   "parts": [
+    {
+     "two-sided": "e04bef9aef87dfe0",
+     "less": "a26e9a830634ee48",
+     "greater": "5db2ff1988fbb113"
+    },
+    {
+     "two-sided": "e04bef9aef87dfe0",
+     "less": "a26e9a830634ee48",
+     "greater": "5db2ff1988fbb113"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "b7e7c03b9f400ef8",
+    "b7e7c03b9f400ef8"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "permutation-test/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "82777b8257df6db9",
+    "82777b8257df6db9"
+   ],
+   "parts": [
+    {
+     "two-sided": "df4d50781651f2f7",
+     "less": "c1a9982801995893",
+     "greater": "677573e0c12a9977"
+    },
+    {
+     "two-sided": "df4d50781651f2f7",
+     "less": "c1a9982801995893",
+     "greater": "677573e0c12a9977"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "bec37fa614e5f274",
+    "bec37fa614e5f274"
+   ],
+   "batch_verdict": "STABLE"
+  },
+  "monte-carlo/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a357a971a19d7a8d",
+    "a357a971a19d7a8d"
+   ],
+   "parts": [
+    {
+     "const": "3495c34e4c0c2229",
+     "sum": "47527c981788bcc7",
+     "product": "45be5810d207f94f"
+    },
+    {
+     "const": "3495c34e4c0c2229",
+     "sum": "47527c981788bcc7",
+     "product": "45be5810d207f94f"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against)",
+    "n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against)"
+   ],
+   "batch_verdict": "N/A"
+  },
+  "monte-carlo/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d01e1c76c3f79545",
+    "d01e1c76c3f79545"
+   ],
+   "parts": [
+    {
+     "const": "0f43695ed9322ec1",
+     "sum": "e7748eeceee9d2fe",
+     "product": "a52bc9f5b9e83784"
+    },
+    {
+     "const": "0f43695ed9322ec1",
+     "sum": "e7748eeceee9d2fe",
+     "product": "a52bc9f5b9e83784"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against)",
+    "n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against)"
+   ],
+   "batch_verdict": "N/A"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1"
+ },
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.13.15",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gpc",
+   "gpc-multiclass",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables"
+  ],
+  "families": {
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "b0ab182002eef076e47d6f8f61b604b7bc741cc377efb06216a5582d4a3388f7",
+    "size": 584536,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "fd5ce23e106e41ab91a33babb77a294b93e9f8d84d5647e2511d95a98a1a1d1a",
+    "size": 627440,
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "97ddfe663b18ce5728ce64de53f8529210b2e5103d655d223ad4a12f36c37c65",
+    "size": 253192,
+    "sabotage": false
+   },
+   "_mojolearn_resample_host": {
+    "column": "cpu",
+    "sha256": "a29841bf93067999545ea27b70b85b6d8e57286b7696e8123b1f0791f8e508c8",
+    "size": 325880,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.5",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-sabaudit/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.13.15",
+  "par_devices": "0",
+  "bindings": []
+ }
+}

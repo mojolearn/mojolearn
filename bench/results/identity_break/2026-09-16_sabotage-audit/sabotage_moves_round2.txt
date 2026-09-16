@@ -1,0 +1,9 @@
+prod families: {'_mojolearn_core_host': False, '_mojolearn_estimators_host': False, '_mojolearn_linalg_host': False, '_mojolearn_resample_host': False}
+sab  families: {'_mojolearn_core_host': True, '_mojolearn_estimators_host': True, '_mojolearn_linalg_host': True, '_mojolearn_resample_host': True}
+bootstrap              base:train:MOVED+batch:MOVED  ties:train:MOVED+batch:MOVED
+gemm-pinned            base:train:MOVED+batch:MOVED  ties:train:UNMOVED(8ddd60b67526c1b1)+batch:UNMOVED(f78018508fcdfa72)
+gemm-transposed        base:train:MOVED+batch:MOVED  ties:train:UNMOVED(e13a4a9f5dad6f79)+batch:UNMOVED(d8743261f9c7c6aa)
+monte-carlo            base:train:MOVED  ties:train:MOVED
+permutation-test       base:train:MOVED+batch:MOVED  ties:train:MOVED+batch:MOVED
+
+TOTAL moved=14 unmoved=4

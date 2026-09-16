@@ -35,8 +35,8 @@ TWO RULES THIS AUDIT APPLIES that earlier readings did not.
 
 | category | lanes | meaning |
 |---|---|---|
-| (a) seen to move | 100 | a committed column shows this lane's host arm change a cell part |
-| (b) arm exists, never seen to move | 48 | a define reaches the lane's family, no committed column shows it move |
+| (a) seen to move | 105 | a committed column shows this lane's host arm change a cell part |
+| (b) arm exists, never seen to move | 43 | a define reaches the lane's family, no committed column shows it move |
 | (c) no sabotage covers the lane | 28 | no host family and no host sabotage define reaches the lane at all |
 
 Every one of the 32 host families' sabotage defines does reach at least one
@@ -46,19 +46,41 @@ against each family's declared `host_modules` in
 
 ## Cheap gaps closed here
 
-Eleven lanes moved from (b) to (a) on this Mac's CPU route, one core, no box
+Sixteen lanes moved from (b) to (a) on this Mac's CPU route, one core, no box
 rented and no Metal job. Evidence
-`bench/results/identity_break/2026-09-16_sabotage-audit/`. The `estimators`
-and `core` families were built production and `-D MOJOLEARN_HOST_SABOTAGE=1`
-into two directories, four binaries with four sha256 values, and the columns
-diffed cell by cell.
+`bench/results/identity_break/2026-09-16_sabotage-audit/`. Four families were
+built production and `-D MOJOLEARN_HOST_SABOTAGE=1` into two directories,
+eight binaries with eight sha256 values, and the columns diffed cell by cell.
 
-`pca`, `pca-whiten`, `tsvd`, `ols`, `ridge`, `logistic`, `logistic-multiclass`,
-`kde`, `knn`, `knn-clf`, `knn-reg`. 79 cell parts moved, 9 did not.
+| round | families | lanes | result |
+|---|---|---|---|
+| 1 | estimators, core | `pca`, `pca-whiten`, `tsvd`, `ols`, `ridge`, `logistic`, `logistic-multiclass`, `kde`, `knn`, `knn-clf`, `knn-reg` | 79 parts moved, 9 did not |
+| 2 | linalg, resample | `gemm-pinned`, `gemm-transposed`, `bootstrap`, `permutation-test`, `monte-carlo` | 14 parts moved, 4 did not |
+
+Round 2 deliberately took the two families whose sabotage define reaches
+EXACTLY ONE `comptime if` site, because a single-site arm is the one most
+likely to be inert. One of them was.
 
 ## Sabotage that cannot fail
 
-### 1. Saved-model cells that hold only the caller's input
+### 1. The shared GEMM leaf arm is inert on the integer fixture
+
+`gemm/host/gemm_oracle.mojo`'s arm walks each accumulation leaf DESCENDING
+instead of ascending. An order perturbation cannot change a sum whose values
+add exactly, and the `ties` fixture is integer valued, so on `ties` the arm
+moves nothing. MEASURED HERE: `gemm-pinned` and `gemm-transposed` move train
+and batch on `base` and read UNMOVED on `ties`, both parts
+(`sabotage_moves_round2.txt`).
+
+This reaches further than those two lanes. That one site is the ONLY arm that
+`linalg`, `mamba` and `transformer` reach, and one of only two for `training`
+and `neural`. On the `ties` fixture those five families have no working
+negative control at all. It is the same defect `lane/ties-sabotage` fixed for
+the neighbor and IVF families by replacing an order perturbation with a value
+flip (`host_sabotage_value_flip`, `ivf_sabotage_value_flip`). The same remedy
+applies here and has NOT been applied.
+
+### 2. Saved-model cells that hold only the caller's input
 
 The `model` part is `identity_break._hfile(path)`, the sha256 of the saved
 file. For the neighbor and density estimators that file holds the fitted
@@ -83,7 +105,7 @@ straight fix is `model_na="n/a:input-index"` on the k-NN, radius and KDE
 lanes, which removes the cell at the source so it never enters the owed list,
 rather than an exemption inside the owed checker.
 
-### 2. A CTR sabotage column is indistinguishable from production
+### 3. A CTR sabotage column is indistinguishable from production
 
 `bindings/_mojolearn_forest_host.mojo` exports `forest_host_sabotage()`
 returning `FOREST_HOST_SABOTAGE` only. The CTR arm
@@ -94,7 +116,7 @@ cannot witness its own arm, and `_backend`'s `MOJOLEARN_HOST_ALLOW_SABOTAGE`
 guard does not fire for it either. This audit's scanner classified the
 committed `2026-09-15_gbdt-ctr-tables/cpu-x86-ctr-sabotage.json` as a
 production column for that reason. The arm itself is real and was watched to
-fail in that lane; what is missing is the read-back, so the metadata lies
+fail in that lane; what is missing is the read-back, so the metadata is wrong
 about which binary ran.
 
 The related trap of a sabotage build that silently loads the production
@@ -103,7 +125,7 @@ the bound binding's path against `binary_path()` and raise when they differ
 (`tools/identity_break.py` lines 6208 to 6217), which is what caught the
 forest sabotage column reading IDENTICAL on a RunPod x86 pod.
 
-### 3. The tokenizer refuses instead of diverging
+### 4. The tokenizer refuses instead of diverging
 
 In the committed column
 `bench/results/identity_break/2026-09-15_tokenizer-batch/cpu.host-sabotage.json`
@@ -120,24 +142,33 @@ committed column shows them move under
 also rest on a single part, but those lanes have only a train cell, so that is
 complete rather than thin.
 
-### 4. Arms that are inert on particular fixtures
+### 5. Arms that are inert on particular fixtures
 
 | lane | what stays unmoved | where |
 |---|---|---|
-| `holtwinters`, `holtwinters-multiplicative` | 6 of 36 cells, the `denormal`, `denormal_ftz` and `wide` fixtures | `2026-09-15_holtwinters-linesearch-fix/diff.166-vs-cpu-sabotage.txt`, DIVERGENT=30 IDENTICAL=6 |
+| `gemm-pinned`, `gemm-transposed` | train and batch on `ties` | measured here, finding 1 |
+| `holtwinters`, `holtwinters-multiplicative` | 6 of 36 cells, `denormal`, `denormal_ftz` and `wide` | `2026-09-15_holtwinters-linesearch-fix/diff.166-vs-cpu-sabotage.txt`, DIVERGENT=30 IDENTICAL=6 |
 | `tsvd` | `model` on `ties`, while `base` moves | measured here |
 | `knn-cosine`, `knn-rbc`, `radius`, `radius-manhattan`, `ivf` | the whole `ties` fixture under the OLD order-only arm | `2026-09-15_ties-sabotage/x86-runpod/moved_counts.txt` |
 
 The `ties` family of failures is the integer fixture problem named in the
-brief, and it is FIXED. `lane/ties-sabotage` replaced the order perturbation
-with a value flip (`host_sabotage_value_flip`, `ivf_sabotage_value_flip`), and
-the same file records the new arms moving 180 of 216 parts against 166 of 216,
-with every remaining unmoved part being the input-copy model cells of finding
-1. The Holt-Winters and tsvd rows above are NOT fixed.
+brief. It is FIXED for the neighbor and IVF families, where
+`lane/ties-sabotage` replaced the order perturbation with a value flip and
+recorded the new arms moving 180 of 216 parts against 166 of 216, every
+remaining unmoved part being the input-copy model cells of finding 2. It is
+NOT fixed for the GEMM leaf, Holt-Winters or tsvd.
 
 `metrics` is the other fixed case. The old arm moved 5 of 9 metrics cells and
 0 of 9 metrics-classification cells; the new arm moves 9 of 9 for both
 (`2026-09-15_metrics-sabotage-coverage/sabotage_moves.txt`).
+
+### 6. One arm states its own inert condition, correctly
+
+`resample/host/resample_host.mojo` shifts every per-replicate and per-chunk
+tree's boundaries by one value, and its docstring says plainly that "the
+`const` integrand folds exact integers and does not move". That is what an
+honest arm looks like. The `monte-carlo` lane still moved on both fixtures
+here, because it hashes more than the const integrand.
 
 ## Category (c), the 28 par-* lanes, and why
 
@@ -171,41 +202,23 @@ perturb. A column that hashes anything else there means the refusal was
 lifted, which is what the lane is for. This wants a named exemption for the
 same reason the input-copy cells do.
 
-## Lanes whose arm reaches only the shared GEMM leaf
-
-`linalg`, `mamba` and `transformer` each reach their sabotage arm through one
-site only, `gemm/host/gemm_oracle.mojo`'s descending leaf. `training` and
-`neural` reach two, that leaf and `training/host/mlp_oracle.mojo`. Any cell in
-those families that does not route through the host GEMM cannot be moved, and
-that is visible in the committed record. Under the `neural` family's arm the
-`mamba1`, `mamba2`, `mamba2-dtlimit`, `mamba3`, `transformer` and
-`transformer-window` train parts read UNMOVED
-(`2026-09-15_neural-forward-inference/cpu-amd-epyc-4564p.host-sabotage.json`).
-Those lanes are in (a) on the strength of their OWN families' arms
-(`mamba`, `transformer`), which is the right reading, but the neural family's
-coverage of them is thinner than one arm per lane.
-
 ## Owed
 
 - A two-device box for any negative control over the 28 par-* lanes.
-- The 48 category (b) lanes not closed here, by host family: gbdt 14, rf 8,
-  training 5, core 5, byte_lm 3, trees 3, resample 3, linalg 2, forecast with
-  arima 2, and one each in preprocessing, arima and estimators. The gbdt, rf
-  and trees arms are claimed DIVERGENT in `python/mojolearn/host_surface.py`
-  comments citing CI gate runs (34884487749, 34900811380 and others), but no
-  committed column in this tree carries them. Those 25 lanes are believed on a
-  CI log, not on a record here.
+- The 43 category (b) lanes not closed here, by host family: gbdt 14, rf 8,
+  training 5, core 5, byte_lm 3, trees 3, forecast with arima 2, and one each
+  in preprocessing, arima and estimators. The gbdt, rf and trees arms are
+  claimed DIVERGENT in `python/mojolearn/host_surface.py` comments citing CI
+  gate runs (34884487749, 34900811380 and others), but no committed column in
+  this tree carries them. Those 25 lanes are believed on a CI log, not on a
+  record here.
 - Ten of the (b) lanes are par-* lanes that DO name a host family, so they are
   not in (c): `par-forest`, `par-forest-et`, `par-scaler`, `par-arima`,
   `par-mlp`, `par-queries-knn`, `par-queries-radius`, `par-queries-kde`,
   `par-reference-knn` and `par-reference-knn-reg`. They are CPU covered and
   reachable by a host arm, so they are closable without a box.
-- `byte-lm-host-train`, `byte-lm-host-infer-threaded`, `arima-exog`,
-  `arima-exog-seasonal`, `gemm-pinned`, `gemm-transposed`, `cross-val`,
-  `bootstrap`, `permutation-test`, `monte-carlo`, `training-primitives`,
-  `optim-sgd`, `optim-adam-clip` and `cross-entropy-arms` are each one family
-  build away from being closed the same way this lane closed eleven, on CPU,
-  with no box.
+- Each remaining family is one build pair away from being closed the way these
+  four were, at about 15 to 90 seconds a build on one core.
 
 ## The per-lane table
 
@@ -240,7 +253,7 @@ ran and left a part unmoved, the part is named.
 | `agglomerative` | a | solver | yes | moved: batch,infer,train; UNMOVED: model,train |
 | `spectral` | a | metrics | yes | moved: batch,infer; UNMOVED: model,train |
 | `holtwinters` | a | forecast,tsa | yes | moved: batch,infer,train; UNMOVED: batch,infer,train |
-| `gemm-pinned` | b | linalg | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
+| `gemm-pinned` | a | linalg | yes | moved: batch,train; UNMOVED: batch,train |
 | `metrics` | a | metrics | yes | moved: train; UNMOVED: train |
 | `svr` | a | svm | yes | moved: batch,infer,model,train |
 | `arima` | a | arima,forecast | yes | moved: batch,infer,model,train |
@@ -324,7 +337,7 @@ ran and left a part unmoved, the part is named.
 | `arima-exog` | b | arima,forecast | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
 | `arima-exog-seasonal` | b | arima,forecast | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
 | `gp-normalize-y` | a | gp,gp_infer | yes | moved: batch,infer,train |
-| `gemm-transposed` | b | linalg | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
+| `gemm-transposed` | a | linalg | yes | moved: batch,train; UNMOVED: batch,train |
 | `metrics-classification` | a | metrics | yes | moved: batch,train; UNMOVED: batch |
 | `metrics-fowlkes-mallows` | a | metrics | yes | moved: train |
 | `tokenizer` | a | tokenizer | yes | moved: batch; UNMOVED: infer,train |
@@ -337,9 +350,9 @@ ran and left a part unmoved, the part is named.
 | `gmm-random-init` | a | mixture,mixture_infer | yes | moved: batch,infer,model,train; UNMOVED: batch,infer |
 | `hdbscan` | a | hdbscan,hdbscan_infer | yes | moved: batch,infer,model,train |
 | `hdbscan-leaf` | a | hdbscan,hdbscan_infer | yes | moved: batch,infer,model,train |
-| `bootstrap` | b | resample | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
-| `permutation-test` | b | resample | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
-| `monte-carlo` | b | resample | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
+| `bootstrap` | a | resample | yes | moved: batch,train |
+| `permutation-test` | a | resample | yes | moved: batch,train |
+| `monte-carlo` | a | resample | yes | moved: train |
 | `training-primitives` | b | training | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
 | `ivf` | a | ivf,ivf_search | yes | moved: batch,infer,model,train; UNMOVED: batch,infer,train |
 | `ivf-euclidean` | a | ivf,ivf_search | yes | moved: batch,infer,model,train |

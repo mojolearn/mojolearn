@@ -26,7 +26,7 @@
 | `agglomerative` | a | solver | yes | moved: batch,infer,train; UNMOVED: model,train |
 | `spectral` | a | metrics | yes | moved: batch,infer; UNMOVED: model,train |
 | `holtwinters` | a | forecast,tsa | yes | moved: batch,infer,train; UNMOVED: batch,infer,train |
-| `gemm-pinned` | b | linalg | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
+| `gemm-pinned` | a | linalg | yes | moved: batch,train; UNMOVED: batch,train |
 | `metrics` | a | metrics | yes | moved: train; UNMOVED: train |
 | `svr` | a | svm | yes | moved: batch,infer,model,train |
 | `arima` | a | arima,forecast | yes | moved: batch,infer,model,train |
@@ -110,7 +110,7 @@
 | `arima-exog` | b | arima,forecast | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
 | `arima-exog-seasonal` | b | arima,forecast | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
 | `gp-normalize-y` | a | gp,gp_infer | yes | moved: batch,infer,train |
-| `gemm-transposed` | b | linalg | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
+| `gemm-transposed` | a | linalg | yes | moved: batch,train; UNMOVED: batch,train |
 | `metrics-classification` | a | metrics | yes | moved: batch,train; UNMOVED: batch |
 | `metrics-fowlkes-mallows` | a | metrics | yes | moved: train |
 | `tokenizer` | a | tokenizer | yes | moved: batch; UNMOVED: infer,train |
@@ -123,9 +123,9 @@
 | `gmm-random-init` | a | mixture,mixture_infer | yes | moved: batch,infer,model,train; UNMOVED: batch,infer |
 | `hdbscan` | a | hdbscan,hdbscan_infer | yes | moved: batch,infer,model,train |
 | `hdbscan-leaf` | a | hdbscan,hdbscan_infer | yes | moved: batch,infer,model,train |
-| `bootstrap` | b | resample | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
-| `permutation-test` | b | resample | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
-| `monte-carlo` | b | resample | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
+| `bootstrap` | a | resample | yes | moved: batch,train |
+| `permutation-test` | a | resample | yes | moved: batch,train |
+| `monte-carlo` | a | resample | yes | moved: train |
 | `training-primitives` | b | training | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
 | `ivf` | a | ivf,ivf_search | yes | moved: batch,infer,model,train; UNMOVED: batch,infer,train |
 | `ivf-euclidean` | a | ivf,ivf_search | yes | moved: batch,infer,model,train |

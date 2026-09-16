@@ -8,18 +8,26 @@ can move and why.
 ## Done
 
 - `docs/lanes/SABOTAGE_AUDIT_2026-09-16.md`, the audit and the per-lane table.
-  100 lanes seen to move, 48 with an arm never seen to move, 28 with no
+  105 lanes seen to move, 43 with an arm never seen to move, 28 with no
   sabotage that reaches them at all.
-- `bench/results/identity_break/2026-09-16_sabotage-audit/`, eleven lanes
+- `bench/results/identity_break/2026-09-16_sabotage-audit/`, sixteen lanes
   closed on this Mac's CPU route, one core, no box rented, no Metal job.
-  `pca`, `pca-whiten`, `tsvd`, `ols`, `ridge`, `logistic`,
-  `logistic-multiclass`, `kde`, `knn`, `knn-clf`, `knn-reg`. 79 cell parts
-  moved, 9 did not.
+  Round 1 (estimators, core): `pca`, `pca-whiten`, `tsvd`, `ols`, `ridge`,
+  `logistic`, `logistic-multiclass`, `kde`, `knn`, `knn-clf`, `knn-reg`, 79
+  parts moved and 9 not. Round 2 (linalg, resample): `gemm-pinned`,
+  `gemm-transposed`, `bootstrap`, `permutation-test`, `monte-carlo`, 14 parts
+  moved and 4 not.
 - Static check that every one of the 32 host families' sabotage defines
   reaches at least one `comptime if` arm in its declared `host_modules`.
 
 ## Open, with reasons
 
+- THE GEMM LEAF ARM IS INERT ON `ties`. `gemm/host/gemm_oracle.mojo` walks the
+  leaf descending, which cannot move an integer fixture. That site is the only
+  arm `linalg`, `mamba` and `transformer` reach and one of two for `training`
+  and `neural`, so those five families have no negative control on `ties`. The
+  remedy is the one `lane/ties-sabotage` already used elsewhere, a value flip
+  instead of an order change. NOT APPLIED here.
 - The input-copy `model` cells. `kde`, `knn`, `knn-clf`, `knn-reg` measured
   here, `radius` and `radius-manhattan` already failing the owed check 0 of
   18. The saved file holds the fitted index and scalars, no arithmetic, so no
