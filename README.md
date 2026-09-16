@@ -146,7 +146,7 @@ framework, or on a device that has not passed the same checks.
   save the same model bytes, and a CPU-only binding reproduces every
   prediction digest of all 24 recordings on seven CPUs (Intel Xeon, AMD
   EPYC, Azure Cobalt Neoverse-N2, Apple M1), with a sabotage build refused on
-  each ([fixtures](bench/results/forest_host/README.md), workflow run 34782452584).
+  each ([fixtures](bench/results/forest_host/README.md)).
 - **UMAP.** Neighbor selection and iterative updates match across the three
   vendors on named fixtures.
 
@@ -244,8 +244,8 @@ CPU-only binding exists for some lanes, and each is held to the same
 bit-identity gate against the Apple, NVIDIA and AMD columns as the GPU builds,
 with a sabotage build required to fail it. Inference on a CPU from a saved
 model: <!--fact:host_inference_surfaces-->random forests, Extra Trees and eight gradient boosting variants; nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting and radius neighbors; linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density on every kernel, metric and weighting, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features; UMAP transform of a saved embedding (the GPU's bytes for the same query batch; a row's embedding depends on the batch it is asked in); SVC and the isolation forest; the Gaussian mixture's scores, probabilities, labels and samples; the Gaussian process regressor's predictive mean and std, normalized targets included, and the Gaussian process classifier's labels and probabilities; HDBSCAN's approximate_predict, membership_vector and all_points_membership_vectors; Embedding lookup in a saved table; IVF-Flat search over a saved index and extending it; batched ARIMA prediction, in sample and out of sample, and forecasts, with or without exogenous regressors, and Holt-Winters forecasts and in-sample one-step predictions, additive and multiplicative<!--/fact-->
-(the forests: 24 three-GPU recordings reproduced on seven CPUs, workflow run
-34782452584, [fixtures](bench/results/forest_host/README.md); the classical
+(the forests: 24 three-GPU recordings reproduced on seven CPUs,
+[fixtures](bench/results/forest_host/README.md); the classical
 estimators: Apple M4, NVIDIA H100 and AMD MI300X recordings of the first
 five, 45 fixtures each, and Apple M4 recordings of kernel density, SVC,
 whitened PCA and the three k-NN classes, 54 fixtures each, reproduced on
