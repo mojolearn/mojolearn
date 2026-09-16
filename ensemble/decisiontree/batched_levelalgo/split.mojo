@@ -146,19 +146,39 @@ both modes.
 
 DEVIATION 106. Their `atomicCAS` / `__threadfence()` / `atomicExch` mutex
 (`:251`, `:270-271`) is not expressible on Metal in that spelling. Mojo 1.0
-comptime-asserts that `threadfence` "is only implemented on NVIDIA GPUs",
-the Apple backend rejects strong compare-exchange by name, and it rejects
-`acquire` success ordering on a compare-exchange. This implementation therefore uses
-the translation this repository already established and enqueued for
-cuVS's own cross-block mutex (`neighbors/mutex_probe_main.mojo`): spin on
-an ACQUIRE load until the mutex reads free, claim it with a WEAK RELAXED
-compare-exchange, hand it back with a RELEASE store, AND (2026-09-16) read
-the mutex once more with an ACQUIRE load after the claim succeeds. Only the
-mutex HOLDER ever writes the release value and their own code discards the
-exchanged value too, so no ABA hides in the relaxed claim. This changes HOW
-the handoff is said, never WHAT is said.
+comptime-asserts that `std.gpu.intrinsics.threadfence` "is only implemented
+on NVIDIA GPUs", the Apple backend rejects strong compare-exchange by name,
+it rejects `acquire` success ordering on a compare-exchange, and it rejects
+`acquire` on any read-modify-write. All four were re-checked against the
+shipped toolchain on 2026-09-16 and all four still hold; the fourth, that
+NO read-modify-write of any operation can carry an acquire on Apple, was
+not previously recorded and it rules out the textbook fix.
 
-WHY THE POST-CLAIM ACQUIRE LOAD EXISTS (2026-09-16,
+A FIFTH APPLE LIMIT, measured 2026-09-16 and NOT a compile error.
+`std.atomic.fence` is a different symbol from `std.gpu.intrinsics.threadfence`
+and it COMPILES for Apple, emitting `fence acquire` into the AIR, which
+`xcrun metal-objdump` will happily disassemble. It then makes the Apple GPU
+MACHINE CODE GENERATOR fail at pipeline creation, every launch, with
+`Failed to create compute pipeline state (GPU machine code generation):
+Compilation failed due to an interrupted connection:
+XPC_ERROR_CONNECTION_INTERRUPTED. This error occurred after multiple
+retries.` A fence-carrying `_mojolearn_rf.so` refused ALL 81 identity cells
+in both arm positions while the control refused none, and a two-second
+single-kernel probe reproduced it in isolation. So on Apple, COMPILING IS
+NOT RUNNING, and this file's post-claim acquire cannot be a fence.
+
+This implementation therefore uses the translation this repository already
+established and enqueued for cuVS's own cross-block mutex
+(`neighbors/mutex_probe_main.mojo`): spin on an ACQUIRE load until the mutex
+reads free, claim it with a WEAK RELAXED compare-exchange, hand it back with
+a RELEASE store, AND (2026-09-16) read the mutex once more with an ACQUIRE
+load after the claim succeeds, in a loop whose exit condition consumes the
+loaded value so the load cannot be deleted. Only the mutex HOLDER ever
+writes the release value and their own code discards the exchanged value
+too, so no ABA hides in the relaxed claim. This changes HOW the handoff is
+said, never WHAT is said.
+
+WHY THE POST-CLAIM ACQUIRE EXISTS (2026-09-16,
 lane/rf-mutex-claim-acquire). Until that date this paragraph said the
 synchronizes-with edge was "a load-acquire observing a store-release", and
 that is true only of the release the SPIN LOAD happened to observe. The
@@ -180,18 +200,47 @@ fired because each of its eight XCDs has its own L2 and a plain load can be
 served from a line that the XCD cached before B's release wrote the slot
 back; a single-L2 part narrows the same hole without closing it.
 
-The repair keeps every existing instruction and adds one acquire load of
-the mutex after the claim succeeds. That load reads the value the claim
-itself wrote, and a compare-exchange is a read-modify-write, so its write
-sits in the release sequence headed by whichever release store the claim
-consumed; an acquire load that reads a value in a release sequence
-synchronizes with the release that heads it (C++ [atomics.order], the
-release-sequence rule). The edge is now made with the release the lock was
-actually taken against, not with the release the spin saw. On every column
-the acquire load is the same legal instruction the spin already used, so no
-vendor-specific spelling is needed. `-D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1`
-compiles the pre-repair spelling and exists ONLY as the control arm of the
-A/B that has to see the old spelling still move; it is never a default.
+The repair keeps every existing instruction and adds one post-claim ACQUIRE
+LOAD of the mutex, written as a loop so its value is consumed. That load
+reads the value the claim itself wrote, and a compare-exchange is a
+read-modify-write, so its write sits in the release sequence headed by
+whichever release store the claim consumed; an acquire load that reads a
+value in a release sequence synchronizes with the release that heads it
+(C++ [atomics.order], the release-sequence rule). The edge is now made with
+the release the lock was ACTUALLY taken against, not with the release the
+spin happened to see.
+
+The loop runs exactly ONE iteration. This thread's own claim wrote the value
+being waited for, a thread cannot read a value earlier than one it wrote
+itself, and only the holder writes anything else, so the first load returns
+it. The loop is not a wait; it is how the value gets consumed.
+
+THE SPELLING IS LOAD-BEARING, and two earlier spellings of this same repair
+failed for two DIFFERENT reasons. Both are recorded so neither is retried.
+
+  - `_ = Atomic.load[ACQUIRE](mutex)` is formally correct and COMPILES TO
+    NOTHING. The value is discarded and a dead non-seq-cst atomic load is
+    deleted. Measured 2026-09-16 by building a probe in this claim's shape
+    four ways and diffing the emitted kernel IR: the discarded-load text is
+    byte-identical to the unrepaired text on Metal AIR, sm_80 PTX and
+    gfx942 GCN alike.
+  - `fence[ordering = Ordering.ACQUIRE]()` emits, and is the direct
+    translation of cuVS's `atomicCAS` plus `__threadfence()`. It emits
+    `fence acquire` in AIR, `fence.acq_rel.sys` in PTX and
+    `buffer_inv sc0 sc1` in gfx942 GCN. It also CRASHES Apple's GPU machine
+    code generator at pipeline creation, so no kernel in the module can
+    launch. See the fifth Apple limit above.
+
+The loop emits on every column. On gfx942 it is a
+`global_load_dword ... sc0 sc1` followed by `buffer_inv sc0 sc1`, and that
+invalidate lands between the `global_atomic_cmpswap` and the plain
+`global_load_dword` of `split[node]`, which is exactly the L2 the MI300X
+traces were reading stale. On sm_80 it is one extra
+`ld.acquire.sys.global.b32`.
+
+`-D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1` compiles the pre-repair spelling and
+exists ONLY as the control arm of the A/B that has to see the old spelling
+still move; it is never a default.
 
 The same claim spelling is used by the extratrees split reduction
 (`extratrees/impl/decisiontree/batched_levelalgo/split.mojo`), by the
@@ -687,12 +736,22 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
         # spin's acquire load and the relaxed claim can observe DIFFERENT
         # releases, and then nothing orders the previous holder's plain stores
-        # before this thread's plain loads. This load reads the claim's own
-        # value, which sits in the release sequence of the release the claim
-        # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+        # before this thread's plain loads. This load reads the value the
+        # claim itself wrote, which sits in the release sequence of the
+        # release the claim consumed, so it synchronizes with THAT release
+        # and the edge is made with the release the lock was ACTUALLY taken
+        # against. It exits after ONE iteration, because this thread's own
+        # claim wrote that value and only the holder ever writes another.
+        # THE LOOP IS LOAD-BEARING. A discarded `_ = Atomic.load[ACQUIRE]`
+        # says the same thing and EMITS NOTHING, and an acquire FENCE emits
+        # but CRASHES Apple's GPU machine code generator. See DEVIATION 106
+        # in
         # ensemble/decisiontree/batched_levelalgo/split.mojo.
         comptime if not is_defined["MOJOLEARN_RF_MUTEX_CLAIM_STOCK"]():
-            _ = Atomic.load[ordering = Ordering.ACQUIRE](mutex)
+            while Atomic.load[ordering = Ordering.ACQUIRE](
+                mutex
+            ) != Int32(1):
+                pass
 
         # `:253-259` -- read the current global split into a
         # register copy. Their field-by-field read exists because

@@ -26,14 +26,34 @@ WHAT MOJO EXPOSES ON APPLE, ESTABLISHED BY COMPILATION NOT DOCS
 ----------------------------------------------------------------
 - `std.gpu.intrinsics.threadfence` is comptime-asserted
   `"threadfence is only implemented on NVIDIA GPUs"`
-  (`stdlib/std/gpu/intrinsics.mojo:790-792` at Mojo 1.0). There is NO
-  standalone device-scope fence for Metal.
+  (`stdlib/std/gpu/intrinsics.mojo:790-792` at Mojo 1.0).
+- `std.atomic.fence` is a DIFFERENT SYMBOL, it COMPILES for Metal, AND IT
+  CANNOT RUN THERE (2026-09-16, lane/rf-mutex-claim-acquire). This paragraph
+  used to end "There is NO standalone device-scope fence for Metal", which
+  was true of `threadfence` and not of the toolchain, so the sentence was
+  corrected and then had to be corrected again. `fence[ordering =
+  Ordering.ACQUIRE]()` compiles for Metal, sm_80, sm_90a and gfx942, and
+  emits `fence acquire` in AIR, `fence.acq_rel.sys` in PTX and
+  `buffer_inv sc0 sc1` in gfx942 GCN. On Apple it then fails at PIPELINE
+  CREATION, every launch, with `Failed to create compute pipeline state
+  (GPU machine code generation): Compilation failed due to an interrupted
+  connection: XPC_ERROR_CONNECTION_INTERRUPTED`. A fence-carrying
+  `_mojolearn_rf.so` refused all 81 identity cells in both arm positions
+  while its control refused none, and a two-second single-kernel probe
+  reproduced it alone. THE LESSON IS THIS FILE'S OWN RULE, which the fence
+  pass forgot: Apple support is established BY ENQUEUE, never by host
+  compile.
 - `pop.atomic.cmpxchg` is legalized for Apple ONLY as `weak` and ONLY
   relaxed: the backend rejects, by name, a strong exchange ("Apple GPU only
   supports `weak` compare-exchange; AIR exposes no strong compare-exchange
   primitive") and any acquire/acq_rel success ordering ("Apple GPU does not
   support `acquire` atomic ordering"). Both messages are from the Mojo 1.0
-  compiler itself, reproduced by this file's history.
+  compiler itself, reproduced by this file's history, and the second was
+  re-checked against the shipped compiler on 2026-09-16 and still fires.
+- THE SAME REFUSAL COVERS EVERY read-modify-write, not just compare-exchange
+  (2026-09-16). `Atomic.fetch_add[ordering = Ordering.ACQUIRE]` fails on
+  `pop.atomic.rmw` with the identical message, so there is no acquire RMW of
+  any width or operation on Apple.
 - `Atomic.load[Ordering.ACQUIRE]` and `Atomic.store[Ordering.RELEASE]` (and
   SEQUENTIAL for both) DO legalize and run on the Apple target. Verified by
   enqueue, not by host compile.
@@ -160,11 +180,21 @@ def mutex_probe_kernel(
                 # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
                 # spin's acquire load and the relaxed claim can observe DIFFERENT
                 # releases, and then nothing orders the previous holder's plain stores
-                # before this thread's plain loads. This load reads the claim's own
-                # value, which sits in the release sequence of the release the claim
-                # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+                # before this thread's plain loads. This load reads the value the
+                # claim itself wrote, which sits in the release sequence of the
+                # release the claim consumed, so it synchronizes with THAT release
+                # and the edge is made with the release the lock was ACTUALLY taken
+                # against. It exits after ONE iteration, because this thread's own
+                # claim wrote that value and only the holder ever writes another.
+                # THE LOOP IS LOAD-BEARING. A discarded `_ = Atomic.load[ACQUIRE]`
+                # says the same thing and EMITS NOTHING, and an acquire FENCE emits
+                # but CRASHES Apple's GPU machine code generator. See DEVIATION 106
+                # in
                 # ensemble/decisiontree/batched_levelalgo/split.mojo.
-                _ = Atomic.load[ordering = Ordering.ACQUIRE](mtx)
+                while Atomic.load[ordering = Ordering.ACQUIRE](
+                    mtx
+                ) != Int32(-1):
+                    pass
             barrier()  # their `__syncthreads()`, `:256`
             var w = tid
             while w < w_count:
@@ -197,11 +227,21 @@ def mutex_probe_kernel(
             # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
             # spin's acquire load and the relaxed claim can observe DIFFERENT
             # releases, and then nothing orders the previous holder's plain stores
-            # before this thread's plain loads. This load reads the claim's own
-            # value, which sits in the release sequence of the release the claim
-            # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+            # before this thread's plain loads. This load reads the value the
+            # claim itself wrote, which sits in the release sequence of the
+            # release the claim consumed, so it synchronizes with THAT release
+            # and the edge is made with the release the lock was ACTUALLY taken
+            # against. It exits after ONE iteration, because this thread's own
+            # claim wrote that value and only the holder ever writes another.
+            # THE LOOP IS LOAD-BEARING. A discarded `_ = Atomic.load[ACQUIRE]`
+            # says the same thing and EMITS NOTHING, and an acquire FENCE emits
+            # but CRASHES Apple's GPU machine code generator. See DEVIATION 106
+            # in
             # ensemble/decisiontree/batched_levelalgo/split.mojo.
-            _ = Atomic.load[ordering = Ordering.ACQUIRE](mtx)
+            while Atomic.load[ordering = Ordering.ACQUIRE](
+                mtx
+            ) != Int32(1):
+                pass
         barrier()
         if sabotage == SABOTAGE_EARLY_RELEASE and tid == 0:
             # The bug arm: hand the buffer over BEFORE filling it, then

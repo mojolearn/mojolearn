@@ -629,11 +629,21 @@ def fused_l2_knn_kernel[
                         # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
                         # spin's acquire load and the relaxed claim can observe DIFFERENT
                         # releases, and then nothing orders the previous holder's plain stores
-                        # before this thread's plain loads. This load reads the claim's own
-                        # value, which sits in the release sequence of the release the claim
-                        # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+                        # before this thread's plain loads. This load reads the value the
+                        # claim itself wrote, which sits in the release sequence of the
+                        # release the claim consumed, so it synchronizes with THAT release
+                        # and the edge is made with the release the lock was ACTUALLY taken
+                        # against. It exits after ONE iteration, because this thread's own
+                        # claim wrote that value and only the holder ever writes another.
+                        # THE LOOP IS LOAD-BEARING. A discarded `_ = Atomic.load[ACQUIRE]`
+                        # says the same thing and EMITS NOTHING, and an acquire FENCE emits
+                        # but CRASHES Apple's GPU machine code generator. See DEVIATION 106
+                        # in
                         # ensemble/decisiontree/batched_levelalgo/split.mojo.
-                        _ = Atomic.load[ordering = Ordering.ACQUIRE](mtx)
+                        while Atomic.load[ordering = Ordering.ACQUIRE](
+                            mtx
+                        ) != Int32(-1):
+                            pass
                     barrier()  # `__syncthreads()` `:256`
 
                     # `:258-276`: pull the producer's numOfNN pairs for
@@ -743,11 +753,21 @@ def fused_l2_knn_kernel[
                     # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
                     # spin's acquire load and the relaxed claim can observe DIFFERENT
                     # releases, and then nothing orders the previous holder's plain stores
-                    # before this thread's plain loads. This load reads the claim's own
-                    # value, which sits in the release sequence of the release the claim
-                    # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+                    # before this thread's plain loads. This load reads the value the
+                    # claim itself wrote, which sits in the release sequence of the
+                    # release the claim consumed, so it synchronizes with THAT release
+                    # and the edge is made with the release the lock was ACTUALLY taken
+                    # against. It exits after ONE iteration, because this thread's own
+                    # claim wrote that value and only the holder ever writes another.
+                    # THE LOOP IS LOAD-BEARING. A discarded `_ = Atomic.load[ACQUIRE]`
+                    # says the same thing and EMITS NOTHING, and an acquire FENCE emits
+                    # but CRASHES Apple's GPU machine code generator. See DEVIATION 106
+                    # in
                     # ensemble/decisiontree/batched_levelalgo/split.mojo.
-                    _ = Atomic.load[ordering = Ordering.ACQUIRE](mtx)
+                    while Atomic.load[ordering = Ordering.ACQUIRE](
+                        mtx
+                    ) != Int32(1):
+                        pass
                 barrier()  # `__syncthreads()` `:319`
                 # `:321-331`: write this block's pairs for its rows into
                 # the output buffer, which doubles as the exchange buffer

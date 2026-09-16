@@ -1,16 +1,34 @@
-# DOES THE POST-CLAIM ACQUIRE LOAD CLOSE THE MI300X RANDOM FOREST RACE? A/B on one box.
+# DOES THE POST-CLAIM ACQUIRE FENCE CLOSE THE MI300X RANDOM FOREST RACE? A/B on one box.
 #
-# lane/rf-mutex-claim-acquire, 2026-09-16. The repair adds ONE acquire load of the mutex
-# after the weak relaxed claim succeeds (DEVIATION 106 in
-# ensemble/decisiontree/batched_levelalgo/split.mojo says why). The shipped spelling is now
-# the repaired one; -D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1 compiles the PRE-repair claim and is
-# the CONTROL arm of this leg only.
+# lane/rf-mutex-claim-acquire, 2026-09-16. The repair adds ONE post-claim ACQUIRE LOAD of the
+# mutex, in a one-iteration loop so its value is consumed and the load is not deleted
+# (DEVIATION 106 in ensemble/decisiontree/batched_levelalgo/split.mojo says why, and why it
+# is not the acquire FENCE that would be one instruction instead of three: the fence cannot
+# launch on Apple). The shipped spelling is the repaired one;
+# -D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1 compiles the PRE-repair claim and is the CONTROL arm of
+# this leg only. On gfx942 the repair is a `global_load_dword ... sc0 sc1` followed by
+# `buffer_inv sc0 sc1`, and that invalidate lands between the `global_atomic_cmpswap` that
+# takes the lock and the plain `global_load_dword` of `split[node]`, which is the read the
+# traces showed going stale.
 #
 # THE CONTROL MUST MOVE OR THE LEG PROVES NOTHING: the pre-repair arm reproduced 13/300 to
-# 16/300 on the wide fixture at 16 columns (max_features=1.0, the default). The two .so
-# digests must differ or the define never reached the compiler and the arms are the same
-# binary. Every line this leg writes carries the token CLAIMFIX-cols16 so a stale R2 object
-# from an earlier leg cannot be read as this leg's numbers.
+# 16/300 on the wide fixture at 16 columns (max_features=1.0, the default). Every line this
+# leg writes carries the token CLAIMFIX-cols16 so a stale R2 object from an earlier leg
+# cannot be read as this leg's numbers.
+#
+# THE ARMS MUST BE TWO PROGRAMS, AND THAT IS CHECKED BEFORE EITHER IS TIMED (2026-09-16).
+# This leg used to compare the whole-file sha256 of the two `.so` files, and to do it AFTER
+# the arms had run. Both were wrong. A file digest differs for reasons that are not code
+# (the `mktemp` install name, a build id), so its `results VOID` branch was unreachable; and
+# a check that runs last cannot stop a leg from spending the box on one program timed twice.
+# The repair as FIRST WRITTEN was a `_ = Atomic.load[ACQUIRE](mutex)` whose result is
+# discarded, which the compiler deletes: every section of both arms was byte-identical while
+# their file digests differed. NOTE WHAT THIS GATE STILL CANNOT SEE. It compares artifacts,
+# so it catches a repair that did not compile in; it cannot catch a repair that compiled in
+# and cannot LAUNCH, which is what the acquire fence turned out to be on Apple. If the
+# claimfix arm reports an error on every fit, suspect the spelling before the box. Both arms are now built first, their CODE AND CONSTANT
+# sections are compared by tools/rf_nondeterminism/section_digest.py, and nothing is timed
+# unless that comparison says they DIFFER.
 # Placeholders: @FULL@ @PUTURL@ @REPEATS@ @PROBESECS@
 set -u
 OUT=/root/gemm_leg_out/identity
@@ -42,13 +60,28 @@ build_arm() {   # <label> <extra defines>
     _rc=$?
     log "build $_lab exit=$_rc"
     [ "$_rc" = 0 ] && [ -f "$SO" ] || { tail -15 "$OUT/build_$_lab.log" >> "$OUT/record.txt"; return 1; }
+    # KEEP THE ARM. The next build writes the same path, and an arm that has
+    # been overwritten cannot be re-run or re-digested without paying for it
+    # again.
+    cp "$SO" "$OUT/so_$_lab.so"
     sha256sum "$SO" | cut -d' ' -f1 > "$OUT/so_$_lab.sha256"
-    log "build $_lab sha256=$(cat "$OUT/so_$_lab.sha256")"
+    # The digest that decides anything is of .text and .rodata, not of the
+    # file. See the header.
+    if ! python3 "$ROOT/tools/rf_nondeterminism/section_digest.py" "$SO" \
+            > "$OUT/sec_$_lab.txt" 2>&1; then
+        log "build $_lab SECTION DIGEST REFUSED: $(cat "$OUT/sec_$_lab.txt")"
+        return 1
+    fi
+    cut -d' ' -f1 < "$OUT/sec_$_lab.txt" > "$OUT/so_$_lab.sections"
+    log "build $_lab file_sha256=$(cat "$OUT/so_$_lab.sha256") sections=$(cat "$OUT/so_$_lab.sections")"
     return 0
 }
 
 run_arm() {     # <label>
     _lab=$1
+    # Reinstall THIS arm: both arms are built before either runs, so the path
+    # holds whichever was built last.
+    cp "$OUT/so_$_lab.so" "$SO" || { log "run $_lab: arm artifact missing"; return 1; }
     log "run $_lab start repeats=@REPEATS@"
     ( cd "$ROOT" && PYTHONPATH="$ROOT/python:$ROOT" MOJOLEARN_NUMERIC_MODE=identical \
         RF_PROBE_JSON="$JSON" RF_PROBE_ARM="$_lab" RF_PROBE_REPEATS=@REPEATS@ \
@@ -145,28 +178,39 @@ flush()
 print("ARM %s %d/%d moved distinct=%d CLAIMFIX-cols16" % (ARM, rec["moved"], rec["runs"], rec["distinct"]))
 PYEOF
 
-# Control first: the pre-repair claim has to be SEEN to move on this box and this build.
-if build_arm stock_prerepair "-D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1"; then
+# BUILD BOTH FIRST, TIME NEITHER YET. The gate below decides whether the box
+# is worth spending, and a gate that runs after the arms cannot do that.
+BUILT_OK=1
+build_arm stock_prerepair "-D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1" \
+    || { BUILT_OK=0; log "CONTROL BUILD FAILED - no control, the A/B is uninterpretable"; }
+build_arm claimfix "" \
+    || { BUILT_OK=0; log "CLAIMFIX BUILD FAILED"; }
+
+# THE GATE. Section digests, before anything is timed. Exit 0 DIFFER, exit 1
+# IDENTICAL, exit 2 the instrument refused; 1 and 2 are different numbers on
+# purpose, so a broken reader is never read as a passing comparison.
+ARMS_INDEPENDENT=0
+if [ "$BUILT_OK" = 1 ]; then
+    python3 "$ROOT/tools/rf_nondeterminism/section_digest.py" \
+        "$OUT/so_stock_prerepair.so" "$OUT/so_claimfix.so" \
+        > "$OUT/sections_ab.txt" 2>&1
+    case $? in
+        0) ARMS_INDEPENDENT=1
+           log "sections DIFFER: stock_prerepair=$(cut -c1-8 < "$OUT/so_stock_prerepair.sections") claimfix=$(cut -c1-8 < "$OUT/so_claimfix.sections")" ;;
+        1) log "SECTION DIGEST COLLISION -- .text and .rodata are IDENTICAL, the two arms are ONE PROGRAM, results VOID, nothing timed"
+           log "   both arms hash $(cut -c1-16 < "$OUT/so_claimfix.sections"); file digests stock=$(cut -c1-8 < "$OUT/so_stock_prerepair.sha256") claimfix=$(cut -c1-8 < "$OUT/so_claimfix.sha256") differ and mean NOTHING"
+           log "   this is what a repair deleted by the optimizer looks like; read the emitted kernel IR before renting again" ;;
+        *) log "SECTION DIGEST REFUSED, results VOID, nothing timed: $(cat "$OUT/sections_ab.txt")" ;;
+    esac
+fi
+
+if [ "$ARMS_INDEPENDENT" = 1 ]; then
+    # Control first: the pre-repair claim has to be SEEN to move on this box
+    # and this build.
     run_arm stock_prerepair
+    run_arm claimfix
 else
-    log "CONTROL BUILD FAILED - no control, the A/B is uninterpretable"
-fi
-
-if build_arm claimfix ""; then
-    if [ "$(cat "$OUT/so_stock_prerepair.sha256" 2>/dev/null)" = "$(cat "$OUT/so_claimfix.sha256" 2>/dev/null)" ]; then
-        log "REFUSED claimfix: digest UNCHANGED, the control define never reached the compiler"
-    else
-        run_arm claimfix
-    fi
-else
-    log "CLAIMFIX BUILD FAILED"
-fi
-
-_s=$(cat "$OUT/so_stock_prerepair.sha256" 2>/dev/null); _a=$(cat "$OUT/so_claimfix.sha256" 2>/dev/null)
-if [ -n "$_s" ] && [ "$_s" = "$_a" ]; then
-    log "DIGEST COLLISION -- arms are NOT independent, results VOID"
-else
-    log "digests: stock_prerepair=$(echo "$_s" | cut -c1-8) claimfix=$(echo "$_a" | cut -c1-8)"
+    log "NOT TIMING EITHER ARM"
 fi
 grep -h "^ARM " "$OUT/rf_claimfix_ab.log" >> "$OUT/record.txt" 2>/dev/null
 

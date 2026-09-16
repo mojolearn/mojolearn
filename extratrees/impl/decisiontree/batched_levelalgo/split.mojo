@@ -517,11 +517,21 @@ def split_reduce_kernel[
                     # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
                     # spin's acquire load and the relaxed claim can observe DIFFERENT
                     # releases, and then nothing orders the previous holder's plain stores
-                    # before this thread's plain loads. This load reads the claim's own
-                    # value, which sits in the release sequence of the release the claim
-                    # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+                    # before this thread's plain loads. This load reads the value the
+                    # claim itself wrote, which sits in the release sequence of the
+                    # release the claim consumed, so it synchronizes with THAT release
+                    # and the edge is made with the release the lock was ACTUALLY taken
+                    # against. It exits after ONE iteration, because this thread's own
+                    # claim wrote that value and only the holder ever writes another.
+                    # THE LOOP IS LOAD-BEARING. A discarded `_ = Atomic.load[ACQUIRE]`
+                    # says the same thing and EMITS NOTHING, and an acquire FENCE emits
+                    # but CRASHES Apple's GPU machine code generator. See DEVIATION 106
+                    # in
                     # ensemble/decisiontree/batched_levelalgo/split.mojo.
-                    _ = Atomic.load[ordering = Ordering.ACQUIRE](mutexes.unsafe_offset(slot))
+                    while Atomic.load[ordering = Ordering.ACQUIRE](
+                        mutexes.unsafe_offset(slot)
+                    ) != Int32(1):
+                        pass
 
                 var cur = SplitExact(
                     Split(
