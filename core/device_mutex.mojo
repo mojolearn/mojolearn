@@ -119,5 +119,26 @@ def claim_device_mutex[origin: MutOrigin, //](
             # against, not with whichever one its spin load happened to observe. Do not
             # replace this with a discarded acquire load; that spelling emits nothing.
             comptime if not CLAIM_STOCK:
-                fence[ordering = Ordering.ACQUIRE]()
+                # MEASURED 2026-09-16: `fence[ordering = Ordering.ACQUIRE]()`
+                # generates valid AIR and then FAILS AT PIPELINE CREATION on
+                # Apple, "GPU machine code generation ...
+                # XPC_ERROR_CONNECTION_INTERRUPTED", 6 of 6 with arm order
+                # rotated, against stock 6 of 6 OK. It broke random forests,
+                # extratrees and the fused kNN on this vendor. Every
+                # cross-compile check passed, because AIR generation is not the
+                # stage that fails.
+                #
+                # This is an acquire LOAD whose value is CONSUMED, which is the
+                # distinction that makes it emit: a discarded one compiles to
+                # nothing on AIR, PTX and GCN alike. It reaches the SAME edge as
+                # the fence. The claim above is a read-modify-write, so its write
+                # sits in the release sequence headed by the release it consumed,
+                # and an acquire that reads a value in that sequence synchronizes
+                # with the release heading it.
+                #
+                # `claim_value`, NEVER a literal 1: the kNN consumer claims
+                # `-2 -> -1`, and a loop waiting on the wrong value does not fail,
+                # it HANGS.
+                while Atomic.load[ordering = Ordering.ACQUIRE](mutex) != claim_value:
+                    pass
             return

@@ -221,15 +221,30 @@ exits and BEFORE the protected load. Anyone who greps this kernel for
 repair was always there.
 
 What these excerpts are NOT. The gfx942 arms are CROSS-COMPILED and have never
-executed on gfx942 hardware. AIR is code GENERATION, not GPU machine code, and
-the stage that turns AIR into machine code is reached by neither. As of
-2026-09-16 an Apple A/B of the fence arm returned 81 of 81 cells refused at
-`Failed to create compute pipeline state (GPU machine code generation)`, with
-the stock arm refusing none, and that is UNEXPLAINED rather than explained: a
-concurrent-Metal window in that run landed on the stock arm, not the fence arm.
-An isolated single-pipeline probe against main is what settles it. Until it
-does, this deviation records that the fence EMITS and does not record that it
-RUNS on Apple.
+executed on gfx942 hardware. AIR is code GENERATION, not GPU machine code.
+
+AND THE FENCE DID NOT SURVIVE THAT LAST STAGE ON APPLE. Settled 2026-09-16,
+solo under the Metal lock, on main's own binary: `fence[ordering =
+Ordering.ACQUIRE]()` generates valid AIR and then FAILS AT PIPELINE CREATION,
+"GPU machine code generation ... XPC_ERROR_CONNECTION_INTERRUPTED", while the
+stock arm runs. Two sessions reproduced it independently, one with arm order
+rotated 6 of 6 against stock 6 of 6 OK, one running this file's own
+`core/device_mutex_check.mojo` and watching the fence arm exit 1 with that
+message and the repaired arm PASS both claim pairs with its sabotage rejected.
+It broke random forests, extratrees and the fused kNN on this vendor for the
+thirty-seven minutes it was on main. Every cross-compile check passed
+throughout, because AIR generation is not the stage that fails, which is
+precisely why a disassembly is necessary and not sufficient.
+
+WHAT SHIPS INSTEAD is an acquire LOAD WHOSE VALUE IS CONSUMED, spinning until
+the mutex reads the value this claim itself wrote. The memory-model argument
+above is untouched: the claim is a read-modify-write, so its write sits in the
+release sequence headed by the release it consumed, and an acquire that reads a
+value in that sequence synchronizes with the release heading it. Only the
+spelling changed. It emits on AIR, PTX and GCN, and unlike the fence it runs.
+The value compared against must be the claim's own, never a literal 1, because
+the kNN consumer claims `-2 -> -1`; a loop waiting on the wrong value does not
+fail, it HANGS.
 
 DEVIATION 107. `printSplits` (`:291-308`) is a debug printer built on
 `raft::linalg::writeOnlyUnaryOp` and is NOT implemented. Price of declining it:
