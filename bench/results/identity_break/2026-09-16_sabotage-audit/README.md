@@ -89,3 +89,13 @@ there. That site is the only arm `linalg`, `mamba` and `transformer` reach and
 one of two for `training` and `neural`, so on `ties` those five families have
 no working negative control. Written up as finding 1 of
 `docs/lanes/SABOTAGE_AUDIT_2026-09-16.md`.
+
+## Correction, 2026-09-16
+
+The audit's denominator was corrected from 176 to 199 after this evidence was
+taken. 176 counts literal `@lane` decorators; the registry holds 23 more that
+are registered in loops. The correction does not touch any measurement here.
+Twenty-one of the 23 were already category (a); `gp-optimize` and
+`gp-optimize-restarts` are in no host family and are category (c).
+
+`lane_table.md` in this directory carries all 199 rows.

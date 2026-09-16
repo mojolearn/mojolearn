@@ -2,10 +2,25 @@
 
 Branch `lane/sabotage-audit`, from main at bfb8f725a.
 
-THE QUESTION, asked of all 176 `tools/identity_break.py` lanes. Has this
+THE QUESTION, asked of all 199 `tools/identity_break.py` lanes. Has this
 lane's sabotage been SEEN to make the lane divergent, or do we only believe it
 would? A sabotage nobody has watched fail is indistinguishable from no
 sabotage.
+
+THE DENOMINATOR IS 199, NOT 176. The first version of this document said 176,
+which is the number of literal `@lane("...")` decorators a grep can see. The
+registry holds 23 more that are registered in loops and are invisible to a
+decorator count: five kde kernel and metric variants, six knn metric variants,
+three radius metric variants, three gp kernels, `gp-sample-y` with its
+normalized twin, `gp-optimize` with its restarts twin, and two `gmm-sample`
+lanes. The count here is `len(LANES)` with `tools/identity_break.py` loaded as
+a module, which is the only way to get it right.
+
+Twenty-one of those 23 were already category (a), so the correction moved the
+base without moving the evidence. TWO WERE NOT. `gp-optimize` and
+`gp-optimize-restarts` appear in no host family in
+`python/mojolearn/host_surface.py` and are not in `covered_lanes()`, so no
+host sabotage define reaches them and they are category (c).
 
 ## What counts as seen
 
@@ -35,9 +50,11 @@ TWO RULES THIS AUDIT APPLIES that earlier readings did not.
 
 | category | lanes | meaning |
 |---|---|---|
-| (a) seen to move | 105 | a committed column shows this lane's host arm change a cell part |
+| (a) seen to move | 126 | a committed column shows this lane's host arm change a cell part |
 | (b) arm exists, never seen to move | 43 | a define reaches the lane's family, no committed column shows it move |
-| (c) no sabotage covers the lane | 28 | no host family and no host sabotage define reaches the lane at all |
+| (c) no sabotage covers the lane | 30 | no host family and no host sabotage define reaches the lane at all |
+
+(c) is the 28 par-* driver lanes plus `gp-optimize` and `gp-optimize-restarts`.
 
 Every one of the 32 host families' sabotage defines does reach at least one
 `comptime if` arm, so no family define is dead. That was checked statically
@@ -75,10 +92,16 @@ and batch on `base` and read UNMOVED on `ties`, both parts
 This reaches further than those two lanes. That one site is the ONLY arm that
 `linalg`, `mamba` and `transformer` reach, and one of only two for `training`
 and `neural`. On the `ties` fixture those five families have no working
-negative control at all. It is the same defect `lane/ties-sabotage` fixed for
-the neighbor and IVF families by replacing an order perturbation with a value
-flip (`host_sabotage_value_flip`, `ivf_sabotage_value_flip`). The same remedy
-applies here and has NOT been applied.
+negative control at all.
+
+FIXED, on branch `lane/sabotage-evidence` at cc5234c00, not yet on main
+(`origin/main` is 8cc2002b0 and still carries the order arm, so the finding
+above stands against main). `gemm/host/gemm_oracle.mojo` now perturbs a VALUE
+through `gemm_oracle_sabotage_value_flip`, the same remedy `lane/ties-sabotage`
+applied to the neighbor and IVF families, and the old order arm is kept behind
+`MOJOLEARN_GEMM_ORACLE_SABOTAGE_LEGACY_ORDER` so the defect can still be
+watched failing rather than believed. No build script and no gate sets that
+legacy define.
 
 ### 2. Saved-model cells that hold only the caller's input
 
@@ -116,8 +139,12 @@ cannot witness its own arm, and `_backend`'s `MOJOLEARN_HOST_ALLOW_SABOTAGE`
 guard does not fire for it either. This audit's scanner classified the
 committed `2026-09-15_gbdt-ctr-tables/cpu-x86-ctr-sabotage.json` as a
 production column for that reason. The arm itself is real and was watched to
-fail in that lane; what is missing is the read-back, so the metadata is wrong
-about which binary ran.
+fail in that lane; what was missing is the read-back, so the metadata was
+wrong about which binary ran.
+
+FIXED, on branch `lane/sabotage-evidence` at cc5234c00, not yet on main.
+`forest_host_sabotage_binding` now reports BOTH arms, so a column built with
+the CTR define records `sabotage: true` and can witness its own binary.
 
 The related trap of a sabotage build that silently loads the production
 binding IS closed in code. `_probe_fit_host` and `_probe_saved_host` compare
@@ -146,7 +173,7 @@ complete rather than thin.
 
 | lane | what stays unmoved | where |
 |---|---|---|
-| `gemm-pinned`, `gemm-transposed` | train and batch on `ties` | measured here, finding 1 |
+| `gemm-pinned`, `gemm-transposed` | train and batch on `ties` | measured here, finding 1; fixed on `lane/sabotage-evidence`, not yet on main |
 | `holtwinters`, `holtwinters-multiplicative` | 6 of 36 cells, `denormal`, `denormal_ftz` and `wide` | `2026-09-15_holtwinters-linesearch-fix/diff.166-vs-cpu-sabotage.txt`, DIVERGENT=30 IDENTICAL=6 |
 | `tsvd` | `model` on `ties`, while `base` moves | measured here |
 | `knn-cosine`, `knn-rbc`, `radius`, `radius-manhattan`, `ivf` | the whole `ties` fixture under the OLD order-only arm | `2026-09-15_ties-sabotage/x86-runpod/moved_counts.txt` |
@@ -155,8 +182,9 @@ The `ties` family of failures is the integer fixture problem named in the
 brief. It is FIXED for the neighbor and IVF families, where
 `lane/ties-sabotage` replaced the order perturbation with a value flip and
 recorded the new arms moving 180 of 216 parts against 166 of 216, every
-remaining unmoved part being the input-copy model cells of finding 2. It is
-NOT fixed for the GEMM leaf, Holt-Winters or tsvd.
+remaining unmoved part being the input-copy model cells of finding 2. The GEMM
+leaf is fixed the same way on `lane/sabotage-evidence` at cc5234c00, not yet on
+main. It is NOT fixed for Holt-Winters or tsvd.
 
 `metrics` is the other fixed case. The old arm moved 5 of 9 metrics cells and
 0 of 9 metrics-classification cells; the new arm moves 9 of 9 for both
@@ -215,8 +243,14 @@ same reason the input-copy cells do.
 - Ten of the (b) lanes are par-* lanes that DO name a host family, so they are
   not in (c): `par-forest`, `par-forest-et`, `par-scaler`, `par-arima`,
   `par-mlp`, `par-queries-knn`, `par-queries-radius`, `par-queries-kde`,
-  `par-reference-knn` and `par-reference-knn-reg`. They are CPU covered and
-  reachable by a host arm, so they are closable without a box.
+  `par-reference-knn` and `par-reference-knn-reg`. All ten are in
+  `covered_lanes()` and a host arm reaches their families. WHETHER THEY CAN BE
+  CLOSED WITHOUT A BOX IS UNSETTLED, and an earlier version of this document
+  contradicted itself by calling them closable while also saying par-* lanes
+  refuse on a CPU column. Nothing in the tree settles it: no committed CPU
+  column carries a `par-forest` or `par-forest-et` cell at all, production or
+  sabotage, so there is no evidence either that the CPU route runs them or
+  that it refuses them. They are OWED, not cheap, until a column exists.
 - Each remaining family is one build pair away from being closed the way these
   four were, at about 15 to 90 seconds a build on one core.
 
@@ -311,6 +345,11 @@ ran and left a part unmoved, the part is named.
 | `kmeans-weighted` | a | core | yes | moved: batch,infer,train |
 | `dbscan-brute-l1` | a | estimators | yes | moved: batch,infer; UNMOVED: model,train |
 | `dbscan-weighted` | a | estimators | yes | moved: batch,infer; UNMOVED: model,train |
+| `kde-tophat-sqeuclidean` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
+| `kde-epanechnikov-l1` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
+| `kde-exponential-chebyshev` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
+| `kde-linear-cosine` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
+| `kde-cosine-minkowski` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
 | `kde-weighted` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
 | `pca-full-whiten` | a | estimators | yes | moved: batch,infer,model,train |
 | `ols-no-intercept` | a | estimators | yes | moved: batch,infer,model,train |
@@ -324,8 +363,17 @@ ran and left a part unmoved, the part is named.
 | `svc-linear` | a | svm | yes | moved: batch,infer,model,train |
 | `svc-poly` | a | svm | yes | moved: batch,infer,model,train |
 | `svr-linear` | a | svm | yes | moved: batch,infer,model,train |
+| `knn-sqeuclidean` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `knn-manhattan` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `knn-chebyshev` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `knn-cosine` | a | core | yes | moved: batch,infer,train; UNMOVED: batch,infer,model |
+| `knn-minkowski-p3` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `knn-rbc` | a | core | yes | moved: batch,infer,train; UNMOVED: batch,infer,model,train |
 | `knn-clf-distance` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
 | `knn-reg-distance` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `radius-manhattan` | a | core | yes | moved: batch,infer,train; UNMOVED: batch,infer,model,train |
+| `radius-chebyshev` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `radius-minkowski-p3` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
 | `standard-scaler-no-mean` | a | estimators,preprocessing | yes | moved: batch,infer,model,train |
 | `standard-scaler-no-std` | a | estimators,preprocessing | yes | moved: batch,infer,model,train |
 | `minmax-scaler-clip` | a | estimators,preprocessing | yes | moved: batch,infer,model,train |
@@ -337,6 +385,13 @@ ran and left a part unmoved, the part is named.
 | `arima-exog` | b | arima,forecast | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
 | `arima-exog-seasonal` | b | arima,forecast | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
 | `gp-normalize-y` | a | gp,gp_infer | yes | moved: batch,infer,train |
+| `gp-sample-y` | a | gp | yes | moved: infer,train |
+| `gp-sample-y-normalize` | a | gp | yes | moved: infer,train |
+| `gp-optimize` | c | - | no | no host family and no host sabotage define |
+| `gp-optimize-restarts` | c | - | no | no host family and no host sabotage define |
+| `gp-matern12` | a | gp,gp_infer | yes | moved: batch,infer,train |
+| `gp-matern32` | a | gp,gp_infer | yes | moved: batch,infer,train |
+| `gp-matern52-ard` | a | gp,gp_infer | yes | moved: batch,infer,train |
 | `gemm-transposed` | a | linalg | yes | moved: batch,train; UNMOVED: batch,train |
 | `metrics-classification` | a | metrics | yes | moved: batch,train; UNMOVED: batch |
 | `metrics-fowlkes-mallows` | a | metrics | yes | moved: train |
@@ -348,6 +403,8 @@ ran and left a part unmoved, the part is named.
 | `rbf-sampler` | a | estimators,kernel_methods | yes | moved: batch,infer,train; UNMOVED: model |
 | `gmm` | a | mixture,mixture_infer | yes | moved: batch,infer,model,train |
 | `gmm-random-init` | a | mixture,mixture_infer | yes | moved: batch,infer,model,train; UNMOVED: batch,infer |
+| `gmm-sample` | a | mixture,mixture_infer | yes | moved: infer,train |
+| `gmm-random-init-sample` | a | mixture,mixture_infer | yes | moved: infer,train |
 | `hdbscan` | a | hdbscan,hdbscan_infer | yes | moved: batch,infer,model,train |
 | `hdbscan-leaf` | a | hdbscan,hdbscan_infer | yes | moved: batch,infer,model,train |
 | `bootstrap` | a | resample | yes | moved: batch,train |

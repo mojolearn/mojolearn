@@ -84,6 +84,11 @@
 | `kmeans-weighted` | a | core | yes | moved: batch,infer,train |
 | `dbscan-brute-l1` | a | estimators | yes | moved: batch,infer; UNMOVED: model,train |
 | `dbscan-weighted` | a | estimators | yes | moved: batch,infer; UNMOVED: model,train |
+| `kde-tophat-sqeuclidean` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
+| `kde-epanechnikov-l1` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
+| `kde-exponential-chebyshev` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
+| `kde-linear-cosine` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
+| `kde-cosine-minkowski` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
 | `kde-weighted` | a | estimators | yes | moved: batch,infer,train; UNMOVED: model |
 | `pca-full-whiten` | a | estimators | yes | moved: batch,infer,model,train |
 | `ols-no-intercept` | a | estimators | yes | moved: batch,infer,model,train |
@@ -97,8 +102,17 @@
 | `svc-linear` | a | svm | yes | moved: batch,infer,model,train |
 | `svc-poly` | a | svm | yes | moved: batch,infer,model,train |
 | `svr-linear` | a | svm | yes | moved: batch,infer,model,train |
+| `knn-sqeuclidean` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `knn-manhattan` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `knn-chebyshev` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `knn-cosine` | a | core | yes | moved: batch,infer,train; UNMOVED: batch,infer,model |
+| `knn-minkowski-p3` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `knn-rbc` | a | core | yes | moved: batch,infer,train; UNMOVED: batch,infer,model,train |
 | `knn-clf-distance` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
 | `knn-reg-distance` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `radius-manhattan` | a | core | yes | moved: batch,infer,train; UNMOVED: batch,infer,model,train |
+| `radius-chebyshev` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
+| `radius-minkowski-p3` | a | core | yes | moved: batch,infer,train; UNMOVED: model |
 | `standard-scaler-no-mean` | a | estimators,preprocessing | yes | moved: batch,infer,model,train |
 | `standard-scaler-no-std` | a | estimators,preprocessing | yes | moved: batch,infer,model,train |
 | `minmax-scaler-clip` | a | estimators,preprocessing | yes | moved: batch,infer,model,train |
@@ -110,6 +124,13 @@
 | `arima-exog` | b | arima,forecast | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
 | `arima-exog-seasonal` | b | arima,forecast | yes | arm exists (MOJOLEARN_HOST_SABOTAGE); no committed column shows it move |
 | `gp-normalize-y` | a | gp,gp_infer | yes | moved: batch,infer,train |
+| `gp-sample-y` | a | gp | yes | moved: infer,train |
+| `gp-sample-y-normalize` | a | gp | yes | moved: infer,train |
+| `gp-optimize` | c | - | no | no host family and no host sabotage define |
+| `gp-optimize-restarts` | c | - | no | no host family and no host sabotage define |
+| `gp-matern12` | a | gp,gp_infer | yes | moved: batch,infer,train |
+| `gp-matern32` | a | gp,gp_infer | yes | moved: batch,infer,train |
+| `gp-matern52-ard` | a | gp,gp_infer | yes | moved: batch,infer,train |
 | `gemm-transposed` | a | linalg | yes | moved: batch,train; UNMOVED: batch,train |
 | `metrics-classification` | a | metrics | yes | moved: batch,train; UNMOVED: batch |
 | `metrics-fowlkes-mallows` | a | metrics | yes | moved: train |
@@ -121,6 +142,8 @@
 | `rbf-sampler` | a | estimators,kernel_methods | yes | moved: batch,infer,train; UNMOVED: model |
 | `gmm` | a | mixture,mixture_infer | yes | moved: batch,infer,model,train |
 | `gmm-random-init` | a | mixture,mixture_infer | yes | moved: batch,infer,model,train; UNMOVED: batch,infer |
+| `gmm-sample` | a | mixture,mixture_infer | yes | moved: infer,train |
+| `gmm-random-init-sample` | a | mixture,mixture_infer | yes | moved: infer,train |
 | `hdbscan` | a | hdbscan,hdbscan_infer | yes | moved: batch,infer,model,train |
 | `hdbscan-leaf` | a | hdbscan,hdbscan_infer | yes | moved: batch,infer,model,train |
 | `bootstrap` | a | resample | yes | moved: batch,train |
