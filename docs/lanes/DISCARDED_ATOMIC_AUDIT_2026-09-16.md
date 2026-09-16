@@ -218,6 +218,30 @@ almost certainly a mistake. `Atomic.fetch_add`, `Atomic.min` and `Atomic.max`
 must stay out of that pattern, since discarding their result is the normal and
 correct thing to do.
 
+## Lane verification
+
+This lane changed no code, so there is nothing to verify and the selector says
+so rather than sweeping:
+
+```
+$ python3 tools/verify_lanes.py --changed-since origin/main --fixtures base
+# 3 changed path(s) against origin/main
+# docs/lanes/DISCARDED_ATOMIC_AUDIT_2026-09-16.md: inert (prose or evidence)
+# 0 of 212 lanes selected
+# REFUSING: the selection is empty. An empty run is not a pass; if the change
+# really touches no lane, say so in the lane status file rather than running this.
+```
+
+Said here, as it asks. The first attempt DID sweep, because an untracked
+`.metadata_never_index` in the worktree came back `NOT ATTRIBUTABLE: no lane's
+derived source set names it, so every lane`, and the selector fell back to all
+212. A stray untracked file in a worktree turns a narrow run into a full sweep;
+the file was removed.
+
+The measurement this lane rests on is in
+`/Users/andrewhendel/mojolearn-evidence/discarded-atomic-audit/`, and its own
+gate is the WITH/WITHOUT pairs that moved.
+
 ## Reproducing
 
 ```sh
