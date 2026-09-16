@@ -332,44 +332,130 @@ the release and nothing in the fold reduces it.
 
 ---
 
+## 3A. THE CRITICAL PATH. The random forest repair is INERT, and the builds wait
+
+**Do not start a build against this source. It is about to change.**
+
+The decision I ranked eighth moved on the morning of 2026-09-16 and it is now
+the item the release schedule hangs off.
+
+**The repair that three branches agreed on does nothing.**
+`_ = Atomic.load[ordering = Ordering.ACQUIRE](mutex)` **emits zero
+instructions** on Metal AIR, PTX and GCN alike, proved by bit-identical
+`__TEXT` and `__DATA` across the arms. A discarded load is dead code, and the
+ordering rides on the load rather than standing on its own, so the optimizer
+takes both away. That is why the A/B had a replicated EFFECT and no
+demonstrated MECHANISM. A 0 of 300 from a build whose only change emits nothing
+was never measuring the repair; it was measuring codegen noise, which is
+exactly what `41fa431ce` said it could not rule out.
+
+The inert spelling is the one actually on the branches, checked rather than
+assumed:
+
+| branch | sites |
+|---|---|
+| `lane/rf-mutex-claim-acquire` | `ensemble/.../split.mojo:676` and `:695`, `extratrees/.../split.mojo:504` and `:524`, `neighbors/impl/detail/fused_l2_knn.mojo:618` |
+| `fix/amd-merge-ordering` | `core/device_mutex.mojo:45` |
+
+**The spelling that emits is `fence[ordering = Ordering.ACQUIRE]()` from
+`std.atomic`.** A lane is correcting that now. `git grep "fence\[ordering"` over
+this base returns **nothing**, so the corrected repair is not yet written
+anywhere in the tree, while `Ordering.ACQUIRE` returns matches in five files,
+which is the control that says the search works.
+
+**Item 8 is therefore not "pick one of three branches".** It is "wait for the
+corrected repair to be written, measured and landed". Nothing chooses between
+the three branches today, because all three carry the same spelling and that
+spelling is inert.
+
+### A question this opens about the SHIPPED code, flagged and not concluded
+
+The four claim sites on `origin/main` **already** use
+`Atomic.load[ordering = Ordering.ACQUIRE]` in their spin conditions, today, in
+shipped source:
+
+```
+ensemble/decisiontree/batched_levelalgo/split.mojo:635
+extratrees/impl/decisiontree/batched_levelalgo/split.mojo:504
+neighbors/impl/detail/fused_l2_knn.mojo:618, :724
+```
+
+These differ from the repair's form in one way that matters. The repair's load
+is DISCARDED, so the whole statement is dead and emits nothing. These loads'
+values ARE used, so a load instruction must be emitted. What is not settled is
+whether the **acquire ordering** on them is honored or is dropped the same way,
+and if it is dropped then the shipped spin-wait has been resting on an ordering
+it never had. That is a question for the lane holding the instrument, not a
+conclusion here, and it is not evidence about the `rf-score-weighted` defect on
+its own. It is written down because the same measurement that proved the repair
+inert can answer it at no extra cost, and because the four sites are the shipped
+ones.
+
+### What this means for sequencing
+
+1. The corrected repair touches `ensemble/`, `extratrees/`, `neighbors/` and
+   possibly `core/` Mojo source, all of it on the native build inventory.
+2. So **no Linux set and no macOS wheel may be built until it lands or is
+   ruled out**, and the freeze commit cannot be named before then.
+3. And because the columns come from the built wheel, **no column may be taken
+   either.** The Apple night in particular must not start; it is the single
+   most expensive thing here and a source change after it throws the whole
+   night away. That is precisely what the fold just did to the 0.8.6 Apple run,
+   and it is not worth doing twice.
+
+Items 3 to 7 of the ranked list are all downstream of this. Items 1 and 2 are
+not, which is why they are done first.
+
+---
+
 ## 4. Ranked list of what 0.8.7 needs before Andrew could say ship
 
-1. **Merge back the three pieces of release machinery** (section 2). Three
-   cherry-picks, one two-line conflict, everything else a clean add. Do this
-   FIRST, because the packer cannot admit a record commit without the
-   post-record allowlist and there is no other enforcement of the content
-   rules. Cheap, local, no rental.
-2. **Rename the release and fix the seven false 0.8.6 claims** (section 1.3),
-   bump `python/mojolearn/_version.py` and `python/pyproject.toml` to 0.8.7,
-   regenerate `CITATION.cff`, and run `tools/docs_facts.py --check`. Also
-   correct the two that still say sixteen families where the answer is
-   thirty-two. Cheap, local.
-3. **Freeze 0.8.7 at a named commit** and run the freeze checks of
+**Items 1 and 2 are DONE. Everything from 3 down is blocked on section 3A.**
+
+1. ~~**Merge back the three pieces of release machinery**~~ (section 2). DONE
+   on this branch, 2026-09-16. The predicted conflict on
+   `tools/check_linux_release_qualification.py` did not happen; git auto-merged
+   it and both hunks were checked by hand. `test_native_source_rule` 2 OK,
+   `test_post_record_allowlist` 6 OK, `test_release_wheel_content_audit` 5 OK,
+   `test_repack_post_record` 4 OK.
+2. ~~**Fix the false 0.8.6 claims**~~ (section 1.3). DONE, and **on main**, not
+   only here, because they were wrong for a reader of main today. Seven
+   statements corrected in `CHANGELOG.md`, `README.md`, `SUPPORT_MATRIX.md`,
+   `docs/BYTE_LM_CPU_TRAINING.md`, `docs/RELEASE_CHECKLIST.md`,
+   `docs/VERIFY_EXTERNALLY.md` and `tools/verify_external.sh`, including the
+   two that still said sixteen families, one that still said ten, and two
+   CHANGELOG lines that called the 0.8.6 wheels published. `docs_facts --check`
+   reads OK. Still owed at freeze: the version bump itself, in
+   `python/mojolearn/_version.py` and `python/pyproject.toml` (both read 0.8.5
+   today, correctly, since 0.8.7 is not frozen), and `CITATION.cff`.
+3. **THE BLOCKER, section 3A. The corrected random forest repair.** The agreed
+   repair is inert, the emitting spelling is `fence[ordering = Ordering.ACQUIRE]()`,
+   and it is not written anywhere in the tree yet. Nothing below can start.
+4. **Freeze 0.8.7 at a named commit** and run the freeze checks of
    `docs/RELEASE_CHECKLIST.md`. Every build below runs from that commit.
-4. **Three Linux build sets** at the freeze commit, sm_89, sm_90a and gfx942,
+5. **Three Linux build sets** at the freeze commit, sm_89, sm_90a and gfx942,
    then the byte compare of the host bindings across all three. Now thirty-two
    host families instead of fifteen, so expect longer compiles and a larger
    wheel. Needs Andrew's approval to rent.
-5. **Pack, audit, strip and upload the Linux wheel**, and build the macOS
+6. **Pack, audit, strip and upload the Linux wheel**, and build the macOS
    wheel, with the content audit from item 1 run on both.
-6. **Four columns, all retaken** (section 3.2), over the 161-lane scope.
-   NVIDIA and AMD from the installed Linux wheel, the CPU column from source,
-   and Apple last. Needs Andrew's approval to rent.
-7. **The Apple column** (section 3.5), once, under
+7. **Three of the four columns**, all retaken (section 3.2), over the 161-lane
+   scope. NVIDIA and AMD from the installed Linux wheel, the CPU column from
+   source. Needs Andrew's approval to rent.
+8. **The Apple column** (section 3.5), LAST, once, under
    `MOJOLEARN_APPLE_RELEASE_RECORD=0.8.7`. Plan a night. Do not start it until
-   items 3 to 5 are settled, because a rebuild after it is taken throws the
-   whole night away, which is exactly what the fold just did to the 0.8.6
+   items 3 to 6 are settled, because a source change after it is taken throws
+   the whole night away, which is exactly what the fold just did to the 0.8.6
    Apple run.
-8. **A decision on `rf-score-weighted`** (section 3.3). It is a defect already
-   published in 0.8.5, the repair is on three branches with its EFFECT
-   replicated and its MECHANISM not demonstrated, and it is on neither main
-   nor any release branch. Either it lands in 0.8.7 with the mechanism
-   settled, or 0.8.7 ships with it and the CHANGELOG says so in plain words.
-   Decide BEFORE item 4, because the repair is in `ensemble/` and
-   `extratrees/` Mojo source and landing it after the builds means redoing
-   them.
 9. **The diff, the record commit, the final pack and repack**, and the final
    content audit on both wheels.
+
+The `rf-score-weighted` decision that was item 8 is now item 3, because it
+turned out to gate the builds rather than follow them. Its standing facts are
+unchanged and are in section 3.3: the defect is already published in 0.8.5, so
+not shipping 0.8.7 protects nobody, and either the corrected repair lands with
+its mechanism settled or 0.8.7 ships with the defect and the CHANGELOG says so
+in plain words.
 
 **STOP BEFORE PUBLISH.**
 
