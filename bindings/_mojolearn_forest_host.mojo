@@ -131,8 +131,26 @@ def forest_host_column_binding() raises -> PythonObject:
 
 
 def forest_host_sabotage_binding() raises -> PythonObject:
-    """Whether this binary divides the vote by the wrong count on purpose."""
-    return PythonObject(FOREST_HOST_SABOTAGE)
+    """Whether this binary carries ANY of its sabotage arms on purpose.
+
+    BOTH arms, not just `FOREST_HOST_SABOTAGE`. The CTR arm
+    (`-D MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1`, `core/gbdt_host_ctr.mojo`) is
+    also exported on its own as `forest_host_gbdt_ctr_sabotage`, and until
+    2026-09-16 this read-back ignored it. A binding built with the CTR define
+    therefore recorded `sabotage: false` in a column's `host.families`, so the
+    column could not witness its own arm, and `_backend`'s
+    MOJOLEARN_HOST_ALLOW_SABOTAGE guard never fired for it either. The
+    committed column
+    `bench/results/identity_break/2026-09-15_gbdt-ctr-tables/cpu-x86-ctr-sabotage.json`
+    is classified as a PRODUCTION column by any reader that trusts this flag,
+    which is how the sabotage audit found it
+    (docs/lanes/SABOTAGE_AUDIT_2026-09-16.md, finding 3). The arm itself is
+    real and was watched to fail; what was missing is the read-back, and a
+    column that misreports which binary produced it undermines every verdict
+    read from it. `python/mojolearn/_forest_host.py` already ORs the two when
+    it decides whether to refuse the load; this makes the column say the same.
+    """
+    return PythonObject(FOREST_HOST_SABOTAGE or GBDT_CTR_HOST_SABOTAGE)
 
 
 def _predict(

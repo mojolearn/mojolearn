@@ -2,7 +2,7 @@ NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS
 NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
 NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
 NOTE: --lanes scopes this diff to 4 lane(s); 164 other lane(s) the JSONs carry are not compared
-| lane/fixture                 | verdict    | arm64            | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 |
+| lane/fixture                 | verdict    | apple-m4         | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 |
 |------------------------------|------------|------------------|------------------|------------------|------------------|
 | gp-matern12/base             | IDENTICAL x4 | a54e340b4a22147f | a54e340b4a22147f | a54e340b4a22147f | a54e340b4a22147f |
 | gp-matern12/denormal         | IDENTICAL x4 | 6ca669d68732c77e | 6ca669d68732c77e | 6ca669d68732c77e | 6ca669d68732c77e |
@@ -43,7 +43,7 @@ NOTE: --lanes scopes this diff to 4 lane(s); 164 other lane(s) the JSONs carry a
 
 summary: IDENTICAL=36
 
-| lane/fixture                 | column | verdict      | arm64            | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 |
+| lane/fixture                 | column | verdict      | apple-m4         | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 |
 |------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
 | gp-matern12/base             | infer  | IDENTICAL x4 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 |
 | gp-matern12/base             | model  | ONE-COLUMN   | ea851543bc06b7ca | n/a:no-save      | n/a:no-save      | n/a:no-save      |

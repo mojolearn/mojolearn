@@ -159,7 +159,10 @@ def _counts(**kw):
 
 
 def test_verdict_exit_codes():
-    assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1))[0] == va.EXIT_VERIFIED
+    # a refused part did not run, so it costs the run its pass
+    # (lane/expose-inference-surface, 2026-09-16; it used to read VERIFIED)
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1))[0] == va.EXIT_CANNOT_RUN
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3))[0] == va.EXIT_VERIFIED
     assert va.verdict(_counts(IDENTICAL=5, DIVERGENT=1))[0] == va.EXIT_MISMATCH
     assert va.verdict(_counts(REFUSED=2, OWED=1))[0] == va.EXIT_CANNOT_RUN
     assert va.verdict(_counts(OWED=4, NA=1))[0] == va.EXIT_NO_REFERENCE
@@ -167,6 +170,102 @@ def test_verdict_exit_codes():
     assert (va.EXIT_VERIFIED, va.EXIT_MISMATCH, va.EXIT_USAGE, va.EXIT_REFUSED_FAST, va.EXIT_CANNOT_RUN,
             va.EXIT_NO_REFERENCE) == (_verify.EXIT_VERIFIED, _verify.EXIT_MISMATCH, _verify.EXIT_USAGE,
                                       _verify.EXIT_REFUSED_FAST, _verify.EXIT_CANNOT_RUN, _verify.EXIT_NO_REFERENCE)
+
+
+def test_a_run_that_refused_is_not_reported_as_verified():
+    """THE VERIFICATION THAT COULD NOT FAIL (lane/expose-inference-surface,
+    2026-09-16). Measured on an Apple M4 CPU-only install whose host bindings
+    were stale: 44 IDENTICAL parts, 288 REFUSED, and the public command
+    printed `RESULT: VERIFIED ... exit 0`. A user ran our verification, saw
+    VERIFIED, and had checked 13 percent of what they believed they checked.
+
+    A REFUSED part is a part that DID NOT RUN. It can never be evidence of
+    success, and no number of parts that did run makes up for it, so there is
+    no threshold below which refusals are tolerable. The run is INCOMPLETE and
+    exits non-zero; only a run with nothing refused may print VERIFIED."""
+    code, headline = va.verdict(_counts(IDENTICAL=44, REFUSED=288))
+    assert headline != "VERIFIED", "a run with refused parts must not print VERIFIED"
+    assert code != va.EXIT_VERIFIED, "a run with refused parts must not exit 0"
+    assert (code, headline) == (va.EXIT_CANNOT_RUN, "INCOMPLETE")
+
+    # one refused part is enough
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1)) == (va.EXIT_CANNOT_RUN, "INCOMPLETE")
+    # a run with nothing refused is still VERIFIED, and OWED and N/A do not spoil it
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3, NA=2)) == (va.EXIT_VERIFIED, "VERIFIED")
+    # a wrong answer still outranks an absent one
+    assert va.verdict(_counts(IDENTICAL=5, DIVERGENT=1, REFUSED=9))[0] == va.EXIT_MISMATCH
+
+
+def test_the_summary_says_how_much_of_the_run_was_actually_checked():
+    """`verified 44 of 332 parts` cannot be misread as `verified`."""
+    text = va.detail_line(_counts(IDENTICAL=44, REFUSED=288))
+    assert "44 of 332" in text, text
+    assert "288 refused" in text, text
+    clean = va.detail_line(_counts(IDENTICAL=332))
+    assert "332 of 332" in clean, clean
+
+
+def test_the_self_test_cannot_pass_with_a_broken_comparator(monkeypatch):
+    """`verify --self-test` exists so a user can WATCH the comparison fail, and
+    it is worth nothing unless it would notice a comparator that cannot fail.
+
+    It is two-sided on purpose: the untouched arm must read IDENTICAL and the
+    perturbed arm DIVERGENT. A comparator stuck on IDENTICAL passes the first
+    and fails the second; one stuck on DIVERGENT does the reverse. Both stubs
+    are exercised here, because a self-test that passes with a broken
+    comparator is the same defect one level up (lane/expose-inference-surface,
+    2026-09-16).
+
+    This runs no lane: the two arms are fed to the same judging code the real
+    self-test uses, which is where the property lives.
+    """
+    table = vref.load_table()
+    ent = vref.entry(table, va.SELF_TEST_LANE, va.SELF_TEST_FIXTURE, "train")
+    assert ent and isinstance(ent.get("ref"), str) and not ent["ref"].startswith("n/a"), (
+        "the shipped table must carry a real train reference for the self-test lane, or the "
+        "self-test has nothing to disagree with")
+    ref = ent["ref"]
+    wrong = ("0" if ref[0] != "0" else "1") + ref[1:]
+
+    def arms(clean_value, dirty_value):
+        rows = [dict(lane=va.SELF_TEST_LANE, fixture=va.SELF_TEST_FIXTURE, part="train",
+                     value=v, error=None) for v in (clean_value, dirty_value)]
+        judged = va.judge_rows(rows, table)
+        return judged[0]["state"], judged[1]["state"]
+
+    # honest comparator: the real arms behave as the self-test demands
+    assert arms(ref, wrong) == (vref.IDENTICAL, vref.DIVERGENT)
+
+    # stuck on IDENTICAL: the perturbed arm no longer diverges, so the
+    # self-test's second condition fails
+    monkeypatch.setattr(vref, "judge", lambda value, ent, error=None: (vref.IDENTICAL, ""))
+    clean, dirty = arms(ref, wrong)
+    assert dirty != vref.DIVERGENT, "the stub did not take effect"
+    assert not (clean == vref.IDENTICAL and dirty == vref.DIVERGENT), (
+        "a comparator stuck on IDENTICAL would satisfy the self-test; it must not")
+
+    # stuck on DIVERGENT: the untouched arm no longer matches, so the first
+    # condition fails
+    monkeypatch.setattr(vref, "judge", lambda value, ent, error=None: (vref.DIVERGENT, "stub"))
+    clean, dirty = arms(ref, wrong)
+    assert clean != vref.IDENTICAL
+    assert not (clean == vref.IDENTICAL and dirty == vref.DIVERGENT), (
+        "a comparator stuck on DIVERGENT would satisfy the self-test; it must not")
+
+
+def test_the_self_test_perturbation_is_not_inert():
+    """The perturbation must actually change the answer, or the perturbed arm
+    reads IDENTICAL and the self-test proves nothing. The FIRST version of it
+    moved a single value, `X[0, 0]`, by one ULP, and that was measured INERT
+    for this lane: `ols` fits 20,000 x 16 and one last-bit change in one of
+    320,000 inputs never reached the rounded coefficients. This holds the
+    replacement to being column-wide, so nobody shrinks it back by accident.
+    """
+    src = (Path(va.__file__).read_text(encoding="utf-8"))
+    assert "Xp[:, 0] = np.nextafter" in src, (
+        "the self-test perturbation is no longer column-wide; a single-value one-ULP change was "
+        "measured inert for this lane and would make the perturbed arm pass by accident")
+    assert "values_changed" in src, "the report must say how many values were perturbed"
 
 
 def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():

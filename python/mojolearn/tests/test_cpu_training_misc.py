@@ -147,8 +147,21 @@ def test_identity_command_runs_public_reference_probes_on_a_cpu():
     host_only = host_surface.PUBLIC_HOST_ONLY_LANES
     trained = set(host_surface.public_reference_lanes()) - set(host_only)
     assert trained <= set(host_surface.record_covered_lanes())
+    # Reachable from a binding that SHIPS. Two ways, and the second is not a
+    # loophole (lane/expose-inference-surface, 2026-09-16): a family holding a
+    # fit stays a source build while a shipped inference-only binding serves
+    # its route. `kpss` is declared by `tsa`, which holds holtwinters_fit and
+    # must not ship, yet a user can call it because the shipped `forecast`
+    # binding serves `_mojolearn_tsa` and registers `kpss_test`. Demanding the
+    # declaring family itself ship would reject a lane that in fact works.
     wheel_lanes = {lane for f in host_surface.FAMILIES if f["ships_in_wheel"] for lane in f["training_lanes"]}
-    assert trained <= wheel_lanes
+    routes, shipped = host_surface.inference_routes(), set(host_surface.wheel_bindings())
+    served_lanes = {lane for f in host_surface.FAMILIES
+                    if not f["ships_in_wheel"] and routes.get(f["routes"]) in shipped
+                    for lane in f["training_lanes"]}
+    unreachable = trained - wheel_lanes - served_lanes
+    assert unreachable == set(), (
+        f"public reference lanes no shipped binding can serve: {sorted(unreachable)}")
     for lane, family in host_only.items():
         f = host_surface.family(family)
         assert f["ships_in_wheel"] and f["routes"] is None, f"{lane}: not a shipped host-only family"

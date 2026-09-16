@@ -66,7 +66,8 @@ from holtwinters.impl.runner import (
     holtwinters_validate_params,
 )
 from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
-from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE, kpss_host_f32
+from bindings.kpss_host_test import kpss_test_binding
+from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -238,82 +239,6 @@ def holtwinters_fit_binding(
 # `bindings/holtwinters_host_predict.mojo` (lane/inference-holtwinters,
 # 2026-09-15), the source the shipped forecast inference binding registers
 # them from; the forecast body is `oracle_forecast`'s, one spelling.
-
-
-def kpss_test_binding(
-    y_addr: PythonObject,
-    flags_addr: PythonObject,
-    stat_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`kpss_test` on the host by `kpss_host_f32`. Returns `batch_size`.
-
-    `params` is, in this exact order (the GPU binding's, mirrored in
-    `python/mojolearn/_tsa_impl.py`):
-
-        0  batch_size
-        1  n_obs
-        2  d               order of simple differencing
-        3  D               order of seasonal differencing
-        4  s               seasonal period
-        5  pval_threshold  (float)
-
-    `y_addr` reads `batch_size * n_obs` float32, each series contiguous.
-    `flags_addr` is written with `batch_size` int32 (1 stationary, 0 not),
-    `stat_addr` with `batch_size` float32 statistics."""
-    if len(params) != 6:
-        raise Error(
-            "kpss_test: params must contain 6 values (batch_size, n_obs, d,"
-            " D, s, pval_threshold), got " + String(len(params))
-        )
-    var y_address = _index(y_addr)
-    var fp = i32_ptr(_index(flags_addr))
-    var sp = f32_ptr(_index(stat_addr))
-    var batch_size = _index(params[0])
-    var n_obs = _index(params[1])
-    var d = _index(params[2])
-    var D = _index(params[3])
-    var s = _index(params[4])
-    var pval = Float32(Float64(py=params[5]))
-    with GILReleased(Python()):
-        # `kpss_test_host`'s `_refuse_empty_shape`.
-        if batch_size < 1:
-            raise Error(
-                "kpss_test: batch_size must be >= 1 (batch_size=" + String(batch_size) + ")"
-            )
-        if n_obs < 1:
-            raise Error("kpss_test: n_obs must be >= 1 (n_obs=" + String(n_obs) + ")")
-        # `kpss_test`'s, in its order.
-        var d_sD = d + s * D
-        if n_obs <= d_sD:
-            raise Error(
-                "stationarity: n_obs (" + String(n_obs)
-                + ") must be greater than d + s*D (" + String(d_sD) + ")"
-            )
-        var y = read_f32(y_address, batch_size * n_obs)
-        for i in range(batch_size * n_obs):
-            if not isfinite(y[i]):
-                raise Error(
-                    "kpss_test: y contains a non-finite value at index "
-                    + String(i) + "; missing or infinite observations are refused by name"
-                )
-        # `prepare_data`'s, reached only when there is differencing to do.
-        if d != 0 or D != 0:
-            if d + D > 2:
-                raise Error(
-                    "prepare_data: d + D must be <= 2 (d=" + String(d) + ", D="
-                    + String(D) + "), refused by name (arima.pyx:313)"
-                )
-            if D > 0 and s < 2:
-                raise Error(
-                    "prepare_data: seasonal differencing needs s >= 2 (s=" + String(s)
-                    + "), refused by name (arima.pyx:310)"
-                )
-        var st = kpss_host_f32(y, batch_size, n_obs, d, D, s, pval)
-        for b in range(batch_size):
-            fp[b] = Int32(1) if st.stationary[b] else Int32(0)
-            sp[b] = st.stat[b]
-    return PythonObject(batch_size)
 
 
 @export

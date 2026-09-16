@@ -751,7 +751,136 @@ LANES = {}
 #:              _tokenizer_synthetic.py). Host integer code, so one hash per
 #:              cell on every device class; the GPU columns are owed at the
 #:              next release record.
-LANE_REVISIONS = {"tokenizer": "synthetic-vocab-1"}
+#:   hdbscan, hdbscan-leaf  rows-4000-1 / rows-2000-1: the fixture row count
+#:              came down from 6000 (2026-09-16, lane/identity-fixtures-light).
+#:              6000 was inherited from the dbscan lane, not chosen. Measured
+#:              across 6000/4000/3000/2000/1500/1000/750, the Boruvka round
+#:              count these lanes HASH holds at 5 down to 4000 (excess-of-mass)
+#:              and to 2000 (leaf), and falls to 4 below, so each lane sits at
+#:              the smallest size that still reaches the fifth merge round.
+#:              Every committed column hashed the 6000-row fit, so those cells
+#:              read OWED to the next record rather than DIVERGENT.
+#: THE 2026-09-16 SHRINK (lane/identity-fixtures-light). Eleven more lanes had
+#: their fixture cut so a bitwise check stops costing a workload's time. Every
+#: committed column hashed the OLD input, so each entry here makes those cells
+#: read OWED to the next record instead of DIVERGENT against different bytes.
+#: The cut is per lane and the arithmetic knobs (tree counts, depths, losses,
+#: optimizer settings, seasonal period) are untouched; what came down is INPUT
+#: SIZE and STEP COUNT.
+LANE_REVISIONS = {
+    "tokenizer": "synthetic-vocab-1",
+    # rows: these lanes fitted the full 20,000 x 16 fixture
+    "gbdt-parametric-losses": "rows-1500-1",
+    "gbdt-nan-modes": "rows-1500-1",
+    "gbdt-lossguide-newtoncosine": "rows-1500-1",
+    "gbdt-pair-logit": "rows-1500-1",
+    # rows: O(n^2) neighbourhood work
+    "hdbscan": "rows-4000-1",
+    "hdbscan-leaf": "rows-2000-1",
+    "spectral": "rows-512-1",
+    # observations: 128 still carries many periods of the seasonal 12
+    "holtwinters": "obs-128-1",
+    # training steps: 3 AdamW steps -> 1
+    "byte-lm": "steps-1-1",
+    "byte-lm-resident": "shape-l1-d16-ff32-1",
+    "samba": "steps-1-1",
+    "samba-untied-dropout-accum": "steps-1-1",
+    # sequence length: the (2, 16, 32) slab -> (2, 8, 32)
+    "mamba2-dtlimit": "seqlen-8-1",
+}
+
+
+# ---------------------------------------------------------------- record scope
+# WHAT A RELEASE RECORD COVERS, and how often the Apple column may be taken.
+# Both were implicit before 2026-09-16 (lane/identity-fixtures-light): the
+# record's scope was "every lane this file defines", and how often to run the
+# Apple column was prose in a handoff. Both are stated here, in code, because
+# a rule that is not code is not a check.
+
+#: LANES A RELEASE RECORD DOES NOT COVER. Every `par-*` lane, for three
+#: measured reasons:
+#:   1. COST OUT OF PROPORTION. The `par-*` lanes were the whole remaining AMD
+#:      gap for 0.8.6: 28 of the 30 lanes that column never reached. The owed
+#:      lanes are a contiguous tail starting exactly at `par-arima`, and two
+#:      further 60-minute Hot Aisle leases got past none of them.
+#:   2. SEVERAL CANNOT BE COVERED HONESTLY AT ALL.
+#:      docs/lanes/LANE_STATUS_lane-cpu-training-par-wave3.md: par-byte-lm-
+#:      model-pool and par-byte-lm-offload compare host arithmetic with itself
+#:      under a pooled label, and 21 more are cooperative families whose split
+#:      lives inside the GPU binding with no host restatement.
+#:   3. IN A RECORD THEY ARE NOT EVEN THE TWO-DEVICE CLAIM. `_par_devices()`
+#:      defaults to device 0, so every `par-*` cell in a release record is a
+#:      ONE-device run. The drivers' actual claim, that two devices hash equal
+#:      to one, is made by the dedicated two-device legs, not by the record.
+#: This excludes them from a FULL-COLUMN run only. `--lanes` names lanes
+#: explicitly and is never filtered, so the two-device par legs and the CPU
+#: identity gate are unaffected.
+RECORD_EXCLUDED_PREFIXES = ("par-",)
+
+
+def record_excluded_lanes():
+    """The lanes a full-column release record does not run, sorted. Derived
+    from LANES at call time, never hand-listed."""
+    return sorted(n for n in LANES if n.startswith(RECORD_EXCLUDED_PREFIXES))
+
+
+def record_lanes():
+    """The lanes a full-column release record DOES run."""
+    return [n for n in LANES if not n.startswith(RECORD_EXCLUDED_PREFIXES)]
+
+
+#: THE APPLE COLUMN RUNS ONCE PER PyPI RELEASE, NEVER ROUTINELY.
+#:
+#: WHY. There is exactly ONE Mac with ONE GPU; only one Metal job may run at a
+#: time; it cannot be rented or parallelized. So an Apple column serializes
+#: behind every other GPU need on the machine and blocks all of it. A full
+#: pass measured over SEVEN HOURS on 2026-09-16 and was stopped at 125 of 158
+#: lanes.
+#:
+#: WHAT TO DO INSTEAD. The rented CPU column is BITWISE EQUAL to Metal, so
+#: routine and occasional verification belongs on a RunPod CPU pod at about
+#: $0.24/hour, in parallel, with small fixtures (tools/runpod_cpu_leg.sh,
+#: docs/RUNPOD_CPU_LEG.md). The only question the Apple column uniquely
+#: answers is whether the METAL BACKEND agrees, and that is a per-release
+#: question. Local Metal is for a lane proving its OWN new cells, one job at a
+#: time through the slot helper, never a full column.
+#:
+#: The guard below refuses a full-column Apple run unless this names the
+#: release it is being recorded for, for example
+#: MOJOLEARN_APPLE_RELEASE_RECORD=0.8.7.
+APPLE_RELEASE_RECORD_ENV = "MOJOLEARN_APPLE_RELEASE_RECORD"
+
+#: More lanes than this in ONE Apple process is a column, not a lane check.
+APPLE_COLUMN_LANE_LIMIT = 24
+
+
+def _is_apple_gpu(host):
+    """True on a Mac running the GPU (Metal) build. `host` is truthy only on
+    a CPU-only install, where this rule does not apply at all."""
+    return sys.platform == "darwin" and not host
+
+
+def refuse_routine_apple_column(lanes, host, env=None):
+    """The Apple column is a per-release artifact. Returns a refusal message
+    for a full-column Apple run outside a release, else ''."""
+    env = os.environ if env is None else env
+    if not _is_apple_gpu(host) or len(lanes) <= APPLE_COLUMN_LANE_LIMIT:
+        return ""
+    if env.get(APPLE_RELEASE_RECORD_ENV, "").strip():
+        return ""
+    return (
+        f"REFUSING: {len(lanes)} lanes in one Apple (Metal) process is a COLUMN, and the Apple "
+        f"column is recorded ONCE PER PyPI RELEASE, never routinely.\n"
+        f"  There is one Mac with one GPU, one Metal job at a time, and it cannot be rented or "
+        f"parallelized, so an Apple column blocks every other GPU need on this machine. A full "
+        f"pass measured over seven hours.\n"
+        f"  FOR ROUTINE VERIFICATION, use the rented CPU column, which is bitwise equal to Metal: "
+        f"tools/runpod_cpu_leg.sh (about $0.24/hour, runs in parallel). See docs/RUNPOD_CPU_LEG.md.\n"
+        f"  FOR ONE LANE's own cells, pass --lanes with at most {APPLE_COLUMN_LANE_LIMIT} lanes and "
+        f"take the Metal slot through mac_slot.sh.\n"
+        f"  IF THIS REALLY IS THE RELEASE RECORD, name the release: "
+        f"{APPLE_RELEASE_RECORD_ENV}=<version>."
+    )
 
 
 def stale_revision_lanes(record):
@@ -994,13 +1123,13 @@ def _(ml, X, yc, yr, Xh=None):
     # eigenpairs, degree scaling and centroids out of the fit and moves no
     # train byte; infer is predict on 256 held-out rows, the Nystrom
     # extension and the fit's k-means assignment (DEVIATION 2860).
-    m = ml.SpectralClustering(n_clusters=4, random_state=3, prediction_data=True).fit(X[:2000, :4])
+    m = ml.SpectralClustering(n_clusters=4, random_state=3, prediction_data=True).fit(X[:512, :4])
     return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("holtwinters")
 def _(ml, X, yc, yr, Xh=None):
-    series = (np.cumsum(X[:512, 0]) + 50.0).astype(np.float32)
+    series = (np.cumsum(X[:128, 0]) + 50.0).astype(np.float32)
     series = series - series.min() + 1.0     # positive, for the multiplicative path
     m = ml.ExponentialSmoothing(series, seasonal="additive", seasonal_periods=12).fit()
     # ExponentialSmoothing takes endog in the constructor and has no
@@ -1167,6 +1296,27 @@ def _byte_lm_params(shape):
             named[name] = _hw(shp, "byte-lm:" + name, -0.125, 0.125)
     flat = np.ascontiguousarray(np.concatenate([named[n].reshape(-1) for n in shape.parameter_names]))
     return named, flat
+
+
+def _byte_lm_shape(ml, e):
+    """The byte LM shape a fit ACTUALLY runs, never the default.
+
+    Until 2026-09-16 every byte LM lane ran the shipped profile, so the
+    parts below could construct `ByteLanguageModelConfig()` and be right.
+    `byte-lm-resident` is now one block at d_model 16
+    (lane/neural-shape-shrink), and a part that assumes the default reads
+    REFUSED with `parameters must be float32 [34944]` instead of checking
+    anything. `LanguageModelInference` and the host trainer expose `shape`;
+    the GPU trainer carries it in `state_dict()['model_shape']`, which it
+    writes only when the shape is not the shipped profile."""
+    shape = getattr(e, "shape", None)
+    if isinstance(shape, ml.ByteLanguageModelConfig):
+        return shape
+    try:
+        moved = e.state_dict().get("model_shape")
+    except Exception:
+        moved = None
+    return ml.ByteLanguageModelConfig(**moved) if moved else ml.ByteLanguageModelConfig()
 
 
 def _block_weights(lane, shapes, ones=()):
@@ -1392,8 +1542,8 @@ def _(ml, X, yc, yr, Xh=None):
     named, _ = _byte_lm_params(shape)
     m = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
                                          shape=shape)
-    ids = _ids(X, 3 * shape.batch, shape.length + 1)
-    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(3)]
+    ids = _ids(X, 1 * shape.batch, shape.length + 1)
+    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(1)]
     return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(m.parameters_)),
                      logits=_h(np.asarray(m.logits(ids[:2, :-1])))),
                 m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))
@@ -1497,9 +1647,9 @@ def _(ml, X, yc, yr, Xh=None):
     surface is open. The checkpoint is the model column."""
     cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
-    ids = _ids(X, 6, 17)
+    ids = _ids(X, 2, 17)
     losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2, :-1], ids[2 * k:2 * k + 2, 1:])["loss"])
-              for k in range(3)]
+              for k in range(1)]
     params = m.parameters()
     return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
                      params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
@@ -1658,6 +1808,7 @@ def _(ml, X, yc, yr, Xh=None):
     """The ten losses no lane above fits, eight trees of depth four each:
     four take a mandatory parameter; CrossEntropy takes a probability
     target; the rest a positive target."""
+    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim (2026-09-16)
     y = _pos(yr)
     fits = {
         "Quantile": dict(), "MAE": dict(), "LogLinQuantile": dict(), "MAPE": dict(), "Poisson": dict(),
@@ -1679,6 +1830,7 @@ def _(ml, X, yc, yr, Xh=None):
     """NewtonCosine, the child-hessian and split-gain and leaf-count
     thresholds, column subsampling, random strength, Bernoulli bootstrap,
     gradient leaves with three iterations: one Lossguide fit."""
+    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim (2026-09-16)
     m = ml.GradientBoosting(n_estimators=20, max_leaves=32, grow_policy="Lossguide", loss="Logloss",
                             score_function="NewtonCosine", min_child_hessian=1.0, min_split_gain=0.01,
                             min_data_in_leaf=8, feature_fraction=0.5, random_strength=1.0,
@@ -1874,6 +2026,7 @@ def _(ml, X, yc, yr, Xh=None):
     """nan_mode Min and Max on a fixture that actually carries NaN
     (_with_nan); on a NaN-free column the quantizer collapses both to
     Forbidden, which is why no lane above could reach them."""
+    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim (2026-09-16)
     Xn = _with_nan(X)
     lo = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Min").fit(Xn, yc)
     hi = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Max").fit(Xn, yc)
@@ -1948,6 +2101,7 @@ def _(ml, X, yc, yr, Xh=None):
     `pairs` and `pairs_weight` (every third generated-style pair of the first
     40 queries, hashed weights), so both input paths are hashed. Predict is
     row-wise, so the held-out probe and the batch part apply."""
+    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim; 178 query groups remain (2026-09-16)
     g = _rank_groups(X.shape[0])
     rel = _relevance(yr)
     m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="PairLogit").fit(X, rel, group_id=g)
@@ -2046,8 +2200,8 @@ def _(ml, X, yc, yr, Xh=None):
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
     blk = ml.Mamba2Block(w, dt_limit=(0.01, 0.1))
-    parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
-    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+    parts = _block_fit(blk, _seq(X, 2, 8, dm), _seq(X, 2, 8, dm, skip=1024), {})
+    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 8, dm))),))
 
 
 @lane("transformer-window")
@@ -2070,13 +2224,25 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """The device-owned session (resident=True, lean step results), the
     path the byte-lm lane's docstring says is bit-equal to the stateless
-    one and measured on one H100 only."""
-    shape = ml.ByteLanguageModelConfig()
+    one and measured on one H100 only.
+
+    SHAPE (lane/neural-shape-shrink, 2026-09-16): one block at d_model 16,
+    not the shipped two-block d_model-32 profile. THIS LANE'S CLAIM IS THE
+    SESSION, not a shape: it asserts the resident export equals the
+    stateless path's gradient BYTE FOR BYTE at whatever shape both are
+    built at (`_same_bytes` below), so the claim is shape-independent and
+    survives the cut. The shipped profile keeps its device column from the
+    `byte-lm` lane, which is floored at it on purpose. Depth is the lever
+    that removes Metal work here: cost on Metal is per-launch overhead, and
+    halving the block count halves the launches (measured 1.380 s -> 0.849 s
+    per resident step, and 0.644 s with d_model 16 and intermediate 32)."""
+    shape = ml.ByteLanguageModelConfig(n_layers=1, d_model=16, n_heads=2, n_kv=1,
+                                       head_dim=8, intermediate=32)
     named, _ = _byte_lm_params(shape)
     m = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
                                          shape=shape, resident=True, step_result="lean")
-    ids = _ids(X, 3 * shape.batch, shape.length + 1)
-    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(3)]
+    ids = _ids(X, 1 * shape.batch, shape.length + 1)
+    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(1)]
     # The exported gradient of the last step, flat and per tensor. Hash the
     # ARRAYS: `export_gradients()` returns a dict holding a nested dict, and
     # `np.asarray` of a dict is a zero-dimensional object array whose bytes
@@ -2095,7 +2261,7 @@ def _(ml, X, yc, yr, Xh=None):
     s = ml.SmallByteLanguageModelTrainer(_byte_lm_params(shape)[0],
                                          data_schedule={"dataset": "identity_break", "order": "sequential"},
                                          shape=shape)
-    for k in range(3):
+    for k in range(1):
         stateless = s.train_step(ids[2 * k:2 * k + 2])
     _same_bytes("resident export_gradients()['flat_gradients']", flat,
                 "stateless train_step()['flat_gradients']", np.asarray(stateless["flat_gradients"]))
@@ -2132,9 +2298,9 @@ def _(ml, X, yc, yr, Xh=None):
                          tie_embeddings=False, dropout=0.1)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3, max_norm=1.0, accumulation_steps=4,
                       lr_schedule=ml.training.WarmupCosineLR(1e-3, warmup_steps=2, total_steps=8, min_lr=1e-5))
-    ids = _ids(X, 96, 17)
+    ids = _ids(X, 32, 17)
     losses = [np.float64(m.train_step(ids[32 * k:32 * k + 32, :-1], ids[32 * k:32 * k + 32, 1:])["loss"])
-              for k in range(3)]
+              for k in range(1)]
     params = m.parameters()
     return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
                      params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
@@ -2759,6 +2925,45 @@ def _(ml, X, yc, yr, Xh=None):
                                                           allow_endoftext=True), dtype=np.int32),))
 
 
+@lane("bpe-trainer")
+def _(ml, X, yc, yr, Xh=None):
+    """BpeVocabularyTrainer (python/mojolearn/tokenizer.py): TRAINING a
+    byte-level BPE vocabulary, where the tokenizer lane only applies one.
+
+    Host integers and tables -- counts, ids and one comparison -- with no
+    float anywhere in the selection, so this is NOT a cross-vendor claim and
+    there is no GPU column to owe: vocabulary training has no GPU path in any
+    library. What the cell says is that the same corpus and config produce
+    the same vocabulary BYTES on this box as on every other.
+
+    The corpus is the first 4,096 bytes of X viewed as bytes, the same
+    derivation the tokenizer lane uses, as ONE document. Both emitted formats
+    are hashed, because both are what a user ships beside a model: ours
+    (rank<TAB>hex) and the ecosystem's (tokenizer.json). `n_ties_broken` is
+    hashed too, and it is the part that matters most -- it is how a reader
+    can see the tie-break rule was REACHED on this fixture, without which the
+    sabotage below would be inert.
+
+    SABOTAGE: MOJOLEARN_BPE_TRAINER_SABOTAGE=1 reverses ONLY the tie-break
+    (largest (left_id, right_id) among the pairs at the top count instead of
+    smallest). MEASURED on this fixture, it moves `ranks`, `tokenizer_json`
+    and `n_ties_broken`, and leaves `n_tokens` and `n_merges` alone -- the
+    vocabulary still fills to vocab_size, it is filled with DIFFERENT tokens.
+    That is why the two artifact hashes are the load-bearing parts of this
+    cell and the counters are not: a cell that watched only the sizes would
+    call this sabotage inert. The Mojo trainer carries the same arm as a
+    build define, and `pixi run check-bpe-trainer-sabotage` is where it is
+    watched failing."""
+    raw = np.ascontiguousarray(X).tobytes()[:4096]
+    v = ml.tokenizer.BpeVocabularyTrainer(vocab_size=320, min_frequency=2).train([raw])
+    ranks = np.frombuffer(v.render_ranks().encode("ascii"), dtype=np.uint8)
+    tj = np.frombuffer(v.render_tokenizer_json().encode("ascii"), dtype=np.uint8)
+    return _fit(dict(ranks=_h(ranks), tokenizer_json=_h(tj),
+                     n_tokens=_h(np.int64(v.n_tokens)),
+                     n_merges=_h(np.int64(len(v.merges))),
+                     n_ties_broken=_h(np.int64(v.n_ties_broken))))
+
+
 @lane("cross-val")
 def _(ml, X, yc, yr, Xh=None):
     """cross_val_score, which had no lane: three unshuffled folds of the
@@ -2900,7 +3105,14 @@ def _(ml, X, yc, yr, Xh=None):
     held-out rows (hdbscan.pyx:1264, predict.cuh:220-262), then
     membership_vector on the same rows and all_points_membership_vectors
     (hdbscan.pyx:1180, :1114, soft_clustering.cuh:385-627, DEVIATION 1616)."""
-    m = ml.HDBSCAN(min_cluster_size=5, prediction_data=True).fit(X[:6000, :4])
+    # 4000 rows, not 6000 (2026-09-16, lane/identity-fixtures-light). The row
+    # count is a fixture size, not a claim, and 6000 was inherited from the
+    # dbscan lane rather than chosen. MEASURED across 6000/4000/3000/2000/
+    # 1500/1000/750: the Boruvka round count, which this lane HASHES, holds at
+    # 5 down to 4000 and falls to 4 at 3000, so 4000 is the smallest size that
+    # still reaches the fifth merge round. Below it the lane would hash a
+    # structurally different fit. Costs 2.9 s instead of 6.4 s to build.
+    m = ml.HDBSCAN(min_cluster_size=5, prediction_data=True).fit(X[:4000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
                 m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
@@ -2913,8 +3125,14 @@ def _(ml, X, yc, yr, Xh=None):
     min_samples below min_cluster_size and allow_single_cluster, the
     other selection arm and the two knobs that change which condensed
     clusters become labels."""
+    # 2000 rows, not 6000 (2026-09-16, lane/identity-fixtures-light), by the
+    # same measurement as the hdbscan lane above. The leaf arm holds its
+    # Boruvka round count at 5 all the way down to 2000 and falls to 4 at
+    # 1500, so 2000 is its floor; it keeps 19 clusters and 37 condensed
+    # clusters there, a structure with plenty left to disagree about. Costs
+    # 0.7 s instead of 6.2 s to build.
     m = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf", allow_single_cluster=True,
-                   prediction_data=True).fit(X[:6000, :4])
+                   prediction_data=True).fit(X[:2000, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
                 m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
@@ -3887,7 +4105,16 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """fit_hdbscan on the hdbscan lane's configuration (the neighbors and
     hierarchy row drivers under _par_devices()), held to the plain fit's
-    labels and core distances."""
+    labels and core distances.
+
+    ROWS: this lane keeps 6000 while the plain hdbscan lane came down to 4000
+    (2026-09-16, lane/identity-fixtures-light). Deliberate, and it breaks
+    nothing: this lane builds BOTH sides of its own comparison at the same
+    size, so `_same_bytes` below still compares like with like. It was left
+    alone because `par-*` is out of the release record's scope
+    (RECORD_EXCLUDED_PREFIXES), so shrinking it would buy no column time while
+    costing another hash revision. "The hdbscan lane's configuration" means
+    its estimator settings, not its row count."""
     from mojolearn.parallel_classical import fit_hdbscan
     par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
     plain = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
@@ -3979,6 +4206,185 @@ def _(ml, X, yc, yr, Xh=None):
     _same_bytes("transform_rbf_sampler", out, "plain transform", m.transform(X[:1000]))
     return _fit(dict(weights=_h(m.random_weights_), offset=_h(m.random_offset_), transform=_h(out)),
                 m, lambda e: (transform_rbf_sampler(e, Xh[:256], devices=_par_devices(), rows_per_shard=100),))
+
+
+# ---------------------------------------------------------------- lanes (2026-09-16, lane/multigpu-audit)
+# The ELEVEN public estimators a multi-GPU driver ALREADY ADMITS BY TYPE and
+# that no par-* lane ever asked. Read from the drivers' admission checks, not
+# from prose: `fit_forest` takes all four forest classes but only the RF
+# classifier and the ET regressor had lanes; `fit_boosting` takes the two
+# sklearn-style adapters beside GradientBoosting; `fit_gram_estimator` takes
+# LinearRegression, PCA and TruncatedSVD beside Ridge; `fit_coordinate_descent`
+# takes ElasticNet beside Lasso; `fit_svm`/`predict_svm` take SVR beside SVC;
+# `fit_scaler` takes MinMaxScaler beside StandardScaler; and `ParallelQueries`
+# takes NearestNeighbors beside the three estimators that had lanes. So the
+# multi-GPU PATH existed and the identity record simply did not carry it.
+# Nothing here is new capability: no driver, no binding flag, no Mojo.
+#
+# These eleven are GPU-ONLY ON PURPOSE. They are NOT added to any family's
+# `training_lanes` in python/mojolearn/host_surface.py, so they never enter
+# `covered_lanes()` and therefore never enter `record_covered_lanes()`. That
+# is deliberate: the day `TRAINING_GPU_COLUMNS` is repointed at a record taken
+# under a narrower scope, the 11 CPU-covered par-* lanes that ARE in the
+# covered set lose their GPU columns unless dropped or admitted, and these
+# eleven cannot join that problem because they were never claimed. Their cells
+# come from an explicit two-device `par` leg (`--lanes`), not from a release
+# record, and until such a leg runs they are simply absent from every column.
+# They are NOT eligible for `--owed-json`: `_owed_status` admits a part as
+# OWED only when a CPU column hashes it STABLE, and these have no CPU column
+# by construction, so a diff naming them reports them short, never OWED.
+# Same rules as every par lane above: devices=_par_devices(), the smallest
+# sharding that splits the work, and `_same_bytes` against the plain fit.
+
+@lane("par-forest-reg")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_forest on the rf-reg lane's RandomForestRegressor, 16 trees in four
+    ranges of four, held to the plain fit. par-forest carries the classifier;
+    the driver admits this class on the same global tree ID ranges."""
+    from mojolearn.parallel_ensemble import fit_forest
+    kw = dict(n_estimators=16, max_depth=8, random_state=7)
+    par = fit_forest(ml.RandomForestRegressor(**kw), X, yr, devices=_par_devices(), trees_per_shard=4)
+    plain = ml.RandomForestRegressor(**kw).fit(X, yr)
+    _same_bytes("fit_forest predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X))), par, lambda e: (e.predict(Xh),))
+
+
+@lane("par-forest-et-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_forest on the et-clf lane's ExtraTreesClassifier. par-forest-et
+    carries the regressor; this is the fourth forest class the driver takes."""
+    from mojolearn.parallel_ensemble import fit_forest
+    kw = dict(n_estimators=16, max_depth=8, random_state=7)
+    par = fit_forest(ml.ExtraTreesClassifier(**kw), X, yc, devices=_par_devices(), trees_per_shard=4)
+    plain = ml.ExtraTreesClassifier(**kw).fit(X, yc)
+    _same_bytes("fit_forest predict_proba", par.predict_proba(X[:2048]),
+                "plain predict_proba", plain.predict_proba(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
+                par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("par-boosting-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_boosting on the gbdt-adapter-clf lane's GradientBoostingClassifier,
+    the sklearn-style adapter `fit_boosting` admits beside GradientBoosting;
+    the same packed feature groups par-boosting distributes."""
+    from mojolearn.parallel_ensemble import fit_boosting
+    kw = dict(n_estimators=20, max_depth=6)
+    par = fit_boosting(ml.GradientBoostingClassifier(**kw), X, yc, devices=_par_devices())
+    plain = ml.GradientBoostingClassifier(**kw).fit(X, yc)
+    _same_bytes("fit_boosting predict_proba", par.predict_proba(X[:2048]),
+                "plain predict_proba", plain.predict_proba(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)),
+                     decision=_h(par.decision_function(X[:512]))),
+                par, lambda e: (e.predict(Xh), e.predict_proba(Xh), e.decision_function(Xh[:512])))
+
+
+@lane("par-boosting-reg")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_boosting on the gbdt-adapter-reg lane's GradientBoostingRegressor."""
+    from mojolearn.parallel_ensemble import fit_boosting
+    kw = dict(n_estimators=20, max_depth=6)
+    par = fit_boosting(ml.GradientBoostingRegressor(**kw), X, yr, devices=_par_devices())
+    plain = ml.GradientBoostingRegressor(**kw).fit(X, yr)
+    _same_bytes("fit_boosting predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X))), par, lambda e: (e.predict(Xh),))
+
+
+@lane("par-gram-ols")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_gram_estimator on the ols lane's LinearRegression: the pinned Gram
+    chunks par-gram distributes for Ridge, on the minimum-norm OLS path."""
+    from mojolearn.parallel_classical import fit_gram_estimator
+    par = fit_gram_estimator(ml.LinearRegression(), X, yr, devices=_par_devices())
+    plain = ml.LinearRegression().fit(X, yr)
+    _same_bytes("fit_gram_estimator coef", par.coef_, "plain coef", plain.coef_)
+    return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))),
+                par, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("par-gram-pca")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_gram_estimator on the pca lane's PCA. The fixture is tall, so the
+    covariance route runs; wide full PCA is refused by the driver by name."""
+    from mojolearn.parallel_classical import fit_gram_estimator
+    par = fit_gram_estimator(ml.PCA(n_components=4), X, devices=_par_devices())
+    plain = ml.PCA(n_components=4).fit(X)
+    _same_bytes("fit_gram_estimator components", par.components_, "plain components", plain.components_)
+    return _fit(dict(components=_h(par.components_), variance=_h(par.explained_variance_),
+                     transform=_h(par.transform(X[:256]))),
+                par, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("par-gram-tsvd")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_gram_estimator on the tsvd lane's TruncatedSVD, the fourth class
+    the Gram driver admits."""
+    from mojolearn.parallel_classical import fit_gram_estimator
+    par = fit_gram_estimator(ml.TruncatedSVD(n_components=4), X, devices=_par_devices())
+    plain = ml.TruncatedSVD(n_components=4).fit(X)
+    _same_bytes("fit_gram_estimator components", par.components_, "plain components", plain.components_)
+    return _fit(dict(components=_h(par.components_), transform=_h(par.transform(X[:256]))),
+                par, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("par-cd-elasticnet")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_coordinate_descent on the elasticnet lane's ElasticNet, the second
+    class the dot-leaf driver admits beside Lasso."""
+    from mojolearn.parallel_classical import fit_coordinate_descent
+    kw = dict(alpha=0.01, l1_ratio=0.5, max_iter=200)
+    par = fit_coordinate_descent(ml.ElasticNet(**kw), X, yr, devices=_par_devices())
+    plain = ml.ElasticNet(**kw).fit(X, yr)
+    _same_bytes("fit_coordinate_descent coef", par.coef_, "plain coef", plain.coef_)
+    return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))),
+                par, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("par-svm-svr")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_svm and predict_svm on the svr lane's SVR, the second class the
+    kernel-row driver admits. predict_svm refuses decision_function for SVR
+    by name, so only predict is asked."""
+    from mojolearn.parallel_classical import fit_svm, predict_svm
+    kw = dict(C=1.0, kernel="rbf", epsilon=0.1, max_iter=200)
+    par = fit_svm(ml.SVR(**kw), X[:2000], yr[:2000], devices=_par_devices())
+    plain = ml.SVR(**kw).fit(X[:2000], yr[:2000])
+    pred = predict_svm(par, X[2000:2256], devices=_par_devices(), method="predict")
+    _same_bytes("predict_svm", pred, "plain predict", plain.predict(X[2000:2256]))
+    return _fit(dict(predict=_h(pred)), par, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("par-scaler-minmax")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_scaler and transform_scaler on the minmax-scaler lane's
+    MinMaxScaler with four columns per shard, the second class the column
+    driver admits. Its five fitted statistics are the plain lane's."""
+    from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
+    par = fit_scaler(ml.MinMaxScaler(), X, devices=_par_devices(), columns_per_shard=4)
+    plain = ml.MinMaxScaler().fit(X)
+    t = transform_scaler(par, X[:256], devices=_par_devices(), columns_per_shard=4)
+    _same_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
+    return _fit(dict(data_min=_h(par.data_min_), data_max=_h(par.data_max_), scale=_h(par.scale_),
+                     min=_h(par.min_), transform=_h(t),
+                     inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4,
+                                                 inverse=True))),
+                par, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("par-queries-nn")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelQueries over the knn lane's NearestNeighbors, 64 query rows in
+    shards of 16, held to the plain kneighbors. par-queries-knn carries the
+    classifier; this is the bare index the driver also admits."""
+    from mojolearn.parallel_neighbors import ParallelQueries
+    m = ml.NearestNeighbors(n_neighbors=8).fit(X[:4096])
+    q = np.ascontiguousarray(X[4096:4160])
+    with ParallelQueries(m, devices=_par_devices(), rows_per_shard=PAR_QUERY_ROWS) as pq:
+        d, i = pq.query(q, method="kneighbors")
+    d0, i0 = m.kneighbors(q)
+    _same_bytes("ParallelQueries kneighbors distances", d, "plain distances", d0)
+    _same_bytes("ParallelQueries kneighbors indices", i, "plain indices", i0)
+    return _fit(dict(dist=_h(d), idx=_h(i)), m, lambda e: _pq(e, Xh[:64], "kneighbors"))
 
 
 def _neural_inference(ml, lane_name, est):
@@ -4317,12 +4723,13 @@ def _rows_calls(*methods, sl=slice(None), prep=None, min_batch=1, refusal=None):
 _batch_decl(_rows_calls("predict", "predict_proba"),
             "rf-clf", "et-clf", "gbdt-symmetric", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
             "et-clf-entropy-bestfirst", "gbdt-multiclass", "gbdt-onevsall", "gbdt-pointwise-l2-bayesian-eval",
-            "par-forest", "par-boosting")
+            "par-forest", "par-boosting", "par-forest-et-clf")
 _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
-            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank")
+            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
+            "par-forest-reg", "par-boosting-reg")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
@@ -4334,7 +4741,7 @@ def _batch_gbdt_adapter_clf(ml, e, Xh):
             + _rows_calls("decision_function", sl=slice(0, 512))(ml, e, Xh))
 
 
-_batch_decl(_batch_gbdt_adapter_clf, "gbdt-adapter-clf")
+_batch_decl(_batch_gbdt_adapter_clf, "gbdt-adapter-clf", "par-boosting-clf")
 
 
 def _batch_iforest(ml, e, Xh):
@@ -4411,14 +4818,16 @@ def _batch_radius(ml, e, Xh):
 _batch_decl(_batch_radius, "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "pca", "pca-whiten", "pca-full-whiten", "tsvd",
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
-            "minmax-scaler-clip", "par-scaler", "rbf-sampler")
+            "minmax-scaler-clip", "par-scaler", "rbf-sampler",
+            "par-gram-pca", "par-gram-tsvd", "par-scaler-minmax")
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "ols", "ridge", "ols-no-intercept",
-            "ols-weighted", "ridge-no-intercept", "par-gram", "svr", "svr-linear")
+            "ols-weighted", "ridge-no-intercept", "par-gram", "svr", "svr-linear",
+            "par-gram-ols", "par-svm-svr")
 # The coordinate descent predict refuses one row BY NAME, mirroring cuML's
 # cdPredict (cd.cuh:341); see _BatchRows. Its rows are asked in windows of two.
 CD_PREDICT_REFUSAL = "Parameter n_rows: number of rows cannot be less than two"
 _batch_decl(_rows_calls("predict", sl=slice(0, 256), min_batch=2, refusal=CD_PREDICT_REFUSAL),
-            "lasso", "elasticnet", "elasticnet-l2end-no-intercept", "par-cd")
+            "lasso", "elasticnet", "elasticnet-l2end-no-intercept", "par-cd", "par-cd-elasticnet")
 _batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "logistic", "logistic-l1", "logistic-elasticnet",
             "logistic-unpenalized-no-intercept", "par-logistic")
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 256)), "logistic-multiclass")
@@ -4872,7 +5281,7 @@ def _batch_byte_lm(ml, e, Xh):
     """logits `[B, L, vocab]`, each sequence alone against 16 of them, and
     every prefix length against the whole length (the model is causal and
     prefills from position 0, so position t may not read the length)."""
-    shape = ml.ByteLanguageModelConfig()
+    shape = _byte_lm_shape(ml, e)
     ids = _ids(Xh, 16, shape.length)
     return [_BatchRows("logits", ids, lambda r: (np.asarray(e.logits(r)),)),
             _BatchPrefix("logits", shape.length, lambda p: (np.asarray(e.logits(np.ascontiguousarray(ids[:, :p]))),),
@@ -4951,6 +5360,7 @@ def _batch_rsn(*methods):
 
 
 _batch_decl(_batch_pq("kneighbors", "predict", "predict_proba", sl=slice(0, 64)), "par-queries-knn")
+_batch_decl(_batch_pq("kneighbors", sl=slice(0, 64)), "par-queries-nn")
 _batch_decl(_batch_pq("radius_neighbors", sl=slice(0, 64), ragged=True, sort_results=True), "par-queries-radius")
 _batch_decl(_batch_pq("score_samples", sl=(slice(0, 256), slice(0, 4))), "par-queries-kde")
 _batch_decl(_batch_rsn("kneighbors", "predict", "predict_proba"), "par-reference-knn")
@@ -5414,11 +5824,12 @@ _batchscale_decl(_batchscale_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimi
 
 
 def _long_byte_lm(ml, e):
-    """The lane's model at length SCALE_LONG_L. Every byte LM lane runs the
-    default shape, and its registry does not depend on the length (RoPE, no
-    position table), so the same flat parameters load into the default
-    config with only `length` changed."""
-    shape = ml.ByteLanguageModelConfig(length=SCALE_LONG_L)
+    """The lane's model at length SCALE_LONG_L. A byte LM registry does not
+    depend on the length (RoPE, no position table), so the same flat
+    parameters load into THE LANE'S OWN shape with only `length` changed.
+    Read the shape from the fit rather than assuming the shipped profile:
+    since 2026-09-16 byte-lm-resident runs one block at d_model 16."""
+    shape = ml.ByteLanguageModelConfig(**dict(_byte_lm_shape(ml, e).to_dict(), length=SCALE_LONG_L))
     if isinstance(e, ml.LanguageModelInference):
         return ml.LanguageModelInference(e._parameters, shape=shape, threaded=e._threaded, threads=e._threads)
     return ml.SmallByteLanguageModelTrainer(np.asarray(e.parameters_),
@@ -5427,7 +5838,7 @@ def _long_byte_lm(ml, e):
 
 
 def _batchscale_byte_lm(ml, e, Xh):
-    shape = ml.ByteLanguageModelConfig()
+    shape = _byte_lm_shape(ml, e)
     ids = _tiled_ids(Xh, SCALE_WHOLE, shape.length)
     long_m = _long_byte_lm(ml, e)
     idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L)
@@ -5568,7 +5979,7 @@ _ragged_decl(_ragged_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "tra
 
 
 def _ragged_byte_lm(ml, e, Xh):
-    shape = ml.ByteLanguageModelConfig()
+    shape = _byte_lm_shape(ml, e)
     lens = tuple(min(n * 2, shape.length) for n in RAGGED_LENGTHS)
     ids = _junk_ids(_ids(Xh, len(lens), shape.length), lens, shape.vocab_size)
     both = lambda a, ls: (np.asarray(e.logits(a, lengths=ls)), np.asarray(e.next_bytes(a, lengths=ls), dtype=np.int64))
@@ -6044,7 +6455,7 @@ def _rlpair_byte_lm(ml, e, Xh):
     through that same entry; sampler 2 is the CPU inference class on the
     trainer's parameters (threaded, two threads), when this install has the
     host binding: sample on the CPU, train on the GPU, in one process."""
-    shape = ml.ByteLanguageModelConfig()
+    shape = _byte_lm_shape(ml, e)
     samplers = [_rl_prefix_sampler("trainer.logits prefix recompute", e.logits)]
     notes = []
     try:
@@ -6364,6 +6775,19 @@ def _run_reference(args):
     lanes = [n for n in lanes if n not in skip]
     if skip:
         print(f"# SKIPPED on request: {sorted(skip)}")
+    # THE RELEASE RECORD'S SCOPE (RECORD_EXCLUDED_PREFIXES, above). A
+    # FULL-COLUMN run leaves these out. `--lanes` names lanes explicitly and is
+    # never filtered here, so the two-device par legs and the CPU identity
+    # gate, which both pass --lanes, are unaffected.
+    if not args.lanes:
+        out_of_scope = [n for n in lanes if n.startswith(RECORD_EXCLUDED_PREFIXES)]
+        if out_of_scope:
+            lanes = [n for n in lanes if n not in out_of_scope]
+            print(f"# OUT OF RECORD SCOPE ({len(out_of_scope)} lanes): {sorted(out_of_scope)}")
+    # THE APPLE COLUMN IS RECORDED ONCE PER PyPI RELEASE, NEVER ROUTINELY.
+    _apple_refusal = refuse_routine_apple_column(lanes, host)
+    if _apple_refusal:
+        raise SystemExit(_apple_refusal)
     fixtures = [f for f in FIXTURES if not args.fixtures or f in args.fixtures.split(",")]
     data = {f: fixture(f) for f in fixtures}
     held = {f: heldout(f) for f in fixtures}
