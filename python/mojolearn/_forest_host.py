@@ -17,12 +17,17 @@ docs/lanes/BRIEF_forest_host_inference_2026-09-13.md records on which CPUs
 that has passed. A CPU not listed there is not certified, whatever this code
 returns on it.
 
-The binary is loaded from `mojolearn/host/` by path and not through
-`_backend.load_set`, because that selector refuses a binary whose vendor
-read-back is not a GPU API, and this one reads back `cpu` by design.
-`MOJOLEARN_FOREST_HOST_BINARY` names a different file, which is how the gate
-loads its sabotage build; a sabotage build is refused unless
-`MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1`.
+The binary is loaded by path and not through `_backend.load_set`, because
+that selector refuses a binary whose vendor read-back is not a GPU API, and
+this one reads back `cpu` by design. WHICH DIRECTORY is still
+`_backend.host_module_path`'s answer, so `MOJOLEARN_HOST_DIR` moves this
+door along with every other host binding. It did not until
+lane/host-path-resolution (2026-09-16), and a process told to use another
+set loaded the package's own forest binding here instead, which is why
+tools/identity_break.py guards every host prediction against the binary it
+asked for. `MOJOLEARN_FOREST_HOST_BINARY` names a different file and still
+wins over the directory, which is how the gate loads its sabotage build; a
+sabotage build is refused unless `MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1`.
 """
 import hashlib
 import importlib.machinery
@@ -30,6 +35,7 @@ import importlib.util
 import os
 import sys
 
+from . import _backend
 from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
@@ -56,11 +62,13 @@ _ESTIMATORS = {
 
 
 def binary_path():
-    """The binary this process loads, or would load."""
+    """The binary this process loads, or would load: the file
+    `MOJOLEARN_FOREST_HOST_BINARY` names, else this install's host binding
+    of that name, wherever `_backend.host_module_path` resolves it."""
     override = os.environ.get('MOJOLEARN_FOREST_HOST_BINARY', '').strip()
     if override:
         return os.path.abspath(override)
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'host', _EXTENSION + '.so')
+    return _backend.host_module_path(_EXTENSION)
 
 
 def _load():

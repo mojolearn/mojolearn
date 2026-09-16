@@ -5,8 +5,9 @@ random_state=s)`: kernel hyperparameters maximize the log marginal likelihood,
 the same bits on every column, not SciPy's bits. The reference is scikit-learn
 1.9.0 `_gpr.py` and `kernels.py`.
 
-**MERGED AND ON MAIN at `e87161dc8`.** Nothing below is unmerged work. What is
-left is ONE Metal rerun and the evidence line it feeds.
+**MERGED AND ON MAIN at `e87161dc8`.** Nothing below is unmerged work. The ONE
+Metal rerun that was left is **DONE (2026-09-16, at `2807d4ad7`)**; this lane is
+closed apart from the NVIDIA and AMD cells, which ride the next release record.
 
 ## What shipped
 
@@ -34,20 +35,31 @@ left is ONE Metal rerun and the evidence line it feeds.
 `bench/results/identity_break/2026-09-15_gp-optimize/` holds the Metal column,
 the CPU column and its gradient-sabotage twin from pod `j02fea57j2pcmr`
 (deleted, verified), the four diffs, `owed.json`, the test logs and
-`analyze.sh`. Headline: CPU 63 of 63 STABLE; Metal against CPU IDENTICAL=54
-train, 108 infer and model, 54 batch; the recorded gp lanes IDENTICAL=36
-against the 166-lane record with no cell moved; the gradient sabotage moves
-9 of 9 fixtures of each new lane and 0 of 9 of every recorded lane.
+`analyze.sh`. Headline, with the Metal column RETAKEN 2026-09-16: CPU 63 of 63
+STABLE and Metal 63 of 63 STABLE (0 moved, 0 refused); **Metal against CPU
+IDENTICAL=63 train, 126 infer and model, 63 batch**; the recorded gp lanes
+IDENTICAL=36 against the 166-lane record with no cell moved; the gradient
+sabotage moves 9 of 9 fixtures of each new lane and 0 of 9 of every recorded
+lane.
 
-## OWED, and the exact commands
+## DONE 2026-09-16: the owed Metal rerun was taken
 
-The Metal column above was taken at `e05b5d3c6` in a worktree that had no base
-or preprocessing binding, so `gp-normalize-y` reads REFUSED on all nine
-fixtures. A rerun at the merge is owed. It was NOT taken because the M4's
-Metal command-queue leak (AGXCommandQueue past 6700 against a 512 limit) makes
-any column taken now untrustworthy, and a restart was imminent.
+The earlier column was taken at `e05b5d3c6` in a worktree that had no base or
+preprocessing binding, so `gp-normalize-y` read REFUSED on all nine fixtures.
+**The rerun is done**, at `2807d4ad7` on branch `lane/gp-optimizer-metal`, from
+a COMPLETE `identical/` set: `cells=63 stable=63 moved=0 refused=0`, infer,
+model and batch 63 each, no REFUSED line anywhere, and Metal against the
+committed x86 CPU column IDENTICAL=63 train, 126 infer and model, 63 batch.
 
-After the Mac restart, from a checkout of main at or after `e87161dc8`:
+The reason recorded here for not taking it earlier (an "M4 Metal command-queue
+leak, AGXCommandQueue past 6700 against a 512 limit") was **WRONG and is
+withdrawn.** Those queues belong to an Apple system service, not to our
+processes; with our own lane holding the GPU during this rerun the count read
+1. No restart was needed then or now.
+
+The commands, kept because they are the recipe that worked (the worktree step
+differs: the shared checkout's prebuilt `identical/` set was copied in and only
+`build_gp.sh` was rebuilt, since the Sep 13 gp binding predates this feature):
 
     # 1. a worktree and its env (the scratchpad under /private/tmp may be gone)
     git -C /Users/andrewhendel/CascadeProjects/mojolearn worktree add -b lane/gp-optimizer-metal /tmp/wt-gpo origin/main

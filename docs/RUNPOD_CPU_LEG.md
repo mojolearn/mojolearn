@@ -30,6 +30,12 @@ create the pod.
   MOJOLEARN_HOST_ALLOW_SABOTAGE=1`.
 - `--vcpu` (default 8), `--flavors` (default `cpu3c,cpu5c`), `--lease` minutes
   (default 60), `--include PATH` to ship a tracked path under `bench/results`.
+  THE HOURLY RATE SCALES WITH `--vcpu`. The $0.24/hr measured below is the
+  8 vCPU price, not a fixed price for a CPU pod: at `--vcpu 16` the same pod
+  bills $0.48/hr (measured 2026-09-16, lane/sabotage-evidence, pod
+  `mojolearn-cpu-sabevid-20260916-095653`). Read the rate off the create
+  response, which the leg prints and records in `create_response.json`, rather
+  than assuming the figure in this file.
 - `bash tools/runpod_cpu_leg.sh list` shows live pods. `bash
   tools/runpod_cpu_leg.sh reap POD_ID` deletes one `mojolearn-cpu-*` pod and
   verifies it is gone.

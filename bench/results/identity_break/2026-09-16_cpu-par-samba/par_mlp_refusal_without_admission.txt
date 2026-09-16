@@ -1,0 +1,51 @@
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/parsamba/parmlp_repro.py", line 15, in <module>
+    tr.train_step([(X[64 * k: 64 * (k + 1)], t[64 * k: 64 * (k + 1)]) for k in range(3)])
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/parallel_training.py", line 271, in train_step
+    results = self._pool.map(requests)
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_parallel_pool.py", line 179, in map
+    raise error
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_parallel_pool.py", line 174, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_parallel_pool.py", line 151, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_parallel_worker.py", line 343, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_parallel_worker.py", line 24, in execute
+    return execute(args)
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_parallel_worker.py", line 73, in execute
+    return model.loss_and_grads(*args)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_mlp_impl.py", line 397, in loss_and_grads
+    loss, _, grads, _ = self._gradient(x, y, self._opt.params, self._binding())
+                                                               ~~~~~~~~~~~~~^^
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_mlp_impl.py", line 315, in _binding
+    _linalg_impl.require_identical()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_linalg_impl.py", line 215, in require_identical
+    loaded = numeric_mode()
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_linalg_impl.py", line 151, in numeric_mode
+    raw = int(binding.linalg_numeric_mode())
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/_backend.py", line 1176, in __getattr__
+    raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+ImportError: mojolearn: no CPU implementation of _mojolearn_linalg.linalg_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_linalg; host bindings built here: _mojolearn_core_host, _mojolearn_mamba_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/identical. Build them with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+
+vendor: cpu
+PAR-MLP FAILED:

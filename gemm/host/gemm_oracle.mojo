@@ -73,14 +73,15 @@ present, which is a real virtue in a reference.
 it prints hex bits beside every decimal.
 """
 
+from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_mul_add
 
 #: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,
 #: 2026-09-13, brief section 3.4). `-D MOJOLEARN_HOST_SABOTAGE=1` makes
-#: `oracle_leaf_partial` walk each leaf DESCENDING instead of ascending, so a
-#: host binding built with it computes a different fold order and every lane
+#: `oracle_leaf_partial` return a partial whose bits DIFFER from the one its
+#: own arithmetic produced, so a host binding built with it and every lane
 #: that reaches this oracle must read DIVERGENT against the GPU columns. A
 #: gate that cannot fail proves nothing. The define is passed by the host
 #: build scripts only (`bindings/build_*_host.sh` through
@@ -88,7 +89,59 @@ from checks.numerics import ftz, identical_mul_add
 #: binding that carries it says so through `<prefix>_sabotage()` and is
 #: refused by `python/mojolearn/_backend.py::load_host_module` outside the
 #: gate.
+#:
+#: THIS WAS AN ORDER ARM UNTIL 2026-09-16, AND THAT ARM COULD NOT FAIL ON THE
+#: `ties` FIXTURE (docs/lanes/SABOTAGE_AUDIT_2026-09-16.md, finding 1). It
+#: walked each leaf DESCENDING. Reversing a sum whose values add EXACTLY
+#: cannot change its result, and `ties` is integer valued
+#: (`tools/identity_break.py`, `rng.integers(0, 6)`), so on that fixture
+#: `gemm-pinned` and `gemm-transposed` read UNMOVED under a build that was
+#: supposed to be wrong. The reach is wider than those two lanes: this site is
+#: the ONLY arm `linalg`, `mamba` and `transformer` reach, and one of two for
+#: `training` and `neural`, so on `ties` those five families had no working
+#: negative control at all. The remedy is the one `lane/ties-sabotage` already
+#: applied to the neighbor and IVF families: perturb a VALUE, which no
+#: fixture can make exact, rather than an ORDER, which an exact fixture folds
+#: away.
 comptime GEMM_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+#: The old order arm, kept behind a define of its own so the defect above can
+#: be WATCHED to fail rather than believed. A build carrying BOTH defines
+#: moves `base` and leaves `ties` unmoved, which is the measurement that
+#: justifies the value flip. No build script and no gate sets this; it exists
+#: for the witness run recorded in
+#: `bench/results/identity_break/2026-09-16_sabotage-evidence/`.
+comptime GEMM_ORACLE_SABOTAGE_LEGACY_ORDER = is_defined[
+    "MOJOLEARN_GEMM_ORACLE_SABOTAGE_LEGACY_ORDER"
+]()
+
+#: The two arms, named so the `comptime if`s below read as one condition each.
+comptime GEMM_ORACLE_SABOTAGE_ORDER_ARM = (
+    GEMM_ORACLE_HOST_SABOTAGE and GEMM_ORACLE_SABOTAGE_LEGACY_ORDER
+)
+comptime GEMM_ORACLE_SABOTAGE_VALUE_ARM = (
+    GEMM_ORACLE_HOST_SABOTAGE and not GEMM_ORACLE_SABOTAGE_LEGACY_ORDER
+)
+
+
+@always_inline
+def gemm_oracle_sabotage_value_flip(v: Float32) -> Float32:
+    """A float32 whose bits always differ from `v`'s. A magnitude below the
+    smallest normal (either zero, or a subnormal) becomes the smallest
+    positive normal, which the seam's `ftz` cannot fold back to zero; every
+    other value steps its mantissa by one unit. Compiled only under
+    GEMM_ORACLE_SABOTAGE_VALUE_ARM; the caller guards it.
+
+    This is `core/knn_host_predict.mojo::host_sabotage_value_flip` spelled a
+    second time rather than imported. This oracle depends on
+    `checks.numerics` and nothing else, and a negative control that dragged a
+    neighbors import into `linalg`, `mamba` and `transformer` would be a worse
+    thing than ten repeated lines.
+    """
+    var bits = bitcast[DType.uint32](v)
+    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
+        return bitcast[DType.float32](UInt32(0x00800000))
+    return bitcast[DType.float32](bits + UInt32(1))
 
 
 # ===========================================================================
@@ -276,9 +329,11 @@ def oracle_leaf_partial(
     sum of two zeros of opposite sign is `+0` in round-to-nearest.
     """
     var acc = Float32(0.0)
-    comptime if GEMM_ORACLE_HOST_SABOTAGE:
-        # THE SABOTAGE ARM: the same leaf, walked DESCENDING. Wrong on
-        # purpose; see GEMM_ORACLE_HOST_SABOTAGE.
+    comptime if GEMM_ORACLE_SABOTAGE_ORDER_ARM:
+        # THE OLD ORDER ARM, compiled only as a witness: the same leaf walked
+        # DESCENDING. Inert wherever the leaf adds exactly, `ties` included,
+        # which is the whole reason it is no longer the arm. See
+        # GEMM_ORACLE_SABOTAGE_LEGACY_ORDER.
         for q in range(p_end - p_begin):
             var p = p_end - 1 - q
             acc = ftz(
@@ -301,6 +356,12 @@ def oracle_leaf_partial(
     # no-op given the flush inside the loop; here because the contract names
     # it as a seam and a reader should not have to derive that it is
     # redundant.
+    comptime if GEMM_ORACLE_SABOTAGE_VALUE_ARM:
+        # THE SABOTAGE ARM: this leaf's own arithmetic, then a value whose
+        # bits differ from it on EVERY fixture, exact ones included. The flip
+        # is applied after the seam so no `ftz` can fold it back. See
+        # GEMM_ORACLE_HOST_SABOTAGE.
+        return gemm_oracle_sabotage_value_flip(ftz(acc))
     return ftz(acc)
 
 

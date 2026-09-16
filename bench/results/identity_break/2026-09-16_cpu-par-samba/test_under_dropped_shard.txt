@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/tests/test_cpu_training_par_classical.py", line 231, in <module>
+    globals()[name]()
+    ~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 85, in inner
+    return func(*args, **kwds)
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-par-samba/python/mojolearn/tests/test_cpu_training_par_classical.py", line 220, in test_sharded_samba_sends_two_gradients_and_one_ordered_update_when_built
+    assert got.tobytes() == (a + b).tobytes(), f"gradient {i} is not shard 0 + shard 1"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: gradient 0 is not shard 0 + shard 1
+ok test_cpu_operations_are_the_python_sharded_drivers
+ok test_manifest_declares_the_par_lanes
+ok test_refusals_come_before_any_worker
