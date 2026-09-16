@@ -247,6 +247,46 @@ The comparison was not blind when it reported 2: the same comparison on a
 genuinely different vocabulary (this unigram model against the BPE model)
 flags 47,441 of the same 54,417 lines.
 
+## Does a pinned version actually hold?
+
+"Pin the version" is only a real answer if it is the *version* doing the work.
+If a vocabulary changed on every upgrade, pinning would be less a condition
+than a cage, so both trainers were retrained on the same corpus under older
+releases. Every version trains at equal directory depth, because SentencePiece
+embeds its relative input paths and unequal depths would manufacture a
+difference again.
+
+**Hugging Face BPE is byte-identical across three releases.**
+
+| version | `tokenizer.json` | `merges.txt` |
+|---|---|---|
+| 0.23.2 (reference) | `4724bad6ac72632c` | `68bc8f9f5493ca43` |
+| 0.22.1 | `4724bad6ac72632c` SAME | `68bc8f9f5493ca43` SAME |
+| 0.20.3 | `4724bad6ac72632c` SAME | `68bc8f9f5493ca43` SAME |
+
+Same vocabulary, same merge sequence, same tokenization. The artifact does not
+move across the range tested.
+
+**SentencePiece keeps the vocabulary but not the artifact.** Between 0.2.0 and
+0.2.2 the `sp.model` bytes differ while `sp.vocab` is byte-identical. The
+differing field is not the vocabulary and not `trainer_spec`, which is
+identical; it is `normalizer_spec.precompiled_charsmap`, the NFKC
+normalization table baked into the model, which grew from 237,561 to 240,007
+bytes.
+
+That one needed checking rather than assuming, because a changed normalizer
+can change how text normalizes and therefore how it tokenizes. It does not
+here: across the 54,417-line held-out sample both versions produce identical
+pieces and identical ids, 1,660,030 tokens each, while the fail-first arm on
+the same text flags 41,010 lines.
+
+sentencepiece 0.1.99 has no CPython 3.12 wheel. That is recorded as **no
+verdict**, not as a pass.
+
+Three releases is evidence, not a guarantee about future ones. But it means a
+pinned Hugging Face BPE vocabulary is reproducible *because* of the algorithm
+and serializer, not because of a frozen build.
+
 ## Thread count, and the unigram trainers
 
 Run on one rented RunPod CPU pod (16 vCPU, `runpod/base:1.3.1-ubuntu2204`,
