@@ -1225,3 +1225,68 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     every = [rel for rel, seen in rev.items() if len(seen) == lanes]
     assert len(every) <= 41, \
         f"{len(every)} files now select every lane, against 41 when the per-export rule landed"
+
+
+# --------------------------------------------------------------------------
+# THE CENSUS AT 3, READ BY A PERSON (lane/lane-map-census, 2026-09-16). Two of
+# the 60 entries were not narrow files. They were a case-insensitive
+# filesystem and a public door that no lane walked through.
+# --------------------------------------------------------------------------
+
+def test_a_package_module_is_resolved_from_the_listing_not_the_filesystem():
+    """`_python_imports` asks whether a name a file imports is itself a
+    package module, and an imported name is often a CLASS. On a
+    case-insensitive checkout `os.path.exists` answers yes to
+    python/mojolearn/UMAP.py for `from ._umap_impl import UMAP` and to
+    python/mojolearn/HDBSCAN.py for `HDBSCAN`. Neither path is tracked; the
+    map carried two files that exist only on that laptop, HDBSCAN.py holding
+    24 lanes, and on a Linux box the same map is a different map."""
+    tracked = set(lane_select.tracked_files())
+    rev = lane_select.reverse_map()
+    for phantom, real in (("python/mojolearn/UMAP.py", "python/mojolearn/umap.py"),
+                          ("python/mojolearn/HDBSCAN.py", "python/mojolearn/hdbscan.py")):
+        assert real in tracked, f"{real} is the tracked spelling; pick a new case"
+        assert phantom not in tracked, f"{phantom} is tracked now; pick a new case"
+        assert phantom not in rev, \
+            f"{phantom} is in the map and is not a file this repository has"
+        assert rev.get(real), f"{real} is the real public door and is in no lane's map"
+    # THE FAILING SIDE, only where the filesystem can produce it.
+    if os.path.exists(os.path.join(lane_select.ROOT, "python/mojolearn/UMAP.py")):
+        assert os.path.join(lane_select.PKG, "UMAP.py") not in lane_select._python_files(), \
+            "the listing itself is case-folding, so this test cannot fail"
+
+
+def test_the_public_door_a_name_is_bound_from_is_in_the_map():
+    """A lane body writes `ml.UMAP`, and that attribute is bound by
+    `__init__.py`'s `from .umap import UMAP`, which executes
+    python/mojolearn/umap.py. Seeding only the file that DEFINES the class
+    walked straight past that door: umap.py, neural_network.py and
+    language_model.py were in no lane's map.
+
+    THE CASE THAT MUST STAY NARROW is in the same assert. Treating every
+    `from .X import N` inside the package as a binding of N was measured and
+    is far too wide: the median file went from 29 lanes to 60 and
+    neural_inference.py from 21 to all 212."""
+    rev = lane_select.reverse_map()
+    for rel, want in (("python/mojolearn/umap.py", "umap"),
+                      ("python/mojolearn/neural_network.py", "mlp"),
+                      ("python/mojolearn/language_model.py", "byte-lm")):
+        lanes = rev.get(rel, set())
+        assert want in lanes, f"{rel} is the public door for {want} and the lane does not reach it"
+        assert len(lanes) <= 12, f"{rel} answers {len(lanes)} lanes; the door rule has gone wide"
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 21, \
+        "the re-export rule moved neural_inference.py off its measured 21 lanes"
+
+    # THE FAILING SIDE: with no public rebindings the three doors vanish.
+    keep = lane_select._public_rebindings
+    lane_select._public_rebindings = lambda files: {}
+    try:
+        lane_select.reset_caches()
+        blind = lane_select.reverse_map()
+        for rel in ("python/mojolearn/umap.py", "python/mojolearn/neural_network.py",
+                    "python/mojolearn/language_model.py"):
+            assert rel not in blind, \
+                f"{rel} is in the map without the public door rule, so this test cannot fail"
+    finally:
+        lane_select._public_rebindings = keep
+        lane_select.reset_caches()

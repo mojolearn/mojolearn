@@ -270,10 +270,46 @@ def _python_files():
     return out
 
 
+def _public_rebindings(files):
+    """name -> the package module `python/mojolearn/__init__.py` binds it FROM.
+
+    A lane body writes `ml.UMAP`, and that attribute is bound by
+    `__init__.py:147`, `from .umap import UMAP`, which executes
+    python/mojolearn/umap.py, which is `from ._umap_impl import UMAP` and
+    nothing else. Seeding only the file that DEFINES a class walks straight
+    past that door: `umap.py`, `neural_network.py` and `language_model.py`
+    were in no lane's map, and a change to one of them rebinds the public name
+    every lane of that family calls.
+
+    ONLY THROUGH `__init__.py`. Treating every `from .X import N` in the
+    package as a binding of N was measured and is far too wide: it took the
+    median file from 29 lanes to 60 and `neural_inference.py` from 21 to all
+    212, because every impl module imports its neighbours. The package's own
+    `__init__` is the one place that says which module the PUBLIC name comes
+    from, which is the only rebinding a lane's `ml.<Name>` can go through."""
+    out = {}
+    listing = set(files)
+    init = os.path.join(PKG, "__init__.py")
+    tree = _parse(init)
+    for node in (tree.body if tree is not None else ()):
+        if not (isinstance(node, ast.ImportFrom) and node.level and node.module):
+            continue
+        rel = os.path.join(PKG, node.module.split(".")[0] + ".py")
+        if rel not in listing or rel == init:
+            continue
+        for alias in node.names:
+            if alias.name != "*":
+                out.setdefault(alias.name, set()).add(rel)
+    return out
+
+
 def _python_symbols(files):
     """symbol -> files that define it: every top-level class and def, plus
-    each file's own module name, so `ml.linalg` and `ml.metrics` resolve."""
+    each file's own module name, so `ml.linalg` and `ml.metrics` resolve, plus
+    the public door `__init__.py` binds the name from (`_public_rebindings`)."""
     index = {}
+    for name, rels in _public_rebindings(files).items():
+        index.setdefault(name, set()).update(rels)
     for rel in files:
         tree = _parse(rel)
         if tree is None:
@@ -308,9 +344,20 @@ def _python_imports(rel):
             for alias in node.names:
                 if alias.name.startswith("mojolearn."):
                     names.add(alias.name.split(".")[1])
+    # AGAINST THE LISTING, NEVER `os.path.exists`. This asks whether a name a
+    # file imports is itself a package module, and an imported name is often a
+    # CLASS. On the macOS checkout the filesystem is case-insensitive, so
+    # `from ._umap_impl import UMAP` answered yes to python/mojolearn/UMAP.py
+    # and `from ._hdbscan_impl import HDBSCAN` to python/mojolearn/HDBSCAN.py.
+    # Neither path is tracked. The map carried two files that exist only on
+    # this laptop, HDBSCAN.py holding 24 lanes, while the real hdbscan.py and
+    # umap.py, which are the public doors `__init__.py` binds those names
+    # from, were in no lane's map at all. On the Linux boxes that run the CPU
+    # column the same map is a different map.
+    listing = set(_python_files())
     for name in names:
         cand = os.path.join(PKG, name + ".py")
-        if os.path.exists(os.path.join(ROOT, cand)):
+        if cand in listing:
             out.add(cand)
     return out
 
