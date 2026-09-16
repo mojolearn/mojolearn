@@ -152,7 +152,10 @@ def test_plain_load_round_trips_without_a_host_binding():
         assert np.asarray(back.cluster_centers_).tobytes() == np.asarray(est.cluster_centers_).tobytes()
         assert back.metric == "euclidean" and back.init == "k-means++"
         assert (back.n_clusters, back.n_features_in_) == (4, 4)
-        assert back.numeric_mode == est.numeric_mode
+        # `_saved_mode` persists the tier that WOULD run, so a model whose
+        # instance never set one saves the backend's default and loads with
+        # it set. That is the point of saving it: the file names the tier.
+        assert back.numeric_mode == (est.numeric_mode or _backend.default_mode())
 
 
 # --------------------------------------------------- the check can fail
@@ -216,7 +219,14 @@ def test_one_ulp_in_the_file_moves_the_answer():
             f"one ULP on centroid element 0 ({old!r} -> {new!r}) changed NOTHING; "
             "this comparison cannot fail and proves nothing"
         )
-        print(f"centers[0] {old!r} -> {new!r}; " + "; ".join(report))
+        # Name the outputs that did NOT move too. One ULP on one centroid
+        # need not change any label (a row's nearest center is decided by a
+        # margin, not by the last bit), and reporting only the movers would
+        # read as though it had.
+        names = {0: "predict", 1: "transform"}
+        still = [names[i] for i in range(len(good)) if i not in moved]
+        print(f"centers[0] {old!r} -> {new!r}; " + "; ".join(report)
+              + (f"; unmoved: {', '.join(still)}" if still else ""))
 
 
 # ------------------------------------------------------------- refusals
