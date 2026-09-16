@@ -236,6 +236,29 @@ Deleted and verified gone (HTTP 204, then GET 404 after two 200s). Evidence:
 - The `sys.executable` probe reads `changed False child BASE` here too, the same Linux finding
   the AMD leg reported.
 
+**NVIDIA leg 2 closes the column.** DigitalOcean H100, droplet 600866189, created 20:45:43 and
+deleted 21:12:19, 26.6 minutes at $4.41 an hour, about **$1.96**, so NVIDIA's share of this
+record is **$5.14**. Deleted and verified gone (HTTP 204, then GET 404 after two 200s) and the
+shared GPU lock released. It ran exactly the six lanes leg 1 did not reach (par-cholesky,
+par-hdbscan, par-kernel-ridge, par-nystroem, par-rbf-sampler, par-resample), 54 cells, all
+STABLE, and finished INSIDE its bound (`identity_break_exit=0`, not a 124 partial). On the box,
+from the same R2 wheel: sha256 equal, vendor cuda, harness copy equal, `identity --check` and
+`verify --quick` exit 0, 15 wheel bindings. Evidence: `records/nvidia-leg-2/`.
+
+**The merged NVIDIA column is COMPLETE.** `identity_break.py --merge` accepted both parts with
+no `--allow-separate-builds`: no `MERGE_SAME` key disagreed, all 23 binding digests were
+identical (both legs installed the same wheel) and `par_devices` matched, which is the check
+that the two legs ran one build even though they ran on two different droplets.
+
+- `~/mojolearn-evidence/release-0.8.6/records/nvidia-h100-sm_90a.json`, 1,354,120 bytes,
+  sha256 `e92d5de7d11f53ed30b5eedf3e0a8ccd0105cda0e59c4a20e665173bb4afd973`
+- vendor nvidia-h100-sm_90a, commit db9047b9f, **192 lanes, 1728 cells, complete**
+- train 1728 STABLE; infer 1521 STABLE, 207 N/A; model 1296 STABLE, 432 N/A; batch 1557
+  STABLE, 171 N/A. **No MOVED, DIVERGENT or REFUSED cell.**
+
+Two of the record's four columns are now finished: this one and the CPU column. Apple is
+running its chunks and AMD is the one still short.
+
 **AMD leg 2 is a TOTAL LOSS, and the 130 lanes are still owed.** Hot Aisle MI300X, VM
 20c7ec81 (enc1-gpuvm012), 20:00:17 to 20:58:14, balance $37.09 to $34.35, so **$2.74 for zero
 cells**. The VM answered its polls until 20:32:11 and never again: no sentinel,
