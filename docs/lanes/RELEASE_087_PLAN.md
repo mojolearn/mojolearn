@@ -332,9 +332,49 @@ the release and nothing in the fold reduces it.
 
 ---
 
-## 3A. THE CRITICAL PATH. The random forest repair is INERT, and the builds wait
+## 3A. THE CRITICAL PATH. RESOLVED 2026-09-16. THE GATE IS LIFTED
 
-**Do not start a build against this source. It is about to change.**
+> **THE BUILDS ARE UNBLOCKED. The corrected repair merged to `main` as
+> `01c228a72`, "Merge lane/rf-mutex-reconcile: the cross-block mutex takes its
+> lock with an acquire fence", and `main` is pushed. Merge `main` into this
+> branch and build.**
+>
+> The emitting spelling is `fence[ordering = Ordering.ACQUIRE]()` from
+> `std.atomic`, exactly as this section predicted. It is measured to reach the
+> instruction stream on all three columns: `fence acquire` in disassembled
+> Metal AIR, `fence.acq_rel.sys` in emitted PTX, and a differing gfx942 code
+> object. Note that `std.atomic.fence` is a DIFFERENT SYMBOL from
+> `std.gpu.intrinsics.threadfence`, which is the confusion that made a fence
+> look unavailable in the first place.
+>
+> The claim now lives in ONE place, `core/device_mutex.mojo`. All six
+> hand-written sites call it, so `git grep -n compare_exchange` over `*.mojo`
+> outside `bench/results` returns exactly ONE hit.
+>
+> **THE OPEN QUESTION THIS SECTION RAISED IS ALSO ANSWERED, AND THE ANSWER IS
+> REASSURING.** The shipped spin load's acquire ordering DOES survive into the
+> instruction stream on all three columns. It is not dropped. The shipped
+> spin-wait has NOT been resting on an ordering it never had.
+>
+> **WHAT THIS RELEASE IS SHIPPING, STATED HONESTLY.** The repair is formally
+> correct and provably emits. The MECHANISM IS NOT DEMONSTRATED: the
+> primitive-level check has returned a NULL twice and is the wrong instrument,
+> ExtraTrees and fused kNN are repaired by the argument and have never been
+> measured, and no identity cell has yet been taken with the repair in. Andrew's
+> decision was to ship anyway, because 0.8.5 carries the defect in PUBLIC on
+> MI300X at 1 to 5 percent of fits with the default `max_features`, so waiting
+> protects nobody. The mechanism hunt continues on `lane/rf-mutex-mechanism`,
+> unmerged and off this release's critical path.
+>
+> **ONE THING THIS RELEASE STILL OWES**, and it is cheap: an rf identity cell
+> with the repair in. Every Apple build taken so far ran under
+> `MOJOLEARN_SKIP_BUILD_GATE` and compared no bits. The fence adds an ordering
+> constraint and no arithmetic, so no bit should move, but that is an argument
+> and not a measurement. `docs/lanes/RF_MUTEX_RECONCILIATION_2026-09-16.md` on
+> `main` is the full account, including what is proved and what is not.
+
+The text below is kept as the record of why the builds waited.
+
 
 The decision I ranked eighth moved on the morning of 2026-09-16 and it is now
 the item the release schedule hangs off.
