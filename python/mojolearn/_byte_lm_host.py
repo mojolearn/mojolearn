@@ -11,12 +11,17 @@ docs/BYTE_LM_CPU_INFERENCE.md lists the CPUs on which the loss bytes of the
 retained Metal, CUDA and HIP captures were reproduced. A CPU not listed there
 is not certified, whatever this code returns on it.
 
-The binary is loaded from `mojolearn/host/` by path and not through
-`_backend.load_set`, because that selector refuses a binary whose vendor
-read-back is not a GPU API, and this one reads back `cpu` by design.
-`MOJOLEARN_BYTE_LM_HOST_BINARY` names a different file, which is how the gate
-loads its sabotage build; a sabotage build is refused unless
-`MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE=1`.
+The binary is loaded by path and not through `_backend.load_set`, because
+that selector refuses a binary whose vendor read-back is not a GPU API, and
+this one reads back `cpu` by design. WHICH DIRECTORY is still
+`_backend.host_module_path`'s answer, so `MOJOLEARN_HOST_DIR` moves this
+door along with every other host binding. It did not until
+lane/host-path-resolution (2026-09-16): this door read `mojolearn/host/`
+alone, and under the override the byte LM TRAINING door opened (it goes
+through `load_host_module`) while this one refused.
+`MOJOLEARN_BYTE_LM_HOST_BINARY` names a different file and still wins over
+the directory, which is how the gate loads its sabotage build; a sabotage
+build is refused unless `MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE=1`.
 """
 import hashlib
 import importlib.machinery
@@ -26,6 +31,7 @@ import struct
 import sys
 from pathlib import Path
 
+from . import _backend
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, frombytes, zeros
 from ._bufcheck import flat_view, le_bytes
 from ._byte_lm_config import ByteLanguageModelConfig
@@ -38,11 +44,13 @@ _MODULE = None
 
 
 def binary_path():
-    """The binary this process loads, or would load."""
+    """The binary this process loads, or would load: the file
+    `MOJOLEARN_BYTE_LM_HOST_BINARY` names, else this install's host binding
+    of that name, wherever `_backend.host_module_path` resolves it."""
     override = os.environ.get('MOJOLEARN_BYTE_LM_HOST_BINARY', '').strip()
     if override:
         return os.path.abspath(override)
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'host', _EXTENSION + '.so')
+    return _backend.host_module_path(_EXTENSION)
 
 
 def _load():
