@@ -145,20 +145,60 @@ order is now pinned. The mutex spin itself (DEVIATION 106) stays in
 both modes.
 
 DEVIATION 106. Their `atomicCAS` / `__threadfence()` / `atomicExch` mutex
-(`:251`, `:270-271`) is not expressible on Metal in that spelling: Mojo 1.0
+(`:251`, `:270-271`) is not expressible on Metal in that spelling. Mojo 1.0
 comptime-asserts that `threadfence` "is only implemented on NVIDIA GPUs",
 the Apple backend rejects strong compare-exchange by name, and it rejects
 `acquire` success ordering on a compare-exchange. This implementation therefore uses
 the translation this repository already established and enqueued for
 cuVS's own cross-block mutex (`neighbors/mutex_probe_main.mojo`): spin on
 an ACQUIRE load until the mutex reads free, claim it with a WEAK RELAXED
-compare-exchange, hand it back with a RELEASE store. The synchronizes-with
-edge is a load-acquire observing a store-release, which is the C++11
-statement of what their CAS-spin plus `__threadfence` accomplishes -- CUDA
-defines `__threadfence()` as `cuda::atomic_thread_fence(seq_cst,
-thread_scope_device)`. Only the mutex HOLDER ever writes the release value
-and their own code discards the exchanged value too, so no ABA hides in the
-relaxed claim. This changes HOW the handoff is said, never WHAT is said.
+compare-exchange, hand it back with a RELEASE store, AND (2026-09-16) read
+the mutex once more with an ACQUIRE load after the claim succeeds. Only the
+mutex HOLDER ever writes the release value and their own code discards the
+exchanged value too, so no ABA hides in the relaxed claim. This changes HOW
+the handoff is said, never WHAT is said.
+
+WHY THE POST-CLAIM ACQUIRE LOAD EXISTS (2026-09-16,
+lane/rf-mutex-claim-acquire). Until that date this paragraph said the
+synchronizes-with edge was "a load-acquire observing a store-release", and
+that is true only of the release the SPIN LOAD happened to observe. The
+spin load and the relaxed claim are two separate reads of the mutex. Thread
+C can leave the spin on a zero written by holder A's release, then lose the
+race for that zero to holder B, and then win its relaxed claim on the zero
+written by B's LATER release. C has now taken the lock having performed no
+acquire that reads B's release, so B's plain store of `split[node]` is
+unordered against C's plain load of it: C merges its candidate into a STALE
+slot and writes the slot back, and B's candidate is erased. A stale read of
+`split[node]` therefore presents as a LOST CANDIDATE, which is exactly what
+the MI300X traces showed (lane/rf-score-weighted-nondeterminism, leg 12, where
+three of four divergences had `best_metric_val` bit-identical with a LOWER
+`colid` winning, which `update`'s higher-colid tie-break forbids unless the
+higher-colid candidate was never merged). The window is the gap between C's
+last spin load and its claim, which is why the rate was 1% to 5% of fits
+and rose with the number of candidates merged per fit. MI300X is where it
+fired because each of its eight XCDs has its own L2 and a plain load can be
+served from a line that the XCD cached before B's release wrote the slot
+back; a single-L2 part narrows the same hole without closing it.
+
+The repair keeps every existing instruction and adds one acquire load of
+the mutex after the claim succeeds. That load reads the value the claim
+itself wrote, and a compare-exchange is a read-modify-write, so its write
+sits in the release sequence headed by whichever release store the claim
+consumed; an acquire load that reads a value in a release sequence
+synchronizes with the release that heads it (C++ [atomics.order], the
+release-sequence rule). The edge is now made with the release the lock was
+actually taken against, not with the release the spin saw. On every column
+the acquire load is the same legal instruction the spin already used, so no
+vendor-specific spelling is needed. `-D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1`
+compiles the pre-repair spelling and exists ONLY as the control arm of the
+A/B that has to see the old spelling still move; it is never a default.
+
+The same claim spelling is used by the extratrees split reduction
+(`extratrees/impl/decisiontree/batched_levelalgo/split.mojo`), by the
+fused L2 kNN producer and consumer (`neighbors/impl/detail/fused_l2_knn.mojo`)
+and by their probe (`neighbors/mutex_probe_main.mojo`); every one of them
+carries the same post-claim acquire load, because this is a hole in the
+shared primitive and not in random forests.
 
 DEVIATION 107. `printSplits` (`:291-308`) is a debug printer built on
 `raft::linalg::writeOnlyUnaryOp` and is NOT implemented. Price of declining it:
@@ -183,6 +223,7 @@ counts, and local counts are filled just before partitioning."
 
 from std.atomic import Atomic, Ordering
 from std.bit import log2_floor
+from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 
 # `split.cuh:8` includes `bins.cuh`, because `detail::CountLeft` is
@@ -643,6 +684,15 @@ struct Split[dtype: DType](TrivialRegisterPassable):
                 weak=True,
             ](mutex, expected, Int32(1)):
                 break
+        # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
+        # spin's acquire load and the relaxed claim can observe DIFFERENT
+        # releases, and then nothing orders the previous holder's plain stores
+        # before this thread's plain loads. This load reads the claim's own
+        # value, which sits in the release sequence of the release the claim
+        # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+        # ensemble/decisiontree/batched_levelalgo/split.mojo.
+        comptime if not is_defined["MOJOLEARN_RF_MUTEX_CLAIM_STOCK"]():
+            _ = Atomic.load[ordering = Ordering.ACQUIRE](mutex)
 
         # `:253-259` -- read the current global split into a
         # register copy. Their field-by-field read exists because

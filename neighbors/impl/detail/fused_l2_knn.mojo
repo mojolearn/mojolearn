@@ -626,6 +626,14 @@ def fused_l2_knn_kernel[
                                 weak=True,
                             ](mtx, expected, Int32(-1)):
                                 break
+                        # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
+                        # spin's acquire load and the relaxed claim can observe DIFFERENT
+                        # releases, and then nothing orders the previous holder's plain stores
+                        # before this thread's plain loads. This load reads the claim's own
+                        # value, which sits in the release sequence of the release the claim
+                        # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+                        # ensemble/decisiontree/batched_levelalgo/split.mojo.
+                        _ = Atomic.load[ordering = Ordering.ACQUIRE](mtx)
                     barrier()  # `__syncthreads()` `:256`
 
                     # `:258-276`: pull the producer's numOfNN pairs for
@@ -732,6 +740,14 @@ def fused_l2_knn_kernel[
                             weak=True,
                         ](mtx, expected, Int32(1)):
                             break
+                    # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
+                    # spin's acquire load and the relaxed claim can observe DIFFERENT
+                    # releases, and then nothing orders the previous holder's plain stores
+                    # before this thread's plain loads. This load reads the claim's own
+                    # value, which sits in the release sequence of the release the claim
+                    # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+                    # ensemble/decisiontree/batched_levelalgo/split.mojo.
+                    _ = Atomic.load[ordering = Ordering.ACQUIRE](mtx)
                 barrier()  # `__syncthreads()` `:319`
                 # `:321-331`: write this block's pairs for its rows into
                 # the output buffer, which doubles as the exchange buffer

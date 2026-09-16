@@ -157,6 +157,14 @@ def mutex_probe_kernel(
                         weak=True,
                     ](mtx, expected, Int32(-1)):
                         break
+                # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
+                # spin's acquire load and the relaxed claim can observe DIFFERENT
+                # releases, and then nothing orders the previous holder's plain stores
+                # before this thread's plain loads. This load reads the claim's own
+                # value, which sits in the release sequence of the release the claim
+                # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+                # ensemble/decisiontree/batched_levelalgo/split.mojo.
+                _ = Atomic.load[ordering = Ordering.ACQUIRE](mtx)
             barrier()  # their `__syncthreads()`, `:256`
             var w = tid
             while w < w_count:
@@ -186,6 +194,14 @@ def mutex_probe_kernel(
                     weak=True,
                 ](mtx, expected, Int32(1)):
                     break
+            # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
+            # spin's acquire load and the relaxed claim can observe DIFFERENT
+            # releases, and then nothing orders the previous holder's plain stores
+            # before this thread's plain loads. This load reads the claim's own
+            # value, which sits in the release sequence of the release the claim
+            # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+            # ensemble/decisiontree/batched_levelalgo/split.mojo.
+            _ = Atomic.load[ordering = Ordering.ACQUIRE](mtx)
         barrier()
         if sabotage == SABOTAGE_EARLY_RELEASE and tid == 0:
             # The bug arm: hand the buffer over BEFORE filling it, then

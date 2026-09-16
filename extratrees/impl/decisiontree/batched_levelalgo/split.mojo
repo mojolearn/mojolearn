@@ -514,6 +514,14 @@ def split_reduce_kernel[
                             weak=True,
                         ](mutexes.unsafe_offset(slot), expected, Int32(1)):
                             break
+                    # THE CLAIM'S OWN ACQUIRE (2026-09-16, lane/rf-mutex-claim-acquire). The
+                    # spin's acquire load and the relaxed claim can observe DIFFERENT
+                    # releases, and then nothing orders the previous holder's plain stores
+                    # before this thread's plain loads. This load reads the claim's own
+                    # value, which sits in the release sequence of the release the claim
+                    # consumed, so it synchronizes with THAT release. See DEVIATION 106 in
+                    # ensemble/decisiontree/batched_levelalgo/split.mojo.
+                    _ = Atomic.load[ordering = Ordering.ACQUIRE](mutexes.unsafe_offset(slot))
 
                 var cur = SplitExact(
                     Split(
