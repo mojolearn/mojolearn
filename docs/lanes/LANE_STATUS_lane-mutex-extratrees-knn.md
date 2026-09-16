@@ -84,3 +84,32 @@ no build script) forces the 32-lane width on a 64-lane device and drops the thre
 ## Status
 
 Reachability established locally, no box spent. Measurement pending.
+
+## THE POWER, COMPUTED BEFORE THE BOX REPORTED
+
+Written and committed while the MI325X leg was still bootstrapping, at 2026-09-16T18:02Z,
+so it cannot have been chosen to suit a result. The rate to beat is the forest's measured
+4.3% to 5.3% of fits on the shipped 0.8.5 wheel.
+
+| arm | N | E[moves] at 4.3% | P(0 moves) at 4.3% | P(0) at 1% | 95% bound on a 0/N |
+|---|---|---|---|---|---|
+| ET stock, 2048 cols | 600 | 25.8 | 3.5e-12 | 0.0024 | 0.50% |
+| ET stock, 2048 cols, if the deadline truncates to ~280 | 280 | 12.0 | 4.5e-06 | 0.06 | 1.07% |
+| ET control, 256 cols, bpn = 1 | 300 | 12.9 | 1.9e-06 | 0.049 | 1.00% |
+| fused kNN, launches | 300 | 12.9 | 1.9e-06 | 0.049 | 1.00% |
+
+The cells are deadline bounded, not count bounded, so the achieved N is whatever the
+lease allowed and `runs` in the JSON records it. Read the achieved N, not the planned one.
+An ExtraTrees fit of this configuration measured 2.5 s on the M4 at 2048 columns, so a
+700 s cell is about 280 fits if the MI325X is no faster.
+
+**What a null would and would not say.** A 0/280 excludes the forest's rate at p about
+5e-6. It does NOT clear the protocol: it bounds ExtraTrees' rate at roughly 1% by the 95%
+rule of three, and the forest's own rate at the LOW end of its range was 1.3% in one
+configuration. So a null at this N is consistent with ExtraTrees carrying the same defect
+at a rate this leg cannot see, and the honest sentence is the bound, not the zero.
+
+**The 0/100 trap, named because this lane family has already fallen into it.**
+`docs/lanes/LANE_STATUS_lane-rf-score-weighted-nondeterminism.md` records a 0/100 that was
+flagged as ~7% likely by luck and used to retract a hypothesis IN THE SAME MESSAGE; the
+same cell returned 4/300 on the next leg. No cell here is read below 250.
