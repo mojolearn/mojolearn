@@ -129,3 +129,55 @@ Primary memory-model references:
 [C++ coherence and release sequences](https://eel.is/c++draft/intro.races),
 [C++ fences](https://eel.is/c++draft/atomics.fences), and
 [LLVM atomic semantics](https://llvm.org/docs/Atomics.html).
+
+## Reconciliation snapshot
+
+After preparing this candidate, a read-only review found Fable's commit
+`39b9b8750156daf17cc0884c0f8c88dcbeec1511` on
+`lane/rf-mutex-claim-acquire`. It independently implements the **same
+post-CAS acquire-load repair**, inline at all four production sites and both
+old probe sites. It retains the pre-claim acquire load; this helper makes the
+pre-claim test relaxed because only the post-claim acquire establishes the
+handoff. Both forms have the necessary edge. Fable also provides a forest
+stock-control define and end-to-end A/B harness absent from this branch.
+
+Do not stack this branch's alternative integration patch on Fable's patch.
+Prefer one production implementation after its hardware gates; Fable's
+minimal inline change avoids an additional helper integration, while the
+bounded counterexample here supplies complementary protocol evidence.
+The statement in Fable's docstring that MI300X's XCD/L2 topology **caused**
+the observed failures is stronger than the traced evidence establishes;
+keep that explanation explicitly a hardware hypothesis. Its retained
+"no ABA hides" sentence also needs qualification: lock-state reuse across
+the two reads is exactly the interleaving the amendment describes.
+
+Fable's A/B harness at that snapshot needs two reconciliation fixes before
+using it as an automatic gate:
+
+- `build_arm` hardcodes `MOJOLEARN_COMPILE_JOBS=4`; use 1 to respect the
+  user's two-core total cap across the two lanes. This session did not run
+  that harness; its own primitive leg uses `-j 1`.
+- The script says the control must move but does not enforce that as an
+  exit-status gate. It also sets `done_<arm>` after an exception or deadline
+  break, and logs rather than propagates a failed run status. Require both
+  builds and runs to succeed, full repeat counts, no error, distinct binary
+  digests, observed stock movement, and zero repaired-arm movement before
+  calling it an A/B pass. Preserve incomplete JSON as incomplete evidence.
+
+The investigation branch advanced to `41fa431ce2628167d9b42f68b176f6798b1ae27f`.
+Its commit records a second acquire-CAS A/B (stock 6/300, acquire 0/300),
+capability measurement, and a primitive probe where **both** original and
+acquire locks passed. That null cannot certify the original protocol and
+does not refute the explicit unordered interleaving above. These remain
+inherited results, not our measurements. Its default is still the original
+protocol. No branches have been merged or pushed by this session.
+
+Independent Metal candidate: `1895b0287` on
+`codex/metal-block-copy-fusion`, with status/evidence in
+`docs/lanes/LANE_STATUS_codex-metal-block-copy-fusion.md` on that branch.
+It fuses nine copies, passes seven Metal bitwise/canary cases and 70 input
+refusals, and its offset sabotage fails as intended. Production dispatch is
+unchanged. Problem 2's full brief was hidden in the supplied text; no claim
+that this candidate satisfies those missing requirements is made. Both
+candidate branches are held for the user's requested reconciliation before
+any explicit approval to merge into main.
