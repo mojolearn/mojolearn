@@ -371,6 +371,101 @@ verified delete: **$0.2540**. Deleted and verified gone (HTTP 204, then 404,
 then absent from the pod listing). Note $0.48/hr, not the $0.24 that
 `docs/RUNPOD_CPU_LEG.md` still claims.
 
+## Summary
+
+| trainer and model | bitwise reproducible | where it breaks |
+|---|---|---|
+| HF `tokenizers` BPE | **yes** | nowhere measured |
+| HF `tokenizers` unigram | **no** | scores wobble run to run |
+| `sentencepiece` BPE, whole corpus | **yes** | `.model` carries version and path metadata |
+| `sentencepiece` BPE, sampled | **no** | the sampling draw, and it cannot be pinned |
+| `sentencepiece` unigram | **yes** (1 thread) | thread axis unmeasured |
+
+Hugging Face BPE held on every axis this lane could move. Repeated runs,
+vocabulary 1,000 and 8,000 and 32,000, forward and reversed and rotated corpus
+order, 1 through 16 threads, arm64 against x86_64, and three library versions.
+
+## If we pin, what would we have to state publicly
+
+Short, which is the point.
+
+- The trainer is Hugging Face `tokenizers`, and the model is **BPE, never
+  unigram**.
+- The corpus bytes and the vocabulary size are fixed. Everything downstream
+  follows from those.
+- The version is pinned as a matter of hygiene, though it did not have to be.
+  0.20.3, 0.22.1 and 0.23.2 all produced the same bytes.
+
+Three things we would **not** have to promise, because they turned out not to
+matter. Thread count is free, 1 through 16 agree. Corpus file order is free.
+Architecture is free, arm64 and x86_64 agree bit for bit.
+
+Two things we would have to warn about. Never use SentencePiece's
+`input_sentence_size` sampling path, which does not reproduce and has no
+`random_seed` to pin in 0.2.2. Never extend a reproducibility claim to a
+unigram vocabulary trained by Hugging Face.
+
+## If we build, what it would actually take
+
+The four pieces named in the brief, priced against what we found.
+
+1. **A tie-break total order.** BPE repeatedly takes the most frequent pair, and
+   the interface does not say who wins a tie. A deterministic trainer needs a
+   documented total order, for example the pair's byte sequence and then its
+   first-occurrence index, applied at every selection rather than only at the
+   top. Cheap to specify, and it is the part most likely to be got subtly
+   wrong.
+2. **A pinned reduction for parallel counting.** Per-shard counts must merge in
+   shard index order, never in completion order. This is the same discipline the
+   GEMM and multi-device work already runs under, so it is familiar rather than
+   novel.
+3. **Sorted iteration instead of hash order.** No hash map may be iterated to
+   produce output or to settle a tie. Worth noting that Hugging Face already
+   gets this right, and it is why its byte stability is structural.
+4. **No floats in the scoring.** For BPE this costs nothing, because selection
+   is over integer counts. It is not free for unigram, whose EM log-likelihood
+   is exactly where Hugging Face loses reproducibility.
+
+So the algorithm itself is the easy part, and for BPE the no-floats
+requirement is satisfied for free. The real cost is everything around it.
+Byte-level pre-tokenization and its regex, special token handling, the
+`tokenizer.json` surface that the ecosystem reads, and a corpus ingestion path
+that is itself deterministic. That is the work, and none of it buys
+reproducibility we do not already have.
+
+## Recommendation
+
+**Pin Hugging Face `tokenizers` BPE. Do not build our own.**
+
+The empirical case is that there is nothing to fix. It is already bitwise
+reproducible across repeats, vocabulary size, corpus order, thread count,
+architecture and three library versions, and the comparison that says so was
+watched failing against perturbed vocabularies first, down to a single float32
+ulp. A trainer we wrote could at best match that, while costing us the
+ecosystem compatibility surface above.
+
+Build only if we later need something the ecosystem genuinely cannot give us.
+A deterministic **unigram** trainer would be such a thing, since Hugging
+Face's is not reproducible. Even there the cheaper answer is to pin
+SentencePiece unigram, which is byte-identical run to run, rather than write
+one.
+
+This changes nothing about what we ship. No trainer becomes a mojolearn
+dependency, no vocabulary is vendored, and the wheel still carries no
+vocabularies. The pin is a statement about how a user trains a vocabulary, not
+about what is inside our wheel.
+
+## What this evidence does not cover
+
+Stated so the recommendation is not read wider than it was measured.
+
+- One corpus, 16 MB of enwik8. English prose and wiki markup. A code corpus
+  was not tried, and tie density differs by corpus kind.
+- Nothing at the scale a real vocabulary is trained at. 16 MB, not 100 GB.
+- The unigram thread axis, which was lost to a harness bug and deliberately
+  not re-rented.
+- Future library versions. Three releases agreeing is evidence, not a promise.
+
 ## Reproducing
 
 See `docs/lanes/LANE_STATUS_lane-tokenizer-trainer-determinism.md`.
