@@ -1,0 +1,55 @@
+# vendor=cpu-apple-m4 commit=bfb8f725ab2b30a94e8596b407775095e37c2508 (git rev-parse HEAD) host.cpu_model='Apple M4' host.column=cpu host.families=['_mojolearn_core_host', '_mojolearn_estimators_host']
+# identity_break  mode=identical  2026-09-16 05:34:40  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             |
+|------------------------|------------------|------------------|
+| knn                    | 6869ae45e01fcb7a | 23daf3a923d4c74f |
+| knn infer              | da53642fe53493ad | 234e9e649f45c983 |
+| knn model              | 2262556d652b5187 | 4049122e7b37a94e |
+| knn batch              | b943759962b58dd3 | be9dd86463c63469 |
+| knn-clf                | 7fb71bb7ee2b9cbf | e49edb14ac08e443 |
+| knn-clf infer          | 8381d6badb2ee31b | d7292e53ec625170 |
+| knn-clf model          | f0b9be0fd408466b | 02aa0eb5e36cffee |
+| knn-clf batch          | ae9a520d4ce52431 | 1135607d7c883ed4 |
+| knn-reg                | 33e7da5c3fdd343c | 556283a80ad1e387 |
+| knn-reg infer          | 12b3c8b2763ae645 | fcbc1a112c60d1d0 |
+| knn-reg model          | 7404b5d0a3a97d83 | 059724706575c43d |
+| knn-reg batch          | b8ade478bb62bf5e | 449e141f98be2c2c |
+| pca                    | 426e098860cb885e | 2cc3098a82f5e29c |
+| pca infer              | 5ec98c317c9314a6 | 470065a905e144bf |
+| pca model              | b41a408ef6ffb8c9 | e3f6772a15daedcd |
+| pca batch              | 65941b218439dea2 | d4c77e8aef2df217 |
+| pca-whiten             | a6f7b7e7740ab870 | 800aa9562d74205a |
+| pca-whiten infer       | 709a8b5fd739ea88 | 93df8c7780a1dc30 |
+| pca-whiten model       | 3cb41b8be892ff28 | 63bb89eef2aad3aa |
+| pca-whiten batch       | d9681bc65483c429 | 2b7884c61c121366 |
+| tsvd                   | 8e8d20af1d08720c | 86d6e87cfc1f48c0 |
+| tsvd infer             | 36793a22ecfc11d9 | 441e224141ca3ef4 |
+| tsvd model             | dad8484c8148cc3a | 5aa8d4139303b4c2 |
+| tsvd batch             | 82ce7144bbf6ecdb | 6f772af007dbdeaf |
+| ols                    | 3d1d7c30b12d9872 | c73c0c1158ebcb9e |
+| ols infer              | 2546a13c03838433 | 55f61f34cae7e5ff |
+| ols model              | a84289377ea9180f | b25d3a2214bc6196 |
+| ols batch              | b578bef320871443 | 9dbfb3084184e215 |
+| ridge                  | a91478be750dc756 | 42410e35cdae30cb |
+| ridge infer            | a5a404bb201b0eeb | d23a652e5f82906f |
+| ridge model            | efada80fdc2d4259 | 824a2e3b44b31af4 |
+| ridge batch            | 5817cf4d9fb9bd91 | 6928f85b10dd8f49 |
+| logistic               | 5b1e42c308451935 | aa9b1fa93dc2ad08 |
+| logistic infer         | 103f76e4a2b23c03 | 31ae5dc087daddea |
+| logistic model         | 1b51b4eabdcf59e2 | eff4803be10700c8 |
+| logistic batch         | 24b0ec1feb4c7f73 | 2eb32fc5060dcf00 |
+| kde                    | e0d6e3d0623d6112 | 0a800c7b3cca66e4 |
+| kde infer              | 1a2c3054b661b72a | 63b4da91ce458ab7 |
+| kde model              | cd5469f3b8854867 | c6b86284b81d2eea |
+| kde batch              | 6651a609fb572c44 | 42cfc4523132cd86 |
+| logistic-multiclass    | b197f3db38cd7fab | 083b19eb8c842f52 |
+| logistic-multiclass infer | 9603308580e1a294 | ec57465dcbb52769 |
+| logistic-multiclass model | b4b216d91d0e4ba7 | 61105df92f03899b |
+| logistic-multiclass batch | 65c83b052abd0434 | a215249040d7dade |
+
+cells=22 stable=22 moved=0 refused=0
+infer: stable=22
+model: stable=22
+batch: stable=22
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-sabaudit/cpu-prod.json
