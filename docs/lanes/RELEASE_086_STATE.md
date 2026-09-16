@@ -237,12 +237,37 @@ missing, BIT FOR BIT IDENTICAL** (`apple-record/chunk00-rerun-compare.txt`,
 `apple-m4.chunk00-rerun.json`). So the degraded state cost time and no bits, and the rerun
 stands as the column's copy of those lanes with the slowdown JSON kept beside it as evidence.
 
-One measurement to keep honest about: the rerun took **2057 s** for those seven lanes against
-**2194 s** for the same seven while degraded, 6 percent apart, and the per-lane shape is the
-same (the three gbdt lanes dominate both runs; degraded they ran 488, 657 and 923 s from
-`chunk00.rowtimes.tsv`). That says these lanes are expensive, not that the machine was or is
-in any particular state, and there is still no pre-slowdown Metal GBDT timing to compare
-against, so no healthy per-fit figure is claimed here.
+### Two measurements of the same degraded window disagree, and nobody has established why
+
+Read both of these before drawing any conclusion about that GPU. Either one alone invites a
+confident and possibly wrong answer.
+
+| what was measured | degraded | after | ratio |
+|---|---|---|---|
+| `gbdt_direct.py` at 20,000 rows, SymmetricTree, the leak lane's own before and after | 21.5 to 23.4 s | 7.7 to 8.3 s | about 2.7x |
+| `gbdt_direct.py` at 20,000 rows, Depthwise, the same | 27.0 to 30.4 s | 11.8 to 14.1 s | about 2.2x |
+| the seven identity lanes chunk 00 recorded under the slowdown, whole run | 2194 s | 2057 s | 1.06x |
+
+So one workload says the machine was running somewhere near 2.2x to 2.7x slow and is not now,
+and the other says the same window cost 6 percent, with the same per-lane shape both times
+(the three gbdt lanes dominate each run; degraded they took 488, 657 and 923 s per
+`chunk00.rowtimes.tsv`). Both cannot be describing the same effect.
+
+Readings that would explain it, none of which anyone has evidence for, and none worth a box or
+a lane to settle: the identity harness may never accumulate enough command queues in one lane
+to cross the limit while `gbdt_direct.py` does; the degraded window may have partly cleared by
+the time those seven lanes ran; or the two workloads may differ in shape enough that only one
+is sensitive to the leak at all.
+
+What IS settled: the rerun of those seven lanes came back **bit for bit identical across all
+63 cells** (hashes, infer, model, reload and batch, none missing), so whatever the degraded
+window did, it cost time and not one bit, and the rerun stands as the column's copy of those
+lanes with the slowdown JSON kept beside it as evidence.
+
+What must NOT be drawn: no claim about the machine's state, in either direction, rests on the
+6 percent figure. It is not evidence that the GPU was healthy while those lanes ran, and it is
+not evidence that the leak lane's 2.2x to 2.7x is wrong. There is still no pre-slowdown Metal
+GBDT timing anywhere, so no healthy per-fit figure is claimed here either.
 
 **The fourth column.** The diff wants a CPU column at the wheel's build commit, and the last
 record shipped only the three GPU columns, so this release takes one. It runs on a box with no
