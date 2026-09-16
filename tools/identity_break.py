@@ -3981,6 +3981,185 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (transform_rbf_sampler(e, Xh[:256], devices=_par_devices(), rows_per_shard=100),))
 
 
+# ---------------------------------------------------------------- lanes (2026-09-16, lane/multigpu-audit)
+# The ELEVEN public estimators a multi-GPU driver ALREADY ADMITS BY TYPE and
+# that no par-* lane ever asked. Read from the drivers' admission checks, not
+# from prose: `fit_forest` takes all four forest classes but only the RF
+# classifier and the ET regressor had lanes; `fit_boosting` takes the two
+# sklearn-style adapters beside GradientBoosting; `fit_gram_estimator` takes
+# LinearRegression, PCA and TruncatedSVD beside Ridge; `fit_coordinate_descent`
+# takes ElasticNet beside Lasso; `fit_svm`/`predict_svm` take SVR beside SVC;
+# `fit_scaler` takes MinMaxScaler beside StandardScaler; and `ParallelQueries`
+# takes NearestNeighbors beside the three estimators that had lanes. So the
+# multi-GPU PATH existed and the identity record simply did not carry it.
+# Nothing here is new capability: no driver, no binding flag, no Mojo.
+#
+# These eleven are GPU-ONLY ON PURPOSE. They are NOT added to any family's
+# `training_lanes` in python/mojolearn/host_surface.py, so they never enter
+# `covered_lanes()` and therefore never enter `record_covered_lanes()`. That
+# is deliberate: the day `TRAINING_GPU_COLUMNS` is repointed at a record taken
+# under a narrower scope, the 11 CPU-covered par-* lanes that ARE in the
+# covered set lose their GPU columns unless dropped or admitted, and these
+# eleven cannot join that problem because they were never claimed. Their cells
+# come from an explicit two-device `par` leg (`--lanes`), not from a release
+# record, and until such a leg runs they are simply absent from every column.
+# They are NOT eligible for `--owed-json`: `_owed_status` admits a part as
+# OWED only when a CPU column hashes it STABLE, and these have no CPU column
+# by construction, so a diff naming them reports them short, never OWED.
+# Same rules as every par lane above: devices=_par_devices(), the smallest
+# sharding that splits the work, and `_same_bytes` against the plain fit.
+
+@lane("par-forest-reg")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_forest on the rf-reg lane's RandomForestRegressor, 16 trees in four
+    ranges of four, held to the plain fit. par-forest carries the classifier;
+    the driver admits this class on the same global tree ID ranges."""
+    from mojolearn.parallel_ensemble import fit_forest
+    kw = dict(n_estimators=16, max_depth=8, random_state=7)
+    par = fit_forest(ml.RandomForestRegressor(**kw), X, yr, devices=_par_devices(), trees_per_shard=4)
+    plain = ml.RandomForestRegressor(**kw).fit(X, yr)
+    _same_bytes("fit_forest predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X))), par, lambda e: (e.predict(Xh),))
+
+
+@lane("par-forest-et-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_forest on the et-clf lane's ExtraTreesClassifier. par-forest-et
+    carries the regressor; this is the fourth forest class the driver takes."""
+    from mojolearn.parallel_ensemble import fit_forest
+    kw = dict(n_estimators=16, max_depth=8, random_state=7)
+    par = fit_forest(ml.ExtraTreesClassifier(**kw), X, yc, devices=_par_devices(), trees_per_shard=4)
+    plain = ml.ExtraTreesClassifier(**kw).fit(X, yc)
+    _same_bytes("fit_forest predict_proba", par.predict_proba(X[:2048]),
+                "plain predict_proba", plain.predict_proba(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
+                par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("par-boosting-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_boosting on the gbdt-adapter-clf lane's GradientBoostingClassifier,
+    the sklearn-style adapter `fit_boosting` admits beside GradientBoosting;
+    the same packed feature groups par-boosting distributes."""
+    from mojolearn.parallel_ensemble import fit_boosting
+    kw = dict(n_estimators=20, max_depth=6)
+    par = fit_boosting(ml.GradientBoostingClassifier(**kw), X, yc, devices=_par_devices())
+    plain = ml.GradientBoostingClassifier(**kw).fit(X, yc)
+    _same_bytes("fit_boosting predict_proba", par.predict_proba(X[:2048]),
+                "plain predict_proba", plain.predict_proba(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)),
+                     decision=_h(par.decision_function(X[:512]))),
+                par, lambda e: (e.predict(Xh), e.predict_proba(Xh), e.decision_function(Xh[:512])))
+
+
+@lane("par-boosting-reg")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_boosting on the gbdt-adapter-reg lane's GradientBoostingRegressor."""
+    from mojolearn.parallel_ensemble import fit_boosting
+    kw = dict(n_estimators=20, max_depth=6)
+    par = fit_boosting(ml.GradientBoostingRegressor(**kw), X, yr, devices=_par_devices())
+    plain = ml.GradientBoostingRegressor(**kw).fit(X, yr)
+    _same_bytes("fit_boosting predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
+    return _fit(dict(predict=_h(par.predict(X))), par, lambda e: (e.predict(Xh),))
+
+
+@lane("par-gram-ols")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_gram_estimator on the ols lane's LinearRegression: the pinned Gram
+    chunks par-gram distributes for Ridge, on the minimum-norm OLS path."""
+    from mojolearn.parallel_classical import fit_gram_estimator
+    par = fit_gram_estimator(ml.LinearRegression(), X, yr, devices=_par_devices())
+    plain = ml.LinearRegression().fit(X, yr)
+    _same_bytes("fit_gram_estimator coef", par.coef_, "plain coef", plain.coef_)
+    return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))),
+                par, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("par-gram-pca")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_gram_estimator on the pca lane's PCA. The fixture is tall, so the
+    covariance route runs; wide full PCA is refused by the driver by name."""
+    from mojolearn.parallel_classical import fit_gram_estimator
+    par = fit_gram_estimator(ml.PCA(n_components=4), X, devices=_par_devices())
+    plain = ml.PCA(n_components=4).fit(X)
+    _same_bytes("fit_gram_estimator components", par.components_, "plain components", plain.components_)
+    return _fit(dict(components=_h(par.components_), variance=_h(par.explained_variance_),
+                     transform=_h(par.transform(X[:256]))),
+                par, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("par-gram-tsvd")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_gram_estimator on the tsvd lane's TruncatedSVD, the fourth class
+    the Gram driver admits."""
+    from mojolearn.parallel_classical import fit_gram_estimator
+    par = fit_gram_estimator(ml.TruncatedSVD(n_components=4), X, devices=_par_devices())
+    plain = ml.TruncatedSVD(n_components=4).fit(X)
+    _same_bytes("fit_gram_estimator components", par.components_, "plain components", plain.components_)
+    return _fit(dict(components=_h(par.components_), transform=_h(par.transform(X[:256]))),
+                par, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("par-cd-elasticnet")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_coordinate_descent on the elasticnet lane's ElasticNet, the second
+    class the dot-leaf driver admits beside Lasso."""
+    from mojolearn.parallel_classical import fit_coordinate_descent
+    kw = dict(alpha=0.01, l1_ratio=0.5, max_iter=200)
+    par = fit_coordinate_descent(ml.ElasticNet(**kw), X, yr, devices=_par_devices())
+    plain = ml.ElasticNet(**kw).fit(X, yr)
+    _same_bytes("fit_coordinate_descent coef", par.coef_, "plain coef", plain.coef_)
+    return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))),
+                par, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("par-svm-svr")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_svm and predict_svm on the svr lane's SVR, the second class the
+    kernel-row driver admits. predict_svm refuses decision_function for SVR
+    by name, so only predict is asked."""
+    from mojolearn.parallel_classical import fit_svm, predict_svm
+    kw = dict(C=1.0, kernel="rbf", epsilon=0.1, max_iter=200)
+    par = fit_svm(ml.SVR(**kw), X[:2000], yr[:2000], devices=_par_devices())
+    plain = ml.SVR(**kw).fit(X[:2000], yr[:2000])
+    pred = predict_svm(par, X[2000:2256], devices=_par_devices(), method="predict")
+    _same_bytes("predict_svm", pred, "plain predict", plain.predict(X[2000:2256]))
+    return _fit(dict(predict=_h(pred)), par, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("par-scaler-minmax")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_scaler and transform_scaler on the minmax-scaler lane's
+    MinMaxScaler with four columns per shard, the second class the column
+    driver admits. Its five fitted statistics are the plain lane's."""
+    from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
+    par = fit_scaler(ml.MinMaxScaler(), X, devices=_par_devices(), columns_per_shard=4)
+    plain = ml.MinMaxScaler().fit(X)
+    t = transform_scaler(par, X[:256], devices=_par_devices(), columns_per_shard=4)
+    _same_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
+    return _fit(dict(data_min=_h(par.data_min_), data_max=_h(par.data_max_), scale=_h(par.scale_),
+                     min=_h(par.min_), transform=_h(t),
+                     inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4,
+                                                 inverse=True))),
+                par, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("par-queries-nn")
+def _(ml, X, yc, yr, Xh=None):
+    """ParallelQueries over the knn lane's NearestNeighbors, 64 query rows in
+    shards of 16, held to the plain kneighbors. par-queries-knn carries the
+    classifier; this is the bare index the driver also admits."""
+    from mojolearn.parallel_neighbors import ParallelQueries
+    m = ml.NearestNeighbors(n_neighbors=8).fit(X[:4096])
+    q = np.ascontiguousarray(X[4096:4160])
+    with ParallelQueries(m, devices=_par_devices(), rows_per_shard=PAR_QUERY_ROWS) as pq:
+        d, i = pq.query(q, method="kneighbors")
+    d0, i0 = m.kneighbors(q)
+    _same_bytes("ParallelQueries kneighbors distances", d, "plain distances", d0)
+    _same_bytes("ParallelQueries kneighbors indices", i, "plain indices", i0)
+    return _fit(dict(dist=_h(d), idx=_h(i)), m, lambda e: _pq(e, Xh[:64], "kneighbors"))
+
+
 def _neural_inference(ml, lane_name, est):
     """The estimator a neural lane's held-out and batch cells ask
     (lane/inference-tokenizer-neural, 2026-09-15). On a CPU column
@@ -4317,12 +4496,13 @@ def _rows_calls(*methods, sl=slice(None), prep=None, min_batch=1, refusal=None):
 _batch_decl(_rows_calls("predict", "predict_proba"),
             "rf-clf", "et-clf", "gbdt-symmetric", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
             "et-clf-entropy-bestfirst", "gbdt-multiclass", "gbdt-onevsall", "gbdt-pointwise-l2-bayesian-eval",
-            "par-forest", "par-boosting")
+            "par-forest", "par-boosting", "par-forest-et-clf")
 _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
-            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank")
+            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
+            "par-forest-reg", "par-boosting-reg")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
@@ -4334,7 +4514,7 @@ def _batch_gbdt_adapter_clf(ml, e, Xh):
             + _rows_calls("decision_function", sl=slice(0, 512))(ml, e, Xh))
 
 
-_batch_decl(_batch_gbdt_adapter_clf, "gbdt-adapter-clf")
+_batch_decl(_batch_gbdt_adapter_clf, "gbdt-adapter-clf", "par-boosting-clf")
 
 
 def _batch_iforest(ml, e, Xh):
@@ -4411,14 +4591,16 @@ def _batch_radius(ml, e, Xh):
 _batch_decl(_batch_radius, "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "pca", "pca-whiten", "pca-full-whiten", "tsvd",
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
-            "minmax-scaler-clip", "par-scaler", "rbf-sampler")
+            "minmax-scaler-clip", "par-scaler", "rbf-sampler",
+            "par-gram-pca", "par-gram-tsvd", "par-scaler-minmax")
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "ols", "ridge", "ols-no-intercept",
-            "ols-weighted", "ridge-no-intercept", "par-gram", "svr", "svr-linear")
+            "ols-weighted", "ridge-no-intercept", "par-gram", "svr", "svr-linear",
+            "par-gram-ols", "par-svm-svr")
 # The coordinate descent predict refuses one row BY NAME, mirroring cuML's
 # cdPredict (cd.cuh:341); see _BatchRows. Its rows are asked in windows of two.
 CD_PREDICT_REFUSAL = "Parameter n_rows: number of rows cannot be less than two"
 _batch_decl(_rows_calls("predict", sl=slice(0, 256), min_batch=2, refusal=CD_PREDICT_REFUSAL),
-            "lasso", "elasticnet", "elasticnet-l2end-no-intercept", "par-cd")
+            "lasso", "elasticnet", "elasticnet-l2end-no-intercept", "par-cd", "par-cd-elasticnet")
 _batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "logistic", "logistic-l1", "logistic-elasticnet",
             "logistic-unpenalized-no-intercept", "par-logistic")
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 256)), "logistic-multiclass")
@@ -4951,6 +5133,7 @@ def _batch_rsn(*methods):
 
 
 _batch_decl(_batch_pq("kneighbors", "predict", "predict_proba", sl=slice(0, 64)), "par-queries-knn")
+_batch_decl(_batch_pq("kneighbors", sl=slice(0, 64)), "par-queries-nn")
 _batch_decl(_batch_pq("radius_neighbors", sl=slice(0, 64), ragged=True, sort_results=True), "par-queries-radius")
 _batch_decl(_batch_pq("score_samples", sl=(slice(0, 256), slice(0, 4))), "par-queries-kde")
 _batch_decl(_batch_rsn("kneighbors", "predict", "predict_proba"), "par-reference-knn")

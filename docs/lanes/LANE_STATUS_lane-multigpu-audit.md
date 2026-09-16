@@ -22,8 +22,16 @@ paths) is NOT started and needs Andrew's word.
 - Every driver's admission check. A driver's `type(estimator) is not X` /
   `type(estimator) not in (...)` line is what actually decides whether a
   shipped class has a path, and it is the line this audit classifies on.
-- The 39 `@lane("par-*")` declarations in `/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py`
-  (176 lanes total).
+- The 39 `@lane("par-*")` declarations in `/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py`.
+  **Count correction (2026-09-16).** The harness registers **199** lanes on
+  main, not 176. 176 are written with a literal `@lane(` decorator; 23 more
+  are registered by module-level loops (the kde kernel and metric grid, the
+  knn and radius metric variants, the gp kernels, `gp-sample-y`,
+  `gp-optimize`, `gmm-sample`). `grep -c '@lane('` therefore UNDERCOUNTS the
+  registry, and the first version of this file said "176 lanes total" on that
+  grep. Every `par-*` lane does use a literal decorator, so the 39 was right.
+  Count the registry by importing it, not by grepping it (see the resume
+  commands).
 - `python/mojolearn/host_surface.py`, `python/mojolearn/_backend.py` and
   `python/mojolearn/tests/test_expose_d_manifest.py` for which host bindings
   deliberately omit a parallel flag, and which bindings have no flag at all.
@@ -135,6 +143,8 @@ is a cell in the identity record, not code.
 Cheapest honest work in the whole audit. Each is a handful of lines in
 `tools/identity_break.py` beside the sibling lane that already exists, and the
 cells ride whatever two-device leg the next record runs. No Mojo, no driver.
+
+**All eleven are DECLARED on this branch.** See "Part 2 as redirected" below.
 
 ## (b) No multi-GPU path, plausibly should have one (6)
 
@@ -255,9 +265,162 @@ A Python-only driver with no native seam (the shape b1, b2 and b3's search half
 take) is far smaller: `transform_rbf_sampler` plus its worker operation is
 about 60 lines.
 
+## Part 2 as redirected: cover what exists, do NOT build the six
+
+### The decision, recorded (2026-09-16)
+
+**Do not build the six missing multi-GPU paths. Add the eleven missing lanes
+instead.** The reasoning, recorded here so it is a decision and not a silent
+change of course:
+
+- only **9** lanes are checkable by a user who installs the wheel
+  (`host_surface.public_reference_lanes()` is the literal list `gemm-pinned`,
+  `kde`, `ols`, `ridge`, `knn`, `svc`, `pca`, `cholesky` plus `tokenizer`);
+- **43** sabotage arms have never been watched fire;
+- **5** families have no working negative control on one fixture.
+
+Six new drivers would add roughly 600 to 800 lines each (the measured size of
+the last three, see "Cost basis") of surface we cannot yet verify, on top of a
+verification debt we are only now measuring honestly. The eleven are the
+opposite trade: they add no surface at all, only cells for a path that already
+exists. **Cover what exists before building more.** This is a sequencing
+decision, not a rejection; the six stay on the board above with their cost
+estimates intact, `cross_val_score` first.
+
+### The eleven lanes, declared
+
+Each holds itself to the plain sibling lane's fit with `_same_bytes`, uses
+`devices=_par_devices()`, and reuses the sibling's exact parameters and fixture
+slice, so the only new thing in the cell is the driver.
+
+| new lane | surface | driver entry | held to |
+|---|---|---|---|
+| `par-forest-reg` | RandomForestRegressor | `fit_forest`, tree ID ranges | `rf-reg` |
+| `par-forest-et-clf` | ExtraTreesClassifier | `fit_forest`, tree ID ranges | `et-clf` |
+| `par-boosting-clf` | GradientBoostingClassifier | `fit_boosting`, feature groups | `gbdt-adapter-clf` |
+| `par-boosting-reg` | GradientBoostingRegressor | `fit_boosting`, feature groups | `gbdt-adapter-reg` |
+| `par-gram-ols` | LinearRegression | `fit_gram_estimator`, Gram chunks | `ols` |
+| `par-gram-pca` | PCA | `fit_gram_estimator`, Gram chunks | `pca` |
+| `par-gram-tsvd` | TruncatedSVD | `fit_gram_estimator`, Gram chunks | `tsvd` |
+| `par-cd-elasticnet` | ElasticNet | `fit_coordinate_descent`, dot leaves | `elasticnet` |
+| `par-svm-svr` | SVR | `fit_svm` / `predict_svm`, kernel rows | `svr` |
+| `par-scaler-minmax` | MinMaxScaler | `fit_scaler` / `transform_scaler`, columns | `minmax-scaler` |
+| `par-queries-nn` | NearestNeighbors | `ParallelQueries`, query rows | `knn` |
+
+Each also joins the `_batch_decl` group its sibling is in, so every one has a
+batch part rather than reading `n/a:UNDECLARED`.
+
+### Condition 2, the trap, and how these survive it
+
+`FIXTURE_SHRINK_SCOPE.md` section E states it: all 11 CPU-covered `par-*`
+lanes are in `host_surface.record_covered_lanes()`, and the day
+`TRAINING_GPU_COLUMNS` is repointed at a record taken under the narrower scope
+those 11 lose their GPU columns unless dropped or admitted.
+
+Read from the code, a lane enters that set by exactly one route:
+
+    covered_lanes()        = the union of every family's `training_lanes`
+                             (cross-checked against TRAINING_LANE_NAMES; they
+                             must agree exactly or host_surface raises)
+    record_covered_lanes() = covered_lanes() minus TRAINING_FIX_LANES
+
+**So the defense is to never enter it.** The eleven are declared as GPU-only
+par lanes: they are NOT added to any family's `training_lanes`, NOT added to
+`TRAINING_LANE_NAMES`, and NOT added to `TRAINING_FIX_LANES` (which would
+raise anyway, because `fix_covered_lanes()` rejects lanes that are not
+covered). They therefore cannot be in `covered_lanes()`, cannot be in
+`record_covered_lanes()`, and a repoint of `TRAINING_GPU_COLUMNS` cannot strip
+columns they were never claimed to have. Verified, not assumed:
+
+    python3 python/mojolearn/host_surface.py --covered-lanes         # 169 lanes, none of the eleven
+    python3 python/mojolearn/host_surface.py --record-covered-lanes  # still exactly 11 par-* lanes
+
+They are also outside `public_reference_lanes()`, which is a literal list, so
+they cannot reach a wheel user's verify surface either.
+
+### Condition 1, and a correction to "write the cells as OWED"
+
+The instruction was to declare the lanes and write their GPU cells as OWED.
+**The harness cannot mark these OWED, and it should not.** `_owed_status` in
+`tools/identity_break.py` derives OWED rather than taking a hand-written list,
+and its first requirement is a CPU column:
+
+    if not cpu_seen: return [], "no CPU column hashes it"
+
+A part is OWED only when at least one CPU column hashes it STABLE over two or
+more repeats and the other columns merely lack a hash. These eleven have no
+CPU column by construction (that is the whole point of the paragraph above),
+so `--owed-json` will report them **short, never OWED**. That is the honest
+status and it is the correct one: OWED means "a CPU column stands behind this
+and the GPU record has not caught up", which is not true here. Their cells
+come from an explicit two-device `par` leg (`--lanes`), and until that leg runs
+they are simply absent from every column. Nothing was rented for them.
+
+Two of the eleven could later become genuinely CPU-covered for zero Mojo,
+because their route is already admitted in `_parallel_pool.CPU_OPERATIONS`
+(`forest_fit`) and the host bindings already export the shard fits
+(`rf_regressor_fit_shard` in `bindings/_mojolearn_rf_host.mojo:631`,
+`et_classifier_fit_shard` in `bindings/_mojolearn_trees_host.mojo:556`):
+`par-forest-reg` and `par-forest-et-clf`. **Doing that would put them in
+`record_covered_lanes()` and add two more instances of the trap**, so it is
+deliberately NOT done here and should only be done together with a decision
+about how the covered par lanes keep their columns.
+
+### Condition 3, the fixture shrink scope
+
+Checked against `docs/lanes/FIXTURE_SHRINK_SCOPE.md` on
+`origin/lane/identity-fixtures-light` (it is not on main). Bucket A ("will
+change") is `hdbscan` and `hdbscan-leaf` and nothing else; bucket C
+("undecided") is **empty**. None of the eleven new lanes, and none of their
+eleven plain siblings, is in either bucket, so this branch and that one do not
+collide. Section E of that file removes all `par-*` lanes from what a release
+record RUNS; because the eleven are named `par-*`, a prefix exclusion picks
+them up automatically, which is the intended behavior (their cells come from
+explicit two-device legs, not from the release record). That exclusion is
+described there but is not implemented in either branch's
+`tools/identity_break.py` yet, so there is nothing to merge against today.
+
+### What was verified here, and what was not
+
+Verified, one core, `nice -n 19`, no build, no box, no Metal:
+
+- the registry imports and is complete: **210** lanes and **50** `par-*` lanes
+  on this branch against 199 and 39 on main, all eleven registered, and
+  `sorted(n for n in LANES if n not in BATCH)` is `[]`, so no lane anywhere
+  reads `n/a:UNDECLARED`;
+- `_batch_decl` raised no duplicate-declaration error (it raises on a second
+  declaration for the same lane, so a clean import is the check);
+- the covered-lane sets are unchanged (the two commands above);
+- gates: `docs_facts --check` OK (13 facts, 12 marked spans), `wheel_ci pins .`
+  OK (56 build scripts), `wheel_ci inventory python/mojolearn` OK (85 modules).
+  `docs_facts` derives its lane facts from `host_surface.training_sentence()`,
+  which reads `TRAINING_LANE_NAMES`; this branch does not touch it, which is
+  why the gate stays green.
+
+**NOT verified, and why.** The eleven lanes have never been RUN. Declaring a
+lane and recording it are different things, and nothing here is evidence about
+any hash. Two Python tests could not run in this worktree because importing
+`mojolearn` calls `_backend.select()`, which needs built identical bindings
+that do not exist here and that I am not authorized to build:
+
+    cd <worktree>/python && python3 -m mojolearn.tests.test_host_surface
+    cd <worktree>/python && python3 -m mojolearn.tests.test_cpu_training_par_classical
+
+**DEFERRED, asking before running:** both need
+`MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh` first, which is a
+37-binding build and far past a cooled machine's one core. The one assertion of
+`test_host_surface` that bears on this change,
+`test_covered_lanes_are_identity_break_lanes` (every covered lane is a lane
+identity_break defines), is satisfied by construction: this branch adds lanes
+and removes none, so `covered ⊆ defined` still holds, and the covered set is
+byte-identical to main's.
+
 ## Done on this branch
 
-- This audit. No code change.
+- The audit (part 1), with the lane-count correction above.
+- The eleven `par-*` lanes declared and batch-declared, GPU-only by design.
+  `tools/identity_break.py` only, +189 / -6.
+- No driver, no binding, no Mojo, no host_surface change, no record change.
 
 ## Resume commands for a session with none of this context
 
@@ -274,13 +437,27 @@ IVF and Mamba/Transformer statements).
 
 **2. Reproduce the counts from the tree, not from this file.**
 
-    grep -c '@lane("par-' tools/identity_break.py                    # 39
-    grep -c '@lane(' tools/identity_break.py                         # 176
+    # The registry, NOT a grep: 199 lanes / 39 par on main, 210 / 50 on this
+    # branch. `grep -c '@lane('` returns 176 and misses the 23 loop-registered.
+    python3 -c "import importlib.util,sys; s=importlib.util.spec_from_file_location('ib','tools/identity_break.py'); m=importlib.util.module_from_spec(s); sys.modules['ib']=m; s.loader.exec_module(m); print(len(m.LANES), sum(1 for k in m.LANES if k.startswith('par-')), sorted(n for n in m.LANES if n not in m.BATCH))"
     git grep -n 'DevicePool(devices' python/mojolearn/parallel_*.py  # cooperative vs not, per driver
     git grep -ho 'MOJOLEARN_[A-Z_]*DEVICE_COUNT' -- '*.mojo' '*.py' | sort -u   # 17 switches
 
-**3. Part 2, only with Andrew's word, in this order.** b1 (cross_val_score),
-then the eleven (a3) lanes that need no driver, then b2 (GPC), then b3 (IVF
+**3. Record the eleven.** They are declared but unrun. They need one
+two-device `par` leg, which is NOT authorized today, and they ride whatever
+leg runs next rather than earning one of their own:
+
+    MOJOLEARN_PAR_DEVICES=0   python3 tools/identity_break.py --lanes <the eleven> --json one.json
+    MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --lanes <the eleven> --json two.json
+    python3 tools/identity_break.py --diff one.json two.json
+
+Every cell must read IDENTICAL one device against two; that equality is the
+drivers' whole claim. `--owed-json` will NOT admit them (no CPU column, see
+Condition 1 above), so a record diff naming them reports them short until the
+leg runs.
+
+**4. The six gaps, only with Andrew's word, and only after the verification
+debt is paid.** b1 (cross_val_score) first, then b2 (GPC), then b3 (IVF
 search), then b5 (ARIMA and Holt-Winters prediction), then b4 (matmul), then
 b6. Each one owes, before it merges:
 
@@ -314,5 +491,13 @@ None rented on this branch.
 ## Owed
 
 Every (b) item owes a two-device leg on two H100s and on two MI300X, and no box
-is authorized. The eleven (a3) lanes owe nothing but a place in the next
-record's two-device columns.
+is authorized. None was rented for this branch.
+
+The eleven declared lanes owe exactly one thing: a place on the next
+two-device `par` leg, one device against two, all nine fixtures. They are
+short until then, not OWED, for the reason given under Condition 1. They are
+unrun, so this branch stays a branch: nothing here is merged to main.
+
+Deferred and awaiting Andrew's word, with the exact command: the two Python
+tests under "What was verified here, and what was not", which need
+`MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh` first.
