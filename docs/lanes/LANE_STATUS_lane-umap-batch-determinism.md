@@ -224,6 +224,16 @@ identical to it):
    that is not the request size. The measured cliff is the largest
    single-row effect in this lane and this is the smallest of the four
    changes, because 100 and 30 are a heuristic rather than a contract.
+
+   **This one moves no recorded cell.** Both umap lanes in
+   `tools/identity_break.py` construct `ml.UMAP(..., n_epochs=8, ...)`
+   (lines 1463 and 3897), so `params.n_epochs != 0` and the 100/30 branch is
+   never taken in any committed column. Repairing it therefore needs no
+   re-record on any device class, which no other item on this list can say.
+   It is still a decision and not a lane merge, because the branch exists to
+   bound work: collapsing it to 100 makes a transform of more than ten
+   thousand queries do 3.3 times the refinement it does today. That cost,
+   not the bits, is what the decision is about.
 1. `:154` key the negative-sample counter on something batch invariant
    instead of `edge = row * k + j`. The batch-invariant data available inside
    `refine_transform` is the row's own neighbor indices and weights, so a hash
