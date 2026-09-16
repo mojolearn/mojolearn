@@ -324,6 +324,20 @@ first, and ends with the gate's own `column` judgement of the merged JSON. Scrip
 (`scripts/cpu_record_body.template.sh`, `scripts/make_cpu_record_body.sh`) stay as the record
 of attempt 1.
 
+**Attempt 2 is home and the fourth column exists.** RunPod pod bjneh55oig1vdt, 16 vCPU AMD
+EPYC 7713, billed 1385 s at $0.48 an hour for **$0.1847**, deleted and verified gone (HTTP
+204). All 32 families built in about 8 minutes and were promoted to the binding cache (32,
+none refused or failed); `readback verdict OK`; the 159 covered lanes ran as 16 shards, the
+slowest 714 s, and merged to 1431 cells, complete; the gate's own check reads **`column
+verdict OK (0 failure(s))`**. Column: vendor `cpu-amd-epyc-7713-64-core-processor` (the
+harness derives the label from the machine, so the file keeps the name it was written under
+while the vendor field names the box), commit db9047b9f, `host.column` cpu, 32 families,
+sha256 starts 5cbfc85054c368b4. Verdicts: train 1431 STABLE; infer 1269 STABLE, 162 N/A; model
+1062 STABLE, 369 N/A; batch 1341 STABLE, 90 N/A. **No REFUSED cell anywhere**, against 747 of
+them in attempt 1, which is the diagnosis confirmed. Evidence:
+`~/mojolearn-evidence/release-0.8.6/records/cpu-column/`, with attempt 1 kept beside it at
+`records/cpu-column-attempt1-wheel/` so the difference stays legible.
+
 Local `release/0.8.6` sat at db9047b9f while this work was pushed to `origin/release/0.8.6`
 from the branch `fix/release-post-record-allowlist`. The local branch is now fast-forwarded to
 7e23bc670, so the two agree again.
