@@ -363,11 +363,14 @@ disagree). The next wheels include **every** family in the table, built
 by the two wheel builders through the same shims, read back
 as vendor cpu and the CPU column, and (on Linux) byte-compared across the
 three architecture legs before packing; 0.8.5 and earlier carry only the
-byte LM's, and 0.8.6 sixteen of the thirty-two. The sixteen training
+byte LM's, and 0.8.6 was folded into 0.8.7 and never published, so 0.8.7 is
+the first published release to carry all thirty-two. The sixteen training
 families joined on 2026-09-16 (lane/ship-cpu-host-families): with them out,
-an installed wheel could check 39 of the harness's 211 lanes, because a
-lane's host binding was not in it; with them in, a measured `verify --all`
-checks 122. Shipping the binding did not make
+an installed wheel could check 39 lanes, because a lane's host binding was
+not in it; with them in, a measured `verify --all` checks 122. Do not quote
+a registry total beside those two. It moves as lanes are added, and it moved
+the same day: `tools/lane_select.py --count` read 211 in the morning and 212
+by the evening. Ask the registry instead. Shipping the binding did not make
 ordinary CPU `fit` public; it still refuses outside the verifier's scope. Each also builds from source through
 `bindings/build_host_family.sh`, one shim per family.
 

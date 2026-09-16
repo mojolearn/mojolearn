@@ -37,8 +37,9 @@
 # run an older harness against a newer record (the second outsider run on
 # 2026-09-14 hit exactly this: six radius cells refused because the 0.8.5
 # wheel predates the harness fix at c3e6dcd37). The script warns when the
-# record's commit is not the wheel's release tag. From 0.8.6 the wheel
-# ships the columns of a record taken at its own commit.
+# record's commit is not the wheel's release tag. From 0.8.7 the wheel
+# ships the columns of a record taken at its own commit (0.8.6 would have
+# been the first; it was folded into 0.8.7 and never published).
 set -eu
 LABEL=${1:?box label, e.g. nvidia-rtx4090-sm_89}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
