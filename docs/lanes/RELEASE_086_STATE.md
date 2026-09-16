@@ -523,6 +523,33 @@ for leg 5 at 2400 s against leg 6 at 2900 s rather than assumed.
 - The lane is NOT dropped, NOT marked n/a and NOT excluded from the diff. Whether 0.8.6 ships
   with a known moving cell is Andrew's call with the finished record in front of him.
 
+### MEASURED, not projected: par-arima cannot be recorded on Hot Aisle at any price
+
+Leg 5 is home. **`identity_break_exit=124` at its 2400 s bound with NO column written**: the
+fetch returned 13,724 bytes of on-box checks and `verify_quick.json`, and there is no
+`identity_break.*.json` at all. One full lease, **$2.00** (balance $34.92 to $32.92), VM deleted
+and verified gone (HTTP 204, GET 404, `listed=no`). **Zero cells for the money.** Evidence:
+`records/amd-leg-5/`.
+
+So the earlier projection is now a measurement: `par-arima` consumed an entire lease without
+finishing one lane. With `--minutes` capped at 60 in enforced code, **no amount of money records
+that lane on this provider.** The `final_partial_uploaded bytes=` line with an empty count is the
+uploader defect already fixed in the template; nothing existed to upload.
+
+**The choice is no longer about budget.** It is:
+
+1. a provider or runner whose lease exceeds 60 minutes, for `par-arima` and any sibling like it;
+2. drop the unfinishable lanes from the AMD column, with the gap recorded and explained in the
+   record rather than hidden; or
+3. accept AMD at **162 of 192** and say so plainly.
+
+Balance $32.92 against the $10 floor. The two most recent legs bought zero cells between them,
+so nothing further is rented without Andrew's word.
+
+**The one cheap measurement that would inform the choice** ($2, now runnable since the lane
+subset path is wired): one leg with `--lanes` naming the 29 lanes other than `par-arima`, to see
+how many land per lease and which others also exceed one.
+
 ### STOP AND REPORT: the owed AMD lanes cost far more than ten legs, and one may not fit a lease at all
 
 Leg 5 rented at 22:51, started its identity run at 22:53:49, and at 23:24 was **29:40 into its
