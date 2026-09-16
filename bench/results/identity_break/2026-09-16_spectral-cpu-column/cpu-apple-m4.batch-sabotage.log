@@ -1,0 +1,38 @@
+# vendor=cpu-apple-m4 commit=f21649d2f60c1306ce0bde37fc51cbb15959aea0 (git rev-parse HEAD) host.cpu_model='Apple M4' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# MOJOLEARN_IDENTITY_BATCH_SABOTAGE is ON: every whole-batch evaluation is perturbed by one low-bit flip; every batch cell with a hash MUST read BATCH_MOVED. This JSON is not evidence.
+# identity_break  mode=identical  2026-09-16 13:36:22  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| spectral               | 112c7b0d7556a6ff | 3976be59c005d8f8 | 63111a283f247f0c | a65623b09f32292e | 96081e4016bb85b3 | 96081e4016bb85b3 | 112c7b0d7556a6ff | c8c26f83355366a6 | 0ae906c32d701fe3 |
+| spectral infer         | a7f3488317ff571e | 3a3fc8018ebcbca3 | 0227830c9fd1fe3e | 586e97f6021ef95f | 2afcfda3fa76f90f | 2afcfda3fa76f90f | a7f3488317ff571e | 39fdef517641e388 | 9125742811a1c301 |
+| spectral model         | 3e34622ced4d3c60 | ad1e356159f986fd | dbca01a677a6db83 | a985160042099a54 | 508b97806e7b4642 | dbaf9dde2a1654b4 | 3e34622ced4d3c60 | 5b584f9ad9a4334f | f530608624dd3f0b |
+| spectral batch         | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      |
+| spectral-precomputed   | 8df6d51dbff9ddaf | 32ed236da838cb22 | fafd67318e66c8e9 | ebeb9c5c4008a66d | 134d1fdd8654374a | 134d1fdd8654374a | 8df6d51dbff9ddaf | bbe40df82c9e623a | 6231ccf8fca2283f |
+| spectral-precomputed infer | bb2835f47f32e74d | 77b660ca4b2a42e2 | 3aed3a887e2b0c41 | c0ba56eeb5dcea34 | 7cd8401e0437ce89 | 7cd8401e0437ce89 | bb2835f47f32e74d | dce8f63e8bca9703 | 423f584e1c5cce33 |
+| spectral-precomputed model | 6b04b89cfa623e45 | ea7aeb5dfe06471c | 57673edfae833da5 | 710be55734b0c960 | 0df4233607620b15 | 0df4233607620b15 | 6b04b89cfa623e45 | c9fda73cee1e07c0 | 8ff2c152fc6fba9f |
+| spectral-precomputed batch | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      |
+
+cells=18 stable=18 moved=0 refused=0
+infer: stable=18
+model: stable=18
+batch: batch_moved=18
+BATCH_MOVED spectral/base: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000002 vs alone 0x00000003
+BATCH_MOVED spectral/ties: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000001 vs alone 0x00000000
+BATCH_MOVED spectral/hashed: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000001 vs alone 0x00000000
+BATCH_MOVED spectral/wide: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000002 vs alone 0x00000003
+BATCH_MOVED spectral/denormal: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000001 vs alone 0x00000000
+BATCH_MOVED spectral/denormal_ftz: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000001 vs alone 0x00000000
+BATCH_MOVED spectral/dupes: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000002 vs alone 0x00000003
+BATCH_MOVED spectral/odd: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000000 vs alone 0x00000001
+BATCH_MOVED spectral/negative: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000002 vs alone 0x00000003
+BATCH_MOVED spectral-precomputed/base: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000003 vs alone 0x00000002
+BATCH_MOVED spectral-precomputed/ties: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000000 vs alone 0x00000001
+BATCH_MOVED spectral-precomputed/hashed: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000003 vs alone 0x00000002
+BATCH_MOVED spectral-precomputed/wide: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000001 vs alone 0x00000000
+BATCH_MOVED spectral-precomputed/denormal: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000001 vs alone 0x00000000
+BATCH_MOVED spectral-precomputed/denormal_ftz: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000001 vs alone 0x00000000
+BATCH_MOVED spectral-precomputed/dupes: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000003 vs alone 0x00000002
+BATCH_MOVED spectral-precomputed/odd: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000003 vs alone 0x00000002
+BATCH_MOVED spectral-precomputed/negative: BATCH_MOVED:predict:row 0 of 64 alone:output 0 element 0: whole 0x00000001 vs alone 0x00000000
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/592ed9a4-9940-48ae-9cf2-819f9a08cc6c/scratchpad/spectral_batchsab.json

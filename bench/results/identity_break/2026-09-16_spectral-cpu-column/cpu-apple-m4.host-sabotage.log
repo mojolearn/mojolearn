@@ -1,0 +1,19 @@
+# vendor=cpu-apple-m4 commit=f21649d2f60c1306ce0bde37fc51cbb15959aea0 (git rev-parse HEAD) host.cpu_model='Apple M4' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-16 13:35:41  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| spectral               | 485ca6729619afa1 | 83ec0728e386ba3e | dfea72dd7be94304 | 34a836204b7d6850 | 773767823f805d1c | 773767823f805d1c | 485ca6729619afa1 | 7e84359f592c9804 | e988e9cf9b7cfcfc |
+| spectral infer         | de406a9a698e59cb | 74c8068a4e7309b4 | 803805ecbfa3cfa5 | 407a02ec5011cf4f | 5cf687705680cca2 | 5cf687705680cca2 | de406a9a698e59cb | d57a32ba445f960f | f6de151960dbf993 |
+| spectral model         | 233109a0b6daa52e | 9fcff167cc459506 | 11a8791a33c55d83 | ece2b2c41974b156 | 533c2ffd9b2c8705 | 7d4ba13300a0b59b | 233109a0b6daa52e | 9e63384465d0b529 | 27204db35dc61c61 |
+| spectral batch         | 8ffd7224da575085 | a7dd88e754992082 | 62f1847873f4d3a9 | 5924bce970550f34 | ffd113feb4404588 | ffd113feb4404588 | 8ffd7224da575085 | 9aac824d2915a351 | 20297977d6777fb9 |
+| spectral-precomputed   | a47b3cee729dfc83 | 39e5e8c26efdbdd4 | af90d22152d3b30b | fcb65baf082d66b7 | 5103c88b4f01df59 | 5103c88b4f01df59 | a47b3cee729dfc83 | c2ecd9c702a6229f | 2a8910a65a579438 |
+| spectral-precomputed infer | fc3cb907ec089c58 | c702f133cec54863 | e64ea8f80c3428b1 | f9d75510ea82105d | 66d9fef4c1d2bc82 | 66d9fef4c1d2bc82 | fc3cb907ec089c58 | eb36092e15b0989d | e3c020d1411a51f4 |
+| spectral-precomputed model | 94f04cc83f552fb9 | f64203268198c9f1 | b6feef6bab9d5694 | a8c0282be693dbbd | 6d55582d1404fa9d | 6d55582d1404fa9d | 94f04cc83f552fb9 | c3c0cf3f14f57dcd | 2ba42c4204a8bb31 |
+| spectral-precomputed batch | e07a76c7391df363 | 496b7f559c57b2d4 | b3060bfcb23fb9b3 | 84b417effa61b507 | 600fc84e875132a6 | 600fc84e875132a6 | e07a76c7391df363 | 7d3e25a66c5969b6 | b65509234f713c16 |
+
+cells=18 stable=18 moved=0 refused=0
+infer: stable=18
+model: stable=18
+batch: stable=18
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/592ed9a4-9940-48ae-9cf2-819f9a08cc6c/scratchpad/spectral_hostsab.json
