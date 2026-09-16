@@ -302,6 +302,23 @@ still carries old-size references for the thirteen. No live or promoted lane is
 among them, so nothing a user runs is affected today, but the table owes a
 regeneration before any shrunk lane becomes publicly checkable.
 
+**That gap is now enforced in code rather than only written down here.**
+`lane/identity-fixtures-light` added `_verify_reference.stale_reference_lanes()`,
+which compares the harness's `LANE_REVISIONS` against the revisions the table
+was generated at, and `verify --all` now DROPS such lanes from the comparison
+and names them. Run against the shipped table it reports exactly the thirteen:
+
+    byte-lm, byte-lm-resident, gbdt-lossguide-newtoncosine, gbdt-nan-modes,
+    gbdt-pair-logit, gbdt-parametric-losses, hdbscan, hdbscan-leaf,
+    holtwinters, mamba2-dtlimit, samba, samba-untied-dropout-accum, spectral
+
+That is the right behaviour, and it matters for the reason that lane gives: a
+stale reference would otherwise read DIVERGENT for a reason that has nothing to
+do with the user's machine, which looks exactly like the identity claim being
+false. The evidence document records those lanes under
+`lanes_summary.stale_references`, because a lane that vanished from the
+comparison is precisely what the counts exist to surface.
+
 This matters more than it sounds. These lanes' references ship **in the
 wheel's table**. Promoting a lane whose fixture then changes would ship a
 reference a user's `verify` fails against, breaking the exact command this lane

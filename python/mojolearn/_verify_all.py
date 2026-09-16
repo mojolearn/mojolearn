@@ -769,7 +769,7 @@ def cmd_verify_all(args):
     # counts that cannot be confused with cell-part counts, and the self-test.
     # It is built from the SAME dict `format_human` renders, so the two cannot
     # drift into describing different runs.
-    report["lanes_summary"] = lane_counts(rows, lanes)
+    report["lanes_summary"] = lane_counts(rows, lanes, stale)
     report["reference_evidence"] = reference_evidence(rows)
     try:
         report["self_test"] = self_test(harness, ml, table)
@@ -816,9 +816,15 @@ def host_binding_artifacts():
     return out
 
 
-def lane_counts(rows, lanes):
+def lane_counts(rows, lanes, stale=()):
     """Lanes checked, lanes skipped and why. Kept apart from the cell-part
     counts so `39 of 39 lanes` and `1065 of 1412 parts` cannot be confused.
+
+    `stale` are lanes DROPPED before the run because their fixture moved past
+    the reference this table carries (lane/identity-fixtures-light). They are
+    logged by `cmd_verify_all`, but a lane that silently vanished from the
+    comparison is precisely what this block exists to surface, so they are
+    named here too.
 
     PORTABLE MODELS ARE COUNTED SEPARATELY. They are not harness lanes, and
     folding them in produced `6 checked of 2 requested`, a count that is
@@ -848,8 +854,11 @@ def lane_counts(rows, lanes):
     model_names = {n for n in by_lane if n.startswith("portable:")}
     checked, skipped = classify(lane_names)
     m_checked, m_skipped = classify(model_names)
-    return dict(requested=len(asked), checked=len(checked), checked_lanes=checked,
-                skipped=len(skipped), skipped_lanes=skipped,
+    stale_note = "fixture moved past the reference this table carries; not comparable"
+    return dict(requested=len(asked) + len(stale), checked=len(checked), checked_lanes=checked,
+                skipped=len(skipped) + len(stale),
+                skipped_lanes=dict(skipped, **{l: stale_note for l in stale}),
+                stale_references=sorted(stale),
                 not_run=sorted(asked - lane_names),
                 portable_models=dict(checked=len(m_checked), checked_models=m_checked,
                                      skipped=len(m_skipped), skipped_models=m_skipped),
