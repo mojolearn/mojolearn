@@ -10,6 +10,7 @@ with one-minute queue and execution limits. Product routing is unchanged.
 """
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -128,8 +129,8 @@ def main(argv=None):
                     help="core = training/inference/save/reload; all runs separate bounded jobs")
     ap.add_argument("--full-selection", action="store_true", help="explicitly run a selector fallback; Apple release policy still applies")
     args = ap.parse_args(argv)
-    if args.timeout <= 0 or args.wait_timeout <= 0:
-        ap.error("timeouts must be positive")
+    if any(not math.isfinite(v) or v <= 0 for v in (args.timeout, args.wait_timeout)):
+        ap.error("timeouts must be finite and positive")
     import identity_break
     if args.exhaustive and args.fixtures is not None:
         ap.error("choose --exhaustive OR --fixtures")
@@ -145,9 +146,23 @@ def main(argv=None):
     selected["fixtures"] = fixtures
     selected["repeats"] = 2
     selected["cell_count"] = len(selected["lanes"]) * len(fixtures)
+    # The audit is a preflight, before staging sources or taking a lease.
+    import lane_applicability
+    column = {"cpu": "cpu-host", "metal": "apple-metal"}.get(args.mode)
+    scopes = lane_applicability.scopes() if column and selected["lanes"] else {}
+    selected["inapplicable"] = {
+        lane: scopes[lane].applicable(column)[1]
+        for lane in selected["lanes"]
+        if column and not scopes[lane].applicable(column)[0]
+    }
     jobs = []
     for lane in selected["lanes"]:
-        groups = ["core", "batch"] + (["rlpair"] if lane in identity_break.RLPAIR else []) if args.probe_group == "all" else [args.probe_group]
+        has_batch = callable(identity_break.BATCH.get(lane))
+        if args.probe_group == "batch" and not has_batch:
+            ap.error(f"{lane} has no applicable batch probe: {identity_break.BATCH.get(lane, 'undeclared')}")
+        groups = (["core"] + (["batch"] if has_batch else [])
+                  + (["rlpair"] if lane in identity_break.RLPAIR else [])
+                  if args.probe_group == "all" else [args.probe_group])
         if args.probe_group == "rlpair" and lane not in identity_break.RLPAIR:
             ap.error(f"{lane} does not declare an rlpair probe")
         jobs.extend(dict(lane=lane, fixture=fixture, group=group) for fixture in fixtures for group in groups)
@@ -157,6 +172,9 @@ def main(argv=None):
     print(json.dumps(selected, indent=2), flush=True)
     if args.plan:
         return 0
+    if selected["inapplicable"]:
+        ap.error("selected lanes are inapplicable to this backend: " +
+                 json.dumps(selected["inapplicable"], sort_keys=True))
     if selected["fallback"] and not args.full_selection:
         ap.error("selection fell back to all lanes; inspect the plan or explicitly pass --full-selection")
     # Splitting into processes must not bypass the harness's release guard.

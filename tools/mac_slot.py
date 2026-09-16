@@ -11,6 +11,7 @@ import argparse
 from contextlib import contextmanager
 import fcntl
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -189,8 +190,9 @@ def main(argv=None):
     ap.add_argument("mode", choices=("run", "metal", "status"))
     ap.add_argument("command", nargs=argparse.REMAINDER)
     args = ap.parse_args(argv)
-    if args.timeout < 0 or args.wait_timeout < 0 or args.poll <= 0:
-        ap.error("timeouts must be nonnegative and poll must be positive")
+    if (any(not math.isfinite(v) for v in (args.timeout, args.wait_timeout, args.poll))
+            or args.timeout < 0 or args.wait_timeout < 0 or args.poll <= 0):
+        ap.error("timeouts must be finite and nonnegative and poll must be finite and positive")
     scheduler = Scheduler()
     if args.mode == "status":
         scheduler.status()

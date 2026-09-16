@@ -119,3 +119,12 @@ def test_concurrent_jobs_never_overlap(env, tmp_path):
     for p in jobs:
         out, err = p.communicate(timeout=10)
         assert p.returncode == 0, (out, err)
+
+
+@pytest.mark.parametrize("flag", ["--timeout", "--wait-timeout", "--poll"])
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
+def test_nonfinite_limits_refuse_before_scheduler(monkeypatch, flag, value):
+    import mac_slot
+    monkeypatch.setattr(mac_slot, "Scheduler", lambda: pytest.fail("invalid limit reached scheduler"))
+    with pytest.raises(SystemExit):
+        mac_slot.main([f"{flag}={value}", "run", "true"])
