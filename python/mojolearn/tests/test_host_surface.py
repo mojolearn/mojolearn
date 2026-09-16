@@ -726,3 +726,41 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
         f"these lanes' fixtures moved past the shipped reference and they are still public: {moved}. "
         "Add them to PUBLIC_PENDING_LANES as 'stale reference' until the release regenerates the table"
     )
+
+
+def _fixture_floors():
+    """`tools/fixture_floors.py` loaded by path, like the lane readers above,
+    so this test needs no numpy and no bindings."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("fixture_floors", ROOT / "tools" / "fixture_floors.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_no_fixture_is_shrunk_below_its_declared_floor():
+    """A FLOOR IN PROSE IS NOT A FLOOR (lane/shrink-floors, 2026-09-16).
+
+    docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md section 1f is
+    titled "LEFT BIG: samba-untied-dropout-accum" and says three steps is that
+    lane's floor because step 3 is the first that evaluates the cosine arm of
+    its schedule. The next lane cut it to one step anyway, FIXTURE_SHRINK_SCOPE
+    carried forward only the rows half of the reasoning, and a third document
+    then recorded as fact that the third step was kept. Nobody lied; the floor
+    simply had no mechanism. It has one now, on the lane, in `@floor(...)`,
+    and this is the gate half of it. The checker also runs in light-checks,
+    which is the workflow that starts by itself."""
+    mod = _fixture_floors()
+    bad = mod.check(path=str(ROOT / "tools" / "identity_break.py"))
+    assert bad == [], "fixture floor violations:\n  " + "\n  ".join(bad)
+
+
+def test_the_fixture_floor_check_refuses_a_violating_shrink(capsys):
+    """A CHECK THAT HAS NOT BEEN SEEN TO REFUSE ANYTHING is the prose floor it
+    replaces. `--self-test` mutates the real harness source five ways (a cut
+    below a floor, a deleted floor, a site that stops reading the floored
+    local, an untraceable reason, and the exemption list used on a lane that
+    has a floorable dimension) and requires each one to be REFUSED by name."""
+    mod = _fixture_floors()
+    assert mod.self_test(path=str(ROOT / "tools" / "identity_break.py")) is True, capsys.readouterr().out
