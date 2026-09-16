@@ -495,11 +495,31 @@ Still owed:
    no arithmetic, so no bit should move, and that is an argument rather than a
    measurement. Both Apple builds so far were taken with the build gate skipped and
    compared nothing.
-4. **ExtraTrees and fused kNN have no measurement at all.** Both carry the identical
-   protocol. Note the asymmetry `fix/amd-merge-ordering` records. The kNN `-2 -> -1`
-   consumer has a single consumer, which restricts the interleavings, so a matching
-   spelling there is not independent proof of the same failure. The kNN producer at
-   `:729` has multiple producers and the argument applies to it directly.
+4. ~~ExtraTrees and fused kNN have no measurement at all.~~ **BOTH MEASURED on gfx942,
+   2026-09-16, by `lane/mutex-extratrees-knn`. Both are NULLS and the two nulls are not
+   the same kind. See `docs/lanes/LANE_STATUS_lane-mutex-extratrees-knn.md`.**
+
+   * **ExtraTrees**, stock claim, 545 fits at 2048 columns, four blocks per node: 0 moved.
+     Excludes the forest's 4.3% at p = 4e-11, bounds its own rate at 0.55%. A contention
+     witness was taken: with the lock removed the same publish loses candidates in 8 of 8
+     runs, so the instrument can show a one.
+   * **The fused kNN claim is UNREACHABLE in every shipped build**, which this file did not
+     know when it listed the site as carrying the same risk.
+     `neighbors/impl/detail/fused_l2_knn.mojo:913` pins `grid_x = 1` under
+     `comptime if PIN_DETERMINISM`, `checks/numerics.mojo:19` makes that true for IDENTICAL
+     and DETERMINISTIC alike, and `bindings/build.sh:278` refuses every other mode for the
+     binding that carries the kernel. At `grid_dim.x == 1` the kernel takes the `if gdx ==
+     1` arm and the mutex array is never touched. Measured anyway on the check path, where
+     it IS reachable: 500 launches per arm at 8 and 16 producers per mutex, 0 wrong against
+     a host oracle, with a sabotaged handoff moving 150 and 250 slots as the control.
+   * **ExtraTrees also has a reachability gate**, softer than the kNN's but real. It
+     contends only at `k > TPB`, and `TPB` is 512 on a 64-lane wavefront
+     (`extratrees/.../builder.mojo:2931`), so on gfx942 it needs MORE THAN 512 SAMPLED
+     COLUMNS against the forest's eleven.
+
+   The asymmetry `fix/amd-merge-ordering` recorded still stands and is now sharper: the kNN
+   `-2 -> -1` consumer has a single consumer, and the producer at `:729` has multiple
+   producers, but neither runs in anything a build script will produce.
 5. **An emission audit of every other discarded atomic in the repository.** Section 0 is
    a general fact about this compiler, not a fact about mutexes, and nothing has checked
    whether the same mistake is spelled anywhere else.
