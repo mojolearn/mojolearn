@@ -63,7 +63,7 @@ requires equal values.
   on the held-out rows, whole, row by row and split, must equal the recorded
   GPU answers.
 
-Every cell (a lane on a fixture) has four parts:
+Every cell (a lane on a fixture) has five parts:
 
 | part | question |
 |---|---|
@@ -71,6 +71,16 @@ Every cell (a lane on a fixture) has four parts:
 | infer | does the fitted model answer held-out rows with the recorded bits? |
 | model | are the saved file's bytes the recorded bytes, and does the reloaded file answer like the model in memory? |
 | batch | are the held-out answers the same whole, one row at a time, in an uneven split and by prefix, and equal to the recorded bits? |
+| stepfull | for a model that decodes, is a sequence decoded ONE TOKEN AT A TIME with a carried state, at every position, the bits the same model answers when the whole sequence runs as one fresh-state forward pass? |
+
+`stepfull` is the decode property, exposed on 2026-09-16. It is the claim an
+inference server actually depends on, and the place bitwise determinism
+usually breaks, so it is asked of the public classes on the machine you
+installed on rather than only recorded by us. Eight lanes have it
+(`transformer`, `transformer-window`, `mamba1`, `mamba2`, `mamba2-dtlimit`,
+`mamba3`, `samba`, `samba-untied-dropout-accum`); every other lane reads
+`n/a:no-decode-state`, which is a declaration rather than a pass. A failure
+names the FIRST differing position and prints both values.
 
 Each part reads one state.
 

@@ -85,7 +85,12 @@ Nothing pre-existing moved. Against a CPU column built from this branch's
 merge base, every train, infer, model, batch, rlpair and ragged cell of the
 nine neural lanes reads IDENTICAL (`13_diff_forkbase_vs_lane.log`).
 
-NVIDIA and AMD confirmation of the `stepfull` part is OWED; no box was rented.
+PAID (lane/decode-columns, 2026-09-16, same day): an RTX 3090 on RunPod and
+an MI325X on DigitalOcean both read all eight `stepfull` lanes STABLE on
+these same hashes, and the Apple column was extended from five lanes to
+eight. Four columns, `IDENTICAL x4` on every one of the eight cells. Both
+sabotage arms fired on both boxes. See
+`docs/lanes/LANE_STATUS_lane-decode-columns.md`.
 
 ## What incremental decoding costs, measured
 

@@ -584,17 +584,23 @@ def host_transform_memberships(distances: List[Float32], rows: Int, k: Int) rais
     """`transform_memberships`, `transform.mojo:33-75`, verbatim."""
     if rows < 1 or k < 2 or len(distances) != rows * k:
         raise Error("UMAP transform neighbor shape mismatch")
-    var mean = Float64(0)
     for i in range(len(distances)):
         if not isfinite(distances[i]) or distances[i] < Float32(0):
             raise Error("UMAP transform neighbor distances must be finite and nonnegative")
         if i % k > 0 and distances[i] < distances[i - 1]:
             raise Error("UMAP transform neighbors must be distance-sorted")
-        mean += Float64(distances[i])
-    mean /= Float64(rows * k)
     var target = identical_log2_64(Float64(k))
     var weights = List[Float32]()
     for row in range(rows):
+        # BATCH INVARIANCE. The sigma floor's mean is THIS ROW's own k
+        # neighbor distances and never the whole request's, so a batch of N
+        # is the concatenation of N batches of one. Measured effectively
+        # inert on ordinary data by lane/umap-batch-determinism, and
+        # repaired anyway, because an inert coupling is still a coupling.
+        var mean = Float64(0)
+        for j in range(k):
+            mean += Float64(distances[row * k + j])
+        mean /= Float64(k)
         var lo = Float64(0)
         var hi = Float64(-1)
         var sigma = Float64(1)
@@ -684,9 +690,30 @@ def host_refine_transform(
     for value in result:
         if not isfinite(value):
             raise Error("UMAP transform refinement initialization must be finite")
-    var maximum = Float32(0)
-    for weight in weights:
-        maximum = max(maximum, weight)
+    # BATCH INVARIANCE, the two couplings that lived in this function. Each
+    # row's edge schedule is scaled by THAT ROW's largest membership rather
+    # than by the whole request's, and each row's negative-sample counter is
+    # keyed on a hash of that row's own k neighbor INDICES rather than on
+    # `row * k + j`, which was a position in the request and not a property
+    # of the query. The memberships are deliberately NOT in the key: hashing
+    # them was tried and made a 4-ULP change to one input feature move the
+    # output by 0.146 where the shipped code needed 16,384 ULPs to move it by
+    # 0.005, which trades a batch coupling for an input discontinuity. The
+    # indices are integers and do not wobble. Both are precomputed once per
+    # row, so the epoch loop below is otherwise unchanged.
+    var row_max = List[Float32]()
+    var row_key = List[UInt64]()
+    for row in range(rows):
+        var maximum = Float32(0)
+        var key = UInt64(0x9E3779B97F4A7C15)
+        for j in range(k):
+            var edge = row * k + j
+            maximum = max(maximum, weights[edge])
+            key = _splitmix64(key ^ UInt64(indices[edge]))
+        if not isfinite(maximum) or maximum <= Float32(0):
+            raise Error("UMAP transform query has no positive memberships")
+        row_max.append(maximum)
+        row_key.append(key)
     for epoch in range(epochs):
         var alpha = (Float32(0.25) * learning_rate) * Float32(Float64(epochs - epoch) / Float64(epochs))
         var draw_epoch = epoch
@@ -696,14 +723,15 @@ def host_refine_transform(
         for row in range(rows):
             for j in range(k):
                 var edge = row * k + j
-                var scaled = Float64(weights[edge]) / Float64(maximum)
+                var edge_key = row_key[row] ^ (UInt64(j) * UInt64(0x9E3779B97F4A7C15))
+                var scaled = Float64(weights[edge]) / Float64(row_max[row])
                 if Int(Float64(epoch + 1) * scaled) <= Int(Float64(epoch) * scaled):
                     continue
                 var tail = Int(indices[edge])
                 for slot in range(negative_sample_rate + 1):
                     var other = tail
                     if slot > 0:
-                        var counter = seed ^ (UInt64(draw_epoch) * UInt64(0xD1B54A32D192ED03)) ^ (UInt64(edge) * UInt64(0x94D049BB133111EB)) ^ UInt64(slot - 1)
+                        var counter = seed ^ (UInt64(draw_epoch) * UInt64(0xD1B54A32D192ED03)) ^ (edge_key * UInt64(0x94D049BB133111EB)) ^ UInt64(slot - 1)
                         other = Int(_splitmix64(counter) % UInt64(n_train))
                     var distance = Float32(0)
                     for c in range(components):
@@ -762,7 +790,14 @@ def host_umap_transform(
     var initial = host_initialize_transform(indices, weights, training_embedding, n_queries, n_train, k, params.n_components)
     var epochs = max(1, params.n_epochs // 3)
     if params.n_epochs == 0:
-        epochs = 100 if n_queries <= 10000 else 30
+        # BATCH INVARIANCE. This read `100 if n_queries <= 10000 else 30`, so
+        # one extra row in a request of ten thousand cut every other row's
+        # refinement from 100 epochs to 30 and moved a row by 1.36 on a map
+        # whose clusters sit about 11 apart, while the same one-row growth at
+        # 9,999 moved no bit at all. The count no longer reads the request
+        # size. The cost of that is measured, not asserted: see
+        # docs/lanes/LANE_STATUS_lane-umap-batch-fix.md.
+        epochs = 100
     var curve = fit_umap_curve(params.min_dist, params.spread)
     return host_refine_transform(
         initial, training_embedding, indices, weights, n_queries, n_train, k,

@@ -132,6 +132,13 @@ embedding. It retains private training/model copies and requires refitting
 after parameter or mode changes. Query batching may change results. This is
 not yet available in the published 0.5.0 wheel.
 
+lane/umap-batch-fix, 2026-09-16: query batching no longer changes results.
+The sigma floor's mean, the edge-weight scale, the negative-sample counter
+and the refinement epoch count are all per row, so a batch of N returns the
+same bytes as N calls of one row, measured bitwise on the CPU host route and
+on Metal. The paragraph above is kept as the 2026-09-05 record of what was
+true then.
+
 Initial Apple IDENTICAL qualification passed the native transform gate, five
 transform API groups, all seven existing fit API groups with unchanged pinned
 fit layouts, and two held-out quality fixtures. The quality record retains
