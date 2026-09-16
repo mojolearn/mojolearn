@@ -22,6 +22,12 @@ flat at 34 across eleven fits in two processes. Evidence:
 does NOT establish a healthy per-fit figure, because no pre-slowdown GBDT Metal timing is
 committed anywhere in the repo. Do not quote a "healthy" per-fit number in the record or here.
 
+**Do not stop reading here.** A second measurement of that same degraded window, the seven
+identity lanes recorded in it, disagrees with the ratio above: they reran 6 percent faster, not
+2.2x to 2.7x. The two are set side by side under "Two measurements of the same degraded window
+disagree, and nobody has established why" further down this file. Read that section before
+treating either ratio as a statement about the machine's state.
+
 ## Branch and commits
 
 - `release/0.8.6` at the commit that adds this file (with the macOS runtime-environment
