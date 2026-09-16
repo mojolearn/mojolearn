@@ -270,9 +270,10 @@ gradient and the loss and the post-step parameters and both Adam moments
 alike; see [docs/BYTE_LM_CPU_TRAINING.md](docs/BYTE_LM_CPU_TRAINING.md), which
 also states what it does not claim. Both are one model profile at one batch
 shape, and identity is claimed per shape because the weight gradients contract
-over the token count. From 0.8.6 every one of these host bindings ships in both
-wheels (0.8.5 and earlier carry only the byte LM's); each also builds from
-source with `bindings/build_*_host.sh` (a shim over
+over the token count. From 0.8.7 every one of these host bindings ships in both
+wheels (0.8.5 and earlier carry only the byte LM's; 0.8.6 was folded into 0.8.7
+and never published); each also builds from source with
+`bindings/build_*_host.sh` (a shim over
 `bindings/build_host_family.sh <family>`). Every lane not named here has
 no CPU path at all: <!--fact:no_cpu_path-->gradient boosting training outside its declared lanes (CTR categorical features, and sample weights, eval sets and the pointwise searcher outside the gbdt-pointwise-l2-bayesian-eval configuration, among them)<!--/fact-->.
 Run the diagnostic command before depending on a new machine:

@@ -2974,6 +2974,94 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(scores=_h(np.asarray(scores, dtype=np.float64))))
 
 
+class _FoldClf:
+    """A classifier stand-in for `split_descriptor`, which refuses to guess.
+    The descriptor reads only `_estimator_type`; nothing is fitted."""
+    _estimator_type = "classifier"
+
+    def get_params(self, deep=False):
+        return {}
+
+
+@lane("cross-val-folds")
+def _(ml, X, yc, yr, Xh=None):
+    """THE FOLD PARTITION ITSELF, AND WHAT IT FAILS TO PIN
+    (lane/data-ordering-determinism, 2026-09-16).
+
+    Data ordering is link 3 of the reproducible-pipeline chain
+    (docs/lanes/PLAN_cross_vendor_llm.md). For the neural path it is
+    deliberately outside our boundary: the byte-LM trainer does not fetch or
+    reorder a corpus and takes a caller-supplied `data_schedule` descriptor
+    instead. Fold assignment looked like the one piece of data ordering that
+    IS ours end to end, and no lane hashed it.
+
+    It turned out to be ours only halfway, which is the finding this lane
+    carries. `model_selection._default_folds` NEVER READS X. The stratified
+    branch is a function of the label sequence; the KFold branch is a function
+    of `len(y)` alone, its folds being contiguous blocks of positions. So the
+    four fold-index parts below CANNOT MOVE under a row permutation that
+    preserves the label sequence, and the KFold two cannot move under any
+    permutation at all, while the rows the estimator is fitted on change
+    completely. Measured on 2048 rows, both classes 1024, 1010 label runs: a
+    within-class rotation of all 2048 rows moved 0 of 4 index hashes and 4 of
+    4 content hashes. That is why `content` is a part and not a comment.
+
+    `descriptor` is the repair: `model_selection.split_descriptor` hashes X and
+    y IN ARRIVAL ORDER beside the fold assignment, so a reproduction recipe has
+    something that moves when the order does. It is the cross-validation
+    analogue of `data_schedule`, and like `data_schedule` it records what is
+    outside the boundary rather than pretending to control it.
+
+    The `cross-val` lane above hashes the SCORES of a fitted boosting
+    regressor. It would move if the folds moved, so it covers the fold
+    assignment BY ARGUMENT; what it cannot do is say so anywhere a reader can
+    check, because it needs a GPU or a host binding to produce a cell at all
+    and reads REFUSED on a CPU-only install (`gather_rows_bytes`, measured
+    2026-09-16). This lane is pure Python over the labels and the split count:
+    no RNG, no seed, no native call, nothing to key. It produces a cell on
+    EVERY column, including a CPU-only wheel.
+
+    `partition` is a HASHED part and not an assertion, for the tokenizer lane's
+    reason: a raise reads REFUSED, which the owed check does not count as a
+    catch, while a hash that moves is a catch. It is 1 when every fold is
+    nonempty, train and test are disjoint, train is exactly the complement, and
+    the test blocks hold every row exactly once.
+
+    NEGATIVE CONTROL: MOJOLEARN_FOLD_ORDER_SABOTAGE=1 with
+    MOJOLEARN_HOST_ALLOW_SABOTAGE=1 rotates the row-to-fold assignment by one.
+    Every invariant `partition` tests still passes and every fold keeps its
+    size; only the assignment differs. So `partition` stays 1 and the four fold
+    hashes MOVE. MEASURED both ways on 2026-09-16: with the switch defined and
+    never called (the state this lane was found in) the arm is INERT and all
+    nine parts hold still, which is a check that cannot fail; with it wired
+    into `_default_folds` all eight order parts move and `partition` holds."""
+    ms = ml.model_selection
+    n = 2048
+    Xn = np.ascontiguousarray(X[:n])
+    parts, ok = {}, 1
+    for tag, labels, clf in (("strat", np.ascontiguousarray(yc[:n]).tolist(), True),
+                             ("kfold", np.ascontiguousarray(yr[:n]).tolist(), False)):
+        for splits in (3, 5):
+            folds = list(ms._default_folds(labels, splits, clf))
+            train = [np.asarray(a, dtype=np.int64) for a, _ in folds]
+            test = [np.asarray(b, dtype=np.int64) for _, b in folds]
+            parts[f"{tag}{splits}"] = _h(*(train + test))
+            # WHAT THE INDEX HASH MISSES: the rows themselves, in the order the
+            # estimator is handed them.
+            parts[f"{tag}{splits}content"] = _h(*[Xn[b] for b in test])
+            if (len(folds) != splits
+                    or any(a.size == 0 or b.size == 0 for a, b in zip(train, test))
+                    or any(np.intersect1d(a, b).size for a, b in zip(train, test))
+                    or any(a.size + b.size != n for a, b in zip(train, test))
+                    or not np.array_equal(np.sort(np.concatenate(test)),
+                                          np.arange(n, dtype=np.int64))):
+                ok = 0
+    parts["partition"] = _h(np.int64(ok))
+    d = ms.split_descriptor(Xn, np.ascontiguousarray(yc[:n]), estimator=_FoldClf(), cv=5)
+    parts["descriptor"] = _h(np.frombuffer(
+        "|".join(f"{k}={d[k]}" for k in sorted(d)).encode("ascii"), dtype=np.uint8))
+    return _fit(parts)
+
 
 # ---------------------------------------------------------------- lanes (2026-09-14 evening, workstream D, the doors)
 # The eight families that had oracles and no door (the claim-surface census,
@@ -5158,6 +5246,10 @@ _batch_decl("n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measur
             "per-sample silhouette_samples is asked on metrics-classification)", "metrics")
 _batch_decl(_batch_silhouette_chunks, "metrics-classification")
 _batch_decl(_batch_cross_val, "cross-val")
+# The fold PARTITION is metadata, not an inference call: the lane fits nothing
+# and asks nothing for a row's answer, so there is no batch axis to vary
+# (lane/data-ordering-determinism, 2026-09-16).
+_batch_decl("n/a:function", "cross-val-folds")
 _batch_decl(_batch_bootstrap_lane, "bootstrap")
 _batch_decl(_batch_permutation_lane, "permutation-test")
 _batch_decl("n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form "

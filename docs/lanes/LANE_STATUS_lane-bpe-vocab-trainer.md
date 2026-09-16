@@ -53,7 +53,12 @@ and nothing is owed to a GPU record. The claim is:
 > The same corpus and config produce the same vocabulary bytes on any machine
 > and architecture.
 
-**Owed:** the x86_64 leg. Measured on arm64 only; nothing was rented.
+**Owed:** the x86_64 leg. Measured on arm64 only; nothing was rented. It needs
+nothing new built. `tools/tokdet_corpus.py` already cut byte-identical corpus
+shards on Apple M4 arm64 and on x86_64 Linux from the same R2 object, and
+`tools/runpod_cpu_leg.sh --lane tokdet` is the rented-CPU path that carried
+`lane/tokenizer-trainer-determinism`'s own cross-architecture leg. Ask before
+renting.
 
 ## Evidence, in one line each
 
@@ -83,6 +88,22 @@ Face BPE already had it, in the configuration that was measured. What it buys
 is that the property is **ours by construction and verified in our own
 harness**, rather than inherited and hoped for. The next two phases are where
 the differentiator actually lives.
+
+**That qualifier does more work than it looks like, and it has now been
+replicated independently.** `lane/tokenizer-trainer-determinism` spent a day
+and a rented CPU pod measuring the ecosystem trainers and recommended **pinning
+Hugging Face BPE instead of building this**. It withdrew that recommendation on
+2026-09-16 after moving the one axis it had not moved, the trainer's own
+configuration. `tools/tokdet_prefix_config.py`, eight fresh processes per arm at
+one core: plain `BpeTrainer` gives **1** distinct vocabulary, `BpeTrainer` with
+`continuing_subword_prefix="##"` gives **8**, `WordPieceTrainer` gives **8**.
+The plain arm is the fail-first control, so the corpus is not the cause. The
+vocabularies genuinely disagree rather than being renumbered (6 to 8 tokens in
+one and not the other, merges differing as a set, `buil` encoding as `buil` in
+one run and `bu ##i ##l` in the other). That is a second, corpus-independent
+confirmation of the `tokenize_words` hash-order finding above, reached without
+reading the Rust. The withdrawn argument and what survives it are in
+`bench/results/tokenizer_determinism/README.md`.
 
 **One real catch, and it is the reason `n_ties_broken` is carried out of the
 trainer and asserted non-zero.** The sabotage reverses the tie-break and
