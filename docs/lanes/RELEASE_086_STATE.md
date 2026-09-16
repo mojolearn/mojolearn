@@ -213,6 +213,39 @@ $37.14), VM 34c731dc deleted and verified gone (HTTP 204 then GET 404). Evidence
 Legs rent only from a CLEAN checkout: both runners refuse a dirty tree, so commit state-file
 edits before renting.
 
+## In flight at 2026-09-15 20:13 EDT
+
+Four jobs at once, one GPU box per vendor. The CPU pod holds no GPU, so it does not count
+against that rule.
+
+| job | box | started | bound | output |
+|---|---|---|---|---|
+| AMD leg 2 | Hot Aisle 1x MI300X 8-core, VM 20c7ec81 | 20:00 | 3221 s | `bench/results/identity_break/2026-09-16_release-0.8.6/amd-leg-2` |
+| NVIDIA leg 1 | DigitalOcean H100 `gpu-h100x1-80gb` nyc2, droplet 600855289 | 20:03 | 3021 s | the same directory, `nvidia-leg-1` |
+| Apple chunks | this Mac under the Metal lock, one process per chunk | 20:04 | none | `~/mojolearn-evidence/release-0.8.6/apple-record/` |
+| CPU column | RunPod CPU pod zz5ylla3sgkejs, 8 vCPU, $0.24/h, 75 minute lease | 20:13 | 3000 s | `scratchpad/rel086/cpu-column` |
+
+AMD leg 2 skips the 62 lanes leg 1 recorded. NVIDIA leg 1 has all 192 owed. Hot Aisle balance
+read $36.65 before AMD leg 2 (floor 500 cents) against 299 cents an hour for the VM, so the
+leg cannot exceed it.
+
+**The fourth column.** The diff wants a CPU column at the wheel's build commit, and the last
+record shipped only the three GPU columns, so this release takes one. It comes from the same
+final wheel installed from R2, on a box with no GPU, over the 154 lanes that
+`python/mojolearn/host_surface.py --record-covered-lanes` names. The other 38 harness lanes
+have no CPU training path, which is why the four column diff is scoped to those 154 (the
+gate's own diff scopes the same way). New scripts beside the leg scripts:
+`scripts/cpu_record_body.template.sh` and `scripts/make_cpu_record_body.sh`. The body refuses
+unless the installed package reads back `vendor() == cpu`, runs the lanes as 8 sharded
+processes through `tools/cpu_identity_gate_check.py run-column` (each shard is the venv's
+python running the checkout harness, which the body proves byte equal to the wheel's
+`_identity_break.py`, and run-column merges the parts itself), then applies the gate's own
+`column` judgement to the merged JSON.
+
+Local `release/0.8.6` sat at db9047b9f while this work was pushed to `origin/release/0.8.6`
+from the branch `fix/release-post-record-allowlist`. The local branch is now fast-forwarded to
+7e23bc670, so the two agree again.
+
 ## Pending steps, in order
 
 1. DONE: byte compare of the 15 host bindings across the three Linux sets at db9047b9f
