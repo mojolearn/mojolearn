@@ -67,9 +67,55 @@ finds `kpss_test` refusing on their laptop reasonably concludes it is broken.
 sabotage build of the shipped binding is refused outside the gate whichever arm
 was raised.
 
-**Evidence: PENDING the prover run** (section 7). The functions must be seen
-refusing before the binding exists and running after, and their lanes must read
-IDENTICAL against the three GPU columns and DIVERGENT under sabotage.
+**Evidence, measured 2026-09-16.** The functions were seen refusing before the
+bindings existed and running after, and their lanes read IDENTICAL against the
+three GPU columns.
+
+BEFORE, on a CPU-only install whose host directory held neither binding (the
+refusal has to be the BINDING's, so the probe treats anything but
+ImportError/NotImplementedError as a wrong-reason failure):
+
+    resample.bootstrap               refused (ImportError): no CPU implementation of
+                                     _mojolearn_resample.resample_numeric_mode yet
+    resample.permutation_test        refused (ImportError): same
+    resample.monte_carlo_integrate   refused (ImportError): same
+    kpss_test                        refused (ImportError): no CPU implementation of
+                                     _mojolearn_tsa.kpss_test yet
+    wrong-reason failures: 0
+
+AFTER, the same four calls with the two bindings built:
+
+    resample.bootstrap               RAN -> BootstrapResult
+    resample.permutation_test        RAN -> PermutationTestResult
+    resample.monte_carlo_integrate   RAN -> MonteCarloResult
+    kpss_test                        RAN -> Array(shape=(1,), dtype='<u1')
+    wrong-reason failures: 0
+
+IDENTITY, the four lanes at 9 fixtures and 2 repeats, diffed against the three
+GPU columns with `--require-columns 4`:
+
+    summary (train):       IDENTICAL=36        (4 lanes x 9 fixtures, every one)
+    summary (infer/model): N/A=72              (functions; no fitted model to save)
+    summary (batch):       IDENTICAL=9, N/A=9, OWED=18
+    require-columns 4 over [bootstrap, kpss, monte-carlo, permutation-test]: OK (18 OWED)
+
+0 DIVERGENT and 0 REQUIRE FAIL. The `tsa` reference binding also compiled
+cleanly into a throwaway directory, which is what proves the 76-line move of
+`kpss_test_binding` into the shared module did not break the binding that keeps
+the fit.
+
+SABOTAGE, the same four lanes against a host set built with
+`-D MOJOLEARN_HOST_SABOTAGE=1`:
+
+    summary (train):       DIVERGENT=36        (every cell moved)
+    summary (infer/model): N/A=72
+    summary (batch):       DIVERGENT=27, N/A=9
+
+**Not one cell stayed IDENTICAL.** The run was bound to the sabotage binaries
+by SHA-256, including the newly built `_mojolearn_resample_host` and
+`_mojolearn_forecast_host` that the exposure depends on, so the movement is the
+sabotage arithmetic and not a mis-bound directory. Unlike the dbscan train
+cells in section 4, these four have no inert corner.
 
 ## 3. Fixed: a verification that could not fail
 
@@ -154,6 +200,70 @@ that was my flag, not arithmetic. Second, a re-run of mine failed outright
 because zsh does not word-split `$GPUCOLS` and it tried to open all three
 column paths as one filename. The authoritative numbers above come from the
 chain, which runs under bash.
+
+### The sabotage, and where it is inert
+
+The same 27 lanes were re-run against a host set built with
+`-D MOJOLEARN_HOST_SABOTAGE=1` and diffed against the production column.
+
+    summary (train):        DIVERGENT=228, IDENTICAL=15
+    summary (infer/model):  DIVERGENT=372, IDENTICAL=51, N/A=63
+    summary (batch):        DIVERGENT=225, N/A=18
+
+**The control was proven real before it was relied on**, because a negative
+control that fails for the wrong reason is worse than none. Production and
+sabotage binaries differ byte for byte for all seven families; production reads
+back `sabotage=False` and sabotage `True`; loading a sabotage binding without
+`MOJOLEARN_HOST_ALLOW_SABOTAGE=1` is refused by name, watched firing; and the
+sabotage run's own JSON records all seven bindings by SHA-256, every one
+matching the sabotage set rather than production.
+
+**228 of 243 train cells moved, and infer and batch moved on every lane.** The
+15 that did not are worth stating plainly rather than rounding away:
+
+- **`kmeans-cosine`, all nine fixtures.** Correct by construction, not a gap.
+  It is the declared refusal lane: the fit refuses and the refusal sentence IS
+  its cell (`_batch_decl("n/a:fit-refused", "kmeans-cosine")`), so no arithmetic
+  runs and no sabotage could move it.
+- **Six dbscan-family train cells**: `dbscan` on hashed, wide and negative,
+  `dbscan-brute-l1` on wide, `dbscan-weighted` on hashed and wide. **On these
+  the negative control does not fail, so it demonstrates nothing there.**
+
+  The cause is the fixture, not a gap in the sabotage arm. The dbscan train
+  cell hashes `labels_` alone, and labels are integers, so a value perturbation
+  can only move the cell if it flips a label. Fitting the lane's own
+  configuration (`eps=0.9, min_samples=5` over `X[:6000, :4]`) shows those
+  fixtures are degenerate or nearly so:
+
+      base       2 labels   noise 77, cluster 5923     -> moved under sabotage
+      wide       1 label    all 6000 in one cluster    -> inert
+      hashed     1 label    all 6000 in one cluster    -> inert
+      negative   2 labels   noise 5, cluster 5995      -> inert
+
+  `wide` and `hashed` put every row in one cluster, so there is no label left
+  to flip; `negative` leaves five noise points out of 6000. That is why five of
+  the six cells share one train hash across different lanes and fixtures.
+
+  A correction to my own work, because the first attempt at this reached the
+  wrong answer: I tried to confirm degeneracy by hashing candidate label
+  vectors and comparing against `d17808b4b9261d5d`, and reported no match. That
+  comparison was at the wrong level. `d17808b4b9261d5d` is the TRAIN CELL hash,
+  which is a hash of the dict holding the labels hash; the labels hash is
+  `1f6fbd85ac2efbda`, and my "all one cluster, int32" candidate produced exactly
+  that. The hypothesis was right and my check was wrong.
+
+  This does not sink the dbscan lanes: their `infer` cells moved 9/9 and their
+  `batch` cells moved 9/9, so the sabotage does reach their arithmetic. What is
+  insensitive is the train part on fixtures whose clustering is degenerate. If
+  dbscan is promoted, that limit should be recorded with it, and a fixture that
+  actually produces several clusters would be the way to make the train cell
+  carry weight.
+
+  This does not sink the dbscan lanes: their `infer` cells moved 9/9 and their
+  `batch` cells moved 9/9, so the sabotage does reach their arithmetic. It is
+  the train part on those fixtures that is insensitive. Before dbscan is
+  promoted, either the cause should be pinned down or the train part's
+  insensitivity recorded as a known limit of that cell.
 
 **Two of my own stated criteria were wrong and a check caught each.** Both
 corrections are now written into the file:
@@ -242,9 +352,18 @@ was watched firing).
 - `C_diff_gpu.log`, `C_diff_gpu_owed.log`, `C_owed_cells.json` — candidates vs
   the three GPU columns, `--require-columns 4`: **0 DIVERGENT, train
   IDENTICAL=270, 225 OWED**, the only train shortfall being `svc-poly`.
-- `D_sab_run.log`, `E_diff_sab.log` — **PENDING**: the same lanes under sabotage.
-- `F_exposed_run.log`, `G_exposed_diff.log` — **PENDING**: kpss, bootstrap, permutation-test, monte-carlo vs the GPU columns.
-- `H_exposed_sab.log`, `I_exposed_sabdiff.log` — **PENDING**: those four under sabotage.
+- `D_sab_run.log`, `E_diff_sab.log`, `cpu-candidates-sab.json` — the same 27
+  lanes under the sabotage host set: **228 of 243 train cells moved**, and
+  infer and batch moved on every lane. See "the sabotage, and where it is
+  inert" below.
+- `F_exposed_run.log`, `G_exposed_diff.log`, `G_owed.json`, `cpu-exposed.json`
+  — kpss, bootstrap, permutation-test and monte-carlo vs the three GPU
+  columns: **train IDENTICAL=36 of 36, 0 DIVERGENT, `require-columns 4 ... OK
+  (18 OWED)`**.
+- `H_exposed_sab.log`, `I_exposed_sabdiff.log`, `cpu-exposed-sab.json` — those
+  four under sabotage: **train DIVERGENT=36 of 36, batch DIVERGENT=27, and not
+  one cell unchanged**. The sabotage run was bound to the sabotage binaries by
+  SHA-256, the newly built resample and forecast ones included.
 
 All under `~/mojolearn-evidence/expose-inference/` (outside the repo).
 
@@ -300,6 +419,11 @@ then re-run `verify --all --full` and the three gates.
 - [x] **fixed** the false VERIFIED, with the new test watched failing first
 - [x] 30 promotable lanes measured, with two of my own criteria corrected
 - [x] sabotage controls proven real before being relied on
-- [ ] the exposure and candidate proofs (running; section 7 placeholders)
+- [x] the exposure proof: refused before, ran after, IDENTICAL x4 on 36 of 36
+      train cells, and DIVERGENT on 36 of 36 under sabotage
+- [x] the candidate proof: 0 DIVERGENT, 26 of 27 IDENTICAL x4 on train
+- [x] pinned down the six sabotage-insensitive dbscan train cells: degenerate
+      clusterings (wide and hashed put all 6000 rows in one cluster), and a
+      correction to my own first, wrong diagnosis of them
 - [ ] **HELD**: promote once `FIXTURE_SHRINK_SCOPE.md` is published
 - [ ] a GPU recording for dbscan, agglomerative and spectral predict
