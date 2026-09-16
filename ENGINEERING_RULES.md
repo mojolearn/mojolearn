@@ -114,8 +114,56 @@ claim we cannot publish is a liability. So a fast tier ships only where it has
 a measured win over the opponent's own CPU, and today that is trees on Apple
 silicon. Tree fitting calls no BLAS anywhere (histogram building and split
 finding are scatter-gather over integers), so the opponent gets nothing from
-Accelerate's AMX coprocessor, and ExtraTrees measured 1.25-1.61x scikit-learn
-on ALL TEN cores at covtype 581k.
+Accelerate's AMX coprocessor, while the classical families' inner loop IS a
+BLAS call.
+
+THE APPLE RATIO THAT USED TO CLOSE THIS PARAGRAPH IS WITHDRAWN AND NOT
+REPLACED (2026-09-16, lane/metal-trees-visibility). It also stood in README.md,
+which is the PyPI long description, so it was public. Five separate things were
+wrong with it and each one is a way to write a bad number.
+
+* It was a SPLICE. Its source,
+  `bench/results/WINDOW_2026-08-22_extratrees-batched.md` (Apple M4, covtype
+  581,012 rows, scikit-learn 1.9.0 at `n_jobs=-1`, arms alternated inside one
+  process), reports 1.25-1.36x at 10 trees and 1.53-1.61x at sklearn's default
+  100 trees. The published range took the bottom of one row and the top of the
+  other, so the interval it stated was never measured.
+* It MIXED CONVENTIONS with the rest of the repository. That window reports
+  speedup, theirs over ours, where above 1.0 we are faster.
+  `bench/OPPONENT_REFERENCE.md` reports ours over theirs, where above 1.0 we
+  are SLOWER, and its own ET rows read 1.53x and 1.63x. The same digits mean
+  opposite things in two files here, which is why a reader who knows the
+  opponent table reads that README sentence as a loss stated as a win.
+* Its source was DELETED on 2026-09-04 (`e08cda5bc`), six days before the
+  sentence was written here on 2026-09-10 (`92928a2cd`), and it was already
+  superseded when it was written. The same file's own later addendum restates
+  covtype as 1.6-1.8x, and three later Apple covtype windows read 1.04x
+  slower, 1.13x slower and 1.12x faster.
+* It was NOT QUOTABLE in the first place. `bench/OPPONENT_REFERENCE.md` has a
+  section headed "Rows never to quote" and two of its three entries are
+  everything under `bench/results/fast_speed/mac-*` and **our own FAST or
+  DETERMINISTIC arms, on any vendor**.
+* It was NOT A QUALIFYING DATASET. covtype at 581k is neither of section 9's
+  two datasets and sits below the million-row floor.
+
+What the qualifying datasets actually say, ours over theirs where lower is
+better, from the leg-1 and leg-2 rows of `bench/OPPONENT_REFERENCE.md`. Extra
+trees is 1.53x of scikit-learn on taxi and 1.63x on Istella-S, which is
+SLOWER, and its fast arm returns the identical arm's hash in the same time, so
+extra trees has the WEAKEST speed standing of the three tree families, not the
+strongest. Random forest is 0.29x and 0.14x, a real win. Symmetric trees are
+0.44x and 0.30x of CatBoost, but XGBoost has no oblivious grower so the second
+opponent cannot be checked at all, and on the depthwise and lossguide policies
+XGBoost is ahead of us.
+
+THE RULE ITSELF IS UNCHANGED. Fast and deterministic still ship for the three
+tree bindings and nothing else. What changes is what the rule rests on. It
+rests on the structural argument above and on the shipping decision, NOT on a
+publishable Apple ratio, because there is not one. The rule's "measured win"
+clause is therefore UNSATISFIED on Apple as of 2026-09-16. That is a gap to
+close with a measurement, not a clause to soften, and a qualifying Apple run on
+taxi or Istella-S is owed before any tree speed claim goes back into README.md
+or onto PyPI.
 
 Nothing else has that argument. Measured on an M4, 4 performance cores,
 10-core GPU, 120 GB/s: Accelerate reaches 1438 GFLOP/s of fp32 GEMM on four
