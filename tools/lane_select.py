@@ -108,6 +108,12 @@ SELECTION_MACHINERY = (
     os.path.join("tools", "lane_select.py"),
     os.path.join("tools", "verify_lanes.py"),
     os.path.join("tools", "test_lane_select.py"),
+    os.path.join("tools", "identity_iterate.py"),
+    os.path.join("tools", "mac_slot.py"),
+    os.path.join("tools", "lane_applicability.py"),
+    os.path.join("tools", "test_algorithm_scope.py"),
+    os.path.join("tools", "test_mac_slot.py"),
+    os.path.join("tools", "test_identity_runtime.py"),
 )
 
 _BINDING_RE = re.compile(r"_mojolearn[a-z0-9_]*")

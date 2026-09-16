@@ -16,6 +16,7 @@ from pathlib import Path
 import subprocess
 import signal
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -79,12 +80,14 @@ def cpu_package(out, host_dir, source=None):
     return root, host_dir
 
 
-def command(python, lane, fixture, record, timeout, mode, resume, group="all", wait_timeout=60):
+def command(python, lane, fixture, record, timeout, mode, resume, group="all", wait_timeout=60, deadline=None):
     cmd = [python, str(ROOT / "tools/mac_slot.py"), "--timeout", str(timeout),
            "--wait-timeout", str(wait_timeout),
            "--timing-json", str(record.with_suffix(".timing.json")), "run" if mode == "cpu" else mode,
            python, "-u", str(ROOT / "tools/identity_break.py"), "--lanes", lane,
            "--fixtures", fixture, "--repeats", "2", "--fail-on-refused", "--json", str(record)]
+    if deadline is not None:
+        cmd[2:2] = ["--deadline", str(deadline)]
     if mode == "cpu":
         cmd.append("--require-cpu")
     if group in ("core", "rlpair"):
@@ -111,6 +114,7 @@ def run_job(cmd, env):
 
 
 def main(argv=None):
+    started = time.monotonic()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("paths", nargs="*", help="changed source paths; otherwise diff --base plus local changes")
     ap.add_argument("--base", default="HEAD^")
@@ -121,6 +125,7 @@ def main(argv=None):
     ap.add_argument("--out", type=Path)
     ap.add_argument("--plan", action="store_true", help="print selection without taking any slot")
     ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--budget", type=float, default=300, help="total seconds including planning, queueing and execution (default 300)")
     ap.add_argument("--timeout", type=float, default=60, help="maximum seconds per job, excluding wait (default 60)")
     ap.add_argument("--mode", choices=("cpu", "metal", "run"), default="cpu")
     ap.add_argument("--metal-diagnostic", action="store_true",
@@ -131,7 +136,7 @@ def main(argv=None):
                     help="core = training/inference/save/reload; all runs separate bounded jobs")
     ap.add_argument("--full-selection", action="store_true", help="explicitly run a selector fallback; Apple release policy still applies")
     args = ap.parse_args(argv)
-    if any(not math.isfinite(v) or v <= 0 for v in (args.timeout, args.wait_timeout)):
+    if any(not math.isfinite(v) or v <= 0 for v in (args.timeout, args.wait_timeout, args.budget)):
         ap.error("timeouts must be finite and positive")
     import identity_break
     if args.exhaustive and args.fixtures is not None:
@@ -169,7 +174,7 @@ def main(argv=None):
             ap.error(f"{lane} does not declare an rlpair probe")
         jobs.extend(dict(lane=lane, fixture=fixture, group=group) for fixture in fixtures for group in groups)
     selected.update(jobs=jobs, job_count=len(jobs), fit_count=2 * len(jobs),
-                    mode=args.mode, timeout=args.timeout, wait_timeout=args.wait_timeout)
+                    mode=args.mode, timeout=args.timeout, wait_timeout=args.wait_timeout, budget=args.budget)
 
     print(json.dumps(selected, indent=2), flush=True)
     if args.plan:
@@ -193,6 +198,10 @@ def main(argv=None):
         return 0
     if not args.out:
         ap.error("--out is required for checkpointed execution")
+    for job in jobs:
+        record = args.out.resolve() / "{lane}--{fixture}--{group}.json".format(**job)
+        if record.exists() and not args.resume:
+            ap.error(f"{record} exists; use --resume or a new output directory")
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "selection.json").write_text(json.dumps(selected, indent=2) + "\n")
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
@@ -206,16 +215,34 @@ def main(argv=None):
             ap.error(str(exc))
         env["PYTHONPATH"] = str(package_root) + os.pathsep + env.get("PYTHONPATH", "")
         env["MOJOLEARN_HOST_DIR"] = str(host)
-    for job in jobs:
+    deadline = started + args.budget
+    completed = []
+    def report(status, pending, failed=None):
+        result = dict(status=status, complete=status == "passed", budget=args.budget,
+                      elapsed_seconds=time.monotonic() - started,
+                      completed=completed, pending=pending, failed=failed)
+        path = args.out / "run-summary.json"
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(result, indent=2) + "\n")
+        temporary.replace(path)
+    report("running", jobs)
+    for index, job in enumerate(jobs):
+        if time.monotonic() >= deadline:
+            report("budget-exhausted", jobs[index:])
+            print(f"Total run budget exhausted; {len(jobs) - index} jobs remain. See run-summary.json.", flush=True)
+            return 124
         lane, fixture, group = job["lane"], job["fixture"], job["group"]
         record = args.out.resolve() / f"{lane}--{fixture}--{group}.json"
-        if record.exists() and not args.resume:
-            ap.error(f"{record} exists; use --resume or a new output directory")
         print(f"# QUEUE {lane}/{fixture}/{group}", flush=True)
         code = run_job(command(sys.executable, lane, fixture, record,
-                               args.timeout, args.mode, args.resume, group, args.wait_timeout), env)
+                               args.timeout, args.mode, args.resume, group, args.wait_timeout, deadline), env)
         if code:
+            report("budget-exhausted" if code == 124 and time.monotonic() >= deadline else "failed",
+                   jobs[index + 1:], dict(job, exit_code=code))
             return code
+        completed.append(job)
+        report("running", jobs[index + 1:])
+    report("passed", [])
     print("Selected iteration cells passed. This is not a full release qualification.")
     return 0
 

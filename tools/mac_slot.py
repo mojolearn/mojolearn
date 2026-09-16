@@ -185,13 +185,14 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--timeout", type=float, default=0, help="execution seconds, excluding queue wait; 0 is unlimited")
     ap.add_argument("--wait-timeout", type=float, default=0)
+    ap.add_argument("--deadline", type=float, default=0, help="shared monotonic deadline; 0 disables it")
     ap.add_argument("--poll", type=float, default=0.25)
     ap.add_argument("--timing-json")
     ap.add_argument("mode", choices=("run", "metal", "status"))
     ap.add_argument("command", nargs=argparse.REMAINDER)
     args = ap.parse_args(argv)
-    if (any(not math.isfinite(v) for v in (args.timeout, args.wait_timeout, args.poll))
-            or args.timeout < 0 or args.wait_timeout < 0 or args.poll <= 0):
+    if (any(not math.isfinite(v) for v in (args.timeout, args.wait_timeout, args.poll, args.deadline))
+            or args.timeout < 0 or args.wait_timeout < 0 or args.deadline < 0 or args.poll <= 0):
         ap.error("timeouts must be finite and nonnegative and poll must be finite and positive")
     scheduler = Scheduler()
     if args.mode == "status":
@@ -212,29 +213,42 @@ def main(argv=None):
         if args.mode == "metal":
             scheduler.enqueue(args.command)
         last_log = -60.0
-        while not scheduler.attempt(args.mode == "metal", args.command):
-            waited = time.monotonic() - started
+        while True:
+            now = time.monotonic()
+            if args.deadline and now >= args.deadline:
+                print("mac_slot: total run budget exhausted", file=sys.stderr, flush=True)
+                code = 124
+                return code
+            if scheduler.attempt(args.mode == "metal", args.command):
+                break
+            waited = now - started
             if args.wait_timeout and waited >= args.wait_timeout:
                 code = 124
                 return code
             if waited - last_log >= 30:
                 print(f"mac_slot: waiting {waited:.1f}s for {args.mode} capacity", file=sys.stderr, flush=True)
                 last_log = waited
-            time.sleep(args.poll)
+            time.sleep(min(args.poll, max(0, args.deadline - time.monotonic()))
+                       if args.deadline else args.poll)
         admitted = time.monotonic()
         print(f"mac_slot: admitted after {admitted - started:.3f}s", file=sys.stderr, flush=True)
         env = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1",
                    VECLIB_MAXIMUM_THREADS="1", MOJOLEARN_CPU_THREADS="1",
                    MOJOLEARN_COMPILE_JOBS="1", MOJOLEARN_BUILD_JOBS="1",
                    MODULAR_THREAD_BUSY_WAIT_US="0")
+        remaining = args.deadline - time.monotonic() if args.deadline else None
+        if remaining is not None and remaining <= 0:
+            code = 124
+            return code
+        limit = min(args.timeout, remaining) if args.timeout and remaining is not None else (remaining or args.timeout or None)
         child = subprocess.Popen(["nice", "-n", "19", *args.command], env=env, start_new_session=True)
         scheduler.child_started(child.pid)
         try:
-            code = child.wait(timeout=args.timeout or None)
+            code = child.wait(timeout=limit)
             if code < 0:
                 code = 128 - code
         except subprocess.TimeoutExpired:
-            print(f"mac_slot: execution exceeded {args.timeout}s", file=sys.stderr, flush=True)
+            print(f"mac_slot: execution exceeded available budget ({limit}s)", file=sys.stderr, flush=True)
             code = 124
     except KeyboardInterrupt as exc:
         code = 128 + (exc.args[0] if exc.args else signal.SIGINT)

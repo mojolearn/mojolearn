@@ -1649,7 +1649,7 @@ numpy = "*"
 pytest = ">=8"
 
 [feature.test.tasks]
-test-runtime-control = "python3 -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py tools/test_algorithm_scope.py tools/test_cpu_identity_gate.py"
+test-runtime-control = "python3 -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py tools/test_algorithm_scope.py tools/test_cpu_identity_gate.py tools/test_lane_select.py::test_runtime_controls_do_not_trigger_numerical_sweep tools/test_lane_select.py::test_the_selector_is_not_imported_by_what_it_selects"
 test-identity-changed = "python3 tools/identity_iterate.py"
 test-algo = "python3 tools/identity_iterate.py"
 # `pixi run -e test test-python`.

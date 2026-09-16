@@ -121,10 +121,41 @@ def test_concurrent_jobs_never_overlap(env, tmp_path):
         assert p.returncode == 0, (out, err)
 
 
-@pytest.mark.parametrize("flag", ["--timeout", "--wait-timeout", "--poll"])
+@pytest.mark.parametrize("flag", ["--timeout", "--wait-timeout", "--poll", "--deadline"])
 @pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
 def test_nonfinite_limits_refuse_before_scheduler(monkeypatch, flag, value):
     import mac_slot
     monkeypatch.setattr(mac_slot, "Scheduler", lambda: pytest.fail("invalid limit reached scheduler"))
     with pytest.raises(SystemExit):
         mac_slot.main([f"{flag}={value}", "run", "true"])
+
+
+def test_shared_deadline_includes_queue_and_execution(env, tmp_path):
+    owner = Scheduler(env)
+    assert owner.attempt(False, ["owner"])
+    marker = tmp_path / "started"
+    deadline = time.monotonic() + .8
+    p = launch(env, "--deadline", str(deadline), "run", sys.executable, "-c",
+               "import pathlib,time,sys;pathlib.Path(sys.argv[1]).touch();time.sleep(30)", str(marker))
+    try:
+        time.sleep(.2)
+        owner.release()
+        p.communicate(timeout=5)
+        assert marker.exists(), "child never ran; execution budget was not exercised"
+        assert p.returncode == 124
+        assert time.monotonic() < deadline + 2
+        assert not any(Path(env["MOJOLEARN_MAC_SLOT_BASE"]).parent.glob("slot.[0-9]*"))
+    finally:
+        owner.release()
+        if p.poll() is None:
+            p.kill()
+            p.wait()
+
+
+def test_expired_deadline_never_launches(env, tmp_path):
+    marker = tmp_path / "must-not-exist"
+    p = launch(env, "--deadline", str(time.monotonic() - 1), "metal", sys.executable,
+               "-c", "import pathlib,sys;pathlib.Path(sys.argv[1]).touch()", str(marker))
+    p.communicate(timeout=5)
+    assert p.returncode == 124 and not marker.exists()
+    assert not Path(env["MOJOLEARN_METAL_LOCK"]).exists()

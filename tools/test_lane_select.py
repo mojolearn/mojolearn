@@ -1346,3 +1346,11 @@ def test_an_aliased_mojo_import_is_recorded_under_the_name_the_body_uses():
         lanes = rev.get(rel, set())
         assert "umap" in lanes and "par-graph-umap" in lanes, \
             f"{rel} is run by both umap lanes and the map names {sorted(lanes)}"
+
+
+def test_runtime_controls_do_not_trigger_numerical_sweep():
+    paths = ["tools/identity_iterate.py", "tools/mac_slot.py", "tools/lane_applicability.py"]
+    selected = lane_select.select(paths)
+    assert selected["lanes"] == []
+    assert not selected["fallback"]
+    assert not selected["unattributed"]

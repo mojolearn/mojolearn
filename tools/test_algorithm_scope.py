@@ -139,8 +139,38 @@ def test_all_does_not_schedule_inapplicable_batch_job(capsys):
         iterate.main(["--lane", name, "--probe-group", "batch", "--plan"])
 
 
-@pytest.mark.parametrize("flag", ["--timeout", "--wait-timeout"])
+@pytest.mark.parametrize("flag", ["--timeout", "--wait-timeout", "--budget"])
 @pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
 def test_nonfinite_iteration_limits_refuse(flag, value):
     with pytest.raises(SystemExit):
         iterate.main(["--lane", "ridge", f"{flag}={value}", "--plan"])
+
+
+def test_budget_stops_later_jobs_and_reports_unfinished(monkeypatch, tmp_path):
+    import json
+    clock = [100.0]
+    monkeypatch.setattr(iterate.time, "monotonic", lambda: clock[0])
+    calls = []
+    def run(cmd, env):
+        calls.append(cmd)
+        assert float(cmd[cmd.index("--deadline") + 1]) == 101.0
+        clock[0] = 102.0
+        return 0
+    monkeypatch.setattr(iterate, "run_job", run)
+    assert iterate.main(["--lanes", "ridge,kmeans", "--mode", "run", "--budget", "1", "--out", str(tmp_path)]) == 124
+    result = json.loads((tmp_path / "run-summary.json").read_text())
+    assert len(calls) == 1
+    assert not result["complete"] and result["status"] == "budget-exhausted"
+    assert result["completed"][0]["lane"] == "ridge"
+    assert result["pending"][0]["lane"] == "kmeans"
+
+
+def test_failed_job_is_not_reported_as_completed(monkeypatch, tmp_path):
+    import json
+    monkeypatch.setattr(iterate, "run_job", lambda *a: 7)
+    assert iterate.main(["--lanes", "ridge,kmeans", "--mode", "run", "--out", str(tmp_path)]) == 7
+    result = json.loads((tmp_path / "run-summary.json").read_text())
+    assert result["status"] == "failed" and not result["complete"]
+    assert result["completed"] == []
+    assert result["failed"]["exit_code"] == 7
+    assert result["pending"][0]["lane"] == "kmeans"

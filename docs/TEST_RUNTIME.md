@@ -31,7 +31,19 @@ Python sources into the output directory and uses the package's existing
 CPU-only installation route. `identity_break --require-cpu` checks the actual
 backend before fitting. The installed package is untouched.
 
-Each job has a **60-second execution limit and 60-second queue limit**.
+The whole invocation has a **five-minute budget** (`--budget 300`), including
+planning, staging, queueing and execution. Each job also has a **60-second
+execution limit and 60-second queue limit**. The scheduler receives one shared
+monotonic deadline, so entering a new job or moving from queue to execution
+does not reset the total budget. Process cleanup can add a short grace period.
+Planning/staging are charged to the budget; no job starts if they exhaust it.
+
+`run-summary.json` is updated atomically after each job and separates completed,
+failed and pending jobs. Budget exhaustion exits 124 and never reports complete
+coverage. Use `--resume` with the same selection/output to recover matching
+records under a fresh budget; source/protocol provenance checks still apply.
+Longer runs require an explicit larger `--budget`.
+
 `--timeout` and `--wait-timeout` make longer checks explicit. A timeout is a
 failure, never reduced coverage reported as success. Child process groups are
 terminated before leases are released. Results use separate
@@ -134,3 +146,9 @@ Timeouts must be finite; NaN and infinity are rejected before scheduling.
 Apple qualification runs for PyPI updates through the installed-wheel release
 workflow. The full Apple identity matrix is no longer an additional release
 requirement. See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md#5b-apple-qualification-once-per-pypi-update).
+
+Changes to the iteration runner, scheduler and applicability audit are test
+control changes, not numerical changes. The selector no longer widens those
+paths into a full algorithm sweep. Tooling tests still apply; an import guard
+checks that the package and identity harness do not depend on these tools.
+Unknown paths and shared numerical dependencies retain conservative selection.
