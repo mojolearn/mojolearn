@@ -58,6 +58,43 @@ the one stated.
 
 `NOT_IMPLEMENTED.tsv` lists what is deliberately absent.
 
+## The trainer (2026-09-16)
+
+`tokenizer/train/` BUILDS a vocabulary; everything above APPLIES one.
+
+```bash
+mojo run -I . tokenizer/train/train_main.mojo OUT 32000 2 corpus1.txt corpus2.txt
+```
+
+writes `OUT.ranks.tsv` (ours) and `OUT.tokenizer.json` (what Hugging Face
+`tokenizers` loads). From Python,
+`mojolearn.tokenizer.BpeVocabularyTrainer(vocab_size=32000).train(documents)`.
+
+| file | what it holds |
+| --- | --- |
+| `train/bpe_train.mojo` | the merge loop: count adjacent pairs, merge the winner, repeat |
+| `train/emit.mojo` | the two output formats, both hand-rolled so two implementations can agree byte for byte |
+| `train/train_main.mojo` | the command line |
+| `checks/trainer_check.mojo` | THE GATE |
+
+**What the property is.** Vocabulary training is host-only in every library —
+Hugging Face, SentencePiece and tiktoken all train on a CPU, because counting
+and merging is not a matmul workload — so there is no GPU path here and no
+vendor column. The claim is that **the same corpus and config produce the same
+vocabulary bytes on any machine and architecture**, and it rests on four
+things: a total order on the tie-break (highest count, then smallest
+`(left_id, right_id)`), single-threaded counting so there is no reduction
+order to get wrong, selection that never depends on an iteration order, and no
+float anywhere in the selection.
+
+**How it is held.** `pixi run check-bpe-trainer` trains the same corpora in
+Mojo and in an independent Python implementation of the same stated algorithm
+(`python/mojolearn/_bpe_trainer.py`) and requires **identical bytes** in both
+formats. `pixi run check-bpe-trainer-sabotage` reverses the tie-break and must
+FAIL — and the gate also asserts `n_ties_broken > 0`, because a tie-break the
+fixture never reaches cannot be broken and the sabotage would be inert.
+Evidence, per axis, is `bench/results/bpe_trainer/README.md`.
+
 ## The pre-tokenizer, which is where the difficulty is
 
 ```
