@@ -1,0 +1,20 @@
+mac_slot: Metal slot busy (/Users/andrewhendel/CascadeProjects/mojolearn :: bash /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/460f8328-3642-45a3-a14f-579fc7e7363f/scratchpad/mechanism_test.sh); ticket 0, queue 4
+# vendor=apple-m4 commit=4c8f0d46215bc3db80c8fde8e2ca81b661d111ae (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-16 12:33:16  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             |
+|------------------------|------------------|------------------|
+| spectral               | 112c7b0d7556a6ff | 3976be59c005d8f8 |
+| spectral infer         | a7f3488317ff571e | 3a3fc8018ebcbca3 |
+| spectral model         | 3e34622ced4d3c60 | ad1e356159f986fd |
+| spectral batch         | fedcfcc1f97d1520 | fa770a3b846ea54d |
+| spectral-precomputed   | 8df6d51dbff9ddaf | 32ed236da838cb22 |
+| spectral-precomputed infer | bb2835f47f32e74d | 77b660ca4b2a42e2 |
+| spectral-precomputed model | 6b04b89cfa623e45 | ea7aeb5dfe06471c |
+| spectral-precomputed batch | 403839d9afb03ede | eba1461e59f20122 |
+
+cells=4 stable=4 moved=0 refused=0
+infer: stable=4
+model: stable=4
+batch: stable=4
+wrote /Users/andrewhendel/mojolearn-evidence/saved-model-reference-gaps/metal/apple-m4.512.json
