@@ -66,7 +66,8 @@ def _wants_suite(args):
                 or getattr(args, "full", False) or getattr(args, "lanes", "")
                 or getattr(args, "emit_models", None)
                 or getattr(args, "self_test", False)
-                or getattr(args, "cross_check", None))
+                or getattr(args, "cross_check", None)
+                or getattr(args, "compare", None))
 
 
 def _verify_dispatch(args):
@@ -154,6 +155,16 @@ def build_parser():
                         "is refused on Apple by that same rule. --lanes and "
                         "--fixtures widen or narrow any of them. On a CPU-only "
                         "install it says so rather than silently skipping")
+    v.add_argument("--compare", nargs=2, metavar=("A", "B"), default=None,
+                   help="DIFF TWO EVIDENCE DOCUMENTS, with us out of the loop. "
+                        "Two people on different hardware each run "
+                        "`verify --all --json-out mine.json`, swap files, and "
+                        "run this: it compares every cell hash, reports where "
+                        "they agree and differ, shows the two provenance blocks "
+                        "side by side, and says whether the machines were "
+                        "genuinely different. A cell present in only one "
+                        "document is INCOMPARABLE, never a match. Needs no GPU, "
+                        "no bindings and no network")
     v.add_argument("--json-out", dest="json_out", metavar="PATH", default=None,
                    help="with --all: also write the full evidence document "
                         "(per-cell hashes computed here and expected, per-lane "

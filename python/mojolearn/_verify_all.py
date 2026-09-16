@@ -758,6 +758,147 @@ def _cmd_cross_check(args, ml):
     return EXIT_VERIFIED if result["passed"] else EXIT_MISMATCH
 
 
+def compare_documents(a, b, label_a="A", label_b="B"):
+    """Diff two evidence documents: where two machines agree, and where they do not.
+
+    THE POINT IS THAT WE ARE NOT IN THE LOOP. Everything else this command
+    offers still rests on our recorded table being honest. Two strangers, one
+    with a 4090 and one with an M2, can each run `verify --all --json`, swap
+    files, and run this. If the hashes match they have demonstrated the central
+    claim TO EACH OTHER with us entirely absent, which is stronger evidence
+    than anything we can publish about ourselves.
+
+    THREE OUTCOMES, NOT TWO. A cell present in one document and missing from
+    the other is INCOMPARABLE, never an agreement: counting absence as a match
+    is how a comparer ends up unable to fail, and this one exists for
+    adversarial use, so that would be the worst place for it.
+
+    A part both sides record as `n/a` is neither agreement nor difference; it
+    is an absence both agreed on, counted separately.
+    """
+    def cells(doc):
+        out = {}
+        for r in doc.get("cells") or []:
+            key = (r.get("lane"), r.get("fixture"), r.get("part"))
+            out[key] = r.get("value")
+        return out
+
+    ca, cb = cells(a), cells(b)
+    agree, differ, na = [], [], []
+    for key in sorted(set(ca) & set(cb), key=lambda k: tuple("" if x is None else str(x) for x in k)):
+        va_, vb_ = ca[key], cb[key]
+        both_na = (isinstance(va_, str) and va_.startswith("n/a")
+                   and isinstance(vb_, str) and vb_.startswith("n/a"))
+        row = dict(lane=key[0], fixture=key[1], part=key[2], a=va_, b=vb_)
+        if both_na:
+            na.append(row)
+        elif va_ == vb_:
+            agree.append(row)
+        else:
+            differ.append(row)
+    only_a = sorted(set(ca) - set(cb), key=lambda k: tuple("" if x is None else str(x) for x in k))
+    only_b = sorted(set(cb) - set(ca), key=lambda k: tuple("" if x is None else str(x) for x in k))
+
+    da, db = a.get("device") or {}, b.get("device") or {}
+    same_class = da.get("device_class") == db.get("device_class")
+    same_device = (da.get("device"), da.get("cpu_model")) == (db.get("device"), db.get("cpu_model"))
+    prov = dict(
+        a={k: da.get(k) for k in ("mojolearn_version", "commit", "vendor", "device_class",
+                                  "device", "cpu_model", "platform", "python")},
+        b={k: db.get(k) for k in ("mojolearn_version", "commit", "vendor", "device_class",
+                                  "device", "cpu_model", "platform", "python")},
+        same_device_class=same_class, same_device=same_device,
+        bindings_a=[x.get("sha256") for x in (a.get("bindings") or [])],
+        bindings_b=[x.get("sha256") for x in (b.get("bindings") or [])],
+        independent=(not same_device) and (not same_class),
+    )
+
+    if differ:
+        verdict_, code = "MISMATCH", EXIT_MISMATCH
+    elif only_a or only_b:
+        verdict_, code = "INCOMPLETE", EXIT_CANNOT_RUN
+    elif agree:
+        verdict_, code = "AGREE", EXIT_VERIFIED
+    else:
+        verdict_, code = "NOTHING COMPARED", EXIT_CANNOT_RUN
+    return dict(format="mojolearn.verify-compare.v1", verdict=verdict_, exit=code,
+                labels=dict(a=label_a, b=label_b), provenance=prov,
+                agree=len(agree), differ=len(differ), n_a=len(na),
+                only_in_a=[list(k) for k in only_a], only_in_b=[list(k) for k in only_b],
+                differing=differ, agreeing=agree)
+
+
+def format_compare(r):
+    p, la, lb = r["provenance"], r["labels"]["a"], r["labels"]["b"]
+    lines = ["# python -m mojolearn verify --compare", ""]
+    lines.append(f"  {'':<22} {la:<34} {lb}")
+    for key, name in (("mojolearn_version", "version"), ("commit", "commit"),
+                      ("vendor", "vendor"), ("device_class", "class"),
+                      ("device", "device"), ("cpu_model", "cpu"), ("python", "python")):
+        av, bv = str(p["a"].get(key)), str(p["b"].get(key))
+        mark = "" if av == bv else "   <- differs"
+        lines.append(f"  {name:<22} {av[:34]:<34} {bv[:34]}{mark}")
+    lines.append(f"  {'bindings hashed':<22} {len(p['bindings_a']):<34} {len(p['bindings_b'])}")
+    lines.append("")
+    if p["independent"]:
+        lines.append("These documents come from DIFFERENT hardware classes, which is what makes")
+        lines.append("this worth doing: agreement here is two independent machines reaching the")
+        lines.append("same bits.")
+    elif p["same_device"]:
+        lines.append("WARNING: both documents describe the SAME device. Agreement then shows")
+        lines.append("repeatability, not cross-hardware identity, and proves much less.")
+    else:
+        lines.append("NOTE: these documents share a device class. Agreement is weaker evidence")
+        lines.append("than two genuinely different vendors would give.")
+    lines.append("")
+    lines.append(f"  agree {r['agree']}   differ {r['differ']}   n/a both {r['n_a']}   "
+                 f"only in {la}: {len(r['only_in_a'])}   only in {lb}: {len(r['only_in_b'])}")
+    if r["differing"]:
+        lines.append("")
+        lines.append(f"DIFFERING CELLS ({len(r['differing'])}):")
+        for d in r["differing"][:40]:
+            lines.append(f"  {d['lane']}/{d['fixture']} {d['part']}: {la}={d['a']}  {lb}={d['b']}")
+    for label, keys in ((la, r["only_in_a"]), (lb, r["only_in_b"])):
+        if keys:
+            lines.append("")
+            lines.append(f"ONLY IN {label} ({len(keys)}), not comparable:")
+            for k in keys[:20]:
+                lines.append(f"  {k[0]}/{k[1]} {k[2]}")
+    lines.append("")
+    if r["verdict"] == "AGREE":
+        lines.append(f"RESULT: AGREE. {r['agree']} cell parts match across both documents, none")
+        lines.append("differ, and none is present in only one. Neither machine trusted the other,")
+        lines.append("and neither had to trust us.")
+    elif r["verdict"] == "MISMATCH":
+        lines.append(f"RESULT: MISMATCH. {r['differ']} cell parts differ; they are named above.")
+    elif r["verdict"] == "NOTHING COMPARED":
+        lines.append("RESULT: NOTHING COMPARED. The two documents share no cell, so there is")
+        lines.append("nothing to agree or disagree about.")
+    else:
+        lines.append(f"RESULT: INCOMPLETE. No cell differs, but {len(r['only_in_a'])} + "
+                     f"{len(r['only_in_b'])} cell parts appear in only one document,")
+        lines.append("so the two runs did not cover the same ground. Absence is not agreement.")
+    return "\n".join(lines)
+
+
+def _cmd_compare(args):
+    """`verify --compare A B`: diff two evidence documents. No GPU, no bindings."""
+    pa, pb = args.compare
+    docs = []
+    for p in (pa, pb):
+        try:
+            with open(p, "r", encoding="utf-8") as fh:
+                docs.append(json.load(fh))
+        except (OSError, ValueError) as exc:
+            return _finish(args, EXIT_USAGE, "USAGE", f"cannot read {p}: {exc}")
+    r = compare_documents(docs[0], docs[1], os.path.basename(pa), os.path.basename(pb))
+    if getattr(args, "json", False):
+        _emit(json.dumps(r, indent=1, sort_keys=True))
+    else:
+        _emit(format_compare(r))
+    return r["exit"]
+
+
 def detail_line(counts):
     """The sentence under the verdict. It leads with how much of the run was
     actually checked, so `verified 44 of 332 cell parts` cannot be misread as
@@ -874,6 +1015,12 @@ def cmd_verify_all(args):
     started = time.time()
     json_out = getattr(args, "json", False)
     log = (lambda s: _emit(s, sys.stderr)) if json_out else _emit
+    # BEFORE ANY IMPORT OR TIER CHECK: comparing two evidence documents is a
+    # pure function over two JSON files. It needs no GPU, no bindings and no
+    # numeric mode, so it must not be gated behind them -- the whole point is
+    # that a third party can run it on a machine that has none of ours.
+    if getattr(args, "compare", None):
+        return _cmd_compare(args)
     try:
         depth = _depth(args)
     except ValueError as exc:

@@ -143,6 +143,36 @@ than leaving it as something I once observed:
 - a `batch` `n/a` is respected, not counted as agreement;
 - the default scope stays inside `APPLE_LANE_CAP`.
 
+## `verify --compare`: two strangers, with us out of the loop
+
+The honest gap in every other check is that we published the reference table.
+Nobody outside has rerun our lanes on their own hardware, and we cannot
+manufacture that. But the evidence document makes it unnecessary: two people on
+different hardware each run `verify --all --json-out mine.json`, swap files,
+and run `verify --compare`. If the hashes match they have demonstrated the
+claim **to each other**, with us absent. That is stronger than anything we can
+publish about ourselves, and it cost one pure function over two JSON files —
+no GPU, no bindings, no network.
+
+**Three outcomes, not two.** A cell present in one document and missing from
+the other is INCOMPARABLE, never an agreement. Counting absence as a match is
+exactly how a comparer becomes unable to fail, and this one exists for
+adversarial use, so that is the worst possible place for it. A part both sides
+record as `n/a` is an absence they agreed on, counted separately.
+
+**Measured, all four behaviours seen rather than assumed:**
+
+    two vendors, same hashes   -> AGREE, exit 0, "two independent machines"
+    one cell altered           -> MISMATCH, exit 1, names ols/base infer and BOTH values
+    a cell in only one doc     -> INCOMPLETE, exit 4, "Absence is not agreement"
+    both docs the same device  -> AGREE but WARNS it shows repeatability, not identity
+
+It also runs with no numeric mode, no host bindings and no GPU set, which is
+the point: a third party has none of ours. `--compare` dispatches before the
+import and tier checks for that reason.
+
+Five tests encode those properties.
+
 ## Owed
 
 - [ ] A run on a **properly built GPU install**, where far more than 5 of 24

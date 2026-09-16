@@ -169,6 +169,39 @@ same rule. `--lanes` and `--fixtures` narrow or widen any of them.
 hardware to compare against, so the cross-check did not run: that is neither a
 pass nor a failure, and it is never silently skipped.
 
+## Two strangers, with us out of the loop
+
+The honest gap in everything above is that **we** published the reference
+table. Nobody outside has rerun these lanes on their own hardware, and we
+cannot manufacture that.
+
+But once the evidence document exists, you can do it without us:
+
+    # on a 4090
+    python -m mojolearn verify --all --json-out mine.json
+    # on an M2, someone else
+    python -m mojolearn verify --all --json-out theirs.json
+    # either of you, anywhere
+    python -m mojolearn verify --compare mine.json theirs.json
+
+It compares every cell hash in the two documents, prints the two provenance
+blocks side by side, and says whether the machines were genuinely different.
+If the hashes match, two people have demonstrated the claim **to each other**,
+with us entirely absent. That is stronger than anything we can publish about
+ourselves, and it needs no GPU, no bindings and no network to run.
+
+Three outcomes, not two, because absence is not agreement:
+
+| result | exit | meaning |
+|---|---|---|
+| `AGREE` | 0 | every shared cell matches, and none is present in only one document |
+| `MISMATCH` | 1 | at least one cell differs; both values are printed |
+| `INCOMPLETE` | 4 | nothing differs, but the two runs did not cover the same cells |
+
+A cell recorded `n/a` by both sides is an absence they agreed on, counted
+separately from agreement. And if both documents describe the same device, the
+output says so: that shows repeatability, not cross-hardware identity.
+
 ## The evidence document
 
 `--json` (and `--json-out PATH`) emits the run as data rather than a verdict,

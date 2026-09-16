@@ -268,6 +268,85 @@ def test_the_self_test_perturbation_is_not_inert():
     assert "values_changed" in src, "the report must say how many values were perturbed"
 
 
+def _doc(vendor, device, device_class, cells, commit="a809d92f2"):
+    """A minimal evidence document, the shape `verify --all --json` writes."""
+    return dict(format="mojolearn.verify-all-report.v1",
+                device=dict(mojolearn_version="0.8.5", commit=commit, vendor=vendor,
+                            device_class=device_class, device=device, cpu_model="cpu-x",
+                            platform="p", python="3.14.6"),
+                bindings=[dict(module="m", sha256="d" * 64, size=1)],
+                cells=[dict(lane=l, fixture=f, part=p, value=v) for l, f, p, v in cells])
+
+
+_BASE_CELLS = [("ols", "base", "train", "3d1d7c30b12d9872"),
+               ("ols", "base", "infer", "2546a13c03838433"),
+               ("umap", "base", "batch", "n/a:batch-dependent-by-contract")]
+
+
+def test_compare_finds_the_one_differing_cell():
+    """`--compare` exists for ADVERSARIAL use: two strangers diff their own
+    documents with us out of the loop. A comparer that reports agreement on
+    mismatched inputs would be the worst instance of the defect this lane has
+    been removing, so it is held to naming the exact cell."""
+    a = _doc("metal", "Apple M2", "apple", _BASE_CELLS)
+    bad = list(_BASE_CELLS)
+    bad[1] = ("ols", "base", "infer", "ffff0000ffff0000")
+    b = _doc("cuda", "RTX 4090", "nvidia", bad)
+
+    r = va.compare_documents(a, b, "a.json", "b.json")
+    assert r["verdict"] == "MISMATCH" and r["exit"] == va.EXIT_MISMATCH
+    assert r["differ"] == 1 and r["agree"] == 1
+    assert [(d["lane"], d["part"]) for d in r["differing"]] == [("ols", "infer")]
+    text = va.format_compare(r)
+    assert "2546a13c03838433" in text and "ffff0000ffff0000" in text, (
+        "both values must be printed, or the mismatch cannot be inspected")
+
+
+def test_compare_agrees_only_when_the_hashes_match():
+    a = _doc("metal", "Apple M2", "apple", _BASE_CELLS)
+    b = _doc("cuda", "RTX 4090", "nvidia", _BASE_CELLS)
+    r = va.compare_documents(a, b)
+    assert r["verdict"] == "AGREE" and r["exit"] == va.EXIT_VERIFIED
+    assert r["agree"] == 2 and r["differ"] == 0
+    # the n/a part is an absence both sides agreed on, not an agreement
+    assert r["n_a"] == 1
+    assert r["provenance"]["independent"] is True
+
+
+def test_compare_absence_is_never_agreement():
+    """A cell in only one document is INCOMPARABLE. Counting it as a match is
+    how a comparer becomes unable to fail."""
+    a = _doc("metal", "Apple M2", "apple", _BASE_CELLS)
+    b = _doc("cuda", "RTX 4090", "nvidia", _BASE_CELLS + [("kde", "base", "train", "aaaa")])
+    r = va.compare_documents(a, b)
+    assert r["differ"] == 0, "no cell actually differs"
+    assert r["verdict"] == "INCOMPLETE" and r["exit"] == va.EXIT_CANNOT_RUN
+    assert r["only_in_b"] == [["kde", "base", "train"]]
+    assert "Absence is not agreement" in va.format_compare(r)
+
+
+def test_compare_warns_when_both_documents_are_the_same_device():
+    """Two documents from one machine show repeatability, not cross-hardware
+    identity. The output must say so rather than let a reader assume more."""
+    a = _doc("metal", "Apple M2", "apple", _BASE_CELLS)
+    b = _doc("metal", "Apple M2", "apple", _BASE_CELLS)
+    r = va.compare_documents(a, b)
+    assert r["verdict"] == "AGREE", "identical documents do agree"
+    assert r["provenance"]["same_device"] is True
+    assert r["provenance"]["independent"] is False
+    text = va.format_compare(r)
+    assert "SAME device" in text and "proves much less" in text
+
+
+def test_compare_with_no_shared_cell_is_not_an_agreement():
+    a = _doc("metal", "Apple M2", "apple", [("ols", "base", "train", "1111")])
+    b = _doc("cuda", "RTX 4090", "nvidia", [("kde", "base", "train", "2222")])
+    r = va.compare_documents(a, b)
+    assert r["agree"] == 0 and r["differ"] == 0
+    assert r["verdict"] in ("INCOMPLETE", "NOTHING COMPARED")
+    assert r["exit"] == va.EXIT_CANNOT_RUN
+
+
 def _cross(pairs, vendor="metal"):
     """The cross-check's own accounting over (lane, part, gpu, cpu) tuples."""
     rows, agree, differ = [], 0, 0
