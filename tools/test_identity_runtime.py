@@ -181,7 +181,7 @@ def test_chunking_does_not_bypass_release_guard(monkeypatch, tmp_path):
     monkeypatch.setattr(ib, "refuse_routine_apple_column", guard)
     monkeypatch.setattr(runner, "run_job", lambda *args: pytest.fail("must not start a job"))
     with pytest.raises(SystemExit):
-        runner.main(["--mode", "metal", "--out", str(tmp_path)])
+        runner.main(["--mode", "metal", "--metal-diagnostic", "--out", str(tmp_path)])
     assert seen == [selection["lanes"]]
 
 
@@ -198,3 +198,21 @@ def test_cpu_requirement_refuses_gpu_before_any_fit(run_fixture):
     with pytest.raises(SystemExit, match="--require-cpu loaded a GPU"):
         ib._run_reference(args)
     assert state["calls"] == 0
+
+
+def test_release_marker_does_not_enable_full_apple_matrix(monkeypatch):
+    monkeypatch.setattr(ib, "_is_apple_gpu", lambda host: not host)
+    lanes = ["ridge", "kmeans"]
+    assert ib.refuse_routine_apple_column(lanes, None, {ib.APPLE_RELEASE_RECORD_ENV: "0.8.7"})
+    assert not ib.refuse_routine_apple_column(lanes, None, {ib.APPLE_FULL_DIAGNOSTIC_ENV: "1"})
+    assert not ib.refuse_routine_apple_column(["ridge"], None, {})
+    assert not ib.refuse_routine_apple_column(lanes, {"column": "cpu"}, {})
+
+
+def test_metal_iteration_requires_release_or_diagnostic(monkeypatch, tmp_path):
+    import identity_iterate as runner
+    monkeypatch.delenv(ib.APPLE_RELEASE_RECORD_ENV, raising=False)
+    monkeypatch.setattr(runner, "run_job", lambda *a: pytest.fail("routine Metal job launched"))
+    with pytest.raises(SystemExit):
+        runner.main(["--lane", "ridge", "--mode", "metal", "--out", str(tmp_path / "out")])
+    assert not (tmp_path / "out").exists()

@@ -123,6 +123,8 @@ def main(argv=None):
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--timeout", type=float, default=60, help="maximum seconds per job, excluding wait (default 60)")
     ap.add_argument("--mode", choices=("cpu", "metal", "run"), default="cpu")
+    ap.add_argument("--metal-diagnostic", action="store_true",
+                    help="explicitly run one bounded Apple diagnostic between releases")
     ap.add_argument("--host-dir", type=Path, help="prebuilt internal CPU oracle bindings; no builds are launched")
     ap.add_argument("--wait-timeout", type=float, default=60, help="queue limit in seconds (default 60)")
     ap.add_argument("--probe-group", choices=("core", "batch", "rlpair", "all"), default="core",
@@ -180,6 +182,9 @@ def main(argv=None):
     # Splitting into processes must not bypass the harness's release guard.
     import identity_break
     if args.mode == "metal":
+        if not (os.environ.get(identity_break.APPLE_RELEASE_RECORD_ENV, "").strip()
+                or args.metal_diagnostic):
+            ap.error("Metal iteration is release-only; use --metal-diagnostic for an explicit investigation")
         refusal = identity_break.refuse_routine_apple_column(selected["lanes"], host=None)
         if refusal:
             ap.error(refusal)

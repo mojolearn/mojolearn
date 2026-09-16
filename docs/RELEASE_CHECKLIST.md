@@ -178,26 +178,32 @@ pass its three output directories and the proofs directory through the
 attached and checked. Use `none` first to see the workflow's own checks
 without uploading.
 
-## 5b. The Apple identity column (THE ONE TIME IT IS TAKEN)
+## 5b. Apple qualification: once per PyPI update
 
-The Apple column is recorded HERE, at the release, and nowhere else.
-Between releases it is not taken at all: routine verification goes on a
-rented CPU pod, which is bitwise equal to Metal, in parallel, at about
-$0.24/hour (`tools/runpod_cpu_leg.sh`). ENGINEERING_RULES.md section 12 has
-the reasoning; `tools/identity_break.py` enforces it and will REFUSE a
-full-column Apple run without the variable below.
+Use the installed-wheel checks in step 6. The release workflow builds the
+actual macOS wheel, installs and runs it on a real Metal GPU for every claimed
+interpreter/mode, rejects skipped interpreters, and runs the installed UMAP
+qualification. Retain these gates before publication.
+
+Do **not** additionally run the all-lane, nine-fixture Apple identity column.
+It duplicates substantial algorithm coverage at a measured cost exceeding
+seven hours. This reduced release policy does not claim a fresh full Apple
+identity column; frozen reference records remain tied to their original code.
+CPU and other GPU checks retain responsibility for their existing contracts.
+
+Between PyPI updates, routine iteration uses CPU. For an Apple-specific
+failure, explicitly request one bounded diagnostic:
 
 ```sh
-# on the release Mac, one Metal job at a time, through the slot helper
-MOJOLEARN_APPLE_RELEASE_RECORD=<version> MOJOLEARN_NUMERIC_MODE=identical \
-  bash mac_slot.sh metal python3 tools/identity_break.py --json apple-m4.json
+pixi run -e test test-algo --lane transformer --mode metal \
+  --metal-diagnostic --out /tmp/apple-transformer-diagnostic
 ```
 
-Budget more than seven hours for a full pass and do not start it behind other
-GPU work: it takes the Metal lock for its whole life and every other GPU job
-on the machine waits. The record runs `record_lanes()`; the `par-*` lanes are
-out of scope by declaration (`RECORD_EXCLUDED_PREFIXES`) and their two-device
-claim is made by the dedicated multi-GPU legs instead.
+The default execution and queue limits are 60 seconds each. No automatic full
+matrix retry follows a timeout. `MOJOLEARN_APPLE_RELEASE_RECORD=<version>`
+permits a release lane check but no longer unlocks a broad matrix. The full
+matrix remains available solely as an intentional investigation through
+`MOJOLEARN_APPLE_FULL_DIAGNOSTIC=1`; it is not a publication requirement.
 
 ## 6. Publish macOS (on the release Mac, 30 to 60 minutes)
 

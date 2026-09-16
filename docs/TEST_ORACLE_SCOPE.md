@@ -53,7 +53,9 @@ with one-minute execution and queue limits. Select `--probe-group batch` or
 `rlpair` only when relevant, or `all` for separate bounded jobs. Use
 `--exhaustive` to select all nine fixtures for that algorithm. Every record
 says which probes were skipped. This is iteration coverage, not release
-qualification. The full release matrix and fixture floors are unchanged.
+qualification. Fixture floors are unchanged. Apple releases now use the
+installed-wheel gates instead of requiring the full Apple identity matrix;
+see [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md#5b-apple-qualification-once-per-pypi-update).
 
 On 2026-09-16 the Transformer base/core job took 0.72 seconds on the available
 CPU oracle binaries. That is a scoped-job measurement, not a claim that it

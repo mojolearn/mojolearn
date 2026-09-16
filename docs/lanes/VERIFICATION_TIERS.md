@@ -1,5 +1,13 @@
 # Verification tiers: what to run, and what not to run
 
+Current Apple policy (2026-09-16): real-Metal qualification is part of each
+PyPI update's installed-wheel release gates. The broad Apple identity column
+is no longer required, even at release. Between releases use CPU iteration;
+Apple-specific investigations explicitly use `--metal-diagnostic`, one lane
+with a 60-second job limit. Historical full-column guidance below is superseded
+by [the release checklist](../RELEASE_CHECKLIST.md#5b-apple-qualification-once-per-pypi-update).
+
+
 Read this before running anything. It exists because checking a two-file
 change had come to mean running a sweep of identity lanes, usually on the
 Mac's Metal GPU, which is the scarcest resource the project owns: one

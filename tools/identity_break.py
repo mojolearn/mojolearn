@@ -1070,40 +1070,10 @@ def record_lanes():
     return [n for n in LANES if not n.startswith(RECORD_EXCLUDED_PREFIXES)]
 
 
-#: THE APPLE COLUMN RUNS ONCE PER PyPI RELEASE, NEVER ROUTINELY.
-#:
-#: WHY. There is exactly ONE Mac with ONE GPU; only one Metal job may run at a
-#: time; it cannot be rented or parallelized. So an Apple column serializes
-#: behind every other GPU need on the machine and blocks all of it. A full
-#: pass measured over SEVEN HOURS on 2026-09-16 and was stopped at 125 of 158
-#: lanes.
-#:
-#: WHAT TO DO INSTEAD. The rented CPU column is BITWISE EQUAL to Metal, so
-#: routine and occasional verification belongs on a RunPod CPU pod at about
-#: $0.24/hour, in parallel, with small fixtures (tools/runpod_cpu_leg.sh,
-#: docs/RUNPOD_CPU_LEG.md). The only question the Apple column uniquely
-#: answers is whether the METAL BACKEND agrees, and that is a per-release
-#: question. Local Metal is for a lane proving its OWN new cells, one job at a
-#: time through the slot helper, never a full column.
-#:
-#: The guard below refuses a full-column Apple run unless this names the
-#: release it is being recorded for, for example
-#: MOJOLEARN_APPLE_RELEASE_RECORD=0.8.7.
+# Apple qualification is the installed-wheel release gate. The full identity
+# matrix is a diagnostic, not an additional per-release obligation.
 APPLE_RELEASE_RECORD_ENV = "MOJOLEARN_APPLE_RELEASE_RECORD"
-
-#: More lanes than this in ONE Apple process is a column, not a lane check.
-#: 2026-09-16, Andrew: a LANE DOES NOT TAKE AN APPLE CELL AT ALL. This was 24,
-#: and the refusal below used to tell a lane to pass --lanes under that limit
-#: and take its own cells, which five lanes did in one afternoon. Each was
-#: defensible alone; together they made the one Mac the serial bottleneck for
-#: every lane, because Metal runs ONE JOB AT A TIME and cannot be rented.
-#: The CPU host route gives the SAME BITS (it is the device kernel restated as
-#: a serial host loop) at 0.37 ms against Metal's 225.71 ms per decode step,
-#: and it runs in parallel. Cross-vendor questions go to RENTED NVIDIA and AMD.
-#: 1 leaves the Metal SMOKE check, "does my change compile and run on Apple at
-#: all", which no cross-compile can answer: on this date an acquire fence
-#: generated valid AIR and then failed at PIPELINE CREATION, breaking three
-#: subsystems on main while every --emit asm check passed.
+APPLE_FULL_DIAGNOSTIC_ENV = "MOJOLEARN_APPLE_FULL_DIAGNOSTIC"
 APPLE_COLUMN_LANE_LIMIT = 1
 
 
@@ -1114,29 +1084,19 @@ def _is_apple_gpu(host):
 
 
 def refuse_routine_apple_column(lanes, host, env=None):
-    """The Apple column is a per-release artifact. Returns a refusal message
-    for a full-column Apple run outside a release, else ''."""
+    """Refuse broad Metal matrices unless explicitly requested as diagnostics."""
     env = os.environ if env is None else env
     if not _is_apple_gpu(host) or len(lanes) <= APPLE_COLUMN_LANE_LIMIT:
         return ""
-    if env.get(APPLE_RELEASE_RECORD_ENV, "").strip():
+    if env.get(APPLE_FULL_DIAGNOSTIC_ENV) == "1":
         return ""
     return (
-        f"REFUSING: {len(lanes)} lanes in one Apple (Metal) process is a COLUMN, and the Apple "
-        f"column is recorded ONCE PER PyPI RELEASE, never routinely.\n"
-        f"  There is one Mac with one GPU, one Metal job at a time, and it cannot be rented or "
-        f"parallelized, so an Apple column blocks every other GPU need on this machine. A full "
-        f"pass measured over seven hours.\n"
-        f"  FOR ROUTINE VERIFICATION, use the rented CPU column, which is bitwise equal to Metal: "
-        f"tools/runpod_cpu_leg.sh (about $0.24/hour, runs in parallel). See docs/RUNPOD_CPU_LEG.md.\n"
-        f"  A LANE DOES NOT TAKE AN APPLE CELL. Verify on the CPU host route, which returns the "
-        f"SAME BITS about 600x faster and in parallel, and send cross-vendor questions to RENTED "
-        f"NVIDIA and AMD. Apple is taken once, at the release record.\n"
-        f"  The one exception is the Metal SMOKE check, does this compile and RUN on Apple at all, "
-        f"which no cross-compile can answer: --lanes with at most {APPLE_COLUMN_LANE_LIMIT} lane, "
-        f"through mac_slot.sh.\n"
-        f"  IF THIS REALLY IS THE RELEASE RECORD, name the release: "
-        f"{APPLE_RELEASE_RECORD_ENV}=<version>."
+        f"REFUSING: {len(lanes)} Apple lanes request a broad identity matrix. "
+        "This is not required for a PyPI update: use the installed-wheel Metal "
+        "checks in release-provenance.yml. Routine checks use CPU. "
+        "For an Apple-specific failure, run one bounded diagnostic lane. "
+        f"Only an intentional full investigation should set {APPLE_FULL_DIAGNOSTIC_ENV}=1; "
+        f"{APPLE_RELEASE_RECORD_ENV} alone does not enable the full matrix."
     )
 
 
@@ -7447,7 +7407,7 @@ def _run_reference(args):
         if out_of_scope:
             lanes = [n for n in lanes if n not in out_of_scope]
             print(f"# OUT OF RECORD SCOPE ({len(out_of_scope)} lanes): {sorted(out_of_scope)}")
-    # THE APPLE COLUMN IS RECORDED ONCE PER PyPI RELEASE, NEVER ROUTINELY.
+    # Broad Apple matrices are explicit diagnostics, not release requirements.
     _apple_refusal = refuse_routine_apple_column(lanes, host)
     if _apple_refusal:
         raise SystemExit(_apple_refusal)

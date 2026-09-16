@@ -48,7 +48,8 @@ unchanged. Skipped probes are recorded N/A with their skip reason.
 Changed-path selection is also supported by `test-identity-changed --base REF`.
 Naming a lane does not prove coverage of a shared numerical primitive. A
 selector fallback refuses execution unless `--full-selection` is explicit.
-`--mode metal` is explicit and still subject to the Apple release guard;
+`--mode metal` requires a release marker or `--metal-diagnostic`, and remains
+subject to the broad-matrix guard;
 `--mode run` reserves CPU capacity but uses the installation's chosen backend,
 for explicit non-Metal GPU work. Neither is the routine default.
 
@@ -129,3 +130,7 @@ selection to the package and does not infer a column for this preflight.
 Batch groups require a callable batch probe. A declared `n/a` batch contract
 no longer creates an extra two-fit job under `--probe-group all`.
 Timeouts must be finite; NaN and infinity are rejected before scheduling.
+
+Apple qualification runs for PyPI updates through the installed-wheel release
+workflow. The full Apple identity matrix is no longer an additional release
+requirement. See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md#5b-apple-qualification-once-per-pypi-update).
