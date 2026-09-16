@@ -368,7 +368,8 @@ No `git stash`, no `git add -A`, no history rewritten, nothing pushed.
     WT=$SP/wt bash ~/mojolearn-evidence/tools/mac_slot.sh metal \
       env MOJOLEARN_NUMERIC_MODE=identical $SP/venv086/bin/python <probe>.py
 
-The probes live in this session's scratchpad under `probe/`: `jobA.py` (the
+The probes and every run log are in
+`~/mojolearn-evidence/shrink-blindness-audit-2026-09-16/`: `jobA.py` (the
 per-lane batteries), `jobB.py` (GBDT), `jobC.py` (AdamW moments), `jobD.py`
 (the symmetric-initialization census), `jobF.py`/`jobG.py` (the nan-mode
 collapse chased to a size and to its mechanism) and `jobH.py` (GBDT feature
