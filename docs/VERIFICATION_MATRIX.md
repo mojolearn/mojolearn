@@ -410,7 +410,7 @@ A blank cell means no lane of this algorithm has that kind.
 | par-gram | amd,apple,nvidia | - | none | - | part | NO |
 | par-graph-agglomerative | amd,apple,nvidia | - | seen(harness) | `bench/results/identity_break/2026-09-15_transductive-predict/apple-m4.batch-sabotage.json` | part | NO |
 | par-graph-spectral | amd,apple,nvidia | - | none | - | n/a n/a:transductive (the par-graph-spectral lane fits without prediction_data; SpectralClustering.predict is the spectral lane's) | NO |
-| par-graph-umap | amd,apple,nvidia | - | none | - | n/a n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) | NO |
+| par-graph-umap | amd,apple,nvidia | - | none | - | part | NO |
 | par-hdbscan | amd,apple,nvidia | - | none | - | part | NO |
 | par-holtwinters | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_holtwinters-linesearch-fix/cpu-amd-epyc-9754.sabotage.json` | part | yes |
 | par-iforest | amd,apple,nvidia | - | none | - | part | NO |
@@ -466,7 +466,7 @@ A blank cell means no lane of this algorithm has that kind.
 | transformer | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-transformer/cpu-apple-m4.sabotage.json` | part | yes |
 | transformer-window | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-transformer/cpu-apple-m4.sabotage.json` | part | yes |
 | tsvd | amd,apple,nvidia | training | declared | - | part | NO |
-| umap | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-forecast-umap-pca/cpu-apple-m4.sabotage.json` | n/a n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, :141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same) | yes |
+| umap | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-forecast-umap-pca/cpu-apple-m4.sabotage.json` | part | yes |
 
 ## Lanes missing each kind, by name
 

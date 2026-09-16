@@ -110,9 +110,11 @@ change. Earlier full hosted run 34978769155 passed on all three CPU hosts.
   the reference `_mojolearn_arima_host` is not built (`host_surface.inference_routes()`,
   `_backend._HOST_INFERENCE_MODULES`). With the neural family above, ten host families ship.
 - Saved UMAP embeddings (`UMAP.save`/`load`, format `mojolearn-umap-1`) transform through the
-  already shipped metrics host binding. The transform's answer depends on the query batch
-  (umap/transform.mojo: the batch mean sigma floor, the batch maximum edge weight and the
-  batch-position negative-sample draws), so the CPU claim is the GPU's bytes for the same batch.
+  already shipped metrics host binding. The transform's answer depended on the query batch when
+  this was written (umap/transform.mojo: the batch mean sigma floor, the batch maximum edge
+  weight and the batch-position negative-sample draws), so the CPU claim was the GPU's bytes for
+  the same batch. lane/umap-batch-fix (2026-09-16) made all four couplings per row, so the CPU
+  claim is now the GPU's bytes for a row whatever else is asked with it.
 - `pca-full-whiten` joins the inference lanes: a saved `svd_solver='full'` whitened PCA
   transforms and inverse transforms through the estimators host binding.
 - `ExponentialSmoothing.fit` refuses on a CPU-only install outside `reference_training()`; it
