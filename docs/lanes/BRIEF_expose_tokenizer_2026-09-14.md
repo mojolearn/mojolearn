@@ -124,6 +124,14 @@ family's `inference_lanes` only if `tools/classical_host_gate.py` grows a
 matching entry (`test_inference_lanes_are_classical_gate_lanes` holds the
 two lists equal); otherwise leave both empty, as now.
 
+**Superseded on the `training_lanes` point (11c5f2192, 2026-09-15).** The
+family now declares `training_lanes=("tokenizer",)`. What changed is the gate,
+not the lane's nature: the CPU identity gate builds every family into its
+sabotage host set with that family's own define, so
+`MOJOLEARN_TOKENIZER_HOST_SABOTAGE` reverses the encoded ids and the lane's
+train, infer and batch parts all move. `inference_lanes` is still empty, and
+for the reason this paragraph gives.
+
 ## 4. The host twin
 
 None is needed and none was written: the tokenizer never runs on a GPU. The

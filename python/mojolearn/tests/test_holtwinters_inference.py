@@ -51,7 +51,10 @@ def test_forecast_family_serves_holtwinters():
     assert "ExponentialSmoothing" in f["classes"]
     assert {"tsa_vendor", "holtwinters_forecast", "holtwinters_predict"} <= set(f["exports"])
     assert "holtwinters_fit" not in f["exports"]
-    assert f["ships_in_wheel"] and not host_surface.family("tsa")["ships_in_wheel"]
+    # Both ship since lane/ship-cpu-host-families (2026-09-16): this binding
+    # so a saved model predicts from a binary with no fit in it, the tsa
+    # binding so the holtwinters and kpss lanes can be checked on a CPU.
+    assert f["ships_in_wheel"] and host_surface.family("tsa")["ships_in_wheel"]
     assert host_surface.inference_routes()["_mojolearn_tsa"] == "_mojolearn_forecast_host"
 
 

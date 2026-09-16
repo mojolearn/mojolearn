@@ -284,7 +284,7 @@ def test_inference_routes_ship_and_carry_no_fit():
         assert route in _backend._MODULES
         assert binding in shipped
         reference = host_surface.routed_modules().get(route)
-        assert reference and reference not in shipped, f"{route}: the reference binding ships; no fallback is needed"
+        assert reference, f"{route} is served by {binding} but is not a routed family"
         name = binding[len("_mojolearn_"):-len("_host")]
         exported = _exports_in_source(name)
         assert not [e for e in exported if e.endswith("_fit")], f"{binding} registers a fit: {exported}"
@@ -340,22 +340,21 @@ def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
     assert set(_backend._HOST_MODULES.values()) <= set(host_surface.bindings())
     assert {"_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host",
             "_mojolearn_neural_host"} <= shipped
-    assert set(host_surface.wheel_families()) == {
-        "byte_lm", "forest", "tokenizer", "neural", "core", "linalg", "estimators", "metrics", "svm", "forecast",
-        "mixture_infer", "hdbscan_infer", "gp_infer",
-        "embedding_infer", "ivf_search",
-        # lane/expose-inference-surface (2026-09-16): bootstrap, the
-        # permutation test and Monte Carlo integration train no model, so the
-        # inference boundary was never meant to exclude them.
-        "resample",
-    }
+    held_back = [f["family"] for f in host_surface.FAMILIES if not f["ships_in_wheel"]]
+    assert held_back == [], (
+        f"these families do not ship: {held_back}. Every host family ships since 2026-09-16 "
+        "(lane/ship-cpu-host-families), so a wheel can check every lane whose reference is "
+        "current; holding one back makes its lanes unverifiable on an installed CPU and needs a "
+        "reason written into its wheel_note"
+    )
+    assert host_surface.wheel_families() == host_surface.families()
     # The inference-only families ship; the reference families whose
     # scoring and prediction entries they carry do not.
     for inference, reference in (("mixture_infer", "mixture"), ("hdbscan_infer", "hdbscan"), ("gp_infer", "gp")):
         assert host_surface.family(inference)["ships_in_wheel"] and host_surface.family(inference)["routes"] is None
-        assert not host_surface.family(reference)["ships_in_wheel"]
+        assert host_surface.family(reference)["ships_in_wheel"], "every family ships since 2026-09-16"
         assert host_surface.family(inference)["training_lanes"] == ()
-    assert len(host_surface.families()) > len(host_surface.wheel_families())
+    assert set(host_surface.wheel_bindings()) == set(host_surface.bindings())
     assert host_surface.training_gpu_column_record() == host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 2)[1]
     for rel, token in (
         ("packaging/linux/pack_wheel.py", "wheel_host_bindings()"),
@@ -494,6 +493,7 @@ def test_the_analysis_functions_are_reachable_on_a_cpu_only_install():
     notes = host_surface.wheel_notes()
     assert "OPEN" not in notes["resample"] and "OPEN" not in notes["tsa"], (
         "these were decided; a note still reading OPEN would misreport the decision")
+    assert notes["tsa"].startswith("Ships:"), "tsa ships since lane/ship-cpu-host-families"
 
     # resample ships, and its binding registers the three entries and no fit.
     resample = host_surface.family("resample")
@@ -504,9 +504,12 @@ def test_the_analysis_functions_are_reachable_on_a_cpu_only_install():
         assert name in exported, f"the resample binding does not register {name}"
     assert [e for e in exported if e.endswith("_fit")] == [], "the resample binding registers a fit"
 
-    # kpss_test is served by the SHIPPED forecast binding, not by shipping the
-    # tsa family, which holds holtwinters_fit.
-    assert not host_surface.family("tsa")["ships_in_wheel"], "tsa holds holtwinters_fit; it must not ship"
+    # kpss_test is served by the SHIPPED forecast binding. Since
+    # lane/ship-cpu-host-families (2026-09-16) the tsa family ships as well, so
+    # that is no longer the ONLY way to reach kpss_test on a CPU -- but it is
+    # still the one this test pins, because it is what keeps a saved
+    # Holt-Winters model answering from a binary with no fit in it.
+    assert host_surface.family("tsa")["ships_in_wheel"], "every family ships since 2026-09-16"
     forecast = host_surface.family("forecast")
     assert forecast["ships_in_wheel"] and "kpss_test" in forecast["exports"]
     assert "kpss_test" in _exports_in_source("forecast"), (
@@ -614,3 +617,71 @@ def test_command_line_prints_the_exposure_surface(capsys):
     assert "resample:" in capsys.readouterr().out
     assert host_surface.main(["--saved-model-inference-owed"]) == 0
     assert "spectral:" in capsys.readouterr().out
+
+
+def _lane_revisions():
+    """`LANE_REVISIONS` read from the harness's source, like the lane readers
+    above, so this needs no numpy and no import of the harness."""
+    import ast
+
+    for node in ast.parse(_read("tools/identity_break.py")).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "LANE_REVISIONS" for t in node.targets):
+            return {k.value: v.value for k, v in zip(node.value.keys, node.value.values)}
+    raise AssertionError("no LANE_REVISIONS in tools/identity_break.py")
+
+
+def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
+    """THE PUBLIC SET IS DERIVED, AND THE HELD-BACK LIST IS CHECKED
+    (lane/ship-cpu-host-families, 2026-09-16).
+
+    `public_reference_lanes()` is every covered lane minus the `par-*`
+    drivers, minus `PUBLIC_PENDING_LANES`, minus the candidates still waiting
+    on a condition of their own. A pending list is a memo unless something
+    holds it to the thing that made it true, so each reason is checked against
+    its source: `stale reference` against the harness's LANE_REVISIONS,
+    `no reference` against the shipped table, `own record` against
+    TRAINING_FIX_LANES, and `measured` against the run recorded in the lane
+    status, which is the only reason that comes from a run rather than from a
+    static condition.
+
+    The load-bearing direction is the last assertion: a lane whose fixture
+    moves and which nobody adds here would become public carrying a reference
+    that describes different bytes, and a user would read DIVERGENT for
+    something that is not their machine."""
+    import json
+
+    table = json.loads(_read("python/mojolearn/verify_reference/table.json"))
+    with_cells = {key.partition("/")[0] for key in table["cells"]}
+    revisions = _lane_revisions()
+    covered = set(host_surface.covered_lanes())
+    host_only = set(host_surface.PUBLIC_HOST_ONLY_LANES)
+    public = host_surface.public_reference_lanes()
+
+    assert len(public) == len(set(public)), "a lane is listed twice"
+    assert not [lane for lane in public if lane.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES)]
+    assert not (set(public) & set(host_surface.PUBLIC_PENDING_LANES)), "a pending lane is public"
+    trained = set(public) - host_only
+    assert trained <= covered, f"public lanes with no CPU training path: {sorted(trained - covered)}"
+    assert trained <= with_cells, f"public lanes the shipped table has no cell for: {sorted(trained - with_cells)}"
+    assert trained <= set(host_surface.record_covered_lanes()), (
+        f"public lanes not diffed against the release record: {sorted(trained - set(host_surface.record_covered_lanes()))}"
+    )
+
+    for lane, why in host_surface.PUBLIC_PENDING_LANES.items():
+        assert lane in covered, f"{lane} is held back but is not a covered lane at all"
+        if why == "stale reference":
+            assert lane in revisions, f"{lane}: no LANE_REVISIONS entry, so its reference is not stale; let it in"
+        elif why == "no reference":
+            assert lane not in with_cells, f"{lane}: the shipped table does carry cells for it; let it in"
+        elif why == "own record":
+            assert lane in host_surface.TRAINING_FIX_LANES, f"{lane}: not a TRAINING_FIX_LANES lane"
+        elif why.startswith("measured"):
+            assert lane in with_cells, f"{lane}: held back on a measurement but the table has no cell to measure"
+        else:
+            raise AssertionError(f"{lane}: {why!r} is not a reason this test knows how to check")
+
+    moved = sorted(set(revisions) - set(host_surface.PUBLIC_PENDING_LANES) - host_only)
+    assert moved == [], (
+        f"these lanes' fixtures moved past the shipped reference and they are still public: {moved}. "
+        "Add them to PUBLIC_PENDING_LANES as 'stale reference' until the release regenerates the table"
+    )
