@@ -79,6 +79,28 @@ same saved model, with no signal that anything changed. Whether a shift that
 size flips a downstream decision was NOT tested here, and on this fixture no
 query changed which training cluster it sits nearest to.
 
+### The device path, measured on Metal
+
+`umap/checks/batch_determinism_device_check.mojo` ran the same arms through a
+`DeviceContext` on the M4, alone in the Metal slot, exit 0. Log:
+`~/mojolearn-evidence/umap-batch-determinism/device-metal.log`.
+
+    SUMMARY device.nsr5 solo True order True  company True
+    SUMMARY device.nsr0 solo True order False company True
+
+Every verdict matches the host route, including the one that carries the
+attribution: `ORDER` is `False` at nsr=0 and `True` at nsr=5 on the device
+too, so the reorder sensitivity is the batch-position RNG ordinal on the GPU
+path as well. The `ULP` ladder fired at the same 16,384 ULPs on both routes.
+
+And the values are not merely similar. Every batch-of-eight cell the device
+printed is bit for bit the cell the host printed, all sixteen of them, and
+the deltas agree to the last bit (`query 4 component 1`, `6.9431734` ->
+`4.974316`, delta `-1.9688573`, on both). So the repository's cross-route
+IDENTICAL claim holds exactly here. The batch dependence is not one column
+disagreeing with another; it is the algorithm, reproduced identically
+everywhere it runs.
+
 ### Why the CPU host route answers for both paths
 
 The arms above ran on the host restatement, so it matters that it is not an
