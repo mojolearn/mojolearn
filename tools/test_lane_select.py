@@ -286,6 +286,40 @@ def test_a_registry_change_selects_every_lane():
         assert len(sel["lanes"]) == len(lane_select.all_lanes())
 
 
+def test_the_selector_is_not_imported_by_what_it_selects():
+    """SELECTION_MACHINERY is only safe while nothing under test imports it.
+    The moment `identity_break.py` or the package imports one of these files,
+    a change to it CAN move a lane's bits and calling it inert would be the
+    silent pass this whole file is about."""
+    watched = [os.path.join(lane_select.ROOT, lane_select.HARNESS)]
+    pkg = os.path.join(lane_select.ROOT, lane_select.PKG)
+    watched += [os.path.join(pkg, n) for n in sorted(os.listdir(pkg)) if n.endswith(".py")]
+    stems = [os.path.basename(p)[:-3] for p in lane_select.SELECTION_MACHINERY]
+    for path in watched:
+        text = open(path, encoding="utf-8", errors="replace").read()
+        for stem in stems:
+            hits = [line.strip() for line in text.splitlines()
+                    if re.search(r"^\s*(import|from)\s+%s\b" % re.escape(stem), line)]
+            assert not hits, f"{path} imports {stem}: {hits[:3]}"
+
+
+def test_the_runner_refuses_an_empty_selection():
+    """THE REFUSAL, RUN. An empty selection must not exit 0. This calls
+    `verify_lanes.main` rather than reading it, and the second arm runs the
+    SAME command on a path that does select lanes, so a refusal that fired for
+    an unrelated reason (a bad argument, a missing file) would show up as both
+    arms refusing."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import verify_lanes
+
+    empty = verify_lanes.main(["--lanes-for-paths", "CHANGELOG.md", "--plan"])
+    assert empty == 2, f"an empty selection exited {empty}, not the refusal"
+
+    narrow = verify_lanes.main(["--lanes-for-paths", "cluster/host/kmeans_oracle.mojo", "--plan"])
+    assert narrow == 0, (f"a non-empty selection also exited {narrow}: the refusal above did not "
+                         "come from the selection being empty")
+
+
 def test_shards_are_the_lane_set_and_are_deterministic():
     lanes = lane_select.all_lanes()
     first, _ = lane_select.shard(lanes, 8)

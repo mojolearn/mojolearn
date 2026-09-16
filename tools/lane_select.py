@@ -95,6 +95,21 @@ INERT_PREFIXES = (
 #: decides which lanes have a CPU route at all.
 GLOBAL_PATHS = (HARNESS, MANIFEST)
 
+#: THE SELECTION MACHINERY ITSELF. These files decide WHICH lanes run; they
+#: cannot change what any lane computes, because nothing the harness or the
+#: package imports reaches them (`test_the_selector_is_not_imported_by_what_it
+#: _selects` holds that). Without this the lane that introduced them ran into
+#: its own tool: on 2026-09-16 `--changed-since origin/main` on this branch
+#: read all five as NOT ATTRIBUTABLE and fell back to all 211 lanes, which is
+#: the full sweep this file exists to avoid. They are not folded into
+#: INERT_PREFIXES because "inert (prose or evidence)" would be a false
+#: description of a tool, and the reason printed should say what they are.
+SELECTION_MACHINERY = (
+    os.path.join("tools", "lane_select.py"),
+    os.path.join("tools", "verify_lanes.py"),
+    os.path.join("tools", "test_lane_select.py"),
+)
+
 _BINDING_RE = re.compile(r"_mojolearn[a-z0-9_]*")
 _MOJO_IMPORT_RE = re.compile(r"^\s*(?:from\s+([a-zA-Z0-9_.]+)\s+import|import\s+([a-zA-Z0-9_.]+))")
 
@@ -788,6 +803,11 @@ def select(paths, ref=None, sources=None):
             else:
                 lanes |= set(touched)
                 reasons[path] = f"harness diff touches only these lane bodies: {','.join(touched) or 'none'}"
+            continue
+        if path in SELECTION_MACHINERY:
+            inert.append(path)
+            reasons[path] = ("the selection machinery itself: it decides which lanes run and "
+                             "cannot move a lane's bits (tools/test_lane_select.py covers it)")
             continue
         if path in GLOBAL_PATHS:
             fallback = True
