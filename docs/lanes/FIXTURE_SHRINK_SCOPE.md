@@ -46,13 +46,41 @@ Record against these freely.
 | `mamba1`, `mamba2`, `mamba3`, `mamba2-dtlimit` | a `(2, 16, 32)` slab, 1024 floats, at the smallest legal d_model |
 | `transformer`, `transformer-window` | the same 1024-float slab |
 | `samba` | `_ids(X, 6, 17)`, three steps, already minimal |
-| the GBDT family, `cross-val`, `umap`, `gpc-multiclass` | their apparent cost is the **Metal command-queue leak**, not fixture size (queue counts 300 to 1809 during those groups against a flat 23 to 27 for the clean lanes). Shrinking them would be treating a runtime defect with a weaker test. Referred to lane/metal-queue-leak phase 2 |
 | **every other lane of the 192** | not examined for shrinking, not touched by this branch |
 
-## C. UNDECIDED
+## C. UNDECIDED, under active re-measurement
 
-Empty. The two lanes in bucket A are the only conditional ones, and their
-condition is stated there.
+**The GBDT family**, plus `cross-val`, `umap`, `gpc-multiclass`.
+
+**These were in bucket B until 2026-09-16 and I have moved them out. If you
+are recording a Metal column for `lane/gbdt-rest` or any GBDT lane, treat
+these as possibly-changing until this file says otherwise.** I would rather
+interrupt a recording now than invalidate it later.
+
+Why they moved. I put them in "leave big" because their cost looked like the
+Metal command-queue leak rather than fixture size. **That attribution has
+collapsed and it was mine.** The leak lane established that device contexts
+are held as FIELDS ON MODEL AND POOL OBJECTS, so a process holding many live
+models legitimately holds many queues. That explains my own data better than
+"leak" did: the lanes whose queue counts climbed are exactly the lanes that
+construct many models (`gbdt-parametric-losses` builds ten `GradientBoosting`
+models; `gbdt-adapter-clf` builds models and saves and reloads them), while
+`byte-lm` holds one trainer and sits flat at 23. Queue count tracks LIVE MODEL
+OBJECTS. It is a correlation with model count, not a cause of slowness. There
+is no leak to blame, so their cost is currently attributed to nothing.
+
+And a second error of mine, which points the other way: I never checked
+whether the GBDT fixtures were large. **They are.** The GBDT lanes fit the
+FULL 20,000 x 16 fixture (`GradientBoosting(...).fit(X, yc)`), unlike the
+neural lanes, which slice 1024 floats out of it. So unlike the neural family,
+these lanes do have real size to remove, and a shrink could genuinely pay.
+
+What decides it: a measurement in flight, not another attribution. Their time
+is being re-measured at today's healthy queue floor and decomposed (whole-lane
+vs `--no-batch`, and fit time against row count). If it scales with rows it is
+arithmetic, the lanes move to bucket A and this file says so. If it does not,
+they go back to bucket B **with the measurement attached** rather than with a
+story.
 
 ## D. NOT CHANGING: the global batch knob
 
