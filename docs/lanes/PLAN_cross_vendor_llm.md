@@ -89,6 +89,23 @@ Two consequences for the plan:
 
 **This depends on a prerequisite we have not measured.** We do not currently know which algorithms have a multi-GPU path at all, let alone which are bitwise reproducible across devices. That audit is running now. The neural training path does have one (the `par-*` lanes cover it), but our evidence for it is tiny-fixture only, exactly as for the single-device case. The calibration run below should therefore be **multi-device from the start**, since adding devices later would invalidate everything it established.
 
+## The pipeline is a CHAIN, and it is only as strong as its weakest link
+
+"End to end reproducible" means: give someone the corpus, the seed and the config, and they get our model back **byte for byte**, on different hardware. That is six links, and a single weak one makes the whole claim worthless. Status as of Sep 16 2026:
+
+| # | Link | Where it runs | Status |
+|---|---|---|---|
+| 1 | Corpus to vocabulary | **CPU only** (no GPU path exists in any implementation) | Being built. Claim is cross-ARCHITECTURE, not cross-vendor |
+| 2 | Text to tokens | Host integers | **Done**, has an identity lane |
+| 3 | **Data ordering** (shuffle, sharding, batching) | Host | **UNVERIFIED — check whether a lane exists** |
+| 4 | Training kernels | GPU | Proven on TINY fixtures; **unproven over thousands of steps**. The real gap |
+| 5 | Checkpoint save and reload | Both | Partially proven: model cells hash saved bytes, reload equality checked per lane, **never across a long run** |
+| 6 | Inference | Both | Largely proven; 182 real batch parts, 17 named n/a, 0 undeclared |
+
+**Link 3 is the one nobody has looked at and it is as load-bearing as any kernel.** If the example order, the shuffle seed handling or the shard assignment varies between runs or between machines, the model differs no matter how perfect the arithmetic is. Before the LLM run, establish whether a deterministic data-ordering lane exists and build one if it does not.
+
+**Link 5 matters more under the replication design** than it would otherwise, because that design restarts from checkpoints repeatedly. A checkpoint that does not round-trip bit-exactly makes every replicated segment meaningless, and it would look exactly like a vendor disagreement.
+
 ## The calibration run, which should come first
 
 Before committing real money, do a **small version of the whole thing**: a 10M to 20M parameter model, one to two hours of training, the full replication design across all three vendors.
