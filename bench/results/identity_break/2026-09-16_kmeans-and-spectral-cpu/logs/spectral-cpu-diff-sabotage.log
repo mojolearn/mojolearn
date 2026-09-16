@@ -1,0 +1,128 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7742-64-core-processor is a CPU column: cpu_model='AMD EPYC 7742 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_metrics_host'] commit=8511c8c518088829c86cd052a1dee0125cd1939e
+NOTE: column cpu-amd-epyc-7742-64-core-processor-sabotage is a CPU column: cpu_model='AMD EPYC 7742 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_metrics_host'] commit=8511c8c518088829c86cd052a1dee0125cd1939e
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-7742-64-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-7742-64-core-processor-sabotage: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-7742-64-core-processor | cpu-amd-epyc-7742-64-core-processor-sabotage |
+|------------------------------|------------|------------------|------------------|
+| spectral-precomputed/base    | IDENTICAL x2 | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf |
+| spectral-precomputed/denormal | ONE-COLUMN | 134d1fdd8654374a | (not run)        |
+| spectral-precomputed/denormal_ftz | ONE-COLUMN | 134d1fdd8654374a | (not run)        |
+| spectral-precomputed/dupes   | ONE-COLUMN | 8df6d51dbff9ddaf | (not run)        |
+| spectral-precomputed/hashed  | ONE-COLUMN | fafd67318e66c8e9 | (not run)        |
+| spectral-precomputed/negative | ONE-COLUMN | 6231ccf8fca2283f | (not run)        |
+| spectral-precomputed/odd     | ONE-COLUMN | bbe40df82c9e623a | (not run)        |
+| spectral-precomputed/ties    | IDENTICAL x2 | 32ed236da838cb22 | 32ed236da838cb22 |
+| spectral-precomputed/wide    | ONE-COLUMN | ebeb9c5c4008a66d | (not run)        |
+| spectral/base                | IDENTICAL x2 | 112c7b0d7556a6ff | 112c7b0d7556a6ff |
+| spectral/denormal            | ONE-COLUMN | 96081e4016bb85b3 | (not run)        |
+| spectral/denormal_ftz        | ONE-COLUMN | 96081e4016bb85b3 | (not run)        |
+| spectral/dupes               | ONE-COLUMN | 112c7b0d7556a6ff | (not run)        |
+| spectral/hashed              | ONE-COLUMN | 63111a283f247f0c | (not run)        |
+| spectral/negative            | ONE-COLUMN | 0ae906c32d701fe3 | (not run)        |
+| spectral/odd                 | ONE-COLUMN | c8c26f83355366a6 | (not run)        |
+| spectral/ties                | IDENTICAL x2 | 3976be59c005d8f8 | 3976be59c005d8f8 |
+| spectral/wide                | ONE-COLUMN | a65623b09f32292e | (not run)        |
+
+summary: IDENTICAL=4, ONE-COLUMN=14
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-7742-64-core-processor | cpu-amd-epyc-7742-64-core-processor-sabotage |
+|------------------------------|--------|--------------|------------------|------------------|
+| spectral-precomputed/base    | infer  | DIVERGENT    | bb2835f47f32e74d | b65c4d613f0bfc8c |
+| spectral-precomputed/base    | model  | IDENTICAL x2 | 6b04b89cfa623e45 | 6b04b89cfa623e45 |
+| spectral-precomputed/base    | batch  | DIVERGENT    | 403839d9afb03ede | 08a819015c790975 |
+| spectral-precomputed/denormal | infer  | ONE-COLUMN   | 7cd8401e0437ce89 | (not run)        |
+| spectral-precomputed/denormal | model  | ONE-COLUMN   | 0df4233607620b15 | (not run)        |
+| spectral-precomputed/denormal | batch  | ONE-COLUMN   | 600fc84e875132a6 | (not run)        |
+| spectral-precomputed/denormal_ftz | infer  | ONE-COLUMN   | 7cd8401e0437ce89 | (not run)        |
+| spectral-precomputed/denormal_ftz | model  | ONE-COLUMN   | 0df4233607620b15 | (not run)        |
+| spectral-precomputed/denormal_ftz | batch  | ONE-COLUMN   | 600fc84e875132a6 | (not run)        |
+| spectral-precomputed/dupes   | infer  | ONE-COLUMN   | bb2835f47f32e74d | (not run)        |
+| spectral-precomputed/dupes   | model  | ONE-COLUMN   | 6b04b89cfa623e45 | (not run)        |
+| spectral-precomputed/dupes   | batch  | ONE-COLUMN   | 403839d9afb03ede | (not run)        |
+| spectral-precomputed/hashed  | infer  | ONE-COLUMN   | 3aed3a887e2b0c41 | (not run)        |
+| spectral-precomputed/hashed  | model  | ONE-COLUMN   | 57673edfae833da5 | (not run)        |
+| spectral-precomputed/hashed  | batch  | ONE-COLUMN   | f37e31ace943997d | (not run)        |
+| spectral-precomputed/negative | infer  | ONE-COLUMN   | 423f584e1c5cce33 | (not run)        |
+| spectral-precomputed/negative | model  | ONE-COLUMN   | 8ff2c152fc6fba9f | (not run)        |
+| spectral-precomputed/negative | batch  | ONE-COLUMN   | 43d927a591f2c6fa | (not run)        |
+| spectral-precomputed/odd     | infer  | ONE-COLUMN   | dce8f63e8bca9703 | (not run)        |
+| spectral-precomputed/odd     | model  | ONE-COLUMN   | c9fda73cee1e07c0 | (not run)        |
+| spectral-precomputed/odd     | batch  | ONE-COLUMN   | b7fdd3972dd692b3 | (not run)        |
+| spectral-precomputed/ties    | infer  | DIVERGENT    | 77b660ca4b2a42e2 | b949cadfcdd521ec |
+| spectral-precomputed/ties    | model  | IDENTICAL x2 | ea7aeb5dfe06471c | ea7aeb5dfe06471c |
+| spectral-precomputed/ties    | batch  | DIVERGENT    | eba1461e59f20122 | ac743c79f0679257 |
+| spectral-precomputed/wide    | infer  | ONE-COLUMN   | c0ba56eeb5dcea34 | (not run)        |
+| spectral-precomputed/wide    | model  | ONE-COLUMN   | 710be55734b0c960 | (not run)        |
+| spectral-precomputed/wide    | batch  | ONE-COLUMN   | 73a372dffb458803 | (not run)        |
+| spectral/base                | infer  | DIVERGENT    | a7f3488317ff571e | 964b85920aa175cc |
+| spectral/base                | model  | IDENTICAL x2 | 3e34622ced4d3c60 | 3e34622ced4d3c60 |
+| spectral/base                | batch  | DIVERGENT    | fedcfcc1f97d1520 | e6c013490b983188 |
+| spectral/denormal            | infer  | ONE-COLUMN   | 2afcfda3fa76f90f | (not run)        |
+| spectral/denormal            | model  | ONE-COLUMN   | 508b97806e7b4642 | (not run)        |
+| spectral/denormal            | batch  | ONE-COLUMN   | a34a571fd486b72b | (not run)        |
+| spectral/denormal_ftz        | infer  | ONE-COLUMN   | 2afcfda3fa76f90f | (not run)        |
+| spectral/denormal_ftz        | model  | ONE-COLUMN   | dbaf9dde2a1654b4 | (not run)        |
+| spectral/denormal_ftz        | batch  | ONE-COLUMN   | a34a571fd486b72b | (not run)        |
+| spectral/dupes               | infer  | ONE-COLUMN   | a7f3488317ff571e | (not run)        |
+| spectral/dupes               | model  | ONE-COLUMN   | 3e34622ced4d3c60 | (not run)        |
+| spectral/dupes               | batch  | ONE-COLUMN   | fedcfcc1f97d1520 | (not run)        |
+| spectral/hashed              | infer  | ONE-COLUMN   | 0227830c9fd1fe3e | (not run)        |
+| spectral/hashed              | model  | ONE-COLUMN   | dbca01a677a6db83 | (not run)        |
+| spectral/hashed              | batch  | ONE-COLUMN   | 62a05c74d9804ffb | (not run)        |
+| spectral/negative            | infer  | ONE-COLUMN   | 9125742811a1c301 | (not run)        |
+| spectral/negative            | model  | ONE-COLUMN   | f530608624dd3f0b | (not run)        |
+| spectral/negative            | batch  | ONE-COLUMN   | bf7af370b26728ba | (not run)        |
+| spectral/odd                 | infer  | ONE-COLUMN   | 39fdef517641e388 | (not run)        |
+| spectral/odd                 | model  | ONE-COLUMN   | 5b584f9ad9a4334f | (not run)        |
+| spectral/odd                 | batch  | ONE-COLUMN   | 3b67216c0796907b | (not run)        |
+| spectral/ties                | infer  | DIVERGENT    | 3a3fc8018ebcbca3 | b3f9c088c84e9a37 |
+| spectral/ties                | model  | IDENTICAL x2 | ad1e356159f986fd | ad1e356159f986fd |
+| spectral/ties                | batch  | DIVERGENT    | fa770a3b846ea54d | f6d3fa103bcde1a8 |
+| spectral/wide                | infer  | ONE-COLUMN   | 586e97f6021ef95f | (not run)        |
+| spectral/wide                | model  | ONE-COLUMN   | a985160042099a54 | (not run)        |
+| spectral/wide                | batch  | ONE-COLUMN   | 1669b42120ecc80a | (not run)        |
+
+summary (infer/model): DIVERGENT=4, IDENTICAL=4, ONE-COLUMN=28
+summary (batch): DIVERGENT=4, ONE-COLUMN=14
+summary (rlpair): 

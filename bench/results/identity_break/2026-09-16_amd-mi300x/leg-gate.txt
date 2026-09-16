@@ -1,0 +1,173 @@
+started=2026-09-16T18:31:53Z
+commit=27c5baf023c79a3e98f260e5889237ebbf1312b7
+device=GPU[0]		: Card Series: 		AMD Instinct MI300X GPU[0]		: Card Model: 		0x74a1 
+cpu=model name	: AMD EPYC 9474F 48-Core Processor x86_64 
+gpu_archs=gfx942
+vendor_label=amd-amd-instinct-mi300x-gfx942
+vendor=hip
+record_predict_exit=1
+             ~~~~^^
+  File "/root/mojolearn/tools/classical_host_gate.py", line 837, in main
+    return do_record(args)
+  File "/root/mojolearn/tools/classical_host_gate.py", line 596, in do_record
+    fit = (ib.LANES[lane] if lane in ib.LANES else LOCAL_FITS[lane])(mojolearn, X, yc, yr, Xh_full)
+  File "/root/mojolearn/tools/identity_break.py", line 1057, in _
+    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:6000, :4])
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+    return method(self, *args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/density.py", line 325, in fit
+    self.n_iter_ = binding.dbscan_fit_core(
+                   ~~~~~~~~~~~~~~~~~~~~~~~^
+        addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        addr(core, name="core"), params,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+| dbscan                 | 64df251bd00de81b | b7535355c1581603 | d17808b4b9261d5d | REFUSED          | REFUSED          | REFUSED          | 64df251bd00de81b | REFUSED          | REFUSED          |
+| dbscan infer           | e6e720fcb54b180e | 63990f64c63d296b | 3a6472714f51d8ab | REFUSED          | REFUSED          | REFUSED          | e6e720fcb54b180e | REFUSED          | REFUSED          |
+| dbscan model           | c36812c6260e7ee6 | 7c766eb707695149 | 22074f6988a2878e | REFUSED          | REFUSED          | REFUSED          | c36812c6260e7ee6 | REFUSED          | REFUSED          |
+| dbscan batch           | f7e7d24690d3107e | be9e40c554329827 | a8e67882b424a053 | REFUSED          | REFUSED          | REFUSED          | f7e7d24690d3107e | REFUSED          | REFUSED          |
+| dbscan-brute-l1        | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-brute-l1 infer  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-brute-l1 model  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-brute-l1 batch  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-weighted        | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-weighted infer  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-weighted model  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-weighted batch  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+cells=54 stable=31 moved=0 refused=23
+REFUSED dbscan/wide: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan/denormal: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan/denormal_ftz: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan/odd: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan/negative: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-brute-l1/base: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-brute-l1/ties: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-brute-l1/hashed: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-brute-l1/wide: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-brute-l1/denormal: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-brute-l1/denormal_ftz: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-brute-l1/dupes: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-brute-l1/odd: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-brute-l1/negative: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-weighted/base: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-weighted/ties: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+REFUSED dbscan-weighted/hashed: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+record_kmeans_exit=0
+record kmeans-weighted odd KMeans identity_hash 86bea24bd326b655 predict 8962069a64da51d7e1b16d779daca407f40e31b6fa24943e4db0115b659f7989 (vendor hip)
+record kmeans-weighted negative KMeans identity_hash 9c9857b78115542b predict 4417df6c99b99a006165a2bb53ee3996ac7c6c55123fcb294729ab6c4162eb22 (vendor hip)
+record kmeans-sqrt base KMeans identity_hash 58a73ee6f884f892 predict efe666197a80ed81a1a87a937ee51872bd31cab056b05e64d293910d36f881d6 (vendor hip)
+record kmeans-sqrt ties KMeans identity_hash 11403f38e806a8a7 predict 4abcf52591638af1dc332d0fef50c8c149d5a3fcc64f526db72bc75fedf01626 (vendor hip)
+record kmeans-sqrt hashed KMeans identity_hash a06e759c2854f5c9 predict 3000eb098968a9f6975eccc272068c410721dc6723c3f27f47bd9d2c8e9f5702 (vendor hip)
+record kmeans-sqrt wide KMeans identity_hash 37c2fbaaa28d56dc predict 0da9efb06d1cb7c59df53dcbb8f3a8e4787383341211fbc538f710c565fcd00b (vendor hip)
+record kmeans-sqrt denormal KMeans identity_hash 5613aee8380a3878 predict 9342a2ad120d02567f655d15d05fa6814ff8e5984f427630f26a53bc5ebe8830 (vendor hip)
+record kmeans-sqrt denormal_ftz KMeans identity_hash 5613aee8380a3878 predict 9342a2ad120d02567f655d15d05fa6814ff8e5984f427630f26a53bc5ebe8830 (vendor hip)
+record kmeans-sqrt dupes KMeans identity_hash b92ddb041800ab7d predict ec89ed6b9ad64e3181e843cdf5f5bc3cdd77c7128c7956c19608ab22262228fb (vendor hip)
+record kmeans-sqrt odd KMeans identity_hash d57783b77ce4e554 predict aef48b03ab0a3e490edc8c1782067733ee040230473095dedb4a7b7411a4f65b (vendor hip)
+record kmeans-sqrt negative KMeans identity_hash 8184b15e6474cb1c predict 30380f6ecb8af029104357e3d1e26c6e59e69ed4b84fc6dc8ab4a440425fc4c3 (vendor hip)
+record kmeans-classic-pp base KMeans identity_hash e44226a81eebb7a8 predict 2bd43baa4649eaf8b3e63c0e2cdcbdf22793a82dd42aa26290352d6cf050ab9b (vendor hip)
+record kmeans-classic-pp ties KMeans identity_hash 83ac9df1fe7b737d predict 709b0913b5961e84d6f744ff8a0ec451c0bcf2e2544ccc2bcb5ab9849de7e321 (vendor hip)
+record kmeans-classic-pp hashed KMeans identity_hash 8987a9c854625d1b predict 3a781ee68db4f364429a01bdd2ce2200e337e6799fad9292e6a4ca4bffeb05c7 (vendor hip)
+record kmeans-classic-pp wide KMeans identity_hash 364ff36014fc9d74 predict 1163c397807894d674856ba2a2d49dea69deb6a26c72cbf6c52c096f9552322b (vendor hip)
+record kmeans-classic-pp denormal KMeans identity_hash f86f206425b73e29 predict 3d690e44ba5a82ab674ae2e6b235af3f51170058112c6c792b50fdb268a768d7 (vendor hip)
+record kmeans-classic-pp denormal_ftz KMeans identity_hash f86f206425b73e29 predict 3d690e44ba5a82ab674ae2e6b235af3f51170058112c6c792b50fdb268a768d7 (vendor hip)
+record kmeans-classic-pp dupes KMeans identity_hash a84b8a2e9fe29bb3 predict 78d5f80c81f8f3b073d75d7a3c9d6f9ae533bcedc0cf2f707941fffaa93701a1 (vendor hip)
+record kmeans-classic-pp odd KMeans identity_hash 3b0d31ba504ffc5b predict e9d9234481560e6c45dd74794475810ee1c5efefd1848c97d0e8a8182da10c70 (vendor hip)
+record kmeans-classic-pp negative KMeans identity_hash 2d1704444a719d70 predict 872f6f5801c24fa763882cb2a935ab359924d25d67e3d0f82cd7686bf232144c (vendor hip)
+cells=63 stable=63 moved=0 refused=0
+check_predict_exit=0
+11840 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x132800000000, nodemask=1)
+check dbscan base predict EQUAL gpu d288a9b1293e5b4d379b87b68aa5e98e3e90253583225b35b95ab2c54a2867b5 host d288a9b1293e5b4d379b87b68aa5e98e3e90253583225b35b95ab2c54a2867b5
+check dbscan base identity_hash EQUAL gpu e6e720fcb54b180e host e6e720fcb54b180e
+check dbscan hashed predict EQUAL gpu 5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef host 5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef
+check dbscan hashed identity_hash EQUAL gpu 3a6472714f51d8ab host 3a6472714f51d8ab
+check dbscan ties predict EQUAL gpu acfe749ff986473bbc9cefc8facdb9d91a1d66a8bc1516fd842fe72915b31f6f host acfe749ff986473bbc9cefc8facdb9d91a1d66a8bc1516fd842fe72915b31f6f
+check dbscan ties identity_hash EQUAL gpu 63990f64c63d296b host 63990f64c63d296b
+gate verdict IDENTICAL (3 fixtures, 0 GPU columns, exit 0)
+check_kmeans_exit=0
+check kmeans-weighted negative predict EQUAL gpu 4417df6c99b99a006165a2bb53ee3996ac7c6c55123fcb294729ab6c4162eb22 host 4417df6c99b99a006165a2bb53ee3996ac7c6c55123fcb294729ab6c4162eb22
+check kmeans-weighted negative predict_training_rows EQUAL gpu 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a host 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a
+check kmeans-weighted negative transform EQUAL gpu f673996558af5650aa35587e8d1c62ad0d5a6e05dd93afcdd03aa0e5cb40b773 host f673996558af5650aa35587e8d1c62ad0d5a6e05dd93afcdd03aa0e5cb40b773
+check kmeans-weighted negative identity_hash EQUAL gpu 9c9857b78115542b host 9c9857b78115542b
+check kmeans-weighted odd labels EQUAL gpu e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4 host e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4
+check kmeans-weighted odd predict EQUAL gpu 8962069a64da51d7e1b16d779daca407f40e31b6fa24943e4db0115b659f7989 host 8962069a64da51d7e1b16d779daca407f40e31b6fa24943e4db0115b659f7989
+check kmeans-weighted odd predict_training_rows EQUAL gpu e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4 host e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4
+check kmeans-weighted odd transform EQUAL gpu 67bf6bc3635d6545eb36fd4923228071fa1604483ae905aef0433057b6264a24 host 67bf6bc3635d6545eb36fd4923228071fa1604483ae905aef0433057b6264a24
+check kmeans-weighted odd identity_hash EQUAL gpu 86bea24bd326b655 host 86bea24bd326b655
+check kmeans-weighted ties labels EQUAL gpu 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08 host 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08
+check kmeans-weighted ties predict EQUAL gpu a7ebbb84b297b7cecaf50cfd1263558851094c7f2e337434c98a02e23baab956 host a7ebbb84b297b7cecaf50cfd1263558851094c7f2e337434c98a02e23baab956
+check kmeans-weighted ties predict_training_rows EQUAL gpu 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08 host 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08
+check kmeans-weighted ties transform EQUAL gpu 97304b6ce5092fb7867390a7d90700c0a0e12d3ce2b60bea9f2b6ae966e3a6e3 host 97304b6ce5092fb7867390a7d90700c0a0e12d3ce2b60bea9f2b6ae966e3a6e3
+check kmeans-weighted ties identity_hash EQUAL gpu f1a40d6c9595a677 host f1a40d6c9595a677
+check kmeans-weighted wide labels EQUAL gpu a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5 host a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5
+check kmeans-weighted wide predict EQUAL gpu 2c2c370cb9d157d10bb38093fc9195de3e6ef14cfda8a811e7ea3aac032dc16c host 2c2c370cb9d157d10bb38093fc9195de3e6ef14cfda8a811e7ea3aac032dc16c
+check kmeans-weighted wide predict_training_rows EQUAL gpu a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5 host a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5
+check kmeans-weighted wide transform EQUAL gpu 1a6c58df1162b03a98fa21edf3bd89fc60d318324860001e907ae2e86c80af43 host 1a6c58df1162b03a98fa21edf3bd89fc60d318324860001e907ae2e86c80af43
+check kmeans-weighted wide identity_hash EQUAL gpu e6cfd7471f95f25f host e6cfd7471f95f25f
+gate verdict IDENTICAL (54 fixtures, 0 GPU columns, exit 0)
+total 2000
+-rwxr-xr-x 1 root root 594488 Sep 16 18:36 _mojolearn_core_host.so
+-rwxr-xr-x 1 root root 653856 Sep 16 18:36 _mojolearn_estimators_host.so
+-rwxr-xr-x 1 root root 794488 Sep 16 18:36 _mojolearn_metrics_host.so
+sabotage_predict_exit=0
+12776 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x531ac0000000, nodemask=1)
+check dbscan base predict DIFFER gpu d288a9b1293e5b4d379b87b68aa5e98e3e90253583225b35b95ab2c54a2867b5 host d96f1cf41809ca123f5cc7460e0d1f8dfaa748a9063d4bcee2f246b4eb76950b
+check dbscan base identity_hash DIFFER gpu e6e720fcb54b180e host 566108915f1ef687
+check dbscan hashed predict DIFFER gpu 5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef host 26f8c588887560686c7a2169bf19e754836bc3c7fe8f553e46ff400fb5fa588b
+check dbscan hashed identity_hash DIFFER gpu 3a6472714f51d8ab host dab6c104519fb920
+check dbscan ties predict DIFFER gpu acfe749ff986473bbc9cefc8facdb9d91a1d66a8bc1516fd842fe72915b31f6f host 99bfe085d3a9204d2c93f32e9695870ae0bd8f033809f3a7540c0d4f7596f758
+check dbscan ties identity_hash DIFFER gpu 63990f64c63d296b host 8cff211e4ce13f60
+gate verdict EXPECTED MISMATCH SEEN (3 fixtures, 0 GPU columns, exit 0)
+sabotage_kmeans_exit=0
+check kmeans-weighted dupes predict DIFFER gpu 3734f778bd4c2ab068489e7cbe6875155379ced3b06a923f4457280afcb5f866 host 98c31dd9cf1522b548474558780bde6c92944ca2b9c5ef3236bd07f4db2217dd
+check kmeans-weighted dupes predict_training_rows DIFFER gpu a707fd1e9447eb348ff704afafb901de9d4a74e28d31a1c87842cb4e78293e28 host 92bf36d7fecb461c1fbb83971c72aeca6cb51dff7f07fc2c94d673e3b284b569
+check kmeans-weighted dupes transform DIFFER gpu 961eabf9b36f11d321710948b31caddc41691fe47640263afa125b41a74e8273 host 0eb5be2025ec0c226db0c3effa50e93f0a953979661a01be37a5e5d99bc51fc6
+check kmeans-weighted dupes identity_hash DIFFER gpu 79cda2869bbc642b host 352d47306e52a0d4
+check kmeans-weighted hashed labels EQUAL gpu 6e5c7d31daf142527193b7f6b40dd20a91e9aa47302fa5ea19accabbad4ffc21 host 6e5c7d31daf142527193b7f6b40dd20a91e9aa47302fa5ea19accabbad4ffc21
+check kmeans-weighted hashed predict DIFFER gpu 8ab5fb10e799d8f44cedfd5ef7be57ac4ff6575df7bc92fe82d4110e4ea7161b host aed2c45f1df02315ac716527c0926e9c793ae9a442e4a61c08b8c71bbb280c1f
+check kmeans-weighted hashed predict_training_rows DIFFER gpu 6e5c7d31daf142527193b7f6b40dd20a91e9aa47302fa5ea19accabbad4ffc21 host c9d0b9b908248e87cab186aee9e55a029b3c0e682824ee6d045f8c95196bacc1
+check kmeans-weighted hashed transform DIFFER gpu 4a928d3958f6e9cbc7fd6dcd82f575bfe3c189315bf7d0006dcae46c78344027 host b3ab3ee9c1aa376335429bf49132079249f2b467aabdad6bb3acc6dbe73a599f
+check kmeans-weighted hashed identity_hash DIFFER gpu 3a661e5929f5295e host 4676c0760865189c
+check kmeans-weighted negative labels EQUAL gpu 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a host 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a
+check kmeans-weighted negative predict DIFFER gpu 4417df6c99b99a006165a2bb53ee3996ac7c6c55123fcb294729ab6c4162eb22 host af20c08c110ab3a026bcc8b20ebfbd65f17714e0727e79a2fc5ef2d95ff43d9b
+check kmeans-weighted negative predict_training_rows DIFFER gpu 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a host 58b852e92a13a4191192095ac405f994346eef131e7fa37643f14ebb58e4c7ca
+check kmeans-weighted negative transform DIFFER gpu f673996558af5650aa35587e8d1c62ad0d5a6e05dd93afcdd03aa0e5cb40b773 host 9aba33223bd72571fb80b7d3e9f96ea1ab39904e1b0bd2fffd24f63e95d6b6c3
+check kmeans-weighted negative identity_hash DIFFER gpu 9c9857b78115542b host 64e2fe936362f8b1
+check kmeans-weighted odd labels EQUAL gpu e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4 host e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4
+check kmeans-weighted odd predict DIFFER gpu 8962069a64da51d7e1b16d779daca407f40e31b6fa24943e4db0115b659f7989 host 3426d4ef94f436f21499f27d350a5aac62c80403cc5226b63896df391bea4054
+check kmeans-weighted odd predict_training_rows DIFFER gpu e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4 host a9c7a48621465c7bdd169b9284a91f7b4a5008eb52cbd2d437b1350e5020680d
+check kmeans-weighted odd transform DIFFER gpu 67bf6bc3635d6545eb36fd4923228071fa1604483ae905aef0433057b6264a24 host 40a107d2e0b7c4a686fa4d300cbc52afa7685aec73783b72882f5eaadb3711bd
+check kmeans-weighted odd identity_hash DIFFER gpu 86bea24bd326b655 host c78bc86829a5f48e
+check kmeans-weighted ties labels EQUAL gpu 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08 host 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08
+check kmeans-weighted ties predict DIFFER gpu a7ebbb84b297b7cecaf50cfd1263558851094c7f2e337434c98a02e23baab956 host 1b1d39f640f30c1802f9716afb4472803e0b7b6a0bb1a1d1ca0a13419ca2163f
+check kmeans-weighted ties predict_training_rows DIFFER gpu 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08 host 5ef92b072d441b5044a8997b1709c5f7729cfac9580877c97f3e419420e7cf53
+check kmeans-weighted ties transform DIFFER gpu 97304b6ce5092fb7867390a7d90700c0a0e12d3ce2b60bea9f2b6ae966e3a6e3 host 227ac98449402a3ebdf6f7d3032dfdf688fb36be8cb46f4ede451fca22075261
+check kmeans-weighted ties identity_hash DIFFER gpu f1a40d6c9595a677 host 8c9bbb02fd81834d
+check kmeans-weighted wide labels EQUAL gpu a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5 host a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5
+check kmeans-weighted wide predict DIFFER gpu 2c2c370cb9d157d10bb38093fc9195de3e6ef14cfda8a811e7ea3aac032dc16c host 98f7f2d820e552b02f06fd590a5109025eaef95a081cd8ea2276a6e3552a229f
+check kmeans-weighted wide predict_training_rows DIFFER gpu a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5 host 40fcf0e02bf13c76a6b3d32fdc90aaa98b9a5d0577c2644b0bae92a0b23f32e9
+check kmeans-weighted wide transform DIFFER gpu 1a6c58df1162b03a98fa21edf3bd89fc60d318324860001e907ae2e86c80af43 host b88363f18c5f7eb0a0ea0c89f68e2b6db3ade0c37d2c17707e9c6975b3a5f396
+check kmeans-weighted wide identity_hash DIFFER gpu e6cfd7471f95f25f host b3f682da0b2f95c1
+gate verdict EXPECTED MISMATCH SEEN (54 fixtures, 0 GPU columns, exit 0)
+build-base	0	37
+build-estimators	0	46
+build-solver	0	29
+build-metrics	0	54
+record-predict	1	3
+identity-predict	0	11
+record-kmeans	0	12
+identity-kmeans	0	17
+build-core-host	0	10
+build-estimators-host	0	11
+build-metrics-host	0	14
+check-predict	0	0
+check-kmeans	0	5
+build-core-host-sabotage	0	11
+build-estimators-host-sabotage	0	10
+build-metrics-host-sabotage	0	14
+sabotage-predict	0	1
+sabotage-kmeans	0	5
+finished=2026-09-16T18:36:43Z

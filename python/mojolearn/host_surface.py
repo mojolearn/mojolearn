@@ -212,6 +212,33 @@ CLASSICAL_RECORDED = (
     # next release record; the identity columns behind these cells are
     # bench/results/identity_break/2026-09-16_predict-nvidia.
     "bench/results/classical_host/2026-09-16-nvidia-predict",
+    # lane/classical-host-recordings (2026-09-16): the six FITTED k-means
+    # lanes, the last entry SAVED_MODEL_INFERENCE_OWED had, on all nine
+    # fixtures each. Recorded on a RunPod NVIDIA A100-SXM4-80GB (sm_80) and
+    # checked on BOTH host architectures: `gate verdict IDENTICAL (54
+    # fixtures, exit 0)` on the box's x86-64 bindings AND on the M4's arm64
+    # ones, so a model fitted on an A100 answers predict and transform with
+    # the A100's bits on a machine with no GPU. Both sabotage host sets, the
+    # family define and MOJOLEARN_KMEANS_PREDICT_SABOTAGE, read `EXPECTED
+    # MISMATCH SEEN` with `unmoved` EMPTY under --every-fixture on both
+    # architectures. The family define had NO arm on this side of the
+    # library until that lane added one, and its --every-fixture arm read
+    # `SABOTAGE NOT CAUGHT` on all 54 when it was first rehearsed. The Apple
+    # and AMD recordings are owed to the next release record; the identity
+    # column behind these cells is
+    # bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu.
+    "bench/results/classical_host/2026-09-16-nvidia-kmeans",
+    # The AMD column of the same six lanes, same nine fixtures, on a RunPod
+    # MI300X (gfx942): `gate verdict IDENTICAL (54 fixtures, exit 0)` and the
+    # predict-define sabotage arm caught on all 54 under --every-fixture. The
+    # AMD PREDICT recording from the same box is 3 of 36 and is deliberately
+    # NOT listed here: its `record` died on the fourth fixture with
+    # hipErrorOutOfMemory in dbscan_fit_core after four DBSCAN fits had
+    # succeeded, so it is kept, named partial, at
+    # bench/results/classical_host/2026-09-16-amd-predict-partial with the
+    # finding written up in
+    # bench/results/identity_break/2026-09-16_amd-mi300x/README.md.
+    "bench/results/classical_host/2026-09-16-amd-kmeans",
 )
 
 #: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
@@ -1111,16 +1138,24 @@ FAMILIES = (
         # The neighbors and density inference lane (2026-09-15) adds every
         # k-NN metric, the ball cover, the distance-weighted vote and mean
         # and RadiusNeighbors on its four metrics, all from a saved model.
+        # lane/classical-host-recordings (2026-09-16): the six FITTED k-means
+        # lanes, from a saved `mojolearn-kmeans-1` file through `HostKMeans`
+        # on this binding (`kmeans_predict` and `kmeans_transform`, the
+        # arithmetic of cluster/host/kmeans_oracle.mojo). One format carries
+        # every metric and every start. `kmeans-cosine` is NOT an inference
+        # lane: its fit is refused by name, so there is no model to save.
         inference_lanes=("knn", "knn-clf", "knn-reg", "knn-sqeuclidean", "knn-manhattan",
                          "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
                          "knn-clf-distance", "knn-reg-distance", "radius", "radius-manhattan",
-                         "radius-chebyshev", "radius-minkowski-p3"),
+                         "radius-chebyshev", "radius-minkowski-p3",
+                         "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
+                         "kmeans-sqrt", "kmeans-classic-pp"),
         forest_kinds=(),
         classes=(
             "NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans",
             "RadiusNeighbors",
         ),
-        display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting and radius neighbors",
+        display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting, radius neighbors and k-means assignment and distances",
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
             "cluster/host/kmeans_oracle.mojo",
@@ -1138,8 +1173,8 @@ FAMILIES = (
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Ships: k-NN, radius-neighbor and k-means inference from a saved model, fifteen inference "
-            "lanes."
+            "Ships: k-NN, radius-neighbor and k-means inference from a saved model, twenty-one "
+            "inference lanes."
         ),
         ships_in_wheel=True,
     ),
@@ -1271,15 +1306,17 @@ FAMILIES = (
         training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
                         "metrics-fowlkes-mallows"),
         # UMAP.transform from a saved embedding (lane/inference-forecast-
-        # umap-pca, 2026-09-15). Its answer depends on the query batch by the
-        # transform's contract, so the claim is the GPU's bytes for the same
-        # batch; `inference_display` says so in the README sentence.
+        # umap-pca, 2026-09-15). Its answer depended on the query batch by the
+        # transform's contract until lane/umap-batch-fix (2026-09-16) made all
+        # four couplings per row, so the claim is now the GPU's bytes for a
+        # row whatever else is asked with it; `inference_display` says so in
+        # the README sentence.
         # SpectralClustering.predict joins it (lane/saved-model-reference-gaps,
         # 2026-09-16, DEVIATION 2860): the Nystrom extension from a saved
         # `prediction_data=True` fit, through `spectral_predict` on this
         # binding, for both affinities the estimator accepts.
         inference_lanes=("umap", "spectral", "spectral-precomputed"),
-        inference_display="UMAP transform of a saved embedding (the GPU's bytes for the same query batch; a row's embedding depends on the batch it is asked in)",
+        inference_display="UMAP transform of a saved embedding (the GPU's bytes for a row, whatever else is asked in the same batch)",
         forest_kinds=(),
         classes=(
             "SpectralClustering", "UMAP",
@@ -2361,41 +2398,89 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #:                     from every committed record, so these do have hashes,
 #:                     but `record_covered_lanes()` is what the public set is
 #:                     held to and they are not in it.
+#:   unwatched         the shipped table DOES carry cells for the lane at the
+#:                     current fixture revision, so nothing static holds it
+#:                     back any more. What is missing is the one thing the
+#:                     promotion rule will not do without: a CPU-only
+#:                     `verify --all` watched to read IDENTICAL for it. Added
+#:                     2026-09-16 by lane/expose-stepfull, which regenerated
+#:                     the table and so cleared `stale reference` for four
+#:                     lanes at once without being able to run that column.
+#:                     The same regeneration gave SIX `no reference`
+#:                     lanes their first cells, so they moved here too.
 #:   measured          a CPU-only `verify --all` at this commit WATCHED the
 #:                     lane and it did not read clean. This reason is the only
 #:                     one that comes from a run rather than from a static
 #:                     condition, and it carries what the run said.
+#:
+#: THE THIRTEEN `stale reference` LANES WERE RESOLVED ON 2026-09-16 by the
+#: regeneration lane/expose-stepfull landed, and the split is the one the
+#: rule predicted: NINE lost every cell, because each record that carried
+#: them predates the fixture shrink, so what they owe is a RECORD and their
+#: reason is now `no reference`; FOUR kept cells at the current revision and
+#: owe only the watched run, so their reason is now `unwatched`.
+#:
+#: AND THE REASON CAME BACK THE SAME DAY, which is the point of keeping it in
+#: the vocabulary. `samba-untied-dropout-accum` (lane/shrink-floors) and then
+#: four more from lane/dead-arms are `stale reference` again: `mamba2-dtlimit`,
+#: whose dt clamp moved, and `mamba3`, `transformer` and `transformer-window`,
+#: whose two same-shape norm weights stopped being one tensor. The last three
+#: were PUBLIC that morning. A fixture change recreates this reason on the
+#: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    "holtwinters": "stale reference",
-    "spectral": "stale reference",
-    "gbdt-nan-modes": "stale reference",
-    "gbdt-parametric-losses": "stale reference",
-    "gbdt-lossguide-newtoncosine": "stale reference",
-    "gbdt-pair-logit": "stale reference",
-    "hdbscan": "stale reference",
-    "hdbscan-leaf": "stale reference",
+    # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
+    # change. UMAP.transform became row separable, so every umap hash in the
+    # shipped table describes bytes this build no longer produces. The
+    # regeneration lane/expose-stepfull landed drops those cells rather than
+    # keeping them, because no committed record was taken at the new
+    # revision, so what umap owes is a RECORD and its reason is
+    # `no reference` rather than `stale reference`. Without an entry here a
+    # user's CPU-only `verify --all` would read OWED for umap on a machine
+    # that is fine.
+    "umap": "no reference",
+    "holtwinters": "no reference",
+    "spectral": "unwatched",
+    "gbdt-nan-modes": "no reference",
+    "gbdt-parametric-losses": "no reference",
+    "gbdt-lossguide-newtoncosine": "no reference",
+    "gbdt-pair-logit": "no reference",
+    "hdbscan": "no reference",
+    "hdbscan-leaf": "no reference",
+    # lane/dead-arms, 2026-09-16: the dt clamp moved from (0.01, 0.1) to
+    # (0.5, 0.9), so the shipped cell 3c1d9aaeaa765468 describes bytes this
+    # harness no longer produces. `unwatched` would be the wrong reason and
+    # the test below says so by name.
     "mamba2-dtlimit": "stale reference",
-    # 2026-09-16, lane/dead-arms: their two same-shape RMSNorm weights were
-    # both ones, so they were the SAME TENSOR and a swap of them was the
-    # identity function. `_block_weights(near_one=...)` gives each its own
-    # vector, which moves these three cells once. They were PUBLIC until
-    # today; the shipped table describes the all-ones bytes, so they are held
-    # back until the next release record regenerates it.
+    # lane/dead-arms, 2026-09-16: THESE THREE WERE PUBLIC UNTIL TODAY. Their
+    # two same-shape RMSNorm weights were both a vector of ones, so they were
+    # the SAME TENSOR and exchanging them on the way in was the identity
+    # function; `_block_weights(near_one=...)` gives each its own vector,
+    # which moves each cell once. The shipped table carries the all-ones
+    # bytes (63de4bf6b9f8262a, 295d4e62d4c78b14, 49ffb2316f238e6d on `base`),
+    # so leaving them public would have a user read DIVERGENT for something
+    # that is not their machine. They come back at the next release record.
     "mamba3": "stale reference",
     "transformer": "stale reference",
     "transformer-window": "stale reference",
-    "samba": "stale reference",
+    "samba": "unwatched",
+    # lane/shrink-floors (2026-09-16) put this lane in identity_break's
+    # LANE_REVISIONS as "steps-3-1", so its fixture has moved past the hash
+    # the shipped table carries and a run would prove nothing. The reason is
+    # "stale reference", not "unwatched", and the test that checks these
+    # reasons against the harness FAILED on main saying exactly that. Found
+    # by lane/classical-host-recordings merging main; it is not this lane's
+    # change and it leaves this dict at the next release record.
     "samba-untied-dropout-accum": "stale reference",
-    "byte-lm": "stale reference",
-    "byte-lm-resident": "stale reference",
-    "metrics-fowlkes-mallows": "no reference",
+    "byte-lm": "no reference",
+    "byte-lm-resident": "no reference",
+    "metrics-fowlkes-mallows": "unwatched",
     "gbdt-adapter-score-weighted": "no reference",
     "rf-score-weighted": "no reference",
-    "gbdt-yeti-rank": "no reference",
-    "arima-exog": "no reference",
-    "arima-exog-seasonal": "no reference",
-    "gbdt-categorical-ctr-tables": "no reference",
-    "gbdt-tensor-ctr-tables": "no reference",
+    "gbdt-yeti-rank": "unwatched",
+    "arima-exog": "unwatched",
+    "arima-exog-seasonal": "unwatched",
+    "gbdt-categorical-ctr-tables": "unwatched",
+    "gbdt-tensor-ctr-tables": "unwatched",
     "kmeans-sqrt": "own record",
     "embedding": "own record",
     "embedding-sort": "own record",
@@ -2531,19 +2616,17 @@ PUBLIC_REFERENCE_CANDIDATES = (
 #: found WHY none of them had a recording: `classical_host_gate.py record`
 #: had been raising AttributeError on main since `--lane-rule-only` was added,
 #: ahead of every other refusal, so the tool that makes a recording could not
-#: start. `kmeans` is left, and lane/kmeans-save gave it the `save` it was
-#: missing, so it is now waiting on the same one thing the other four were.
-SAVED_MODEL_INFERENCE_OWED = {
-    "kmeans": "KMeans.predict and KMeans.transform shipped with lane/kmeans-predict, and "
-              "lane/kmeans-save (2026-09-16) gave the class `save` and `load`: "
-              "mojolearn-kmeans-1 is in _classical_host._FORMATS and host_model returns a "
-              "HostKMeans on _mojolearn_core_host. What is left is the GPU recording under "
-              "bench/results/classical_host/, as it was for dbscan, agglomerative and "
-              "spectral until lane/saved-model-reference-gaps took theirs. The one format "
-              "carries every k-means lane (the metric and the start are members of the file, "
-              "not tags of their own), so the kmeans, kmeans-random, kmeans-array, "
-              "kmeans-weighted, kmeans-sqrt and kmeans-classic-pp lanes all load through it.",
-}
+#: start.
+#:
+#: lane/classical-host-recordings (2026-09-16) took the last one. `kmeans`,
+#: `kmeans-random`, `kmeans-array`, `kmeans-weighted`, `kmeans-sqrt` and
+#: `kmeans-classic-pp` are declared inference lanes now, recorded at
+#: bench/results/classical_host/2026-09-16-nvidia-kmeans, so THE LIST IS
+#: EMPTY. Empty means every saved-model inference the classical host door
+#: dispatches is also a declared, gated and recorded inference lane; it does
+#: NOT mean nothing is left to implement. A new `save` that ships without a
+#: recording belongs here, with the reason, rather than nowhere.
+SAVED_MODEL_INFERENCE_OWED = {}
 
 
 def public_reference_candidates():

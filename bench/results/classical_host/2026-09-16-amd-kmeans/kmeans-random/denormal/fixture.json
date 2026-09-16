@@ -1,0 +1,8 @@
+{
+  "estimator": "KMeans",
+  "heldout_seed": 1,
+  "kind": "denormal",
+  "lane": "kmeans-random",
+  "probe_rows": 20000,
+  "x_sha256": "abaa6f04a019158f645b9f365a93259a6a6031c5c726062374782c546d0e3ed5"
+}

@@ -287,29 +287,46 @@ the shipped reference table already holds, and they are:
 
 ## 5. THE REFERENCE CONSEQUENCE, which is real
 
+Measured against `origin/main` as merged here, not against the state this
+branch was cut from. Main regenerated `python/mojolearn/verify_reference/table.json`
+this morning (`lane/expose-stepfull`), and the regenerated table's own
+`train/base` refs are **exactly the five pre-fix cells measured above**, which
+is an independent confirmation of every "before" number in sections 1 to 3:
+
+```
+  mamba2-dtlimit      3c1d9aaeaa765468        mamba3              63de4bf6b9f8262a
+  transformer         295d4e62d4c78b14        transformer-window  49ffb2316f238e6d
+  mamba1              1609902abaf80a04        mamba2              5b05a3ecbd70248e   (the two controls)
+```
+
+**Five lanes' recorded cells move. One of the five costs nothing.**
+
+| lane | revision was | is now | what it costs |
+|---|---|---|---|
+| `gbdt-nan-modes` | `rows-1500-1` | `rows-1500-nan-in-split-columns-2` | nothing: the regenerated table carries NO cell for it, so it is `no reference` before and after |
+| `mamba2-dtlimit` | `seqlen-8-1` | `seqlen-8-dtlimit-straddle-2` | its reason moves from `unwatched` to `stale reference`; the table's cell now describes different bytes |
+| `mamba3` | (none, PUBLIC) | `norms-near-one-1` | **held back from the public set until the next record** |
+| `transformer` | (none, PUBLIC) | `norms-near-one-1` | **held back** |
+| `transformer-window` | (none, PUBLIC) | `norms-near-one-1` | **held back** |
+
 `release/0.8.7` is live and has not recorded yet (its build gate lifted today,
 `06afb4075`), so this lands at the cheapest moment there is: the 0.8.7 record
-captures the new revisions and regenerates the shipped table in one pass.
+captures the new revisions and regenerates the table in one pass. The three
+that were public carried cells describing the all-ones bytes, so leaving them
+public would have had a user read DIVERGENT for something that is not their
+machine.
 
-**Five lanes' recorded cells move. Two of the five cost nothing extra.**
+**The three new revisions are NOT sizes**, so they carry no `@floor` and are
+declared in `NON_SIZE_REVISIONS` with what moved instead, which is what
+`tools/fixture_floors.py` rule 1 requires. `gbdt-nan-modes` and
+`mamba2-dtlimit` keep their size keys (`rows-1500-...`, `seqlen-8-...`) and
+their existing floors: **neither fix moved a size.** The two `@floor` reasons
+are updated, because both of them described the dead arm as dead.
 
-| lane | was | is now | cost |
-|---|---|---|---|
-| `gbdt-nan-modes` | `rows-1500-1` | `rows-1500-nan-in-split-columns-2` | none: already `stale reference`, already owed a re-record |
-| `mamba2-dtlimit` | `seqlen-8-1` | `seqlen-8-dtlimit-straddle-2` | none: already `stale reference`, already owed a re-record |
-| `mamba3` | (no entry, PUBLIC) | `norms-near-one-1` | **held back from the public set until the next record** |
-| `transformer` | (no entry, PUBLIC) | `norms-near-one-1` | **held back** |
-| `transformer-window` | (no entry, PUBLIC) | `norms-near-one-1` | **held back** |
+### The guard was watched to FAIL before it was trusted
 
-The three that were public carried cells in
-`python/mojolearn/verify_reference/table.json` describing the all-ones bytes
-(`train/base` `63de4bf6b9f8262a`, `295d4e62d4c78b14`, `49ffb2316f238e6d`), so
-leaving them public would have had a user read DIVERGENT for something that is
-not their machine. They are now `PUBLIC_PENDING_LANES[...] = "stale reference"`.
-
-**The guard was watched to FAIL before it was trusted.** With the three
-`PUBLIC_PENDING_LANES` entries removed, `test_host_surface.py
-::test_public_reference_lanes_are_derived_and_every_pending_reason_is_true`
+With the three `PUBLIC_PENDING_LANES` entries removed,
+`test_host_surface.py::test_public_reference_lanes_are_derived_and_every_pending_reason_is_true`
 fails and names them:
 
 ```
@@ -319,7 +336,8 @@ E   AssertionError: these lanes' fixtures moved past the shipped reference and t
 1 failed, 154 deselected
 ```
 
-With them restored, `155 passed`.
+With them restored, the file passes. That was run before the merge, against
+main's older copy of the same test; the post-merge run is in section 7.
 
 ## 6. What this does NOT claim
 

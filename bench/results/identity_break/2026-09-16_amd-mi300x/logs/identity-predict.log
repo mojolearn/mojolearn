@@ -1,0 +1,336 @@
+10460 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x121000000000, nodemask=1)
+##(##(hip[0]:0x64f4f0c4b990)##: memory_manager(chunk_size: 0 ; max_cache_size: 0 ; free_list: 0x64f4f0c5efa0)
+hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=137.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f1a18940 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=48.10MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f1f074b0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=48.10MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f0c62150 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=2.55MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f1fa7b60 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=19.21MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f19e3b70 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+# vendor=amd-amd-instinct-mi300x-gfx942 commit=27c5baf023c79a3e98f260e5889237ebbf1312b7 (commit.txt)
+# identity_break  mode=identical  2026-09-16 18:34:42  Linux-6.8.0-138-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| dbscan                 | 64df251bd00de81b | b7535355c1581603 | d17808b4b9261d5d | REFUSED          | REFUSED          | REFUSED          | 64df251bd00de81b | REFUSED          | REFUSED          |
+| dbscan infer           | e6e720fcb54b180e | 63990f64c63d296b | 3a6472714f51d8ab | REFUSED          | REFUSED          | REFUSED          | e6e720fcb54b180e | REFUSED          | REFUSED          |
+| dbscan model           | c36812c6260e7ee6 | 7c766eb707695149 | 22074f6988a2878e | REFUSED          | REFUSED          | REFUSED          | c36812c6260e7ee6 | REFUSED          | REFUSED          |
+| dbscan batch           | f7e7d24690d3107e | be9e40c554329827 | a8e67882b424a053 | REFUSED          | REFUSED          | REFUSED          | f7e7d24690d3107e | REFUSED          | REFUSED          |
+| agglomerative          | ad11b976bfbfc20b | 7dea8a094150b8a9 | 196c79a60c16166c | 24b2baa4533fb568 | b05982504c7e8646 | b05982504c7e8646 | ad11b976bfbfc20b | c747a33eff11bbe1 | 795f9975eb5ed985 |
+| agglomerative infer    | 3a6472714f51d8ab | d161892b4ef55128 | 26e420cf82c51709 | 3a6472714f51d8ab | 2b2d3f329eec69f7 | 2b2d3f329eec69f7 | 3a6472714f51d8ab | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| agglomerative model    | 9bb9f86300c44f5f | 64a8cd1101ec17ba | a18b7b9941cdcfc6 | 921238d7a4940b9c | 0749a7721feb2709 | 60f83b3658dd10ab | 9bb9f86300c44f5f | dc518a35765a3b5c | 573732d2cc0397a8 |
+| agglomerative batch    | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 | a2740d2ed4d74812 | a2740d2ed4d74812 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| spectral               | 112c7b0d7556a6ff | 3976be59c005d8f8 | 63111a283f247f0c | a65623b09f32292e | 96081e4016bb85b3 | 96081e4016bb85b3 | 112c7b0d7556a6ff | c8c26f83355366a6 | 0ae906c32d701fe3 |
+| spectral infer         | a7f3488317ff571e | 3a3fc8018ebcbca3 | 0227830c9fd1fe3e | 586e97f6021ef95f | 2afcfda3fa76f90f | 2afcfda3fa76f90f | a7f3488317ff571e | 39fdef517641e388 | 9125742811a1c301 |
+| spectral model         | 3e34622ced4d3c60 | ad1e356159f986fd | dbca01a677a6db83 | a985160042099a54 | 508b97806e7b4642 | dbaf9dde2a1654b4 | 3e34622ced4d3c60 | 5b584f9ad9a4334f | f530608624dd3f0b |
+| spectral batch         | fedcfcc1f97d1520 | fa770a3b846ea54d | 62a05c74d9804ffb | 1669b42120ecc80a | a34a571fd486b72b | a34a571fd486b72b | fedcfcc1f97d1520 | 3b67216c0796907b | bf7af370b26728ba |
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f218b830 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f19c1250 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f20222c0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f1ef0f80 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f1f0fc50 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f19c1250 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f20222c0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f1ef0f80 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f1f0fc50 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+| dbscan-brute-l1        | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-brute-l1 infer  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-brute-l1 model  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-brute-l1 batch  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f19c1250 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f20222c0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f1ef0f80 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f1f0fc50 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f19c1250 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f20222c0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f1ef0f80 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f1f0fc50 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+##(hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=34.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x64f4f19c1250 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x64f4f0c5efa0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+| dbscan-weighted        | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-weighted infer  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-weighted model  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| dbscan-weighted batch  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| spectral-precomputed   | 8df6d51dbff9ddaf | 32ed236da838cb22 | fafd67318e66c8e9 | ebeb9c5c4008a66d | 134d1fdd8654374a | 134d1fdd8654374a | 8df6d51dbff9ddaf | bbe40df82c9e623a | 6231ccf8fca2283f |
+| spectral-precomputed infer | bb2835f47f32e74d | 77b660ca4b2a42e2 | 3aed3a887e2b0c41 | c0ba56eeb5dcea34 | 7cd8401e0437ce89 | 7cd8401e0437ce89 | bb2835f47f32e74d | dce8f63e8bca9703 | 423f584e1c5cce33 |
+| spectral-precomputed model | 6b04b89cfa623e45 | ea7aeb5dfe06471c | 57673edfae833da5 | 710be55734b0c960 | 0df4233607620b15 | 0df4233607620b15 | 6b04b89cfa623e45 | c9fda73cee1e07c0 | 8ff2c152fc6fba9f |
+| spectral-precomputed batch | 403839d9afb03ede | eba1461e59f20122 | f37e31ace943997d | 73a372dffb458803 | 600fc84e875132a6 | 600fc84e875132a6 | 403839d9afb03ede | b7fdd3972dd692b3 | 43d927a591f2c6fa |
+
+cells=54 stable=31 moved=0 refused=23
+infer: stable=31
+model: stable=31
+batch: stable=31
+REFUSED dbscan/wide: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan/denormal: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan/denormal_ftz: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan/odd: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan/negative: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-brute-l1/base: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-brute-l1/ties: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-brute-l1/hashed: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-brute-l1/wide: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-brute-l1/denormal: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-brute-l1/denormal_ftz: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-brute-l1/dupes: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-brute-l1/odd: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-brute-l1/negative: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-weighted/base: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-weighted/ties: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-weighted/hashed: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-weighted/wide: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-weighted/denormal: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-weighted/denormal_ftz: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-weighted/dupes: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-weighted/odd: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+REFUSED dbscan-weighted/negative: Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.
+wrote /root/gemm_leg_out/predict-kmeans-amd/amd-amd-instinct-mi300x-gfx942.predict.json

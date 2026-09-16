@@ -1,0 +1,29 @@
+3078 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x305400000000, nodemask=1)
+vendor=cuda  numeric_mode=identical
+host binding=/root/mojolearn/python/mojolearn/host/_mojolearn_core_host.so
+[default] fitted on cuda; loaded as HostKMeans on cpu
+    predict   <i4 (256,) sha256=be303630b87ead55362219e456934df80d7d2dac93c9f0871b6431ebb4be5992
+    transform <f4 (256, 6) sha256=64c2f464b959282bd87795f17a7d94d80d69bcf8f61df1b7802acef01e5a61ba
+    IDENTICAL: predict and transform on 256 held-out rows, and predict on the 512 training rows equals labels_
+    CONTROL FIRED: centers[0] np.float32(1.0956461) -> np.float32(1.0956463); transform(256, 6) at (np.int64(2), np.int64(0)): np.float32(7.275838) -> np.float32(7.2758384) (69 of 1536 moved); UNMOVED: predict
+[l2-sqrt] fitted on cuda; loaded as HostKMeans on cpu
+    predict   <i4 (256,) sha256=af10dbf77b647556f172c18e77dfb53f97bf9182aeecf62947b27c808e51b1ad
+    transform <f4 (256, 6) sha256=6da4866f90f528054b806942e730a994d2bd9077b806ea1f5a10ffdb7c90c24b
+    IDENTICAL: predict and transform on 256 held-out rows, and predict on the 512 training rows equals labels_
+    CONTROL FIRED: centers[0] np.float32(-0.71478313) -> np.float32(-0.7147832); transform(256, 6) at (np.int64(2), np.int64(0)): np.float32(1.3733588) -> np.float32(1.373359) (37 of 1536 moved); UNMOVED: predict
+[random-start] fitted on cuda; loaded as HostKMeans on cpu
+    predict   <i4 (256,) sha256=92c70227f456955428b4b25fca76d8837a7d9402a5fe8622d0e6472dad499a2d
+    transform <f4 (256, 5) sha256=49979c91c11cc85276babeaaa25a0a96475c3d960e8912514c94d68c2e175ce3
+    IDENTICAL: predict and transform on 256 held-out rows, and predict on the 512 training rows equals labels_
+    CONTROL FIRED: centers[0] np.float32(0.8512116) -> np.float32(0.85121167); transform(256, 5) at (np.int64(1), np.int64(0)): np.float32(7.7059345) -> np.float32(7.705935) (44 of 1280 moved); UNMOVED: predict
+[classic-pp] fitted on cuda; loaded as HostKMeans on cpu
+    predict   <i4 (256,) sha256=5ad6a0fce95f63dd7a96e0f2b7610c1ac8e913e23212be2bf7b62f401d609713
+    transform <f4 (256, 5) sha256=a7748a62e3b6eb70c1081d84d92887e83be95468b0b55f4046995ebd8d6b7fab
+    IDENTICAL: predict and transform on 256 held-out rows, and predict on the 512 training rows equals labels_
+    CONTROL FIRED: centers[0] np.float32(-0.64205885) -> np.float32(-0.6420589); transform(256, 5) at (np.int64(1), np.int64(0)): np.float32(1.2031093) -> np.float32(1.203109) (103 of 1280 moved); UNMOVED: predict
+[weighted] fitted on cuda; loaded as HostKMeans on cpu
+    predict   <i4 (256,) sha256=eb4b3dcfe829211b394766f2f69e0e3efcd40e2789948b0fc74ba4008148861e
+    transform <f4 (256, 6) sha256=c80ab765e01b5dcdf6af61247e3031bc337c78732dc39b00f6ecb747155a0dc4
+    IDENTICAL: predict and transform on 256 held-out rows, and predict on the 512 training rows equals labels_
+    CONTROL FIRED: centers[0] np.float32(1.6531765) -> np.float32(1.6531767); transform(256, 6) at (np.int64(0), np.int64(0)): np.float32(5.29176) -> np.float32(5.2917604) (146 of 1536 moved); UNMOVED: predict
+cases=5 failed=0

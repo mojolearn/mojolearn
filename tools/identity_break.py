@@ -109,8 +109,9 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             (the tokenizer in records before 2026-09-15, when
             GPT2Tokenizer.encode_batch gave it documents as rows), optimizer-step and training-step (the batch IS the
             arithmetic of a step), no-model (a trainer lane that returns
-            no estimator) and batch-dependent-by-contract (UMAP.transform,
-            whose module says query batching may change results). A method
+            no estimator). batch-dependent-by-contract was UMAP.transform's
+            reason until lane/umap-batch-fix made the transform row
+            separable and turned the exemption into a part. A method
             that refuses a batch of one BY NAME (the coordinate descent
             predict, mirroring cuML's cdPredict) is held to that refusal and
             its rows are asked in the smallest admitted batch instead
@@ -784,6 +785,17 @@ LANES = {}
 #: The cut is per lane and the arithmetic knobs (tree counts, depths, losses,
 #: optimizer settings, seasonal period) are untouched; what came down is INPUT
 #: SIZE and STEP COUNT.
+#: AN ARITHMETIC CHANGE STALES A REFERENCE THE SAME WAY, and this dict is
+#: where it has to be said (lane/umap-batch-fix, 2026-09-16). Every entry
+#: above is an INPUT that moved. `umap` and `par-graph-umap` are the first
+#: entries where the input is unchanged and the TRANSFORM moved: its sigma
+#: floor, edge schedule, negative-sample counter and refinement epoch count
+#: are per row now rather than per request, so every committed umap and
+#: par-graph-umap cell hashes arithmetic this harness no longer performs. The
+#: mechanism is the one that is needed either way, a column whose revision is
+#: not this one carrying NO cell for the lane, so those cells read OWED to the
+#: next record instead of DIVERGENT on a user's machine. `umap` also joins
+#: host_surface.PUBLIC_PENDING_LANES as `stale reference` until that record.
 LANE_REVISIONS = {
     "tokenizer": "synthetic-vocab-1",
     # rows: these lanes fitted the full 20,000 x 16 fixture
@@ -799,24 +811,144 @@ LANE_REVISIONS = {
     "spectral": "rows-512-1",
     # observations: 128 still carries many periods of the seasonal 12
     "holtwinters": "obs-128-1",
-    # training steps: 3 AdamW steps -> 1
-    "byte-lm": "steps-1-1",
+    # training steps: 3 AdamW steps -> 1, and two of those cuts REVERSED
+    # 2026-09-16 (lane/shrink-floors) because the one-step cell could no longer
+    # FAIL: byte-lm back to 2 steps, samba-untied-dropout-accum back to 3. Each
+    # reversal moves those lanes' bytes again, so their committed cells read
+    # OWED to the next record rather than DIVERGENT. That costs nothing today:
+    # release/0.8.7 already requires all four record columns to be retaken, and
+    # deferring it would cost a whole re-record later. The reason each number is
+    # where it is now lives on the lane, in @floor(...), not in a document.
+    "byte-lm": "steps-2-1",
     "byte-lm-resident": "shape-l1-d16-ff32-1",
     "samba": "steps-1-1",
-    "samba-untied-dropout-accum": "steps-1-1",
+    "samba-untied-dropout-accum": "steps-3-1",
     # sequence length: the (2, 16, 32) slab -> (2, 8, 32)
-    # dt_limit (0.01, 0.1) -> (0.5, 0.9): the old clamp saturated at its upper
-    # bound for every value, so two of its three branches were dead and a
-    # constant clamp read IDENTICAL (2026-09-16, lane/dead-arms)
+    # dt_limit (0.01, 0.1) -> (0.5, 0.9): every dt this lane makes was ABOVE
+    # the old upper bound, so S9 returned `hi` for every value, the lower
+    # bound was inert and a clamp pinned to a constant read IDENTICAL
+    # (2026-09-16, lane/dead-arms). The LENGTH did not move; 8 is still 8.
     "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
     # THE NORMS THAT WERE BITWISE EQUAL (2026-09-16, lane/dead-arms). Two
     # same-shape RMSNorm weights initialised to ones are the same tensor, so
-    # exchanging them was the identity function and these lanes, which never
-    # train, had no step in which they could separate. `near_one` gives each
-    # its own elementwise vector within an eighth of unity.
+    # exchanging them was the identity function, and these lanes never train,
+    # so no step could separate them. `_block_weights(near_one=...)` gives
+    # each its own elementwise vector within an eighth of unity.
     "mamba3": "norms-near-one-1",
     "transformer": "norms-near-one-1",
     "transformer-window": "norms-near-one-1",
+    # arithmetic, not input: UMAP.transform is row separable now
+    "umap": "transform-row-separable-1",
+    "par-graph-umap": "transform-row-separable-1",
+}
+
+
+# ------------------------------------------------------------- fixture floors
+# THE SMALLEST A LANE'S FIXTURE MAY GET, declared ON the lane, with the reason
+# attached, and enforced by `tools/fixture_floors.py` in the push gate.
+#
+# WHY THIS IS CODE. On 2026-09-16 an audit found two shrunken cells that can no
+# longer FAIL (docs/lanes/LANE_STATUS_shrink-blindness-audit.md). One of them,
+# samba-untied-dropout-accum, had a floor WRITTEN DOWN before it was cut:
+# docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md section 1f is titled
+# "LEFT BIG" and says three steps is the floor because step 3 is the first that
+# evaluates the cosine arm of the schedule. It was cut to one step anyway,
+# docs/lanes/FIXTURE_SHRINK_SCOPE.md carried forward only the ROWS half of that
+# reasoning, and docs/lanes/LANE_STATUS_lane-neural-shape-shrink.md then
+# recorded as FACT that the third step was kept. Nobody lied. The reason and
+# the number lived in a different file from the fixture, so a change never had
+# to walk past them.
+#
+# HOW IT READS. Under `@lane(...)`, and above the body it constrains:
+#
+#     @lane("samba-untied-dropout-accum")
+#     @floor(steps=(3, "why, ending in the measurement that set the number"))
+#     def _(ml, X, yc, yr, Xh=None):
+#         steps, rows = 3, 32          # the floored locals
+#         ...
+#         for k in range(steps): ...   # the site, which must READ them
+#
+# WHAT THE GATE REFUSES (tools/fixture_floors.py has the four rules and a
+# --self-test that watches each one refuse a real mutation of this file):
+#   * a floored local below its floor, printing the reason;
+#   * a shrunk lane (one with a LANE_REVISIONS entry) that declares no floor
+#     for a dimension the checker can find a site for, which is DERIVED from
+#     LANE_REVISIONS rather than hand-listed;
+#   * a site that stops reading the floored local, so the number cannot be
+#     bypassed while the floor still looks satisfied;
+#   * a reason too short to be a reason, or one citing no date, `docs/` path
+#     or `lane/` name to trace it back to a measurement.
+#
+# A FLOOR IS NOT A CLAIM THAT THE NUMBER IS RIGHT. Only a measurement is, which
+# is why every reason has to cite one. To move a floor, measure, then change it
+# here, where the next person reads why it was where it was.
+
+def floor(**dims):
+    """Declare a fixture floor on the lane below. Each keyword is a dimension
+    (`steps`, `rows`, `observations`, `batch`, `seqlen`) and a
+    `(minimum, why)` pair, written out in full so the number and the reason
+    cannot be separated.
+    This records; `tools/fixture_floors.py` enforces, from the source, so the
+    check needs no numpy and no bindings and runs in the cheapest gate."""
+    def deco(fn):
+        fn.fixture_floors = dict(getattr(fn, "fixture_floors", {}), **dims)
+        return fn
+    return deco
+
+
+def lane_floors():
+    """Every declared floor, derived from LANES at call time: lane -> dim ->
+    (minimum, why). Never hand-listed."""
+    return {name: dict(getattr(fn, "fixture_floors", {}))
+            for name, fn in LANES.items() if getattr(fn, "fixture_floors", None)}
+
+
+#: REVISIONS THAT ARE NOT A SIZE, and what they changed instead. LANE_REVISIONS
+#: records every lane whose input moved, which is broader than "was shrunk". A
+#: key that changed a SIZE says so in its first token (`rows-`, `obs-`,
+#: `steps-`, `seqlen-`, `batch-`) and MUST carry a matching @floor; every other
+#: key lands here with a sentence saying what moved. An entry whose key does
+#: name a size is refused by name, so this cannot become a way of opting out.
+NON_SIZE_REVISIONS = {
+    "tokenizer": (
+        "what changed is the VOCABULARY, not a size: the lane swapped the GPT-2 table for a 512-rank "
+        "synthetic one (2026-09-16, lane/identity-fixtures-light), and a vocabulary is a constructor "
+        "choice with no integer in the body to floor. The thing worth watching here is not a count but "
+        "how thin the coverage is: docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 5f measured "
+        "4088 single-byte tokens and 4 two-byte tokens over the 4096 fixture bytes, so the BPE merge "
+        "loop runs four times and the endoftext branch never matches"),
+    "byte-lm-resident": (
+        "what changed is the model SHAPE, one block at d_model 16 instead of two at 32 (2026-09-16, "
+        "lane/neural-shape-shrink), which is a property of the trainer rather than a count in the "
+        "fixture. The lane's claim survives it by construction: it asserts the resident export equals "
+        "the stateless gradient BYTE FOR BYTE at whatever shape both are built at. Its step count is "
+        "floored on the lane; see docs/lanes/LANE_STATUS_lane-neural-shape-shrink.md"),
+    "umap": (
+        "arithmetic, not input: UMAP.transform became row separable (2026-09-16, "
+        "lane/umap-batch-determinism), so the cell moved without any fixture size moving. The lane "
+        "still fits 1024 rows, exactly as it did before; see "
+        "docs/lanes/LANE_STATUS_lane-umap-batch-fix.md"),
+    "mamba3": (
+        "what changed is the norm WEIGHTS, not a size (2026-09-16, lane/dead-arms). `B_norm.weight` and "
+        "`C_norm.weight` are the same shape and were both a vector of ones, so they were the SAME TENSOR "
+        "and exchanging them on the way in was the identity function: the cell read 63de4bf6b9f8262a with "
+        "and without the swap. This lane never trains, so no step count could separate them and no floor "
+        "can hold this; they now come from `_block_weights(near_one=...)`. See "
+        "docs/lanes/LANE_STATUS_dead-arms.md section 2"),
+    "transformer": (
+        "the same defect as `mamba3` (2026-09-16, lane/dead-arms): `input_layernorm.weight` and "
+        "`post_attention_layernorm.weight` are the same shape and were both ones, so the swap was the "
+        "identity function and the cell read 295d4e62d4c78b14 either way. Not a size, and this lane does "
+        "not train. See docs/lanes/LANE_STATUS_dead-arms.md section 2"),
+    "transformer-window": (
+        "the same pair as `transformer`, through the same helper (2026-09-16, lane/dead-arms); the cell "
+        "read 49ffb2316f238e6d with and without the swap. The shrink audit did not name this lane, which "
+        "is why the census in docs/lanes/LANE_STATUS_dead-arms.md section 2 was run over every sequence "
+        "block rather than the two it listed. Not a size"),
+    "par-graph-umap": (
+        "the same row-separable UMAP.transform change as the `umap` lane (2026-09-16, "
+        "lane/umap-batch-determinism); this driver's fixture size did not move either. See "
+        "docs/lanes/LANE_STATUS_lane-umap-batch-fix.md"),
 }
 
 
@@ -1148,18 +1280,30 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("spectral")
+@floor(rows=(512, "512 rows is the SHARPER fixture, not merely the cheaper one: it resolves a smaller "
+                  "relative move of column 0 than the 2000 it replaced, 1e-4 against 1e-3, measured "
+                  "2026-09-16 (docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4). Below 512 "
+                  "nothing has been measured, and the eigenpair problem this lane hashes gets easier "
+                  "as it gets smaller."))
 def _(ml, X, yc, yr, Xh=None):
     # prediction_data=True (lane/spectral-predict, 2026-09-15) copies the
     # eigenpairs, degree scaling and centroids out of the fit and moves no
     # train byte; infer is predict on 256 held-out rows, the Nystrom
     # extension and the fit's k-means assignment (DEVIATION 2860).
-    m = ml.SpectralClustering(n_clusters=4, random_state=3, prediction_data=True).fit(X[:512, :4])
+    rows = 512                                   # FLOORED, see @floor above
+    m = ml.SpectralClustering(n_clusters=4, random_state=3, prediction_data=True).fit(X[:rows, :4])
     return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("holtwinters")
+@floor(observations=(128, "128 observations still carries ten periods of the seasonal 12, and resolves a "
+                          "SMALLER move than the 512 it replaced, 1e-7 against 1e-5 (2026-09-16, "
+                          "docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4, where all 128 "
+                          "observations were also shown live one at a time). Below two seasonal periods "
+                          "the initial seasonal estimate has nothing to average over."))
 def _(ml, X, yc, yr, Xh=None):
-    series = (np.cumsum(X[:128, 0]) + 50.0).astype(np.float32)
+    observations = 128                           # FLOORED, see @floor above
+    series = (np.cumsum(X[:observations, 0]) + 50.0).astype(np.float32)
     series = series - series.min() + 1.0     # positive, for the multiplicative path
     m = ml.ExponentialSmoothing(series, seasonal="additive", seasonal_periods=12).fit()
     # ExponentialSmoothing takes endog in the constructor and has no
@@ -1589,18 +1733,26 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("byte-lm")
+@floor(steps=(2, "TWO steps, not one, and the second one is the whole point. _byte_lm_params sets every "
+                 "norm1_w and norm2_w to a vector of ONES, so at the input of the FIRST step they are "
+                 "bitwise equal and a read-side exchange of them is the identity function: at one step "
+                 "this cell CANNOT FAIL under that defect. They separate by 2.000e-03 after one step, so "
+                 "step 2 is the first that can see it, measured blind at one step and detected at two "
+                 "(2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 2, reversed by "
+                 "lane/shrink-floors)."))
 def _(ml, X, yc, yr, Xh=None):
     """SmallByteLanguageModelTrainer (LanguageModelTrainer is the same
-    class) at the default b2-l32-d32 profile, 34944 parameters. Three
-    AdamW steps on three (2, 33) windows of the fixture bytes (_ids),
+    class) at the default b2-l32-d32 profile, 34944 parameters. Two
+    AdamW steps on two (2, 33) windows of the fixture bytes (_ids),
     weights from _byte_lm_params. The identity claim is per shape by the
     trainer's own contract; this is one shape."""
     shape = ml.ByteLanguageModelConfig()
     named, _ = _byte_lm_params(shape)
     m = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
                                          shape=shape)
-    ids = _ids(X, 1 * shape.batch, shape.length + 1)
-    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(1)]
+    steps = 2                                    # FLOORED, see @floor above
+    ids = _ids(X, steps * shape.batch, shape.length + 1)
+    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(steps)]
     return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(m.parameters_)),
                      logits=_h(np.asarray(m.logits(ids[:2, :-1])))),
                 m, lambda e: (np.asarray(e.logits(_ids(Xh, shape.batch, shape.length))),))
@@ -1701,17 +1853,29 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("samba")
+@floor(steps=(1, "one step is measured to be ENOUGH for this lane's arms, which is the only reason a "
+                 "floor of one is honest here: its 20 parameter tensors contain no bitwise-equal "
+                 "same-shape pair, so no permutation of two of them is invisible the way byte-lm's norm "
+                 "weights were, and the layer-order swap and a change of the AdamW betas both move the "
+                 "ONE-step cell (2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4). "
+                 "Adding an arm first evaluated at a later step means raising this number first, which is "
+                 "exactly what samba-untied-dropout-accum needed and did not get."),
+       batch=(2, "two sequences per step is the shipped batch and the size every arm above was measured "
+                 "live at (2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4). One "
+                 "sequence takes the batch axis out of every kernel this stack launches."))
 def _(ml, X, yc, yr, Xh=None):
     """SambaStack, one Mamba-3 layer and one attention layer at d_model 32
     over a 256-byte vocabulary, weights from the stack's own seeded
-    generator, three AdamW steps on three (2, 17) windows of the fixture
-    bytes. SUPPORT_MATRIX says cross-vendor qualification of the training
+    generator, ONE AdamW step on one (2, 17) window of the fixture bytes
+    (three before 2026-09-16, floored at one above). SUPPORT_MATRIX says cross-vendor qualification of the training
     surface is open. The checkpoint is the model column."""
     cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
-    ids = _ids(X, 2, 17)
-    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2, :-1], ids[2 * k:2 * k + 2, 1:])["loss"])
-              for k in range(1)]
+    steps, batch = 1, 2                          # FLOORED, see @floor above
+    ids = _ids(X, steps * batch, 17)
+    losses = [np.float64(m.train_step(ids[batch * k:batch * k + batch, :-1],
+                                      ids[batch * k:batch * k + batch, 1:])["loss"])
+              for k in range(steps)]
     params = m.parameters()
     return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
                      params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
@@ -1885,11 +2049,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("gbdt-parametric-losses")
+@floor(rows=(1500, "1500 rows was measured to cost no detection against the 20000 this lane used to fit "
+                   "(2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4): the eleven loss parts "
+                   "still separate into ten distinct hashes, and the union of columns the fitted "
+                   "ensembles actually split on is at least 13 of 16. Nothing below 1500 is measured."))
 def _(ml, X, yc, yr, Xh=None):
     """The ten losses no lane above fits, eight trees of depth four each:
     four take a mandatory parameter; CrossEntropy takes a probability
     target; the rest a positive target."""
-    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim (2026-09-16)
+    rows = 1500                                  # FLOORED, see @floor above
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim (2026-09-16)
     y = _pos(yr)
     fits = {
         "Quantile": dict(), "MAE": dict(), "LogLinQuantile": dict(), "MAPE": dict(), "Poisson": dict(),
@@ -1907,11 +2076,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("gbdt-lossguide-newtoncosine")
+@floor(rows=(1500, "at 1500 rows the fitted ensemble still splits on ALL 16 columns despite "
+                   "feature_fraction=0.5, and 13 of its 20 trees still reach max_leaves=32 "
+                   "(2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md sections 4 and 5e). Fewer rows starve "
+                   "the lossguide split budget this lane exists to exercise."))
 def _(ml, X, yc, yr, Xh=None):
     """NewtonCosine, the child-hessian and split-gain and leaf-count
     thresholds, column subsampling, random strength, Bernoulli bootstrap,
     gradient leaves with three iterations: one Lossguide fit."""
-    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim (2026-09-16)
+    rows = 1500                                  # FLOORED, see @floor above
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim (2026-09-16)
     m = ml.GradientBoosting(n_estimators=20, max_leaves=32, grow_policy="Lossguide", loss="Logloss",
                             score_function="NewtonCosine", min_child_hessian=1.0, min_split_gain=0.01,
                             min_data_in_leaf=8, feature_fraction=0.5, random_strength=1.0,
@@ -2103,11 +2277,19 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("gbdt-nan-modes")
+@floor(rows=(1500, "the nan_mode arm is LIVE at 1500 as of 2026-09-16 (lane/dead-arms): Min and Max hash "
+                   "da54f1f980861f61 against d8e2a3e5305a859b here, and they are DISTINCT on all nine "
+                   "fixtures including `ties`. Until that day they hashed the SAME bytes at 1500, 6000 "
+                   "and 20000, because _with_nan wrote NaN into columns 5, 6 and 7 while the fit splits "
+                   "only on 3 and 4, so no row count meant anything. The floor stays at 1500 because that "
+                   "is the size the live arm was measured at; see docs/lanes/LANE_STATUS_dead-arms.md "
+                   "section 1."))
 def _(ml, X, yc, yr, Xh=None):
     """nan_mode Min and Max on a fixture that actually carries NaN
     (_with_nan); on a NaN-free column the quantizer collapses both to
     Forbidden, which is why no lane above could reach them."""
-    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim (2026-09-16)
+    rows = 1500                                  # FLOORED, see @floor above
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim (2026-09-16)
     Xn = _with_nan(X)
     lo = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Min").fit(Xn, yc)
     hi = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Max").fit(Xn, yc)
@@ -2175,6 +2357,9 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("gbdt-pair-logit")
+@floor(rows=(1500, "1500 rows still carries 178 query groups, 994 explicit pairs and every grade 0..4 "
+                   "(2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4). A ranking loss needs "
+                   "groups holding MIXED grades, and that is what fewer rows take away first."))
 def _(ml, X, yc, yr, Xh=None):
     """PairLogit (learning to rank, pairwise derivatives on query groups):
     20 depth-6 symmetric trees on the gbdt-query-rmse queries and grades with
@@ -2182,7 +2367,8 @@ def _(ml, X, yc, yr, Xh=None):
     `pairs` and `pairs_weight` (every third generated-style pair of the first
     40 queries, hashed weights), so both input paths are hashed. Predict is
     row-wise, so the held-out probe and the batch part apply."""
-    X, yc, yr = X[:1500], yc[:1500], yr[:1500]   # rows are a fixture size, not a claim; 178 query groups remain (2026-09-16)
+    rows = 1500                                  # FLOORED, see @floor above
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # a fixture size, not a claim; 178 query groups remain (2026-09-16)
     g = _rank_groups(X.shape[0])
     rel = _relevance(yr)
     m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="PairLogit").fit(X, rel, group_id=g)
@@ -2270,6 +2456,14 @@ def _(ml, X, yc, yr, Xh=None):
 # -- neural
 
 @lane("mamba2-dtlimit")
+@floor(seqlen=(8, "L=8 keeps everything this lane claims live: all three dt_limit changes are DETECTED "
+                  "and all 8 sequence positions move the cell (2026-09-16, "
+                  "docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4). Length was never the "
+                  "lever on the dead path here, which was the CLAMP: under the old (0.01, 0.1) every dt "
+                  "saturated at the upper bound at L=16 as well as at L=8, so dt_bias was read "
+                  "one-sidedly and a clamp pinned to a constant read IDENTICAL. Fixed by moving the "
+                  "clamp, not the length (2026-09-16, lane/dead-arms, "
+                  "docs/lanes/LANE_STATUS_dead-arms.md section 3)."))
 def _(ml, X, yc, yr, Xh=None):
     """The active dt clamp (seam S9); at the default (0, inf) it cannot
     move a bit, which is what the mamba2 lane measures.
@@ -2304,9 +2498,10 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
+    seqlen = 8                                   # FLOORED, see @floor above
     blk = ml.Mamba2Block(w, dt_limit=(0.5, 0.9))
-    parts = _block_fit(blk, _seq(X, 2, 8, dm), _seq(X, 2, 8, dm, skip=1024), {})
-    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 8, dm))),))
+    parts = _block_fit(blk, _seq(X, 2, seqlen, dm), _seq(X, 2, seqlen, dm, skip=1024), {})
+    return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, seqlen, dm))),))
 
 
 @lane("transformer-window")
@@ -2328,6 +2523,14 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("byte-lm-resident")
+@floor(steps=(1, "ONE is the weakest floor there is, and this lane is the case where that is the truthful "
+                 "number. Its claim is the SESSION, not a shape or a schedule: the resident export must "
+                 "equal the stateless path's gradient byte for byte, which `_same_bytes` below asserts at "
+                 "whatever step count both run, and its per-tensor `grads` part catches a norm-weight "
+                 "exchange on the WRITE side at one step. It is blind to the READ-side exchange by the "
+                 "same mechanism byte-lm was (2026-09-16, "
+                 "docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 2), and byte-lm, the shipped "
+                 "profile of the same trainer, is floored at two steps to carry that class for both."))
 def _(ml, X, yc, yr, Xh=None):
     """The device-owned session (resident=True, lean step results), the
     path the byte-lm lane's docstring says is bit-equal to the stateless
@@ -2348,8 +2551,9 @@ def _(ml, X, yc, yr, Xh=None):
     named, _ = _byte_lm_params(shape)
     m = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
                                          shape=shape, resident=True, step_result="lean")
-    ids = _ids(X, 1 * shape.batch, shape.length + 1)
-    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(1)]
+    steps = 1                                    # FLOORED, see @floor above
+    ids = _ids(X, steps * shape.batch, shape.length + 1)
+    losses = [np.float64(m.train_step(ids[2 * k:2 * k + 2])["loss"]) for k in range(steps)]
     # The exported gradient of the last step, flat and per tensor. Hash the
     # ARRAYS: `export_gradients()` returns a dict holding a nested dict, and
     # `np.asarray` of a dict is a zero-dimensional object array whose bytes
@@ -2368,7 +2572,7 @@ def _(ml, X, yc, yr, Xh=None):
     s = ml.SmallByteLanguageModelTrainer(_byte_lm_params(shape)[0],
                                          data_schedule={"dataset": "identity_break", "order": "sequential"},
                                          shape=shape)
-    for k in range(1):
+    for k in range(steps):
         stateless = s.train_step(ids[2 * k:2 * k + 2])
     _same_bytes("resident export_gradients()['flat_gradients']", flat,
                 "stateless train_step()['flat_gradients']", np.asarray(stateless["flat_gradients"]))
@@ -2394,6 +2598,20 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("samba-untied-dropout-accum")
+@floor(steps=(3, "step 3 is the FIRST step that evaluates the cosine arm at all. `_Schedule._progress` "
+                 "returns the linear warmup value while t <= warmup_steps and this lane runs "
+                 "WarmupCosineLR(warmup_steps=2), so at one or two steps the cosine decay, and the exact "
+                 "rational `_cos_pi_interval` / `_decide_f32` path under it, are never reached: the cell "
+                 "could not tell its own schedule from a linear one or from a constant one. Measured "
+                 "blind at one step and detected at three (2026-09-16, "
+                 "docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 3; the same floor was written "
+                 "in prose in docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md section 1f BEFORE "
+                 "the cut and did not stop it, which is why it is code now)."),
+       batch=(32, "32 rows per step is T = 512 tokens, the smallest size at which "
+                  "`training.accumulation_is_aligned` admits the A = 4 accumulation split this lane "
+                  "exists to claim; at 16 rows A = 4 is refused BY NAME, which deletes the claim rather "
+                  "than shrinking it (measured, docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md "
+                  "section 1f, 2026-09-16)."))
 def _(ml, X, yc, yr, Xh=None):
     """Untied embeddings, dropout on, four accumulation microbatches, a
     global-norm clip and a warmup-cosine schedule: the training knobs the
@@ -2405,9 +2623,11 @@ def _(ml, X, yc, yr, Xh=None):
                          tie_embeddings=False, dropout=0.1)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3, max_norm=1.0, accumulation_steps=4,
                       lr_schedule=ml.training.WarmupCosineLR(1e-3, warmup_steps=2, total_steps=8, min_lr=1e-5))
-    ids = _ids(X, 32, 17)
-    losses = [np.float64(m.train_step(ids[32 * k:32 * k + 32, :-1], ids[32 * k:32 * k + 32, 1:])["loss"])
-              for k in range(1)]
+    steps, batch = 3, 32                         # FLOORED, see @floor above
+    ids = _ids(X, steps * batch, 17)
+    losses = [np.float64(m.train_step(ids[batch * k:batch * k + batch, :-1],
+                                      ids[batch * k:batch * k + batch, 1:])["loss"])
+              for k in range(steps)]
     params = m.parameters()
     return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
                      params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
@@ -3288,6 +3508,11 @@ lane("gmm-random-init-sample")(_gmm_sample_lane("random"))
 
 
 @lane("hdbscan")
+@floor(rows=(4000, "the Boruvka round count this lane HASHES holds at 5 down to 4000 rows and falls to 4 "
+                   "below it, measured across 6000/4000/3000/2000/1500/1000/750 (2026-09-16, "
+                   "lane/identity-fixtures-light), and the fifth merge round is where a divergence first "
+                   "shows. Detection is unchanged at 4000: the resolution ladder reads 1e-7 at 4000 and "
+                   "at 6000 (docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4)."))
 def _(ml, X, yc, yr, Xh=None):
     """HDBSCAN (python/mojolearn/hdbscan.py), cuML's runner path at its
     defaults with excess-of-mass selection: the core distances, the
@@ -3307,7 +3532,8 @@ def _(ml, X, yc, yr, Xh=None):
     # 5 down to 4000 and falls to 4 at 3000, so 4000 is the smallest size that
     # still reaches the fifth merge round. Below it the lane would hash a
     # structurally different fit. Costs 2.9 s instead of 6.4 s to build.
-    m = ml.HDBSCAN(min_cluster_size=5, prediction_data=True).fit(X[:4000, :4])
+    rows = 4000                                  # FLOORED, see @floor above
+    m = ml.HDBSCAN(min_cluster_size=5, prediction_data=True).fit(X[:rows, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
                 m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
@@ -3315,6 +3541,11 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("hdbscan-leaf")
+@floor(rows=(2000, "leaf selection holds its fifth Boruvka round down to 2000 rows and loses it below, "
+                   "measured across 6000/4000/3000/2000/1500/1000/750 (2026-09-16, "
+                   "lane/identity-fixtures-light); the resolution ladder reads 1e-7 at 2000 and at 6000 "
+                   "(docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4), so the cut cost no "
+                   "detection and the round count is what sets the floor."))
 def _(ml, X, yc, yr, Xh=None):
     """The same fit under cluster_selection_method='leaf' with
     min_samples below min_cluster_size and allow_single_cluster, the
@@ -3326,8 +3557,9 @@ def _(ml, X, yc, yr, Xh=None):
     # 1500, so 2000 is its floor; it keeps 19 clusters and 37 condensed
     # clusters there, a structure with plenty left to disagree about. Costs
     # 0.7 s instead of 6.2 s to build.
+    rows = 2000                                  # FLOORED, see @floor above
     m = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf", allow_single_cluster=True,
-                   prediction_data=True).fit(X[:2000, :4])
+                   prediction_data=True).fit(X[:rows, :4])
     return _fit(dict(labels=_h(m.labels_), core=_h(m.core_distances_),
                      counts=_h(np.asarray([m.n_clusters_, m.n_outliers_, m.n_boruvka_rounds_, m.n_condensed_clusters_], dtype=np.int64))),
                 m, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4]))
@@ -5049,30 +5281,52 @@ _batch_decl(_batch_gp, "gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "p
 # (gaussian_process/checks/sample_y.mojo, DEVIATION 2793)
 _batch_decl("n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
             "gp-sample-y", "gp-sample-y-normalize")
-# UMAP.transform is batch-dependent BY ITS OWN CONTRACT: umap/transform.mojo's
-# module docstring says "Query batching may change results (global sigma
-# floor, edge weighting and RNG ordinals)", and the part measured it on the
-# M4 (base fixture, 2026-09-14 night: held-out row 0 alone 0xbfb692af against
-# 0xbf99e1c6 in the batch of 64). A BATCH_MOVED there is the documented
-# algorithm, not a defect, so the part records the reason instead of failing
-# every IDENTICAL run; the infer column still hashes the whole-batch transform.
-# The four batch couplings, read 2026-09-15 (the CPU host restatement,
-# umap/host/umap_oracle.mojo:594,614,689,698,706, carries the same four):
-#   1. the sigma floor 0.001 * mean over EVERY query's neighbor distances
-#      (transform.mojo:44,66);
-#   2. the edge schedule scales each weight by the maximum over the whole
-#      batch (:141, used at :147);
-#   3. the negative-sample counter hashes the batch-local edge ordinal
-#      row * k + j (:146,154), so a row's draws depend on its position;
-#   4. with n_epochs == 0 the epoch count is 100 or 30 by n_queries (:224);
-#      the lanes pass n_epochs=8, so this one is not reached here.
-# cuML's transform couples a batch the same ways (runner.cuh:549-554 epochs
-# by inputs.n, fuzzy_simpl_set/naive.cuh:168 the mean_dist sigma floor,
-# optimize_batch_kernel.cuh:267 Philox seeded by the batch COO row), and
-# its docstring says "the transform() function is stochastic" (umap.pyx:1475).
-_batch_decl("n/a:batch-dependent-by-contract (umap/transform.mojo:44,66 batch-mean sigma floor, "
-            ":141 batch-max edge schedule, :146,154 batch-local RNG edge ordinal; cuML couples the same)",
-            "umap", "par-graph-umap")
+# UMAP.transform WAS batch-dependent by its own contract, and until
+# lane/umap-batch-fix (2026-09-16) these two lanes carried a batch EXEMPTION
+# saying so. It named four couplings, all of which are now per row
+# (umap/transform.mojo and the CPU host restatement
+# umap/host/umap_oracle.mojo, which stays character identical to it):
+#   1. the sigma floor 0.001 * mean was over EVERY query's neighbor
+#      distances and is now over the row's own k;
+#   2. the edge schedule scaled each weight by the maximum over the whole
+#      batch and now uses the row's own maximum;
+#   3. the negative-sample counter hashed the batch-local edge ordinal
+#      row * k + j, so a row's draws depended on its POSITION in the request,
+#      and is now keyed on a hash of the row's own k neighbor indices;
+#   4. with n_epochs == 0 the epoch count was 100 or 30 by n_queries and is
+#      now 100 at every size. The lanes pass n_epochs=8, so this one was
+#      never reached in any recorded column.
+# So the exemption becomes a PART. A BATCH_MOVED here is now a defect, and it
+# is the arm that would catch any of the four coming back. The claim it
+# encodes was measured bitwise on the CPU host route and on Metal, both routes
+# agreeing to the last bit, by umap/checks/batch_determinism_check.mojo,
+# umap/checks/batch_determinism_device_check.mojo and
+# umap/checks/batch_epoch_cliff_check.mojo.
+# This is a deliberate divergence from cuML, whose transform couples a batch
+# the same four ways (runner.cuh:549-554 epochs by inputs.n,
+# fuzzy_simpl_set/naive.cuh:168 the mean_dist sigma floor,
+# optimize_batch_kernel.cuh:267 Philox seeded by the batch COO row) and whose
+# docstring says "the transform() function is stochastic" (umap.pyx:1475).
+# The standing rule is not to reproduce a reference library's bug.
+
+
+def _batch_umap(ml, e, Xh):
+    """UMAP.transform, each row alone against the whole request."""
+    return [_BatchRows("transform", np.ascontiguousarray(Xh[:64, :8]),
+                       lambda r: (e.transform(r),))]
+
+
+def _batch_par_graph_umap(ml, e, Xh):
+    """The same arm through the parallel graph surface, whose transform is a
+    free function over the fitted graph rather than a method."""
+    from mojolearn.parallel_graph import transform_umap
+    return [_BatchRows("transform_umap", np.ascontiguousarray(Xh[:64, :8]),
+                       lambda r: (transform_umap(e, np.ascontiguousarray(r),
+                                                 devices=_par_devices()),))]
+
+
+_batch_decl(_batch_umap, "umap")
+_batch_decl(_batch_par_graph_umap, "par-graph-umap")
 _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "kernel-ridge")
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "nystroem")
 _batch_decl(_rows_calls("score_samples", "predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gmm")

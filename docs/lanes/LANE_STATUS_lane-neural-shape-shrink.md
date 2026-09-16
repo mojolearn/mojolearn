@@ -199,6 +199,17 @@ lane found, 32 rows because `accumulation_is_aligned(512, 4)` is the A=4 claim
 and the third step because it is the first that evaluates the cosine arm of
 the warmup schedule.
 
+> **THAT SECOND HALF WAS NOT TRUE WHEN IT WAS WRITTEN** (2026-09-16,
+> lane/shrink-floors). The lane had already been cut to ONE step, so the third
+> step was not kept and the cosine arm was never evaluated: measured, the cell
+> could not tell `WarmupCosineLR` from `WarmupLinearLR` or from `ConstantLR`
+> (`docs/lanes/LANE_STATUS_shrink-blindness-audit.md` section 3). This is the
+> third document in a chain that lost a floor written down in
+> `docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md` section 1f. The lane
+> is back at three steps, and the floor is now `@floor(steps=(3, ...))` on the
+> lane itself with `tools/fixture_floors.py` refusing a cut past it, so no
+> document has to be right about this again.
+
 ## 4. THE REVISED APPLE COLUMN
 
 The projection stood at **8.32 h**. `byte-lm-resident` is measured at 173.95 s

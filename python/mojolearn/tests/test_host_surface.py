@@ -577,8 +577,14 @@ def test_saved_model_inference_owed_names_real_undeclared_lanes():
     would be gated already), and names a saved-model format the classical host
     door dispatches, or says why there is no format yet."""
     owed = host_surface.saved_model_inference_owed()
-    assert owed, "the owed list is empty"
+    # The list may be empty, and since lane/classical-host-recordings
+    # (2026-09-16) took the k-means recording it IS. It was asserted non-empty
+    # until then, which would have made emptying it a test failure rather than
+    # the closing of the gap. What must hold is the SHAPE of any entry that is
+    # there, checked below, and the invariant that no DECLARED lane is listed.
     declared = set(host_surface.inference_lanes())
+    assert not (set(owed) & declared), (
+        f"owed lanes that are already declared inference lanes: {sorted(set(owed) & declared)}")
     text = _read("tools/identity_break.py")
     defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
     defined |= set(re.findall(r'^lane\("([a-z0-9-]+)"\)\(', text, re.M))
@@ -617,9 +623,12 @@ def test_command_line_prints_the_exposure_surface(capsys):
     assert "resample:" in capsys.readouterr().out
     assert host_surface.main(["--saved-model-inference-owed"]) == 0
     # lane/saved-model-reference-gaps (2026-09-16) recorded spectral, dbscan
-    # and agglomerative and declared them, which left kmeans: the one owed
-    # entry that waits on a serialization format rather than on a box.
-    assert "kmeans:" in capsys.readouterr().out
+    # and agglomerative; lane/classical-host-recordings (2026-09-16) recorded
+    # the six k-means lanes, and the list is empty. The flag must still EXIT 0
+    # and print nothing rather than fail, so an empty gap reads as an empty
+    # gap and not as a broken command. The exit code above is the assertion;
+    # this one is that it printed no lane.
+    assert capsys.readouterr().out.strip() == ""
 
 
 def _lane_revisions():
@@ -710,6 +719,22 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
         elif why == "no reference":
             if lane in with_cells:
                 wrong_reason.append(f"{lane}: the shipped table DOES carry cells for it; let it in")
+        elif why == "unwatched":
+            # THE ONE REASON A REGENERATION CANNOT CLEAR BY ITSELF
+            # (lane/expose-stepfull, 2026-09-16). It says the static
+            # conditions are all met and only the watched CPU-only run is
+            # owed, so it is checked against exactly that: the table must
+            # carry cells for the lane AT THE CURRENT REVISION. A lane that
+            # loses its cells, or whose fixture moves again, cannot hide
+            # here; it falls back to `no reference` or `stale reference`.
+            if lane not in with_cells:
+                wrong_reason.append(f"{lane}: held back as 'unwatched', but the shipped table carries "
+                                    "NO cell for it, so its reason is 'no reference' and what is owed "
+                                    "is a record, not a run")
+            elif lane in stale:
+                wrong_reason.append(f"{lane}: held back as 'unwatched', but its fixture has moved past "
+                                    f"the shipped reference ({revisions.get(lane)!r}), so its reason is "
+                                    "'stale reference' and a run would prove nothing")
         elif why == "own record":
             assert lane in host_surface.TRAINING_FIX_LANES, f"{lane}: not a TRAINING_FIX_LANES lane"
         elif why.startswith("measured"):
@@ -721,8 +746,56 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
         "these lanes are held back for a reason the shipped table no longer supports:\n  "
         + "\n  ".join(wrong_reason))
 
-    moved = sorted(stale - set(host_surface.PUBLIC_PENDING_LANES) - host_only)
+    # A prefix-excluded lane is never in the public set, so it cannot become
+    # public carrying a stale reference and it must not be required in
+    # PUBLIC_PENDING_LANES, which only admits COVERED lanes (the loop above).
+    # The case first arose with par-graph-umap (lane/umap-batch-fix,
+    # 2026-09-16), the first `par-` lane to get a LANE_REVISIONS entry: the
+    # assertion demanded an entry that the same test's own loop would then
+    # reject.
+    excluded = {lane for lane in revisions
+                if lane.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES)}
+    moved = sorted(stale - set(host_surface.PUBLIC_PENDING_LANES)
+                   - host_only - excluded)
     assert moved == [], (
-        f"these lanes' fixtures moved past the shipped reference and they are still public: {moved}. "
+        f"these lanes moved past the shipped reference and they are still public: {moved}. "
         "Add them to PUBLIC_PENDING_LANES as 'stale reference' until the release regenerates the table"
     )
+
+
+def _fixture_floors():
+    """`tools/fixture_floors.py` loaded by path, like the lane readers above,
+    so this test needs no numpy and no bindings."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("fixture_floors", ROOT / "tools" / "fixture_floors.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_no_fixture_is_shrunk_below_its_declared_floor():
+    """A FLOOR IN PROSE IS NOT A FLOOR (lane/shrink-floors, 2026-09-16).
+
+    docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md section 1f is
+    titled "LEFT BIG: samba-untied-dropout-accum" and says three steps is that
+    lane's floor because step 3 is the first that evaluates the cosine arm of
+    its schedule. The next lane cut it to one step anyway, FIXTURE_SHRINK_SCOPE
+    carried forward only the rows half of the reasoning, and a third document
+    then recorded as fact that the third step was kept. Nobody lied; the floor
+    simply had no mechanism. It has one now, on the lane, in `@floor(...)`,
+    and this is the gate half of it. The checker also runs in light-checks,
+    which is the workflow that starts by itself."""
+    mod = _fixture_floors()
+    bad = mod.check(path=str(ROOT / "tools" / "identity_break.py"))
+    assert bad == [], "fixture floor violations:\n  " + "\n  ".join(bad)
+
+
+def test_the_fixture_floor_check_refuses_a_violating_shrink(capsys):
+    """A CHECK THAT HAS NOT BEEN SEEN TO REFUSE ANYTHING is the prose floor it
+    replaces. `--self-test` mutates the real harness source five ways (a cut
+    below a floor, a deleted floor, a site that stops reading the floored
+    local, an untraceable reason, and the exemption list used on a lane that
+    has a floorable dimension) and requires each one to be REFUSED by name."""
+    mod = _fixture_floors()
+    assert mod.self_test(path=str(ROOT / "tools" / "identity_break.py")) is True, capsys.readouterr().out
