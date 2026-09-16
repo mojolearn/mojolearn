@@ -232,12 +232,19 @@ CLASSICAL_RECORDED = (
     # MI300X (gfx942): `gate verdict IDENTICAL (54 fixtures, exit 0)` and the
     # predict-define sabotage arm caught on all 54 under --every-fixture. The
     # AMD PREDICT recording from the same box is 3 of 36 and is deliberately
-    # NOT listed here: its `record` died on the fourth fixture with
-    # hipErrorOutOfMemory in dbscan_fit_core after four DBSCAN fits had
-    # succeeded, so it is kept, named partial, at
-    # bench/results/classical_host/2026-09-16-amd-predict-partial with the
-    # finding written up in
-    # bench/results/identity_break/2026-09-16_amd-mi300x/README.md.
+    # NOT listed here: its `record` died with hipErrorOutOfMemory in
+    # dbscan_fit_core, so it is kept, named partial, at
+    # bench/results/classical_host/2026-09-16-amd-predict-partial.
+    #
+    # WHY IT DIED, ANSWERED BY lane/amd-dbscan-oom THE SAME DAY: not a leak
+    # and not the code. A second RunPod MI300X reproduced the same refusal,
+    # and its card had 360.4 MiB of 196592.0 MiB FREE before `import
+    # mojolearn` ran, with 178.6 GiB held by a kfd process outside the
+    # container. A dedicated DigitalOcean MI325X ran the same three DBSCAN
+    # lanes at `cells=27 stable=27 moved=0 refused=0` with device memory flat
+    # at a 1.5 GiB plateau. The AMD predict column is owed on a card that is
+    # ours, and there is nothing to fix first. See
+    # docs/lanes/LANE_STATUS_lane-amd-dbscan-oom.md.
     "bench/results/classical_host/2026-09-16-amd-kmeans",
 )
 

@@ -1,0 +1,44 @@
+{
+ "source": "rocm-smi",
+ "device": 0,
+ "total": 206141652992,
+ "used_boot": 205763780608,
+ "arms": [
+  "cold"
+ ],
+ "repeats": 2,
+ "n": 12,
+ "rows": [
+  {
+   "i": 1,
+   "arm": "selfcheck",
+   "lane": "dbscan",
+   "fixture": "wide",
+   "kw": {
+    "eps": 0.9,
+    "min_samples": 5,
+    "prediction_data": true
+   },
+   "weighted": false,
+   "nnz": 36000000,
+   "used_before": 205763780608,
+   "used_after": 193148108800,
+   "delta": -12615671808,
+   "total": 206141652992,
+   "rss_before": 89456640,
+   "rss_after": 2144071680,
+   "rss_peak": 2144071680,
+   "wall_s": 31.206,
+   "n_clusters": 1,
+   "ok": true,
+   "error": null
+  }
+ ],
+ "started": "2026-09-16T19:24:53Z",
+ "self_check_moved_mib": -12031.2421875,
+ "trend": {
+  "selfcheck": null,
+  "ALL": null
+ },
+ "refused": []
+}

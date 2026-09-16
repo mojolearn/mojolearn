@@ -1045,8 +1045,8 @@ fi
 
 if [ "$MODE" != "reap" ]; then
     case "$VENDOR" in
-        nvidia) : "${GPU_ID:=$LEG_GPU_NVIDIA}"; : "${IMAGE:=$LEG_IMAGE_NVIDIA}"; SMI_CMD='nvidia-smi --query-gpu=name,driver_version --format=csv,noheader' ;;
-        amd)    : "${GPU_ID:=$LEG_GPU_AMD}";    : "${IMAGE:=$LEG_IMAGE_AMD}";    SMI_CMD='rocm-smi --showproductname'
+        nvidia) : "${GPU_ID:=$LEG_GPU_NVIDIA}"; : "${IMAGE:=$LEG_IMAGE_NVIDIA}"; SMI_CMD='nvidia-smi --query-gpu=name,driver_version,memory.total,memory.used,memory.free --format=csv,noheader' ;;
+        amd)    : "${GPU_ID:=$LEG_GPU_AMD}";    : "${IMAGE:=$LEG_IMAGE_AMD}";    SMI_CMD='rocm-smi --showproductname; echo "-- free VRAM at acceptance --"; rocm-smi --showmeminfo vram'
                 # AMD hosts advertise no CUDA version, so the CUDA allow-list
                 # filters out EVERY host that could hold this pod: the
                 # 2026-08-26_162559 create died "no instances currently
