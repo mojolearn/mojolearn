@@ -75,7 +75,29 @@ comptime TPB_DEFAULT = 128
 
 # `builder.cuh:203` -- "number of blocks used to parallelize column-wise
 # computations". A plain member initialised to 10 and never reassigned.
-comptime N_BLKS_FOR_COLS = 10
+#
+# DIAGNOSTIC ONLY (lane/rf-score-weighted-nondeterminism, 2026-09-16).
+# `-D MOJOLEARN_RF_BLKS_COLS16=1` raises the cap to 16. It is NOT a fix and
+# NOT shipped: 10 is the reference value and the default below is unchanged.
+#
+# WHY IT EXISTS. `enqueue_best_splits` strides `c += N_BLKS_FOR_COLS`, so a
+# fit whose `n_sampled_cols` exceeds this cap runs MORE THAN ONE
+# `find_best_splits` launch, and every launch after the first merges into a
+# `split[node]` slot that `initSplit` initialised only once (DEVIATION 1916
+# fuses initSplit and the mutex re-zero into the once-per-round setup launch).
+# Measured on one MI300X across four legs: ONE launch 0 moves / 400 fits,
+# TWO launches 10 / 400, Fisher one-sided p = 9.2e-4, with the decisive
+# contrast 10 columns (one launch, 0/200) against 11 columns (two launches,
+# 3/100) -- a single feature apart, so candidate tie density cannot explain
+# it. Raising the cap puts a 16-feature fit back into ONE launch, which tests
+# that reading from the code side rather than by argument.
+#
+# PRICE: the histogram arena is sized `max_batch * max_n_bins *
+# N_BLKS_FOR_COLS * num_outputs` at two sites (:664 and :1251, both derived
+# from THIS constant, so there is no stray 10 to miss). At 16 that is 1.6x
+# the device bytes -- about 67 MB at max_batch_size 4096, max_n_bins 128,
+# one output, `RegressionBin` -- which is why this is a probe and not a knob.
+comptime N_BLKS_FOR_COLS = 16 if is_defined["MOJOLEARN_RF_BLKS_COLS16"]() else 10
 
 # `builder.cuh:205` -- "Memory alignment value"
 comptime ALIGN_VALUE = 512
