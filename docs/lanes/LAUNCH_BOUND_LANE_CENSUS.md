@@ -274,6 +274,16 @@ in the optimizer, not in the series. `holtwinters` was cut **512 observations
 to 128** by the fixture lane; by the same reading that removes grid and not
 launches, and no Metal gain is predicted there either.
 
+**And `max_iterations` is not the free knob it looks like.** I wrote it up as
+this file's one live candidate and then checked the lane bodies, which refutes
+it. `tools/identity_break.py:2642` and `:2654` hash `ar_`, `ma_`, `sar_`, `mu_`,
+`sigma2_` and `forecast(24)`: the optimizer's FIXED POINT. Lowering the
+iteration cap moves every one of those values, so it is a full re-record, and
+it swaps a converged fit for an unconverged one, which is a weaker thing to
+assert bitwise identity about. Neither lane passes `max_iterations` at all, so
+lowering it means adding an argument that changes what the lane claims.
+**Withdrawn.** There is no live shrink candidate left in this column.
+
 ## 4. The repo-wide wait density, which is where the money is
 
 The cost model says a wait is worth about a dozen launches, so the interesting
@@ -326,15 +336,19 @@ count the invariant names.**
 | `mamba1/2/3`, `mamba2-dtlimit`, `transformer`, `transformer-window` | 3475 | one block each at a d_model floor | blocks = 1 | **NO axis exists** |
 | `gbdt-*`, ten lanes | ~7500 | **INVARIANTS**: loss parametrization, NaN modes, grow policy, pair logit, CTR | `n_trees x max_depth` | rows are free; trees and depth are the bill **and they are also the claim** |
 | `hdbscan`, `hdbscan-leaf` | 910 | an **INVARIANT** pinned to the Boruvka round count | rounds | **NO.** The launch term is the hashed integer |
-| `arima-seasonal-c`, `arima-011` | 396 | an **INVARIANT**, the seasonal order and (0,1,1) | `iterations x linesearch x params` | **CANDIDATE.** `max_iterations` is a fit knob, not the order the lane asserts |
+| `arima-seasonal-c`, `arima-011` | 396 | an **INVARIANT**, the seasonal order and (0,1,1) | `iterations x linesearch x params` | **NO.** The lanes hash the optimizer's FIXED POINT, so the iteration cap is not a free knob (section 3) |
 
-The one row of that table that is a live candidate and has not been taken is
-ARIMA, and it is 396 s. Everything larger is pinned by its own claim. That is
-the same conclusion `lane/neural-shape-shrink` reached for the neural family,
-now extended across the column: **the Apple column is not expensive because its
-fixtures are big, and it cannot be made cheap by making them smaller.** It is
-expensive per host round trip, and the only lever that is not also a claim is
-the one the LANE_STATUS ranks first, the waits inside the composed operations.
+**Every row is a NO.** The one candidate this file drafted, ARIMA's iteration
+cap, was withdrawn on checking the lane bodies. So the conclusion
+`lane/neural-shape-shrink` reached for the neural family extends across the
+whole column: **the Apple column is not expensive because its fixtures are big,
+and it cannot be made cheap by making them smaller.** Every count that would
+remove launches is a count some lane's claim pins.
+
+That is not a dead end, it is a redirection. It is expensive per host round
+trip, and the one lever that is nobody's claim is the one the LANE_STATUS ranks
+first: the waits inside the composed operations, which order nothing that the
+next enqueue on the same in-order context does not already order.
 
 ## 6. What this file does NOT claim
 
