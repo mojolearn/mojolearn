@@ -86,11 +86,21 @@ for i in 1 2 3; do
 done
 cp /tmp/stock_*.out /tmp/fixed_*.out /root/gemm_leg_out/ 2>/dev/null
 
-echo "$TOKEN ---- best-effort ISA evidence that the fence reached the GPU code ----"
+echo "$TOKEN ---- ISA evidence: NOT YET WORKING, read this before believing a number ----"
+# A `grep -c` over a command that produced nothing returns 0, and a 0 here is
+# INDISTINGUISHABLE from "the instruction is absent". llvm-objdump with an amdgcn
+# triple does NOT disassemble the GPU code object embedded in the HOST ELF, so the
+# first version of this block printed 0 for BOTH arms and meant nothing by it. The
+# authoritative emission evidence is the SECTION GATE above: .rodata carries the
+# embedded code object, and it MOVED between the arms.
 for a in fixed stock; do
-    n=$(llvm-objdump -d --triple=amdgcn-amd-amdhsa "/tmp/dmc_$a" 2>/dev/null \
-        | grep -c "buffer_inv" || true)
-    echo "$TOKEN $a buffer_inv_occurrences=${n:-unavailable}"
+    dis=$(llvm-objdump -d --triple=amdgcn-amd-amdhsa "/tmp/dmc_$a" 2>/dev/null | wc -l)
+    if [ "$dis" -lt 10 ]; then
+        echo "$TOKEN $a buffer_inv=UNAVAILABLE (objdump produced $dis lines; not a zero count)"
+    else
+        echo "$TOKEN $a buffer_inv_occurrences=$(llvm-objdump -d \
+            --triple=amdgcn-amd-amdhsa "/tmp/dmc_$a" 2>/dev/null | grep -c buffer_inv)"
+    fi
 done
 
 echo "$TOKEN finished $(date -u +%Y-%m-%dT%H:%M:%SZ)"

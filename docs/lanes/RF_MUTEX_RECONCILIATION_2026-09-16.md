@@ -77,6 +77,44 @@ Ordering.ACQUIRE, ...]`, which is a different spelling from the discarded load a
 has its own reason to emit. Whether it did is a question the same section comparison
 answers, and it is now owed and cheap.
 
+### 0.25 THE SHIPPED SPIN LOAD IS FINE. Asked, measured, answered NO
+
+The release lane asked the obvious follow-on. `main` already uses
+`Atomic.load[ordering = Ordering.ACQUIRE]` in the SHIPPED spin conditions at
+`ensemble/decisiontree/batched_levelalgo/split.mojo:635`,
+`extratrees/impl/decisiontree/batched_levelalgo/split.mojo:504` and
+`neighbors/impl/detail/fused_l2_knn.mojo:618` and `:724`. Those loads USE their value,
+so a load must be emitted, but does the ACQUIRE ORDERING survive? If it did not, the
+shipped spin-wait would have been resting on an ordering it never had, on every column,
+for as long as the code has existed. That would be a far larger finding than the repair.
+
+**It survives. Measured on all three columns 2026-09-16.** Evidence at
+`/Users/andrewhendel/mojolearn-evidence/rf-mutex-reconcile/spin-acquire-emission-2026-09-16/spin_acquire.log`.
+
+- **Metal AIR, by DISASSEMBLY.** The metallib carved out of `__TEXT,__const` and
+  disassembled with `xcrun metal-objdump` reads
+  `%26 = load atomic i32, i32 addrspace(1)* %25 acquire, align 4`, then
+  `air.atomic.global.cmpxchg.weak.i32`, then `fence acquire`, then
+  `store atomic i32 -2, ... release`. The whole protocol is visible and correct.
+- **NVIDIA PTX, by READING THE EMITTED PTX.** `ld.acquire.sys.global.b32`, then
+  `atom.relaxed.sys.global.cas.b32`, then `fence.acq_rel.sys`, then
+  `st.release.sys.global.b32`.
+- **gfx942, by DIFFERENTIAL BUILD.** This Mac has no AMDGPU disassembler, so the
+  question was put a different way. `-D MOJOLEARN_MUTEX_SPIN_RELAXED=1` builds an arm
+  whose spin test is a RELAXED load. If the acquire emitted nothing, the two arms would
+  be byte-identical. The embedded code object in `__TEXT,__const` DIFFERS. The same
+  differential on Metal and NVIDIA, where the disassembly already gives the answer,
+  is the method's control and also differs.
+
+This is a DIFFERENTIAL BUILD result on gfx942 and a DISASSEMBLY on the other two. The
+differential answers "does the ordering survive at all" and does not name the
+instruction; it is one level weaker and it is enough for this question.
+
+**This changes nothing in the account of the defect.** The spin's acquire was always
+real. What was missing was an acquire on the path the CLAIM took, which is section 1,
+and that is unaffected. The MI300X story is likewise unchanged, and remains the
+hardware hypothesis section 3.2 marks it as.
+
 ### 0.3 A second defect, in the A/B harness
 
 `tools/rf_nondeterminism/rf_claimfix_ab_body.template.sh` guards arm independence with a
@@ -301,7 +339,43 @@ passing, not the stock primitive failing. Its sabotage breaks the COUNT, not the
 edge. And per section 0 the primitive it passed contained no ordering instruction at the
 claim, so what it actually demonstrated is that the check's contention pattern does not
 expose the hole, on a build where the hole was fully present. **That is a NULL, and a
-useful one.** It sets the bar for the stock arm of section 6.
+useful one.** It set the bar for the stock arm below.
+
+### 4.2.1 THE STOCK ARM WAS TAKEN. It is a NULL
+
+**DigitalOcean MI325X VF, gfx942, 2026-09-16T15:44Z, about four minutes of lease, box
+destroyed and the delete verified by a 404.** Evidence at
+`/Users/andrewhendel/mojolearn-evidence/rf-mutex-reconcile/gfx942-stock-arm-2026-09-16_154113/remote/device_mutex_ab.log`.
+Hot Aisle had zero stock on all three specs, so the box came from the next provider in
+the box order. This was the top owed item and Andrew approved the rent.
+
+The section gate ran on the box BEFORE either arm was trusted, and passed. The positive
+control (sabotage) and the arms both moved `ELF,.rodata`, which is where the embedded
+gfx942 code object lives, so the two arms are genuinely two programs on that target.
+
+Then, with a much harder contention pattern than the first run (64 to 128 blocks, 32 to
+64 claims each, a stored HOLD widening the critical section, 4096 claims per
+configuration, four independent repeats of both arms):
+
+| arm | claims | lost | torn | verdict |
+|---|---|---|---|---|
+| **stock, no fence** | 4096 per configuration | **0** | 0 | PASS, every repeat |
+| fence | 4096 per configuration | 0 | 0 | PASS, every repeat |
+| skip-write sabotage | 4096 expected | 4096 | 0 | REJECTED, every repeat |
+
+**The stock arm did not lose a single update.** The sabotage was rejected every time, so
+the count assertion is a check that can fail. **This is a NULL and it is not a clearance
+for the stock protocol.** It says the check still does not reach the window, on a harder
+pattern than the one that produced the first null. The mechanism is STILL not
+demonstrated at the primitive, and the replicated forest effect of section 0.2 remains
+unexplained.
+
+One correction to that leg's own output, made in `tools/device_mutex_ab_leg.sh` rather
+than left to mislead a reader. Its ISA step printed `buffer_inv_occurrences=0` for BOTH
+arms. `llvm-objdump` with an amdgcn triple does not disassemble the GPU code object
+embedded in the HOST ELF, so it produced nothing, and `grep -c` over nothing returns 0.
+That zero is indistinguishable from "the instruction is absent" and means nothing. The
+authoritative emission evidence is the section gate, and separately section 0.25.
 
 **Apple M4, Metal, under the exclusive Metal lock, one CPU thread.** Recorded on
 `fix/amd-merge-ordering`. Sixteen launches, all counts 256, no handoff errors, skip-write
@@ -344,32 +418,47 @@ The protocol argument is column independent. That is its value and also its limi
 
 ## 5. What is still OWED
 
-1. **A section-level byte comparison of the arms, before any box is rented.** Section 0.3.
-   Stock against fence, with a sabotage arm that must move the sections so the comparator
-   is seen able to differ. This is the gate on everything below it.
-2. **A stock arm of `core/device_mutex_check.mojo` on gfx942.** The top owed item and the
-   one that converts effect into mechanism. The existing gfx942 run passes only the
-   repaired primitive, and its skip-write sabotage breaks the count rather than the
-   ordering edge. **Andrew has approved a rented AMD box for this.**
-3. **Whether the acquire-CAS spelling of legs 13 and 14 emits.** Settled by the same
-   section comparison as item 1. If it does not, those legs compared one program with
-   itself and the 0/300 arms are void. If it does, their arms were genuinely distinct and
-   the effect is a real contrast between two real programs that still is not the ordering
-   repair.
-4. **A forest A/B at the spelling that ships,** with the fixed harness guard.
-5. **An rf identity cell with the repair in.** The fence adds an ordering constraint and
-   no arithmetic, so no bit should move, and that is currently an argument rather than a
-   measurement. The Apple build was taken with the build gate skipped and compared
-   nothing.
-6. **One NVIDIA build and run of `core/device_mutex_check.mojo`.**
-7. **ExtraTrees and fused kNN have no measurement at all.** Both carry the identical
+PAID since the first version of this file:
+
+- ~~A section-level byte comparison of the arms before any box is rented.~~ **DONE**,
+  section 0.3 and the gate log. It is now `tools/compare_binary_sections.py`, it caught
+  its own first run failing its positive control, and it runs on the box too.
+- ~~A stock arm of `core/device_mutex_check.mojo` on gfx942.~~ **TAKEN, and it is a
+  NULL.** Section 4.2.1.
+- ~~Whether the shipped spin load's acquire ordering survives.~~ **DONE, it survives on
+  all three columns.** Section 0.25.
+- ~~One NVIDIA build of `core/device_mutex_check.mojo`.~~ **DONE**, cross-compiled
+  locally for `sm_90a`, and its PTX read. Still never RUN on NVIDIA silicon.
+
+Still owed:
+
+1. **A contention pattern that actually reaches the window.** This is now the blocker,
+   and two nulls at the primitive say the current check is not it. The forest reaches it
+   at 1% to 5% of fits and the primitive does not reach it in 4096 claims, which is
+   itself informative: whatever opens the window is more like the forest's access
+   pattern (many nodes, real payload structs, cross-XCD block placement) than like a
+   single hot counter. A check built to resemble the forest's publish is the next
+   instrument, not more rounds of this one.
+2. **Whether the acquire-CAS spelling of legs 13 and 14 emits.** One section comparison,
+   no box needed, since the arms cross-compile locally. If it does not, those legs
+   compared one program with itself and their 0/300 arms are void. If it does, their
+   arms were two real programs and the effect is still not the ordering repair.
+3. **A forest A/B at the spelling that ships,** with the section guard in place of the
+   whole-file digest.
+4. **An rf identity cell with the repair in.** The fence adds an ordering constraint and
+   no arithmetic, so no bit should move, and that is an argument rather than a
+   measurement. Both Apple builds so far were taken with the build gate skipped and
+   compared nothing.
+5. **ExtraTrees and fused kNN have no measurement at all.** Both carry the identical
    protocol. Note the asymmetry `fix/amd-merge-ordering` records. The kNN `-2 -> -1`
    consumer has a single consumer, which restricts the interleavings, so a matching
-   spelling there is not independent proof of the same failure. The kNN producer at `:729`
-   has multiple producers and the argument applies to it directly.
-8. **An emission audit of every other discarded atomic in the repository.** Section 0 is a
-   general fact about this compiler, not a fact about mutexes, and nothing has checked
+   spelling there is not independent proof of the same failure. The kNN producer at
+   `:729` has multiple producers and the argument applies to it directly.
+6. **An emission audit of every other discarded atomic in the repository.** Section 0 is
+   a general fact about this compiler, not a fact about mutexes, and nothing has checked
    whether the same mistake is spelled anywhere else.
+7. **A run of `core/device_mutex_check.mojo` on NVIDIA silicon.** It now builds for
+   `sm_90a` and has never executed there.
 
 ---
 

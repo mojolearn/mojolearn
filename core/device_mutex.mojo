@@ -86,6 +86,15 @@ comptime CLAIM_STOCK = is_defined["MOJOLEARN_RF_MUTEX_CLAIM_STOCK"]()
 #: The protocol still works under it, since only the holder writes the held value.
 comptime SECTION_SABOTAGE = is_defined["MOJOLEARN_MUTEX_SECTION_SABOTAGE"]()
 
+#: MEASUREMENT INSTRUMENT, NEVER A DEFAULT. `-D MOJOLEARN_MUTEX_SPIN_RELAXED=1` makes the
+#: SPIN TEST a relaxed load instead of an acquire load. It exists to answer, on a column
+#: with no AMDGPU disassembler to hand, whether the spin's ACQUIRE ORDERING survives into
+#: the instruction stream at all. If this arm is byte-identical to the default, the
+#: acquire on the spin emits nothing on that column and the shipped spin-wait has been
+#: resting on an ordering it never had. If it differs, the acquire is real. This is a
+#: differential build, and it answers the question without disassembling anything.
+comptime SPIN_RELAXED = is_defined["MOJOLEARN_MUTEX_SPIN_RELAXED"]()
+
 
 @always_inline
 def claim_device_mutex[origin: MutOrigin, //](
@@ -94,8 +103,12 @@ def claim_device_mutex[origin: MutOrigin, //](
     """Take a cross-block device lock. Supports both the `0 -> 1` and `-2 -> -1` claims."""
     var claim_value = held + Int32(1) if SECTION_SABOTAGE else held
     while True:
-        if Atomic.load[ordering = Ordering.ACQUIRE](mutex) != available:
-            continue
+        comptime if SPIN_RELAXED:
+            if Atomic.load[ordering = Ordering.RELAXED](mutex) != available:
+                continue
+        else:
+            if Atomic.load[ordering = Ordering.ACQUIRE](mutex) != available:
+                continue
         var expected = available
         if Atomic.compare_exchange[
             success_ordering = Ordering.RELAXED,
