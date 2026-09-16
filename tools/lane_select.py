@@ -165,11 +165,12 @@ def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
     global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
-    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS
+    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES
     for cache in _CACHES:
         cache.clear()
     _GIT_SHOW.clear()
     _TRACKED = None
+    _PYTHON_FILES = None
     _ENUMERATORS = None
     _LANE_SOURCES = None
     _SOURCE_HASHED = None
@@ -259,14 +260,25 @@ def _code_names(fn, module_globals, seen=None):
     return out
 
 
+_PYTHON_FILES = None
+
+
 def _python_files():
     """Every tracked Python file of the package, excluding its test modules
-    (a test cannot change a lane's bits)."""
+    (a test cannot change a lane's bits).
+
+    MEMOIZED: `_python_imports` asks for this listing once per package file to
+    tell a module name from a class name, and the `os.listdir` behind it is
+    the whole cost of that loop."""
+    global _PYTHON_FILES
+    if _PYTHON_FILES is not None:
+        return _PYTHON_FILES
     out = []
     base = os.path.join(ROOT, PKG)
     for name in sorted(os.listdir(base)):
         if name.endswith(".py"):
             out.append(os.path.join(PKG, name))
+    _PYTHON_FILES = out
     return out
 
 

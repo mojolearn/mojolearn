@@ -115,12 +115,13 @@ reason that is in the tree, not in a list. Three were not.
 | `--selfcheck` | OK, 0 lanes with an empty side |
 | `tools/test_lane_select.py` | 50 tests, 0 failures (42 inherited, 8 added) |
 | map, before -> after | 723 -> 792 files, median 33 -> 29 lanes, 41 files selecting every lane, unchanged |
-| files that LOST a lane | 0 |
+| files that LOST a lane | 2, and both are the phantom paths, which left the map entirely |
 | `cluster/host/kmeans_oracle.mojo` | 20, unmoved |
 | `core/gbdt_host_predict.mojo` | 23, unmoved |
 | `python/mojolearn/neural_inference.py` | 21, unmoved |
 | `core/forest_host_predict.mojo` | 7 -> 15, on purpose: `rf_predict_proba` routes to it and the rf lanes were missing |
-| files that answered "212 of 212, falling back" and now answer narrowly | 68 |
+| files that entered the map, so answer narrowly instead of "212 of 212, falling back" | 71 |
+| `lane_sources()` cold, on the merged tree | 5.2 s (the branch that built it reported 0.9 s over a 723-file map; this one is 792 files and the number is re-measured, not carried over) |
 
 Every rule added was run on its unfixed side first and watched to fail: root-only
 Mojo resolution must lose `bindings/forest_inference_binding.mojo` while keeping
@@ -128,6 +129,19 @@ the ordinary root import; the old `def_function` pattern must miss
 `rf_classifier_fit`; `_public_rebindings` blanked must lose all three public
 doors; and the ORIGINAL import name must not match the export body that uses the
 alias. The case that must STAY narrow is asserted beside each.
+
+## One thing to know before running the property tests
+
+`tools/test_lane_select.py` WRITES `python/mojolearn/host_surface.py` and
+creates `armprobedir/` in the tree it runs in, restoring both at the end. That
+is fine in a private worktree and is not fine in
+`/Users/andrewhendel/CascadeProjects/mojolearn`, where several lanes are
+editing `host_surface.py` today. It was seen from the outside: a
+`--changed-since origin/main` run that overlapped the suite reported
+`host_surface.py: docstrings and comments only` and two `armprobedir/` paths
+that no commit has. The same call with the suite idle prints three paths and
+`0 of 212 lanes selected`, which is this lane's own change correctly read as
+selection machinery.
 
 ## Owed / not done
 
