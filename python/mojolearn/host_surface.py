@@ -41,7 +41,7 @@ Mojo host modules that ship inside it, the function names it exports, and
 whether it ships in a wheel. SINCE 2026-09-16 EVERY FAMILY SHIPS
 (lane/ship-cpu-host-families). The "inference only, CPU training internal"
 boundary held the sixteen training families back, and the price was the number
-that matters: an installed wheel could check 39 of the harness's 199 identity
+that matters: an installed wheel could check 39 of the harness's 211 identity
 lanes, because a lane's host binding was not in it. Bitwise reproducibility a
 user cannot re-run on their own machine is a claim, not a result. The
 objection was size, and size was measured rather than guessed: the sixteen add

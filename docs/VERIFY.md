@@ -36,17 +36,24 @@ requires equal values.
   per constructor value that selects a different numeric path, the linalg
   and metrics functions, and the multi-GPU drivers on one device).
 - **On a CPU-only install** the public CPU reference lanes run
-  (`host_surface.public_reference_lanes()`, 39 of them), fitted inside the
-  verifier's reference scope. They cover k-means and its starts, the k-NN,
-  radius and kernel-density variants, DBSCAN, the linear, ridge, logistic and
-  decomposition lanes, SVC, SVR and the isolation forest, the saved UMAP
+  (`host_surface.public_reference_lanes()`, 122 of them), fitted inside the
+  verifier's reference scope. The list is DERIVED, not hand-written: every
+  lane with a CPU training path that a release record covers and the shipped
+  table carries a reference for, less the `par-*` multi-GPU drivers and the
+  lanes held in `PUBLIC_PENDING_LANES` with a stated reason. They cover the
+  gradient boosting and random forest and Extra Trees fits, k-means and its
+  starts, the k-NN, radius and kernel-density variants, DBSCAN, the linear,
+  ridge, logistic and decomposition lanes, SVC, SVR and the isolation forest,
+  the Gaussian processes and mixtures, the scalers, ARIMA and Holt-Winters,
+  the MLP, Mamba and Transformer blocks and the optimizers, the saved UMAP
   embedding's transform, the pinned GEMM and the Cholesky solve, the KPSS
   test, the bootstrap, the permutation test and Monte Carlo integration, and
   tokenizer, which loads the synthetic vocabulary mojolearn trains itself.
-  Thirty of the 39 were added on 2026-09-16 after being measured IDENTICAL
-  against the Apple, NVIDIA and AMD columns with their sabotage arm seen to
-  move; the wheel grew by nothing, because every one is served by a binding it
-  already carried.
+  It was 9 lanes until 2026-09-16, then 39 when thirty more were measured
+  IDENTICAL against the Apple, NVIDIA and AMD columns, and then 122 when
+  every host family began shipping (lane/ship-cpu-host-families) and 83 lanes
+  stopped being unreachable on the machine you installed on. Each of the 83
+  was watched reading IDENTICAL on a CPU-only install before it was added.
 - **Portable models** run on every install: small models trained on a GPU
   and saved, shipped in `mojolearn/verify_reference/models/` (a random
   forest, a symmetric boosting model, a linear regression and a PCA, 179 KB
@@ -178,7 +185,7 @@ fixture would hash different bytes.
 
 | install | `--quick` | `--full` |
 |---|---|---|
-| CPU-only, Apple M4, one core | 2 s | 8.7 min, measured (39 lanes, 9 fixtures, 4 models) |
+| CPU-only, Apple M4, one core | 2 s | about 25 min, measured (122 lanes, 9 fixtures, 4 models; 1,488 s summed over 17 chunked processes at one core) |
 | CPU-only, x86 Linux (AMD EPYC, 8 vCPU) | 2 s | 6 to 12 s |
 | Metal, Apple M4 | 12 s (26 lanes, base fixture) | more than an hour (about 180 lanes x 9 fixtures) |
 

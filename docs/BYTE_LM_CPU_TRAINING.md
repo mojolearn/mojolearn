@@ -365,8 +365,9 @@ as vendor cpu and the CPU column, and (on Linux) byte-compared across the
 three architecture legs before packing; 0.8.5 and earlier carry only the
 byte LM's, and 0.8.6 sixteen of the thirty-two. The sixteen training
 families joined on 2026-09-16 (lane/ship-cpu-host-families): with them out,
-an installed wheel could check 39 of the harness's 199 lanes, because a
-lane's host binding was not in it. Shipping the binding did not make
+an installed wheel could check 39 of the harness's 211 lanes, because a
+lane's host binding was not in it; with them in, a measured `verify --all`
+checks 122. Shipping the binding did not make
 ordinary CPU `fit` public; it still refuses outside the verifier's scope. Each also builds from source through
 `bindings/build_host_family.sh`, one shim per family.
 
