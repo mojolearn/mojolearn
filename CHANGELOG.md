@@ -3,7 +3,18 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## Unreleased (0.8.6 prep; the freeze commit names it 0.8.6 with the version bump)
+## Unreleased (0.8.7 prep)
+
+**0.8.6 WAS NEVER PUBLISHED, and its number is skipped.** It was frozen on branch
+release/0.8.6, built on three GPU boxes, packed, audited and partly recorded, and then folded
+into 0.8.7 on 2026-09-16 rather than finished. The reason was a defect in the wheel it would
+have shipped: `verify --all` returned VERIFIED as soon as one part read IDENTICAL, before it
+looked at REFUSED, so a CPU-only install printed VERIFIED, exit 0 on 44 IDENTICAL and 288
+REFUSED parts. The fix (below) is in an inventoried file, so shipping it meant rebuilding all
+three Linux sets and the macOS wheel and re-recording, which is the whole release again. Main
+never carried the 0.8.6 version bump, so nothing outside that branch ever claimed it. The
+wheels that were built are kept as evidence, are not release candidates, and must not be
+published; docs/lanes/RELEASE_087_PLAN.md on release/0.8.7 names each artifact.
 
 Packaging release. Nothing in a kernel moves; what changes is what the two wheels carry and
 what a user can check from a pip install. The freeze checks of docs/RELEASE_CHECKLIST.md,
@@ -85,10 +96,13 @@ Linux legs are OWED before this heading reads published.
   unchanged. The cost was measured rather than estimated: the sixteen add 7,663,488 bytes
   uncompressed and 2,189,221 compressed, taking the macOS wheel from 26,368,494 to
   28,639,807 bytes (+8.61%) and the Linux wheel, projected from the ratio measured over the
-  fifteen families in both published wheels, from 70,862,796 to 73,444,604 (+3.64%). The
+  fifteen families in both 0.8.6 candidate wheels, from 70,862,796 to 73,444,604 (+3.64%). The
   compressed figures are measurements: at deflate level 6 with a raw window this reproduces
-  the published 0.8.6 wheel's recorded compressed sizes exactly on all fifteen of its host
-  bindings, where level 9 reproduces none of them.
+  the 0.8.6 candidate wheel's recorded compressed sizes exactly on all fifteen of its host
+  bindings, where level 9 reproduces none of them. Those wheels were built and audited but
+  NEVER PUBLISHED (see the heading above), so the measurement is against an artifact on disk,
+  not against anything on PyPI; the last published wheels are 0.8.5's, which carry the byte
+  LM's host binding alone.
   A wheel is still dominated by its GPU bindings, 312 MB uncompressed across 91 files on
   Linux, which is why sixteen more CPU binaries move the total so little. Every family's
   `wheel_note` now begins "Ships:" and says what that binding makes checkable that nothing
