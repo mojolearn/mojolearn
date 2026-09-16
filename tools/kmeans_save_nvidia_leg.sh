@@ -84,11 +84,30 @@ HOSTBUILD="env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_NUME
 run build_core_gpu   $BUILD_ENV sh bindings/build.sh          || say "BUILD FAILED: build.sh"
 run build_core_host  $HOSTBUILD sh bindings/build_core_host.sh || say "BUILD FAILED: build_core_host.sh"
 mkdir -p /root/sabotage-host
-run build_core_host_sabotage env MOJOLEARN_HOST_OUTDIR=/root/sabotage-host \
+# `-u` MUST COME BEFORE ANY ASSIGNMENT. `env FOO=1 -u BAR cmd` does not unset
+# BAR: env stops parsing options at the first non-option argument, so `-u` is
+# taken as a file to execute and the whole call dies `env: '-u': No such file
+# or directory`, exit 127. That is exactly what happened on the 2026-09-16
+# L40S leg: the sabotage binary was never built, MOJOLEARN_HOST_DIR pointed at
+# an empty directory, and every cell of arm D read REFUSED. A REFUSED cell is
+# not a failed cell, so arm E read ONE-COLUMN and proved NOTHING. The whole
+# point of the arm is that it must be able to fail, and a missing binary makes
+# it unable to either fail or pass.
+run build_core_host_sabotage env -u MOJOLEARN_GPU_ARCHS \
+    MOJOLEARN_HOST_OUTDIR=/root/sabotage-host \
     MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1" \
-    -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_NUMERIC_MODE=identical \
+    MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_NUMERIC_MODE=identical \
     MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=$JOBS sh bindings/build_core_host.sh \
     || say "BUILD FAILED: sabotage core host"
+# And REFUSE TO RUN THE ARM AT ALL if the binary is not there, rather than
+# letting a missing file masquerade as a control.
+if [ ! -s /root/sabotage-host/_mojolearn_core_host.so ]; then
+    say "SABOTAGE ARM NOT TAKEN: no /root/sabotage-host/_mojolearn_core_host.so."
+    say "  Arms D and E below are NOT a negative control. Do not read them as one."
+    SABOTAGE_READY=0
+else
+    SABOTAGE_READY=1
+fi
 sha256sum python/mojolearn/identical/_mojolearn.so python/mojolearn/host/_mojolearn_core_host.so \
     /root/sabotage-host/_mojolearn_core_host.so >> "$G" 2>&1
 
@@ -125,12 +144,24 @@ run B_host_infer $IB MOJOLEARN_IDENTITY_HOST_INFER=1 pixi run python tools/ident
 run C_diff_gpu_host env PYTHONPATH=/root/mojolearn/python pixi run python tools/identity_break.py \
     --diff "$OUT/gpu.json" "$OUT/host.json"
 # D and E: the negative control, and the diff that must NOT read IDENTICAL.
-run D_host_sabotage $IB MOJOLEARN_IDENTITY_HOST_INFER=1 MOJOLEARN_HOST_DIR=/root/sabotage-host \
-    MOJOLEARN_HOST_ALLOW_SABOTAGE=1 pixi run python tools/identity_break.py \
-    --lanes "$LANES" --fixtures base --vendor "$LABEL-sabotage" --json "$OUT/host_sabotage.json"
-run E_diff_gpu_sabotage env PYTHONPATH=/root/mojolearn/python pixi run python tools/identity_break.py \
-    --diff "$OUT/gpu.json" "$OUT/host_sabotage.json"
+if [ "$SABOTAGE_READY" = 1 ]; then
+    run D_host_sabotage $IB MOJOLEARN_IDENTITY_HOST_INFER=1 MOJOLEARN_HOST_DIR=/root/sabotage-host \
+        MOJOLEARN_HOST_ALLOW_SABOTAGE=1 pixi run python tools/identity_break.py \
+        --lanes "$LANES" --fixtures base --vendor "$LABEL-sabotage" --json "$OUT/host_sabotage.json"
+    run E_diff_gpu_sabotage env PYTHONPATH=/root/mojolearn/python pixi run python tools/identity_break.py \
+        --diff "$OUT/gpu.json" "$OUT/host_sabotage.json"
+    # A diff that EXITS 0 here is the failure: the sabotaged arithmetic did not
+    # move a byte, so the control did not control anything.
+    if [ "$(awk -F'\t' '$1=="E_diff_gpu_sabotage"{print $2}' "$OUT/status.tsv")" = 0 ]; then
+        say "SABOTAGE ARM DID NOT FIRE: the diff against the sabotaged host read clean."
+    fi
+    # And a cell that REFUSED is not a cell that differed.
+    if grep -q "REFUSED" "$OUT/logs/E_diff_gpu_sabotage.log" 2>/dev/null; then
+        say "SABOTAGE ARM REFUSED at least one cell; a REFUSED cell is not a DIVERGENT cell."
+    fi
+fi
 
+say "sabotage_ready=$SABOTAGE_READY"
 for c in A_gpu_infer B_host_infer C_diff_gpu_host D_host_sabotage E_diff_gpu_sabotage; do
     say "$c exit=$(awk -F'\t' -v n="$c" '$1==n{print $2}' "$OUT/status.tsv")"
 done
