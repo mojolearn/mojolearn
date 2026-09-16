@@ -186,3 +186,11 @@ def test_resume_signature_does_not_publish_environment_secrets(run_fixture, monk
     monkeypatch.setenv("MOJOLEARN_PRIVATE_TOKEN", "secret-that-must-not-be-recorded")
     assert ib._run_reference(args) == 0
     assert "secret-that-must-not-be-recorded" not in Path(args.json).read_text()
+
+
+def test_cpu_requirement_refuses_gpu_before_any_fit(run_fixture):
+    args, state, _ = run_fixture
+    args.require_cpu = True
+    with pytest.raises(SystemExit, match="--require-cpu loaded a GPU"):
+        ib._run_reference(args)
+    assert state["calls"] == 0

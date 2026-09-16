@@ -4,8 +4,9 @@
 """Run changed identity lanes in fair, bounded jobs with live progress.
 
 The default base fixture is an iteration check, never a full release record.
-Every cell still runs both fits and all its default inference/batch/state
-checks. Each lane/fixture releases the GPU before the next joins the queue.
+Each job runs two fits and inference/save/reload. Batch and decode checks
+are separate explicit groups. Routine jobs use existing CPU oracle binaries,
+with one-minute queue and execution limits. Product routing is unchanged.
 """
 import argparse
 import json
@@ -38,11 +39,57 @@ def plan(paths, base, fixtures, lanes=()):
     return selection
 
 
-def command(python, lane, fixture, record, timeout, mode, resume):
+def cpu_package(out, host_dir, source=None):
+    """Stage only Python sources, exercising the existing CPU-only install route.
+
+    No product code or installed binaries are edited. A stable directory keeps
+    resume provenance stable. Native host files stay at their recorded paths.
+    """
+    source = source or ROOT / "python" / "mojolearn"
+    host_dir = Path(host_dir).resolve()
+    if not host_dir.is_dir() or not list(host_dir.glob("_mojolearn_*_host.so")):
+        raise ValueError(f"no CPU host bindings under {host_dir}; pass --host-dir")
+    root = out.resolve() / "cpu-package"
+    root.mkdir(parents=True, exist_ok=True)
+    marker = root / ".identity-iterate"
+    if any(root.iterdir()) and not marker.exists():
+        raise ValueError(f"refusing to replace an unowned package directory: {root}")
+    marker.touch()
+    package = root / "mojolearn"
+    package.mkdir(exist_ok=True)
+    wanted = set()
+    for src in source.rglob("*.py"):
+        rel = src.relative_to(source)
+        if "__pycache__" in rel.parts:
+            continue
+        dst = package / rel
+        wanted.add(dst)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if dst.is_symlink() and dst.resolve() == src.resolve():
+            continue
+        if dst.exists() or dst.is_symlink():
+            dst.unlink()
+        dst.symlink_to(src.resolve())
+    for dst in package.rglob("*"):
+        if dst.suffix in (".so", ".dylib"):
+            raise ValueError(f"native library in CPU source staging: {dst}")
+        if dst.suffix == ".py" and dst not in wanted:
+            dst.unlink()
+    return root, host_dir
+
+
+def command(python, lane, fixture, record, timeout, mode, resume, group="all", wait_timeout=60):
     cmd = [python, str(ROOT / "tools/mac_slot.py"), "--timeout", str(timeout),
-           "--timing-json", str(record.with_suffix(".timing.json")), mode,
+           "--wait-timeout", str(wait_timeout),
+           "--timing-json", str(record.with_suffix(".timing.json")), "run" if mode == "cpu" else mode,
            python, "-u", str(ROOT / "tools/identity_break.py"), "--lanes", lane,
            "--fixtures", fixture, "--repeats", "2", "--fail-on-refused", "--json", str(record)]
+    if mode == "cpu":
+        cmd.append("--require-cpu")
+    if group in ("core", "rlpair"):
+        cmd.append("--no-batch")
+    if group in ("core", "batch"):
+        cmd.append("--no-rlpair")
     if resume and record.exists():
         cmd.append("--resume")
     return cmd
@@ -73,12 +120,16 @@ def main(argv=None):
     ap.add_argument("--out", type=Path)
     ap.add_argument("--plan", action="store_true", help="print selection without taking any slot")
     ap.add_argument("--resume", action="store_true")
-    ap.add_argument("--timeout", type=float, default=900, help="maximum seconds per cell, excluding wait (default 900)")
-    ap.add_argument("--mode", choices=("metal", "run"), default="metal" if sys.platform == "darwin" else "run")
+    ap.add_argument("--timeout", type=float, default=60, help="maximum seconds per job, excluding wait (default 60)")
+    ap.add_argument("--mode", choices=("cpu", "metal", "run"), default="cpu")
+    ap.add_argument("--host-dir", type=Path, help="prebuilt internal CPU oracle bindings; no builds are launched")
+    ap.add_argument("--wait-timeout", type=float, default=60, help="queue limit in seconds (default 60)")
+    ap.add_argument("--probe-group", choices=("core", "batch", "rlpair", "all"), default="core",
+                    help="core = training/inference/save/reload; all runs separate bounded jobs")
     ap.add_argument("--full-selection", action="store_true", help="explicitly run a selector fallback; Apple release policy still applies")
     args = ap.parse_args(argv)
-    if args.timeout <= 0:
-        ap.error("--timeout must be positive")
+    if args.timeout <= 0 or args.wait_timeout <= 0:
+        ap.error("timeouts must be positive")
     import identity_break
     if args.exhaustive and args.fixtures is not None:
         ap.error("choose --exhaustive OR --fixtures")
@@ -94,7 +145,15 @@ def main(argv=None):
     selected["fixtures"] = fixtures
     selected["repeats"] = 2
     selected["cell_count"] = len(selected["lanes"]) * len(fixtures)
-    selected["fit_count"] = selected["cell_count"] * 2
+    jobs = []
+    for lane in selected["lanes"]:
+        groups = ["core", "batch"] + (["rlpair"] if lane in identity_break.RLPAIR else []) if args.probe_group == "all" else [args.probe_group]
+        if args.probe_group == "rlpair" and lane not in identity_break.RLPAIR:
+            ap.error(f"{lane} does not declare an rlpair probe")
+        jobs.extend(dict(lane=lane, fixture=fixture, group=group) for fixture in fixtures for group in groups)
+    selected.update(jobs=jobs, job_count=len(jobs), fit_count=2 * len(jobs),
+                    mode=args.mode, timeout=args.timeout, wait_timeout=args.wait_timeout)
+
     print(json.dumps(selected, indent=2), flush=True)
     if args.plan:
         return 0
@@ -114,16 +173,26 @@ def main(argv=None):
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "selection.json").write_text(json.dumps(selected, indent=2) + "\n")
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
-    for lane in selected["lanes"]:
-        for fixture in fixtures:
-            record = args.out.resolve() / f"{lane}--{fixture}.json"
-            if record.exists() and not args.resume:
-                ap.error(f"{record} exists; use --resume or a new output directory")
-            print(f"# QUEUE {lane}/{fixture}", flush=True)
-            code = run_job(command(sys.executable, lane, fixture, record,
-                                   args.timeout, args.mode, args.resume), env)
-            if code:
-                return code
+    # Run this checkout's routing code, even when the interpreter has a wheel.
+    env["PYTHONPATH"] = str(ROOT / "python") + os.pathsep + env.get("PYTHONPATH", "")
+    if args.mode == "cpu":
+        host = args.host_dir or os.environ.get("MOJOLEARN_HOST_DIR") or ROOT / "python" / "mojolearn" / "host"
+        try:
+            package_root, host = cpu_package(args.out, host)
+        except ValueError as exc:
+            ap.error(str(exc))
+        env["PYTHONPATH"] = str(package_root) + os.pathsep + env.get("PYTHONPATH", "")
+        env["MOJOLEARN_HOST_DIR"] = str(host)
+    for job in jobs:
+        lane, fixture, group = job["lane"], job["fixture"], job["group"]
+        record = args.out.resolve() / f"{lane}--{fixture}--{group}.json"
+        if record.exists() and not args.resume:
+            ap.error(f"{record} exists; use --resume or a new output directory")
+        print(f"# QUEUE {lane}/{fixture}/{group}", flush=True)
+        code = run_job(command(sys.executable, lane, fixture, record,
+                               args.timeout, args.mode, args.resume, group, args.wait_timeout), env)
+        if code:
+            return code
     print("Selected iteration cells passed. This is not a full release qualification.")
     return 0
 

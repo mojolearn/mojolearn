@@ -110,3 +110,18 @@ Full logs, binary hashes, NPZ byte comparisons and the bounded verification
 script are under `~/mojolearn-evidence/neural-metal-setup/`. The committed
 `tools/neural_runtime_leg.sh` reproduces the narrow GPU checks and exports a
 native decode NPZ for comparison with Apple on a rented CUDA or HIP machine.
+
+## AMD follow-up
+
+The same narrow runtime leg passed on a dedicated DigitalOcean MI325X
+(gfx942), including production/guarded initialization, the 176-case scan gate,
+and the current mutex primitive check. All 30 decode output/state arrays
+matched the Apple candidate bytewise. The tiny Mamba-1 B1 case took 1.31 ms per
+token in that AMD run. This is targeted coverage, not a full AMD release or a
+proof that the intermittent random-forest defect is resolved. Droplet
+601175617 was deleted and its subsequent GET returned HTTP 404.
+
+Apple routine work is bypassed while the remaining latency is investigated.
+The standalone scan experiment showed variable launch/wait latency and no
+consistent win from replacing the reduction with a single-thread scan, so that
+experimental kernel was not shipped. No further Apple matrix was launched.

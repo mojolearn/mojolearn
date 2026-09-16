@@ -150,6 +150,13 @@ def do_column(args):
         if lane in covered:
             need(verdict == "STABLE",
                  f"{key}: covered lane reads {verdict}, not STABLE" + (f" ({cell.get('error', '')[:160]})" if verdict == "REFUSED" else ""))
+            # A stable training hash cannot certify a failed inference or
+            # metamorphic comparison. Only explicitly inapplicable/skipped
+            # parts may be N/A; every reported failure stays a failure.
+            for field, part_verdict in cell.items():
+                if field.endswith("_verdict"):
+                    need(part_verdict in ("STABLE", "N/A"),
+                         f"{key}: {field} is {part_verdict}, not STABLE or N/A")
         else:
             need(verdict == "REFUSED", f"{key}: uncovered lane reads {verdict}, not REFUSED; a hash from a lane with no CPU implementation is a routing bug")
             need(REFUSAL in str(cell.get("error", "")),

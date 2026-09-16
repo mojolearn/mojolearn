@@ -72,3 +72,48 @@ def test_invalid_scope_combinations_and_single_repeat_refuse():
         verify_lanes.main(["--lane", "ridge", "--repeats", "1", "--plan"])
     with pytest.raises(SystemExit):
         iterate.main(["--lane", "ridge", "--exhaustive", "--fixtures", "base", "--plan"])
+
+
+def test_default_is_bounded_cpu_core_and_all_splits_groups(capsys):
+    import json
+    iterate.main(["--lane", "transformer", "--plan"])
+    p = json.loads(capsys.readouterr().out)
+    assert p["mode"] == "cpu"
+    assert p["timeout"] == p["wait_timeout"] == 60
+    assert [j["group"] for j in p["jobs"]] == ["core"]
+    iterate.main(["--lane", "transformer", "--probe-group", "all", "--plan"])
+    p = json.loads(capsys.readouterr().out)
+    assert [j["group"] for j in p["jobs"]] == ["core", "batch", "rlpair"]
+    assert p["job_count"] == 3 and p["fit_count"] == 6
+
+
+def test_group_commands_keep_cpu_guard_and_timeouts(tmp_path):
+    for group, skip_batch, skip_rl in (("core", True, True), ("batch", False, True), ("rlpair", True, False)):
+        cmd = iterate.command("python", "transformer", "base", tmp_path / (group + ".json"),
+                              60, "cpu", False, group)
+        assert "--require-cpu" in cmd
+        assert ("--no-batch" in cmd) == skip_batch
+        assert ("--no-rlpair" in cmd) == skip_rl
+        assert cmd[cmd.index("--timeout") + 1] == "60"
+        assert cmd[cmd.index("--wait-timeout") + 1] == "60"
+        assert "metal" not in cmd
+
+
+def test_cpu_staging_excludes_gpu_binaries_and_rejects_contamination(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "__init__.py").write_text("# source")
+    (source / "gpu.so").write_bytes(b"not loaded")
+    host = tmp_path / "host"
+    host.mkdir()
+    (host / "_mojolearn_core_host.so").write_bytes(b"host")
+    root, chosen = iterate.cpu_package(tmp_path / "out", host, source)
+    assert chosen == host
+    assert (root / "mojolearn" / "__init__.py").read_text() == "# source"
+    assert not list(root.rglob("*.so"))
+    assert (source / "gpu.so").read_bytes() == b"not loaded"
+    (root / "mojolearn" / "rogue.so").write_bytes(b"bad")
+    with pytest.raises(ValueError, match="native library"):
+        iterate.cpu_package(tmp_path / "out", host, source)
+    with pytest.raises(ValueError, match="no CPU host bindings"):
+        iterate.cpu_package(tmp_path / "other", tmp_path / "missing", source)

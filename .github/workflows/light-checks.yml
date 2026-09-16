@@ -60,4 +60,4 @@ jobs:
       - name: Scheduler and checkpoint regressions (CPU only, no bindings)
         run: |
           /tmp/yaml-venv/bin/pip install --quiet pytest==8.3.5 numpy==2.2.6
-          /tmp/yaml-venv/bin/python -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py
+          /tmp/yaml-venv/bin/python -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py tools/test_algorithm_scope.py tools/test_cpu_identity_gate.py

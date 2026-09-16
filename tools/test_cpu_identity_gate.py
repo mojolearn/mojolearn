@@ -41,6 +41,22 @@ class GateTests(unittest.TestCase):
     def test_complete_column_passes(self):
         self.assertEqual(self.column(record()), 0)
 
+    def test_stable_training_cannot_hide_a_failed_probe(self):
+        for field, verdict in (("infer_verdict", "MOVED"),
+                               ("model_verdict", "RELOAD-MOVED"),
+                               ("batch_verdict", "BATCH_MOVED"),
+                               ("rlpair_verdict", "REFUSED"),
+                               ("stepfull_verdict", "MOVED")):
+            value = record()
+            value['cells']['kde/base'][field] = verdict
+            self.assertEqual(self.column(value), 1, (field, verdict))
+            self.assertIn(field, self.output.getvalue())
+
+    def test_explicitly_inapplicable_probe_is_allowed(self):
+        value = record()
+        value['cells']['kde/base']['batch_verdict'] = 'N/A'
+        self.assertEqual(self.column(value), 0)
+
     def test_missing_fixture_fails_even_with_complete_flag(self):
         value = record()
         del value['cells']['kde/odd']

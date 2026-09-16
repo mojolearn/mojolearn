@@ -1,51 +1,58 @@
-# Fast iteration and fair Apple Metal testing
+# Bounded test iteration
 
-Use changed-lane checks while editing; reserve the complete cross-vendor matrix
-for a release. A smaller selection is recorded as iteration coverage, never as
-full qualification. The fixture sizes, repeat count and numerical contracts are
-unchanged by this runner.
-
-For one algorithm, name its lane explicitly. The default is the base fixture,
-with two fits and the existing probes. `--exhaustive` selects all nine fixtures
-for those lanes. `verify_lanes.py` uses the same base default.
+Routine checks use the internal CPU oracle, one algorithm and the base fixture.
+Apple is bypassed by default. No product routing, PyPI API, public CPU training
+permission, numerical contract or frozen reference is changed by this runner.
 
 ```sh
+# Inspect the exact jobs, coverage and limits without running anything.
 pixi run -e test test-algo --lane transformer --plan
-pixi run -e test test-algo --lane transformer --mode run --out /tmp/transformer-check
+
+# Two fits plus inference/save/reload, on prebuilt CPU oracle bindings.
+pixi run -e test test-algo --lane transformer --host-dir /path/to/host \
+  --out /tmp/transformer-core
+
+# Run just the additional batch or decode-consistency contract.
+pixi run -e test test-algo --lane transformer --probe-group batch \
+  --host-dir /path/to/host --out /tmp/transformer-batch
+pixi run -e test test-algo --lane transformer --probe-group rlpair \
+  --host-dir /path/to/host --out /tmp/transformer-decode
+
+# All applicable groups, each in its own bounded process and record.
+pixi run -e test test-algo --lane transformer --probe-group all --plan
+# All nine hostile fixtures remain explicit, for the selected algorithm.
 pixi run -e test test-algo --lane transformer --exhaustive --plan
 ```
 
-The execution example requires a CPU host installation. Naming a lane tests
-that algorithm only; use changed-path selection for shared source changes.
+`--host-dir` defaults to `MOJOLEARN_HOST_DIR`, then this checkout's host
+binding directory. Missing CPU bindings fail immediately; the runner never
+builds all families or falls back to Metal. It stages only the checkout's
+Python sources into the output directory and uses the package's existing
+CPU-only installation route. `identity_break --require-cpu` checks the actual
+backend before fitting. The installed package is untouched.
 
-```sh
-# Inspect the affected lanes without taking the GPU.
-pixi run -e test test-identity-changed --plan --base HEAD^ cluster/host/kmeans_oracle.mojo
+Each job has a **60-second execution limit and 60-second queue limit**.
+`--timeout` and `--wait-timeout` make longer checks explicit. A timeout is a
+failure, never reduced coverage reported as success. Child process groups are
+terminated before leases are released. Results use separate
+`LANE--FIXTURE--GROUP.json` records; `--resume` preserves completed matching
+jobs. Do not merge different groups into a release column: their enabled
+protocols differ deliberately.
 
-# One lane/fixture per Metal lease; two fits and all default probes per cell.
-pixi run -e test test-identity-changed --base HEAD^ \
-  --out /tmp/kmeans-check cluster/host/kmeans_oracle.mojo
+The `core` group includes training and inference/save/reload. `batch` and
+`rlpair` each rerun that prerequisite, plus only their selected contract.
+`all` expands to separate jobs; undeclared rlpair probes are omitted from its
+plan, and requesting one explicitly refuses. Both fits and fixture sizes stay
+unchanged. Skipped probes are recorded N/A with their skip reason.
 
-# Additional hostile fixtures are explicit. Reuse completed cells after an interruption.
-pixi run -e test test-identity-changed --base HEAD^ --fixtures base,odd,ties \
-  --out /tmp/kmeans-hostile --resume cluster/host/kmeans_oracle.mojo
+Changed-path selection is also supported by `test-identity-changed --base REF`.
+Naming a lane does not prove coverage of a shared numerical primitive. A
+selector fallback refuses execution unless `--full-selection` is explicit.
+`--mode metal` is explicit and still subject to the Apple release guard;
+`--mode run` reserves CPU capacity but uses the installation's chosen backend,
+for explicit non-Metal GPU work. Neither is the routine default.
 
-python3 tools/identity_timing.py /tmp/kmeans-hostile/*.json
-```
-
-The Python environment must have the intended installed MojoLearn bindings.
-`--mode metal` is the Mac default; `--mode run` reserves only CPU capacity and
-**does not switch a GPU installation to CPU execution**. Use a CPU installation
-for host checks. The runner prints the selector's reasons. An unattributed
-change refuses execution unless `--full-selection` is explicit. Splitting a
-selection into processes does not bypass the existing Apple release guard.
-
-Each cell has a 900-second execution limit by default (`--timeout` changes it).
-Queue wait is separate. A timeout or refused stage stops the runner with a
-nonzero exit. The child process group is terminated before releasing its lease.
-The output directory carries the selection, per-cell records, and separate
-scheduler timing records. Output streams live rather than waiting in a `tail`
-pipeline. Completed records are not overwritten accidentally.
+See [TEST_ORACLE_SCOPE.md](TEST_ORACLE_SCOPE.md) for what each comparison proves.
 
 ## Scheduler
 

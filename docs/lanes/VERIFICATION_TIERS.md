@@ -51,6 +51,13 @@ and a toolchain change can move bits on every lane.
 
 ## Tier 1, ROUTINE: on a change, before merging
 
+The bounded routine entry point is now `pixi run -e test test-algo --lane NAME`.
+It defaults to the CPU oracle, the base fixture and core checks, with separate
+60-second queue and execution limits. Batch and decode contracts are selected
+with `--probe-group`; `all` creates separate jobs. See
+[TEST_RUNTIME.md](../TEST_RUNTIME.md) and [TEST_ORACLE_SCOPE.md](../TEST_ORACLE_SCOPE.md).
+The full-column runners below remain explicit qualification tools.
+
 Only the lanes the change can affect, on the CPU host route, small fixtures.
 This is what a lane runs before it merges.
 
