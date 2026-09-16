@@ -23,9 +23,9 @@ scalars moving, and NO epoch change. If the controlled step is small and the
 step across the boundary is large, the cliff is the only thing left that can
 explain the gap.
 
-`negative_sample_rate` is 0 throughout, so the batch-position RNG ordinal,
-which dominates everything else in this transform, is switched off and cannot
-contaminate either step.
+Both arms run at `negative_sample_rate` 0 and again at the shipped default 5.
+At 0 the batch-position RNG ordinal, which dominates everything else in this
+transform, is switched off and cannot contaminate either step.
 """
 from std.math import isfinite
 from std.memory import bitcast
@@ -97,13 +97,14 @@ def _compare(label: String, a: List[Float32], b: List[Float32]) -> Float32:
 
 
 def _run(
-    training: List[Float32], embedding: List[Float32], queries: List[Float32], rows: Int
+    training: List[Float32], embedding: List[Float32], queries: List[Float32],
+    rows: Int, negatives: Int,
 ) raises -> List[Float32]:
     var params = UMAPParams(
         n_neighbors=K, n_components=C, n_epochs=0, random_seed=UInt64(7),
-        negative_sample_rate=0,
+        negative_sample_rate=negatives,
     )
-    print("CLIFF_RUN rows", rows, "epochs", _epochs_for(rows))
+    print("CLIFF_RUN rows", rows, "epochs", _epochs_for(rows), "nsr", negatives)
     var batch = _head(queries, rows)
     var result = host_umap_transform(training, embedding, batch, N_TRAIN, rows, D, params)
     for value in result:
@@ -112,30 +113,39 @@ def _run(
     return result^
 
 
-def main() raises:
-    print("UMAP transform epoch-count cliff at 10,000 queries, CPU host route")
+def _cliff(negatives: Int) raises:
+    var suffix = String("nsr") + String(negatives)
     var tr = _training()
     var training = tr[0].copy()
     var embedding = tr[1].copy()
     var queries = _queries()
 
-    var at_9999 = _run(training, embedding, queries, 9999)
-    var at_10000 = _run(training, embedding, queries, 10000)
-    var at_10001 = _run(training, embedding, queries, 10001)
+    var at_9999 = _run(training, embedding, queries, 9999, negatives)
+    var at_10000 = _run(training, embedding, queries, 10000, negatives)
+    var at_10001 = _run(training, embedding, queries, 10001, negatives)
 
     # The control: one row added, both sides at 100 epochs.
-    var control = _compare(String("CONTROL.9999-vs-10000"), at_9999, at_10000)
-    print("ARM CONTROL one row added, 100 epochs both sides, largest move", control)
+    var control = _compare(String("CONTROL.9999-vs-10000.") + suffix, at_9999, at_10000)
+    print("ARM CONTROL", suffix, "one row added, 100 epochs both sides, largest move", control)
 
     # The cliff: one row added, 100 epochs against 30.
-    var cliff = _compare(String("CLIFF.10000-vs-10001"), at_10000, at_10001)
-    print("ARM CLIFF one row added, 100 epochs against 30, largest move", cliff)
+    var cliff = _compare(String("CLIFF.10000-vs-10001.") + suffix, at_10000, at_10001)
+    print("ARM CLIFF", suffix, "one row added, 100 epochs against 30, largest move", cliff)
 
-    # A control that moved nothing would make the contrast unreadable, and a
-    # cliff that moved nothing would mean the boundary is not reached at all.
-    if control == Float32(0):
-        raise Error("the control step moved nothing; the contrast cannot be read")
+    # The cliff arm is what proves `_compare` can report a difference at all.
+    # Once it has fired, a control of exactly zero is not a broken comparison,
+    # it is the strongest possible attribution: the one-row growth moved the
+    # batch scalars and moved no bit, so everything the boundary step moved is
+    # the epoch count and nothing else.
     if cliff == Float32(0):
-        raise Error("the boundary step moved nothing; the epoch cliff was not reached")
-    print("SUMMARY epoch cliff control", control, "cliff", cliff)
+        raise Error("the boundary step moved nothing; this comparison was never seen to fail")
+    if control == Float32(0):
+        print("ARM CONTROL is exactly zero, so the entire cliff move is the epoch count")
+    print("SUMMARY", suffix, "epoch cliff control", control, "cliff", cliff)
+
+
+def main() raises:
+    print("UMAP transform epoch-count cliff at 10,000 queries, CPU host route")
+    _cliff(0)
+    _cliff(5)
     print("UMAP epoch cliff measurement COMPLETE")

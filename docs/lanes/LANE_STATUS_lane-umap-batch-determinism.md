@@ -110,10 +110,36 @@ which the arm's own control then demonstrates:
 So the declaration lists the sigma floor first, and it is the coupling that
 almost never acts.
 
-**4. The epoch count from `n_queries` (`:222-224`). NOT MEASURED HERE.** With
-`n_epochs` unset the count is 100 at or below 10,000 queries and 30 above, so
-it bites only at that one boundary. This lane read it in the code and did not
-cross the boundary; it is a code fact in this write-up, not a measurement.
+**4. The epoch count from `n_queries` (`:222-224`). A CLIFF, and the worst of
+the four to serve behind.** With `n_epochs` unset the count is 100 at or below
+10,000 queries and 30 above. `identity_break.py` records this coupling but its
+lanes pass `n_epochs=8`, so it is never reached there, and the arms above run
+batches of eight. `umap/checks/batch_epoch_cliff_check.mojo` crosses it. Log:
+`~/mojolearn-evidence/umap-batch-determinism/epoch-cliff.log`, 9 s, one core.
+
+The evidence is a contrast. Growing a batch by one row also moves the batch
+mean and can move the batch maximum, so 10,000 against 10,001 alone would
+prove nothing about epochs. The control is 9,999 against 10,000: the same
+one-row growth, no epoch change.
+
+| step | epochs | largest move over the first four rows |
+|---|---|---|
+| 9,999 -> 10,000, nsr=0 | 100 -> 100 | `0.0`, bitwise identical |
+| 10,000 -> 10,001, nsr=0 | 100 -> 30 | `0.022047043` |
+| 9,999 -> 10,000, nsr=5 | 100 -> 100 | `0.0`, bitwise identical |
+| **10,000 -> 10,001, nsr=5** | **100 -> 30** | **`1.3616371`** |
+
+At the shipped default, adding ONE row to a request of ten thousand moves
+another row's embedding by `1.36` on a map whose clusters sit about 11 apart,
+while adding one row at 9,999 moves no bit at all. The control is exactly
+zero, which is the strongest attribution available: everything the boundary
+step moved is the epoch count and nothing else. The cliff arm fires in the
+same run with the same comparison function, so the zero control is a
+measurement and not a check that could not fail.
+
+This is the coupling a serving system will actually meet, because request
+sizes drift across a fixed threshold without anyone choosing to change
+anything.
 
 ### This is structural, not float chaos
 
@@ -165,6 +191,10 @@ both spellings (`umap/transform.mojo` and the host restatement
 `umap/host/umap_oracle.mojo:594,614,689,698,706`, which must stay bit
 identical to it):
 
+0. `:222-224` with `n_epochs` unset, derive the epoch count from something
+   that is not the request size. The measured cliff is the largest
+   single-row effect in this lane and this is the smallest of the four
+   changes, because 100 and 30 are a heuristic rather than a contract.
 1. `:154` key the negative-sample counter on something batch invariant
    instead of `edge = row * k + j`. The batch-invariant data available inside
    `refine_transform` is the row's own neighbor indices and weights, so a hash
@@ -177,7 +207,7 @@ identical to it):
    batch. Measured above as almost never binding, so this one is for
    completeness rather than effect.
 
-**The code change is contained. Its consequence is not.** All three move every
+**The code change is contained. Its consequence is not.** All four move every
 recorded UMAP transform cell on every column, which is a numeric contract
 change to a shipped inference path and needs the Apple, NVIDIA and AMD columns
 re-recorded. Under [[gpu-records-only-for-releases]] that happens once per
@@ -189,9 +219,10 @@ is exactly the decision being asked for.
 
 The gate is already written. After the fix, `SOLO`, `ORDER` and `COMPANY` in
 `umap/checks/batch_determinism_check.mojo` must all report `False` where they
-report `True` today, while `REPEAT` stays equal and the `ULP` ladder still
-fires. That is a sabotage arm divergent before and after, in one file, with no
-new harness.
+report `True` today, and `CLIFF` in `umap/checks/batch_epoch_cliff_check.mojo`
+must report `0.0` where it reports `1.3616371` today, while `REPEAT` stays
+equal and the `ULP` ladder still fires. That is a sabotage arm divergent
+before and after, in two files, with no new harness.
 
 ## Verification scope
 
