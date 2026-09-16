@@ -2444,13 +2444,30 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
 #: day that run reads IDENTICAL for it and the sabotage host build reads
 #: DIVERGENT for it.
 PUBLIC_REFERENCE_CANDIDATES = (
-    # `svc-poly` is the only one left, and it is here rather than promoted for
-    # a reason that is not about its arithmetic: its cells rest on TWO columns
-    # (apple and cpu, from 2026-09-15_inference-svm), so it cannot meet
-    # `--require-columns 4`. CLASSICAL_RECORDED already notes that its NVIDIA
-    # and AMD recordings are owed to the next release record; it joins
-    # `public_reference_lanes()` the day a record carries them.
+    # `svc-poly` is here rather than promoted for a reason that is not about
+    # its arithmetic: its cells rest on TWO columns (apple and cpu, from
+    # 2026-09-15_inference-svm), so it cannot meet `--require-columns 4`.
+    # CLASSICAL_RECORDED already notes that its NVIDIA and AMD recordings are
+    # owed to the next release record; it joins `public_reference_lanes()` the
+    # day a record carries them.
     "svc-poly",
+    # The same condition, and the same remedy, for nine more
+    # (lane/ship-cpu-host-families, 2026-09-16). Each read IDENTICAL in the
+    # measured CPU-only run, so it is NOT their arithmetic that holds them:
+    # every IDENTICAL cell they have rests on the APPLE column alone, with no
+    # NVIDIA and no AMD recording behind it. A lane whose only GPU witness is
+    # one vendor is a two-column agreement, and promoting it on this lane's
+    # own evidence would apply a weaker rule than the one svc-poly was held
+    # to. They join the day a release record carries the other two columns.
+    "gbdt-query-rmse",
+    "gmm-random-init-sample",
+    "gmm-sample",
+    "gp-normalize-y",
+    "gp-sample-y",
+    "gp-sample-y-normalize",
+    "gpc",
+    "gpc-multiclass",
+    "ivf-extend",
 )
 
 #: Saved-model CPU inference that IS implemented and that

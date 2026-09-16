@@ -617,3 +617,71 @@ def test_command_line_prints_the_exposure_surface(capsys):
     assert "resample:" in capsys.readouterr().out
     assert host_surface.main(["--saved-model-inference-owed"]) == 0
     assert "spectral:" in capsys.readouterr().out
+
+
+def _lane_revisions():
+    """`LANE_REVISIONS` read from the harness's source, like the lane readers
+    above, so this needs no numpy and no import of the harness."""
+    import ast
+
+    for node in ast.parse(_read("tools/identity_break.py")).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "LANE_REVISIONS" for t in node.targets):
+            return {k.value: v.value for k, v in zip(node.value.keys, node.value.values)}
+    raise AssertionError("no LANE_REVISIONS in tools/identity_break.py")
+
+
+def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
+    """THE PUBLIC SET IS DERIVED, AND THE HELD-BACK LIST IS CHECKED
+    (lane/ship-cpu-host-families, 2026-09-16).
+
+    `public_reference_lanes()` is every covered lane minus the `par-*`
+    drivers, minus `PUBLIC_PENDING_LANES`, minus the candidates still waiting
+    on a condition of their own. A pending list is a memo unless something
+    holds it to the thing that made it true, so each reason is checked against
+    its source: `stale reference` against the harness's LANE_REVISIONS,
+    `no reference` against the shipped table, `own record` against
+    TRAINING_FIX_LANES, and `measured` against the run recorded in the lane
+    status, which is the only reason that comes from a run rather than from a
+    static condition.
+
+    The load-bearing direction is the last assertion: a lane whose fixture
+    moves and which nobody adds here would become public carrying a reference
+    that describes different bytes, and a user would read DIVERGENT for
+    something that is not their machine."""
+    import json
+
+    table = json.loads(_read("python/mojolearn/verify_reference/table.json"))
+    with_cells = {key.partition("/")[0] for key in table["cells"]}
+    revisions = _lane_revisions()
+    covered = set(host_surface.covered_lanes())
+    host_only = set(host_surface.PUBLIC_HOST_ONLY_LANES)
+    public = host_surface.public_reference_lanes()
+
+    assert len(public) == len(set(public)), "a lane is listed twice"
+    assert not [lane for lane in public if lane.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES)]
+    assert not (set(public) & set(host_surface.PUBLIC_PENDING_LANES)), "a pending lane is public"
+    trained = set(public) - host_only
+    assert trained <= covered, f"public lanes with no CPU training path: {sorted(trained - covered)}"
+    assert trained <= with_cells, f"public lanes the shipped table has no cell for: {sorted(trained - with_cells)}"
+    assert trained <= set(host_surface.record_covered_lanes()), (
+        f"public lanes not diffed against the release record: {sorted(trained - set(host_surface.record_covered_lanes()))}"
+    )
+
+    for lane, why in host_surface.PUBLIC_PENDING_LANES.items():
+        assert lane in covered, f"{lane} is held back but is not a covered lane at all"
+        if why == "stale reference":
+            assert lane in revisions, f"{lane}: no LANE_REVISIONS entry, so its reference is not stale; let it in"
+        elif why == "no reference":
+            assert lane not in with_cells, f"{lane}: the shipped table does carry cells for it; let it in"
+        elif why == "own record":
+            assert lane in host_surface.TRAINING_FIX_LANES, f"{lane}: not a TRAINING_FIX_LANES lane"
+        elif why.startswith("measured"):
+            assert lane in with_cells, f"{lane}: held back on a measurement but the table has no cell to measure"
+        else:
+            raise AssertionError(f"{lane}: {why!r} is not a reason this test knows how to check")
+
+    moved = sorted(set(revisions) - set(host_surface.PUBLIC_PENDING_LANES) - host_only)
+    assert moved == [], (
+        f"these lanes' fixtures moved past the shipped reference and they are still public: {moved}. "
+        "Add them to PUBLIC_PENDING_LANES as 'stale reference' until the release regenerates the table"
+    )
