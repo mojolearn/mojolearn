@@ -3,7 +3,18 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## Unreleased (0.8.6 prep; the freeze commit names it 0.8.6 with the version bump)
+## Unreleased (0.8.7 prep)
+
+**0.8.6 WAS NEVER PUBLISHED, and its number is skipped.** It was frozen on branch
+release/0.8.6, built on three GPU boxes, packed, audited and partly recorded, and then folded
+into 0.8.7 on 2026-09-16 rather than finished. The reason was a defect in the wheel it would
+have shipped: `verify --all` returned VERIFIED as soon as one part read IDENTICAL, before it
+looked at REFUSED, so a CPU-only install printed VERIFIED, exit 0 on 44 IDENTICAL and 288
+REFUSED parts. The fix (below) is in an inventoried file, so shipping it meant rebuilding all
+three Linux sets and the macOS wheel and re-recording, which is the whole release again. Main
+never carried the 0.8.6 version bump, so nothing outside that branch ever claimed it. The
+wheels that were built are kept as evidence, are not release candidates, and must not be
+published; docs/lanes/RELEASE_087_PLAN.md on release/0.8.7 names each artifact.
 
 Packaging release. Nothing in a kernel moves; what changes is what the two wheels carry and
 what a user can check from a pip install. The freeze checks of docs/RELEASE_CHECKLIST.md,
@@ -12,11 +23,10 @@ Linux legs are OWED before this heading reads published.
 
 - Every host family now says in `python/mojolearn/host_surface.py` why it does or does not
   ship in the wheels (`wheel_note`, `--wheel-notes`), so an exclusion is never silent
-  (lane/expose-inference-surface, for 0.8.7). Fifteen families ship and seventeen do not;
-  each of the seventeen names the shipping family that serves its inference instead
-  (preprocessing and kernel_methods through estimators, trees, rf and gbdt through forest,
-  gp through gp_infer, arima and tsa through forecast, mamba, transformer and the training
-  forwards through neural, and so on) or says it is training-only.
+  (lane/expose-inference-surface, for 0.8.7). That entry read "fifteen families ship and
+  seventeen do not", each of the seventeen naming the shipping family that served its
+  inference instead; lane/ship-cpu-host-families then shipped all thirty-two, so every note
+  now begins "Ships:" and none of them names an exclusion.
 - **The bootstrap, the permutation test, Monte Carlo integration and `kpss_test` now work on
   a CPU-only install.** They were unreachable: each computes a statistic from the caller's
   own data, trains no model and has nothing to save, so the saved-model inference boundary
@@ -62,6 +72,47 @@ Linux legs are OWED before this heading reads published.
   under `mojolearn._host.*`, which the scanner did not look at), per-cell timings were dropped
   by `judge_rows`, and the lane counts first read "6 checked of 2 requested" because the
   portable models were folded in with the harness lanes.
+- **Every CPU host binding ships in both wheels, and `verify --all` on a CPU-only install
+  goes from 39 lanes to 122** (lane/ship-cpu-host-families). The manifest declared thirty-two
+  host families and shipped sixteen; the sixteen held back were the CPU TRAINING families,
+  kept out by the "inference only, CPU training internal" boundary. That boundary is about
+  what a user may TRAIN with, and it was also deciding, as a side effect nobody chose, what a
+  user may CHECK: a lane whose host binding is not in the wheel cannot be re-run on the
+  machine it was installed on, whatever reference the shipped table carries. So
+  `preprocessing`, `tsa`, `solver`, `trees`, `rf`, `gp`, `kernel_methods`, `mixture`,
+  `hdbscan`, `gbdt`, `training`, `mamba`, `arima`, `embedding`, `ivf` and `transformer` now
+  ship, and 83 lanes join `public_reference_lanes()`, which is now DERIVED from the covered
+  lanes rather than hand-listed. Both numbers are measured on one machine: the after arm ran
+  131 candidate lanes x 9 fixtures, 4,716 cell parts, 3,855 IDENTICAL, 0 DIVERGENT, 0
+  REFUSED, one process per chunk at one core; the before arm ran origin/main's package
+  against a host directory carrying exactly origin/main's sixteen wheel bindings, and read
+  39. Nine lanes read IDENTICAL and are still held back beside `svc-poly`, because every
+  IDENTICAL cell they carry rests on the Apple column alone and a two-column agreement is
+  not what the other thirty were promoted on; they join when a release record carries NVIDIA
+  and AMD. **CPU training did not become public.** An ordinary `fit` on a CPU-only install
+  still refuses by name and still says to train on a GPU and load the saved model; these
+  bindings answer the verifier, which fits inside its own private reference scope
+  (`python/mojolearn/_cpu_reference.py`), and `test_cpu_inference_boundary.py` passes
+  unchanged. The cost was measured rather than estimated: the sixteen add 7,663,488 bytes
+  uncompressed and 2,189,221 compressed, taking the macOS wheel from 26,368,494 to
+  28,639,807 bytes (+8.61%) and the Linux wheel, projected from the ratio measured over the
+  fifteen families in both 0.8.6 candidate wheels, from 70,862,796 to 73,444,604 (+3.64%). The
+  compressed figures are measurements: at deflate level 6 with a raw window this reproduces
+  the 0.8.6 candidate wheel's recorded compressed sizes exactly on all fifteen of its host
+  bindings, where level 9 reproduces none of them. Those wheels were built and audited but
+  NEVER PUBLISHED (see the heading above), so the measurement is against an artifact on disk,
+  not against anything on PyPI; the last published wheels are 0.8.5's, which carry the byte
+  LM's host binding alone.
+  A wheel is still dominated by its GPU bindings, 312 MB uncompressed across 91 files on
+  Linux, which is why sixteen more CPU binaries move the total so little. Every family's
+  `wheel_note` now begins "Ships:" and says what that binding makes checkable that nothing
+  else could, and `test_public_inference_bindings_ship_and_packaging_reads_the_manifest`
+  asserts that the held-back list is empty, so holding a family back again has to delete
+  that assertion and write a reason. `docs/VERIFY.md` gains a section on what the CPU
+  training bindings are for (verification, small data, reproducibility, air-gapped checking)
+  and what they are not: a host binding is a device kernel restated as a serial host loop so
+  it produces the device's bits exactly, single-threaded by construction, so timing one
+  against a GPU fit measures that choice and nothing else.
 - **What a CPU-only wheel user can verify goes from 9 lanes to 39, for zero extra wheel
   bytes.** `public_reference_lanes()` gained thirty lanes: k-means and its starts, the k-NN,
   radius and kernel-density variants, DBSCAN, the linear, ridge, logistic and decomposition
@@ -73,8 +124,9 @@ Linux legs are OWED before this heading reads published.
   in the shipped table, merely never consulted. The promotion waited for the fixture shrink
   (`e2bb9e541`) to publish its scope, since these references ship in the wheel's table and a
   lane whose fixture moved would ship a reference a user's `verify` then fails against; none
-  of the thirty is among the thirteen shrunk lanes. `svc-poly` is the one lane not promoted,
-  because its cells rest on two columns and cannot meet `--require-columns 4`. Measured end
+  of the thirty is among the thirteen shrunk lanes. `svc-poly` was the one lane not promoted,
+  because its cells rest on two columns and cannot meet `--require-columns 4` (nine more
+  joined it on the same ground when lane/ship-cpu-host-families widened the set). Measured end
   to end on the CPU-only install afterwards, `verify --all --full` reads
   `VERIFIED (verified 1065 of 1412 cell parts (0 divergent, 158 owed, 0 refused, 189 n/a))`
   in 523.7 s, against 278 of 332 before.
@@ -525,6 +577,49 @@ Linux legs are OWED before this heading reads published.
   every train cell it ran and IDENTICAL x4 or N/A on the infer and model cells. On a CPU-only
   install only the lanes with a CPU training path run. `--check` resolves the harness, the
   columns and the witness and runs nothing. Exit codes follow `verify`. Needs numpy.
+- **The Apple silicon backend is now stated in the third paragraph of README.md, which is the
+  PyPI long description for both wheels** (`packaging/macos/build_release_wheel.sh` copies it
+  into `python/`, `packaging/linux/pack_wheel.py` reads it from the repository root), and the
+  PyPI summary line in `python/pyproject.toml` names Apple silicon, NVIDIA and AMD by vendor.
+  It was buried two thirds of the way down the file. The paragraph is a capability claim, that
+  one Mojo source builds for Metal, CUDA and HIP so the tree and classical estimators fit on an
+  M-series GPU, and it says in the same breath that the optional `fast` tier is not the
+  bitwise-identical default and promises no repeatability at all, so a reader cannot come away
+  thinking the accelerated tree training is the certified thing.
+- **The Apple tree speed ratio is withdrawn from README.md and ENGINEERING_RULES.md, and no
+  tree speed claim replaces it.** Both files said ExtraTrees measured a range against
+  scikit-learn on all ten M4 cores at covtype 581k, framed as the win that earns the `fast`
+  tier its place. The range is a splice of two rows of a deleted file
+  (`bench/results/WINDOW_2026-08-22_extratrees-batched.md`, removed by `e08cda5bc` on
+  2026-09-04, six days before `92928a2cd` wrote the sentence), it reports speedup where
+  `bench/OPPONENT_REFERENCE.md` reports its inverse so the same digits mean the opposite thing
+  in two files of this repository, its own source was already superseded by a later addendum
+  and by three later Apple covtype windows reading 1.04x slower, 1.13x slower and 1.12x
+  faster, covtype is neither of the two datasets a training-speed claim requires and is below
+  the million-row floor, and `bench/OPPONENT_REFERENCE.md`'s "Rows never to quote" section
+  covers both `bench/results/fast_speed/mac-*` and our own fast and deterministic arms on any
+  vendor. On the qualifying datasets the standing is the reverse of the withdrawn claim, ours
+  over theirs where lower is better, extra trees 1.53x of scikit-learn on taxi and 1.63x on
+  Istella-S (slower, and its fast arm returns the identical arm's hash in the same time),
+  random forest 0.29x and 0.14x, symmetric trees 0.44x and 0.30x of CatBoost with no XGBoost
+  oblivious grower to check against. The tier rule is unchanged; what changes is that it now
+  rests on the structural argument, tree fitting calls no BLAS while the classical families
+  do, and a qualifying Apple measurement is recorded as owed.
+- **`KMeans` can be saved and loaded, so a k-means model fitted on a GPU predicts on a machine
+  with none.** `KMeans.predict` and `KMeans.transform` already shipped and
+  `mojolearn/host/_mojolearn_core_host.so` already exported both, but the class had no `save`,
+  so there was no file for `mojolearn.host_model()` to open and the whole train-here,
+  infer-there route stopped at serialization; `host_surface.py`'s own gap registry said so.
+  `save` writes the format `mojolearn-kmeans-1` through the same deterministic npz writer
+  every other portable model uses, and `mojolearn.host_model(path)` returns a `HostKMeans`
+  bound to the core host binding. ONE format covers every k-means lane: the metric and the
+  start are members of the file rather than tags of their own. The fit's own `labels_` travels
+  with the centroids, because it is what `predict` on the training rows must equal. A file of
+  another format or another estimator, a truncated one, one whose centroid count disagrees
+  with its dimensionality, one whose metric name disagrees with its code member, and one whose
+  arrays are at another dtype are each refused by name rather than loaded into a plausible
+  wrong answer. What is still owed for `kmeans` is the GPU recording under
+  `bench/results/classical_host/`, as for `dbscan`, `agglomerative` and `spectral`.
 
 ## 0.8.5 (published 2026-09-14)
 

@@ -38,11 +38,22 @@ gate's negative control passes, the identity_break lanes it covers for
 TRAINING (the CPU column must read STABLE and IDENTICAL x4 on them), the
 lanes and public classes it serves for INFERENCE from a saved model, the
 Mojo host modules that ship inside it, the function names it exports, and
-whether it ships in a wheel (inference dependencies and the published byte-LM
-trainer ship; training-only families remain source reference bindings; the two wheel builders and the packer read
+whether it ships in a wheel. SINCE 2026-09-16 EVERY FAMILY SHIPS
+(lane/ship-cpu-host-families). The "inference only, CPU training internal"
+boundary held the sixteen training families back, and the price was the number
+that matters: an installed wheel could check 39 of the harness's 211 identity
+lanes, because a lane's host binding was not in it. Bitwise reproducibility a
+user cannot re-run on their own machine is a claim, not a result. The
+objection was size, and size was measured rather than guessed: the sixteen add
+7.66 MB uncompressed and 2.19 MB compressed to a wheel whose weight is GPU
+bindings (312 MB uncompressed on Linux, 91 files). `ships_in_wheel=False` now
+means a deliberate, stated exclusion, and nothing carries one. What did NOT
+change is the RUN-TIME boundary: an ordinary `fit` on a CPU-only install still
+refuses (`_cpu_reference.py`), and these bindings answer the verifier, which
+fits inside `reference_training()`. The two wheel builders and the packer read
 `--wheel-families` and `--wheel-bindings` below instead of naming the byte
 LM's binding by hand, and packaging/check_ext_lists.py fails when any of
-them carries a host list of its own).
+them carries a host list of its own.
 
 This file imports nothing from the package on purpose. It runs by path
 before the package can import (the gate runner has no binding built yet):
@@ -63,12 +74,14 @@ before the package can import (the gate runner has no binding built yet):
     python3 python/mojolearn/host_surface.py --markdown
     python3 python/mojolearn/host_surface.py --json
 
-Every family carries a `wheel_note` saying why it does or does not ship, so
-an exclusion is never silent (lane/expose-inference-surface, 2026-09-16).
-Two of them read OPEN rather than settled: `resample` and the `tsa` family's
-`kpss_test` compute an answer from a user's own data with no fitted model to
-save, so they fit neither side of the saved-model inference boundary and no
-shipped family carries them.
+Every family carries a `wheel_note` saying why it ships
+(lane/expose-inference-surface, 2026-09-16, which introduced the field so that
+an exclusion could never be silent). Every note now begins "Ships:", and
+python/mojolearn/tests/test_host_surface.py fails if one does not: the two
+that once read OPEN, `resample` and the `tsa` family's `kpss_test`, were
+settled by shipping them, and lane/ship-cpu-host-families then shipped the
+rest. A family held back again must say so in its note, which is the only
+place the reason belongs.
 
 and `python3 -m mojolearn.host_surface ...` says the same thing on a box
 where the package imports.
@@ -1320,11 +1333,11 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only. StandardScaler and MinMaxScaler transform from a saved "
-            "model through the shipped estimators binding, so nothing a user infers with is behind "
-            "this binding."
+            "Ships: the scaler fits, so the six scaler lanes can be checked on an installed CPU. "
+            "StandardScaler and MinMaxScaler already transformed from a saved model through the "
+            "shipped estimators binding; standard_fit and minmax_fit are only here."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         family="tsa",
@@ -1347,14 +1360,12 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only, because this binding holds holtwinters_fit. "
-            "ExponentialSmoothing forecasts and predicts in sample from a saved model through the "
-            "shipped forecast binding, and since lane/expose-inference-surface (2026-09-16) "
-            "kpss_test is served from there too (bindings/kpss_host_test.mojo, registered by both "
-            "bindings), so nothing a user calls is stranded behind this family. Andrew's call: "
-            "kpss_test trains no model, so the inference boundary was never meant to exclude it."
+            "Ships: holtwinters_fit and the KPSS test, so the holtwinters and kpss lanes can be "
+            "checked on an installed CPU. A saved ExponentialSmoothing still forecasts through the "
+            "shipped forecast binding, which registers kpss_test from the same shared module "
+            "(bindings/kpss_host_test.mojo), so the two binaries cannot drift."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         family="solver",
@@ -1378,12 +1389,11 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only (the coordinate descent and the linkage). Lasso and "
-            "ElasticNet predict from a saved model through the shipped estimators binding. "
-            "AgglomerativeClustering.predict is implemented and mojolearn.host_model dispatches it, "
-            "but it is not a declared inference lane yet; see SAVED_MODEL_INFERENCE_OWED."
+            "Ships: the coordinate descent and the linkage, so the lasso, elasticnet and "
+            "agglomerative lanes can be checked on an installed CPU. Saved Lasso and ElasticNet "
+            "models still predict through the shipped estimators binding."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         family="svm",
@@ -1445,10 +1455,11 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only (the Extra Trees fit). Saved ExtraTreesClassifier and "
-            "ExtraTreesRegressor models predict through the shipped forest binding."
+            "Ships: the Extra Trees fit, including the best-first growth and the shard offsets, so "
+            "the five Extra Trees lanes can be checked on an installed CPU. Saved models still "
+            "predict through the shipped forest binding."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # Workstream E batch 3 (2026-09-14): the RandomForest family's host
@@ -1489,10 +1500,11 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only (the random forest fit). Saved RandomForestClassifier and "
-            "RandomForestRegressor models predict through the shipped forest binding."
+            "Ships: the random forest fit, the four criteria and the class-weighted bootstrap, so "
+            "the eight random forest lanes can be checked on an installed CPU. Saved models still "
+            "predict through the shipped forest binding."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # Workstream E, the gp host lane (2026-09-14): the Gaussian process
@@ -1540,10 +1552,11 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only (the Gaussian process fit and the kernel hyperparameter "
-            "optimizer). Saved models predict through the shipped gp_infer binding."
+            "Ships: the Gaussian process fit, the log marginal likelihood gradient and the "
+            "posterior draws, so the nine GP lanes can be checked on an installed CPU. Saved "
+            "models still predict through the shipped gp_infer binding, which carries no fit."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # CPU training for the workstream D estimators
@@ -1580,10 +1593,11 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only. KernelRidge predicts and Nystroem and RBFSampler transform "
-            "from a saved model through the shipped estimators binding."
+            "Ships: the kernel ridge, Nystroem and random Fourier feature fits, so those three "
+            "lanes can be checked on an installed CPU. Saved models still predict and transform "
+            "through the shipped estimators binding."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # CPU training for the workstream D estimators
@@ -1617,11 +1631,12 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only (the EM fit). Saved GaussianMixture models score, predict "
-            "and sample through the shipped mixture_infer binding, which shares this family's scoring "
-            "source."
+            "Ships: the EM fit and its two starts, so the four Gaussian mixture lanes can be "
+            "checked on an installed CPU. Saved models still score, predict and sample through the "
+            "shipped mixture_infer binding, which shares this family's scoring source and carries "
+            "no fit."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # The neighbors and density inference lane (2026-09-15): the
@@ -1699,11 +1714,12 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only (the cluster hierarchy fit). Saved models answer "
-            "approximate_predict, membership_vector and all_points_membership_vectors through the "
-            "shipped hdbscan_infer binding, which shares this family's predict source."
+            "Ships: the Boruvka rounds, the condensed tree and the extraction, so the two HDBSCAN "
+            "lanes can be checked on an installed CPU. Saved models still answer "
+            "approximate_predict and the membership vectors through the shipped hdbscan_infer "
+            "binding."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # The neighbors and density inference lane (2026-09-15): the
@@ -1835,11 +1851,12 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only (the boosting fit and cross_val_score, which fits). Saved "
-            "gradient boosting models predict through the shipped forest binding. CPU training of CTR "
-            "categorical features refuses by name (NO_CPU_PATH)."
+            "Ships: the boosting fit, which is twenty-one covered lanes, the largest block of "
+            "checkable surface any one binding holds. Saved models still predict through the "
+            "shipped forest binding. CPU training of CTR categorical features still refuses by "
+            "name (NO_CPU_PATH). At about 1.3 MB it is the largest host binding."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # The mlp lane (lane/cpu-training-mlp, 2026-09-14): the training
@@ -1894,12 +1911,13 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only by definition. Optimizers (SGD, Adam, AdamW), the losses, "
-            "the gradient clip and accumulation and the embedding, RMSNorm and linear backward "
-            "primitives are training, which the inference boundary keeps internal. The MLP and Samba "
-            "stack FORWARDS a user infers with are in the shipped neural family instead."
+            "Ships: the optimizers, the losses, the gradient clip, the accumulation and the "
+            "backward primitives, so the ten training lanes can be checked on an installed CPU. "
+            "The forwards a user infers with remain in the shipped neural family. Shipping the "
+            "binding does not make CPU training public: an ordinary fit still refuses outside the "
+            "verifier's scope."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # lane/cpu-training-misc batch 2 (2026-09-15): the resampling
@@ -1983,10 +2001,11 @@ FAMILIES = (
         # Training-only reference family: source builds for internal bitwise
         # verification, not shipped (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
         wheel_note=(
-            "Does not ship: training-only (the block backward and the recurrent training step). The "
-            "Mamba-1, Mamba-2 and Mamba-3 zero-state forwards are in the shipped neural family."
+            "Ships: the three blocks' prefill backward, so the mamba1, mamba2 and mamba3 lanes can "
+            "be checked on an installed CPU; the shipped neural family is forward only and cannot "
+            "answer their train part. About 1.06 MB, the second largest host binding."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # Workstream E (lane/cpu-training-arima, 2026-09-14): batched
@@ -2016,10 +2035,11 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only (the Kalman filter fit and the L-BFGS). Saved ARIMA models "
-            "predict and forecast through the shipped forecast binding."
+            "Ships: the Kalman filter fit and the L-BFGS, so the six ARIMA lanes can be checked on "
+            "an installed CPU. Saved models still predict and forecast through the shipped "
+            "forecast binding, which carries no fit."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # lane/cpu-training-embedding-ivf (2026-09-15): the Embedding
@@ -2049,10 +2069,11 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only (the embedding backward). Lookup in a saved table is served "
-            "by the shipped embedding_infer binding."
+            "Ships: the embedding backward fold and both execution plans, so the embedding lanes "
+            "can be checked on an installed CPU. Lookup in a saved table is still served by the "
+            "shipped embedding_infer binding."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # lane/inference-embedding-ivf-cholesky (2026-09-15): public CPU
@@ -2122,10 +2143,11 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Does not ship: training-only (the IVF-Flat index build). Search over a saved index and "
-            "extending it are served by the shipped ivf_search binding."
+            "Ships: the IVF-Flat index build with its k-means quantizer, so the IVF lanes can be "
+            "checked on an installed CPU. Search over a saved index is still served by the shipped "
+            "ivf_search binding, which carries no build."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
     dict(
         # lane/inference-embedding-ivf-cholesky (2026-09-15): public CPU
@@ -2241,10 +2263,11 @@ FAMILIES = (
         # Training-only reference family: source builds for internal bitwise
         # verification, not shipped (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
         wheel_note=(
-            "Does not ship: training-only (the block backward). The Transformer block forward is in "
-            "the shipped neural family."
+            "Ships: the block's decode step and prefill backward, which the transformer and "
+            "transformer-window lanes hash, so they can be checked on an installed CPU; the "
+            "shipped neural family carries the forward only."
         ),
-        ships_in_wheel=False,
+        ships_in_wheel=True,
     ),
 )
 
@@ -2279,42 +2302,102 @@ def wheel_bindings():
     return [f["binding"] for f in FAMILIES if f["ships_in_wheel"]]
 
 
+#: LANES A RELEASE RECORD DOES NOT COVER, so the public set does not either.
+#: `tools/identity_break.py` excludes every `par-*` lane from a full-column
+#: record (its RECORD_EXCLUDED_PREFIXES, 2026-09-16): in a record they are
+#: one-device runs, several cannot be covered honestly at all, and the
+#: two-device claim is made by the dedicated legs instead. Their references in
+#: the shipped table therefore come from a record whose scope no longer
+#: includes them and which nothing will refresh, and unlike a shrunk fixture
+#: there is no LANE_REVISIONS entry to catch it going stale. A user's `verify`
+#: must not rest on that. They stay covered lanes, and the CPU identity gate
+#: still runs all thirteen.
+PUBLIC_EXCLUDED_PREFIXES = ("par-",)
+
+#: COVERED LANES HELD BACK FROM THE PUBLIC SET, each with the reason, checked
+#: by python/mojolearn/tests/test_host_surface.py against the harness, the
+#: shipped table and the measured run rather than trusted as prose
+#: (lane/ship-cpu-host-families, 2026-09-16). A lane leaves this dict the day
+#: its reason stops being true, which for `stale reference` is the next
+#: release record.
+#:
+#:   stale reference   the lane's fixture moved past the hash the shipped
+#:                     table carries (identity_break LANE_REVISIONS, the
+#:                     thirteen lanes lane/identity-fixtures-light shrank).
+#:                     `_verify_all` would drop and name them anyway; keeping
+#:                     them out means the public set is a set that PASSES,
+#:                     not one that reports thirteen lanes it cannot compare.
+#:   no reference      no committed record carries a single hash for the lane,
+#:                     so every part would read OWED, which is not a pass.
+#:   own record        diffed against TRAINING_FIX_COLUMNS, not the release
+#:                     record (TRAINING_FIX_LANES). The shipped table is built
+#:                     from every committed record, so these do have hashes,
+#:                     but `record_covered_lanes()` is what the public set is
+#:                     held to and they are not in it.
+#:   measured          a CPU-only `verify --all` at this commit WATCHED the
+#:                     lane and it did not read clean. This reason is the only
+#:                     one that comes from a run rather than from a static
+#:                     condition, and it carries what the run said.
+PUBLIC_PENDING_LANES = {
+    "holtwinters": "stale reference",
+    "spectral": "stale reference",
+    "gbdt-nan-modes": "stale reference",
+    "gbdt-parametric-losses": "stale reference",
+    "gbdt-lossguide-newtoncosine": "stale reference",
+    "gbdt-pair-logit": "stale reference",
+    "hdbscan": "stale reference",
+    "hdbscan-leaf": "stale reference",
+    "mamba2-dtlimit": "stale reference",
+    "samba": "stale reference",
+    "samba-untied-dropout-accum": "stale reference",
+    "byte-lm": "stale reference",
+    "byte-lm-resident": "stale reference",
+    "metrics-fowlkes-mallows": "no reference",
+    "gbdt-adapter-score-weighted": "no reference",
+    "rf-score-weighted": "no reference",
+    "gbdt-yeti-rank": "no reference",
+    "arima-exog": "no reference",
+    "arima-exog-seasonal": "no reference",
+    "gbdt-categorical-ctr-tables": "no reference",
+    "gbdt-tensor-ctr-tables": "no reference",
+    "kmeans-sqrt": "own record",
+    "embedding": "own record",
+    "embedding-sort": "own record",
+    "ivf": "own record",
+    "ivf-euclidean": "own record",
+}
+
+
 def public_reference_lanes():
-    """Small explicit verification surface available in an inference wheel.
+    """THE LANES AN INSTALLED WHEEL CAN CHECK, on a CPU-only install, as
+    `python -m mojolearn verify --all` and `python -m mojolearn identity`
+    select them.
 
-    Full CPU training verification uses source bindings and covered_lanes().
-    These probes need only public inference dependencies, including linalg.
+    Until 2026-09-16 this was eight hand-named probes plus the tokenizer, and
+    then thirty-nine after lane/expose-inference-surface measured thirty more.
+    Both lists were bounded by the same thing: a lane whose host binding was
+    not in the wheel could not be re-run on the machine it was installed on,
+    whatever the shipped table said. Every host family ships now (see the
+    module docstring), so the limit is no longer what is installed but what
+    can be honestly compared: a covered lane, in a release record's scope,
+    with a reference in the shipped table, WATCHED to read clean by a CPU-only
+    run at this commit.
 
-    THIS LIST IS WHAT A USER CAN CHECK (lane/expose-inference-surface,
-    2026-09-16). It was nine lanes, against sixteen shipped host families
-    serving 79 declared inference lanes and seven forest kinds, so almost
-    everything the wheel carried was taken on faith. Thirty lanes were measured
-    against the three GPU columns on an Apple M4 CPU column, 9 fixtures and 2
-    repeats, read 0 DIVERGENT with their sabotage arm moving, and were promoted
-    here, taking the checkable surface to 39 lanes for ZERO extra wheel bytes:
-    every one is served by a binding that already ships and every reference
-    hash is already in the shipped table, it was simply never consulted.
-
-    The promotion waited for the fixture shrink (docs/lanes/FIXTURE_SHRINK_SCOPE.md,
-    landed at e2bb9e541) because these references ship in the wheel's table and
-    a lane whose fixture moved would ship a reference a user's `verify` then
-    fails against. None of the thirty is among the thirteen shrunk lanes, which
-    is why the evidence taken before the shrink still stands; it was re-checked
-    on the merged harness.
+    It is DERIVED, never hand-listed, so a lane that gains a CPU path joins on
+    the day it is declared, and one that cannot be compared is held back in
+    `PUBLIC_PENDING_LANES` with the reason written down. The promotion rule
+    lane/expose-inference-surface set is kept: a lane is public only because a
+    run was watched to read IDENTICAL for it, which is why every lane this
+    returns is in the measured run recorded in
+    docs/lanes/LANE_STATUS_lane-ship-cpu-host-families.md, and why
+    `PUBLIC_REFERENCE_CANDIDATES` stays out until its own condition is met.
     """
-    return [
-        # the original eight
-        "gemm-pinned", "kde", "ols", "ridge", "knn", "svc", "pca", "cholesky",
-        # promoted 2026-09-16 (lane/expose-inference-surface), measured below
-        "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted", "kmeans-classic-pp",
-        "kmeans-cosine", "knn-clf-distance", "knn-reg-distance", "radius",
-        "dbscan", "dbscan-brute-l1", "dbscan-weighted", "kde-weighted", "pca-full-whiten",
-        "ols-no-intercept", "ols-weighted", "ridge-no-intercept", "logistic-l1",
-        "logistic-elasticnet", "logistic-unpenalized-no-intercept",
-        "svc-linear", "svr", "svr-linear", "iforest", "iforest-tuned",
-        "umap",
-        "kpss", "bootstrap", "permutation-test", "monte-carlo",
-    ] + list(PUBLIC_HOST_ONLY_LANES)
+    lanes = [lane for lane in covered_lanes()
+             if not lane.startswith(PUBLIC_EXCLUDED_PREFIXES)
+             and lane not in PUBLIC_PENDING_LANES
+             and lane not in PUBLIC_REFERENCE_CANDIDATES
+             and lane not in PUBLIC_HOST_ONLY_LANES]
+    return lanes + list(PUBLIC_HOST_ONLY_LANES)
 
 
 #: Public reference lanes of a shipped host family with no GPU path to cover,
@@ -2322,6 +2405,12 @@ def public_reference_lanes():
 #: vocabulary the harness trains itself, so it needs no vocabulary file on the
 #: install. Since lane/cpu-verifier-gaps-7 it is also a covered lane, which
 #: the full CPU gate runs; this list is the inference wheel's reference set.
+#: It is public though no record carries its hashes yet (the GPT-2 table left
+#: the tree and the lane now loads the synthetic vocabulary the harness trains
+#: itself), so its parts read OWED until the next record. It was public before
+#: lane/ship-cpu-host-families widened the set and narrowing it would be a
+#: regression, which is why the derivation adds it back rather than deriving
+#: it: it is the one public lane a run selects without comparing.
 PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
 
 #: Lanes that PASS every static condition for `public_reference_lanes()` and
@@ -2361,13 +2450,30 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
 #: day that run reads IDENTICAL for it and the sabotage host build reads
 #: DIVERGENT for it.
 PUBLIC_REFERENCE_CANDIDATES = (
-    # `svc-poly` is the only one left, and it is here rather than promoted for
-    # a reason that is not about its arithmetic: its cells rest on TWO columns
-    # (apple and cpu, from 2026-09-15_inference-svm), so it cannot meet
-    # `--require-columns 4`. CLASSICAL_RECORDED already notes that its NVIDIA
-    # and AMD recordings are owed to the next release record; it joins
-    # `public_reference_lanes()` the day a record carries them.
+    # `svc-poly` is here rather than promoted for a reason that is not about
+    # its arithmetic: its cells rest on TWO columns (apple and cpu, from
+    # 2026-09-15_inference-svm), so it cannot meet `--require-columns 4`.
+    # CLASSICAL_RECORDED already notes that its NVIDIA and AMD recordings are
+    # owed to the next release record; it joins `public_reference_lanes()` the
+    # day a record carries them.
     "svc-poly",
+    # The same condition, and the same remedy, for nine more
+    # (lane/ship-cpu-host-families, 2026-09-16). Each read IDENTICAL in the
+    # measured CPU-only run, so it is NOT their arithmetic that holds them:
+    # every IDENTICAL cell they have rests on the APPLE column alone, with no
+    # NVIDIA and no AMD recording behind it. A lane whose only GPU witness is
+    # one vendor is a two-column agreement, and promoting it on this lane's
+    # own evidence would apply a weaker rule than the one svc-poly was held
+    # to. They join the day a release record carries the other two columns.
+    "gbdt-query-rmse",
+    "gmm-random-init-sample",
+    "gmm-sample",
+    "gp-normalize-y",
+    "gp-sample-y",
+    "gp-sample-y-normalize",
+    "gpc",
+    "gpc-multiclass",
+    "ivf-extend",
 )
 
 #: Saved-model CPU inference that IS implemented and that
@@ -2397,8 +2503,14 @@ SAVED_MODEL_INFERENCE_OWED = {
     "spectral-precomputed": "The same predict on a precomputed affinity, the same saved "
                             "mojolearn-spectral-1 file, the caller passing the (n_new, n_train) "
                             "affinity instead of the fit's k-NN graph; the GPU recording is owed.",
-    "kmeans": "KMeans.predict shipped with lane/kmeans-predict; the class has no `save`, so the "
-              "saved-model route needs a serialization format before a recording can be made.",
+    "kmeans": "KMeans.predict and KMeans.transform shipped with lane/kmeans-predict, and "
+              "lane/kmeans-save (2026-09-16) gave the class `save` and `load`: "
+              "mojolearn-kmeans-1 is in _classical_host._FORMATS and host_model returns a "
+              "HostKMeans on _mojolearn_core_host. What is left is the GPU recording under "
+              "bench/results/classical_host/, as for dbscan, agglomerative and spectral. The "
+              "one format carries every k-means lane (the metric and the start are members of "
+              "the file, not tags of their own), so the kmeans, kmeans-random, kmeans-array, "
+              "kmeans-weighted, kmeans-sqrt and kmeans-classic-pp lanes all load through it.",
 }
 
 

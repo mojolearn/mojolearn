@@ -93,3 +93,131 @@ def test_default_and_explicit_cv_without_numpy_or_sklearn():
     result = subprocess.run([sys.executable, '-c', program], capture_output=True, text=True,
                             env=os.environ.copy())
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+# ---------------------------------------------------------------------------
+# LINK 3, THE ROW ORDER (lane/data-ordering-determinism, 2026-09-16).
+#
+# The fold assignment does not read X. These tests pin the consequence, which
+# is a gap and not a bug: an index hash cannot see a permutation, and the
+# descriptor can. Both directions are asserted, so neither can quietly stop
+# being true.
+# ---------------------------------------------------------------------------
+
+class _Clf:
+    """The estimator `split_descriptor` reads. Nothing is fitted."""
+    _estimator_type = 'classifier'
+
+    def get_params(self, deep=False):
+        return {}
+
+
+def _ordered_fixture(n=48):
+    """Rows whose VALUES differ everywhere and whose labels alternate.
+
+    Not uniform, deliberately: uniform test data hides a permutation, and a
+    fixture that hides one would make every assertion below vacuous.
+    """
+    from mojolearn import Array
+    labels = [i % 2 for i in range(n)]
+    rows = [[float(i), float(-i), float(i * i % 7) + 0.5] for i in range(n)]
+    return Array.from_list(rows, '<f4'), labels
+
+
+def _within_class_rotation(labels):
+    """A permutation that rotates the rows of each class by one, so the label
+    SEQUENCE is unchanged and only the rows move."""
+    order = list(range(len(labels)))
+    for value in sorted(set(labels)):
+        rows = [i for i, label in enumerate(labels) if label == value]
+        for position, row in enumerate(rows):
+            order[row] = rows[(position + 1) % len(rows)]
+    assert [labels[i] for i in order] == labels
+    return order
+
+
+@pytest.mark.parametrize('splits', [3, 4])
+@pytest.mark.parametrize('classifier', [True, False])
+def test_fold_indices_cannot_see_a_label_preserving_permutation(splits, classifier):
+    # THE GAP ITSELF. `_default_folds` never reads X, so the indices it yields
+    # are identical for the permuted rows while the estimator is fitted on
+    # different data. If this ever starts failing, the folds began reading X
+    # and `split_descriptor`'s docstring is wrong.
+    _, labels = _ordered_fixture()
+    order = _within_class_rotation(labels)
+    assert order != list(range(len(labels)))
+    permuted = [labels[i] for i in order]
+    assert list(_default_folds(labels, splits, classifier)) == \
+        list(_default_folds(permuted, splits, classifier))
+
+
+@pytest.mark.parametrize('splits', [3, 4])
+def test_split_descriptor_moves_where_the_fold_hash_cannot(splits):
+    from mojolearn import Array
+    from mojolearn.model_selection import split_descriptor
+
+    X, labels = _ordered_fixture()
+    order = _within_class_rotation(labels)
+    rows = X.tolist()
+    moved = Array.from_list([rows[i] for i in order], '<f4')
+
+    before = split_descriptor(X, labels, estimator=_Clf(), cv=splits)
+    after = split_descriptor(moved, [labels[i] for i in order], estimator=_Clf(), cv=splits)
+
+    # The two halves of the finding, asserted against each other.
+    assert before['fold_assignment_sha256'] == after['fold_assignment_sha256']
+    assert before['y_sha256'] == after['y_sha256']
+    assert before['X_sha256'] != after['X_sha256']
+    assert before['sha256'] != after['sha256']
+    assert before['n_rows'] == after['n_rows'] == len(labels)
+
+
+def test_split_descriptor_is_reproducible_and_refuses_to_guess_the_splitter():
+    from mojolearn.model_selection import SPLIT_DESCRIPTOR_SCHEMA, split_descriptor
+
+    X, labels = _ordered_fixture()
+    first = split_descriptor(X, labels, estimator=_Clf(), cv=4)
+    assert first == split_descriptor(X, labels, estimator=_Clf(), cv=4)
+    assert first['schema'] == SPLIT_DESCRIPTOR_SCHEMA
+    # Stratified folds and KFold folds are different splits; describing one as
+    # the other would be a descriptor of a run that never happened, which is
+    # why the estimator is refused rather than defaulted below.
+    explicit = split_descriptor(X, labels, cv=[([0, 1, 2], [3, 4])])
+    assert explicit['n_folds'] == 1 and explicit['fold_sizes'] == [[3, 2]]
+    assert explicit['X_sha256'] == first['X_sha256']
+    assert explicit['sha256'] != first['sha256']
+    with pytest.raises(ValueError, match='estimator is required'):
+        split_descriptor(X, labels, cv=4)
+    with pytest.raises(ValueError, match='estimator is required'):
+        split_descriptor(X, labels)
+
+
+def test_fold_order_sabotage_is_dormant_and_fires_only_with_both_switches(monkeypatch):
+    # A DORMANT CONTROL THAT IS NEVER CALLED IS NOT A CONTROL. This lane found
+    # the switch defined and unreachable; the arm below is what would have
+    # caught that, so it asserts the inert state fails.
+    _, labels = _ordered_fixture()
+    clean = list(_default_folds(labels, 4, True))
+
+    for environment in ({'MOJOLEARN_FOLD_ORDER_SABOTAGE': '1'},
+                        {'MOJOLEARN_HOST_ALLOW_SABOTAGE': '1'}):
+        with monkeypatch.context() as patch:
+            for name, value in environment.items():
+                patch.setenv(name, value)
+            assert list(_default_folds(labels, 4, True)) == clean, \
+                'one switch alone must leave the folds alone'
+
+    with monkeypatch.context() as patch:
+        patch.setenv('MOJOLEARN_FOLD_ORDER_SABOTAGE', '1')
+        patch.setenv('MOJOLEARN_HOST_ALLOW_SABOTAGE', '1')
+        rotated = list(_default_folds(labels, 4, True))
+
+    assert rotated != clean
+    # Every invariant a partition check could test still holds, which is the
+    # point of this sabotage: it is a DIFFERENT partition, not a broken one.
+    assert [len(test) for _, test in rotated] == [len(test) for _, test in clean]
+    held = sorted(row for _, test in rotated for row in test)
+    assert held == list(range(len(labels)))
+    for train, test in rotated:
+        assert not set(train) & set(test)
+        assert sorted(train + test) == list(range(len(labels)))

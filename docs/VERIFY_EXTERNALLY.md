@@ -80,9 +80,10 @@ built from an older commit can refuse a lane the newer harness calls, which
 reads REFUSED and fails the verdict. That is a real mismatch and the script
 has no switch to hide it; it warns when the record's commit is not the wheel's
 release tag. The two outsider runs on 2026-09-14 (`bench/results/verify_external/`)
-show exactly this against the 0.8.5 wheel: six radius cells refused. From 0.8.6
+show exactly this against the 0.8.5 wheel: six radius cells refused. From 0.8.7
 the wheel ships the columns of a record taken at its own commit, so the recipe
-is one command with no skew.
+is one command with no skew. (0.8.6 would have been the first to do so; it was
+folded into 0.8.7 and never published.)
 
 Reading a failure. `DIVERGENT` names a lane and fixture whose hash differs
 between boxes: that is a finding, keep the JSON and open an issue with it and

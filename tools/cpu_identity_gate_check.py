@@ -42,7 +42,11 @@ section 3.4), as a tool that runs on a laptop too.
              (python/mojolearn/host_surface.py, 2026-09-15). Every family the
              manifest declares (the full verification) or every family whose
              binding ships in the wheel (routine) must be in --families and in
-             --sabotage-families, each must have its build shim, and
+             --sabotage-families. Since 2026-09-16 those are the same
+             thirty-two families, because every family ships
+             (lane/ship-cpu-host-families); the two scopes are kept apart so
+             that holding a family back again narrows routine without an edit
+             here. Each must have its build shim, and
              --readback must name exactly the --families bindings. Exit 1
              names each binding left out: on 2026-09-15 the workflow built
              byte_lm, forest, tokenizer and the routed families only and

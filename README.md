@@ -20,6 +20,21 @@ default**. The claim is proven by stage-level identity cards and separating
 sabotage tests, never inferred from a final-output hash, and it holds only for
 the configurations recorded in [the support matrix](SUPPORT_MATRIX.md).
 
+**It also trains on the Mac's own GPU.** GPU tree training and GPU classical
+learning have not had an Apple silicon backend. One Mojo source builds for
+Metal, CUDA and HIP, so gradient boosting, random forests, Extra Trees, the
+isolation forest, clustering, nearest neighbors, decompositions and linear
+models fit on an Apple M-series GPU as well as on a datacenter card, and Apple
+Metal is one of the three vendor columns in both records named above.
+That is a capability claim about where the code runs, not a speed claim.
+Separately, and only for gradient boosting, random forests and Extra Trees,
+there is an optional `fast` tier meant for this machine. `fast` is a different
+tier from the bitwise-identical default, and it is the opposite promise. It
+offers throughput and nothing else, repeated fits on the same device need not
+return the same bits, and no `fast` result is certified. No speed claim is
+published for it. Why not is under
+[Which families offer which tiers](#which-families-offer-which-tiers).
+
 RF/ET offer `inference_engine="sequential"` (existing host prediction) and
 experimental `inference_engine="parallel_groves"` (shared GPU prediction).
 Both retain GPU training; see the [inference algorithms and numerical contract](docs/FOREST_INFERENCE_ENGINES.md).
@@ -96,11 +111,10 @@ It also lets a job move. Train on rented NVIDIA capacity, continue on AMD from
 the checkpoint, and the run stays on the same trajectory rather than a nearby
 one. Hardware stops being a confounding variable in a mixed fleet.
 
-There is a second reason to be here, independent of the contract. GPU tree
-training and GPU classical learning have not had an Apple silicon backend. One
-Mojo source
-builds for Metal, CUDA and HIP, which puts them on the laptop as well as the
-datacenter.
+The second reason to be here is independent of the contract and is stated at
+the top of this file. The Apple silicon backend puts GPU tree training and GPU
+classical learning on the laptop as well as in the datacenter, from the same
+Mojo source that builds for CUDA and HIP.
 
 The reference has to be created and replayed under the same numerical profile.
 Identity does not certify a run performed in `fast` mode, in another
@@ -186,10 +200,10 @@ Asking an `identical`-only family for a lower tier raises a named error rather
 than resolving to something weaker.
 
 Cross-vendor bitwise identity is the product, and it is the default. A `fast`
-tier only earns its place where it has a measured win over the opponent's own
-CPU, and that is trees on Apple silicon: tree fitting calls no BLAS, so the
-opponent gets nothing from Accelerate's AMX coprocessor, and extra trees
-measured 1.25-1.61x scikit-learn on all ten cores at covtype 581k. The
+tier is a different kind of thing, because a tier sold on speed is a claim, and
+the argument for putting one on trees and nowhere else is structural rather
+than a published number. Tree fitting calls no BLAS, so an opponent on an M4
+gets nothing from Accelerate's AMX coprocessor. The
 classical families have a BLAS call in the inner loop, and on an M4 Accelerate
 reaches 1438 GFLOP/s of fp32 GEMM on four performance cores against roughly
 4000 for the ten-core GPU, with one CPU thread already taking 88 of the 120
@@ -199,6 +213,18 @@ scikit-learn gets for free, for the price of the reproducibility guarantee.
 fast tier that are not "trees" is a rule you would have to look up, and one
 rule beats two wins. The neural lanes gate every fused kernel on the identical
 contract, so their lower tiers were slower than the default anyway.
+
+No tree speed ratio is published here, on Apple or anywhere else.
+`bench/OPPONENT_REFERENCE.md` keeps a "Rows never to quote" list, and its
+entries include our own `fast` and `deterministic` arms on every vendor and
+every Apple number under `bench/results/fast_speed/mac-*`. On the two datasets
+a training-speed claim requires, NYC taxi and Istella-S at a million rows, the
+extra trees lane does not beat scikit-learn in either tier. The Apple tree
+numbers that do exist are August 2026 runs on covtype and HIGGS, below that
+row floor and on datasets since retired, and they straddle parity with
+scikit-learn across four windows in one week that were never reconciled. The
+Apple silicon backend is therefore offered here as a capability and nothing
+more, and a qualifying Apple measurement is owed.
 
 What every other family offers instead is cross-vendor bitwise identity:
 the same bits on Apple, NVIDIA and AMD GPUs and on the CPU.
@@ -270,9 +296,10 @@ gradient and the loss and the post-step parameters and both Adam moments
 alike; see [docs/BYTE_LM_CPU_TRAINING.md](docs/BYTE_LM_CPU_TRAINING.md), which
 also states what it does not claim. Both are one model profile at one batch
 shape, and identity is claimed per shape because the weight gradients contract
-over the token count. From 0.8.6 every one of these host bindings ships in both
-wheels (0.8.5 and earlier carry only the byte LM's); each also builds from
-source with `bindings/build_*_host.sh` (a shim over
+over the token count. From 0.8.7 every one of these host bindings ships in both
+wheels (0.8.5 and earlier carry only the byte LM's; 0.8.6 was folded into 0.8.7
+and never published); each also builds from source with
+`bindings/build_*_host.sh` (a shim over
 `bindings/build_host_family.sh <family>`). Every lane not named here has
 no CPU path at all: <!--fact:no_cpu_path-->gradient boosting training outside its declared lanes (CTR categorical features, and sample weights, eval sets and the pointwise searcher outside the gbdt-pointwise-l2-bayesian-eval configuration, among them)<!--/fact-->.
 Run the diagnostic command before depending on a new machine:

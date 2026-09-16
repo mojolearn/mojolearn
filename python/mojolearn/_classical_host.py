@@ -71,6 +71,7 @@ from ._umap_impl import UMAP, _UMAP_FORMAT
 from ._spectral_impl import SpectralClustering, _SPECTRAL_FORMAT
 from .decomposition import PCA, TruncatedSVD, _PCA_FORMAT, _TSVD_FORMAT
 from ._hierarchy_impl import AgglomerativeClustering, _AGGLOMERATIVE_FORMAT
+from .cluster import KMeans, _KMEANS_FORMAT
 from .density import DBSCAN, KernelDensity, _DBSCAN_FORMAT, _KDE_FORMAT
 from ._gp_impl import GaussianProcessRegressor, _GP_FORMAT
 from .hdbscan import HDBSCAN, _HDBSCAN_FORMAT
@@ -255,6 +256,21 @@ class HostAgglomerativeClustering(_HostBound, AgglomerativeClustering):
     """`AgglomerativeClustering.predict` from a saved model through the
     estimators host binding; the fit's solver family does not ship."""
     _HOST_ARRAYS = ("_fit_X", "labels_")
+
+
+class HostKMeans(_HostBound, KMeans):
+    """`KMeans.predict` and `KMeans.transform` from a saved model through
+    `_mojolearn_core_host`'s `kmeans_predict` and `kmeans_transform`
+    (lane/kmeans-save, 2026-09-16). The arithmetic is
+    `cluster/host/kmeans_oracle.mojo`, the fit's own final assignment, so a
+    model fitted on a GPU labels a row on a CPU with the GPU's bits. The
+    cosine metric is refused by name inside `host_validate_params`, as it is
+    at fit, so the refusal is the same one on both sides.
+
+    `labels_` is in the file and in the hash: it is the fit's assignment of
+    the training rows, and it is what a caller checks `predict` against.
+    """
+    _HOST_ARRAYS = ("cluster_centers_", "labels_")
 
 
 class HostGaussianMixture(_HostBound, GaussianMixture):
@@ -449,6 +465,9 @@ _FORMATS = {
     _SVR_FORMAT: {"SVR": HostSVR},
     _DBSCAN_FORMAT: {"DBSCAN": HostDBSCAN},
     _AGGLOMERATIVE_FORMAT: {"AgglomerativeClustering": HostAgglomerativeClustering},
+    # lane/kmeans-save (2026-09-16): a saved k-means model, every metric and
+    # every start in ONE format, predicted on the core host binding.
+    _KMEANS_FORMAT: {"KMeans": HostKMeans},
     _KNN_FORMAT: {
         "NearestNeighbors": HostNearestNeighbors,
         "KNeighborsClassifier": HostKNeighborsClassifier,

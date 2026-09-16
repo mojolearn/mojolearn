@@ -32,7 +32,15 @@ def test_manifest_declares_the_family():
     assert f["routes"] is None, "the tokenizer has no GPU binding to route from"
     assert f["classes"] == ("GPT2Tokenizer",)
     assert f["sabotage_define"] == "MOJOLEARN_TOKENIZER_HOST_SABOTAGE"
-    assert f["training_lanes"] == () and f["inference_lanes"] == ()
+    # A covered TRAINING lane since lane/cpu-verifier-gaps-7 (11c5f2192,
+    # 2026-09-15): the gate builds this family into its sabotage host set with
+    # the family's own define, which reverses the ids of gpt2_encode and of
+    # every document of gpt2_encode_batch, so the lane's train, infer and batch
+    # parts all move. It was () when this test was written (2026-09-14), before
+    # that gate existed. No INFERENCE lane, because the family has no saved
+    # model to predict from.
+    assert f["training_lanes"] == ("tokenizer",) and f["inference_lanes"] == ()
+    assert "tokenizer" in host_surface.covered_lanes()
     assert "tokenizer/encoding.mojo" in f["host_modules"]
     assert "_mojolearn_tokenizer_host" not in host_surface.routed_modules().values()
     assert "_mojolearn_tokenizer_host" in host_surface.bindings()
