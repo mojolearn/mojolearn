@@ -326,6 +326,39 @@ case "$ARM" in
             card="$OUT/${ARM}.card"
             log="$OUT/${ARM}.log"
         fi
+        # THE SHARED METAL LOCK (2026-09-16). The `device` arm runs a GPU job.
+        # On a Mac that GPU is the one every other lane is queued for, and this
+        # script is reached from at least six leg runners, so guarding the
+        # CALLERS one at a time loses the race with the next caller written.
+        # The guard belongs on the primitive. On 2026-09-16 an unguarded caller
+        # ran this twice beside another lane's Metal job; concurrent Metal here
+        # has returned NaN, constant and zero outputs with solo reruns clean,
+        # so the cost is somebody else's cell being quietly inadmissible.
+        #
+        # Only on Darwin, and only for `device`. A rented Linux box runs this
+        # arm with no such lock and must not be refused. This does NOT
+        # implement a second lock; it READS the one mac_slot.sh writes and
+        # refuses rather than racing, and it lets through a caller that is
+        # already the holder's descendant.
+        if [ "$ARM" = device ] && [ "$(uname -s)" = Darwin ]; then
+            _ml="${MOJOLEARN_METAL_LOCK:-/tmp/mojolearn-metal-slot}"
+            _holder=$(cat "$_ml/pid" 2>/dev/null || true)
+            case "$_holder" in ''|*[!0-9]*) _holder="" ;; esac
+            if [ -n "$_holder" ] && kill -0 "$_holder" 2>/dev/null; then
+                _p=$$; _mine=no
+                while [ -n "$_p" ] && [ "$_p" != 0 ] && [ "$_p" != 1 ]; do
+                    if [ "$_p" = "$_holder" ]; then _mine=yes; break; fi
+                    _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d ' ')
+                done
+                if [ "$_mine" != yes ]; then
+                    echo "gemm_card.sh: REFUSING the device arm. The Metal lock is held by pid $_holder since $(cat "$_ml/since" 2>/dev/null)." >&2
+                    echo "  $(cat "$_ml/what" 2>/dev/null | cut -c1-100)" >&2
+                    echo "  A second Metal job beside it makes BOTH cells inadmissible. Run this under 'mac_slot.sh metal'," >&2
+                    echo "  or set MOJOLEARN_METAL_LOCK to a free lock if you are certain this Mac's GPU is idle." >&2
+                    exit 3
+                fi
+            fi
+        fi
         echo "== gemm.fp32.v1 card: arm $ARM, $WANT_MODE =="
         emit_card "$ARM" "$card" "$log"
         ;;
