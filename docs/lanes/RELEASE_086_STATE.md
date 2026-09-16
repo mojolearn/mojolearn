@@ -523,6 +523,38 @@ for leg 5 at 2400 s against leg 6 at 2900 s rather than assumed.
 - The lane is NOT dropped, NOT marked n/a and NOT excluded from the diff. Whether 0.8.6 ships
   with a known moving cell is Andrew's call with the finished record in front of him.
 
+### STOP AND REPORT: the owed AMD lanes cost far more than ten legs, and one may not fit a lease at all
+
+Leg 5 rented at 22:51, started its identity run at 22:53:49, and at 23:24 was **29:40 into its
+first lane** (`par-arima`) with `_parallel_worker` at 162 percent CPU and no JSON written. Its
+body timeout fires at about 23:34, so the lease will record **zero lanes** for about $2.10. This
+is not infrastructure failing, as leg 2 was; it is one lane being longer than the whole lease.
+
+**The budget, recomputed against evidence rather than leg 4's three lanes:**
+
+| | |
+|---|---|
+| owed | 30 lanes, all `par-*` plus iforest, iforest-tuned, par-iforest |
+| proven cheap | `par-dbscan` and `par-scaler` (leg 4 fitted both alongside `rf-score-weighted`) |
+| proven expensive | `par-arima` exceeds a full 60 minute lease by itself |
+| realistic span | **15 to 30 legs, about $32 to $63** |
+| balance | **$34.72**, against Andrew's $10 stop line |
+
+Ten legs at $21 is not on the table. Pressing on crosses the stop line with the column still
+short, so **no leg 6 was rented** and this is the report Andrew asked for instead.
+
+**The harder problem, which money does not solve.** `hotaisle_leg.sh` refuses `--minutes` above
+60 (enforced at `:319-321`), so a lane that needs more than roughly 50 minutes of recording time
+CANNOT complete on Hot Aisle at any price. `par-arima` looks like such a lane, and
+`par-samba`, `par-byte-lm` and `par-byte-lm-offload` are candidates. If that holds, **the AMD
+column cannot reach 192 of 192 on this provider**, and the choice is a different provider, a
+longer-lease runner, or a recorded and explained gap in the AMD column.
+
+**The cheaper shape available now.** `identity_break.py` takes `--lanes`, so a leg can name an
+explicit subset instead of taking the owed list in order. Running the 29 lanes other than
+`par-arima` would bank the cheap ones several per lease instead of spending a whole lease on one
+lane that cannot finish, and would measure which of the four suspects really exceed a lease.
+
 ### The Apple overnight estimate, lane aware: about 10.6 hours
 
 A single mean is misleading here because the lane costs are bimodal. Measured over the first ten
