@@ -102,6 +102,21 @@ boosting lanes take 40 to 140 s each on the M4. On a shared GPU run it in
 pieces, `--lanes a,b,...` a group at a time, or check one area with
 `--lanes` and `--fixtures base`. `--quick` is the few-seconds check.
 
+**Maintainers: do not run a full Apple column routinely.** There is one Mac
+with one GPU, only one Metal job runs at a time, and it cannot be rented or
+parallelized, so a full Apple pass (over seven hours, measured) serializes
+every other GPU need on that machine behind it. The Apple column is recorded
+ONCE PER PyPI RELEASE (`docs/RELEASE_CHECKLIST.md` section 5b,
+ENGINEERING_RULES.md section 12), and `tools/identity_break.py` refuses a
+full-column Apple run that does not name the release in
+`MOJOLEARN_APPLE_RELEASE_RECORD`.
+
+For routine and occasional verification use the **rented CPU column**, which
+is bitwise equal to Metal, runs in parallel and costs about $0.24/hour
+(`tools/runpod_cpu_leg.sh`, `docs/RUNPOD_CPU_LEG.md`). The only question the
+Apple column uniquely answers is whether the Metal backend agrees, and that
+is a per-release question.
+
 ## Exit codes
 
 | exit | meaning |
