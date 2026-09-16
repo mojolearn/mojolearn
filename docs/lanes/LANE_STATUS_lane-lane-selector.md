@@ -169,6 +169,27 @@ Two more, smaller: a family case named a DIRECTORY and so passed vacuously,
 and the selector read its own three files as NOT ATTRIBUTABLE, so this lane's
 first real use of its own tool fell back to all 211 lanes.
 
+### 2026-09-16 afternoon: the first lane to use it reported a false sweep
+
+`lane/data-ordering-determinism` ran `--changed-since origin/main` and got
+FALLING BACK TO EVERY LANE, 212 of 212, for a diff whose blast radius was
+three lanes. Two causes, both fixed.
+
+1. **A comment counted as a change.** A Python path whose code is identical to
+   the ref once docstrings are stripped is now inert. Only the first statement
+   of a module, class or function is dropped; a string literal anywhere else
+   is a value. Files whose bytes are hashed at run time are excluded, derived
+   from the modules that hash a file.
+2. **Inserting a lane renumbered everything below it.** `harness_lanes` keyed
+   a bare top-level statement by its LINE NUMBER, so an additive hunk changed
+   every key and returned every lane. Segments are AST dumps now.
+
+Proved on the real tree, both directions, at `/Users/andrewhendel/mojolearn-evidence/lane-selector-2026-09-16/real_tree_arms_2026-09-16.md`:
+a comment, a docstring and an inserted lane gave **1 of 213 lanes selected**,
+naming the added lane; the same three files with a real `tol` change and a
+real helper edit fell back to 213 of 213; and an f-string ERROR MESSAGE
+changed alone in the same file moved it from inert to 3 lanes.
+
 ### Measured cost
 
 Deriving the map took 146 s per call before memoization, and the property
