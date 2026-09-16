@@ -402,6 +402,37 @@ is why it blocks: the cell is not reproducible where it was recorded.
 Leg 4 records the lane a second time (it must be left OUT of the skip list). Two recordings say
 whether the instability is reproducible or was a single event.
 
+### The second recording answers it: the lane moves again, on a DIFFERENT fixture
+
+Leg 4, a different MI300X VM, ran the lane with it deliberately absent from the skip list
+(`skip_lanes=159`, zero occurrences of `rf-score-weighted` in the body's `--skip`). From its R2
+partial at 22:02:
+
+- **`rf-score-weighted/wide` is now STABLE**, `49be8ea935a47640` on both fits, which is what
+  NVIDIA, the CPU column and leg 3's own FIRST fit all produce. That cell is not
+  deterministically broken.
+- **`rf-score-weighted/base` MOVED instead**: `d744878e7c0e31ee` then `eb475cefa0f32408`. The
+  first value is what NVIDIA, the CPU column AND leg 3 all read for that cell; the second
+  appears nowhere else.
+
+The shape is identical in both legs: all four `clf_*` parts byte identical across the two fits,
+all four `reg_*` parts different, one fit agreeing with every other column and the other fit
+alone.
+
+What two runs on two VMs establish, which one run could not:
+
+- The instability is **real and reproducible at the LANE level**: `rf-score-weighted` moved in
+  leg 3 and again in leg 4.
+- It is **not fixture specific**: `wide` in leg 3, `base` in leg 4.
+- It is **confined to the weighted REGRESSOR parts**. The classifier parts have never moved in
+  any fit of any run.
+- It is **intermittent per cell**: the cell that moved in one leg was stable in the other.
+
+So the blocker stands and is better characterized. On gfx942 the weighted regressor score is not
+reproducible run to run, landing on a different fixture each time, while every other vendor and
+the CPU column reproduce it exactly. A third recording would be a FIFTH AMD leg, which is not
+rented without reporting the count first.
+
 ### The decision rule, fixed in advance (coordinator, 2026-09-15 evening)
 
 Written down before the evidence arrives so it is not decided under time pressure. The trigger
