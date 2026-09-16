@@ -139,6 +139,13 @@ another order would not reliably move an argmin or an Int32 sum, which is
 why this family's arm is a unit and not an order. Read back by
 `core_host_sabotage`.
 
+That arm is in `host_accumulate`, which ONLY THE FIT walks. It therefore
+says nothing about a SAVED model's `predict` and `transform`, which is what
+`bench/results/classical_host/` records and what a CPU-only install actually
+runs. `-D MOJOLEARN_KMEANS_PREDICT_SABOTAGE=1`, or the family define again,
+is the arm for that side: one bit into every predicted label and one unit
+into every transform cell (`KMEANS_PREDICT_HOST_SABOTAGE`).
+
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the kmeans lane is the measurement.
 """
@@ -164,6 +171,24 @@ from core.classical_host_predict import host_gemm_nt
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
 comptime KMEANS_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+#: THE SAVED-MODEL NEGATIVE CONTROL (lane/classical-host-recordings,
+#: 2026-09-16). `KMEANS_ORACLE_HOST_SABOTAGE` above sits in `host_accumulate`,
+#: which only the FIT walks, so it cannot move a saved model's `predict` or
+#: `transform` by one bit. That was measured, not assumed: the k-means
+#: recording's `check --expect-mismatch --every-fixture` built with
+#: `-D MOJOLEARN_HOST_SABOTAGE=1` read `SABOTAGE NOT CAUGHT ON FIXTURES` with
+#: ALL 54 of them in `unmoved`, which is a gate that could not fail dressed as
+#: a gate that passed. This arm is on the inference side, in the shape
+#: `core/labeled_reference_host_predict.mojo` uses for the transductive
+#: predicts: one unit, not an order, because an argmin walked in another order
+#: need not move. `predict` XORs 1 into every label and `transform` adds one
+#: to every cell, so the identity pair moves, the `predict` digest moves, and
+#: the training-row restatement of `labels_` moves too.
+comptime KMEANS_PREDICT_HOST_SABOTAGE = (
+    is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+    or is_defined["MOJOLEARN_KMEANS_PREDICT_SABOTAGE"]()
+)
 
 #: The three fold widths, read as the kernels read them. Each is a
 #: classified float fold (`lib_block_bounds_a_float_fold`), so under
@@ -1249,6 +1274,11 @@ def host_kmeans_predict(
         x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
         labels, min_dist,
     )
+    comptime if KMEANS_PREDICT_HOST_SABOTAGE:
+        # THE SABOTAGE ARM: one bit into every label. Wrong on purpose; see
+        # KMEANS_PREDICT_HOST_SABOTAGE.
+        for row in range(n):
+            labels[row] = labels[row] ^ UInt32(1)
 
 
 def host_kmeans_transform(
@@ -1300,4 +1330,8 @@ def host_kmeans_transform(
                 dist = Float32(0.0)
             if is_sqrt:
                 dist = identical_sqrt(dist)
+            comptime if KMEANS_PREDICT_HOST_SABOTAGE:
+                # THE SABOTAGE ARM: one unit into every cell. Wrong on
+                # purpose; see KMEANS_PREDICT_HOST_SABOTAGE.
+                dist = dist + Float32(1.0)
             dist_out[row * k + col] = dist
