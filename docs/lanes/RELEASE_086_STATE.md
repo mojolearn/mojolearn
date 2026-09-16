@@ -627,6 +627,31 @@ measures the machine at that instant and cannot see the process's own accumulati
 to group03 figures above come from live samples taken by hand while the processes ran. The
 runner now samples every 5 s during each group and reports the PEAK.
 
+### I CAUSED CONCURRENT METAL WORK WITH A PARTIAL KILL, AND THREE PARTS ARE QUARANTINED
+
+Switching to one lane per process, I killed the runner's wrapper without its child. The child
+was re-parented to pid 1 and **kept running Metal work outside the lock** while the next locked
+process started, so from about **22:17:58 to 22:23:40** two Metal processes ran at once. That is
+the contention that has already produced NaN, constant and zero outputs in this repository's
+history, and a cell recorded under it is not evidence.
+
+Two mechanical causes, both mine:
+
+- The runner's sampler subshell inherits the script's command line, so `ps` shows THREE matches
+  per run (sampler, lock wrapper, python). Killing "the runner" by pattern leaves the others.
+- Killing a parent does not kill the lane's python. It must be killed explicitly, and then the
+  tree re-checked, which is how the second orphan appeared after the first cleanup.
+
+Quarantined to `apple-record/contended-2026-09-15/` rather than deleted, so the evidence
+survives: `c16-group03` (radius, standard-scaler, written 22:17:58, exit 0 but inside the
+window), `c16-group04` (minmax-scaler, incomplete, `exit=137`) and `c16-group05`
+(gbdt-feature-freq, mlp, 22:23:11). Only `c16-group01` (gp, gpc) and `c16-group02`
+(gpc-multiclass, umap) predate the overlap and stand, so **4 lanes of 162 are covered, not 6**.
+
+**The rule for whoever kills one of these next:** kill the python first, then the wrapper, then
+the sampler, then re-read `ps` and confirm the tree is EMPTY and `mac_slot.sh status` reads
+free before starting anything. A launch line that looks clean is not proof that nothing survived.
+
 ### Release is LAZY, ambient count does not degrade a fresh process, and the tripwire is retired
 
 The first three prefixed groups settle both open questions:
