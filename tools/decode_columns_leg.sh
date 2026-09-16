@@ -225,8 +225,17 @@ cp "$OUT/logs/stepfull-gpu-oneulp.log" "$OUT/one-ulp.gpu.sabotage.log" 2>/dev/nu
 # 2 in zero seconds for exactly that and took a check and both sabotage arms
 # with them. `env FOO=1 -u BAR` does NOT unset BAR, because env stops parsing
 # options at the first assignment; the -u comes first here for that reason.
-run build-neural-host env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_NUMERIC_MODE=identical \
-    MOJOLEARN_BUILD_JOBS="$JOBS" sh bindings/build_neural_host.sh
+#
+# MOJOLEARN_TARGET_COLUMN=cpu IS THE SECOND HALF OF THAT SAME FIX, and the
+# 2026-09-16 MI325X leg is what taught it: tools/do_extra_leg.sh EXPORTS
+# MOJOLEARN_TARGET_COLUMN=amd (the RunPod runner exports nothing), and
+# bindings/build_neural_host.sh refuses any column but cpu by name --
+# "neural host compiles the CPU column only; MOJOLEARN_TARGET_COLUMN=amd is
+# refused", exit 2 in zero seconds, taking both host-route arms with it.
+# tools/identity_three_columns_leg.sh has carried both halves since
+# 2026-09-14; this file did not.
+run build-neural-host env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu \
+    MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS="$JOBS" sh bindings/build_neural_host.sh
 say "build_neural_host_exit=$(awk -F'	' '$1=="build-neural-host"{print $2}' "$OUT/status.tsv")"
 run hostroute-equal env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
     pixi run python tools/step_vs_full_check.py
