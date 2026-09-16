@@ -710,6 +710,22 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
         elif why == "no reference":
             if lane in with_cells:
                 wrong_reason.append(f"{lane}: the shipped table DOES carry cells for it; let it in")
+        elif why == "unwatched":
+            # THE ONE REASON A REGENERATION CANNOT CLEAR BY ITSELF
+            # (lane/expose-stepfull, 2026-09-16). It says the static
+            # conditions are all met and only the watched CPU-only run is
+            # owed, so it is checked against exactly that: the table must
+            # carry cells for the lane AT THE CURRENT REVISION. A lane that
+            # loses its cells, or whose fixture moves again, cannot hide
+            # here; it falls back to `no reference` or `stale reference`.
+            if lane not in with_cells:
+                wrong_reason.append(f"{lane}: held back as 'unwatched', but the shipped table carries "
+                                    "NO cell for it, so its reason is 'no reference' and what is owed "
+                                    "is a record, not a run")
+            elif lane in stale:
+                wrong_reason.append(f"{lane}: held back as 'unwatched', but its fixture has moved past "
+                                    f"the shipped reference ({revisions.get(lane)!r}), so its reason is "
+                                    "'stale reference' and a run would prove nothing")
         elif why == "own record":
             assert lane in host_surface.TRAINING_FIX_LANES, f"{lane}: not a TRAINING_FIX_LANES lane"
         elif why.startswith("measured"):
