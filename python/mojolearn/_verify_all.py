@@ -13,7 +13,9 @@ write for the same cell on the same machine
 
 WHAT IS COMPARED. Each cell part this box produces (train: the fit read back;
 infer: the model on held-out rows; model: the saved file's bytes; batch: the
-held-out rows whole, alone, split and by prefix) against
+held-out rows whole, alone, split and by prefix; stepfull: a sequence decoded
+one token at a time with a carried state against one fresh-state forward pass
+over the whole of it, bitwise per position) against
 `mojolearn/verify_reference/table.json` (`_verify_reference.py` builds it
 from the committed records). Each part reads IDENTICAL, DIVERGENT, OWED (no
 record carries it yet), REFUSED (the lane or probe raised; the sentence is
@@ -192,9 +194,42 @@ def _collapse(values, errors):
     return (values[0], None) if len(set(values)) == 1 else ("MOVED", None)
 
 
+#: THE DECODE PART, by the name the harness gives it. It is one of
+#: `identity_break.EXTRA_PARTS`, which the harness runs only behind
+#: `--step-full` because a column is a maintainer artifact; here it always
+#: runs, because a property a user cannot check is not a property they have.
+STEPFULL = "stepfull"
+
+
+def _probe_stepfull(harness, fit, lane, ml, held):
+    """(value, error) for the stepfull part of one fit.
+
+    THE DECODE IS THE PREFILL. `step(x_t, state)` walked over a sequence must
+    answer, at every position, the bits `forward(x)` answers over the whole of
+    it from a zero state. The harness's own evaluator reports the FIRST
+    differing position with both values, so a failure names a place rather
+    than a count; the value here is that evaluator's, unchanged.
+
+    A HARNESS WITHOUT THE PART IS AN ERROR, NEVER AN ABSENCE. Returning an
+    `n/a` when `_probe_part` is missing would make this part read N/A on every
+    lane on every install, which is a check that cannot fail. It refuses
+    instead, which costs the run its VERIFIED and says why."""
+    probe = getattr(harness, "_probe_part", None)
+    if probe is None or STEPFULL not in (getattr(harness, "EXTRA_PARTS", None) or {}):
+        return None, (f"stepfull: this harness ({getattr(harness, '__file__', 'unknown')}) defines no "
+                      "stepfull part, so the decode property was not checked on this box. It is "
+                      "in tools/identity_break.py since 2026-09-16; unset MOJOLEARN_IDENTITY_BREAK "
+                      "or point it at a current harness.")
+    value, err, _notes = probe(STEPFULL, fit, lane, ml, held.copy(), harness.BATCH_ALONE, "")
+    return value, err
+
+
 def run_cell(harness, ml, lane, fixture, data, held, repeats):
     """{part: (value, error)} for one cell, through the harness's own calls,
-    in the harness's order (train, then infer and model, then batch)."""
+    in the harness's order (train, then infer and model, then batch, then
+    stepfull). The order is load bearing: every part after the first runs on
+    its OWN copy of the held-out rows and after the parts it must not move, so
+    no hash a record already carries can change because a part was added."""
     X, yc, yr = data
     vals = {p: [] for p in vref.PARTS}
     errs = {p: [] for p in vref.PARTS}
@@ -220,6 +255,11 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats):
         if berr:
             errs["batch"].append(berr[:400])
         vals["batch"].append(batch)
+        # the decode part last, for the same reason the batch part is not first
+        step, serr = _probe_stepfull(harness, fit, lane, ml, held)
+        if serr:
+            errs[STEPFULL].append(serr[:400])
+        vals[STEPFULL].append(step)
     return {p: _collapse(vals[p], errs[p]) for p in vref.PARTS}
 
 

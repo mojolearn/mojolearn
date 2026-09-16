@@ -2363,39 +2363,61 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #:                     from every committed record, so these do have hashes,
 #:                     but `record_covered_lanes()` is what the public set is
 #:                     held to and they are not in it.
+#:   unwatched         the shipped table DOES carry cells for the lane at the
+#:                     current fixture revision, so nothing static holds it
+#:                     back any more. What is missing is the one thing the
+#:                     promotion rule will not do without: a CPU-only
+#:                     `verify --all` watched to read IDENTICAL for it. Added
+#:                     2026-09-16 by lane/expose-stepfull, which regenerated
+#:                     the table and so cleared `stale reference` for four
+#:                     lanes at once without being able to run that column.
+#:                     The same regeneration gave SIX `no reference`
+#:                     lanes their first cells, so they moved here too.
 #:   measured          a CPU-only `verify --all` at this commit WATCHED the
 #:                     lane and it did not read clean. This reason is the only
 #:                     one that comes from a run rather than from a static
 #:                     condition, and it carries what the run said.
+#:
+#: THE THIRTEEN `stale reference` LANES WERE RESOLVED ON 2026-09-16 by the
+#: regeneration lane/expose-stepfull landed, and the split is the one the
+#: rule predicted: NINE lost every cell, because each record that carried
+#: them predates the fixture shrink, so what they owe is a RECORD and their
+#: reason is now `no reference`; FOUR kept cells at the current revision and
+#: owe only the watched run, so their reason is now `unwatched`. No lane is
+#: `stale reference` today. The reason stays in the vocabulary because the
+#: next fixture change recreates it.
 PUBLIC_PENDING_LANES = {
     # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
     # change. UMAP.transform became row separable, so every umap hash in the
-    # shipped table describes bytes this build no longer produces. Without
-    # this entry a user's CPU-only `verify --all` reads DIVERGENT for umap on
-    # a machine that is fine. It leaves the day the next release record is
-    # taken, with the rest of the `stale reference` block.
-    "umap": "stale reference",
-    "holtwinters": "stale reference",
-    "spectral": "stale reference",
-    "gbdt-nan-modes": "stale reference",
-    "gbdt-parametric-losses": "stale reference",
-    "gbdt-lossguide-newtoncosine": "stale reference",
-    "gbdt-pair-logit": "stale reference",
-    "hdbscan": "stale reference",
-    "hdbscan-leaf": "stale reference",
-    "mamba2-dtlimit": "stale reference",
-    "samba": "stale reference",
-    "samba-untied-dropout-accum": "stale reference",
-    "byte-lm": "stale reference",
-    "byte-lm-resident": "stale reference",
-    "metrics-fowlkes-mallows": "no reference",
+    # shipped table describes bytes this build no longer produces. The
+    # regeneration lane/expose-stepfull landed drops those cells rather than
+    # keeping them, because no committed record was taken at the new
+    # revision, so what umap owes is a RECORD and its reason is
+    # `no reference` rather than `stale reference`. Without an entry here a
+    # user's CPU-only `verify --all` would read OWED for umap on a machine
+    # that is fine.
+    "umap": "no reference",
+    "holtwinters": "no reference",
+    "spectral": "unwatched",
+    "gbdt-nan-modes": "no reference",
+    "gbdt-parametric-losses": "no reference",
+    "gbdt-lossguide-newtoncosine": "no reference",
+    "gbdt-pair-logit": "no reference",
+    "hdbscan": "no reference",
+    "hdbscan-leaf": "no reference",
+    "mamba2-dtlimit": "unwatched",
+    "samba": "unwatched",
+    "samba-untied-dropout-accum": "unwatched",
+    "byte-lm": "no reference",
+    "byte-lm-resident": "no reference",
+    "metrics-fowlkes-mallows": "unwatched",
     "gbdt-adapter-score-weighted": "no reference",
     "rf-score-weighted": "no reference",
-    "gbdt-yeti-rank": "no reference",
-    "arima-exog": "no reference",
-    "arima-exog-seasonal": "no reference",
-    "gbdt-categorical-ctr-tables": "no reference",
-    "gbdt-tensor-ctr-tables": "no reference",
+    "gbdt-yeti-rank": "unwatched",
+    "arima-exog": "unwatched",
+    "arima-exog-seasonal": "unwatched",
+    "gbdt-categorical-ctr-tables": "unwatched",
+    "gbdt-tensor-ctr-tables": "unwatched",
     "kmeans-sqrt": "own record",
     "embedding": "own record",
     "embedding-sort": "own record",

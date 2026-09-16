@@ -4,10 +4,10 @@
 
 WHAT IT IS. One small JSON shipped in the wheel at
 `mojolearn/verify_reference/table.json`. For every identity_break cell
-(`<lane>/<fixture>`) and every part (`train`, `infer`, `model`, `batch`) it
-holds the hash the committed records agree on, and which record each device
-class (apple, nvidia, amd, cpu) got it from, with that record's directory and
-commit. No hash in it is typed: `build_table` reads the JSON columns
+(`<lane>/<fixture>`) and every part (`train`, `infer`, `model`, `batch`,
+`stepfull`) it holds the hash the committed records agree on, and which
+record each device class (apple, nvidia, amd, cpu) got it from, with that
+record's directory and commit. No hash in it is typed: `build_table` reads the JSON columns
 `tools/identity_break.py --json` wrote under `bench/results/identity_break/`.
 
 WHICH RECORDS COUNT. A column is admitted only if it is identical mode, names
@@ -54,7 +54,16 @@ import subprocess
 FORMAT = "mojolearn.verify-reference.v1"
 TABLE_DIR = "verify_reference"
 TABLE_NAME = "table.json"
-PARTS = ("train", "infer", "model", "batch")
+#: THE PARTS A USER CAN CHECK. `stepfull` joined the four on 2026-09-16
+#: (lane/expose-stepfull). It asserts that a sequence decoded ONE TOKEN AT A
+#: TIME with a carried state is, at every position, the bits the same model
+#: answers when the whole sequence runs as ONE fresh-state forward pass. That
+#: is the property incremental decoding rests on and the place bitwise
+#: determinism usually breaks, and it was proved on four columns for all
+#: eight decode lanes before it was exposed here. Adding a part to this tuple
+#: is not free: no row of an EXISTING table carries a value for it, so the
+#: change only lands together with a regenerated table.
+PARTS = ("train", "infer", "model", "batch", "stepfull")
 CLASSES = ("apple", "nvidia", "amd", "cpu")
 
 #: what `mojolearn.vendor()` reads back, as a device class of the table
