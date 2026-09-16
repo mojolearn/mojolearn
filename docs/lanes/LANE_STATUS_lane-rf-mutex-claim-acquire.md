@@ -11,7 +11,35 @@ nondeterminism.md` and `docs/lanes/LANE_STATUS_MECHANISM.md` on that branch). Th
 answers the five questions the addendum asked, names the repair, and carries the evidence
 for it.
 
-> **2026-09-16 12:47. MAIN IS BROKEN ON APPLE.** `01c228a72` merged the
+> **2026-09-16 12:55. CLOSED. THE FIX LANDED ON MAIN AS `36ec47446`, IN A
+> DIFFERENT AND BETTER SHAPE. THIS BRANCH IS A RECORD, NOT PENDING WORK.**
+> Do not merge it, do not port its six per-site edits, and do not treat its
+> "Still owed" list as this branch's to finish. `01c228a72` had already moved
+> the claim into ONE function, `core/device_mutex.mojo::claim_device_mutex`,
+> and `36ec47446` fixes it there in one line. That structure is strictly better
+> than the six copies here, and it disposed of this branch's sharpest trap for
+> free: `claim_value` is computed in that function and already in scope, so the
+> loop cannot get the kNN `-2 -> -1` case wrong, which two of the six sites here
+> did get wrong on the first pass.
+>
+> WHAT THIS BRANCH IS FOR NOW. It is the measurement that the fence cannot run
+> on Apple, and the reasoning behind the spelling that replaced it. The
+> artifacts are outside the repo at
+> `~/mojolearn-evidence/rf-mutex-claim-acquire/apple-fence-2026-09-16/`.
+> A second session reproduced the result independently before anything landed,
+> building `core/device_mutex_check.mojo` both ways from main's tree and running
+> it alone under the lock: the fence arm exits 1 with the same message, and the
+> repaired arm passes both claim pairs, 4096 of 4096 counted, 0 lost, 0 torn,
+> with its skip-write sabotage rejected. They ran the FAILING arm through the
+> same harness first, so their pass is not a check that could only pass. Two
+> instruments, two methods, one answer.
+>
+> CONFIRMED ON THE SHARED TREE. `36ec47446` built and fitted here: FIT OK, train
+> accuracy 0.996, matching the 0.996 the fence-compiled-out control produced at
+> `c173a6b4f`. Loaded binding read from INSIDE the importing process, sections
+> `1b51167b049709cf`, whole file `53f35c15483160c6`.
+
+> **2026-09-16 12:47. MAIN WAS BROKEN ON APPLE, and this is how it was found.** `01c228a72` merged the
 > acquire FENCE into `core/device_mutex.mojo` at 12:07. Measured on main's own
 > binary at `c173a6b4f`, a 3-tree random forest fit fails at Metal pipeline
 > creation; the same commit with the fence compiled out fits fine. See "MAIN IS
@@ -356,7 +384,7 @@ gfx942 and sm_80 are COMPILER OUTPUT from cross-compiling with
 `--target-accelerator` on the Mac. They are not a run. Nothing in this lane has
 executed on AMD or NVIDIA.
 
-### MAIN IS BROKEN ON APPLE AS OF `c173a6b4f`
+### MAIN WAS BROKEN ON APPLE AS OF `c173a6b4f`, FIXED BY `36ec47446`
 
 Written 2026-09-16 12:47. `01c228a72` merged lane/rf-mutex-reconcile at 12:07
 and put the shared claim in `core/device_mutex.mojo`, whose line 122 is
@@ -380,15 +408,24 @@ Same commit, same worktree, same machine, minutes apart. The only difference
 is the fence. The attribution is closed on main's own artifact, not only on a
 probe.
 
-THE FIX IS THE SPELLING THIS BRANCH CARRIES, applied to
-`core/device_mutex.mojo` instead of to six sites. One trap for whoever does
-it: the loop must compare against `claim_value`, the value THAT claim writes,
-not a literal `1`. `claim_device_mutex` serves both the `0 -> 1` and the
-`-2 -> -1` claims, so a literal would hang the kNN consumer forever. Two of
-this branch's six sites were wrong on the first pass for exactly that reason.
+FIXED BY `36ec47446` at 12:55, in `core/device_mutex.mojo`, one line, in the
+one shared claim function rather than at six sites:
 
     while Atomic.load[ordering = Ordering.ACQUIRE](mutex) != claim_value:
         pass
+
+It compares against `claim_value`, not a literal `1`, which matters because
+`claim_device_mutex` serves both the `0 -> 1` and the `-2 -> -1` claim; a
+literal would hang the kNN consumer forever. Two of this branch's six
+hand-written sites were wrong on the first pass for exactly that reason, and
+the one-site structure made the mistake unavailable.
+
+CONFIRMED HERE ON THE SHARED TREE, same worktree as the two rows above:
+`36ec47446` fits at train accuracy 0.996, matching the fence-compiled-out
+control exactly. The loaded binding's digests were read from INSIDE the
+importing process, sections `1b51167b049709cf`, whole file `53f35c15483160c6`,
+because an earlier run in this lane reported against a `.so` that another
+process had swapped underneath it.
 
 ### THE FENCE COMPILES ON APPLE AND CANNOT RUN THERE
 
@@ -636,38 +673,48 @@ acquire load" is true of the text and says nothing about the shipped path.
 
 ### Still owed
 
-  - **FIX MAIN.** `c173a6b4f` cannot fit a forest on Apple. This branch's six
-    per-site loops are now the WRONG SHAPE for main, which has since moved the
-    claim into `core/device_mutex.mojo` (`01c228a72`). What main needs is the
-    loop applied ONCE there, comparing against `claim_value`. This branch is
-    the evidence and the spelling, not the patch.
-  - THE APPLE IDENTITY A/B FOR THE LOOP IS NOT FINISHED. Its loop arm was
-    cancelled partway when the fence-on-main question took priority. The stock
-    arm has been run three times (80 STABLE 1 MOVED each time) but the loop arm
-    has no completed record, so this branch has NO cell-for-cell identity
-    result for the shipped spelling. It must be run before the spelling is
-    trusted to leave output unmoved.
+NOT BY THIS BRANCH, which is closed. These are owed by whoever carries
+`core/device_mutex.mojo` forward, and they are listed here because this is
+where the evidence for them is.
 
-  - THE MI300X A/B. Nothing in this lane has RUN on AMD. Everything above is
-    compiler output plus an Apple identity comparison, and neither can say the
-    hole is closed on the part that showed it. The leg
-    (`tools/rf_nondeterminism/rf_claimfix_ab_body.template.sh`) is ready, its
-    guard now compares sections before either arm is timed, and the guard has
-    been shown to reject a pair of identical arms. Blocked on Hot Aisle stock;
+  - NO CELL-FOR-CELL IDENTITY RECORD EXISTS FOR THE CONSUMED-LOAD SPELLING, on
+    any column. Its A/B was cut short when the broken-main question took
+    priority. The STOCK arm has a complete record three times over (80 STABLE,
+    1 MOVED, a different cell each run) and the repaired arm has none. So
+    "the repair does not move output" is UNMEASURED, not established. The
+    Apple fit at 0.996 says the kernels launch and fit a separable fixture; it
+    says nothing about bit-identity.
+  - NOTHING IN THIS LANE RAN ON AMD. Every gfx942 line quoted anywhere in this
+    file is CROSS-COMPILER OUTPUT produced on the Mac with
+    `--target-accelerator`. No MI300X, no MI325X, no run of any kind.
+  - THE MI300X A/B NEVER RAN AT ALL, so THE ORIGINAL RACE HAS NOT BEEN SHOWN TO
+    BE GONE. That is the question the whole lane exists to answer and it is
+    still open. Everything established here is about whether the repair is
+    present in the artifact and whether it launches, which are prerequisites,
+    not the result. `tools/rf_nondeterminism/rf_claimfix_ab_body.template.sh`
+    is ready and its guard now compares sections before either arm is timed;
     leg-1 under `~/mojolearn-evidence/rf-mutex-claim-acquire/leg-1/` records
     `exit=3`, no box created and nothing spent.
   - The control arm has to be SEEN to move at the rate the earlier legs
     measured, 13/300 to 16/300 on the wide fixture at 16 columns. If it does
     not move, the leg says nothing about the repair.
+
   - A powered run on `rf-reg-gamma-ig/wide`, the shape with the most mutex
     traffic per node, to put a rate on the two unexplained Apple movers.
-  - `neighbors/mutex_probe_main.mojo` has never been RUN with the repair in it.
-    It compiles, and its two claim sites now carry the loop with the consumer
-    waiting for `-1`. Its two sabotage arms are the only thing in the tree that
-    tests this handoff protocol directly, and running it on Metal is the
-    cheapest non-AMD evidence that the repair does not break the protocol it is
-    meant to strengthen. It matters more than usual now, because the consumer's
-    loop constant differs from every other site's and nothing has executed that
-    path.
-  - `_mojolearn_trees.so` and `_mojolearn.so` were rebuilt with the loop and
-    were NOT run. Only the rf binding has been through identity with it.
+  - `neighbors/mutex_probe_main.mojo` has never been RUN with the repair in it,
+    on this branch or on main. Its two sabotage arms are the only thing in the
+    tree that tests this handoff protocol end to end, so running it on Metal is
+    the cheapest non-AMD evidence that the repair does not break the protocol
+    it is meant to strengthen. The other session's
+    `core/device_mutex_check.mojo` run covers the claim function itself, 4096
+    of 4096 counted with 0 lost and 0 torn on both claim pairs; the probe would
+    cover the kNN producer and consumer protocol around it.
+  - EXTRATREES AND THE FUSED kNN have not been run with the repair on any
+    column. Only the rf binding has been fitted, and only for a separable
+    fixture, not for identity.
+  - THE EVIDENCE FOR EVERYTHING ABOVE lives outside the repo at
+    `~/mojolearn-evidence/rf-mutex-claim-acquire/apple-fence-2026-09-16/`:
+    the probe source and its three build scripts, the emitted kernel IR for
+    four spellings across Metal, sm_80, sm_90a and gfx942, the metallib diff
+    read back out of a shipped binding, both identity A/B logs with their
+    JSONs, and the solo rotated-arm probe log. 392K, no blobs.
