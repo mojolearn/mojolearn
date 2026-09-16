@@ -544,6 +544,40 @@ a degradation threshold near 512, which is why a 23-lane chunk degrades and why 
 work runs in groups of two lanes per process (`scripts/run_apple_groups.sh`), with the queue
 count read around every group so a short process's behavior is measured rather than assumed.
 
+### Group size for the Apple chunks: TWO lanes per process, with a measured tripwire
+
+Measured on the six restarted lanes, each group its own fresh process under the Metal lock:
+
+| group | lanes | seconds | queues |
+|---|---|---|---|
+| group01 | spectral, holtwinters | **1510** | started 22, live samples 23 to 24 across the whole 25 minutes |
+| group02 | gemm-pinned, metrics | **20** | 23 throughout |
+| group03 | svr, arima | (running) | live **288** |
+
+What this settles:
+
+- **Two lanes per process stays under the ~512 limit on this evidence.** The highest live
+  reading was 288, and group01 held 23 to 24 for 25 minutes. Chunks 01 to 06 therefore run at
+  two lanes per process, with a **tripwire: if any group's measured peak exceeds 400, the rest
+  drop to one lane per process.** That is a decision the instrument can now enforce rather than
+  a guess.
+- **265 queues per lane was a MEAN and must not be used as a constant.** `spectral` and
+  `holtwinters` together cost about 2 net; `svr` and `arima` reach 288. Per-lane cost varies by
+  an order of magnitude, so a group's queue count cannot be predicted from its lane count.
+- **The restart paid for itself.** Two lanes including `spectral` finished in 1510 s in a fresh
+  process, where the degraded process had spent more than 43 minutes on `spectral` alone and had
+  not finished it.
+- **Wall time is not the constraint.** group02 ran two lanes end to end in 20 s, so per-process
+  startup is seconds. Across 162 lanes the difference between 81 and 162 processes is on the
+  order of ten minutes, which is why headroom, not overhead, decides the size.
+
+**A correction to my own instrument.** The runner originally read the queue count before and
+after each group, and the "after" reading is taken once the process has EXITED, at which point
+the queues are already released. That pair measures the machine's baseline and cannot see
+accumulation at all. The group01 and group02 figures above come from live samples taken by hand
+while the processes ran. The runner now samples every 5 s during each group and reports the
+PEAK, so every group from chunk 01 onward carries a number that means what it says.
+
 **The exit measurement, 21:37: 4673 to 22.** By the time the restart was approved the count had
 climbed further, to **4673**. The driver was terminated first (so it could not go on to launch
 chunk 01 as another 30-lane process), then the lock wrapper and the worker. Three seconds after
