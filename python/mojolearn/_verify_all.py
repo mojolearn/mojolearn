@@ -36,6 +36,7 @@ import importlib.util
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -487,6 +488,646 @@ def _cmd_self_test(args, ml):
     return EXIT_VERIFIED if result["passed"] else EXIT_MISMATCH
 
 
+#: One Apple Metal process may run at most this many lanes before
+#: `identity_break.refuse_routine_apple_column` refuses it: a full column is a
+#: per-release artifact, not something a routine command takes. The cross-check
+#: respects it rather than tripping over it, so the default is capped here.
+APPLE_LANE_CAP = 24
+
+
+def cross_check_lanes(harness, scope="default"):
+    """The lanes a GPU-against-CPU cross-check runs, and what it leaves out.
+
+    The intersection is every lane with BOTH a shipped GPU path and a shipped
+    host family, which is ALL 79 declared inference lanes: every one is
+    reachable from a binding the wheel already carries.
+
+    THE TIER IS THE POINT. A verification nobody runs proves nothing, so the
+    default has to be something a user will actually sit through, while doing
+    visibly enough work that the number of checks is impressive on its face:
+
+      quick    one lane per family, base fixture. Seconds, for someone in a
+               hurry or wiring this into CI.
+      default  up to APPLE_LANE_CAP lanes, base fixture. Minutes. Capped
+               because one Apple Metal process may not run more than that
+               without naming a release, which is enforced in identity_break
+               rather than advisory.
+      all      the whole intersection. On Apple this is REFUSED by that same
+               rule, deliberately; on NVIDIA and AMD it runs.
+    """
+    hs = host_surface()
+    shipped = set(hs.wheel_bindings())
+    routes = hs.inference_routes()
+    per_family, every = {}, []
+    for f in hs.FAMILIES:
+        reachable = f["ships_in_wheel"] or routes.get(f["routes"]) in shipped
+        for lane in f["inference_lanes"]:
+            if not reachable or lane not in harness.LANES:
+                continue
+            every.append(lane)
+            per_family.setdefault(f["family"], lane)
+    every = sorted(set(every))
+    representative = sorted(set(per_family.values()))
+    if scope == "quick":
+        chosen = representative
+    elif scope == "all":
+        chosen = every
+    else:
+        # the representatives first, so every family is covered even if the cap
+        # bites, then fill up to the cap in lane order
+        chosen = list(representative)
+        for lane in every:
+            if len(chosen) >= APPLE_LANE_CAP:
+                break
+            if lane not in chosen:
+                chosen.append(lane)
+        chosen = sorted(chosen[:APPLE_LANE_CAP])
+    return chosen, every, dict(per_family)
+
+
+def cross_check(harness, ml, lanes, fixtures, log=None):
+    """THEIR GPU AGAINST THEIR CPU, on the user's own machine.
+
+    The strongest of the three checks, because it requires trusting NOBODY.
+    Comparing against our shipped table asks the user to believe we recorded
+    honestly; this asks them to believe nothing. They generate both sides
+    themselves, on two genuinely different pieces of hardware in their own
+    box, and what it demonstrates is exactly the claim: the same computation
+    yields the same bits on different hardware. It also works on any GPU we
+    support, not only the three vendors we happened to record, which answers
+    "I do not own an H100".
+
+    ONE DIGEST, SO THE TWO SIDES CANNOT DRIFT. The lane is fitted ONCE on the
+    GPU. `fit.probe(gpu_estimator)` gives one answer and
+    `fit.probe(host_model(saved))` the other, both hashed by the harness's own
+    `_h`. There is no second comparison path and no second digest to disagree
+    with the first; the only difference between the arms is which binding
+    answers.
+
+    AND THE BINDING THAT ANSWERED IS THE ONE NAMED. `_probe_fit_host` learned
+    this the hard way: a forest sabotage column once read IDENTICAL on a
+    RunPod pod because the binding actually loaded was not the one asked for,
+    so the check was comparing a thing against itself. The same guard is kept
+    here.
+    """
+    import tempfile
+    from . import _backend
+    log = log or (lambda s: None)
+    vendor = _backend.vendor()
+    if vendor == "cpu":
+        return dict(ran=False, vendor=vendor, lanes=[],
+                    reason=("no GPU in this installation, so there is no second piece of hardware "
+                            "to compare against. This is not a pass and not a failure: the "
+                            "cross-check did not run. `verify --all` still checks this machine "
+                            "against the recorded columns, and `--self-test` still shows the "
+                            "comparison can fail."))
+    from ._forest_host import host_model, binary_path
+    rows, agree, differ, skipped = [], 0, 0, {}
+    for lane in lanes:
+        for fx in fixtures:
+            t0 = time.time()
+            X, yc, yr = harness.fixture(fx)
+            held = harness.heldout(fx)
+            try:
+                fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+            except Exception as exc:
+                skipped[lane] = f"the lane raised: {type(exc).__name__}: {exc}"[:200]
+                continue
+            if not callable(fit.probe):
+                skipped[lane] = f"no out-of-sample probe ({fit.probe})"
+                continue
+            sl = harness._save_load(fit.est)
+            if sl is None:
+                skipped[lane] = "the estimator has no save/load, so the CPU side has nothing to load"
+                continue
+            save, _load, suffix = sl
+            try:
+                gpu_est = harness._public_est(lane, fit.est)
+                pair = {"infer": [harness._h(*fit.probe(gpu_est)), None]}
+                # THE BATCH PART TOO, where the lane has one. Batch invariance is
+                # a DIFFERENT AXIS from cross-vendor identity: cross-vendor asks
+                # "same input, different hardware, same bits", batch invariance
+                # asks "same row, different batch neighbours, same bits". A
+                # serving system batches dynamically, so a user whose prediction
+                # changes with traffic has a real problem, and this is the one
+                # place they can test both at once on their own machine. A lane
+                # that declares `n/a` for batch keeps its n/a; inventing a
+                # comparison there would be a check that cannot fail.
+                gb, gerr = harness._probe_batch(fit, lane, ml, held.copy(), harness.BATCH_ALONE, False)
+                if gerr is None and isinstance(gb, str) and not gb.startswith("n/a"):
+                    pair["batch"] = [gb, None]
+                elif isinstance(gb, str) and gb.startswith("n/a"):
+                    pair["batch"] = [gb, gb]        # declared absent on both sides
+                with tempfile.TemporaryDirectory(prefix="mojolearn_cross_") as tmp:
+                    path = os.path.join(tmp, f"{lane}{suffix}")
+                    getattr(fit.est, save)(path)
+                    host = host_model(path)
+                    bound = getattr(getattr(host, "_binding", None), "__file__", None)
+                    if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
+                            os.path.realpath(bound) != os.path.realpath(binary_path())):
+                        raise RuntimeError(f"the host binding that answered is {bound}, not "
+                                           f"{binary_path()}; this would compare a thing to itself")
+                    pair["infer"][1] = harness._h(*fit.probe(host))
+                    if "batch" in pair and pair["batch"][1] is None:
+                        hfit = harness.Fit({})
+                        hfit.est = host
+                        hfit.probe = fit.probe
+                        hb, herr = harness._probe_batch(hfit, lane, ml, held.copy(),
+                                                        harness.BATCH_ALONE, False)
+                        pair["batch"][1] = hb if herr is None else f"raised: {herr}"[:120]
+            except Exception as exc:
+                skipped[lane] = f"{type(exc).__name__}: {exc}"[:200]
+                continue
+            secs = round(time.time() - t0, 3)
+            verdicts = []
+            for part, (g, c) in sorted(pair.items()):
+                na = isinstance(g, str) and g.startswith("n/a")
+                same = (g == c)
+                if not na:
+                    agree += same
+                    differ += (not same)
+                rows.append(dict(lane=lane, fixture=fx, part=part, gpu=g, cpu=c,
+                                 agree=None if na else same, na=na, seconds=secs))
+                verdicts.append(f"{part}={'n/a' if na else ('agree' if same else 'DIFFER')}")
+            # streamed per lane: it shows the run is alive, and it is itself
+            # evidence that work happened. A verification that returns instantly
+            # invites the suspicion this whole command exists to remove.
+            log(f"  {lane:<26} {fx:<8} {' '.join(verdicts):<28} {secs:6.2f}s")
+    # NOTHING COMPARED IS NOT A MISMATCH. The first run of this printed
+    # "MISMATCH. 0 of 0 cells differ", which is self-contradictory: no cell was
+    # compared, so nothing differed and nothing agreed. Reporting a result
+    # about hashes that were never computed is the same defect as VERIFIED over
+    # a refused run (lane/verify-cross-check, 2026-09-16).
+    return dict(ran=True, vendor=vendor, device_class=vref.VENDOR_CLASS.get(vendor),
+                lanes=sorted({r['lane'] for r in rows}), fixtures=list(fixtures),
+                compared=len(rows), agree=agree, differ=differ,
+                skipped=skipped, cells=rows,
+                passed=(differ == 0) if rows else None)
+
+
+def format_cross_check(r):
+    lines = ["# python -m mojolearn verify --cross-check", ""]
+    if not r["ran"]:
+        lines.append("NOT RUN: " + r["reason"])
+        return "\n".join(lines)
+    lines.append(f"Fitted each lane ONCE on this machine's GPU ({r['vendor']}), then asked the same")
+    lines.append("fitted model for the same held-out answer twice: from the GPU estimator, and from")
+    lines.append("the saved model reloaded through the CPU host binding. Same digest both times.")
+    lines.append("")
+    lines.append("`infer` is cross-vendor identity: same input, different hardware, same bits.")
+    lines.append("`batch` is batch invariance: same row, different batch neighbours, same bits --")
+    lines.append("a different axis, and the one that bites a serving system batching dynamically.")
+    lines.append("")
+    for c in r["cells"]:
+        if c.get("na"):
+            lines.append(f"  {c['lane']:<26} {c['fixture']:<8} {c['part']:<6} n/a  {c['gpu']}")
+            continue
+        lines.append(f"  {c['lane']:<26} {c['fixture']:<8} {c['part']:<6} "
+                     f"gpu={c['gpu']}  cpu={c['cpu']}  {'agree' if c['agree'] else 'DIFFER'}")
+    lines.append("")
+    if r["skipped"]:
+        lines.append(f"Not compared ({len(r['skipped'])}):")
+        for lane, why in sorted(r["skipped"].items()):
+            lines.append(f"  {lane}: {why}")
+        lines.append("")
+    if r["passed"] is None:
+        lines.append("RESULT: NOTHING COMPARED. No lane produced a GPU answer and a CPU answer, so")
+        lines.append("there is nothing to agree or disagree about. This is not a pass and not a")
+        lines.append("failure; the reasons are listed above.")
+    elif r["passed"]:
+        asked = len(r["lanes"]) + len(r["skipped"])
+        lines.append(f"RESULT: YOUR GPU AND YOUR CPU AGREE on {r['agree']} of {r['agree']} compared "
+                     f"cell parts,")
+        # THE SKIPPED COUNT RIDES WITH THE VERDICT. A confident headline over a
+        # run that compared 5 of 24 lanes is a pass whose scope is much smaller
+        # than it looks, which is the failure this command exists to remove.
+        lines.append(f"across {len(r['lanes'])} of {asked} lanes"
+                     + (f" ({len(r['skipped'])} SKIPPED, listed above)" if r["skipped"] else "")
+                     + f" and {len(r['fixtures'])} fixture(s), in {r.get('elapsed_s', 0):.1f}s.")
+        if r["skipped"]:
+            lines.append("A skipped lane was NOT checked. This agreement covers only the lanes")
+            lines.append("named above, and says nothing about the ones that did not run.")
+        lines.append("You generated both sides on two different pieces of hardware in this machine,")
+        lines.append("so this result depends on trusting nobody: not our recorded columns, not us.")
+    else:
+        lines.append(f"RESULT: MISMATCH. {r['differ']} of {r['compared']} cells differ between this")
+        lines.append("machine's GPU and its CPU. The differing hashes are above and in --json.")
+    return "\n".join(lines)
+
+
+def _cmd_cross_check(args, ml):
+    """`verify --cross-check [fast|all]`: this machine's GPU against its CPU."""
+    json_out = getattr(args, "json", False)
+    log = (lambda s: _emit(s, sys.stderr)) if json_out else _emit
+    scope = getattr(args, "cross_check", None) or "default"
+    started = time.time()
+    try:
+        harness = load_harness()
+    except (FileNotFoundError, CannotRun) as exc:
+        return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
+
+    chosen, every, per_family = cross_check_lanes(harness, scope)
+    asked = [x for x in (getattr(args, "lanes", "") or "").split(",") if x]
+    if asked:
+        unknown = [l for l in asked if l not in every]
+        if unknown:
+            _emit(f"USAGE: --lanes names lanes outside the cross-check intersection: {unknown}; "
+                  f"the intersection is {len(every)} lanes", sys.stderr)
+            return EXIT_USAGE
+        chosen = [l for l in every if l in asked]
+    fixtures = [x for x in (getattr(args, "fixtures", "") or "").split(",") if x] or ["base"]
+    bad = [f for f in fixtures if f not in harness.FIXTURES]
+    if bad:
+        _emit(f"USAGE: --fixtures names fixtures the harness does not define: {bad}", sys.stderr)
+        return EXIT_USAGE
+
+    log(f"# cross-check ({scope}): {len(chosen)} of {len(every)} intersection lanes x "
+        f"{len(fixtures)} fixture(s)")
+    result = cross_check(harness, ml, chosen, fixtures, log=log)
+    result.update(scope=scope, intersection=len(every), intersection_lanes=every,
+                  representative_of=per_family, elapsed_s=round(time.time() - started, 2),
+                  apple_lane_cap=APPLE_LANE_CAP)
+    if json_out:
+        _emit(json.dumps(dict(format="mojolearn.verify-cross-check.v1", **result),
+                         indent=1, sort_keys=True))
+    else:
+        _emit(format_cross_check(result))
+    if not result["ran"] or result["passed"] is None:
+        # no GPU, or no lane produced both answers: nothing was compared, which
+        # is CANNOT RUN rather than a verdict about hashes never computed
+        return EXIT_CANNOT_RUN
+    return EXIT_VERIFIED if result["passed"] else EXIT_MISMATCH
+
+
+#: The evidence document `--compare` reads. A file that does not announce
+#: itself as one is REFUSED BY NAME rather than compared on a guess. This
+#: command exists to be used adversarially, and quietly accepting any JSON
+#: that happens to carry a `cells` key is the first step toward a comparer
+#: that always agrees: two files with no cells at all would "not disagree".
+COMPARE_INPUT_FORMAT = "mojolearn.verify-all-report.v1"
+
+#: What a real cell value looks like: a hash this box actually computed. The
+#: harness writes truncated lowercase sha256, so anything outside this shape
+#: is NOT a bit pattern and must never be compared as though it were one.
+_HASH_RE = re.compile(r"\A[0-9a-f]{8,64}\Z")
+
+#: Values that mean THE BOX DISAGREED WITH ITSELF. `vref.judge` reads all
+#: three as DIVERGENT. Two documents both carrying `MOVED` for a cell hold
+#: the same STRING, and equality on strings counted that as agreement: two
+#: machines "agreeing" that neither of them is deterministic, reported as a
+#: pass. That is the precise opposite of the claim being checked, so it gets
+#: its own verdict and its own non-zero exit.
+_SELF_CONTRADICTED = ("MOVED", "BATCH_MOVED", "RELOAD-MOVED")
+
+
+def _value_kind(v):
+    """Classify one cell value. The whole point is that only `hash` is a bit
+    pattern two machines can agree ON; the rest are agreements about nothing."""
+    if not isinstance(v, str) or not v:
+        return "missing"                       # None where the probe raised
+    if v == "MOVED" or v.startswith("BATCH_MOVED") or v.startswith("RELOAD-MOVED"):
+        return "moved"
+    if v.startswith("n/a"):
+        return "n/a"
+    if _HASH_RE.match(v):
+        return "hash"
+    return "missing"                           # unrecognized: never a match
+
+
+def _read_cells(doc, label):
+    """`{(lane, fixture, part): value}` plus every structural complaint.
+
+    DUPLICATE KEYS ARE A COMPLAINT, NOT A LAST-WINS. The obvious attack on a
+    comparer is to append a second row for a cell, copied from the other
+    party's document, so the dict build overwrites the honest answer and the
+    mismatch disappears. A document with two rows for one cell part is not a
+    document this command will read.
+    """
+    problems, out, states, seen = [], {}, {}, {}
+    if not isinstance(doc, dict):
+        return out, states, [f"{label}: not an evidence document (top level is "
+                             f"{type(doc).__name__}, expected an object)"]
+    fmt = doc.get("format")
+    if fmt != COMPARE_INPUT_FORMAT:
+        problems.append(f"{label}: format is {fmt!r}, expected {COMPARE_INPUT_FORMAT!r}. "
+                        "Write it with `verify --all --json-out <path>`")
+    rows = doc.get("cells")
+    if rows is None:
+        problems.append(f"{label}: has no `cells`, so there is nothing to compare")
+        rows = []
+    if not isinstance(rows, list):
+        return out, states, problems + [f"{label}: `cells` is {type(rows).__name__}, expected a list"]
+    for i, r in enumerate(rows):
+        if not isinstance(r, dict):
+            problems.append(f"{label}: cells[{i}] is {type(r).__name__}, expected an object")
+            continue
+        key = (r.get("lane"), r.get("fixture"), r.get("part"))
+        if key in seen:
+            problems.append(f"{label}: {key[0]}/{key[1]} {key[2]} appears twice "
+                            f"(rows {seen[key]} and {i}, values {out[key]!r} and {r.get('value')!r})")
+            continue
+        seen[key] = i
+        out[key] = r.get("value")
+        states[key] = r.get("state")
+    return out, states, problems
+
+
+def compare_documents(a, b, label_a="A", label_b="B"):
+    """Diff two evidence documents: where two machines agree, and where they do not.
+
+    THE POINT IS THAT WE ARE NOT IN THE LOOP. Everything else this command
+    offers still rests on our recorded table being honest. Two strangers, one
+    with a 4090 and one with an M2, can each run `verify --all --json-out
+    mine.json`, swap files, and run this. If the hashes match they have
+    demonstrated the central claim TO EACH OTHER with us entirely absent,
+    which is stronger evidence than anything we can publish about ourselves.
+
+    IT NEEDS NO LANE SET OF ITS OWN, and that is deliberate. The lanes come
+    from the two documents; this function never enumerates, greps or imports
+    a list of lanes. A second idea of what the lane set is, in a second code
+    path, is how one afternoon produced four different lane totals. Where a
+    lane list IS needed it is read from the registry by import, the same way
+    `tools/lane_select.py` and `tools/verification_matrix.py` read it.
+
+    A COMPARER'S ONE FAILURE MODE IS AGREEING TOO EASILY, so every way of
+    "matching" without two machines having computed the same bits is broken
+    out and given a non-agreeing outcome:
+
+    * a cell in only ONE document is INCOMPARABLE, never a match;
+    * a cell NEITHER side computed (`value` null, where the probe raised) is
+      two absences, not an agreement, however equal the nulls are;
+    * a cell either side recorded as MOVED, BATCH_MOVED or RELOAD-MOVED says
+      that box contradicted ITSELF, and two such documents agree only on the
+      claim being false;
+    * two DIFFERENT `n/a` reasons are a disagreement about what the part even
+      is, so they are not folded in with an agreed `n/a`;
+    * a duplicated cell row makes the whole document unreadable, because
+      last-wins would let one party paste the other's answer over their own;
+    * two documents that are byte-identical are ONE document passed twice,
+      which compares nothing;
+    * a cell both sides carry the SAME hash for, which either side judged
+      DIVERGENT against its reference table, is an agreement on an answer one
+      of them already recorded as wrong.
+
+    AGREE IS THE LAST OUTCOME TRIED, and that ordering is the point. On
+    2026-09-16 `verdict()` was fixed for the same defect one level down: it
+    returned VERIFIED as soon as ONE part read IDENTICAL, before it looked at
+    REFUSED, so a CPU-only install printed `VERIFIED, exit 0` over 44
+    identical and 288 refused parts. There is no number of agreements that
+    makes up for one problem, here either. A wrong answer outranks an absent
+    one, so the exit-1 outcomes are read before the exit-4 ones, exactly as
+    `verdict()` reads DIVERGENT before REFUSED.
+    """
+    ca, sa, pa_ = _read_cells(a, label_a)
+    cb, sb, pb_ = _read_cells(b, label_b)
+    problems = pa_ + pb_
+
+    def _sortkey(k):
+        return tuple("" if x is None else str(x) for x in k)
+
+    # A MALFORMED DOCUMENT IS NOT COMPARED AT ALL. Comparing the readable part
+    # of an unreadable file produces a cell count, and a cell count next to a
+    # complaint is exactly the shape a reader skims as a result.
+    shared = [] if problems else sorted(set(ca) & set(cb), key=_sortkey)
+    agree, differ, moved, uncomputed, na, na_differ, agreed_div = [], [], [], [], [], [], []
+    for key in shared:
+        va_, vb_ = ca[key], cb[key]
+        ka, kb = _value_kind(va_), _value_kind(vb_)
+        row = dict(lane=key[0], fixture=key[1], part=key[2], a=va_, b=vb_,
+                   kind_a=ka, kind_b=kb, state_a=sa.get(key), state_b=sb.get(key))
+        if "moved" in (ka, kb):
+            moved.append(row)
+        elif "missing" in (ka, kb):
+            uncomputed.append(row)
+        elif ka == "n/a" and kb == "n/a":
+            (na if va_ == vb_ else na_differ).append(row)
+        elif va_ != vb_:
+            differ.append(row)
+        elif vref.DIVERGENT in (sa.get(key), sb.get(key)):
+            # THE TWO PARTIES AGREE AND AT LEAST ONE OF THEM JUDGED THESE VERY
+            # BITS WRONG. `verify --all` was fixed on 2026-09-16 to stop
+            # letting parts that did run outrank parts that did not; the same
+            # defect reaches this command through agreement, so a divergence
+            # either side recorded is carried up rather than absorbed into the
+            # agreement count.
+            agreed_div.append(row)
+        else:
+            agree.append(row)
+    only_a = [] if problems else sorted(set(ca) - set(cb), key=_sortkey)
+    only_b = [] if problems else sorted(set(cb) - set(ca), key=_sortkey)
+
+    da, db = (a.get("device") or {}) if isinstance(a, dict) else {}, \
+             (b.get("device") or {}) if isinstance(b, dict) else {}
+    same_class = da.get("device_class") == db.get("device_class")
+    same_device = (da.get("device"), da.get("cpu_model")) == (db.get("device"), db.get("cpu_model"))
+    try:
+        same_document = json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+    except (TypeError, ValueError):
+        same_document = False
+    prov = dict(
+        a={k: da.get(k) for k in ("mojolearn_version", "commit", "vendor", "device_class",
+                                  "device", "cpu_model", "platform", "python")},
+        b={k: db.get(k) for k in ("mojolearn_version", "commit", "vendor", "device_class",
+                                  "device", "cpu_model", "platform", "python")},
+        same_device_class=same_class, same_device=same_device, same_document=same_document,
+        bindings_a=[x.get("sha256") for x in ((a.get("bindings") or []) if isinstance(a, dict) else [])],
+        bindings_b=[x.get("sha256") for x in ((b.get("bindings") or []) if isinstance(b, dict) else [])],
+        independent=(not same_device) and (not same_class) and (not same_document),
+        # each document's OWN verdict about its own run, carried through
+        # unchanged. Two parties can agree with each other while one of them
+        # checked a fraction of what the reader assumes, and the only honest
+        # place to see that is next to the agreement.
+        own_verdict_a=(a.get("verdict") if isinstance(a, dict) else None),
+        own_verdict_b=(b.get("verdict") if isinstance(b, dict) else None),
+        own_detail_a=(a.get("detail") if isinstance(a, dict) else None),
+        own_detail_b=(b.get("detail") if isinstance(b, dict) else None),
+    )
+
+    if problems:
+        verdict_, code = "MALFORMED", EXIT_USAGE
+    elif same_document:
+        verdict_, code = "SAME DOCUMENT", EXIT_CANNOT_RUN
+    elif differ:
+        verdict_, code = "MISMATCH", EXIT_MISMATCH
+    elif moved:
+        verdict_, code = "SELF-CONTRADICTED", EXIT_MISMATCH
+    elif agreed_div:
+        verdict_, code = "AGREED ON A DIVERGENT ANSWER", EXIT_MISMATCH
+    elif only_a or only_b or uncomputed or na_differ:
+        verdict_, code = "INCOMPLETE", EXIT_CANNOT_RUN
+    elif agree:
+        verdict_, code = "AGREE", EXIT_VERIFIED
+    else:
+        verdict_, code = "NOTHING COMPARED", EXIT_CANNOT_RUN
+    return dict(format="mojolearn.verify-compare.v1", verdict=verdict_, exit=code,
+                labels=dict(a=label_a, b=label_b), provenance=prov, problems=problems,
+                agree=len(agree), differ=len(differ), n_a=len(na), moved=len(moved),
+                uncomputed=len(uncomputed), n_a_differing=len(na_differ),
+                agreed_divergent=len(agreed_div),
+                only_in_a=[list(k) for k in only_a], only_in_b=[list(k) for k in only_b],
+                differing=differ, agreeing=agree, self_contradicted=moved,
+                not_computed=uncomputed, n_a_differing_cells=na_differ,
+                agreed_divergent_cells=agreed_div)
+
+
+def _cell_lines(title, rows, la, lb, limit=40):
+    """Name the cells, and say how many were not named. PRINT THE MATCHES, NOT
+    THE COUNT: a bare number is a thing a reader cannot check."""
+    out = ["", f"{title} ({len(rows)}):"]
+    for d in rows[:limit]:
+        out.append(f"  {d['lane']}/{d['fixture']} {d['part']}: {la}={d['a']}  {lb}={d['b']}")
+    if len(rows) > limit:
+        out.append(f"  ... and {len(rows) - limit} more, not shown; run with --json for all of them")
+    return out
+
+
+def format_compare(r):
+    p, la, lb = r["provenance"], r["labels"]["a"], r["labels"]["b"]
+    lines = ["# python -m mojolearn verify --compare", ""]
+    if r["problems"]:
+        lines.append("THESE FILES ARE NOT BOTH READABLE EVIDENCE DOCUMENTS:")
+        for m in r["problems"][:20]:
+            lines.append(f"  {m}")
+        if len(r["problems"]) > 20:
+            lines.append(f"  ... and {len(r['problems']) - 20} more")
+        lines.append("")
+        lines.append("RESULT: MALFORMED. Nothing was compared, and this is NOT a pass.")
+        return "\n".join(lines)
+    lines.append(f"  {'':<22} {la:<34} {lb}")
+    for key, name in (("mojolearn_version", "version"), ("commit", "commit"),
+                      ("vendor", "vendor"), ("device_class", "class"),
+                      ("device", "device"), ("cpu_model", "cpu"), ("python", "python")):
+        av, bv = str(p["a"].get(key)), str(p["b"].get(key))
+        mark = "" if av == bv else "   <- differs"
+        lines.append(f"  {name:<22} {av[:34]:<34} {bv[:34]}{mark}")
+    lines.append(f"  {'bindings hashed':<22} {len(p['bindings_a']):<34} {len(p['bindings_b'])}")
+    lines.append(f"  {'its own verdict':<22} {str(p['own_verdict_a'])[:34]:<34} "
+                 f"{str(p['own_verdict_b'])[:34]}")
+    for lbl, key in ((la, "own_detail_a"), (lb, "own_detail_b")):
+        if p.get(key):
+            lines.append(f"    {lbl}: {p[key]}")
+    lines.append("")
+    if p["same_document"]:
+        lines.append("THESE TWO FILES ARE BYTE-IDENTICAL. That is one document handed over twice,")
+        lines.append("not two parties comparing, and it can only ever agree with itself.")
+    elif p["independent"]:
+        lines.append("These documents come from DIFFERENT hardware classes, which is what makes")
+        lines.append("this worth doing: agreement here is two independent machines reaching the")
+        lines.append("same bits.")
+    elif p["same_device"]:
+        lines.append("WARNING: both documents describe the SAME device. Agreement then shows")
+        lines.append("repeatability, not cross-hardware identity, and proves much less.")
+    else:
+        lines.append("NOTE: these documents share a device class. Agreement is weaker evidence")
+        lines.append("than two genuinely different vendors would give.")
+    lines.append("")
+    lines.append(f"  agree {r['agree']}   differ {r['differ']}   self-contradicted {r['moved']}   "
+                 f"neither computed {r['uncomputed']}   agreed on a divergence "
+                 f"{r['agreed_divergent']}")
+    lines.append(f"  n/a agreed {r['n_a']}   n/a differing {r['n_a_differing']}   "
+                 f"only in {la}: {len(r['only_in_a'])}   only in {lb}: {len(r['only_in_b'])}")
+    if r["differing"]:
+        lines += _cell_lines("DIFFERING CELLS", r["differing"], la, lb)
+    if r["agreed_divergent_cells"]:
+        lines += _cell_lines("AGREED, BUT ONE SIDE JUDGED THESE VERY BITS DIVERGENT",
+                             r["agreed_divergent_cells"], la, lb)
+    if r["self_contradicted"]:
+        lines += _cell_lines("SELF-CONTRADICTED CELLS, a box that disagreed with ITSELF",
+                             r["self_contradicted"], la, lb)
+    if r["not_computed"]:
+        lines += _cell_lines("NEITHER SIDE COMPUTED THESE, so they are two absences, not a match",
+                             r["not_computed"], la, lb)
+    if r["n_a_differing_cells"]:
+        lines += _cell_lines("DIFFERENT n/a REASONS, a disagreement about what the part is",
+                             r["n_a_differing_cells"], la, lb)
+    for label, keys in ((la, r["only_in_a"]), (lb, r["only_in_b"])):
+        if keys:
+            lines.append("")
+            lines.append(f"ONLY IN {label} ({len(keys)}), not comparable:")
+            for k in keys[:20]:
+                lines.append(f"  {k[0]}/{k[1]} {k[2]}")
+            if len(keys) > 20:
+                lines.append(f"  ... and {len(keys) - 20} more")
+    lines.append("")
+    if r["verdict"] == "AGREE":
+        lines.append(f"RESULT: AGREE. {r['agree']} cell parts match across both documents, none")
+        lines.append("differ, and none is present in only one. Neither machine trusted the other,")
+        lines.append("and neither had to trust us.")
+    elif r["verdict"] == "MISMATCH":
+        lines.append(f"RESULT: MISMATCH. {r['differ']} cell parts differ; they are named above.")
+    elif r["verdict"] == "SELF-CONTRADICTED":
+        lines.append(f"RESULT: SELF-CONTRADICTED. No cell differs BETWEEN the documents, but "
+                     f"{r['moved']} cell")
+        lines.append("part(s) record a box that gave two different answers for the same fit. Two")
+        lines.append("documents agreeing on that agree the claim is false, which is not a pass.")
+    elif r["verdict"] == "AGREED ON A DIVERGENT ANSWER":
+        lines.append(f"RESULT: AGREED ON A DIVERGENT ANSWER. The two documents match on every")
+        lines.append(f"shared cell, but {r['agreed_divergent']} of them carry a hash that one side "
+                     "judged DIVERGENT")
+        lines.append("against its own reference table. Two machines reaching the same wrong answer")
+        lines.append("is a finding, not a pass.")
+    elif r["verdict"] == "SAME DOCUMENT":
+        lines.append("RESULT: SAME DOCUMENT. The two files are byte-identical, so nothing was")
+        lines.append("compared. A document cannot corroborate itself.")
+    elif r["verdict"] == "NOTHING COMPARED":
+        lines.append("RESULT: NOTHING COMPARED. The two documents share no cell, so there is")
+        lines.append("nothing to agree or disagree about.")
+    else:
+        missing = len(r["only_in_a"]) + len(r["only_in_b"])
+        lines.append("RESULT: INCOMPLETE. Absence is not agreement.")
+        lines.append(f"No cell differs, but {missing} cell part(s) appear in only one document, "
+                     f"{r['uncomputed']}")
+        lines.append(f"were computed by neither side, and {r['n_a_differing']} carry different n/a "
+                     "reasons, so the two")
+        lines.append("runs did not cover the same ground.")
+    return "\n".join(lines)
+
+
+def _cmd_compare(args):
+    """`verify --compare A B`: diff two evidence documents. No GPU, no bindings.
+
+    EVERY PATH OUT OF HERE PRINTS ONE `RESULT:` LINE and returns a documented
+    exit code. A command that dies with a traceback exits 1, which is the code
+    for MISMATCH, and an empty stdout is indistinguishable from a run that was
+    never made; neither may be mistaken for the pass this is used to claim.
+    """
+    pa, pb = args.compare
+    try:
+        if os.path.realpath(pa) == os.path.realpath(pb):
+            return _compare_refusal(args, EXIT_USAGE, "SAME FILE",
+                                    f"both arguments name the same file ({os.path.realpath(pa)}). "
+                                    "Two parties compare TWO documents; one file passed twice "
+                                    "compares nothing and could only ever agree.")
+        docs = []
+        for p in (pa, pb):
+            try:
+                with open(p, "r", encoding="utf-8") as fh:
+                    docs.append(json.load(fh))
+            except (OSError, ValueError) as exc:
+                return _compare_refusal(args, EXIT_USAGE, "CANNOT READ", f"cannot read {p}: {exc}")
+        r = compare_documents(docs[0], docs[1], os.path.basename(pa), os.path.basename(pb))
+    except Exception as exc:                      # never let a crash exit 1 and read as MISMATCH
+        return _compare_refusal(args, EXIT_CANNOT_RUN, "CANNOT RUN",
+                                f"comparing raised {type(exc).__name__}: {exc}")
+    if getattr(args, "json", False):
+        _emit(json.dumps(r, indent=1, sort_keys=True))
+    else:
+        _emit(format_compare(r))
+    return r["exit"]
+
+
+def _compare_refusal(args, code, headline, detail):
+    """A refusal shaped like a compare result, so a reader parsing `format` is
+    not handed a `verify-all-report` that never ran."""
+    if getattr(args, "json", False):
+        _emit(json.dumps(dict(format="mojolearn.verify-compare.v1", verdict=headline,
+                              exit=code, detail=detail), indent=1, sort_keys=True))
+    else:
+        _emit("# python -m mojolearn verify --compare\n\n"
+              f"RESULT: {headline}. {detail}")
+    return code
+
+
 def detail_line(counts):
     """The sentence under the verdict. It leads with how much of the run was
     actually checked, so `verified 44 of 332 cell parts` cannot be misread as
@@ -603,6 +1244,12 @@ def cmd_verify_all(args):
     started = time.time()
     json_out = getattr(args, "json", False)
     log = (lambda s: _emit(s, sys.stderr)) if json_out else _emit
+    # BEFORE ANY IMPORT OR TIER CHECK: comparing two evidence documents is a
+    # pure function over two JSON files. It needs no GPU, no bindings and no
+    # numeric mode, so it must not be gated behind them -- the whole point is
+    # that a third party can run it on a machine that has none of ours.
+    if getattr(args, "compare", None):
+        return _cmd_compare(args)
     try:
         depth = _depth(args)
     except ValueError as exc:
@@ -629,6 +1276,8 @@ def cmd_verify_all(args):
         return _cmd_emit_models(args, ml)
     if getattr(args, "self_test", False):
         return _cmd_self_test(args, ml)
+    if getattr(args, "cross_check", None):
+        return _cmd_cross_check(args, ml)
 
     try:
         table_file = getattr(args, "reference_table", None) or vref.table_path()
@@ -775,6 +1424,32 @@ def cmd_verify_all(args):
         report["self_test"] = self_test(harness, ml, table)
     except Exception as exc:
         report["self_test"] = dict(passed=None, error=f"{type(exc).__name__}: {exc}"[:200])
+
+    # THE THIRD CHECK, in the same artifact (lane/verify-cross-check,
+    # 2026-09-16). A reader's agent should see all three at once, because they
+    # answer different questions and only together mean much:
+    #   1 this machine's GPU against its own CPU  -- trusts nobody
+    #   2 this machine against our recorded columns -- trusts the table, which
+    #     is auditable because the raw columns are committed
+    #   3 the self-test -- shows the comparison can fail at all
+    # On a CPU-only install (1) records that it did not run and why, which is
+    # not a pass; it is never silently omitted.
+    # IT IS NOT RUN IMPLICITLY, and that is a deliberate reversal. Folding a
+    # cross-check into every --all seemed right (one artifact, all three
+    # checks) until the shape of it was clear: on a GPU box it makes a
+    # documented command ACQUIRE THE GPU as a side effect. Two runs at once, or
+    # a run beside a gate, would then contend for the single Metal device --
+    # the concurrency that previously returned NaN, constant and zero outputs
+    # in two lanes. A command that quietly grabs a scarce device is the hidden
+    # coupling this lane exists to remove, so --all records that the
+    # cross-check was not run AND HOW TO RUN IT, which is not a pass, and
+    # `verify --cross-check` stays the explicit door.
+    report["cross_check"] = dict(
+        ran=False, passed=None, scope=None,
+        reason=("not run: --all does not take the GPU implicitly, because that would make this "
+                "command contend for the single GPU with any other run. Use "
+                "`python -m mojolearn verify --cross-check` to compare this machine's GPU "
+                "against its CPU; on a CPU-only install that will say so rather than skip."))
 
     if json_out:
         _emit(json.dumps(report, indent=1, sort_keys=True))
