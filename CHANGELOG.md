@@ -3,7 +3,7 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## Unreleased (0.8.7 prep)
+## 0.8.7 (unreleased 2026-09-16)
 
 **0.8.6 WAS NEVER PUBLISHED, and its number is skipped.** It was frozen on branch
 release/0.8.6, built on three GPU boxes, packed, audited and partly recorded, and then folded
