@@ -128,6 +128,12 @@ _MOJO_IMPORT_RE = re.compile(r"^\s*(?:from\s+([a-zA-Z0-9_.]+)\s+import|import\s+
 #: edges it would have contributed were the ones dropped here.
 ENUMERATOR_MAX_BINDINGS = 3
 
+#: A package file extended (subclassed or patched) by more than this many
+#: others defines a base everything inherits, and "X extends it" then says
+#: nothing about which lane X belongs to. Measured 2026-09-16: 23 for
+#: `_mode.py` against 2 for the next, so the gap is not close.
+UNIVERSAL_BASE_MAX_EXTENDERS = 3
+
 
 #: PER-FILE RESULTS ARE MEMOIZED, because the map asks the same question of
 #: the same file once per lane. Without this, deriving the map parsed each
@@ -158,7 +164,7 @@ def _by_path(fn):
 def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
-    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS
+    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
     for cache in _CACHES:
         cache.clear()
     _GIT_SHOW.clear()
@@ -167,6 +173,7 @@ def reset_caches():
     _LANE_SOURCES = None
     _SOURCE_HASHED = None
     _CONSTANTS = None
+    _EXTENDERS = None
 
 
 @_by_path
@@ -326,19 +333,126 @@ def enumerator_files():
     return _ENUMERATORS
 
 
+@_by_path
+def _extends(rel):
+    """The names this file's top-level classes INHERIT from, and the names it
+    assigns an attribute on at module level.
+
+    Both are edges that run BACKWARDS along the import graph, and the map
+    followed imports forward only. `neural_inference.py` defines
+    `Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block)`: it imports
+    `_mamba_impl`, so `_mamba_impl` never reaches IT, and the mamba and samba
+    lanes were credited with three of the six lanes that file serves. Deleting
+    those wrappers' `forward` overrides is about as load-bearing as an edit to
+    that file gets, and the map called it none of their business.
+
+    Reported by lane/stateful-cpu-decoding 2026-09-16. An under-attribution is
+    silent and reads as a narrow PASS, which is the failure every other rule
+    here is written against."""
+    tree = _parse(rel)
+    out = set()
+    for node in (tree.body if tree else []):
+        if isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                name = getattr(base, "id", None) or getattr(base, "attr", None)
+                if name:
+                    out.add(name)
+        elif isinstance(node, ast.Assign):
+            # MONKEYPATCHING. `SomeClass.method = f` at module level rebinds
+            # behaviour on a class defined somewhere else entirely.
+            for target in node.targets:
+                if isinstance(target, ast.Attribute):
+                    owner = getattr(target.value, "id", None)
+                    if owner:
+                        out.add(owner)
+    return out
+
+
+_EXTENDERS = None
+
+
+def extenders():
+    """file -> the package files it extends, by subclassing or by patching a
+    class on. Built once over the package, then used to walk the import graph
+    BACKWARDS from a lane's closure."""
+    global _EXTENDERS
+    if _EXTENDERS is None:
+        symbols = _python_symbols(_python_files())
+        raw = {}
+        for rel in _python_files():
+            targets = set()
+            for name in _extends(rel):
+                for other in symbols.get(name, ()):
+                    if other != rel:
+                        targets.add(other)
+            if targets:
+                raw[rel] = targets
+        # A BASE EVERYTHING INHERITS IS NOT EVIDENCE ABOUT ONE LANE, the same
+        # argument that makes a whole-surface registry a sink. Measured on this
+        # tree 2026-09-16: `python/mojolearn/_mode.py` is extended by 23
+        # package files and the next most-extended is extended by 2, so every
+        # lane reached _mode.py, pulled in all 23, and the median file went
+        # from 32 lanes to 197. Nothing is lost by dropping it: a change to
+        # _mode.py itself still selects everything that imports it, and an
+        # extender is attributed by its own ordinary edges.
+        fan = {}
+        for targets in raw.values():
+            for rel in targets:
+                fan[rel] = fan.get(rel, 0) + 1
+        universal = {rel for rel, n in fan.items() if n > UNIVERSAL_BASE_MAX_EXTENDERS}
+        out = {}
+        for rel, targets in raw.items():
+            kept = targets - universal
+            if kept:
+                out[rel] = kept
+        _EXTENDERS = out
+    return _EXTENDERS
+
+
+def _extending_files(closure):
+    """Every package file that extends something in `closure`, transitively."""
+    edges = extenders()
+    out, changed = set(), True
+    while changed:
+        changed = False
+        for rel, targets in edges.items():
+            if rel in out or rel in closure:
+                continue
+            if targets & (closure | out):
+                out.add(rel)
+                changed = True
+    return out
+
+
 def _python_closure(seeds, sinks=()):
     """The package's own import closure of `seeds`. A sink is included but not
     followed: the walk stops at a registry rather than stepping through it into
     every other family."""
     out, stack = set(), list(seeds)
-    while stack:
-        rel = stack.pop()
-        if rel in out:
-            continue
-        out.add(rel)
-        if rel not in sinks:
-            stack.extend(_python_imports(rel))
-    return out
+    while True:
+        while stack:
+            rel = stack.pop()
+            if rel in out:
+                continue
+            out.add(rel)
+            if rel not in sinks:
+                stack.extend(_python_imports(rel))
+        # THE EDGE THAT RUNS BACKWARDS. A file that subclasses or patches a
+        # class in this closure can change what the lane computes even though
+        # nothing in the closure imports it.
+        #
+        # ITS IMPORTS ARE FOLLOWED TOO. Leaving them out was tried first and
+        # the whole-tree inversion check caught it: `mamba1` reached
+        # `neural_inference.py` without reaching the `_samba_impl` and
+        # `_transformer_impl` that file imports at module level, so "F imports
+        # B, therefore every lane reaching F reaches B" stopped holding. An
+        # invariant that holds over the WHOLE TREE is worth more than the few
+        # files it costs, and it cost nothing measurable here: the median file
+        # is 33 lanes either way.
+        fresh = _extending_files(out) - out
+        if not fresh:
+            return out
+        stack.extend(fresh)
 
 
 @_by_path
@@ -1544,6 +1658,33 @@ def selfcheck():
     return 1 if bad else 0
 
 
+def census(limit):
+    """The files the map credits with FEW lanes, which is where a missing edge
+    hides. A file serving six lanes that the map credits with three is the
+    shape to look for; that is exactly what `neural_inference.py` was on
+    2026-09-16, credited with mlp and the two transformer lanes while also
+    serving four mamba and two samba lanes through subclasses.
+
+    The two inversion checks in `tools/test_lane_select.py` are the
+    mechanical half of this and run over the whole tree. This is the half a
+    person reads."""
+    sources, _ = lane_sources()
+    rev = reverse_map(sources)
+    rows = sorted(((len(lanes), rel) for rel, lanes in rev.items() if len(lanes) <= limit),
+                  key=lambda r: (r[0], r[1]))
+    print(f"# {len(rows)} file(s) attributed to {limit} lane(s) or fewer, of {len(rev)} mapped")
+    for n, rel in rows:
+        defines = ""
+        if rel.endswith(".py"):
+            tree = _parse(rel)
+            names = [x.name for x in (tree.body if tree else [])
+                     if isinstance(x, (ast.ClassDef, ast.FunctionDef))]
+            defines = " defines " + ",".join(names[:6]) + ("..." if len(names) > 6 else "")
+        print(f"#   {n:>3} {rel}{defines}")
+    print(f"# {len(rows)} file(s); a file here that serves more lanes than this is a missing edge")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--changed-since", metavar="REF",
@@ -1559,6 +1700,9 @@ def main(argv=None):
     ap.add_argument("--json", default="", metavar="PATH", help="write the selection as JSON")
     ap.add_argument("--selfcheck", action="store_true", help="every lane maps to real files")
     ap.add_argument("--count", action="store_true", help="print the registry's lane count and exit")
+    ap.add_argument("--census", type=int, default=0, metavar="N",
+                    help="list the files the map attributes to N lanes or fewer, with what each "
+                         "file defines; a missing edge hides in a file credited with too few")
     args = ap.parse_args(argv)
 
     if args.count:
@@ -1566,6 +1710,8 @@ def main(argv=None):
         return 0
     if args.selfcheck:
         return selfcheck()
+    if args.census:
+        return census(args.census)
 
     sources, why = lane_sources()
     every = sorted(sources, key=list(sources).index)
