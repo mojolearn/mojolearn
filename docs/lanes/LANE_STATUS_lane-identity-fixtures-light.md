@@ -83,13 +83,44 @@ bound for the `par-*` ones, which ran far above median on AMD):
 | as scoped for 0.8.6 | 35,497 | **9.86** |
 | with `par-*` out of scope (section 2) | 32,362 | **8.99** |
 
-**Keep the proportions honest.** Of that ~9.9 h column, the Metal queue leak
-is about **13,063 s (3.6 h, 37%)**, `par-*` is about **0.9 h**, and the two
-lanes this branch can actually shrink, hdbscan and hdbscan-leaf, are
-**910 s together, about 2.5%**. Fixture shrinking is real but it is the
-SMALLEST of the three levers. A session that wants the Apple pass to be
-affordable should spend its next hour on lane/metal-queue-leak phase 2, not
-on fixtures.
+### Keep the proportions honest, and label how each one was produced
+
+An earlier revision of this file split the ~9.9 h column three ways and
+presented all three as measurements. **One of them was an inference and it is
+retracted here.** Each number below now carries its provenance.
+
+| figure | value | how it was produced |
+|---|---|---|
+| hdbscan + hdbscan-leaf | 910 s, ~2.5% | **MEASURED.** Their record times (471 s, 439 s), cross-checked against direct Metal re-runs at 45.7 and 47.8 s per fixture |
+| `par-*` | ~0.9 h | **ESTIMATED.** 39 lanes never run on Apple x the 80 s measured median. A lower bound, not a measurement; no `par-*` lane was ever timed on this column |
+| "queue leak" | ~3.6 h | **RETRACTED. This was an inference presented as a measurement.** |
+
+**The retraction, in full.** The 13,063 s figure is the summed wall time of
+lanes whose group ran while the sampled queue count was above 60. That is an
+ASSOCIATION between two observations. It is not a subtraction of observed cost
+minus healthy cost, and no such subtraction was ever performed, so it never
+measured time LOST. The true lost time is unknown, bounded above by 13,063 s
+and plausibly far below it.
+
+**And the cause it named does not exist.** lane/metal-queue-leak established
+that device contexts are held as FIELDS ON MODEL AND POOL OBJECTS, so a
+process holding many live models legitimately holds many queues. That fits the
+data better than "leak" did: the groups whose counts climbed are exactly the
+lanes that construct many models (`gbdt-parametric-losses` builds ten
+`GradientBoosting` models, `gbdt-adapter-clf` builds them and saves and
+reloads them), while `byte-lm` holds one trainer and stays flat at 23 for its
+whole life. **Queue count tracks live model objects.** It is a proxy for model
+count, not evidence of slowness.
+
+What that costs: the GBDT family's time is now attributed to NOTHING, so the
+"leave big" verdict that rested on it has been withdrawn (they are undecided
+in `docs/lanes/FIXTURE_SHRINK_SCOPE.md` pending measurement). Their fixtures
+are in fact LARGE, since they fit the full 20,000 x 16 fixture, so they may
+turn out to be the best shrink target in the harness.
+
+The lesson for this repository is its own rule, measure before attributing. A
+queue count going up while a lane is slow does not make the queues the reason
+the lane is slow.
 
 **Finding: roughly half the Apple column's wall time is a runtime queue leak,
 not fixture size.** Shrinking the GBDT fixtures would be treating a runtime
@@ -207,13 +238,21 @@ per-fixture arithmetic used everywhere above (record seconds / 9 fixtures):
 | hdbscan | 52.3 s | **45.7 s** | 17.4 s |
 | hdbscan-leaf | 48.8 s | **47.8 s** | 19.0 s |
 | samba-untied-dropout-accum | 173.4 s | **168.0 s** | 33.8 s |
+| byte-lm | 221.7 s | **231.8 s** | 5.2 s |
 
-Three independent measurements of the same quantity agreeing inside ~12% (two
-of them inside 3%), with the CPU route a factor of 2.5 to 5 away from all of
+Four independent measurements of the same quantity agreeing inside ~12% (three
+of them inside 5%), with the CPU route a factor of 2.5 to 45 away from all of
 them, is the check that the Metal column really is Metal and that dividing a
 record group by 9 is a sound per-fixture unit. The column projections in
 section 1b-i rest on that unit, including for the lanes that cannot be
 re-measured.
+
+The byte-lm row also confirms the framing this lane was handed: 231.8 s per
+fixture over nine fixtures is **34.8 minutes** to prove that lane's numbers
+equal, against the 33 minutes the record shows. The number is real. What the
+CPU column proves is that **5.2 s of it is arithmetic** and the rest is the
+harness talking to the device; see 1c and 1d for why that is a probe-count
+problem rather than a fixture problem.
 
 ### 1f. LEFT BIG: samba-untied-dropout-accum, and the paths only the large input reaches
 
@@ -271,9 +310,17 @@ per leg from the lanes already recorded:
       SKIP=$(python3 -c "... {k.split('/')[0] for k in j['cells']} ...")
 
 `--skip` is resume bookkeeping, not scope. So `tools/identity_break.py`'s
-`LANES` dict has been the record's scope by default, and the scope is now
-stated explicitly in that file as `RECORD_EXCLUDED_LANES`, with the reason
-beside it.
+`LANES` dict has been the record's scope by default. The scope is now stated
+explicitly in that file, with the reasons beside it:
+
+    RECORD_EXCLUDED_PREFIXES = ("par-",)   # the declaration
+    record_excluded_lanes()                # 39 lanes, derived from LANES
+    record_lanes()                         # the 160 a record runs
+
+and enforced in `run()`: a FULL-COLUMN run (no `--lanes`) drops them and
+prints `# OUT OF RECORD SCOPE (39 lanes): ...`. `--lanes` is never filtered,
+so the two-device `par` legs and the CPU identity gate, which both pass
+`--lanes` explicitly, are unaffected.
 
 ### What is excluded and why
 
