@@ -12,6 +12,7 @@ selector goes quiet, not merely if it errors.
     .pixi/envs/test/bin/python -m pytest tools/test_lane_select.py -q
     python3 tools/test_lane_select.py          # same checks, no pytest
 """
+import ast
 import os
 import re
 import sys
@@ -560,7 +561,13 @@ def test_a_test_module_is_inert_unless_something_outside_the_tests_imports_it():
         "gone, this control is gone with it and needs replacing, not deleting.")
 
     inert = [n for n in names if lane_select.test_module_inert("python/mojolearn/tests/" + n)]
-    assert len(inert) >= len(names) - 5, \
+    # The floor is HALF, not "nearly all". It was 124 of 125 while the check
+    # looked for import STATEMENTS; closing the dynamic-import hole by
+    # searching for the module NAME anywhere outside the tests directory took
+    # it to 91 of 125, because 33 modules are mentioned by a workflow, a script
+    # or a requirements file. That is the trade this rule is supposed to make.
+    # The floor exists to catch the rule dying, not to pin a number.
+    assert len(inert) > len(names) // 2, \
         f"only {len(inert)} of {len(names)} test modules read inert; the rule stopped firing"
 
     for rel in ("python/mojolearn/cluster.py", "python/mojolearn/host_surface.py",
@@ -701,6 +708,132 @@ def test_the_source_hygiene_patterns_still_fire():
     import source_hygiene_check
 
     assert source_hygiene_check.self_test() == 0, "a source hygiene pattern no longer fires"
+
+
+# --------------------------------------------------------------------------
+# THE ADVERSARIAL PASS, 2026-09-16. Everything above asks whether a rule
+# narrows when it should. These ask the question that costs a defect rather
+# than an afternoon: can a rule be made to report a NARROW answer for a change
+# that genuinely moves a cell. Four could. Each attack is kept beside the
+# control it must not break, because a fix that refuses everything passes the
+# attack and destroys the rule.
+# --------------------------------------------------------------------------
+
+def _harness_answer_pair(old, new):
+    ref, path = "<fake ref>", "<fake harness>"
+    lane_select._GIT_SHOW[f"{ref}:{path}"] = old
+    lane_select._read.cache[path] = new
+    try:
+        return lane_select.harness_lanes(ref, path)
+    finally:
+        lane_select._GIT_SHOW.pop(f"{ref}:{path}", None)
+        lane_select._read.cache.pop(path, None)
+
+
+def test_a_lane_carrying_a_second_decorator_is_not_a_lane_body():
+    """ATTACK. `@mutate_everything` above `@lane("beta")` was admitted as one
+    new lane. The other decorator RUNS at import and can touch a fixture
+    table, a registry or another lane's defaults."""
+    base = '@lane("alpha")\ndef _alpha():\n    return 1\n'
+    attacked = base + '\n\n@mutate_everything\n@lane("beta")\ndef _beta():\n    return 2\n'
+    assert _harness_answer_pair(base, attacked) is None, \
+        "a new lane carrying a second decorator was narrowed"
+    plain = base + '\n\n@lane("beta")\ndef _beta():\n    return 2\n'
+    assert _harness_answer_pair(base, plain) == ["beta"], \
+        "the fix broke the ordinary added lane, which is the whole point of the rule"
+
+
+def test_two_registry_keys_that_are_the_same_value_are_not_an_addition():
+    """ATTACK. `"mojolearn-dbscan-" + "1"` beside `"mojolearn-dbscan-1"` is a
+    different EXPRESSION and the same VALUE, so the later entry overrides the
+    earlier one and an existing lane's dispatch moves. It was admitted as an
+    addition."""
+    base = 'FORMATS = {\n    "mojolearn-dbscan-1": {"DBSCAN": HostDBSCAN},\n}\n'
+    attacked = base.replace("}\n", '    "mojolearn-dbscan-" + "1": {"DBSCAN": HostOther},\n}\n')
+    assert _registry_answer(attacked, base) is None, \
+        "a key equal in value to an existing one was admitted as an addition"
+    genuine = base.replace("}\n", '    "mojolearn-kmeans-1": {"KMeans": HostKMeans},\n}\n')
+    answer = _registry_answer(genuine, base)
+    assert answer and "kmeans" in answer, \
+        "the fix broke the ordinary additive entry, which is the whole point of the rule"
+
+
+def test_a_test_module_named_any_way_at_all_is_not_inert():
+    """ATTACK. `importlib.import_module('mojolearn.tests.test_host_model_kmeans')`
+    is invisible to an import-statement regex, and the module was called
+    inert. The NAME is searched now, anywhere outside the tests directory, so
+    a dynamic import, a `python -m` line and a bare mention all count. That
+    cost 33 modules of narrowing (124 of 125 down to 91 of 125) and is the
+    right trade: over-firing here costs a sweep, under-firing costs a defect."""
+    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
+    before = open(manifest, encoding="utf-8").read()
+    target = "python/mojolearn/tests/test_host_model_kmeans.py"
+    try:
+        lane_select.reset_caches()
+        assert lane_select.test_module_inert(target), f"{target} should be inert to begin with"
+        with open(manifest, "w") as fh:
+            fh.write(before + "\n_DYN = __import__('importlib').import_module("
+                     "'mojolearn.tests.test_host_model_kmeans')\n")
+        lane_select.reset_caches()
+        assert lane_select.test_module_inert(target) is None, \
+            "a test module imported dynamically by string was still called inert"
+    finally:
+        with open(manifest, "w") as fh:
+            fh.write(before)
+        lane_select.reset_caches()
+
+
+def test_a_directory_named_without_its_slash_still_counts():
+    """ATTACK. `os.path.join('armprobedir', name + '.bin')` names the
+    directory without ever writing a slash, so the path tokens saw nothing and
+    a file in it was called unreachable. Path-building calls are read
+    STRUCTURALLY, not as text, because the bare word `umap` is also a package
+    module and a family-table entry and matching those would send every new
+    file under `umap/` to a sweep."""
+    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
+    before = open(manifest, encoding="utf-8").read()
+    probe_dir = os.path.join(lane_select.ROOT, "armprobedir")
+    rel = "armprobedir/armprobefixture.bin"
+    os.makedirs(probe_dir, exist_ok=True)
+    try:
+        with open(os.path.join(lane_select.ROOT, rel), "w") as fh:
+            fh.write("x\n")
+        lane_select.reset_caches()
+        assert lane_select.unreachable(rel), f"{rel} should be unreachable to begin with"
+        with open(manifest, "w") as fh:
+            fh.write(before + "\nimport os as _o\n_ARM = _o.path.join('armprobedir', 'x' + '.bin')\n")
+        lane_select.reset_caches()
+        assert lane_select.unreachable(rel) is None, \
+            "a directory handed to os.path.join without a slash did not count as naming it"
+    finally:
+        with open(manifest, "w") as fh:
+            fh.write(before)
+        probe = os.path.join(lane_select.ROOT, rel)
+        if os.path.exists(probe):
+            os.unlink(probe)
+        if os.path.isdir(probe_dir) and not os.listdir(probe_dir):
+            os.rmdir(probe_dir)
+        lane_select.reset_caches()
+
+
+def test_no_docstring_is_read_back_at_run_time():
+    """The docstring rule rests on nothing consuming a docstring as a VALUE.
+    That is an absence claim, so it is checked rather than assumed: the only
+    `__doc__` in the package and the harness are ASSIGNMENTS in the kde, knn,
+    radius, gp and gmm registration loops, which are code and survive the
+    strip, plus argparse help."""
+    bad = []
+    pkg = os.path.join(lane_select.ROOT, lane_select.PKG)
+    paths = [os.path.join(pkg, n) for n in sorted(os.listdir(pkg)) if n.endswith(".py")]
+    paths.append(os.path.join(lane_select.ROOT, lane_select.HARNESS))
+    for path in paths:
+        tree = lane_select._parse(os.path.relpath(path, lane_select.ROOT))
+        for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+            if isinstance(node, ast.Attribute) and node.attr == "__doc__" \
+                    and isinstance(node.ctx, ast.Load):
+                bad.append(f"{os.path.relpath(path, lane_select.ROOT)}:{node.lineno}")
+    assert not bad, ("a docstring is READ as a value, so a docstring-only change can reach it: "
+                     f"{bad[:5]}")
 
 
 def _main():

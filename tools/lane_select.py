@@ -158,7 +158,7 @@ def _by_path(fn):
 def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
-    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED
+    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS
     for cache in _CACHES:
         cache.clear()
     _GIT_SHOW.clear()
@@ -166,6 +166,7 @@ def reset_caches():
     _ENUMERATORS = None
     _LANE_SOURCES = None
     _SOURCE_HASHED = None
+    _CONSTANTS = None
 
 
 @_by_path
@@ -861,20 +862,27 @@ def test_module_inert(path):
     module = os.path.basename(path)[:-3]
     if len(module) < 4:
         return None
-    pattern = re.compile(_IMPORT_OF.format(re.escape(module)))
+    # NOT AN IMPORT LINE. Attacked 2026-09-16 with
+    # `importlib.import_module('mojolearn.tests.test_host_model_kmeans')`,
+    # which an import-statement regex cannot see and which was called inert.
+    # The module NAME is searched instead, anywhere outside the tests
+    # directory, so a dynamic import, a `python -m` line in a script and a
+    # bare mention all count. Over-firing here only costs a sweep.
     importers = []
     for rel in sorted(tracked_files()):
-        if rel.startswith(TESTS) or _is_inert(rel) or not rel.endswith((".py", ".sh", ".toml")):
+        if rel.startswith(TESTS) or _is_inert(rel) or rel in SELECTION_MACHINERY:
+            continue
+        if not rel.endswith((".py", ".sh", ".toml", ".yml", ".yaml", ".cfg", ".txt", ".in")):
             continue
         try:
-            if pattern.search(_read(rel)):
+            if module in _read(rel):
                 importers.append(rel)
         except OSError:
             continue
     if importers:
         return None
     return ("a test module: it is outside the map by construction, because a test cannot change "
-            "what a lane computes, and nothing outside python/mojolearn/tests/ imports it")
+            "what a lane computes, and its name appears nowhere outside python/mojolearn/tests/")
 
 
 def _reaching_corpus():
@@ -951,6 +959,39 @@ def _named_by_the_corpus(token, skip=(), whole=False):
     return out
 
 
+_JOINERS = frozenset({"join", "Path", "PurePosixPath", "open", "glob", "iglob", "rglob"})
+
+
+@_by_path
+def _path_join_roots(rel):
+    """String constants this Python file hands to a path-building call as its
+    FIRST argument: `os.path.join('bench', name)` yields 'bench'. A directory
+    named this way is being walked or built on, even though its name never
+    appears with a slash."""
+    tree = _parse(rel)
+    out = set()
+    for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+        if not isinstance(node, ast.Call):
+            continue
+        name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+        if name not in _JOINERS:
+            continue
+        for arg in node.args:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                out.add(arg.value.strip("/"))
+            elif isinstance(arg, ast.BinOp) and isinstance(arg.left, ast.Constant) \
+                    and isinstance(arg.left.value, str):
+                out.add(arg.left.value.strip("/"))
+    return out
+
+
+def _joined_with(directory, skip=()):
+    """The corpus files that hand `directory` to a path-building call."""
+    return [rel for rel in _reaching_corpus()
+            if rel.endswith(".py") and rel not in skip and not _is_inert(rel)
+            and rel not in SELECTION_MACHINERY and directory in _path_join_roots(rel)]
+
+
 def unreachable(path):
     """Why NOTHING can reach `path`, or None when something might.
 
@@ -1000,8 +1041,50 @@ def unreachable(path):
         hits = _named_by_the_corpus(token, skip={path}, whole=whole)
         if hits:
             return None
+    for part in dict.fromkeys(parts):
+        # A DIRECTORY NAMED WITHOUT ITS SLASH, as a bare string handed to a
+        # path join. Attacked 2026-09-16 with
+        # `os.path.join('armprobedir', name + '.bin')`: the slash tokens above
+        # see nothing and the file was called unreachable. Searched
+        # STRUCTURALLY rather than as text, because the bare word `umap` is
+        # also the name of a package module and of a family-table entry, and
+        # matching those would send every new file under umap/ to a sweep.
+        if _joined_with(part, skip={path}):
+            return None
     return ("nothing reaches it: no lane's derived source set contains this path, and no file "
             "that any lane DOES reach names it, its stem or any directory above it")
+
+
+_CONSTANTS = None
+
+
+def module_constants():
+    """Module-level `NAME = "literal"` bindings across the package, so a key
+    written as `_KMEANS_FORMAT` can be compared with one written as
+    `"mojolearn-kmeans-1"`. Best effort: a name that does not resolve is left
+    unresolved and simply has to be new."""
+    global _CONSTANTS
+    if _CONSTANTS is None:
+        out = {}
+        for rel in _python_files():
+            tree = _parse(rel)
+            for node in (tree.body if tree else []):
+                if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            out.setdefault(target.id, node.value.value)
+        _CONSTANTS = out
+    return _CONSTANTS
+
+
+def _key_value(node):
+    """What a dict key resolves to, or None when it cannot be resolved."""
+    if isinstance(node, ast.Constant):
+        return ("const", node.value)
+    if isinstance(node, ast.Name):
+        value = module_constants().get(node.id)
+        return ("const", value) if value is not None else ("name", node.id)
+    return None
 
 
 def _stmt_key(node):
@@ -1029,6 +1112,18 @@ def _container_delta(old, new):
         nkeys = [ast.dump(k) for k in new.keys]
         kept = [k for k in nkeys if k in okeys]
         if kept != okeys or len(set(okeys)) != len(okeys):
+            return None
+        # TWO KEYS CAN BE DIFFERENT EXPRESSIONS AND THE SAME VALUE, and then
+        # the later one OVERRIDES the earlier and an existing lane's dispatch
+        # moves. Attacked 2026-09-16 with `"mojolearn-dbscan-" + "1"` beside
+        # `"mojolearn-dbscan-1"`, which was admitted as an addition. A key must
+        # be a literal or a bare name, and the values they resolve to must be
+        # distinct.
+        if any(not isinstance(k, (ast.Constant, ast.Name)) for k in new.keys):
+            return None
+        resolved = [_key_value(k) for k in new.keys]
+        seen = [v for v in resolved if v is not None]
+        if len(set(seen)) != len(seen):
             return None
         oval = dict(zip(okeys, old.values))
         added, changed = [], []
@@ -1208,13 +1303,22 @@ def _harness_segments(text):
     tree = _strip_docstrings(ast.parse(text))
     lanes, others = {}, []
     for node in tree.body:
-        names = [dec.args[0].value for dec in getattr(node, "decorator_list", [])
+        decorators = getattr(node, "decorator_list", [])
+        names = [dec.args[0].value for dec in decorators
                  if (isinstance(dec, ast.Call) and getattr(dec.func, "id", None) == "lane"
                      and dec.args and isinstance(dec.args[0], ast.Constant))]
         dump = ast.dump(node)
-        if names:
+        if names and len(names) == len(decorators):
             for name in names:
                 lanes[name] = dump
+        elif names:
+            # A LANE CARRYING A SECOND DECORATOR IS NOT A LANE BODY. The other
+            # decorator RUNS at import and can touch anything: a fixture table,
+            # a registry, another lane's defaults. Attacked 2026-09-16 with
+            # `@mutate_everything` above `@lane("beta")`, which was admitted as
+            # the one new lane. It goes to `others` now, so any change around
+            # it answers every lane.
+            others.append((getattr(node, "name", None), node, dump))
         else:
             others.append((getattr(node, "name", None), node, dump))
     return lanes, others
