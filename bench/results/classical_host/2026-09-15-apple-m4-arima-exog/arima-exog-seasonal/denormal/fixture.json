@@ -1,0 +1,8 @@
+{
+  "estimator": "ARIMA",
+  "heldout_seed": 1,
+  "kind": "denormal",
+  "lane": "arima-exog-seasonal",
+  "probe_rows": 512,
+  "x_sha256": "231c4c1b32ce7b345aec0e4bd540108b6790acd5cb12cb2ea9fd84bd50a9f800"
+}

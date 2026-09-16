@@ -98,6 +98,22 @@ _ARIMA_EXTRAS = {
 }
 
 
+def _arima_exog_future(X, rows):
+    """identity_break's arima-exog regressors over the first `rows` held-out
+    rows (`_arima_exog_block`), the future values the probe hands in."""
+    return identity_tool()._arima_exog_block(X, rows)
+
+
+#: The arima-exog lanes' surfaces (lane/arima-exog, 2026-09-15): the ARIMA
+#: extras, with the straddle's 16 future rows of regressors from the held-out
+#: draw, and the regression coefficients a loaded model answers.
+_ARIMA_EXOG_EXTRAS = dict(
+    _ARIMA_EXTRAS,
+    predict_straddle=lambda e, X: e.predict(e.n_obs_ - 16, e.n_obs_ + 16, exog=_arima_exog_future(X, 16)),
+    beta=lambda e, X: e.beta_,
+)
+
+
 def _hw_forecast_pair(e):
     """identity_break's Holt-Winters infer probe: forecast(H) through both
     return paths, the flat buffer and the `index=0` strided read, held to the
@@ -288,6 +304,13 @@ LANES = {
         _ARIMA_EXTRAS, ma=lambda e, X: e.ma_)),
     'arima-seasonal-c': ('ARIMA', lambda e, X: _forecast_pair(e), dict(
         _ARIMA_EXTRAS, ar=lambda e, X: e.ar_, sar=lambda e, X: e.sar_, mu=lambda e, X: e.mu_)),
+    # lane/arima-exog (2026-09-15): the probe is identity_break's
+    # `_arima_exog_probe` over the held-out draw's first FORECAST_HORIZON
+    # rows (LANE_PROBE_ROWS), so its hash is that column's cell.
+    'arima-exog': ('ARIMA', lambda e, X: identity_tool()._arima_exog_probe(e, X), dict(
+        _ARIMA_EXOG_EXTRAS, ar=lambda e, X: e.ar_, mu=lambda e, X: e.mu_)),
+    'arima-exog-seasonal': ('ARIMA', lambda e, X: identity_tool()._arima_exog_probe(e, X), dict(
+        _ARIMA_EXOG_EXTRAS, ar=lambda e, X: e.ar_, sar=lambda e, X: e.sar_)),
     # lane/inference-holtwinters (2026-09-15): the saved Holt-Winters models,
     # additive and multiplicative, through the forecast inference binding.
     'holtwinters': ('ExponentialSmoothing', lambda e, X: _hw_forecast_pair(e), _HW_EXTRAS),
@@ -360,6 +383,7 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'knn-reg': 'predict', 'logistic-multiclass': 'predict_proba',
                'pca-full-whiten': 'transform', 'umap': 'transform',
                'arima': 'forecast', 'arima-011': 'forecast', 'arima-seasonal-c': 'forecast',
+               'arima-exog': 'forecast', 'arima-exog-seasonal': 'forecast',
                'holtwinters': 'forecast', 'holtwinters-multiplicative': 'forecast',
                'ols-no-intercept': 'predict', 'ols-weighted': 'predict',
                'ridge-no-intercept': 'predict', 'logistic-l1': 'predict_proba',
@@ -415,7 +439,9 @@ def package_root(args):
 
 #: Lanes whose identity_break probe reads the whole held-out draw; every
 #: other lane reads its first PROBE_ROWS rows.
-LANE_PROBE_ROWS = {'iforest': None, 'iforest-tuned': None}
+LANE_PROBE_ROWS = {'iforest': None, 'iforest-tuned': None,
+                   # the regressors' future values over FORECAST_HORIZON rows
+                   'arima-exog': 512, 'arima-exog-seasonal': 512}
 
 
 def probe_rows(ib, lane, kind):

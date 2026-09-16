@@ -1,0 +1,134 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_forecast_host'] commit=a8e3a49c37ec20faf93e9e4671a5a0a5d8362e19
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_forecast_host'] commit=a8e3a49c37ec20faf93e9e4671a5a0a5d8362e19
+FIXTURE MISMATCH on 'denormal': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': '752323c375a1cbf5', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+FIXTURE MISMATCH on 'denormal_ftz': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': '34c156b0d0e8a891', 'y_clf': '3a1bce5286de1274', 'y_reg': '6988f4eaf25e42f9'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+FIXTURE MISMATCH on 'dupes': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': '9d9d9db7c7785a14', 'y_clf': 'd390ee2944b13e1d', 'y_reg': '135ce10f2a0817fe'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+FIXTURE MISMATCH on 'hashed': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': 'c93497b26fe65cda', 'y_clf': 'd104ead2f62bdd03', 'y_reg': 'ce4959d8070bb069'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+FIXTURE MISMATCH on 'negative': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': '08106ffff3256313', 'y_clf': '294ce4d7dadaf0bb', 'y_reg': 'ce1914d5f78f5707'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+FIXTURE MISMATCH on 'odd': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': '93d9611a09107bb9', 'y_clf': '273a388a705a4f40', 'y_reg': '25f3d126c81ca0ec'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+FIXTURE MISMATCH on 'ties': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': '186fe2109fc34ad5', 'y_clf': 'f33cf521f758ae3c', 'y_reg': '047d4652a4d56bc3'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+FIXTURE MISMATCH on 'wide': the columns were not handed the same bytes; cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': '35f6a8481e649eb8', 'y_clf': '276ebacc29267948', 'y_reg': '611fc5dd6367bef5'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+HELD-OUT MISMATCH on 'denormal': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': '5061056b118d07d0'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+HELD-OUT MISMATCH on 'denormal_ftz': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': 'a8c3d1a560b5cabb'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+HELD-OUT MISMATCH on 'dupes': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': 'e4b16c115962dfcd'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+HELD-OUT MISMATCH on 'hashed': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': '9dc786ade4574aff'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+HELD-OUT MISMATCH on 'negative': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': '45b539a3f66ce25d'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+HELD-OUT MISMATCH on 'odd': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': '32ea0bbed60b8e6c'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+HELD-OUT MISMATCH on 'ties': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': 'd1ba686494256660'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+HELD-OUT MISMATCH on 'wide': the columns were not handed the same held-out bytes; infer and model cells on it are the fixture's divergence, not the library's
+    cpu-amd-epyc-9655p-96-core-processor: {'X': 'd52a1af18a3c2f1c'}
+    cpu-amd-epyc-9655p-96-core-processor: None
+| lane/fixture                 | verdict    | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| arima-exog-seasonal/base     | DIVERGENT  | parts differ: beta,ar,sar,sigma2,forecast; agree: - | a51d012335f1200c |
+| arima-exog-seasonal/denormal | ONE-COLUMN | db005efa7d2bc517 | (not run)        |
+| arima-exog-seasonal/denormal_ftz | ONE-COLUMN | db005efa7d2bc517 | (not run)        |
+| arima-exog-seasonal/dupes    | ONE-COLUMN | 716663af2f675e1e | (not run)        |
+| arima-exog-seasonal/hashed   | ONE-COLUMN | ddb5e4a7881fb445 | (not run)        |
+| arima-exog-seasonal/negative | ONE-COLUMN | 9e92d02b880f0954 | (not run)        |
+| arima-exog-seasonal/odd      | ONE-COLUMN | 6ea94414246da114 | (not run)        |
+| arima-exog-seasonal/ties     | ONE-COLUMN | 637a2f39d5d40eea | (not run)        |
+| arima-exog-seasonal/wide     | ONE-COLUMN | 69c50e293c60f173 | (not run)        |
+| arima-exog/base              | DIVERGENT  | parts differ: beta,mu,sigma2,forecast; agree: ar | 847f5eefdf7eb461 |
+| arima-exog/denormal          | ONE-COLUMN | a540e07412fe0435 | (not run)        |
+| arima-exog/denormal_ftz      | ONE-COLUMN | a540e07412fe0435 | (not run)        |
+| arima-exog/dupes             | ONE-COLUMN | 2f628c52654e2724 | (not run)        |
+| arima-exog/hashed            | ONE-COLUMN | f61694f0445b2d3d | (not run)        |
+| arima-exog/negative          | ONE-COLUMN | 1a99c270f6b43778 | (not run)        |
+| arima-exog/odd               | ONE-COLUMN | a724e4c3c77b9c2d | (not run)        |
+| arima-exog/ties              | ONE-COLUMN | 2e313860637dab58 | (not run)        |
+| arima-exog/wide              | ONE-COLUMN | a17b576410730c15 | (not run)        |
+
+summary: DIVERGENT=2, ONE-COLUMN=16
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| arima-exog-seasonal/base     | infer  | DIVERGENT    | 0392c5518c63ed4d | 75465fead0e06d7a |
+| arima-exog-seasonal/base     | model  | DIVERGENT    | 6dd538a7ed348bcd | cbf33cc24017099a |
+| arima-exog-seasonal/base     | batch  | DIVERGENT    | 8cfb82c8b1e5204a | 93b691936f18ea21 |
+| arima-exog-seasonal/denormal | infer  | ONE-COLUMN   | 73bddff16649e238 | (not run)        |
+| arima-exog-seasonal/denormal | model  | ONE-COLUMN   | 47916d777fdf7a1e | (not run)        |
+| arima-exog-seasonal/denormal | batch  | ONE-COLUMN   | c366fcb72f5a1cde | (not run)        |
+| arima-exog-seasonal/denormal_ftz | infer  | ONE-COLUMN   | 73bddff16649e238 | (not run)        |
+| arima-exog-seasonal/denormal_ftz | model  | ONE-COLUMN   | 655c915176e34b1b | (not run)        |
+| arima-exog-seasonal/denormal_ftz | batch  | ONE-COLUMN   | c366fcb72f5a1cde | (not run)        |
+| arima-exog-seasonal/dupes    | infer  | ONE-COLUMN   | 0392c5518c63ed4d | (not run)        |
+| arima-exog-seasonal/dupes    | model  | ONE-COLUMN   | 6dd538a7ed348bcd | (not run)        |
+| arima-exog-seasonal/dupes    | batch  | ONE-COLUMN   | 8cfb82c8b1e5204a | (not run)        |
+| arima-exog-seasonal/hashed   | infer  | ONE-COLUMN   | 92a5f3575f52162e | (not run)        |
+| arima-exog-seasonal/hashed   | model  | ONE-COLUMN   | 98dacdf7f83a0ea7 | (not run)        |
+| arima-exog-seasonal/hashed   | batch  | ONE-COLUMN   | 8c9c124041fa0231 | (not run)        |
+| arima-exog-seasonal/negative | infer  | ONE-COLUMN   | 6fbe1b03160ddf99 | (not run)        |
+| arima-exog-seasonal/negative | model  | ONE-COLUMN   | 6df61f9b0e3d912b | (not run)        |
+| arima-exog-seasonal/negative | batch  | ONE-COLUMN   | 3f405565a07aedbc | (not run)        |
+| arima-exog-seasonal/odd      | infer  | ONE-COLUMN   | 8600ec544f57bd54 | (not run)        |
+| arima-exog-seasonal/odd      | model  | ONE-COLUMN   | 611c9b29cdf16288 | (not run)        |
+| arima-exog-seasonal/odd      | batch  | ONE-COLUMN   | 5a4988eab5262e8a | (not run)        |
+| arima-exog-seasonal/ties     | infer  | ONE-COLUMN   | 9a23b875558b8979 | (not run)        |
+| arima-exog-seasonal/ties     | model  | ONE-COLUMN   | 14bf7fc49e25c5bc | (not run)        |
+| arima-exog-seasonal/ties     | batch  | ONE-COLUMN   | 7f49a8b78175bfe2 | (not run)        |
+| arima-exog-seasonal/wide     | infer  | ONE-COLUMN   | 2e93bf12d7b45b77 | (not run)        |
+| arima-exog-seasonal/wide     | model  | ONE-COLUMN   | 1fe0449adb2ddf02 | (not run)        |
+| arima-exog-seasonal/wide     | batch  | ONE-COLUMN   | aa36d0df25f89009 | (not run)        |
+| arima-exog/base              | infer  | DIVERGENT    | 47a42389a7c18a25 | 1ab11f4a87c3995d |
+| arima-exog/base              | model  | DIVERGENT    | 270897d998bb6557 | 1b6c99d74bf19c1e |
+| arima-exog/base              | batch  | DIVERGENT    | d840092861e7cf68 | 744f2cfb47a74b09 |
+| arima-exog/denormal          | infer  | ONE-COLUMN   | c6b5b3538692eba0 | (not run)        |
+| arima-exog/denormal          | model  | ONE-COLUMN   | c3ab2dffbd90daa2 | (not run)        |
+| arima-exog/denormal          | batch  | ONE-COLUMN   | 86579187256ea38f | (not run)        |
+| arima-exog/denormal_ftz      | infer  | ONE-COLUMN   | c6b5b3538692eba0 | (not run)        |
+| arima-exog/denormal_ftz      | model  | ONE-COLUMN   | d31fdb6ed28b378b | (not run)        |
+| arima-exog/denormal_ftz      | batch  | ONE-COLUMN   | 86579187256ea38f | (not run)        |
+| arima-exog/dupes             | infer  | ONE-COLUMN   | 47a42389a7c18a25 | (not run)        |
+| arima-exog/dupes             | model  | ONE-COLUMN   | 270897d998bb6557 | (not run)        |
+| arima-exog/dupes             | batch  | ONE-COLUMN   | d840092861e7cf68 | (not run)        |
+| arima-exog/hashed            | infer  | ONE-COLUMN   | d1f6dae58ca38fc6 | (not run)        |
+| arima-exog/hashed            | model  | ONE-COLUMN   | 7a8acb745895f97b | (not run)        |
+| arima-exog/hashed            | batch  | ONE-COLUMN   | 407326029acbf498 | (not run)        |
+| arima-exog/negative          | infer  | ONE-COLUMN   | 24118bc0349bd37f | (not run)        |
+| arima-exog/negative          | model  | ONE-COLUMN   | 88e854113c47b02e | (not run)        |
+| arima-exog/negative          | batch  | ONE-COLUMN   | 3dc3207ebf330ebb | (not run)        |
+| arima-exog/odd               | infer  | ONE-COLUMN   | 0d8696d7fda83e82 | (not run)        |
+| arima-exog/odd               | model  | ONE-COLUMN   | ed44afca33203821 | (not run)        |
+| arima-exog/odd               | batch  | ONE-COLUMN   | a36825b2a47ca167 | (not run)        |
+| arima-exog/ties              | infer  | ONE-COLUMN   | 0a54764aac3e8750 | (not run)        |
+| arima-exog/ties              | model  | ONE-COLUMN   | af6358733525c1c0 | (not run)        |
+| arima-exog/ties              | batch  | ONE-COLUMN   | bdeada0870bfb5a6 | (not run)        |
+| arima-exog/wide              | infer  | ONE-COLUMN   | fa4ad43b61573ad3 | (not run)        |
+| arima-exog/wide              | model  | ONE-COLUMN   | f7dae018bf993756 | (not run)        |
+| arima-exog/wide              | batch  | ONE-COLUMN   | 9fe0205a307595c4 | (not run)        |
+
+summary (infer/model): DIVERGENT=4, ONE-COLUMN=32
+summary (batch): DIVERGENT=2, ONE-COLUMN=16
+summary (rlpair): 

@@ -1,0 +1,86 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_forecast_host'] commit=a8e3a49c37ec20faf93e9e4671a5a0a5d8362e19
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_forecast_host'] commit=a8e3a49c37ec20faf93e9e4671a5a0a5d8362e19
+| lane/fixture                 | verdict    | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| arima-exog-seasonal/base     | DIVERGENT  | parts differ: beta,ar,sar,sigma2,forecast; agree: - | a076d04f969daeca |
+| arima-exog-seasonal/denormal | DIVERGENT  | parts differ: beta,ar,sar,sigma2,forecast; agree: - | ab2d72177cb4ca0e |
+| arima-exog-seasonal/denormal_ftz | DIVERGENT  | parts differ: beta,ar,sar,sigma2,forecast; agree: - | ab2d72177cb4ca0e |
+| arima-exog-seasonal/dupes    | DIVERGENT  | parts differ: beta,ar,sar,sigma2,forecast; agree: - | a076d04f969daeca |
+| arima-exog-seasonal/hashed   | DIVERGENT  | parts differ: beta,ar,sar,sigma2,forecast; agree: - | df092ab853b6f1c4 |
+| arima-exog-seasonal/negative | DIVERGENT  | parts differ: beta,ar,sar,sigma2,forecast; agree: - | 9cabd78c8ec35a81 |
+| arima-exog-seasonal/odd      | DIVERGENT  | parts differ: beta,ar,sar,sigma2,forecast; agree: - | e7e245b5ef62c13e |
+| arima-exog-seasonal/ties     | DIVERGENT  | parts differ: beta,ar,sar,sigma2,forecast; agree: - | 2130197720462237 |
+| arima-exog-seasonal/wide     | DIVERGENT  | parts differ: beta,sigma2,forecast; agree: ar,sar | 51337e16e1d8af36 |
+| arima-exog/base              | DIVERGENT  | parts differ: beta,ar,mu,sigma2,forecast; agree: - | d46e237ca40bf67d |
+| arima-exog/denormal          | DIVERGENT  | parts differ: beta,ar,mu,sigma2,forecast; agree: - | dd70c32656d3b418 |
+| arima-exog/denormal_ftz      | DIVERGENT  | parts differ: beta,ar,mu,sigma2,forecast; agree: - | dd70c32656d3b418 |
+| arima-exog/dupes             | DIVERGENT  | parts differ: beta,ar,mu,sigma2,forecast; agree: - | d46e237ca40bf67d |
+| arima-exog/hashed            | DIVERGENT  | parts differ: beta,ar,mu,sigma2,forecast; agree: - | 551b46c727b513b0 |
+| arima-exog/negative          | DIVERGENT  | parts differ: beta,ar,mu,sigma2,forecast; agree: - | 7a3ebbc59c8753fc |
+| arima-exog/odd               | DIVERGENT  | parts differ: beta,ar,mu,sigma2,forecast; agree: - | 0b9d4b36839c1cab |
+| arima-exog/ties              | DIVERGENT  | parts differ: beta,ar,mu,sigma2,forecast; agree: - | c903b04ba074dd05 |
+| arima-exog/wide              | DIVERGENT  | parts differ: beta,mu,forecast; agree: ar,sigma2 | 9c37fb6e5a7ff072 |
+
+summary: DIVERGENT=18
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| arima-exog-seasonal/base     | infer  | DIVERGENT    | 0392c5518c63ed4d | 48871bb4a59d93a7 |
+| arima-exog-seasonal/base     | model  | DIVERGENT    | 6dd538a7ed348bcd | 6ffa0716e9cbf36c |
+| arima-exog-seasonal/base     | batch  | DIVERGENT    | 8cfb82c8b1e5204a | 61ffbe4823b4efda |
+| arima-exog-seasonal/denormal | infer  | DIVERGENT    | 73bddff16649e238 | 39aefbc5171c7f48 |
+| arima-exog-seasonal/denormal | model  | DIVERGENT    | 47916d777fdf7a1e | ebcb3f0acf75295f |
+| arima-exog-seasonal/denormal | batch  | DIVERGENT    | c366fcb72f5a1cde | 317525855aaecf96 |
+| arima-exog-seasonal/denormal_ftz | infer  | DIVERGENT    | 73bddff16649e238 | 39aefbc5171c7f48 |
+| arima-exog-seasonal/denormal_ftz | model  | DIVERGENT    | 655c915176e34b1b | d5dc031c0ede7bb0 |
+| arima-exog-seasonal/denormal_ftz | batch  | DIVERGENT    | c366fcb72f5a1cde | 317525855aaecf96 |
+| arima-exog-seasonal/dupes    | infer  | DIVERGENT    | 0392c5518c63ed4d | 48871bb4a59d93a7 |
+| arima-exog-seasonal/dupes    | model  | DIVERGENT    | 6dd538a7ed348bcd | 6ffa0716e9cbf36c |
+| arima-exog-seasonal/dupes    | batch  | DIVERGENT    | 8cfb82c8b1e5204a | 61ffbe4823b4efda |
+| arima-exog-seasonal/hashed   | infer  | DIVERGENT    | 92a5f3575f52162e | 5c2d2ece34ea4cbb |
+| arima-exog-seasonal/hashed   | model  | DIVERGENT    | 98dacdf7f83a0ea7 | c385b3cf925795cc |
+| arima-exog-seasonal/hashed   | batch  | DIVERGENT    | 8c9c124041fa0231 | 2b17aa2140d7c8fe |
+| arima-exog-seasonal/negative | infer  | DIVERGENT    | 6fbe1b03160ddf99 | 24aae079045662df |
+| arima-exog-seasonal/negative | model  | DIVERGENT    | 6df61f9b0e3d912b | 1579e21fc1e7ca58 |
+| arima-exog-seasonal/negative | batch  | DIVERGENT    | 3f405565a07aedbc | fb0bcaf600efe781 |
+| arima-exog-seasonal/odd      | infer  | DIVERGENT    | 8600ec544f57bd54 | 146849e89b937a18 |
+| arima-exog-seasonal/odd      | model  | DIVERGENT    | 611c9b29cdf16288 | 799f0387a3c0a160 |
+| arima-exog-seasonal/odd      | batch  | DIVERGENT    | 5a4988eab5262e8a | 99bc15bd6a9f1bcc |
+| arima-exog-seasonal/ties     | infer  | DIVERGENT    | 9a23b875558b8979 | 15832d4e6f6b72b6 |
+| arima-exog-seasonal/ties     | model  | DIVERGENT    | 14bf7fc49e25c5bc | fc411756ef1718d2 |
+| arima-exog-seasonal/ties     | batch  | DIVERGENT    | 7f49a8b78175bfe2 | e8f4a370d05b1ddb |
+| arima-exog-seasonal/wide     | infer  | DIVERGENT    | 2e93bf12d7b45b77 | e6a0a311bd0cc87a |
+| arima-exog-seasonal/wide     | model  | DIVERGENT    | 1fe0449adb2ddf02 | 0c6c7a4b4921fb14 |
+| arima-exog-seasonal/wide     | batch  | DIVERGENT    | aa36d0df25f89009 | ed74c54e8786b8db |
+| arima-exog/base              | infer  | DIVERGENT    | 47a42389a7c18a25 | 13df2fb0d7959157 |
+| arima-exog/base              | model  | DIVERGENT    | 270897d998bb6557 | fc6107a5fddb8002 |
+| arima-exog/base              | batch  | DIVERGENT    | d840092861e7cf68 | efb3756565409fed |
+| arima-exog/denormal          | infer  | DIVERGENT    | c6b5b3538692eba0 | f869c7f607ea8014 |
+| arima-exog/denormal          | model  | DIVERGENT    | c3ab2dffbd90daa2 | f2608bf0b1591206 |
+| arima-exog/denormal          | batch  | DIVERGENT    | 86579187256ea38f | 9f93ac0bb868689e |
+| arima-exog/denormal_ftz      | infer  | DIVERGENT    | c6b5b3538692eba0 | f869c7f607ea8014 |
+| arima-exog/denormal_ftz      | model  | DIVERGENT    | d31fdb6ed28b378b | d7462ca30bcd8533 |
+| arima-exog/denormal_ftz      | batch  | DIVERGENT    | 86579187256ea38f | 9f93ac0bb868689e |
+| arima-exog/dupes             | infer  | DIVERGENT    | 47a42389a7c18a25 | 13df2fb0d7959157 |
+| arima-exog/dupes             | model  | DIVERGENT    | 270897d998bb6557 | fc6107a5fddb8002 |
+| arima-exog/dupes             | batch  | DIVERGENT    | d840092861e7cf68 | efb3756565409fed |
+| arima-exog/hashed            | infer  | DIVERGENT    | d1f6dae58ca38fc6 | 77cd0b5d1c2cc3b0 |
+| arima-exog/hashed            | model  | DIVERGENT    | 7a8acb745895f97b | 11aba6874911c951 |
+| arima-exog/hashed            | batch  | DIVERGENT    | 407326029acbf498 | 4f23bc41a5c2631e |
+| arima-exog/negative          | infer  | DIVERGENT    | 24118bc0349bd37f | d2a7dcac1b558519 |
+| arima-exog/negative          | model  | DIVERGENT    | 88e854113c47b02e | dd245ec928a3baa2 |
+| arima-exog/negative          | batch  | DIVERGENT    | 3dc3207ebf330ebb | d4d8ecb3d932defc |
+| arima-exog/odd               | infer  | DIVERGENT    | 0d8696d7fda83e82 | 01be160591bb0fa2 |
+| arima-exog/odd               | model  | DIVERGENT    | ed44afca33203821 | f94adb7c0f767e21 |
+| arima-exog/odd               | batch  | DIVERGENT    | a36825b2a47ca167 | d1a584857e979a08 |
+| arima-exog/ties              | infer  | DIVERGENT    | 0a54764aac3e8750 | b4ab869bfa9d5f11 |
+| arima-exog/ties              | model  | DIVERGENT    | af6358733525c1c0 | 9a8036eb84aefb51 |
+| arima-exog/ties              | batch  | DIVERGENT    | bdeada0870bfb5a6 | 9ed348801ee75299 |
+| arima-exog/wide              | infer  | DIVERGENT    | fa4ad43b61573ad3 | 286a2e39e95dfa51 |
+| arima-exog/wide              | model  | DIVERGENT    | f7dae018bf993756 | b4c81bd735dd8607 |
+| arima-exog/wide              | batch  | DIVERGENT    | 9fe0205a307595c4 | 4f9cfd2b22c54ca3 |
+
+summary (infer/model): DIVERGENT=36
+summary (batch): DIVERGENT=18
+summary (rlpair): 

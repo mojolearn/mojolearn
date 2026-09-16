@@ -190,6 +190,10 @@ FORECAST_RECORDED = (
     # lane/inference-holtwinters (2026-09-15): holtwinters and
     # holtwinters-multiplicative, recorded on the M4's Metal set.
     "bench/results/classical_host/2026-09-15-apple-m4-holtwinters",
+    # lane/arima-exog (2026-09-15): arima-exog and arima-exog-seasonal, the
+    # saved mojolearn-arima-2 models (the fit's regressors travel in the
+    # file), recorded on the M4's Metal set, nine fixtures each.
+    "bench/results/classical_host/2026-09-15-apple-m4-arima-exog",
 )
 
 #: The iforest, GMM and HDBSCAN saved-model recordings (the neighbors and
@@ -542,6 +546,10 @@ TRAINING_LANE_NAMES = {
     "arima": "ARIMA",
     "arima-011": "differenced ARIMA",
     "arima-seasonal-c": "seasonal ARIMA",
+    # lane/arima-exog (2026-09-15): regression with ARIMA errors, the
+    # regressors restated in arima/host/arima_oracle.mojo beside the lane.
+    "arima-exog": "ARIMA with exogenous regressors",
+    "arima-exog-seasonal": "differenced seasonal ARIMA with exogenous regressors",
     # The umap host lane (lane/cpu-training-umap-b, 2026-09-14): UMAP fits
     # and transforms through umap/host/umap_oracle.mojo, exported under the
     # GPU binding's names from the metrics host binding. The fit's optimizer
@@ -1844,7 +1852,8 @@ FAMILIES = (
         routes="_mojolearn_arima",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("arima", "arima-011", "arima-seasonal-c", "par-arima"),
+        training_lanes=("arima", "arima-011", "arima-seasonal-c", "par-arima", "arima-exog",
+                        "arima-exog-seasonal"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ARIMA",),
@@ -2005,10 +2014,12 @@ FAMILIES = (
         loaded_by="_backend._HOST_INFERENCE_MODULES and python/mojolearn/_classical_host.py",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(),
-        inference_lanes=("arima", "arima-011", "arima-seasonal-c", "holtwinters", "holtwinters-multiplicative"),
+        inference_lanes=("arima", "arima-011", "arima-seasonal-c", "holtwinters", "holtwinters-multiplicative",
+                         "arima-exog", "arima-exog-seasonal"),
         forest_kinds=(),
         classes=("ARIMA", "ExponentialSmoothing"),
-        display=("batched ARIMA prediction, in sample and out of sample, and forecasts, and Holt-Winters"
+        display=("batched ARIMA prediction, in sample and out of sample, and forecasts, with or without"
+                 " exogenous regressors, and Holt-Winters"
                  " forecasts and in-sample one-step predictions, additive and multiplicative"),
         host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict.mojo",
                       "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo"),

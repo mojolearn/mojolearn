@@ -1,0 +1,6 @@
+lane=arima-exog
+commit=a8e3a49c37ec20faf93e9e4671a5a0a5d8362e19
+dirty_tracked=0
+worktree=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-arima-exog
+source=2812	19113728	018af7b73754ba12768f827d8b2c641ec5a45e47158ecc1d1aafb6944a0ba966
+box_clock_minus_mac=0

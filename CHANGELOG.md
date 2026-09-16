@@ -10,6 +10,21 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- `ARIMA` takes exogenous regressors: `fit(y, exog)`, `forecast(steps, exog)` and
+  `predict(start, end, exog)` (lane/arima-exog, for 0.8.7), regression with ARIMA errors as
+  cuML's. `beta` is packed after `mu`, the regressors are differenced beside `y`, `beta` is
+  started by a least-squares regression before the ARMA start values and then fitted jointly
+  with them by the L-BFGS, and `x_t beta` is the observation intercept the Kalman filter adds
+  to every prediction and forecast. `beta_` and `n_exog_` are new attributes; `exog` is
+  `(batch_size, n_obs, n_exog)` (DEVIATION 996), at most 17 regressors (994), and a non-finite
+  regressor is refused by name (997). The closed cuBLAS gemms of the observation intercept and
+  of the start-value regression are ours to spell, serial ascending fma from zero (995).
+  `trend='t'` and `'ct'` stay refused, now pointing at `exog`. Saved models: a fit without
+  regressors is still `mojolearn-arima-1` byte for byte, and one with them is
+  `mojolearn-arima-2`, carrying the regressors and `n_exog` (998), which the shipped forecast
+  host binding predicts from on a CPU-only install. New lanes `arima-exog` and
+  `arima-exog-seasonal`; the existing ARIMA lanes are unchanged. Evidence:
+  bench/results/identity_break/2026-09-15_arima-exog.
 - Gaussian process kernel hyperparameter optimization (lane/gp-optimizer, for 0.8.7).
   `GaussianProcessRegressor(optimizer="fmin_l_bfgs_b", n_restarts_optimizer=k, random_state=s)`
   maximizes the log marginal likelihood as scikit-learn does, with the same bits on every

@@ -1,0 +1,162 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 2 lane(s); 165 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_forecast_host'] commit=a8e3a49c37ec20faf93e9e4671a5a0a5d8362e19
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| arima-exog-seasonal/base     | OWED x1    | (not run)        | (not run)        | (not run)        | 716663af2f675e1e |
+| arima-exog-seasonal/denormal | OWED x1    | (not run)        | (not run)        | (not run)        | db005efa7d2bc517 |
+| arima-exog-seasonal/denormal_ftz | OWED x1    | (not run)        | (not run)        | (not run)        | db005efa7d2bc517 |
+| arima-exog-seasonal/dupes    | OWED x1    | (not run)        | (not run)        | (not run)        | 716663af2f675e1e |
+| arima-exog-seasonal/hashed   | OWED x1    | (not run)        | (not run)        | (not run)        | ddb5e4a7881fb445 |
+| arima-exog-seasonal/negative | OWED x1    | (not run)        | (not run)        | (not run)        | 9e92d02b880f0954 |
+| arima-exog-seasonal/odd      | OWED x1    | (not run)        | (not run)        | (not run)        | 6ea94414246da114 |
+| arima-exog-seasonal/ties     | OWED x1    | (not run)        | (not run)        | (not run)        | 637a2f39d5d40eea |
+| arima-exog-seasonal/wide     | OWED x1    | (not run)        | (not run)        | (not run)        | 69c50e293c60f173 |
+| arima-exog/base              | OWED x1    | (not run)        | (not run)        | (not run)        | 2f628c52654e2724 |
+| arima-exog/denormal          | OWED x1    | (not run)        | (not run)        | (not run)        | a540e07412fe0435 |
+| arima-exog/denormal_ftz      | OWED x1    | (not run)        | (not run)        | (not run)        | a540e07412fe0435 |
+| arima-exog/dupes             | OWED x1    | (not run)        | (not run)        | (not run)        | 2f628c52654e2724 |
+| arima-exog/hashed            | OWED x1    | (not run)        | (not run)        | (not run)        | f61694f0445b2d3d |
+| arima-exog/negative          | OWED x1    | (not run)        | (not run)        | (not run)        | 1a99c270f6b43778 |
+| arima-exog/odd               | OWED x1    | (not run)        | (not run)        | (not run)        | a724e4c3c77b9c2d |
+| arima-exog/ties              | OWED x1    | (not run)        | (not run)        | (not run)        | 2e313860637dab58 |
+| arima-exog/wide              | OWED x1    | (not run)        | (not run)        | (not run)        | a17b576410730c15 |
+
+summary: OWED=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| arima-exog-seasonal/base     | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0392c5518c63ed4d |
+| arima-exog-seasonal/base     | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 6dd538a7ed348bcd |
+| arima-exog-seasonal/base     | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 8cfb82c8b1e5204a |
+| arima-exog-seasonal/denormal | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 73bddff16649e238 |
+| arima-exog-seasonal/denormal | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 47916d777fdf7a1e |
+| arima-exog-seasonal/denormal | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | c366fcb72f5a1cde |
+| arima-exog-seasonal/denormal_ftz | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 73bddff16649e238 |
+| arima-exog-seasonal/denormal_ftz | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 655c915176e34b1b |
+| arima-exog-seasonal/denormal_ftz | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | c366fcb72f5a1cde |
+| arima-exog-seasonal/dupes    | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0392c5518c63ed4d |
+| arima-exog-seasonal/dupes    | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 6dd538a7ed348bcd |
+| arima-exog-seasonal/dupes    | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 8cfb82c8b1e5204a |
+| arima-exog-seasonal/hashed   | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 92a5f3575f52162e |
+| arima-exog-seasonal/hashed   | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 98dacdf7f83a0ea7 |
+| arima-exog-seasonal/hashed   | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 8c9c124041fa0231 |
+| arima-exog-seasonal/negative | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 6fbe1b03160ddf99 |
+| arima-exog-seasonal/negative | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 6df61f9b0e3d912b |
+| arima-exog-seasonal/negative | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 3f405565a07aedbc |
+| arima-exog-seasonal/odd      | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 8600ec544f57bd54 |
+| arima-exog-seasonal/odd      | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 611c9b29cdf16288 |
+| arima-exog-seasonal/odd      | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 5a4988eab5262e8a |
+| arima-exog-seasonal/ties     | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 9a23b875558b8979 |
+| arima-exog-seasonal/ties     | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 14bf7fc49e25c5bc |
+| arima-exog-seasonal/ties     | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 7f49a8b78175bfe2 |
+| arima-exog-seasonal/wide     | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 2e93bf12d7b45b77 |
+| arima-exog-seasonal/wide     | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 1fe0449adb2ddf02 |
+| arima-exog-seasonal/wide     | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | aa36d0df25f89009 |
+| arima-exog/base              | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 47a42389a7c18a25 |
+| arima-exog/base              | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 270897d998bb6557 |
+| arima-exog/base              | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | d840092861e7cf68 |
+| arima-exog/denormal          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | c6b5b3538692eba0 |
+| arima-exog/denormal          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | c3ab2dffbd90daa2 |
+| arima-exog/denormal          | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 86579187256ea38f |
+| arima-exog/denormal_ftz      | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | c6b5b3538692eba0 |
+| arima-exog/denormal_ftz      | model  | OWED x1      | (not run)        | (not run)        | (not run)        | d31fdb6ed28b378b |
+| arima-exog/denormal_ftz      | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 86579187256ea38f |
+| arima-exog/dupes             | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 47a42389a7c18a25 |
+| arima-exog/dupes             | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 270897d998bb6557 |
+| arima-exog/dupes             | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | d840092861e7cf68 |
+| arima-exog/hashed            | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | d1f6dae58ca38fc6 |
+| arima-exog/hashed            | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 7a8acb745895f97b |
+| arima-exog/hashed            | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 407326029acbf498 |
+| arima-exog/negative          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 24118bc0349bd37f |
+| arima-exog/negative          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 88e854113c47b02e |
+| arima-exog/negative          | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 3dc3207ebf330ebb |
+| arima-exog/odd               | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0d8696d7fda83e82 |
+| arima-exog/odd               | model  | OWED x1      | (not run)        | (not run)        | (not run)        | ed44afca33203821 |
+| arima-exog/odd               | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | a36825b2a47ca167 |
+| arima-exog/ties              | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0a54764aac3e8750 |
+| arima-exog/ties              | model  | OWED x1      | (not run)        | (not run)        | (not run)        | af6358733525c1c0 |
+| arima-exog/ties              | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | bdeada0870bfb5a6 |
+| arima-exog/wide              | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | fa4ad43b61573ad3 |
+| arima-exog/wide              | model  | OWED x1      | (not run)        | (not run)        | (not run)        | f7dae018bf993756 |
+| arima-exog/wide              | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 9fe0205a307595c4 |
+
+summary (infer/model): OWED=36
+summary (batch): OWED=18
+summary (rlpair): 
+require-columns 4 over ['arima-exog', 'arima-exog-seasonal']: OK (72 OWED)
+OWED arima-exog-seasonal/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/denormal_ftz batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/hashed batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/negative batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog-seasonal/wide batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/denormal_ftz batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/hashed batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/negative batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+OWED arima-exog/wide batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9655p-96-core-processor)
+summary (owed): OWED=72; the next release record owes exactly these cell parts; wrote /root/leg_out/owed_cells.json

@@ -44,9 +44,9 @@ address and a params list of the wrong length. Every model refusal lives one
 or two layers down and is raised there by name, which is what keeps it
 reachable from every caller and not only from Python:
 
-    exog                 `arima/impl/tsa/arima_common.mojo::validate_order`
-                         (`n_exog != 0`). `ARIMAParams` has no `beta`
-                         anywhere in the lane
+    n_exog < 0 or > 17   `arima/impl/tsa/arima_common.mojo::validate_order`
+    non-finite exog      `bindings/arima_exog_layout.mojo`, naming the
+                         series, row and regressor (DEVIATION 997)
     method css, css-ml   `arima/estimator.mojo::_refuse_method`
     rd > 8               `validate_order`, cuML's block-per-series Kalman
     r > 5                `validate_order`, cuML's Schur Lyapunov solver
@@ -58,8 +58,11 @@ reachable from every caller and not only from Python:
     float64              by dtype, DEVIATION 670. Metal exposes no Float64
                          on the device and every kernel here is float32
 
-DEVIATIONS 990-999 are this surface's. 990, 991, 992 and 993 are used and
-each is named where it bites; 994-999 are unassigned.
+DEVIATIONS 990-999 are this surface's. 990 to 993 are used and each is named
+where it bites; 994 to 998 are the exogenous regressors' (lane/arima-exog,
+2026-09-15: 994 EXOG_MAX, 995 the observation intercept's fold, 996 the
+exog layout, 997 the non-finite exog refusal, 998 the saved-model format);
+999 is unassigned.
 
 `ARIMA` IS wired into `python/mojolearn/__init__.py` and
 `_mojolearn_arima` IS registered in `python/mojolearn/_backend.py`'s
@@ -123,6 +126,7 @@ def arima_vendor_binding() raises -> PythonObject:
 
 def arima_fit_binding(
     y_addr: PythonObject,
+    exog_addr: PythonObject,
     params_addr: PythonObject,
     x_addr: PythonObject,
     x0_addr: PythonObject,
@@ -131,8 +135,12 @@ def arima_fit_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`ARIMA(order, seasonal_order, trend).fit(y)` (arima/, DEVIATIONS 670
-    to 687 and 990 to 993). Returns `N * batch_size`, the number of float32
-    written to `params_addr`, with `N = p + q + P + Q + k + 1`.
+    to 687 and 990 to 998). Returns `N * batch_size`, the number of float32
+    written to `params_addr`, with `N = p + q + P + Q + k + n_exog + 1`.
+
+    `exog_addr` reads `batch_size * n_obs * n_exog` float32 as `(batch_size,
+    n_obs, n_exog)` C order (DEVIATION 996). It must be a live address even
+    when `n_exog == 0`, and is then not read.
 
     `params` is, in this exact order (mirrored in
     `python/mojolearn/_arima_impl.py`):
@@ -147,7 +155,7 @@ def arima_fit_binding(
          7  Q
          8  s
          9  k                fit_intercept, 0 or 1
-        10  n_exog           REFUSED unless 0, by validate_order
+        10  n_exog           the exogenous regressor count, 0 to 17
         11  method           0 = MLE, 1 = CSS, 2 = CSS-ML; only MLE is
                              offered and the other two are REFUSED BY NAME
                              in arima/estimator.mojo
@@ -163,6 +171,7 @@ def arima_fit_binding(
 
         series b occupies [b * N, (b + 1) * N)
             mu       k values     (absent when k == 0)
+            beta     n_exog values
             ar       p values
             ma       q values
             sar      P values
@@ -194,6 +203,8 @@ def arima_fit_binding(
             + String(len(params))
         )
     var yp = _f32_ptr(Int(py=y_addr))
+    var exog_address = Int(py=exog_addr)
+    _ = _f32_ptr(exog_address)
     var pp = _f32_ptr(Int(py=params_addr))
     var xp = _f32_ptr(Int(py=x_addr))
     var x0p = _f32_ptr(Int(py=x0_addr))
@@ -215,7 +226,7 @@ def arima_fit_binding(
     var written = 0
     with GILReleased(Python()):
         written = arima_fit_ptr_host(
-            yp, pp, xp, x0p, sp, fp, batch_size, n_obs,
+            yp, exog_address, pp, xp, x0p, sp, fp, batch_size, n_obs,
             p, d, q, P, D, Q, s, k, n_exog, method, max_iterations,
         )
     return PythonObject(written)
@@ -223,12 +234,18 @@ def arima_fit_binding(
 
 def arima_predict_binding(
     y_addr: PythonObject,
+    exog_addr: PythonObject,
+    exog_fut_addr: PythonObject,
     params_addr: PythonObject,
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """`ARIMA.predict(start, end)` with no confidence level and no exog
-    (arima/). Returns `(end - start) * batch_size`.
+    """`ARIMA.predict(start, end, exog)` with no confidence level (arima/).
+    Returns `(end - start) * batch_size`. `exog_addr` reads the fit's
+    regressors, `(batch_size, n_obs, n_exog)`, and `exog_fut_addr` their
+    future values, `(batch_size, max(end - n_obs, 0), n_exog)`; both must be
+    live addresses and are read only when `n_exog > 0` (the second only when
+    `end > n_obs`).
 
     `params` is, in this exact order (mirrored in
     `python/mojolearn/_arima_impl.py`):
@@ -245,7 +262,7 @@ def arima_predict_binding(
          9  Q
         10  s
         11  k                fit_intercept, 0 or 1
-        12  n_exog           REFUSED unless 0, by validate_order
+        12  n_exog           the exogenous regressor count
 
     `y_addr` reads `batch_size * n_obs` float32, series contiguous, the SAME
     series the fit saw. `params_addr` reads `N * batch_size` float32 in
@@ -266,6 +283,10 @@ def arima_predict_binding(
             + String(len(params))
         )
     var yp = _f32_ptr(Int(py=y_addr))
+    var exog_address = Int(py=exog_addr)
+    _ = _f32_ptr(exog_address)
+    var exog_fut_address = Int(py=exog_fut_addr)
+    _ = _f32_ptr(exog_fut_address)
     var pp = _f32_ptr(Int(py=params_addr))
     var op = _f32_ptr(Int(py=out_addr))
     var batch_size = Int(py=params[0])
@@ -284,7 +305,7 @@ def arima_predict_binding(
     var written = 0
     with GILReleased(Python()):
         written = arima_predict_ptr_host(
-            yp, pp, op, batch_size, n_obs, start, end,
+            yp, exog_address, exog_fut_address, pp, op, batch_size, n_obs, start, end,
             p, d, q, P, D, Q, s, k, n_exog,
         )
     return PythonObject(written)
@@ -292,13 +313,16 @@ def arima_predict_binding(
 
 def arima_forecast_binding(
     y_addr: PythonObject,
+    exog_addr: PythonObject,
+    exog_fut_addr: PythonObject,
     params_addr: PythonObject,
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
     """`ARIMA.forecast(steps)` (arima/), which in the reference is
     `predict(n_obs, n_obs + steps)` and is that here too. Returns
-    `steps * batch_size`.
+    `steps * batch_size`. The addresses are `arima_predict`'s, with
+    `exog_fut_addr` holding `steps` rows.
 
     `params` is, in this exact order (mirrored in
     `python/mojolearn/_arima_impl.py`). IT IS `arima_predict`'s LIST WITH
@@ -316,7 +340,7 @@ def arima_forecast_binding(
          8  Q
          9  s
         10  k                fit_intercept, 0 or 1
-        11  n_exog           REFUSED unless 0, by validate_order
+        11  n_exog           the exogenous regressor count
         12  reserved         MUST BE 0. It exists so that this list is the
                              same length as the other two and so that a
                              future step-scoped parameter (cuML's `level`
@@ -336,6 +360,10 @@ def arima_forecast_binding(
             " got " + String(len(params))
         )
     var yp = _f32_ptr(Int(py=y_addr))
+    var exog_address = Int(py=exog_addr)
+    _ = _f32_ptr(exog_address)
+    var exog_fut_address = Int(py=exog_fut_addr)
+    _ = _f32_ptr(exog_fut_address)
     var pp = _f32_ptr(Int(py=params_addr))
     var op = _f32_ptr(Int(py=out_addr))
     var batch_size = Int(py=params[0])
@@ -364,7 +392,7 @@ def arima_forecast_binding(
     var written = 0
     with GILReleased(Python()):
         written = arima_forecast_ptr_host(
-            yp, pp, op, batch_size, n_obs, n_steps,
+            yp, exog_address, exog_fut_address, pp, op, batch_size, n_obs, n_steps,
             p, d, q, P, D, Q, s, k, n_exog,
         )
     return PythonObject(written)

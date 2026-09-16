@@ -319,6 +319,7 @@ sampler, a solver, a metric, a reduction).
                spectral-precomputed holtwinters-multiplicative kpss arima-011
                arima-seasonal-c gp-matern12 gp-matern32 gp-matern52-ard
       functions gemm-transposed metrics-classification tokenizer cross-val
+    2026-09-15 (lane/arima-exog) arima-exog arima-exog-seasonal
     2026-09-14 evening, workstream D (docs/lanes/LANE_BODY_*.py)
       cholesky kernel-ridge nystroem rbf-sampler gmm gmm-random-init hdbscan
                hdbscan-leaf bootstrap permutation-test monte-carlo
@@ -2497,6 +2498,69 @@ def _(ml, X, yc, yr, Xh=None):
                                          e.predict(e.n_obs_, e.n_obs_ + FORECAST_HORIZON)))
 
 
+#: The exogenous regressor columns of series `b` in the arima-exog lanes:
+#: two fixture columns per series, `4 + 2b` and `5 + 2b` (columns 4 to 11,
+#: which no fixture perturbs: denormal rewrites 0 to 2, dupes the last two).
+_ARIMA_EXOG_PER_SERIES = 2
+
+
+def _arima_exog_block(X, rows):
+    """`(4, rows, 2)` float32: the regressors of the four series over the
+    first `rows` rows of `X`, series major then time then regressor, which is
+    `ARIMA`'s exog layout (DEVIATION 996)."""
+    k = _ARIMA_EXOG_PER_SERIES
+    return np.ascontiguousarray(
+        np.stack([X[:rows, 4 + k * b: 4 + k * b + k] for b in range(4)]).astype(np.float32))
+
+
+def _arima_exog_inputs(X):
+    """The arima-exog lanes' training inputs: the arima lane's four series of
+    512 observations, their regressors over the same 512 rows, and the
+    regressors' next 24 rows (X[512:536]) for the train column's forecast(24),
+    so no train cell reads the held-out draw."""
+    series = np.ascontiguousarray(X[:512, :4].T)
+    exog = _arima_exog_block(X, 512)
+    fut24 = _arima_exog_block(X[512:], 24)
+    return series, exog, fut24
+
+
+def _arima_exog_probe(e, Xh):
+    """The infer probe: FORECAST_HORIZON steps with the regressors' future
+    values from the held-out rows, through `forecast(h, exog)` and
+    `predict(n_obs, n_obs + h, exog)`, held to the same bytes."""
+    F = _arima_exog_block(Xh, FORECAST_HORIZON)
+    return _same_bytes("forecast(h, exog)", e.forecast(FORECAST_HORIZON, exog=F),
+                       "predict(n_obs, n_obs + h, exog)",
+                       e.predict(e.n_obs_, e.n_obs_ + FORECAST_HORIZON, exog=F))
+
+
+@lane("arima-exog")
+def _(ml, X, yc, yr, Xh=None):
+    """Regression with ARIMA(1, 0, 0) errors and an intercept (lane/arima-exog,
+    2026-09-15): two regressors per series, beta estimated by least squares
+    before the ARMA start and then jointly with it by the L-BFGS, and added
+    to every prediction as the observation intercept."""
+    series, exog, fut24 = _arima_exog_inputs(X)
+    m = ml.ARIMA(order=(1, 0, 0), trend="c").fit(series, exog)
+    return _fit(dict(beta=_h(m.beta_), ar=_h(m.ar_), mu=_h(m.mu_), sigma2=_h(m.sigma2_),
+                     forecast=_h(m.forecast(24, exog=fut24))),
+                m, lambda e: _arima_exog_probe(e, Xh))
+
+
+@lane("arima-exog-seasonal")
+def _(ml, X, yc, yr, Xh=None):
+    """Differenced, seasonal, with two regressors (lane/arima-exog,
+    2026-09-15): ARIMA(1, 1, 0)(1, 0, 0)_4, so the regressors are differenced
+    beside y, their future values are differenced against their past
+    (prepare_future_data) and the forecast is undifferenced after the
+    observation intercept; rd = 6, r = 5, the implemented Kalman arms."""
+    series, exog, fut24 = _arima_exog_inputs(X)
+    m = ml.ARIMA(order=(1, 1, 0), seasonal_order=(1, 0, 0, 4)).fit(series, exog)
+    return _fit(dict(beta=_h(m.beta_), ar=_h(m.ar_), sar=_h(m.sar_), sigma2=_h(m.sigma2_),
+                     forecast=_h(m.forecast(24, exog=fut24))),
+                m, lambda e: _arima_exog_probe(e, Xh))
+
+
 def _gp_lane(nu, length_scale):
     def body(ml, X, yc, yr, Xh=None):
         k = ml.ConstantKernel(1.0) * ml.Matern(length_scale, nu=nu) + ml.WhiteKernel(0.1)
@@ -4435,6 +4499,20 @@ def _batch_forecast(ml, e, Xh):
 
 _batch_decl(_batch_forecast, "holtwinters", "holtwinters-multiplicative", "arima", "arima-011",
             "arima-seasonal-c", "par-arima")
+
+
+def _batch_forecast_exog(ml, e, Xh):
+    """The forecasters' LENGTH invariance with regressors (lane/arima-exog):
+    forecast(p, exog=F[:, :p]) equal to the first p steps of forecast(H, F).
+    A forecast step reads its own row of the future regressors and, when
+    differenced, the rows `period` before it, never a later one, so a prefix
+    of the future is enough for a prefix of the forecast."""
+    F = _arima_exog_block(Xh, FORECAST_HORIZON)
+    return [_BatchPrefix("forecast", FORECAST_HORIZON,
+                         lambda h: (e.forecast(h, exog=np.ascontiguousarray(F[:, :h])),), axis=-1)]
+
+
+_batch_decl(_batch_forecast_exog, "arima-exog", "arima-exog-seasonal")
 
 
 def _batch_kpss(ml, e, Xh):

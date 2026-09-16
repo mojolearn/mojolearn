@@ -39,6 +39,8 @@ ROOT = Path(__file__).resolve().parents[3]
 
 ORACLE = "arima/host/arima_oracle.mojo"
 LANES = ("arima", "arima-011", "arima-seasonal-c")
+#: lane/arima-exog (2026-09-15), declared after par-arima.
+EXOG_LANES = ("arima-exog", "arima-exog-seasonal")
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 
 
@@ -49,7 +51,7 @@ def _read(rel):
 def test_manifest_declares_the_arima_family():
     fam = host_surface.family("arima")
     assert fam["routes"] == "_mojolearn_arima"
-    assert fam["training_lanes"] == LANES + ("par-arima",)
+    assert fam["training_lanes"] == LANES + ("par-arima",) + EXOG_LANES
     assert ORACLE in fam["host_modules"] and (ROOT / ORACLE).is_file()
     assert (ROOT / host_surface.build_shim("arima")).is_file()
     assert (ROOT / host_surface.binding_source("arima")).is_file()

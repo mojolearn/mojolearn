@@ -1,0 +1,5 @@
+pod=exrdkn3qlq35bj
+name=mojolearn-cpu-arima-exog-20260915-234426
+terminated_verified=1
+exit=1
+at=2026-09-15T23:50:03Z

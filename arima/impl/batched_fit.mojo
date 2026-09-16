@@ -105,8 +105,8 @@ a compile slot should replace both with what it sees, exactly as
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from arima.impl.batched_arima import _refuse_non_finite, batched_loglike_grad
-from arima.impl.estimate_x0 import StartParamsResult, estimate_x0
+from arima.impl.batched_arima import _refuse_non_finite, batched_loglike_grad_x
+from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
 from arima.impl.lbfgs_host import (
     armijo_ok,
     check_convergence_at,
@@ -219,6 +219,7 @@ def _zeros(n: Int) -> List[Float32]:
 def eval_batch(
     ctx: DeviceContext,
     mut d_y_kf: DeviceBuffer[DType.float32],
+    mut d_exog_kf: DeviceBuffer[DType.float32],
     batch_size: Int,
     n_obs_kf: Int,
     order_kf: ARIMAOrder,
@@ -253,8 +254,8 @@ def eval_batch(
     and synchronize `(N + 1)` times per candidate point, hundreds of times
     over, to re-answer a question about data nobody has touched."""
     _upload(ctx, d_x, xin)
-    var ll = batched_loglike_grad(
-        ctx, d_y_kf, batch_size, n_obs_kf, order_kf, d_x, d_grad, h, True,
+    var ll = batched_loglike_grad_x(
+        ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x, d_grad, h, True,
         scratch, d_x_pert, False,
     )
     var g = _download(ctx, d_grad, len(xin))
@@ -290,6 +291,7 @@ struct BatchedLBFGSResult(Movable):
 def batched_min_lbfgs(
     ctx: DeviceContext,
     mut d_y_kf: DeviceBuffer[DType.float32],
+    mut d_exog_kf: DeviceBuffer[DType.float32],
     batch_size: Int,
     n_obs_kf: Int,
     scale: Float32,
@@ -387,7 +389,7 @@ def batched_min_lbfgs(
     # `min_lbfgs:161-173`: evaluate at x0, and exit early per series if it
     # is already a minimizer.
     eval_batch(
-        ctx, d_y_kf, batch_size, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
+        ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
         scratch, h, scale, x, fx, grad,
     )
     n_eval += 1
@@ -465,7 +467,7 @@ def batched_min_lbfgs(
                     for i in range(n):
                         cand[b * n + i] = x[b * n + i]
             eval_batch(
-                ctx, d_y_kf, batch_size, n_obs_kf, order_kf, d_x, d_grad,
+                ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x, d_grad,
                 d_x_pert, scratch, h, scale, cand, fxc, gradc,
             )
             n_eval += 1
@@ -594,9 +596,37 @@ def batched_fit(
     max_iterations: Int = 1000,
     h: Float32 = ARIMA_FIT_H,
 ) raises -> FitResult:
+    """The `n_exog = 0` door the checks call: `batched_fit_x` with a
+    placeholder it does not read."""
+    if order.n_exog != 0:
+        raise Error(
+            "batched_fit: n_exog=" + String(order.n_exog)
+            + " needs the exogenous series; call batched_fit_x"
+        )
+    var e0 = ctx.enqueue_create_buffer[DType.float32](1)
+    var r = batched_fit_x(ctx, d_y, e0, batch_size, n_obs, order, params, trace, max_iterations, h)
+    _ = e0^
+    return r^
+
+
+def batched_fit_x(
+    ctx: DeviceContext,
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_exog: DeviceBuffer[DType.float32],
+    batch_size: Int,
+    n_obs: Int,
+    order: ARIMAOrder,
+    mut params: ARIMAParams,
+    mut trace: IdentityTrace,
+    max_iterations: Int = 1000,
+    h: Float32 = ARIMA_FIT_H,
+) raises -> FitResult:
     """`ARIMA.fit` (`arima.pyx:860-958`) with `method = "ml"`,
-    `start_params = None`, `simple_differencing = True` and no exog, which
-    is every arm this lane can reach. `method = "css"` and `"css-ml"` are
+    `start_params = None` and `simple_differencing = True`, which is every
+    arm this lane can reach. `d_exog` holds the regressors in the filter's
+    layout over the `n_obs` observations (a placeholder when `n_exog = 0`);
+    they are differenced once beside `y` (`arima.pyx:430-436`) and every
+    likelihood evaluation reads the differenced copy. `method = "css"` and `"css-ml"` are
     refused by name (the CSS log-likelihood is not implemented); a caller-supplied
     `start_params` is not offered, because `set_fit_params` has no door here
     yet.
@@ -628,7 +658,8 @@ def batched_fit(
     _refuse_non_finite(ctx, d_y, batch_size * n_obs, "y")
 
     # 1. the starting parameters
-    var start = estimate_x0(ctx, params, d_y, batch_size, n_obs, order)
+    var exog_info = ctx.enqueue_create_buffer[DType.int32](max(1, batch_size))
+    var start = estimate_x0_x(ctx, params, d_y, d_exog, batch_size, n_obs, order, exog_info)
     trace.record_device[DType.float32](ctx, "fit.x0.sigma2", params.sigma2, batch_size)
     if order.p != 0:
         trace.record_device[DType.float32](ctx, "fit.x0.ar", params.ar, order.p * batch_size)
@@ -640,6 +671,11 @@ def batched_fit(
         trace.record_device[DType.float32](ctx, "fit.x0.sma", params.sma, order.Q * batch_size)
     if order.k != 0:
         trace.record_device[DType.float32](ctx, "fit.x0.mu", params.mu, batch_size)
+    if order.n_exog != 0:
+        # The exog regression's coefficients and its DECISION stage: which
+        # series' solve refused (beta zeroed) and at which column.
+        trace.record_device[DType.float32](ctx, "fit.x0.beta", params.beta, order.n_exog * batch_size)
+        trace.record_device[DType.int32](ctx, "fit.x0.exog.info_ls", exog_info, batch_size)
     # THE DECISION STAGES. `info_ls` is which series the least squares
     # refused and at which column (negative for the AR pre-fit); `invparams`
     # is `test_invparams`' verdict, one byte per series. Neither is
@@ -684,11 +720,21 @@ def batched_fit(
             dst_buf=y_kf,
             src_buf=d_y.create_sub_buffer[DType.float32](0, n_obs * batch_size),
         )
+    var n_ser = order.n_exog * batch_size
+    var exog_kf = ctx.enqueue_create_buffer[DType.float32](max(1, n_obs_kf * n_ser))
+    if n_ser > 0:
+        if diff:
+            prepare_data(ctx, exog_kf, d_exog, n_ser, n_obs, order.d, order.D, order.s)
+        else:
+            ctx.enqueue_copy(
+                dst_buf=exog_kf,
+                src_buf=d_exog.create_sub_buffer[DType.float32](0, n_obs * n_ser),
+            )
     ctx.synchronize()
     # `n_obs - 1` uses the ORIGINAL length, not the differenced one
     # (`arima.pyx:910`, `:918`: `self.n_obs`)
     var res = batched_min_lbfgs(
-        ctx, y_kf, batch_size, n_obs_kf, Float32(n_obs - 1), order_kf, x0,
+        ctx, y_kf, exog_kf, batch_size, n_obs_kf, Float32(n_obs - 1), order_kf, x0,
         arima_fit_params(max_iterations), h, trace,
     )
 
@@ -709,6 +755,8 @@ def batched_fit(
     _ = d_x0^
     _ = d_x^
     _ = d_t_x^
+    _ = exog_kf^
+    _ = exog_info^
     _ = y_kf^
     return FitResult(
         x=res.x.copy(), t_x=t_x^, x0=x0^, fx=res.fx.copy(),

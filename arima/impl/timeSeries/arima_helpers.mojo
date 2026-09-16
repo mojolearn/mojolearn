@@ -8,9 +8,11 @@ v26.08.00): `_param_to_poly` (:35-44), `_select_read` (:58-62),
 `_undiff_kernel` (:136-163), `reduced_polynomial` (:183-193),
 `finalize_forecast` (:321-350), `batched_jones_transform` (:358-379).
 `prepare_data` (:209-239) is imported from the tsa lane's implementation of the same
-file; `prepare_future_data` / `_future_diff_kernel` (exog only) are not
-reached (exog refused) and are in `arima/NOT_IMPLEMENTED.tsv`. Arithmetic
-order is pinned for identity; a change needs a DEVIATION.
+file. `_future_diff_kernel` (:73-85), `_future_second_diff_kernel` (:99-119)
+and `prepare_future_data` (:262-292), the exogenous regressors' future values
+differenced against their past (lane/arima-exog, 2026-09-15), are
+`future_diff_kernel` and `prepare_future_data` below. Arithmetic order is
+pinned for identity; a change needs a DEVIATION.
 
 `reduced_polynomial<isAr>(bid, param, lags, sparam, slags, s, idx)` is
 `-coef0 * coef1` for AR and `coef0 * coef1` for MA, ONE product (exact sign);
@@ -228,6 +230,15 @@ def batched_jones_transform(
         var src = params.mu.create_sub_buffer[DType.float32](0, batch_size)
         var dst = t_params.mu.create_sub_buffer[DType.float32](0, batch_size)
         ctx.enqueue_copy(dst_buf=dst, src_buf=src)
+    # `beta` is not transformed either: theirs aliases `Tparams.beta =
+    # params.beta` beside `mu` (`batched_arima.cu:419-425`, and
+    # `arima.pyx::_batched_transform` hands the packed vector through
+    # `batched_jones_transform`, which never reads the beta block). Copied,
+    # for the same reason `mu` is.
+    if order.n_exog != 0:
+        var bsrc = params.beta.create_sub_buffer[DType.float32](0, order.n_exog * batch_size)
+        var bdst = t_params.beta.create_sub_buffer[DType.float32](0, order.n_exog * batch_size)
+        ctx.enqueue_copy(dst_buf=bdst, src_buf=bsrc)
 
 
 def batched_jones_transform_host(
@@ -249,3 +260,92 @@ def batched_jones_transform_host(
     for i in range(batch_size):
         sigma2.append(max(ftz(params.sigma2[i]), MIN_SIGMA2))
     return ARIMAParamsHost(mu=params.mu.copy(), ar=ar^, ma=ma^, sar=sar^, sma=sma^, sigma2=sigma2^)
+
+
+# ---------------------------------------------------------------------------
+# prepare_future_data (:262-292) and its two kernels (:73-119)
+# ---------------------------------------------------------------------------
+
+
+def future_diff_kernel(
+    d_past: MutPointer[Float32, MutAnyOrigin],
+    d_fut: MutPointer[Float32, MutAnyOrigin],
+    d_out: MutPointer[Float32, MutAnyOrigin],
+    n_series_in: Int32,
+    n_past_in: Int32,
+    n_fut_in: Int32,
+    period1_in: Int32,
+    period2_in: Int32,
+    two_in: Int32,
+):
+    """`_future_diff_kernel` (`:73-85`) when `two_in == 0`, and
+    `_future_second_diff_kernel` (`:99-119`) otherwise, one thread per
+    series (theirs is one BLOCK per series with the threads strided over the
+    steps: scheduling, no cell reads another's result). `_select_read`
+    (`:58-62`) reads the past when the index is negative.
+
+        one   out[i] = fut[i] - sel(i - p1)
+        two   out[i] = ((fut[i] - sel(i - p1)) - sel(i - p2)) + sel(i - p1 - p2)
+
+    C++ evaluates `a - b - c + d` left to right; each operand is flushed on
+    load and each intermediate is one local through `ftz`, the spelling of
+    `tsa/impl/linalg/batched/matrix.mojo::batched_second_diff_kernel`."""
+    var sid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if sid >= Int(n_series_in):
+        return
+    var n_past = Int(n_past_in)
+    var n_fut = Int(n_fut_in)
+    var p1 = Int(period1_in)
+    var p2 = Int(period2_in)
+    var pb = sid * n_past
+    var fb = sid * n_fut
+    for i in range(n_fut):
+        var a = ftz(d_fut.unsafe_load(fb + i))
+        var b = _select_read(d_past, pb, n_past, d_fut, fb, i - p1)
+        var t0 = ftz(a - b)
+        if two_in == 0:
+            d_out.unsafe_store(fb + i, t0)
+        else:
+            var c = _select_read(d_past, pb, n_past, d_fut, fb, i - p2)
+            var d = _select_read(d_past, pb, n_past, d_fut, fb, i - p1 - p2)
+            var t1 = ftz(t0 - c)
+            d_out.unsafe_store(fb + i, ftz(t1 + d))
+
+
+def prepare_future_data(
+    ctx: DeviceContext,
+    mut d_out: DeviceBuffer[DType.float32],
+    mut d_in_past: DeviceBuffer[DType.float32],
+    mut d_in_fut: DeviceBuffer[DType.float32],
+    n_series: Int,
+    n_past: Int,
+    n_fut: Int,
+    d: Int,
+    D: Int,
+    s: Int,
+) raises:
+    """`prepare_future_data` (`:262-292`): `d_out` holds `n_fut * n_series`
+    values of the same length as `d_in_fut`, the future differenced against
+    the last `period` values of the past. `d + D == 0` copies. `n_series` is
+    `batch_size * n_exog` at the one call site (`batched_arima.cu:134-143`).
+    Threads per block is their heuristic (`n_fut > 128 ? 64 : 32`):
+    SCHEDULING, one series per thread here."""
+    if d + D > 2:
+        raise Error(
+            "prepare_future_data: d + D must be <= 2 (d=" + String(d) + ", D="
+            + String(D) + "), refused by name (arima.pyx:313)"
+        )
+    if d + D == 0:
+        var view_in = d_in_fut.create_sub_buffer[DType.float32](0, n_fut * n_series)
+        var view_out = d_out.create_sub_buffer[DType.float32](0, n_fut * n_series)
+        ctx.enqueue_copy(dst_buf=view_out, src_buf=view_in)
+        return
+    var p1 = 1 if d != 0 else s
+    var p2 = 1 if d == 2 else s
+    comptime TPB = 64
+    ctx.enqueue_function[future_diff_kernel](
+        d_in_past.unsafe_ptr(), d_in_fut.unsafe_ptr(), d_out.unsafe_ptr(),
+        Int32(n_series), Int32(n_past), Int32(n_fut), Int32(p1), Int32(p2),
+        Int32(0 if d + D == 1 else 1),
+        grid_dim=((n_series + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+    )

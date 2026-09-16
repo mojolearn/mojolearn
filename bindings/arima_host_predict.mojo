@@ -10,10 +10,10 @@ from here, so the two binaries answer a saved model through the same source.
 Not a binding itself: it registers nothing, and the host surface tests glob
 only `_mojolearn_*_host.mojo`.
 
-The contract is `bindings/_mojolearn_arima.mojo`'s: `arima_predict`'s
-`params` is (batch_size, n_obs, start, end, p, d, q, P, D, Q, s, k, n_exog)
-and `arima_forecast`'s (batch_size, n_obs, n_steps, p, d, q, P, D, Q, s, k,
-n_exog, reserved). The validation is `arima/estimator.mojo`'s, in its order:
+The contract is `bindings/_mojolearn_arima.mojo`'s: the addresses are (y, exog, exog_fut,
+params, out), `arima_predict`'s `params` is (batch_size, n_obs, start, end,
+p, d, q, P, D, Q, s, k, n_exog) and `arima_forecast`'s (batch_size, n_obs,
+n_steps, p, d, q, P, D, Q, s, k, n_exog, reserved). The validation is `arima/estimator.mojo`'s, in its order:
 `_order` through the device's own `validate_order`, `_refuse_shape`,
 `_predict_into`'s start and end checks, then
 `arima_host_refuse_unrestated`. Since 2026-09-15 an in-sample prediction
@@ -22,6 +22,7 @@ n_exog, reserved). The validation is `arima/estimator.mojo`'s, in its order:
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
+from bindings.arima_exog_layout import exog_filter_layout
 from bindings.hostptr import f32_ptr, read_f32
 from arima.host.arima_oracle import (
     ArimaHostOrder,
@@ -39,7 +40,7 @@ def _order(
     `validate_order` on the nine integers, then the host order."""
     var order = ARIMAOrder(p, d, q, P, D, Q, s, k, n_exog)
     validate_order(order)
-    return ArimaHostOrder(p, d, q, P, D, Q, s, k)
+    return ArimaHostOrder(p, d, q, P, D, Q, s, k, n_exog)
 
 
 def _refuse_shape(batch_size: Int, n_obs: Int, who: String) raises:
@@ -56,6 +57,8 @@ def _refuse_shape(batch_size: Int, n_obs: Int, who: String) raises:
 
 def _forecast_into(
     y_address: Int,
+    exog_address: Int,
+    exog_fut_address: Int,
     params_address: Int,
     op: MutPointer[Float32, MutUntrackedOrigin],
     batch_size: Int,
@@ -68,7 +71,11 @@ def _forecast_into(
     var N = order.complexity()
     var y = read_f32(y_address, batch_size * n_obs)
     var pr = read_f32(params_address, N * batch_size)
-    var fc = arima_host_forecast(y, pr, batch_size, n_obs, n_steps, order)
+    var exog = exog_filter_layout(exog_address, batch_size, n_obs, order.n_exog, "exog")
+    var fut = exog_filter_layout(
+        exog_fut_address, batch_size, n_steps, order.n_exog, "exog (future values)"
+    )
+    var fc = arima_host_forecast(y, exog, fut, pr, batch_size, n_obs, n_steps, order)
     if len(fc) != n_steps * batch_size:
         raise Error(
             "arima_forecast: the host oracle returned a forecast of an"
@@ -81,6 +88,8 @@ def _forecast_into(
 
 def _predict_in_sample_into(
     y_address: Int,
+    exog_address: Int,
+    exog_fut_address: Int,
     params_address: Int,
     op: MutPointer[Float32, MutUntrackedOrigin],
     batch_size: Int,
@@ -95,7 +104,12 @@ def _predict_in_sample_into(
     var y = read_f32(y_address, batch_size * n_obs)
     var pr = read_f32(params_address, N * batch_size)
     var ld = end - start
-    var out = arima_host_predict(y, pr, batch_size, n_obs, start, end, order)
+    var num_steps = end - n_obs if end > n_obs else 0
+    var exog = exog_filter_layout(exog_address, batch_size, n_obs, order.n_exog, "exog")
+    var fut = exog_filter_layout(
+        exog_fut_address, batch_size, num_steps, order.n_exog, "exog (future values)"
+    )
+    var out = arima_host_predict(y, exog, fut, pr, batch_size, n_obs, start, end, order)
     if len(out) != ld * batch_size:
         raise Error(
             "arima_predict: the host oracle returned a prediction of an"
@@ -108,6 +122,8 @@ def _predict_in_sample_into(
 
 def arima_predict_binding(
     y_addr: PythonObject,
+    exog_addr: PythonObject,
+    exog_fut_addr: PythonObject,
     params_addr: PythonObject,
     out_addr: PythonObject,
     params: PythonObject,
@@ -124,6 +140,10 @@ def arima_predict_binding(
         )
     var y_address = Int(py=y_addr)
     _ = f32_ptr(y_address)
+    var exog_address = Int(py=exog_addr)
+    _ = f32_ptr(exog_address)
+    var exog_fut_address = Int(py=exog_fut_addr)
+    _ = f32_ptr(exog_fut_address)
     var params_address = Int(py=params_addr)
     _ = f32_ptr(params_address)
     var op = f32_ptr(Int(py=out_addr))
@@ -160,17 +180,21 @@ def arima_predict_binding(
         arima_host_refuse_unrestated(order, "arima_predict")
         if start < n_obs:
             written = _predict_in_sample_into(
-                y_address, params_address, op, batch_size, n_obs, start, end, order
+                y_address, exog_address, exog_fut_address, params_address, op,
+                batch_size, n_obs, start, end, order,
             )
         else:
             written = _forecast_into(
-                y_address, params_address, op, batch_size, n_obs, end - n_obs, order
+                y_address, exog_address, exog_fut_address, params_address, op,
+                batch_size, n_obs, end - n_obs, order,
             )
     return PythonObject(written)
 
 
 def arima_forecast_binding(
     y_addr: PythonObject,
+    exog_addr: PythonObject,
+    exog_fut_addr: PythonObject,
     params_addr: PythonObject,
     out_addr: PythonObject,
     params: PythonObject,
@@ -186,6 +210,10 @@ def arima_forecast_binding(
         )
     var y_address = Int(py=y_addr)
     _ = f32_ptr(y_address)
+    var exog_address = Int(py=exog_addr)
+    _ = f32_ptr(exog_address)
+    var exog_fut_address = Int(py=exog_fut_addr)
+    _ = f32_ptr(exog_fut_address)
     var params_address = Int(py=params_addr)
     _ = f32_ptr(params_address)
     var op = f32_ptr(Int(py=out_addr))
@@ -225,6 +253,7 @@ def arima_forecast_binding(
         _refuse_shape(batch_size, n_obs, "arima_forecast")
         arima_host_refuse_unrestated(order, "arima_forecast")
         written = _forecast_into(
-            y_address, params_address, op, batch_size, n_obs, n_steps, order
+            y_address, exog_address, exog_fut_address, params_address, op,
+            batch_size, n_obs, n_steps, order,
         )
     return PythonObject(written)

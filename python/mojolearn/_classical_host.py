@@ -59,7 +59,7 @@ import hashlib
 
 from . import _backend, _serialize
 from ._iforest_impl import IsolationForest, _IFOREST_FORMAT
-from ._arima_impl import ARIMA, _ARIMA_FORMAT
+from ._arima_impl import ARIMA, _ARIMA_FORMAT, _ARIMA_FORMAT_EXOG
 from ._tsa_impl import ExponentialSmoothing, _HW_FORMAT
 from ._cholesky_impl import _CHOLESKY_FORMAT, HostCholesky
 from ._ivf_impl import IVFIndex, _IVF_FORMAT
@@ -306,8 +306,13 @@ class HostRadiusNeighbors(_HostBound, RadiusNeighbors):
 
 class HostARIMA(_HostBound, ARIMA):
     """A saved ARIMA model on the forecast inference binding, which exports
-    `arima_predict` and `arima_forecast` and no `arima_fit`."""
-    _HOST_ARRAYS = ("_y", "params_")
+    `arima_predict` and `arima_forecast` and no `arima_fit`.
+
+    `_exog` is the fit's exogenous regressors, which a `mojolearn-arima-2`
+    file carries and prediction reads (lane/arima-exog, 2026-09-15). It is
+    `None` for a model fit without them, and `model_sha256` skips a `None`,
+    so every `mojolearn-arima-1` model hashes exactly as it did."""
+    _HOST_ARRAYS = ("_y", "params_", "_exog")
 
 
 class HostExponentialSmoothing(_HostBound, ExponentialSmoothing):
@@ -420,6 +425,9 @@ class HostEmbedding(_HostBound, Embedding):
 #: member names another class is refused by that class's own `load`.
 _FORMATS = {
     _ARIMA_FORMAT: {"ARIMA": HostARIMA},
+    # lane/arima-exog (2026-09-15): the same host class serves a model fitted
+    # WITH regressors; `ARIMA.load` reads either tag and the file says which.
+    _ARIMA_FORMAT_EXOG: {"ARIMA": HostARIMA},
     _HW_FORMAT: {"ExponentialSmoothing": HostExponentialSmoothing},
     _UMAP_FORMAT: {"UMAP": HostUMAP},
     _SPECTRAL_FORMAT: {"SpectralClustering": HostSpectralClustering},

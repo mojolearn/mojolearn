@@ -32,7 +32,7 @@ refusals, the Float64 tolerance and the structural claims assert in both.
                                         defect: `x + 0` is not a copy)
     check_kalman_matches_float64        the log-likelihood and P0 against
                                         the Float64 reference (DEVIATION 670)
-    check_arima_refuses_by_name         rd > 8, r > 5, exog, s < 2, d+D > 2,
+    check_arima_refuses_by_name         rd > 8, r > 5, n_exog < 0, s < 2, d+D > 2,
                                         p >= s, all-zero order, p > 8,
                                         NaN / inf in y, a non-positive
                                         innovation variance (DEVIATION 673)
@@ -729,7 +729,7 @@ def check_arima_refuses_by_name(ctx: DeviceContext) raises:
         (ARIMAOrder(4, 0, 1, 1, 0, 1, 4, 0, 0), String("p >= s")),
         (ARIMAOrder(0, 1, 0, 0, 0, 0, 0, 0, 0), String("p+q+P+Q+k == 0")),
         (ARIMAOrder(9, 0, 0, 0, 0, 0, 0, 0, 0), String("p > 8")),
-        (ARIMAOrder(1, 0, 1, 0, 0, 0, 0, 0, 2), String("n_exog != 0")),
+        (ARIMAOrder(1, 0, 1, 0, 0, 0, 0, 0, -1), String("n_exog < 0")),
         (ARIMAOrder(1, 0, 8, 0, 0, 0, 0, 0, 0), String("rd = 9 > 8 (block-per-series kernel)")),
         (ARIMAOrder(6, 0, 0, 0, 0, 0, 0, 0, 0), String("r = 6 > 5 (Schur Lyapunov)")),
     ]
