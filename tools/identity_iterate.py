@@ -18,10 +18,20 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def plan(paths, base, fixtures):
+def plan(paths, base, fixtures, lanes=()):
     import lane_select
     import identity_break
-    selection = lane_select.select(paths if paths else lane_select.changed_paths(base), ref=base)
+    if lanes and paths:
+        raise ValueError("choose named lanes OR changed paths, not both")
+    if lanes:
+        unknown = set(lanes) - set(identity_break.LANES)
+        if unknown:
+            raise ValueError(f"unknown lanes: {sorted(unknown)}")
+        # Naming one algorithm does not need the whole dependency graph.
+        selection = dict(lanes=list(dict.fromkeys(lanes)), fallback=False,
+                         reasons={name: "explicit lane" for name in lanes}, unattributed=[])
+    else:
+        selection = lane_select.select(paths if paths else lane_select.changed_paths(base), ref=base)
     unknown = set(fixtures) - set(identity_break.FIXTURES)
     if unknown:
         raise ValueError(f"unknown fixtures: {sorted(unknown)}")
@@ -56,7 +66,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("paths", nargs="*", help="changed source paths; otherwise diff --base plus local changes")
     ap.add_argument("--base", default="HEAD^")
-    ap.add_argument("--fixtures", default="base", help="comma-separated fixture names; default base is iteration coverage")
+    ap.add_argument("--lane", action="append", default=[], help="one algorithm lane; repeat to select several")
+    ap.add_argument("--lanes", default="", help="comma-separated algorithm lanes")
+    ap.add_argument("--exhaustive", action="store_true", help="all nine fixtures for the selected lanes")
+    ap.add_argument("--fixtures", default=None, help="comma-separated fixture names; default base is iteration coverage")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--plan", action="store_true", help="print selection without taking any slot")
     ap.add_argument("--resume", action="store_true")
@@ -66,10 +79,22 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.timeout <= 0:
         ap.error("--timeout must be positive")
-    fixtures = list(dict.fromkeys(filter(None, args.fixtures.split(","))))
+    import identity_break
+    if args.exhaustive and args.fixtures is not None:
+        ap.error("choose --exhaustive OR --fixtures")
+    fixture_names = ",".join(identity_break.FIXTURES) if args.exhaustive else (args.fixtures if args.fixtures is not None else "base")
+    fixtures = list(dict.fromkeys(filter(None, fixture_names.split(","))))
     if not fixtures:
         ap.error("at least one fixture is required")
-    selected = plan(args.paths, args.base, fixtures)
+    lanes = args.lane + [name for name in args.lanes.split(",") if name]
+    try:
+        selected = plan(args.paths, args.base, fixtures, lanes) if lanes else plan(args.paths, args.base, fixtures)
+    except ValueError as exc:
+        ap.error(str(exc))
+    selected["fixtures"] = fixtures
+    selected["repeats"] = 2
+    selected["cell_count"] = len(selected["lanes"]) * len(fixtures)
+    selected["fit_count"] = selected["cell_count"] * 2
     print(json.dumps(selected, indent=2), flush=True)
     if args.plan:
         return 0
