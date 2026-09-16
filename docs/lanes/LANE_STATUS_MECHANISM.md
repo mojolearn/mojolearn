@@ -1,106 +1,110 @@
-# rf-score-weighted: the mechanism is SPLIT SELECTION over IDENTICAL histograms
+# rf-score-weighted: the mechanism is a LOST CANDIDATE in the cross-block merge
 
-**2026-09-16, leg 11. The divergence is introduced inside `find_best_splits_kernel`, in the
-reduction and selection over histogram data that is bit-identical between the two runs.**
-Not accumulation, not feature sampling, not the partition. Still not narrowed to stale-read
-versus dropped-write-back; that is leg 12 and needs no code change.
+**2026-09-16, legs 11-14. The divergence is introduced in `find_best_splits_kernel`, over
+histogram data that is bit-identical between the two runs, and it takes the form of a
+candidate VANISHING from the merge rather than a tie being resolved differently.**
 
-This file is the mechanism evidence. `LANE_STATUS_lane-rf-score-weighted-nondeterminism.md`
-carries the defect's history, the shipped-release confirmation and the method notes.
+**A fix is identified and its EFFECT is replicated. Its MECHANISM is NOT demonstrated, and
+nothing has been landed as a default.**
 
-## How it was obtained, with no code change
+> **SCOPE, AND THIS IS THE PART THAT MATTERS BEYOND RANDOM FORESTS.**
+> `extratrees/impl/decisiontree/batched_levelalgo/split.mojo:512` and
+> `neighbors/impl/detail/fused_l2_knn.mojo:624,730` use the **identical mutex spelling**,
+> verbatim, and **have never been measured**. If the ordering hole is real, this is not a
+> random-forest bug; it is a shared-primitive bug that happened to surface in random forests,
+> and ExtraTrees and fused kNN on AMD are exposed by the same argument.
 
-`instr.trace.enabled` is a RUNTIME check inside `fit_forest`, which constructs a live
-`FitInstruments()` whose `IdentityTrace()` reads `getenv("MOJOLEARN_IDENTITY_TRACE")`. So the
-PUBLISHED 0.8.5 wheel emits an ordered stage trace from an env var alone. `IdentityTrace()` is
-built per `fit_forest` call and re-reads the variable, so a distinct path per fit gives one
-complete trace per fit.
+## Leg 11: the first differing STAGE
 
-The checkpoint that mattered already existed. `.cand` (`builder.mojo:2276`) records
-`_read_splits(len(st.active_items))` -- the candidate splits read back from the device for a
-sampling round -- field by field, 10 u32 lanes per split: `is_valid`, `colid`, `quesval`
-lo/hi, `best_metric_val` lo/hi, `global_n_left` lo/hi, `local_n_left` lo/hi. The
-`record_device` call I was authorized to add was unnecessary.
+Stage trace on the SHIPPED 0.8.5 wheel, no code change (`instr.trace.enabled` is a runtime
+check inside `fit_forest`, which builds a live `FitInstruments()` whose `IdentityTrace()`
+reads `getenv(MOJOLEARN_IDENTITY_TRACE)`).
 
-**Arm 1 was UNTRACED and is the positive control: 4/100 moved, verdict REPRODUCES.** Tracing
-drains the queue per record and could have masked a 4% race; without the control a traced null
-would have proved nothing. Traced arm: 6/150 moved, and
-`identical_trace_but_model_moved = 0` -- every moved fit had a diverging record, so the
-divergence is visible in a recorded stage rather than confined to the unchecked `split[]`.
-
-## The evidence
-
-Six divergences, always the same shape. First differing record:
-
-| repeats | first differing record | dtype | count |
-|---|---|---|---|
-| 48, 108, 142 | `tree0.batch6.round0.cand` (seq 139) | u32 | 610 |
-| 99, 127, 143 | `tree12.batch6.round0.cand` (seq 655) | u32 | 610 |
-
-The reference hash is always identical (`be63059365b47eb7`, `c18560c86172c3ff`); every
-divergent hash is distinct (`744cc0d8`, `63ae6777`, `3680d89c` / `2bf164ff`, `d338bda8`,
-`9f90f11d`). A race, now at stage granularity.
-
-**What precedes the first difference, and matches bit for bit:**
+Untraced positive control 4/100 REPRODUCES. Traced 6/150, `identical_trace_but_model_moved=0`.
 
     seq=124  tree0.batch6.round0.colsamples   i32  976      MATCHED
     seq=125  tree0.batch6.round0.cols0.hist   u8   624640   MATCHED
     seq=126  tree0.batch6.round0.cols10.hist  u8   374784   MATCHED
     seq=139  tree0.batch6.round0.cand         u32  610      <-- FIRST DIFFERENCE
 
-Both column-block histograms and the feature sample for that exact round are identical. The
-split results computed FROM them differ. This ordering was CHECKED, not assumed: tree0's
-batch6 histograms are at seq 125-126, genuinely before seq 139, because the K=4 pipeline
-interleaves trees and tree1-3's batch6 records sit at 128-138.
+Ordering CHECKED, not assumed: the K=4 pipeline interleaves trees, so tree1-3's batch6 records
+sit at 128-138 and tree0's own histograms are genuinely earlier. The whole differing set is 8
+of 693 records, a causal chain inside ONE tree, ending at `nodes`/`leaves`.
 
-**The whole differing set is 8 of 693 records, a causal chain confined to ONE tree:**
+## Leg 12: WHICH FIELD moves
 
-    seq=139  tree0.batch6.round0.cand        <-- the flip
-    seq=143  tree0.batch6.splits             <-- that batch's final splits
-    seq=145  tree0.batch7.round0.cols0.hist  <-- NEXT batch: different split -> different
-    seq=146  tree0.batch7.round0.cols10.hist     partition -> different histograms
-    seq=159  tree0.batch7.round0.cand
-    seq=163  tree0.batch7.splits
-    seq=164  tree0.nodes
-    seq=165  tree0.leaves
+`.cand` packs 10 u32 lanes per split. Dumping the sidecars and diffing lane by lane:
 
-tree1, tree2 and tree3 are untouched, matching leg 3's independent finding of exactly one
-diverging tree. The batch7 histogram differences are DOWNSTREAM consequences of the batch6
-split flip, not a second fault.
+| repeat | `colid` | `best_metric_val` | reading |
+|---|---|---|---|
+| 34 | 15 -> **13** | **identical** | lower colid won |
+| 71 | 14 -> **13** | **identical** | lower colid won |
+| 98 | 15 -> **7** | **identical** | lower colid won |
+| 86 | 15 -> **3** | ref **higher** | lower gain won |
 
-`batch6` also matches leg 3's finding that the diverging node sits at depth 6, reached from
-model arrays rather than traces. 610 lanes / 10 per split = 61 splits; 640 / 10 = 64 -- the
-node counts of depth 6.
+`Split::update` awards an equal-gain tie to the **higher** `colid`. Three of four show a LOWER
+colid winning at **bit-identical gain**, which the total order forbids -- so the higher-colid
+candidate was **ABSENT from the merge**, not outvoted. The fourth lost a strictly higher gain.
+One direction every time: **a lost candidate**.
 
-## What this rules out
+## The suspect line
 
-- **Histogram accumulation** -- identical at the diverging round, both column blocks.
-- **Feature sampling** -- `.colsamples` identical at the diverging round.
-- **The partition and row order** -- everything before seq 139 matches, across all prior
-  batches of all four in-flight trees.
+`_publish_to_global`'s claim. The ACQUIRE sits on the spin **load**; the lock is taken by a
+weak **RELAXED** compare-exchange. An RMW must read the latest value in the coherence order; a
+plain acquire-load must not. When the two observe different releases, the previous holder's
+**plain non-atomic** store to `split[node]` is unordered against this thread's plain read of
+it. DEVIATION 106 is amended in place with this reasoning.
 
-Combined with the earlier exclusions (integer atomics, the label scale, the zeroing extent,
-the content-guarded H2D caches, the pinned 32-lane reduce, `n_streams`), the divergence is
-inside `find_best_splits_kernel`: the block reduction plus the mutex-guarded cross-block merge
-in `_publish_to_global`.
+## Legs 13-14: the A/B, replicated
 
-## LEG 12: which field moves (no code change)
+`-D MOJOLEARN_RF_ACQUIRE_CAS=1` moves the ACQUIRE onto the claim.
 
-`MOJOLEARN_IDENTITY_TRACE_DUMP=cand` writes a `.bin` sidecar per matching record. Compare the
-two `.cand` dumps lane by lane, 10 lanes per split:
+| leg | control (`stock`, 24c92e17) | test (`acqcas`, a705f9a1) | P(0 at control rate) |
+|---|---|---|---|
+| 13 | 7/300 moved | **0/300** | 9.1e-4 |
+| 14 | 6/300 moved | **0/300** | ~1e-3 |
 
-- **`best_metric_val` IDENTICAL, `colid` differs** -> the gains matched and the merge chose a
-  different candidate among them. That is the tie/merge path, and `Split::update`'s
-  higher-colid rule should have made it deterministic, so the arrival-order-dependent step is
-  implicated directly.
-- **`best_metric_val` DIFFERS** -> a gain computed from an identical histogram moved, which
-  means a candidate was lost or a partial reduction was read, not a tie resolved differently.
+Digests provably distinct; arms independent. The stock digest is byte-identical to leg 9's
+pre-edit binary, so **both diagnostic defines are provably inert when absent** -- demonstrated
+by digest, not asserted.
 
-Either answer names the mechanism. The same untraced positive control must run first.
+## What is NOT established, and why I am not calling it proven
 
-## Caveat kept from the trace tool's own header
+A `0/300` is consistent with the acquire ordering repairing the edge. It is **equally
+consistent with different codegen perturbing timing enough to hide a 2-5% race.** That is the
+same masking confound raised against the `N_BLKS_FOR_COLS` cap arm, and a result that suits
+the hypothesis does not get less scepticism than one that does not.
 
-A matching hash proves two buffers held the same bits at that checkpoint, not that the
-computation was identical, and anything not hashed is invisible. The claim here is narrower
-than "the histograms are correct": it is that the histogram bytes at that round were the same
-in both runs, which is what makes the selection step the place the difference enters.
+The primitive probe is what separates them, and **it has not yet done so**:
+
+- **Leg 13**: the probe failed to compile, both arms, from my own error --
+  `'comptime if' must be contained in a function`. Mojo rejects a module-scope `comptime if`.
+- **Leg 14**: the probe ran and returned a **NULL**: `relaxed: got 512 want 512 shortfall 0`
+  with `unlocked(SABOTAGE)` losing 508 of 512. The sabotage proves the cell contends, so the
+  probe can see lost updates -- the shipped spelling simply did not lose any.
+
+**That null is underpowered, and the reason is my probe's design**: each block acquired the
+mutex ONCE with a two-instruction critical section, so the spin almost never looped -- and the
+hypothesised window REQUIRES the spin to loop, with the load observing one release while the
+claim lands on another. The probe is now rewritten with `ROUNDS = 64` acquisitions per block
+and a `HOLD` widening whose result is stored into a sink the host reads, so a compiler cannot
+elide it and silently restore the narrow section.
+
+## Measured capability
+
+`column_has_acquire_rmw` (`ensemble/checks/atomic_matrix.mojo`), AMD **MEASURED** two ways on
+gfx942: the probe printed `acquire_arm_compiled True` with `acquire: got 512 want 512`, and
+`_mojolearn_rf.so` built and ran under the define with a distinct digest. Apple is **False**
+(documented by name in DEVIATION 106). NVIDIA and the rest are **UNPROVEN** and conservatively
+False, because unproven is an honest value and a transcribed guess is not.
+
+## What would settle it
+
+Re-run the strengthened probe. If the relaxed spelling loses updates where the acquire
+spelling does not, the mechanism is demonstrated away from forests and the fix is proven in
+the strong sense. If it stays exact, the A/B remains an effect without a mechanism, and
+landing an ordering change across three subsystems on that basis is a judgement call rather
+than a measurement -- which is why it has not been landed.
+
+**Owed regardless of outcome:** ExtraTrees and fused kNN carry the same spelling and no
+measurement at all.

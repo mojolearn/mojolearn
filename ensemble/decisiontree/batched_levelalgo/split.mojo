@@ -160,6 +160,50 @@ thread_scope_device)`. Only the mutex HOLDER ever writes the release value
 and their own code discards the exchanged value too, so no ABA hides in the
 relaxed claim. This changes HOW the handoff is said, never WHAT is said.
 
+REVISITED 2026-09-16 (lane/rf-score-weighted-nondeterminism). THE ARGUMENT
+ABOVE HAS A HOLE, AND IT IS NAMED HERE RATHER THAN QUIETLY REWRITTEN.
+
+"The synchronizes-with edge is a load-acquire observing a store-release" holds
+only when the acquire LOAD and the claiming COMPARE-EXCHANGE observe the SAME
+release. They need not. A read-modify-write must read the latest value in the
+coherence order; a plain acquire-load must not. So a thread can leave the spin
+on a STALE zero from release R1 and then win the RELAXED claim on the zero from
+a later release R2, having performed no acquire that synchronizes with R2 --
+leaving the previous holder's PLAIN store to `split[node]` unordered against
+this thread's PLAIN read of it in `_publish_to_global`. Merge into a stale
+split, write it back, and the prior candidate is ERASED.
+
+WHY IT WAS REVISITED. A regressor fit on MI300X moves in 1-5% of fits (published
+0.8.5, measured: 13/300 at `max_features=1.0`). Leg 11's stage trace put the
+FIRST differing record at `tree<i>.batch6.round0.cand` with that round's
+`colsamples` and BOTH column-block histograms bit-identical, so selection, not
+accumulation. Leg 12's field diff: of four divergences, THREE had
+`best_metric_val` bit-identical with a LOWER `colid` winning -- which `update`'s
+higher-colid tie-break forbids, so the higher-colid candidate was ABSENT from
+the merge rather than outvoted. The fourth lost a strictly higher gain. One
+direction, every time: a LOST CANDIDATE.
+
+WHAT IS MEASURED, AND WHAT IS NOT. `-D MOJOLEARN_RF_ACQUIRE_CAS=1` moves the
+ACQUIRE onto the claim; with it the fit stops moving (0/300 twice, against
+controls of 7/300 and 6/300, P ~ 1e-3 each). That is the FIX'S EFFECT. It is NOT
+the mechanism: a 0/300 is equally consistent with different codegen perturbing
+timing enough to hide the race. `ensemble/checks/acquire_rmw_probe.mojo`
+measured the shipped spelling as EXACT on gfx942 (512/512, unlocked sabotage
+losing 508), which is a NULL and not a clearance -- that version acquired ONCE
+per block, so the spin almost never looped, and the hypothesised window requires
+it to.
+
+WHAT `neighbors/mutex_probe_main.mojo` ESTABLISHED, PRECISELY. It validated this
+spelling under contention ON THE M4. That is evidence it works THERE, not proof
+the edge is formally established, and Apple is not the column where this fires.
+The spelling was chosen deliberately because AIR offers no alternative; that
+constraint is real and unchanged.
+
+SCOPE. `extratrees/impl/decisiontree/batched_levelalgo/split.mojo:512` and
+`neighbors/impl/detail/fused_l2_knn.mojo:624,730` use the IDENTICAL spelling and
+have NOT been measured. If the hole is real this is a shared-primitive defect
+that happened to surface in random forests.
+
 DEVIATION 107. `printSplits` (`:291-308`) is a debug printer built on
 `raft::linalg::writeOnlyUnaryOp` and is NOT implemented. Price of declining it:
 one debug aid, replaceable by a host-side copy and print at any call site

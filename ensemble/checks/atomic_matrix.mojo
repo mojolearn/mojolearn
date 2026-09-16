@@ -126,6 +126,49 @@ def bin_counter_is_exact_at_32_bits() -> Bool:
     return True
 
 
+def column_has_acquire_rmw(column: Int) -> Bool:
+    """Whether an ACQUIRE ordering is legal on a read-modify-write.
+
+    **THIS ROW DECIDES WHETHER THE CROSS-BLOCK MUTEX CAN TAKE ITS LOCK WITH AN
+    ACQUIRE.** `_publish_to_global`
+    (`ensemble/decisiontree/batched_levelalgo/split.mojo`) spins on an ACQUIRE
+    LOAD and then claims the lock with a weak RELAXED compare-exchange. The two
+    can observe DIFFERENT releases -- a read-modify-write must read the latest
+    value in the coherence order, a plain acquire-load need not -- so the edge
+    DEVIATION 106 claims is not established in general.
+
+    - apple    **False. DOCUMENTED, not measured here.** DEVIATION 106 records
+               that the Apple backend "rejects `acquire` success ordering on a
+               compare-exchange" by name, alongside no strong compare-exchange
+               in AIR and an NVIDIA-only `threadfence`.
+    - amd      **True. MEASURED 2026-09-16 on gfx942**, two independent ways:
+               `ensemble/checks/acquire_rmw_probe.mojo` printed
+               `acquire_arm_compiled True` and `acquire: got 512 want 512
+               shortfall 0` with its unlocked sabotage arm losing 508 of 512,
+               so the cell contended; and `_mojolearn_rf.so` built and ran with
+               `-D MOJOLEARN_RF_ACQUIRE_CAS=1` (digest a705f9a1, distinct from
+               the stock 24c92e17).
+    - nvidia   **UNPROVEN.** Nothing in this tree has measured it. CUDA's
+               `cuda::atomic` exposes acquire on RMW, so it is very likely True,
+               but likely is not a verdict and this row does not pretend
+               otherwise.
+    - amd-rdna/qualcomm/intel/spec-baseline: **UNPROVEN**, conservatively False
+               so no caller silently depends on an unmeasured capability.
+
+    WHAT THIS ROW DOES NOT SAY. That the RELAXED claim is broken in practice.
+    The same probe measured the shipped spelling as EXACT (512/512) on gfx942
+    under its contention pattern, which is a NULL and not a clearance: the
+    probe acquires ROUNDS times per block precisely because the ONE-acquisition
+    version could not make the spin loop, and the hypothesised window needs it
+    to. See `docs/lanes/LANE_STATUS_MECHANISM.md`.
+    """
+    if column == COLUMN_APPLE:
+        return False
+    if column == COLUMN_AMD:
+        return True
+    return False
+
+
 def column_has_float32_atomics(column: Int) -> Bool:
     """Whether `atomicAdd` on a `Float32` exists, in global memory.
 
