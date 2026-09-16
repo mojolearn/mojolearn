@@ -478,6 +478,72 @@ the finding IS that the two disagree.
 scalers suggested. The remaining set is heavy with `par-*`, neural and byte-LM lanes, so 6.8 h is
 the current estimate and not a ceiling.
 
+### The contested lane, in plain words (Andrew's decision, 2026-09-15)
+
+`rf-score-weighted` has **two AMD recordings that differ**, and both stay in the record.
+
+- Leg 3 recorded the lane with `wide` MOVED (`49be8ea935a47640` then `50ce4a9f62cddf8e`) and
+  `base` STABLE. Leg 4 recorded it again on a different VM with `base` MOVED
+  (`d744878e7c0e31ee` then `eb475cefa0f32408`) and `wide` STABLE. In both, the four `clf_*`
+  parts are byte identical across the two fits and all four `reg_*` parts differ.
+- **The AMD column carries LEG 3's recording**, because leg 3 is the larger part (98 lanes) and
+  is the column's natural spine. Leg 4's recording is kept beside it in `records/amd-leg-4/` as
+  the second reading, because the finding IS that the two disagree.
+- **NVIDIA and the CPU column both independently produce leg 3's value** for each cell, and each
+  reads STABLE across its own two fits. The value that appears nowhere but on one AMD fit is the
+  odd one out in each case.
+- **The lane is new in 0.8.6**, so there is no prior recording to appeal to: a `git grep` for
+  `rf-score-weighted/` returns nothing on `release/0.8.6` or `origin/main`, while the same
+  command shape returns 26 hits for the control lane `kmeans-sqrt/wide`.
+- The lane is NOT dropped, NOT marked n/a and NOT excluded from the diff. Whether 0.8.6 ships
+  with a known moving cell is Andrew's call with the finished record in front of him.
+
+## Lessons from tonight: a check that is not code is not a check
+
+Three failures in one night, and they are the same failure wearing different clothes. Read them
+together.
+
+1. **A guard that could never pass.** The rental guard
+   `ps -eo command | grep -q "[h]otaisle_leg.sh"` matched the command line of its own enclosing
+   wrapper, which quotes the script name several times. The `[h]` trick only excludes grep's own
+   process. It refused a rental while nothing was running, and would have refused every rental
+   forever.
+2. **A tripwire that never tripped.** "If any group's measured peak exceeds 400, drop the rest to
+   one lane per process" was written in this file and in a commit message. It was never written
+   in the runner. When peaks of 718, 1531 and 827 arrived, nothing halted and nothing re-planned;
+   I revised the rule instead, which is the one outcome a tripwire exists to prevent.
+3. **Searches whose failure looks like success.** A `git grep` with a pathspec that could not
+   match returned zero and nearly became "no record carries this lane"; a literal-name search for
+   `forest_predict_resident` in `python/mojolearn` returned zero and did become, for two turns,
+   "nothing calls the resident path", when the caller resolves the name dynamically.
+
+The shape: **a check expressed as prose, or as a pattern that cannot tell itself from its
+target, or as a search whose empty result is indistinguishable from a pass.** The remedy is the
+same in all three cases and it is cheap: give every check a control that MUST trip it, run the
+control before the check is trusted, and make the check a mechanism that acts rather than a
+sentence that describes. The DIVERGENT report and the collision check both got controls tonight
+and both caught real defects; the three above did not.
+
+### Killing a Metal run: the exact order, because a partial kill cost real work
+
+A partial kill left a python doing Metal work outside the lock while the next locked process
+started, two Metal processes overlapped for about six minutes, and the cost was three quarantined
+part files and two lanes of rework. Contended cells are not evidence, so they cannot simply be
+kept.
+
+Do it in this order, every time:
+
+1. `ps -eo pid,ppid,etime,command` and identify ALL of: the runner, its sampler subshell (which
+   inherits the runner's command line, so it looks identical in `ps`), the `mac_slot.sh metal`
+   wrapper, and the lane's python.
+2. Kill **the python first**, then the wrapper, then the sampler, then the runner. Killing a
+   parent never kills the lane's python; it re-parents it to pid 1 and it keeps using the GPU.
+3. Re-read `ps` and confirm the tree is EMPTY, then confirm `mac_slot.sh status` reads `metal:
+   free`, then confirm the queue count has fallen back to the low tens.
+4. Only then start anything. A launch line that looks clean is not proof that nothing survived.
+5. Afterwards, quarantine every part file whose mtime falls inside the overlap window, even one
+   that exited 0, and re-run those lanes.
+
 ### What the CODE says about the moving cell (read only, nothing changed)
 
 **The path that ran**, established by reading rather than assuming. The lane builds
