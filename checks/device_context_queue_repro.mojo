@@ -11,12 +11,17 @@ estimator in it: a loop that creates a DeviceContext, does one trivial buffer
 fill on it, synchronizes, and drops it. Nothing here is vendor specific; it
 runs the same on Metal, CUDA and HIP, and the counters are the host's.
 
+Build it from the SHARED checkout, which owns the pixi environment, pointing
+`-I` and the source at your worktree and the output at your scratchpad. A bare
+`mojo build` outside `pixi run` cannot find `std` or `max`.
+
+    cd /Users/andrewhendel/CascadeProjects/mojolearn
+
     # one context per iteration (the shape every binding call has today)
-    mojo build -I . checks/device_context_queue_repro.mojo -o /tmp/qrepro
-    ITERS=200 /tmp/qrepro
+    pixi run mojo build -I $WT $WT/checks/device_context_queue_repro.mojo -o $SP/qrepro
 
     # the proposed workaround: ONE context reused for every iteration
-    mojo build -I . -D ONE_CTX=1 checks/device_context_queue_repro.mojo -o /tmp/qrepro_one
+    pixi run mojo build -I $WT -D ONE_CTX=1 $WT/checks/device_context_queue_repro.mojo -o $SP/qrepro_one
 
 Sample the queue count from another shell while it runs, and once after it
 exits, with `tools/diag/metal_queue_leak.py --watch <pid>` (macOS), or
@@ -27,17 +32,20 @@ exits, with `tools/diag/metal_queue_leak.py --watch <pid>` (macOS), or
   grows, survives the process         a kernel-side leak; reuse only slows it,
                                       and the report goes to Modular
 
-`ITERS` is read at compile time (`-D ITERS=...` or the environment at build).
+The iteration count is the `ITERS` constant below. This toolchain has no
+`env_get_int` in `std.sys` or `std.sys.compile`, so it is a plain `comptime`
+constant: edit it and rebuild, rather than passing `-D ITERS=...`.
 """
 
-from std.sys import env_get_int, has_accelerator, is_defined
+from std.sys import has_accelerator
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 
 from max.gpu.host import DeviceContext
 
-comptime ITERS = env_get_int["ITERS", 200]()
+comptime ITERS = 200
 comptime ONE_CTX = is_defined["ONE_CTX"]()
-comptime REPORT_EVERY = env_get_int["REPORT_EVERY", 20]()
+comptime REPORT_EVERY = 20
 
 
 def one_step(ctx: DeviceContext) raises:
