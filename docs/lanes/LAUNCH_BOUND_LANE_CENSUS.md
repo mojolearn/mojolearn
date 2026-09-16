@@ -34,6 +34,44 @@ being paid for. This is why the 2026-09-16 fixture shrink bought the neural
 lanes nothing on Metal, and section 2 argues it will not have bought the GBDT,
 hdbscan or holtwinters lanes anything either.
 
+### 0.0 The general result: NO launch anywhere sits in a loop over rows
+
+`a7b3b0393` established this for the byte LM step. It holds for the **whole
+shipped library**, and it is mechanically checkable rather than argued.
+
+Over every non-check `.mojo` file, find each `for ... in range(...)` whose
+bound mentions a row, sample or observation count, and report the
+`enqueue_function`, `enqueue_fill` or `enqueue_copy` calls inside its body:
+
+    row-count loops enclosing a launch, repo-wide (non-check): 0
+
+**The same detector, pointed at iteration, depth and head counts, finds nine**,
+and printing the matches rather than the count is what makes the zero mean
+something:
+
+| loop | launches inside |
+|---|---:|
+| `greedy_search_helper.mojo:1320` `for depth in range(max_depth):` | 15 |
+| `doc_parallel_boosting.mojo:1598` `for iteration in range(n_estimators):` | 6 |
+| `greedy_search_helper.mojo:5069` `for depth in range(max_depth):` | 5 |
+| `modeling_llama.mojo:2959` `for h in range(nh):` | 3 |
+| `modeling_llama.mojo:3152` `for h2 in range(nh):` | 3 |
+| `dbscan/impl/label/merge_labels.mojo:157` `for _it in range(max_iterations):` | 3 |
+| `dbscan/impl/sparse/detail/csr.mojo:201` `for _it in range(max_iterations):` | 3 |
+| `dynamic_boosting.mojo:236` `for iteration in range(n_estimators):` | 2 |
+| `doc_parallel_boosting.mojo:1269` `for p in range(perm_count):` | 1 |
+
+So the positive arm fires and the row arm is empty. **A data-size cut cannot
+remove a launch anywhere in this library.** Only an iteration, depth, head,
+layer or permutation count can.
+
+Its limit, stated: the check is DIRECT textual enclosure, so a row loop that
+called a helper which launched would be missed. The row loops that exist were
+read. The GBDT ones (`gbdt/train.mojo:368`, `:379`, `:583`) are a NaN scan and
+a `memcpy` into a pinned host buffer, with the two `enqueue_copy` calls and the
+`binarize_float_feature_kernel` launch OUTSIDE them at `:387-389`, once per
+feature. They are host staging, not launches.
+
 ### 0.1 The control: the per-operation cost is FLAT in the batch size
 
 Multiplying a count by a constant is only legitimate if the constant is a
