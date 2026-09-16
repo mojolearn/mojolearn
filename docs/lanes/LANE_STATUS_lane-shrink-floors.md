@@ -186,6 +186,40 @@ byte-lm's one-step ids and the tokenizer's 4096 bytes all hash the same on
 both sources, while the two reversals' ids are DIFFERENT and of the expected
 new shape. Neither check needs a binding, so neither is a GPU cost.
 
+### 2e. AND THE CELLS THEMSELVES, end to end
+
+The two checks above answer the question without a GPU. The end-to-end run
+landed afterwards and agrees: all fourteen touched lanes fitted on both
+sources, `base` fixture, Apple Metal, 0.8.6 bindings.
+
+```
+tokenizer                    08b10bbc6f4b565b  08b10bbc6f4b565b  same
+gbdt-parametric-losses       bf0c582ab2b4f7a5  bf0c582ab2b4f7a5  same
+gbdt-nan-modes               67fab9b57ed3504c  67fab9b57ed3504c  same
+gbdt-lossguide-newtoncosine  b9a66e78b1e9dd1d  b9a66e78b1e9dd1d  same
+gbdt-pair-logit              31e4f6ed00121ebb  31e4f6ed00121ebb  same
+hdbscan                      3c5c76e51b0ae88f  3c5c76e51b0ae88f  same
+hdbscan-leaf                 7e6eda79b757c89f  7e6eda79b757c89f  same
+spectral                     REFUSED (same message both sides, see below)
+holtwinters                  df61c2f61cdabb61  df61c2f61cdabb61  same
+byte-lm                      63bd514c0e71982a  4e8dfbf5daf0e950  MOVED
+byte-lm-resident             927bd17804146a19  927bd17804146a19  same
+samba                        59edc5499524917a  59edc5499524917a  same
+samba-untied-dropout-accum   f5297e8abd4a4c51  4610c84719bc1a25  MOVED
+mamba2-dtlimit               3c1d9aaeaa765468  3c1d9aaeaa765468  same
+```
+
+Twelve unchanged, and the two reversals landed on exactly the cells section 2c
+named, `4e8dfbf5daf0e950` and `4610c84719bc1a25`.
+
+**`spectral` is the one lane this run did NOT cover.** The 0.8.6 wheel refuses
+`SpectralClustering(prediction_data=True)`, which is post-0.8.6, so both sides
+returned the same REFUSED message rather than a hash. Matching refusals are not
+matching arithmetic. What covers that lane is section 2d: its `X[:512, :4]`
+slice is byte-identical across the two sources on three fixtures, and its only
+change was the literal `512` becoming `rows = 512`. The same limitation is
+recorded in `docs/lanes/LANE_STATUS_shrink-blindness-audit.md` section 1.
+
 ## 3. THE FLOOR MECHANISM
 
 ### 3a. What went wrong, exactly
@@ -411,6 +445,8 @@ estimate, not a benchmark.
 
 - Two lanes' references are dropped by design (section 2c). `release/0.8.7`
   retakes all four record columns; those two cells read OWED until it does.
+- `spectral` has no end-to-end before-and-after cell on this wheel (section
+  2e); its equivalence rests on the source and array checks in section 2d.
 - The `docs/lanes/LANE_STATUS_lane-neural-shape-shrink.md` and
   `docs/lanes/FIXTURE_SHRINK_SCOPE.md` statements that contradicted the code
   are corrected in place on this branch, each with a dated note saying what
@@ -448,8 +484,12 @@ was honored and both jobs waited behind other agents' runs. No box rented. No
       ~/mojolearn-evidence/shrink-floors-2026-09-16/probe_reversals.py both
 
 The probe and both run logs are in
-`~/mojolearn-evidence/shrink-floors-2026-09-16/`: `probe_reversals.py`,
-`out_before.txt` (the frozen harness at `16b29b9cf`) and `out_after.txt`.
+`~/mojolearn-evidence/shrink-floors-2026-09-16/`: `probe_reversals.py` with
+`out_before.txt` (the frozen harness at `16b29b9cf`) and `out_after.txt`;
+`eq_sites.py` and `eq.py` with `out_eq_sites.txt` and `out_eq_arrays.txt` (the
+rename checks, section 2d); and `probe_unchanged.py` with `out_cells_before.txt`,
+`out_cells_after.txt` and `out_cells_diff.txt` (the end-to-end cells, section
+2e).
 
 ## Pods
 

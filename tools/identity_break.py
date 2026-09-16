@@ -439,6 +439,85 @@ import traceback
 
 import numpy as np
 
+from contextlib import contextmanager
+from pathlib import Path
+
+
+def atomic_json(path, value):
+    path = Path(path)
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(value, stream, indent=1)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+class CellTimer:
+    def __init__(self, label):
+        self.label = label
+        self.started = time.perf_counter()
+        self.stages = {}
+
+    @contextmanager
+    def stage(self, name):
+        started = time.perf_counter()
+        print(f"# START {self.label} {name}", flush=True)
+        try:
+            yield
+        finally:
+            seconds = time.perf_counter() - started
+            self.stages[name] = self.stages.get(name, 0.0) + seconds
+            print(f"# DONE {self.label} {name} {seconds:.3f}s", flush=True)
+
+    def result(self):
+        return dict(total_seconds=time.perf_counter() - self.started, stages=dict(self.stages))
+
+
+def resume_signature(args, package_dir, harness, provenance):
+    """Bind reuse to Python/binary bytes, execution settings and full protocol.
+
+    Native modules load lazily, so hash all installed candidates before any fit,
+    not just the subset imported at checkpoint time. Reject a changed installation
+    or source harness even when its declared version/commit did not change.
+    """
+    files = [Path(harness)]
+    root = Path(package_dir)
+    files += sorted(p for p in root.rglob("*") if p.is_file() and p.suffix in (".py", ".so", ".dylib"))
+    # Some host/sabotage installations live outside the Python package.
+    for key, value in os.environ.items():
+        if key.startswith("MOJOLEARN_") and (key.endswith("HOST_DIR") or value.endswith((".so", ".dylib"))):
+            path = Path(value)
+            if path.is_file() and path.suffix in (".so", ".dylib"):
+                files.append(path)
+            elif key.endswith("HOST_DIR") and path.is_dir():
+                files += sorted(path.rglob("*.so"))
+    h = hashlib.sha256()
+    for path in files:
+        h.update(str(path.resolve()).encode())
+        with path.open("rb") as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                h.update(block)
+    options = {k: v for k, v in vars(args).items() if k not in ("json", "resume", "verbose")}
+    env = {k: v for k, v in os.environ.items() if k.startswith(("MOJO", "MODULAR", "OMP_", "MKL_", "OPENBLAS_", "VECLIB_"))}
+    # Environment values can contain credentials. Compare them without publishing them.
+    env_hash = hashlib.sha256(json.dumps(env, sort_keys=True).encode()).hexdigest()
+    return dict(schema=1, source_sha256=h.hexdigest(), options=options,
+                environment_sha256=env_hash, provenance=provenance)
+
+
+def resume_cells(path, signature):
+    with open(path) as stream:
+        previous = json.load(stream)
+    if previous.get("resume_signature") != signature:
+        raise SystemExit("REFUSING TO RESUME: sources, bindings, environment or run protocol changed")
+    return previous["cells"]
+
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 #: A box label: lowercase, digits, `_ . -`, never a placeholder.
@@ -982,7 +1061,19 @@ def record_lanes():
 APPLE_RELEASE_RECORD_ENV = "MOJOLEARN_APPLE_RELEASE_RECORD"
 
 #: More lanes than this in ONE Apple process is a column, not a lane check.
-APPLE_COLUMN_LANE_LIMIT = 24
+#: 2026-09-16, Andrew: a LANE DOES NOT TAKE AN APPLE CELL AT ALL. This was 24,
+#: and the refusal below used to tell a lane to pass --lanes under that limit
+#: and take its own cells, which five lanes did in one afternoon. Each was
+#: defensible alone; together they made the one Mac the serial bottleneck for
+#: every lane, because Metal runs ONE JOB AT A TIME and cannot be rented.
+#: The CPU host route gives the SAME BITS (it is the device kernel restated as
+#: a serial host loop) at 0.37 ms against Metal's 225.71 ms per decode step,
+#: and it runs in parallel. Cross-vendor questions go to RENTED NVIDIA and AMD.
+#: 1 leaves the Metal SMOKE check, "does my change compile and run on Apple at
+#: all", which no cross-compile can answer: on this date an acquire fence
+#: generated valid AIR and then failed at PIPELINE CREATION, breaking three
+#: subsystems on main while every --emit asm check passed.
+APPLE_COLUMN_LANE_LIMIT = 1
 
 
 def _is_apple_gpu(host):
@@ -1007,8 +1098,12 @@ def refuse_routine_apple_column(lanes, host, env=None):
         f"pass measured over seven hours.\n"
         f"  FOR ROUTINE VERIFICATION, use the rented CPU column, which is bitwise equal to Metal: "
         f"tools/runpod_cpu_leg.sh (about $0.24/hour, runs in parallel). See docs/RUNPOD_CPU_LEG.md.\n"
-        f"  FOR ONE LANE's own cells, pass --lanes with at most {APPLE_COLUMN_LANE_LIMIT} lanes and "
-        f"take the Metal slot through mac_slot.sh.\n"
+        f"  A LANE DOES NOT TAKE AN APPLE CELL. Verify on the CPU host route, which returns the "
+        f"SAME BITS about 600x faster and in parallel, and send cross-vendor questions to RENTED "
+        f"NVIDIA and AMD. Apple is taken once, at the release record.\n"
+        f"  The one exception is the Metal SMOKE check, does this compile and RUN on Apple at all, "
+        f"which no cross-compile can answer: --lanes with at most {APPLE_COLUMN_LANE_LIMIT} lane, "
+        f"through mac_slot.sh.\n"
         f"  IF THIS REALLY IS THE RELEASE RECORD, name the release: "
         f"{APPLE_RELEASE_RECORD_ENV}=<version>."
     )
@@ -7242,6 +7337,13 @@ def _run_reference(args):
     _apple_refusal = refuse_routine_apple_column(lanes, host)
     if _apple_refusal:
         raise SystemExit(_apple_refusal)
+    unknown_fixtures = set(filter(None, args.fixtures.split(","))) - set(FIXTURES)
+    if unknown_fixtures:
+        raise SystemExit(f"REFUSING: unknown fixtures: {sorted(unknown_fixtures)}")
+    if args.repeats < 1:
+        raise SystemExit("REFUSING: --repeats must be positive")
+    if getattr(args, "resume", False) and not args.json:
+        raise SystemExit("REFUSING: --resume requires --json")
     fixtures = [f for f in FIXTURES if not args.fixtures or f in args.fixtures.split(",")]
     data = {f: fixture(f) for f in fixtures}
     held = {f: heldout(f) for f in fixtures}
@@ -7286,6 +7388,18 @@ def _run_reference(args):
                      if extra_sabotage[part] == "serial" else
                      "every hashed cell MUST read BATCH_MOVED") + ". This JSON is not evidence.")
 
+    signature = None
+    if args.json:
+        signature = resume_signature(args, package["package_dir"], __file__,
+                                     dict(commit=commit, mode=mode, vendor=vendor,
+                                          platform=platform.platform(), python=platform.python_version(),
+                                          numpy=np.__version__, fixtures=fixture_hashes, heldout=heldout_hashes))
+    if getattr(args, "resume", False):
+        cells.update(resume_cells(args.json, signature))
+        with open(args.json) as stream:
+            package["bindings"] = json.load(stream).get("package", {}).get("bindings", [])
+        print(f"# RESUME {len(cells)} completed cells", flush=True)
+
     def dump(complete):
         record = dict(mode=mode, repeats=args.repeats, platform=platform.platform(),
                       vendor=vendor, commit=commit, commit_source=commit_source,
@@ -7309,13 +7423,15 @@ def _run_reference(args):
         # caught two packaging regressions a source column could not see
         try:
             from mojolearn._verify import binding_artifacts
-            package["bindings"] = [dict(module=b["module"], sha256=b["sha256"], size=b["size"])
-                                   for b in binding_artifacts()]
+            artifacts = {b["module"]: b for b in package.get("bindings", [])}
+            artifacts.update({b["module"]: dict(module=b["module"], sha256=b["sha256"], size=b["size"])
+                              for b in binding_artifacts()})
+            package["bindings"] = list(artifacts.values())
         except Exception as exc:                        # never lose a column over provenance
             package["bindings_error"] = f"{type(exc).__name__}: {exc}"[:200]
         record["package"] = package
-        with open(args.json, "w") as fh:
-            json.dump(record, fh, indent=1)
+        record["resume_signature"] = signature
+        atomic_json(args.json, record)
 
     print(f"# identity_break  mode={mode}  {time.strftime('%Y-%m-%d %H:%M:%S')}  "
           f"{platform.platform()}")
@@ -7329,6 +7445,19 @@ def _run_reference(args):
         row, row_infer, row_model, row_batch, row_rl = [], [], [], [], []
         row_extra = {}
         for f in fixtures:
+            if f"{name}/{f}" in cells:
+                cached = cells[f"{name}/{f}"]
+                display = cached["hashes"][0] if cached["verdict"] == "STABLE" else cached["verdict"]
+                row.append(f"{display:<16}")
+                for col, target in (("infer", row_infer), ("model", row_model), ("batch", row_batch),
+                                    ("rlpair", row_rl)) + tuple((part, row_extra.setdefault(part, [])) for part in extra):
+                    if col == "rlpair" and name not in RLPAIR:
+                        continue
+                    verdict = cached.get(f"{col}_verdict", "REFUSED")
+                    target.append(_shown(verdict, cached.get(col, [])))
+                print(f"# REUSED {name}/{f} {cached['verdict']}", flush=True)
+                continue
+            timer = CellTimer(f"{name}/{f}")
             X, yc, yr = data[f]
             hs, parts, err = [], [], None
             infers, models, reloads, errs2 = [], [], [], []
@@ -7341,7 +7470,8 @@ def _run_reference(args):
                     # hand the next fit rows it wrote to
                     global _DUMP_TAG
                     _DUMP_TAG = f"{name}/{f}/{repeat}"
-                    p = LANES[name](ml, X, yc, yr, held[f].copy())
+                    with timer.stage(f"repeat={repeat + 1}/train"):
+                        p = LANES[name](ml, X, yc, yr, held[f].copy())
                     parts.append(dict(p))
                     hs.append(_train_hash(p))
                 except Exception as exc:
@@ -7349,7 +7479,8 @@ def _run_reference(args):
                     if args.verbose:
                         traceback.print_exc()
                     break
-                inf, mod, rel, err2 = _probe_fit(p, name)
+                with timer.stage(f"repeat={repeat + 1}/infer-save-reload"):
+                    inf, mod, rel, err2 = _probe_fit(p, name)
                 infers.append(inf); models.append(mod); reloads.append(rel)
                 if err2:
                     errs2.append(err2[:300])
@@ -7360,15 +7491,17 @@ def _run_reference(args):
                 if args.no_batch:
                     bat, err3 = "n/a:skipped (--no-batch)", None
                 else:
-                    bat, err3 = _probe_batch(p, name, ml, held[f].copy(), args.batch_alone, batch_sabotage)
+                    with timer.stage(f"repeat={repeat + 1}/batch"):
+                        bat, err3 = _probe_batch(p, name, ml, held[f].copy(), args.batch_alone, batch_sabotage)
                 batches.append(bat)
                 if err3:
                     errs3.append(err3[:300])
                     if args.verbose:
                         print(err3)
                 for part in extra:
-                    val, errp, notes = _probe_part(part, p, name, ml, held[f].copy(), args.batch_alone,
-                                                   extra_sabotage[part])
+                    with timer.stage(f"repeat={repeat + 1}/{part}"):
+                        val, errp, notes = _probe_part(part, p, name, ml, held[f].copy(), args.batch_alone,
+                                                       extra_sabotage[part])
                     extras[part]["values"].append(val)
                     if errp:
                         extras[part]["errors"].append(errp[:300])
@@ -7382,7 +7515,8 @@ def _run_reference(args):
                     if args.no_rlpair:
                         rl, err4, sd = "n/a:skipped (--no-rlpair)", None, []
                     else:
-                        rl, err4, sd = _probe_rlpair(p, name, ml, held[f].copy(), rlpair_sabotage)
+                        with timer.stage(f"repeat={repeat + 1}/rlpair"):
+                            rl, err4, sd = _probe_rlpair(p, name, ml, held[f].copy(), rlpair_sabotage)
                     rls.append(rl)
                     rl_sides = rl_sides if rl_sides is not None else sd
                     if err4:
@@ -7446,16 +7580,16 @@ def _run_reference(args):
                     row_extra.setdefault(part, []).append("REFUSED")
                 if name in RLPAIR:
                     row_rl.append("REFUSED")
+            cell["timing"] = timer.result()
             cells[f"{name}/{f}"] = cell
+            if args.json:
+                dump(False)
+            print(f"# CELL {name}/{f} {cell['verdict']} {cell['timing']['total_seconds']:.3f}s", flush=True)
             row.append(f"{shown:<16}")
         print(f"| {name:<{W}} | " + " | ".join(row) + " |", flush=True)
         for label, r in (("infer", row_infer), ("model", row_model), ("batch", row_batch), ("rlpair", row_rl)) + tuple(row_extra.items()):
             if any(not s.startswith("n/a") for s in r):
                 print(f"| {name + ' ' + label:<{W}} | " + " | ".join(f"{s:<16}" for s in r) + " |", flush=True)
-        if args.json:
-            # written after EVERY lane so a hang that gets killed by the
-            # caller's timeout still leaves the finished lanes on disk
-            dump(False)
 
     refused = {k: v["error"] for k, v in cells.items() if v["verdict"] == "REFUSED"}
     moved = [k for k, v in cells.items() if v["verdict"] == "MOVED"]
@@ -7531,7 +7665,10 @@ def _run_reference(args):
     if args.json:
         dump(True)
         print(f"wrote {args.json}")
-    return 1 if (moved or moved2 or moved3 or batch_fails or moved4 or rl_fails or extra_fail) else 0
+    refused_any = refused or refused2 or refused3 or refused4 or any(
+        c.get(f"{part}_error") for c in cells.values() for part in extra)
+    return 1 if (moved or moved2 or moved3 or batch_fails or moved4 or rl_fails or extra_fail
+                 or (getattr(args, "fail_on_refused", False) and refused_any)) else 0
 
 
 def _diff_column(cols, k, col):
@@ -7946,7 +8083,8 @@ def merge(paths, out, allow_separate_builds=False):
     cells = {}
     for p, j in parts:
         for k, c in j["cells"].items():
-            if k in cells and json.dumps(cells[k], sort_keys=True) != json.dumps(c, sort_keys=True):
+            if k in cells and {a: b for a, b in cells[k].items() if a != "timing"} != {
+                    a: b for a, b in c.items() if a != "timing"}:
                 raise SystemExit(f"REFUSING --merge: cell {k} is in two parts with different contents")
             cells[k] = c
     lane_rank = {n: i for i, n in enumerate(LANES)}
@@ -7977,6 +8115,10 @@ def merge(paths, out, allow_separate_builds=False):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--json", default="")
+    ap.add_argument("--fail-on-refused", action="store_true",
+                    help="exit nonzero if any requested stage refuses (used by iteration runner)")
+    ap.add_argument("--resume", action="store_true",
+                    help="reuse completed cells from --json only when sources, binaries and protocol match")
     ap.add_argument("--lanes", default="")
     ap.add_argument("--skip", default="", help="lanes to leave out, comma separated; each is reported as SKIPPED")
     ap.add_argument("--fixtures", default="")
