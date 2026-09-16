@@ -37,12 +37,13 @@ import os
 import tempfile
 
 from . import _backend
+from . import _bpe_trainer
 from . import _tokenizer_synthetic
 from ._buffer import addr, addr_ro
 
 _EXTENSION = "_mojolearn_tokenizer_host"
 
-__all__ = ["GPT2Tokenizer"]
+__all__ = ["GPT2Tokenizer", "BpeVocabularyTrainer", "TrainedBpeVocabulary"]
 
 _NO_VOCABULARY = (
     "mojolearn: GPT2Tokenizer needs a vocabulary, and mojolearn ships none. "
@@ -381,3 +382,130 @@ class GPT2Tokenizer:
 
     def __repr__(self):
         return f"GPT2Tokenizer(n_vocab={self._n_vocab}, vocabulary={self._source!r})"
+
+
+class TrainedBpeVocabulary:
+    """What `BpeVocabularyTrainer.train` returns: the vocabulary, the merges,
+    and the two formats it can be written in.
+
+    `tokens` are the token byte strings in rank order (rank = id, the 256
+    single bytes first). `merges` are `(left_id, right_id, new_id)` in the
+    order they were made. `n_ties_broken` is how many selections had two or
+    more pairs at the top count, which is how you can see the tie-break rule
+    was actually REACHED on your corpus rather than merely present.
+    """
+
+    def __init__(self, tokens, merges, stats):
+        self.tokens = tokens
+        self.merges = merges
+        self.stats = dict(stats)
+
+    @property
+    def n_tokens(self):
+        """The ranks. `<|endoftext|>` takes the id after the last one."""
+        return len(self.tokens)
+
+    @property
+    def n_ties_broken(self):
+        return self.stats["n_ties_broken"]
+
+    @property
+    def tie_break(self):
+        """The total order that settles equal counts, spelled out."""
+        return self.stats["tie_break"]
+
+    def render_ranks(self):
+        """OUR format as text: `rank<TAB>hex_of_token_bytes` per line."""
+        return _bpe_trainer.render_ranks(self.tokens)
+
+    def render_tokenizer_json(self):
+        """A `tokenizer.json` Hugging Face `tokenizers` loads, as text."""
+        return _bpe_trainer.render_tokenizer_json(self.tokens, self.merges)
+
+    def write_ranks(self, path):
+        _bpe_trainer.write_ranks(self.tokens, path)
+        return path
+
+    def write_tokenizer_json(self, path):
+        _bpe_trainer.write_tokenizer_json(self.tokens, self.merges, path)
+        return path
+
+    def tokenizer(self):
+        """A `GPT2Tokenizer` over this vocabulary, so a freshly trained table
+        can be used without going through a file."""
+        return GPT2Tokenizer.from_token_bytes(self.tokens)
+
+    def __repr__(self):
+        return (f"TrainedBpeVocabulary(n_tokens={self.n_tokens}, "
+                f"n_merges={len(self.merges)}, n_ties_broken={self.n_ties_broken})")
+
+
+class BpeVocabularyTrainer:
+    """Train a byte-level BPE vocabulary, deterministically.
+
+        tok = BpeVocabularyTrainer(vocab_size=32000).train(documents).tokenizer()
+
+    mojolearn ships no vocabulary and no corpus; `documents` is yours, as a
+    sequence of `bytes` (or `str`, encoded UTF-8 first). Each document is
+    pre-tokenized ALONE, so no pre-token spans a document join and the ORDER
+    the documents arrive in cannot reach the result.
+
+    WHAT IS BEING CLAIMED. Vocabulary training is host-only everywhere --
+    Hugging Face, SentencePiece and tiktoken all train on a CPU -- so this is
+    not a cross-vendor GPU claim and there is no vendor column. The claim is
+    that THE SAME CORPUS AND CONFIG PRODUCE THE SAME VOCABULARY BYTES ON ANY
+    MACHINE AND ARCHITECTURE, and it rests on four things: a total order on
+    the tie-break (highest count, then smallest `(left_id, right_id)`),
+    single-threaded counting so there is no reduction order to get wrong,
+    selection that never depends on an iteration order, and no float anywhere
+    in the selection.
+
+    The arithmetic is `tokenizer/train/bpe_train.mojo`; this door runs the
+    independent Python implementation of the same stated algorithm, which
+    `pixi run check-bpe-trainer` holds the Mojo one to file byte for file
+    byte.
+    """
+
+    def __init__(self, vocab_size=32000, min_frequency=2):
+        if not isinstance(vocab_size, int) or isinstance(vocab_size, bool):
+            raise TypeError(f"mojolearn: vocab_size must be an int, got {type(vocab_size).__name__}")
+        if vocab_size < 256:
+            raise ValueError(
+                f"mojolearn: vocab_size {vocab_size} is below the 256 single-byte tokens; "
+                "byte-level BPE needs every byte")
+        if not isinstance(min_frequency, int) or isinstance(min_frequency, bool):
+            raise TypeError(f"mojolearn: min_frequency must be an int, got {type(min_frequency).__name__}")
+        if min_frequency < 1:
+            raise ValueError(f"mojolearn: min_frequency {min_frequency} must be at least 1")
+        self.vocab_size = vocab_size
+        self.min_frequency = min_frequency
+
+    def train(self, documents):
+        """Train on `documents`, a sequence of bytes-like or str."""
+        if isinstance(documents, (str, bytes, bytearray, memoryview)):
+            raise TypeError(
+                f"mojolearn: train takes a sequence of documents, got {type(documents).__name__}; "
+                "wrap a single document in a list")
+        try:
+            docs = list(documents)
+        except TypeError:
+            raise TypeError(
+                f"mojolearn: train takes a sequence of documents, got {type(documents).__name__}"
+            ) from None
+        if not docs:
+            raise ValueError("mojolearn: train needs at least one document")
+        raws = []
+        for k, d in enumerate(docs):
+            if isinstance(d, str):
+                raws.append(d.encode("utf-8"))
+            elif isinstance(d, (bytes, bytearray, memoryview)):
+                raws.append(bytes(d))
+            else:
+                raise TypeError(
+                    f"mojolearn: document {k} must be str or bytes-like, got {type(d).__name__}")
+        tokens, merges, stats = _bpe_trainer.train(raws, self.vocab_size, self.min_frequency)
+        return TrainedBpeVocabulary(tokens, merges, stats)
+
+    def __repr__(self):
+        return (f"BpeVocabularyTrainer(vocab_size={self.vocab_size}, "
+                f"min_frequency={self.min_frequency})")
