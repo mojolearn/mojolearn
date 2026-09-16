@@ -288,6 +288,23 @@ from the branch `fix/release-post-record-allowlist`. The local branch is now fas
 9. Record commit on `release/0.8.6` under `bench/results/identity_break/<release dir>`:
    `TRAINING_GPU_COLUMNS` and the other record lists, `verify --all --emit-reference`,
    CHANGELOG, docs_facts. Merge the record back to main (cherry-pick, not a main merge).
+   The exact pieces, so none of this is rediscovered:
+   - the record lists live in `python/mojolearn/host_surface.py`: `TRAINING_GPU_COLUMNS` (the
+     three column paths, today the 166-lane record), `TRAINING_FIX_COLUMNS` and
+     `TRAINING_FIX_LANES` (kmeans-sqrt, embedding, embedding-sort, ivf, ivf-euclidean). These
+     three names are also the post-record allowlist the packer admits.
+   - the table: `MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify --all
+     --emit-reference python/mojolearn/verify_reference/table.json`, run from the release
+     checkout. It needs no host binding and no GPU, and it walks
+     `bench/results/identity_break` (or the `--records` paths given), so the new record
+     directory must be COMMITTED first or the table will not carry it. It refuses on a FAST
+     build, and prints a summary plus the table's byte size.
+   - the facts: `python3 tools/docs_facts.py --check` fails when a doc disagrees with the
+     tree, `--write` rewrites the marked spans (the version span and the CHANGELOG date are
+     the ones this release moves).
+   - the CHANGELOG's 0.8.6 heading still reads `(unreleased 2026-09-16)` and its opening
+     paragraph still calls the identity record OWED. Both are edited when the record lands,
+     and the date is set only when the wheels go out.
 10. Final Linux pack from the recorded proofs at the record commit (allowlist below) and the
     macOS repack; final content audit on both wheels; `host_surface.py` import and
     `verify --quick` from each installed final wheel.
