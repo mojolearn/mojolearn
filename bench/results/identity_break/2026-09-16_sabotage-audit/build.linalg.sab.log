@@ -1,0 +1,19 @@
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-sabaudit/bindings/_mojolearn_linalg_host.mojo:194:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[i] = c[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-sabaudit/bindings/_mojolearn_linalg_host.mojo:47:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-sabaudit/bindings/_mojolearn_linalg_host.mojo:187:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-sabaudit/bindings/_mojolearn_linalg_host.mojo:258:16: warning: assignment to 'info' was never used; assign to '_' instead?
+    var info = 0
+               ^
+ld: warning: passed two min versions (26.0, 11.0) for platform macOS. Using 11.0.
+ld: warning: object file (/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojo_archive-8eb6e2e.a) was built for newer 'macOS' version (26.0) than being linked (11.0)
+built /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-sabaudit/host-sab/_mojolearn_linalg_host.so

@@ -1,0 +1,15 @@
+prod families: {'_mojolearn_core_host': False, '_mojolearn_estimators_host': False}
+sab  families: {'_mojolearn_core_host': True, '_mojolearn_estimators_host': True}
+kde                    base:train:MOVED+infer:MOVED+model:UNMOVED(cd5469f3b8854867)+batch:MOVED  ties:train:MOVED+infer:MOVED+model:UNMOVED(c6b86284b81d2eea)+batch:MOVED
+knn                    base:train:MOVED+infer:MOVED+model:UNMOVED(2262556d652b5187)+batch:MOVED  ties:train:MOVED+infer:MOVED+model:UNMOVED(4049122e7b37a94e)+batch:MOVED
+knn-clf                base:train:MOVED+infer:MOVED+model:UNMOVED(f0b9be0fd408466b)+batch:MOVED  ties:train:MOVED+infer:MOVED+model:UNMOVED(02aa0eb5e36cffee)+batch:MOVED
+knn-reg                base:train:MOVED+infer:MOVED+model:UNMOVED(7404b5d0a3a97d83)+batch:MOVED  ties:train:MOVED+infer:MOVED+model:UNMOVED(059724706575c43d)+batch:MOVED
+logistic               base:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED  ties:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED
+logistic-multiclass    base:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED  ties:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED
+ols                    base:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED  ties:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED
+pca                    base:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED  ties:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED
+pca-whiten             base:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED  ties:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED
+ridge                  base:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED  ties:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED
+tsvd                   base:train:MOVED+infer:MOVED+model:MOVED+batch:MOVED  ties:train:MOVED+infer:MOVED+model:UNMOVED(5aa8d4139303b4c2)+batch:MOVED
+
+TOTAL moved=79 unmoved=9

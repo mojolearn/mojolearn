@@ -10,6 +10,91 @@ what a user can check from a pip install. The freeze checks of docs/RELEASE_CHEC
 the per-vendor GPU-box build and the byte compare of the host bindings across the three
 Linux legs are OWED before this heading reads published.
 
+- Every host family now says in `python/mojolearn/host_surface.py` why it does or does not
+  ship in the wheels (`wheel_note`, `--wheel-notes`), so an exclusion is never silent
+  (lane/expose-inference-surface, for 0.8.7). Fifteen families ship and seventeen do not;
+  each of the seventeen names the shipping family that serves its inference instead
+  (preprocessing and kernel_methods through estimators, trees, rf and gbdt through forest,
+  gp through gp_infer, arima and tsa through forecast, mamba, transformer and the training
+  forwards through neural, and so on) or says it is training-only.
+- **The bootstrap, the permutation test, Monte Carlo integration and `kpss_test` now work on
+  a CPU-only install.** They were unreachable: each computes a statistic from the caller's
+  own data, trains no model and has nothing to save, so the saved-model inference boundary
+  never had a side for them to fall on and they refused on a laptop. The boundary exists to
+  keep CPU TRAINING OF MODELS internal, not to exclude analysis. The `resample` family now
+  ships, taking the wheels from fifteen host bindings to sixteen; its binding already
+  registered the three entries and no fit. `kpss_test` could not ship the same way, because
+  its family `tsa` holds `holtwinters_fit`, so `kpss_test_binding` moved into a new shared
+  module `bindings/kpss_host_test.mojo` that BOTH the tsa reference binding and the shipped
+  `forecast` inference binding register, the pattern `holtwinters_host_predict.mojo` set: the
+  `_mojolearn_tsa` route already falls back to the forecast binding on a CPU-only install, so
+  no fit ships and the two binaries answer through one source. `forecast_host_sabotage` now
+  also reports the KPSS arm.
+- **`verify --all` can no longer pass a run it did not perform.** On a CPU-only install with
+  stale bindings it printed `VERIFIED ... exit 0` while 288 of 332 cell parts REFUSED: the
+  user had checked 13 percent of what they believed they had. A refused part did not run, so
+  it is never evidence of success and no number of parts that did run makes up for it. Any
+  refusal now reads `INCOMPLETE` and exits 4, only a run with nothing refused may read
+  VERIFIED, and DIVERGENT is still read first because a wrong answer outranks an absent one.
+  The verdict line leads with what was checked: `verified 44 of 332 cell parts (0 divergent,
+  27 owed, 288 refused, 0 n/a)`. `docs/VERIFY.md` and `test_verdict_exit_codes` updated; the
+  new test was watched failing against the old code first. A healthy install is unaffected
+  (278 of 332, VERIFIED, exit 0).
+- **`python -m mojolearn verify --self-test`: a user can now watch the verifier fail.** Reading
+  VERIFIED meant trusting, unseen, that we wrote an honest table and a real comparison. The
+  self-test runs one lane twice through the ordinary comparison path, untouched (must read
+  IDENTICAL) and with every value of the input's first column moved up one ULP (must read
+  DIVERGENT). The perturbation is real arithmetic at run time, so it needs no sabotage build
+  and no second binding, and exit 0 requires BOTH arms, so a comparison stuck on either answer
+  fails it. Proven against a deliberately broken comparator in both directions, and that is
+  now a test rather than a one-off. The two-sided design earned itself immediately: the first
+  perturbation moved a single value and was measured INERT for this lane, so the self-test
+  reported NOT TRUSTWORTHY instead of passing quietly; a one-sided version would have shipped
+  green. The size used is the smallest measured to move the hash, pinned by a test.
+- **`verify --json` and `--json-out PATH` emit evidence rather than a verdict**, rendered from
+  the same object as the human report so the two cannot drift. Per cell: the hash computed on
+  this machine, the hash expected, the verdict and the wall time. Plus the version and commit,
+  the sha256 and size of every binding actually loaded (host bindings included), the device,
+  CPU, OS and Python, the committed column each reference came from as an openable path under
+  `bench/results/identity_break/`, the self-test result in the same artifact, and lane counts
+  kept separate from cell-part counts. Three defects were found by reading the output rather
+  than assuming: the binding provenance was EMPTY on a CPU-only install (host bindings load
+  under `mojolearn._host.*`, which the scanner did not look at), per-cell timings were dropped
+  by `judge_rows`, and the lane counts first read "6 checked of 2 requested" because the
+  portable models were folded in with the harness lanes.
+- **What a CPU-only wheel user can verify goes from 9 lanes to 39, for zero extra wheel
+  bytes.** `public_reference_lanes()` gained thirty lanes: k-means and its starts, the k-NN,
+  radius and kernel-density variants, DBSCAN, the linear, ridge, logistic and decomposition
+  lanes, SVC, SVR, the isolation forest, the saved UMAP embedding's transform, and the four
+  analysis functions this release exposes. Every one was measured on an Apple M4 CPU column
+  at 9 fixtures and 2 repeats against the Apple, NVIDIA and AMD columns: 0 DIVERGENT, and
+  their sabotage arm seen to move rather than assumed. Nothing was added to the wheel,
+  because each is served by a binding it already carried and each reference hash was already
+  in the shipped table, merely never consulted. The promotion waited for the fixture shrink
+  (`e2bb9e541`) to publish its scope, since these references ship in the wheel's table and a
+  lane whose fixture moved would ship a reference a user's `verify` then fails against; none
+  of the thirty is among the thirteen shrunk lanes. `svc-poly` is the one lane not promoted,
+  because its cells rest on two columns and cannot meet `--require-columns 4`. Measured end
+  to end on the CPU-only install afterwards, `verify --all --full` reads
+  `VERIFIED (verified 1065 of 1412 cell parts (0 divergent, 158 owed, 0 refused, 189 n/a))`
+  in 523.7 s, against 278 of 332 before.
+- The same file now records the two measured exposure gaps rather than leaving them in a
+  reader's head. `PUBLIC_REFERENCE_CANDIDATES` names the identity lanes that pass every static
+  condition for `public_reference_lanes()` (a real train reference on all nine fixtures, a
+  `cpu` column in the shipped table, all nine fixtures on all three training GPU columns so
+  `--require-columns 4` can be met, and reachability from a binding that ships, so promoting
+  them grows the wheel by nothing). Measured on an Apple M4 CPU column at 9 fixtures and 2
+  repeats: 0 DIVERGENT and 26 of 27 IDENTICAL x4 on train across every fixture. They are held,
+  not live, until the fixture shrink publishes its scope, because these references ship in
+  the wheel's table and promoting a lane whose fixture then changes would ship a reference a
+  user's `verify` fails against. Two criteria of the list were wrong and a check caught each:
+  `svc-poly` rests on two columns and was dropped, and `kpss` was wrongly excluded by a rule
+  that demanded the declaring family ship when a shipped binding serves its route.
+  `SAVED_MODEL_INFERENCE_OWED` names the saved-model inference that IS implemented and that
+  `mojolearn.host_model()` already dispatches but that no gate covers: DBSCAN,
+  AgglomerativeClustering and SpectralClustering `predict`, each waiting on a GPU recording,
+  and `KMeans.predict`, which has no save format yet.
+
 - `ARIMA` takes exogenous regressors: `fit(y, exog)`, `forecast(steps, exog)` and
   `predict(start, end, exog)` (lane/arima-exog, for 0.8.7), regression with ARIMA errors as
   cuML's. `beta` is packed after `mu`, the regressors are differenced beside `y`, `beta` is

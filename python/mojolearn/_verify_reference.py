@@ -61,8 +61,28 @@ CLASSES = ("apple", "nvidia", "amd", "cpu")
 VENDOR_CLASS = {"metal": "apple", "cuda": "nvidia", "hip": "amd", "cpu": "cpu"}
 
 _COMMIT = re.compile(r"^[0-9a-f]{7,40}$")
-#: file and directory name tokens of runs that are not evidence of the claim
-_EXCLUDED_NAME_TOKENS = ("sabotage", "partial", "probe", "unfixed", "post-merge-smoke")
+#: Tokens of runs that are not evidence of the claim, matched against the
+#: WHOLE PATH because each marks a whole DIRECTORY of such runs:
+#: `2026-09-14_kmeans-sqrt-fix/unfixed/` holds columns taken with the bug still
+#: present, and admitting those would feed known-wrong hashes into the table.
+_EXCLUDED_PATH_TOKENS = ("partial", "probe", "unfixed", "post-merge-smoke")
+#: `sabotage` is matched against the FILE NAME ALONE (2026-09-16,
+#: lane/sabotage-evidence). A negative control is recorded BESIDE the clean
+#: column it is a control for, in one record directory, and naming that
+#: directory after what it records is the obvious thing to do. Matching the
+#: whole path therefore refused clean columns for their neighbor's sin, and
+#: refused them SILENTLY: two committed ones,
+#: `2026-09-15_ties-sabotage/x86-runpod/cpu-x86.json` and
+#: `2026-09-15_metrics-sabotage-coverage/cpu-prod.json`, were being discarded
+#: with no error to read. A sabotage build also declares itself in its own
+#: metadata, `host.families[*].sabotage` and the `*_sabotage` flags checked
+#: below, which is the stronger test and still refuses it. Measured over the
+#: 495 committed columns: 220 admitted before, 222 after, NOTHING newly
+#: refused, and no column carrying a sabotage signal admitted
+#: (`tests/test_verify_reference_admit.py`).
+_EXCLUDED_BASENAME_TOKENS = ("sabotage",)
+#: the whole vocabulary, for readers and for anything that wants to report it
+_EXCLUDED_NAME_TOKENS = _EXCLUDED_PATH_TOKENS + _EXCLUDED_BASENAME_TOKENS
 #: n/a values that describe the RUN, not the estimator
 _SKIPPED_NA = ("n/a:skipped", "n/a:UNDECLARED")
 
@@ -209,7 +229,9 @@ def _commit_time(root, commit, cache):
 def admit(j, path):
     """None when the column is admissible, else the reason it is not."""
     low = path.lower()
-    if any(tok in low for tok in _EXCLUDED_NAME_TOKENS):
+    base = os.path.basename(low)
+    if any(tok in low for tok in _EXCLUDED_PATH_TOKENS) or any(
+            tok in base for tok in _EXCLUDED_BASENAME_TOKENS):
         return "sabotage, partial, probe, unfixed or smoke run (by name)"
     if not isinstance(j, dict) or not isinstance(j.get("cells"), dict):
         return "not an identity_break column"
@@ -342,10 +364,44 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None):
         format=FORMAT,
         generated_by="python -m mojolearn verify --all --emit-reference",
         harness_sha256=sha256_file(harness.__file__),
+        #: THE LANE REVISIONS THIS TABLE WAS GENERATED AGAINST (2026-09-16,
+        #: lane/identity-fixtures-light). A lane whose fixture moves gets a new
+        #: LANE_REVISIONS entry in the harness; recording the revisions here is
+        #: what lets `stale_reference_lanes` below detect, mechanically, that a
+        #: reference predates the input it is supposed to describe. A table
+        #: generated before this key existed carries none, which reads as
+        #: "unknown" and therefore stale for any lane that has a revision.
+        lane_revisions=dict(getattr(harness, "LANE_REVISIONS", {}) or {}),
         fixtures=want_fix, heldout=want_held,
         records=[records[i] for i in used],
         cells=cells,
     )
+
+
+def stale_reference_lanes(table, harness):
+    """Lanes whose FIXTURE has moved but whose REFERENCE has not, sorted.
+
+    A reference hash describes one exact input. When a lane's fixture is
+    shrunk or otherwise changed, the harness bumps its `LANE_REVISIONS`
+    entry, and every hash recorded at the old input stops describing
+    anything this harness can produce. Comparing against it would fail for a
+    reason that has nothing to do with the user's machine, which is the worst
+    failure this tool has: it looks exactly like the identity claim being
+    false.
+
+    A lane is stale when the table still carries cells for it and the table's
+    recorded revision is not the harness's. A table generated before
+    `lane_revisions` was recorded carries no revision at all, which is not
+    evidence that it is current, so it counts as stale. A lane the table has
+    no cells for is not stale; there is nothing to compare against.
+    """
+    want = dict(getattr(harness, "LANE_REVISIONS", {}) or {})
+    if not want:
+        return []
+    have = table.get("lane_revisions") or {}
+    with_cells = {k.partition("/")[0] for k in table.get("cells", {})}
+    return sorted(lane for lane, rev in want.items()
+                  if lane in with_cells and have.get(lane) != rev)
 
 
 def write_table(table, path):

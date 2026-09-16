@@ -33,21 +33,34 @@ from concurrent.futures import ThreadPoolExecutor
 #: in Python, fits each range through the rf and trees host bindings' shard
 #: fits (`rf_*_fit_shard`, `et_*_fit_shard`, the GPU bindings' tree_start
 #: offset restated on the host) and concatenates the trees in ID order.
+#:
+#: Wave 3 (lane/cpu-verifier-par-samba, 2026-09-16) adds the Samba stack's
+#: gradient shards. `ParallelNeuralTrainer` sends one `samba_gradient` per
+#: logical shard from the same non-cooperative `DevicePool(devices)` that
+#: carries par-mlp's `mlp_gradient`, and the shard gradients come back to
+#: the driver and are folded by `parallel_training.ordered_sum_gradients`
+#: inside the one `samba_update` its one-device cooperative pool carries.
+#: Since lane/cpu-training-samba (2026-09-15) the training, mamba and
+#: transformer host bindings serve every call SambaStack makes, so both
+#: requests run the same host arithmetic the covered `samba` lane does.
 CPU_OPERATIONS = frozenset((
     'scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit',
     'neighbor_query', 'neighbor_reference', 'neighbor_vote',
-    'forest_fit', 'mlp_gradient',
+    'forest_fit', 'mlp_gradient', 'samba_gradient',
 ))
 
-#: The one cooperative operation the CPU route admits, and only from a
-#: ONE-device pool: ParallelNeuralTrainer's update (`mlp_update`), which folds
-#: the logical shards' gradients in Python (`ordered_sum_gradients`) and
-#: applies one optimizer step. Its gradient columns, clip tensors and
-#: optimizer ranges are split inside the GPU binding only at
-#: MOJOLEARN_OPTIMIZER_DEVICE_COUNT above one (`training/*_multi_gpu.mojo`
-#: take the plain path at one), so a one-device update hides no partition a
-#: host binding would have to restate; two or more devices refuse by name.
-CPU_SINGLE_DEVICE_COOPERATIVE = frozenset(('mlp_update',))
+#: The cooperative operations the CPU route admits, and only from a
+#: ONE-device pool: ParallelNeuralTrainer's updates (`mlp_update`, and
+#: `samba_update` since wave 3), which fold the logical shards' gradients in
+#: Python (`ordered_sum_gradients`) and apply one optimizer step. Their
+#: gradient columns, clip tensors and optimizer ranges are split inside the
+#: GPU binding only at MOJOLEARN_OPTIMIZER_DEVICE_COUNT above one
+#: (`training/*_multi_gpu.mojo` take the plain path at one), so a one-device
+#: update hides no partition a host binding would have to restate; two or
+#: more devices refuse by name. `samba_update` also carries the global norm
+#: clip (par-samba-clip's max_norm), whose host arithmetic the covered
+#: samba-untied-dropout-accum lane already checks.
+CPU_SINGLE_DEVICE_COOPERATIVE = frozenset(('mlp_update', 'samba_update'))
 
 
 def _cpu_refusal(requests, cooperative, n_devices=1):
