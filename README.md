@@ -447,9 +447,10 @@ match across all three vendors. The macOS 0.6.0 candidate also passed clean
 installed fit/transform and quality checks. See the [version-specific evidence](SUPPORT_MATRIX.md#umap-060-release-candidate).
 
 Transformation retains private training data and embedding copies. Changing
-parameters or numeric mode requires refitting, and changing query batching
-can change results. Supervised targets, alternate metrics and alternate
-initialization remain unsupported.
+parameters or numeric mode requires refitting. Changing query batching does
+NOT change results: a batch of N returns the same bytes as N calls of one
+row. Supervised targets, alternate metrics and alternate initialization
+remain unsupported.
 
 The APIs follow familiar estimator conventions, but mojolearn is not a drop-in
 replacement. Where an algorithm has a settled convention for a default, that

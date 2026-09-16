@@ -113,6 +113,25 @@ def _arms(ctx: DeviceContext, negatives: Int) raises:
         "solo", solo_moved, "order", order_moved, "company", company_moved,
     )
 
+    # THE GATE, the same three raises the host route carries. The device is
+    # not a second opinion here: it is the shipped path, and before
+    # lane/umap-batch-fix all three reported True on it.
+    if solo_moved:
+        raise Error(
+            "UMAP device transform is batch dependent at " + suffix
+            + ": a query alone does not match the same query in a batch"
+        )
+    if order_moved:
+        raise Error(
+            "UMAP device transform is batch dependent at " + suffix
+            + ": reordering the same queries moves a row"
+        )
+    if company_moved:
+        raise Error(
+            "UMAP device transform is batch dependent at " + suffix
+            + ": a query at the same position with different company moves"
+        )
+
 
 def main() raises:
     print("UMAP transform batch-determinism measurement, device route")

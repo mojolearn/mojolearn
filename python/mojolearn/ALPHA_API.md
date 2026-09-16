@@ -96,8 +96,9 @@ Input is dense, converted to FP32. CSR describes the stored neighbor graph.
 Exact neighbor search still performs quadratic pair comparisons. Supervision,
 alternate metrics and alternate initialization are unsupported. Transform
 uses frozen private training data/embedding copies; changing query batching
-can change results. Neither API similarity nor neighborhood-quality agreement
-means bitwise agreement with cuML or umap-learn.
+does not change results, a batch of N being the concatenation of N batches of
+one. Neither API similarity nor neighborhood-quality agreement means bitwise
+agreement with cuML or umap-learn.
 
 ## Transformer and training primitives
 

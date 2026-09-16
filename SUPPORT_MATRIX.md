@@ -310,8 +310,8 @@ exact neighbor search still performs quadratic pair comparisons.
 `transform` embeds new samples against the frozen fitted embedding. Private
 training and embedding copies add O(n_samples × (n_features + n_components))
 storage. Changes to parameters or numeric mode require refitting; changing
-query batching can change results. Supervised targets and alternate metrics
-or initialization remain unsupported.
+query batching does not change results. Supervised targets and alternate
+metrics or initialization remain unsupported.
 
 | Evidence layer | Completed evidence | Still pending |
 |---|---|---|

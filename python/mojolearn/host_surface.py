@@ -2339,6 +2339,13 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #:                     one that comes from a run rather than from a static
 #:                     condition, and it carries what the run said.
 PUBLIC_PENDING_LANES = {
+    # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
+    # change. UMAP.transform became row separable, so every umap hash in the
+    # shipped table describes bytes this build no longer produces. Without
+    # this entry a user's CPU-only `verify --all` reads DIVERGENT for umap on
+    # a machine that is fine. It leaves the day the next release record is
+    # taken, with the rest of the `stale reference` block.
+    "umap": "stale reference",
     "holtwinters": "stale reference",
     "spectral": "stale reference",
     "gbdt-nan-modes": "stale reference",
