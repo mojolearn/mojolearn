@@ -477,6 +477,24 @@ a degradation threshold near 512, which is why a 23-lane chunk degrades and why 
 work runs in groups of two lanes per process (`scripts/run_apple_groups.sh`), with the queue
 count read around every group so a short process's behavior is measured rather than assumed.
 
+**The exit measurement, 21:37: 4673 to 22.** By the time the restart was approved the count had
+climbed further, to **4673**. The driver was terminated first (so it could not go on to launch
+chunk 01 as another 30-lane process), then the lock wrapper and the worker. Three seconds after
+they exited the machine read **22**, and it still read 22 at +11 s and +21 s. The Metal lock
+released itself and no process was left behind. This is the strongest evidence yet for the
+per-process reading: those queues belonged to one process and came back the instant it died.
+
+One correction that follows from it: **22 is BELOW the "34 to 41 at rest" figure** quoted at the
+top of this file, so that earlier baseline was itself measured with something alive on the GPU.
+The honest statement is that an idle machine here reads in the tens. Nothing about the 6 percent
+disagreement changes.
+
+Before the restart, the 17 finished lanes were proven to survive it rather than assumed to:
+`apple-m4.chunk00-rest.json` parses with 17 lanes and 153 cells (104,468 bytes, sha256
+30aedb1be32433fd) and `apple-m4.chunk00-rerun.json` with 7 lanes, 63 cells, complete. Both were
+copied to `.presplit-backup` first. The 43 minutes that process spent on `spectral` is cost
+already paid, not a free restart.
+
 **The fourth column.** The diff wants a CPU column at the wheel's build commit, and the last
 record shipped only the three GPU columns, so this release takes one. It runs on a box with no
 GPU over the 159 lanes `python/mojolearn/host_surface.py --covered-lanes` names, and the four
