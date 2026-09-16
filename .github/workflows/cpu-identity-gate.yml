@@ -97,6 +97,17 @@ env:
   #                       bindings/build_<family>_host.sh (a shim over
   #                       bindings/build_host_family.sh), read back as the CPU
   #                       column, and named in host.families.
+  #                       SINCE 2026-09-16 THE TWO LISTS NAME THE SAME
+  #                       THIRTY-TWO FAMILIES, because every family ships
+  #                       (lane/ship-cpu-host-families). The branch is kept
+  #                       rather than collapsed: it is the manifest that
+  #                       decides, and the day a family is held back again the
+  #                       routine list shrinks with it and nothing here has to
+  #                       change. The routine gate now builds the whole set on
+  #                       a push, which is the point, because it builds what
+  #                       the wheel ships, at about seven minutes of
+  #                       compiling, restored from the host-v2 cache when no
+  #                       .mojo, build script or manifest moved.
   #   SABOTAGE_FAMILIES   the same list, built again with
   #                       -D MOJOLEARN_HOST_SABOTAGE=1 into host-sab.
   #   ALL_HOST_BINDINGS   the BUILD_FAMILIES basenames, comma separated, the
