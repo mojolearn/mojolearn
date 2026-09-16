@@ -183,6 +183,7 @@ counts, and local counts are filled just before partitioning."
 
 from std.atomic import Atomic, Ordering
 from std.bit import log2_floor
+from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 
 # `split.cuh:8` includes `bins.cuh`, because `detail::CountLeft` is
@@ -194,6 +195,32 @@ from std.gpu.primitives.id import lane_id
 from std.gpu.primitives.warp import shuffle_idx
 from max.gpu.sync import barrier
 
+
+#: DIAGNOSTIC, NOT A DEFAULT (lane/rf-score-weighted-nondeterminism, 2026-09-16).
+#: `-D MOJOLEARN_RF_ACQUIRE_CAS=1` moves the ACQUIRE from the spin LOAD onto the
+#: compare-exchange that actually TAKES the lock. The shipped spelling is
+#: unchanged when the define is absent.
+#:
+#: WHY. DEVIATION 106 justifies the current spelling as "the synchronizes-with
+#: edge is a load-acquire observing a store-release". That holds only when the
+#: acquire-load and the claiming compare-exchange observe the SAME release. A
+#: read-modify-write must read the latest value in the coherence order; a plain
+#: acquire-load need not. So a thread can leave the spin on a STALE zero from
+#: release R1 and then win the RELAXED claim on the zero from a later release
+#: R2, having performed no acquire that synchronizes with R2 -- leaving the
+#: previous holder's PLAIN store to `split[node]` unordered against this
+#: thread's PLAIN read of it in `_publish_to_global`. Merge into a stale split,
+#: write it back, and the prior candidate is ERASED.
+#:
+#: MEASURED CONSEQUENCE (leg 12, MI300X, published 0.8.5): of four divergences,
+#: three had `best_metric_val` BIT-IDENTICAL with a LOWER `colid` winning, which
+#: `update`'s higher-colid tie-break forbids -- so the higher-colid candidate was
+#: ABSENT from the merge, not outvoted. The fourth lost a strictly higher gain.
+#:
+#: NOT ENABLED BY DEFAULT AND NOT A MATRIX ROW YET: the Apple backend rejects
+#: acquire orderings on an RMW by name (DEVIATION 106), and whether AMD legalizes
+#: one is MEASURED by `ensemble/checks/acquire_rmw_probe.mojo`, not assumed.
+comptime ACQUIRE_CAS_CLAIM = is_defined["MOJOLEARN_RF_ACQUIRE_CAS"]()
 
 #: DEVIATION 404 -- the reduction width `eval_best_split_pinned` uses on
 #: every vendor: `raft::WarpSize`'s hardcoded 32, which is also the width
@@ -637,12 +664,24 @@ struct Split[dtype: DType](TrivialRegisterPassable):
             ):
                 continue
             var expected = Int32(0)
-            if Atomic.compare_exchange[
-                success_ordering = Ordering.RELAXED,
-                failure_ordering = Ordering.RELAXED,
-                weak=True,
-            ](mutex, expected, Int32(1)):
-                break
+            comptime if ACQUIRE_CAS_CLAIM:
+                # The ACQUIRE rides the operation that TAKES the lock, so the
+                # edge is established with the release this thread actually
+                # claimed against rather than with whichever one its spin load
+                # happened to observe.
+                if Atomic.compare_exchange[
+                    success_ordering = Ordering.ACQUIRE,
+                    failure_ordering = Ordering.RELAXED,
+                    weak=True,
+                ](mutex, expected, Int32(1)):
+                    break
+            else:
+                if Atomic.compare_exchange[
+                    success_ordering = Ordering.RELAXED,
+                    failure_ordering = Ordering.RELAXED,
+                    weak=True,
+                ](mutex, expected, Int32(1)):
+                    break
 
         # `:253-259` -- read the current global split into a
         # register copy. Their field-by-field read exists because
