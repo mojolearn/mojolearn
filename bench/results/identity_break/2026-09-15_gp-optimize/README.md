@@ -18,12 +18,20 @@ so no recorded gp cell moves.
 
 ## Columns
 
-- `apple-m4.json` is the Metal identical column, built and run on the Apple M4
-  through the shared Metal slot, two repeats, at `e05b5d3c6` (before the merge
-  of origin/main, which changed no gp arithmetic). Train reads 54 of 63 STABLE
-  and `gp-normalize-y` REFUSED on all nine fixtures: that worktree had no base
-  or preprocessing binding when the column ran, which StandardScaler needs. Both
-  are built now; the rerun is OWED (see below).
+- `apple-m4.json` is the Metal identical column, RETAKEN 2026-09-16 at
+  `2807d4ad7` (main, after the merge) through the exclusive Metal slot, two
+  repeats. **Train reads `cells=63 stable=63 moved=0 refused=0`, and infer,
+  model and batch each read 63 stable.** `gp-normalize-y` now RECORDS on all
+  nine fixtures and the column contains no REFUSED line at all.
+
+  This replaces an earlier column taken at `e05b5d3c6`, which read 54 of 63
+  with `gp-normalize-y` REFUSED on all nine fixtures. That was never a defect
+  in the lane: the worktree it ran in carried no base or preprocessing binding,
+  and StandardScaler needs both. The retake ran from a COMPLETE `identical/`
+  set (17 bindings), checked by IMPORT rather than by `nm`, because Mojo
+  `def_function` exports are registered at module init and `nm` cannot answer
+  the question: `transpose_f32` present on the base binding, `gpr_lml_grad` and
+  `gp_theta_params` on the gp binding.
 - `x86-runpod/cpu.json` is the CPU column. One RunPod CPU pod (`j02fea57j2pcmr`,
   Linux x86-64, `tools/runpod_cpu_leg.sh`) built the gp, preprocessing and core
   host bindings at the merge `e87161dc8`, two repeats. Train reads 63 of 63
@@ -36,17 +44,22 @@ so no recorded gp cell moves.
 
 ## Diffs
 
-- `diff_metal_cpu.txt`: Metal against CPU reads IDENTICAL=54 train, 108 infer
-  and model, 54 batch. The 9 ONE-COLUMN cells are `gp-normalize-y`, which the
-  Metal column refused. Both new lanes are IDENTICAL on all nine fixtures, on
-  train, infer, model and batch.
+- `diff_metal_cpu.txt`: Metal against CPU reads **IDENTICAL=63 train, 126 infer
+  and model, 63 batch, with nothing ONE-COLUMN.** Both new lanes are IDENTICAL
+  on all nine fixtures, on train, infer, model and batch, and `gp-normalize-y`
+  is now compared rather than skipped: the 9 ONE-COLUMN cells of the earlier
+  diff were exactly its refusals. The two columns sit at different commits
+  (`2807d4ad7` and `e87161dc8`); `--diff` refuses only on differing FIXTURE
+  SIZES, not on differing commits, so this comparison is a real one.
 - `diff_record_gp.txt`: the four recorded gp lanes of the Metal column against
   the 166-lane record's Apple M4, H100 and MI325X columns read IDENTICAL=36
   train, 36 infer, 36 batch. NO RECORDED CELL MOVED. The 36 `--require-columns 4`
   failures are all `model` parts and nothing else (0 non-model): the record
   predates the GP's save and load, so those columns carry no model hash.
 - `diff_record_owed.txt` and `owed.json`: the two columns against the record
-  read OWED=108 cell parts, which the next release record owes.
+  read **OWED=144 cell parts** (up from 108, because `gp-normalize-y`'s nine
+  cells now carry hashes instead of refusals), and `--require-columns 4` reads
+  OK over all seven lanes. The next release record owes exactly those parts.
 - `diff_cpu_gsab.txt`: the gradient sabotage against the production CPU column
   reads DIVERGENT=18 train, 36 infer and model, 18 batch, and IDENTICAL=36 on
   the four recorded gp lanes. Per cell, on the first hash and the first parts
@@ -92,11 +105,16 @@ Billed 169 s, $0.0113. No GPU pod was rented.
 
 ## Owed
 
-- A Metal column of the seven lanes at the merge `e87161dc8`, with the base and
-  preprocessing bindings present so `gp-normalize-y` records instead of
-  refusing. It was NOT run because the Mac's Metal queue leak makes a column
-  taken now untrustworthy and a restart was imminent; the exact command is in
-  `docs/lanes/LANE_STATUS_lane-gp-optimizer.md`.
+- ~~A Metal column of the seven lanes with the base and preprocessing bindings
+  present so `gp-normalize-y` records instead of refusing.~~ **DONE 2026-09-16**
+  at `2807d4ad7`; it is the `apple-m4.json` described above.
+
+  The reason previously given here for not running it ("the Mac's Metal queue
+  leak makes a column taken now untrustworthy") was **WRONG and is withdrawn.**
+  Those AGXCommandQueue counts belong to an Apple SYSTEM SERVICE, not to our
+  processes: measured directly, one of our lanes held a single queue while
+  DockHelper held thousands, and while this very column was running with our
+  lane holding the GPU the count read 1. No restart was ever needed.
 - The NVIDIA and AMD cells of `gp-optimize` and `gp-optimize-restarts`, to the
   next release record.
 - `GaussianProcessClassifier`'s optimizer stays refused (DEVIATION 1761): its
