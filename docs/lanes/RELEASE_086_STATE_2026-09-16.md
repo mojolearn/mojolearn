@@ -28,23 +28,27 @@ fix for that is on main and not on this branch.
 
 ## 1. What the old state file got wrong
 
-### 1.1 The current state file is not the one on this branch
+### 1.1 The stale state file was the LOCAL branch, not the release branch
 
-`release/0.8.6` carries a 355-line `RELEASE_086_STATE.md`. The branch
-`fix/release-post-record-allowlist` carries a **1189-line** one, and the only
-difference between the two branches is that single file (`git diff --stat
-release/0.8.6..fix/release-post-record-allowlist` reads one file changed, 834
-insertions). `release/0.8.6` is an ancestor of it.
+The local `release/0.8.6` sat at 7e23bc670 with a 355-line
+`RELEASE_086_STATE.md`. `origin/release/0.8.6` is at **f7943e757**, which is
+**the same commit as `fix/release-post-record-allowlist`**, and carries a
+**1189-line** one. The only difference between 7e23bc670 and f7943e757 is that
+single file (`git diff --stat` reads one file changed, 834 insertions).
 
-So `fix/release-post-record-allowlist` is not a fix branch at all any more. It
-is the release branch plus 31 state-file commits, and it holds everything from
-2026-09-15 20:00 onward, including the complete NVIDIA column, the CPU column,
-AMD legs 2 to 5 and the `rf-score-weighted` blocker. Anyone resuming from the
-copy on `release/0.8.6` is reading a state that is 31 commits stale.
+So `fix/release-post-record-allowlist` is not a fix branch any more. It is the
+branch the release pushes were made from, it IS the published release branch,
+and it holds everything from 2026-09-15 20:00 onward, including the complete
+NVIDIA column, the CPU column, AMD legs 2 to 5 and the `rf-score-weighted`
+blocker. The long state file was never lost; only the local pointer was stale,
+for the second time (the file records the first).
 
-**Action.** The 31 state-file commits should be fast-forwarded onto
-`release/0.8.6`. They touch no wheel file and no inventoried file, so they
-cannot move a recorded byte.
+**Done in this commit.** The local branch was rebased onto
+`origin/release/0.8.6`, so the two agree again and this audit sits on top of
+the current state. The lesson stands for the next session. Read
+`origin/release/0.8.6`, never the local pointer, and check
+`git rev-parse origin/release/0.8.6` against `HEAD` before believing any state
+file on this branch.
 
 ### 1.2 The Apple column is at 151 lanes, not at chunk 00
 
@@ -456,18 +460,15 @@ token is present, and the matches are printed above rather than the counts.
    `--lanes`. Needs Andrew's approval to rent.
 5. **Two Apple lanes**, the same two, one small group under the Metal lock,
    then merge the 125 Apple parts into one column.
-6. **Fast-forward the 31 state-file commits** from
-   `fix/release-post-record-allowlist` onto `release/0.8.6` (1.1). No shipped
-   byte moves.
-7. **Write the record scope into the record README** (2.3), naming the 39
+6. **Write the record scope into the record README** (2.3), naming the 39
    excluded `par-*` lanes and citing main's `RECORD_EXCLUDED_PREFIXES`. Do not
    edit `tools/identity_break.py` on this branch.
-8. **Run the diff and the owed check** (`scripts/release_diff.sh`), then the
+7. **Run the diff and the owed check** (`scripts/release_diff.sh`), then the
    record commit, the final pack and repack, and the final content audit.
-9. **Plan the merge-back of the three release fixes to main** (3.1), so 0.8.7
+8. **Plan the merge-back of the three release fixes to main** (3.1), so 0.8.7
    does not rediscover the post-record allowlist, the content audit and the
    macOS repack.
-10. **Move the 206 MB of leg evidence out of `/private/tmp`** (4.6).
+9. **Move the 206 MB of leg evidence out of `/private/tmp`** (4.6).
 
 **STOP BEFORE PUBLISH.** No PyPI upload, no tag that triggers one, no
 `release-provenance.yml` dispatch.
