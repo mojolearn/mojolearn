@@ -212,6 +212,22 @@ CLASSICAL_RECORDED = (
     # next release record; the identity columns behind these cells are
     # bench/results/identity_break/2026-09-16_predict-nvidia.
     "bench/results/classical_host/2026-09-16-nvidia-predict",
+    # lane/classical-host-recordings (2026-09-16): the six FITTED k-means
+    # lanes, the last entry SAVED_MODEL_INFERENCE_OWED had, on all nine
+    # fixtures each. Recorded on a RunPod NVIDIA A100-SXM4-80GB (sm_80) and
+    # checked on BOTH host architectures: `gate verdict IDENTICAL (54
+    # fixtures, exit 0)` on the box's x86-64 bindings AND on the M4's arm64
+    # ones, so a model fitted on an A100 answers predict and transform with
+    # the A100's bits on a machine with no GPU. Both sabotage host sets, the
+    # family define and MOJOLEARN_KMEANS_PREDICT_SABOTAGE, read `EXPECTED
+    # MISMATCH SEEN` with `unmoved` EMPTY under --every-fixture on both
+    # architectures. The family define had NO arm on this side of the
+    # library until that lane added one, and its --every-fixture arm read
+    # `SABOTAGE NOT CAUGHT` on all 54 when it was first rehearsed. The Apple
+    # and AMD recordings are owed to the next release record; the identity
+    # column behind these cells is
+    # bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu.
+    "bench/results/classical_host/2026-09-16-nvidia-kmeans",
 )
 
 #: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),

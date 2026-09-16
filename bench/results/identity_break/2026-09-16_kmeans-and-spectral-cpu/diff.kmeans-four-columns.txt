@@ -1,0 +1,264 @@
+NOTE: --lanes scopes this diff to 7 lane(s); 1 other lane(s) the JSONs carry are not compared
+| lane/fixture                 | verdict    | nvidia-nvidia-a100-sxm4-80gb-sm_80 | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| kmeans-array/base            | IDENTICAL x4 | 37ab2f0355ef716a | 37ab2f0355ef716a | 37ab2f0355ef716a | 37ab2f0355ef716a |
+| kmeans-array/denormal        | IDENTICAL x4 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 |
+| kmeans-array/denormal_ftz    | IDENTICAL x4 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 |
+| kmeans-array/dupes           | IDENTICAL x4 | a71e34a5786a472e | a71e34a5786a472e | a71e34a5786a472e | a71e34a5786a472e |
+| kmeans-array/hashed          | IDENTICAL x4 | a960d6d68f5c8665 | a960d6d68f5c8665 | a960d6d68f5c8665 | a960d6d68f5c8665 |
+| kmeans-array/negative        | IDENTICAL x4 | 64223107950d714a | 64223107950d714a | 64223107950d714a | 64223107950d714a |
+| kmeans-array/odd             | IDENTICAL x4 | 5b347e0f29ddb844 | 5b347e0f29ddb844 | 5b347e0f29ddb844 | 5b347e0f29ddb844 |
+| kmeans-array/ties            | IDENTICAL x4 | f7e7677d5ae7597f | f7e7677d5ae7597f | f7e7677d5ae7597f | f7e7677d5ae7597f |
+| kmeans-array/wide            | IDENTICAL x4 | ac99cd5354363ce1 | ac99cd5354363ce1 | ac99cd5354363ce1 | ac99cd5354363ce1 |
+| kmeans-classic-pp/base       | IDENTICAL x4 | e6648c8209c562ac | e6648c8209c562ac | e6648c8209c562ac | e6648c8209c562ac |
+| kmeans-classic-pp/denormal   | IDENTICAL x4 | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e |
+| kmeans-classic-pp/denormal_ftz | IDENTICAL x4 | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e | d3ba0ebbb0af1b3e |
+| kmeans-classic-pp/dupes      | IDENTICAL x4 | a0389077dee20809 | a0389077dee20809 | a0389077dee20809 | a0389077dee20809 |
+| kmeans-classic-pp/hashed     | IDENTICAL x4 | 8aec37d06d525fce | 8aec37d06d525fce | 8aec37d06d525fce | 8aec37d06d525fce |
+| kmeans-classic-pp/negative   | IDENTICAL x4 | 644cff6572372f33 | 644cff6572372f33 | 644cff6572372f33 | 644cff6572372f33 |
+| kmeans-classic-pp/odd        | IDENTICAL x4 | a47bec6025e076d8 | a47bec6025e076d8 | a47bec6025e076d8 | a47bec6025e076d8 |
+| kmeans-classic-pp/ties       | IDENTICAL x4 | b0f1aa9e9e7adf6f | b0f1aa9e9e7adf6f | b0f1aa9e9e7adf6f | b0f1aa9e9e7adf6f |
+| kmeans-classic-pp/wide       | IDENTICAL x4 | 51beac4d46f297db | 51beac4d46f297db | 51beac4d46f297db | 51beac4d46f297db |
+| kmeans-cosine/base           | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/denormal       | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/denormal_ftz   | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/dupes          | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/hashed         | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/negative       | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/odd            | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/ties           | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-cosine/wide           | IDENTICAL x4 | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-random/base           | IDENTICAL x4 | 2bab0cda9f319dbb | 2bab0cda9f319dbb | 2bab0cda9f319dbb | 2bab0cda9f319dbb |
+| kmeans-random/denormal       | IDENTICAL x4 | ddb08cf02222e6a3 | ddb08cf02222e6a3 | ddb08cf02222e6a3 | ddb08cf02222e6a3 |
+| kmeans-random/denormal_ftz   | IDENTICAL x4 | ddb08cf02222e6a3 | ddb08cf02222e6a3 | ddb08cf02222e6a3 | ddb08cf02222e6a3 |
+| kmeans-random/dupes          | IDENTICAL x4 | b8953eb119af6144 | b8953eb119af6144 | b8953eb119af6144 | b8953eb119af6144 |
+| kmeans-random/hashed         | IDENTICAL x4 | 0b375d0049c4c87b | 0b375d0049c4c87b | 0b375d0049c4c87b | 0b375d0049c4c87b |
+| kmeans-random/negative       | IDENTICAL x4 | 23ce9524cf23e596 | 23ce9524cf23e596 | 23ce9524cf23e596 | 23ce9524cf23e596 |
+| kmeans-random/odd            | IDENTICAL x4 | f22e6751eeedc598 | f22e6751eeedc598 | f22e6751eeedc598 | f22e6751eeedc598 |
+| kmeans-random/ties           | IDENTICAL x4 | 9f90e48e2d5a4ce4 | 9f90e48e2d5a4ce4 | 9f90e48e2d5a4ce4 | 9f90e48e2d5a4ce4 |
+| kmeans-random/wide           | IDENTICAL x4 | 2b64e3f5f82a82d8 | 2b64e3f5f82a82d8 | 2b64e3f5f82a82d8 | 2b64e3f5f82a82d8 |
+| kmeans-sqrt/base             | IDENTICAL x4 | 8864be3c295d6c4a | 8864be3c295d6c4a | 8864be3c295d6c4a | 8864be3c295d6c4a |
+| kmeans-sqrt/denormal         | IDENTICAL x4 | c2486d60db950886 | c2486d60db950886 | c2486d60db950886 | c2486d60db950886 |
+| kmeans-sqrt/denormal_ftz     | IDENTICAL x4 | c2486d60db950886 | c2486d60db950886 | c2486d60db950886 | c2486d60db950886 |
+| kmeans-sqrt/dupes            | IDENTICAL x4 | 66b6c6d6d5088c26 | 66b6c6d6d5088c26 | 66b6c6d6d5088c26 | 66b6c6d6d5088c26 |
+| kmeans-sqrt/hashed           | IDENTICAL x4 | ac3f2b1bd8367ffa | ac3f2b1bd8367ffa | ac3f2b1bd8367ffa | ac3f2b1bd8367ffa |
+| kmeans-sqrt/negative         | IDENTICAL x4 | 5780022527a439a1 | 5780022527a439a1 | 5780022527a439a1 | 5780022527a439a1 |
+| kmeans-sqrt/odd              | IDENTICAL x4 | cd50fd82b95de87a | cd50fd82b95de87a | cd50fd82b95de87a | cd50fd82b95de87a |
+| kmeans-sqrt/ties             | IDENTICAL x4 | 07a5cce02a00bdae | 07a5cce02a00bdae | 07a5cce02a00bdae | 07a5cce02a00bdae |
+| kmeans-sqrt/wide             | IDENTICAL x4 | 4bde18fe714ad92e | 4bde18fe714ad92e | 4bde18fe714ad92e | 4bde18fe714ad92e |
+| kmeans-weighted/base         | IDENTICAL x4 | 5080fbf55610f54e | 5080fbf55610f54e | 5080fbf55610f54e | 5080fbf55610f54e |
+| kmeans-weighted/denormal     | IDENTICAL x4 | c3613adfb9158691 | c3613adfb9158691 | c3613adfb9158691 | c3613adfb9158691 |
+| kmeans-weighted/denormal_ftz | IDENTICAL x4 | c3613adfb9158691 | c3613adfb9158691 | c3613adfb9158691 | c3613adfb9158691 |
+| kmeans-weighted/dupes        | IDENTICAL x4 | a530038afd2318d6 | a530038afd2318d6 | a530038afd2318d6 | a530038afd2318d6 |
+| kmeans-weighted/hashed       | IDENTICAL x4 | eded8c9746d545c7 | eded8c9746d545c7 | eded8c9746d545c7 | eded8c9746d545c7 |
+| kmeans-weighted/negative     | IDENTICAL x4 | 3bf996834a2fd658 | 3bf996834a2fd658 | 3bf996834a2fd658 | 3bf996834a2fd658 |
+| kmeans-weighted/odd          | IDENTICAL x4 | fc6107e901e7d7be | fc6107e901e7d7be | fc6107e901e7d7be | fc6107e901e7d7be |
+| kmeans-weighted/ties         | IDENTICAL x4 | a7070391c3cc52fb | a7070391c3cc52fb | a7070391c3cc52fb | a7070391c3cc52fb |
+| kmeans-weighted/wide         | IDENTICAL x4 | 5e333d411cffbf33 | 5e333d411cffbf33 | 5e333d411cffbf33 | 5e333d411cffbf33 |
+| kmeans/base                  | IDENTICAL x4 | 5aa44cc11034dec9 | 5aa44cc11034dec9 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+| kmeans/denormal              | IDENTICAL x4 | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c |
+| kmeans/denormal_ftz          | IDENTICAL x4 | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c |
+| kmeans/dupes                 | IDENTICAL x4 | 2ae942d45a51757a | 2ae942d45a51757a | 2ae942d45a51757a | 2ae942d45a51757a |
+| kmeans/hashed                | IDENTICAL x4 | 0a570e84b0002723 | 0a570e84b0002723 | 0a570e84b0002723 | 0a570e84b0002723 |
+| kmeans/negative              | IDENTICAL x4 | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 |
+| kmeans/odd                   | IDENTICAL x4 | 43d8a3d3859f4143 | 43d8a3d3859f4143 | 43d8a3d3859f4143 | 43d8a3d3859f4143 |
+| kmeans/ties                  | IDENTICAL x4 | 3de3e103006de69c | 3de3e103006de69c | 3de3e103006de69c | 3de3e103006de69c |
+| kmeans/wide                  | IDENTICAL x4 | 6f0529fcb3d60536 | 6f0529fcb3d60536 | 6f0529fcb3d60536 | 6f0529fcb3d60536 |
+
+summary: IDENTICAL=63
+
+| lane/fixture                 | column | verdict      | nvidia-nvidia-a100-sxm4-80gb-sm_80 | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| kmeans-array/base            | infer  | ONE-COLUMN   | ae9509c50c75d2bc | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/base            | model  | ONE-COLUMN   | ce0dcf87ec776455 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/base            | batch  | ONE-COLUMN   | 4b1022a4b98908d1 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/denormal        | infer  | ONE-COLUMN   | c7e58f1805e93798 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/denormal        | model  | ONE-COLUMN   | 625710908540a7ff | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/denormal        | batch  | ONE-COLUMN   | 8aaa92c6db31897f | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/denormal_ftz    | infer  | ONE-COLUMN   | c7e58f1805e93798 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/denormal_ftz    | model  | ONE-COLUMN   | 625710908540a7ff | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/denormal_ftz    | batch  | ONE-COLUMN   | 8aaa92c6db31897f | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/dupes           | infer  | ONE-COLUMN   | 08f7bb492ea1e9b0 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/dupes           | model  | ONE-COLUMN   | b1776833ecc1def9 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/dupes           | batch  | ONE-COLUMN   | 7a59fb6deea2d1f2 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/hashed          | infer  | ONE-COLUMN   | 5b19e2ea451673e1 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/hashed          | model  | ONE-COLUMN   | 9c877fbb3fe99c28 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/hashed          | batch  | ONE-COLUMN   | 694188ed807486c0 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/negative        | infer  | ONE-COLUMN   | d50bab746221d061 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/negative        | model  | ONE-COLUMN   | 8f24f57baf792d57 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/negative        | batch  | ONE-COLUMN   | c1a2aad03330b9d3 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/odd             | infer  | ONE-COLUMN   | cb0a1ae7215c27aa | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/odd             | model  | ONE-COLUMN   | b6861440bb007c37 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/odd             | batch  | ONE-COLUMN   | 21e79ca2282ddc5f | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/ties            | infer  | ONE-COLUMN   | 5f64992d5da78b8f | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/ties            | model  | ONE-COLUMN   | cdc008a193fd7e57 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/ties            | batch  | ONE-COLUMN   | 3d1ce5fa3f9e09c4 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/wide            | infer  | ONE-COLUMN   | df4998fb3e12110e | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-array/wide            | model  | ONE-COLUMN   | 06692d227986f0bf | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-array/wide            | batch  | ONE-COLUMN   | 3acceb1e255e2796 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/base       | infer  | ONE-COLUMN   | e44226a81eebb7a8 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/base       | model  | ONE-COLUMN   | 55fd7b42b82bed5a | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/base       | batch  | ONE-COLUMN   | a710fad38f112c1c | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/denormal   | infer  | ONE-COLUMN   | f86f206425b73e29 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/denormal   | model  | ONE-COLUMN   | a1d512cffe9f55e1 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/denormal   | batch  | ONE-COLUMN   | 15dec882e28b9589 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/denormal_ftz | infer  | ONE-COLUMN   | f86f206425b73e29 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/denormal_ftz | model  | ONE-COLUMN   | a1d512cffe9f55e1 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/denormal_ftz | batch  | ONE-COLUMN   | 15dec882e28b9589 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/dupes      | infer  | ONE-COLUMN   | a84b8a2e9fe29bb3 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/dupes      | model  | ONE-COLUMN   | be9fb4c81b880248 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/dupes      | batch  | ONE-COLUMN   | c4635b7f02d3b87c | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/hashed     | infer  | ONE-COLUMN   | 8987a9c854625d1b | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/hashed     | model  | ONE-COLUMN   | 9b441895a27cb6f4 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/hashed     | batch  | ONE-COLUMN   | e06096a70b93c99d | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/negative   | infer  | ONE-COLUMN   | 2d1704444a719d70 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/negative   | model  | ONE-COLUMN   | 5e9d9a063f022421 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/negative   | batch  | ONE-COLUMN   | 17eaba10a2e24c67 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/odd        | infer  | ONE-COLUMN   | 3b0d31ba504ffc5b | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/odd        | model  | ONE-COLUMN   | 01cb00a5d860be9c | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/odd        | batch  | ONE-COLUMN   | 192831cf947aa32b | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/ties       | infer  | ONE-COLUMN   | 83ac9df1fe7b737d | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/ties       | model  | ONE-COLUMN   | 1b9389c57ac86008 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/ties       | batch  | ONE-COLUMN   | ff31663995ac52c6 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/wide       | infer  | ONE-COLUMN   | 364ff36014fc9d74 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-classic-pp/wide       | model  | ONE-COLUMN   | ad958243c642d0db | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-classic-pp/wide       | batch  | ONE-COLUMN   | 513be11997c08466 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-cosine/base           | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/base           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/base           | batch  | N/A          | n/a:fit-refused  | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-cosine/denormal       | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/denormal       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/denormal       | batch  | N/A          | n/a:fit-refused  | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-cosine/denormal_ftz   | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/denormal_ftz   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/denormal_ftz   | batch  | N/A          | n/a:fit-refused  | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-cosine/dupes          | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/dupes          | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/dupes          | batch  | N/A          | n/a:fit-refused  | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-cosine/hashed         | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/hashed         | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/hashed         | batch  | N/A          | n/a:fit-refused  | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-cosine/negative       | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/negative       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/negative       | batch  | N/A          | n/a:fit-refused  | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-cosine/odd            | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/odd            | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/odd            | batch  | N/A          | n/a:fit-refused  | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-cosine/ties           | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/ties           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/ties           | batch  | N/A          | n/a:fit-refused  | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-cosine/wide           | infer  | N/A          | n/a:function     | n/a:function     | n/a:function     | n/a:function     |
+| kmeans-cosine/wide           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-cosine/wide           | batch  | N/A          | n/a:fit-refused  | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/base           | infer  | ONE-COLUMN   | 45d941e241fdba4f | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/base           | model  | ONE-COLUMN   | 7f934305a96d1b77 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/base           | batch  | ONE-COLUMN   | 41f3015cf8e0680a | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/denormal       | infer  | ONE-COLUMN   | f1b6a290aca7f88d | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/denormal       | model  | ONE-COLUMN   | 8e8ece44376c7493 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/denormal       | batch  | ONE-COLUMN   | 88799e781dfe5a5b | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/denormal_ftz   | infer  | ONE-COLUMN   | f1b6a290aca7f88d | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/denormal_ftz   | model  | ONE-COLUMN   | 8e8ece44376c7493 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/denormal_ftz   | batch  | ONE-COLUMN   | 88799e781dfe5a5b | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/dupes          | infer  | ONE-COLUMN   | 615650d1d33aa5a1 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/dupes          | model  | ONE-COLUMN   | 5caae1d486d2182d | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/dupes          | batch  | ONE-COLUMN   | d867364110410379 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/hashed         | infer  | ONE-COLUMN   | e73f5b76f598daad | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/hashed         | model  | ONE-COLUMN   | 6a568c8e9b403e58 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/hashed         | batch  | ONE-COLUMN   | bc5e45c0121fa326 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/negative       | infer  | ONE-COLUMN   | 01c6af7e36729c93 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/negative       | model  | ONE-COLUMN   | ec538ee79a5421b9 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/negative       | batch  | ONE-COLUMN   | 5e632c6cf0418456 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/odd            | infer  | ONE-COLUMN   | df29a616a051e530 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/odd            | model  | ONE-COLUMN   | e0d1e2a7afc72753 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/odd            | batch  | ONE-COLUMN   | 53b58fa53fc8a4c3 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/ties           | infer  | ONE-COLUMN   | 6698384517f202cd | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/ties           | model  | ONE-COLUMN   | d25373be4895312d | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/ties           | batch  | ONE-COLUMN   | 9dba3245a60df276 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/wide           | infer  | ONE-COLUMN   | 1b4870bfea4141d8 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-random/wide           | model  | ONE-COLUMN   | 6945513fb5ac5415 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-random/wide           | batch  | ONE-COLUMN   | fafa2ba50e2b1137 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/base             | infer  | ONE-COLUMN   | 58a73ee6f884f892 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/base             | model  | ONE-COLUMN   | 0effed928846f9bd | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/base             | batch  | ONE-COLUMN   | 50d831d9342c295e | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/denormal         | infer  | ONE-COLUMN   | 5613aee8380a3878 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/denormal         | model  | ONE-COLUMN   | 7e1253b548caa109 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/denormal         | batch  | ONE-COLUMN   | 79378a3a1acbc98e | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/denormal_ftz     | infer  | ONE-COLUMN   | 5613aee8380a3878 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/denormal_ftz     | model  | ONE-COLUMN   | 7e1253b548caa109 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/denormal_ftz     | batch  | ONE-COLUMN   | 79378a3a1acbc98e | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/dupes            | infer  | ONE-COLUMN   | b92ddb041800ab7d | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/dupes            | model  | ONE-COLUMN   | 40878a0402655c43 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/dupes            | batch  | ONE-COLUMN   | 266157cdb4a673b5 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/hashed           | infer  | ONE-COLUMN   | a06e759c2854f5c9 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/hashed           | model  | ONE-COLUMN   | 84c2a44a21e44403 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/hashed           | batch  | ONE-COLUMN   | 9047d13746fde11f | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/negative         | infer  | ONE-COLUMN   | 8184b15e6474cb1c | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/negative         | model  | ONE-COLUMN   | 17f7794f0738050e | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/negative         | batch  | ONE-COLUMN   | e97dcd5d4ed89145 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/odd              | infer  | ONE-COLUMN   | d57783b77ce4e554 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/odd              | model  | ONE-COLUMN   | f9e8185ae7bbb0c8 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/odd              | batch  | ONE-COLUMN   | 308b44148cf1b4d5 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/ties             | infer  | ONE-COLUMN   | 11403f38e806a8a7 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/ties             | model  | ONE-COLUMN   | 7181baa5430d7dab | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/ties             | batch  | ONE-COLUMN   | 59f927df98783136 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/wide             | infer  | ONE-COLUMN   | 37c2fbaaa28d56dc | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-sqrt/wide             | model  | ONE-COLUMN   | cb86b13af4ca5a13 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-sqrt/wide             | batch  | ONE-COLUMN   | 2830b761f5399579 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/base         | infer  | ONE-COLUMN   | 33403bafb4259ce4 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/base         | model  | ONE-COLUMN   | e8b41924fc98f304 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/base         | batch  | ONE-COLUMN   | bd21da2a20bcf33f | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/denormal     | infer  | ONE-COLUMN   | 03780e8f5ba1bb21 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/denormal     | model  | ONE-COLUMN   | b9b31eab6a556e78 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/denormal     | batch  | ONE-COLUMN   | d4c912e6b87b383e | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/denormal_ftz | infer  | ONE-COLUMN   | 03780e8f5ba1bb21 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/denormal_ftz | model  | ONE-COLUMN   | b9b31eab6a556e78 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/denormal_ftz | batch  | ONE-COLUMN   | d4c912e6b87b383e | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/dupes        | infer  | ONE-COLUMN   | 79cda2869bbc642b | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/dupes        | model  | ONE-COLUMN   | ac013121f8c58dd4 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/dupes        | batch  | ONE-COLUMN   | d38344596a34ea37 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/hashed       | infer  | ONE-COLUMN   | 3a661e5929f5295e | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/hashed       | model  | ONE-COLUMN   | 4bcb2f5de8c49236 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/hashed       | batch  | ONE-COLUMN   | 595c6444c7aa9abc | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/negative     | infer  | ONE-COLUMN   | 9c9857b78115542b | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/negative     | model  | ONE-COLUMN   | 696412b2cd46c6e3 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/negative     | batch  | ONE-COLUMN   | aae24527d57c6fcc | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/odd          | infer  | ONE-COLUMN   | 86bea24bd326b655 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/odd          | model  | ONE-COLUMN   | f22e247490a77c1c | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/odd          | batch  | ONE-COLUMN   | 2ac9fe78151082ea | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/ties         | infer  | ONE-COLUMN   | f1a40d6c9595a677 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/ties         | model  | ONE-COLUMN   | 65f5faf4242d792a | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/ties         | batch  | ONE-COLUMN   | 797f19f2820413c0 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/wide         | infer  | ONE-COLUMN   | e6cfd7471f95f25f | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans-weighted/wide         | model  | ONE-COLUMN   | 936fbfdb67d72490 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans-weighted/wide         | batch  | ONE-COLUMN   | c64980738ee6589a | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/base                  | infer  | ONE-COLUMN   | 3d50c4c50bf078b2 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/base                  | model  | ONE-COLUMN   | 355598f468300bee | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/base                  | batch  | ONE-COLUMN   | ce34789a012168b5 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/denormal              | infer  | ONE-COLUMN   | 9b15ee1cac8ce636 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/denormal              | model  | ONE-COLUMN   | 8646c7d4fc16c75e | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/denormal              | batch  | ONE-COLUMN   | cd11da38d7d996eb | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/denormal_ftz          | infer  | ONE-COLUMN   | 9b15ee1cac8ce636 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/denormal_ftz          | model  | ONE-COLUMN   | 8646c7d4fc16c75e | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/denormal_ftz          | batch  | ONE-COLUMN   | cd11da38d7d996eb | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/dupes                 | infer  | ONE-COLUMN   | 45007c31b3127822 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/dupes                 | model  | ONE-COLUMN   | daa4518508a79e25 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/dupes                 | batch  | ONE-COLUMN   | 226990012f870f93 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/hashed                | infer  | ONE-COLUMN   | 5d6e4fa66a2f59bb | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/hashed                | model  | ONE-COLUMN   | d6356da8f36cfff4 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/hashed                | batch  | ONE-COLUMN   | 2821adc81c87c1a6 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/negative              | infer  | ONE-COLUMN   | 2ceb107b327d1b74 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/negative              | model  | ONE-COLUMN   | 5749d537f980d312 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/negative              | batch  | ONE-COLUMN   | a1cee1687356c069 | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/odd                   | infer  | ONE-COLUMN   | 191287260610940c | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/odd                   | model  | ONE-COLUMN   | 5fdc9f5ac45877c9 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/odd                   | batch  | ONE-COLUMN   | 06c7a23bc000d13d | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/ties                  | infer  | ONE-COLUMN   | 0e9dcaedec0fcadc | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/ties                  | model  | ONE-COLUMN   | 74275c5f94fd56a2 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/ties                  | batch  | ONE-COLUMN   | ff636ffbdf6153fe | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/wide                  | infer  | ONE-COLUMN   | 576a17d0775573bc | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+| kmeans/wide                  | model  | ONE-COLUMN   | 1c5abd185e53aaf6 | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| kmeans/wide                  | batch  | ONE-COLUMN   | 1893d1e955539a1c | n/a:no-predict   | n/a:no-predict   | n/a:no-predict   |
+
+summary (infer/model): N/A=18, ONE-COLUMN=108
+summary (batch): N/A=9, ONE-COLUMN=54
+summary (rlpair): 
