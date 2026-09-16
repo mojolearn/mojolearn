@@ -667,9 +667,22 @@ def _mojo_import_symbols(rel):
         if not files:
             continue                         # the toolchain's own modules, not ours
         for name in m.group(2).split(","):
-            name = name.strip().split(" as ")[0].strip()
-            if name and name != "*":
-                out.setdefault(name, set()).update(files)
+            # THE LOCAL NAME, WHICH IS THE ALIAS WHEN THERE IS ONE. An export's
+            # body is searched for these names, and the body writes what the
+            # import BOUND. `bindings/_mojolearn_metrics.mojo:56` is
+            # `from umap.estimator import fit_transform as umap_fit_transform`
+            # and `umap_fit_transform_binding` calls `umap_fit_transform`.
+            # Recording `fit_transform` made `\bfit_transform\b` miss it (the
+            # underscore before `fit` is a word character), so the whole umap
+            # tree was invisible to the per-export scan and reached the `umap`
+            # lane only because the metrics HOST family happens to list
+            # umap/graph.mojo among its host modules. `par-graph-umap`, which
+            # runs the same fit across devices and is not in that family, was
+            # credited with none of it.
+            parts = [p.strip() for p in name.strip().split(" as ")]
+            local = parts[-1] if len(parts) > 1 else parts[0]
+            if local and local != "*":
+                out.setdefault(local, set()).update(files)
     return out
 
 

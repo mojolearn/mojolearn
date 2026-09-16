@@ -1083,8 +1083,10 @@ if __name__ == "__main__":
 # backward edge and it is not correct as is: the shipped `_mojolearn_rf.so`
 # carries that file's Metal kernels as the AIR blobs
 # `core_forest_inference_forest_g...` and `core_forest_inference_forest_v...`
-# (the same probe over `_mojolearn.so`, `_mojolearn_gbdt.so`,
-# `_mojolearn_estimators.so` and `_mojolearn_forest_host.so` prints nothing),
+# (over python/mojolearn/identical/, where all 17 bindings exist, they are in
+# _mojolearn_rf.so and _mojolearn_trees.so and in NEITHER of the other 15; the
+# first control named three .so that do not exist, so `strings` failed and its
+# empty output read exactly like a clean probe),
 # and a `RandomForestClassifier(..., inference_engine="parallel_groves")`,
 # which is exactly what `@lane("rf-clf-balanced-parallel")` builds, was
 # measured calling `forest_prepare_gpu`, `forest_predict_resident_reuse_gpu`
@@ -1290,3 +1292,29 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
     finally:
         lane_select._public_rebindings = keep
         lane_select.reset_caches()
+
+
+def test_an_aliased_mojo_import_is_recorded_under_the_name_the_body_uses():
+    """`bindings/_mojolearn_metrics.mojo:56` is
+    `from umap.estimator import fit_transform as umap_fit_transform`, and
+    `umap_fit_transform_binding` calls `umap_fit_transform`. Recording the
+    ORIGINAL name made the per-export body scan search for
+    `\\bfit_transform\\b`, which does not match inside `umap_fit_transform`
+    because the underscore before `fit` is a word character. The whole umap
+    tree was therefore invisible to the scan, and reached the `umap` lane only
+    because the metrics HOST family happens to list umap/graph.mojo among its
+    host modules. `par-graph-umap`, which runs the same fit across devices and
+    is not in that family, was credited with none of it."""
+    syms = lane_select._mojo_import_symbols("bindings/_mojolearn_metrics.mojo")
+    body = lane_select._mojo_blocks_for("bindings/_mojolearn_metrics.mojo")["umap_fit_transform_binding"]
+    assert "umap_fit_transform(" in body, "the export stopped calling the alias; pick a new case"
+    assert "umap/estimator.mojo" in syms.get("umap_fit_transform", set()), \
+        "the alias the body uses is not in the import table"
+    assert not re.search(r"\bfit_transform\b", body), \
+        "the ORIGINAL name matches the body after all, so this test cannot fail"
+
+    rev = lane_select.reverse_map()
+    for rel in ("umap/graph.mojo", "umap/sparse_graph.mojo", "umap/estimator.mojo"):
+        lanes = rev.get(rel, set())
+        assert "umap" in lanes and "par-graph-umap" in lanes, \
+            f"{rel} is run by both umap lanes and the map names {sorted(lanes)}"
