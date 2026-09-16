@@ -59,7 +59,10 @@ class ReleaseInventory(unittest.TestCase):
                 schema='mojolearn.linux.build-provenance.v1', complete=True,
                 build_exit=0, action='build', source_commit='a' * 40,
                 source_inventory=inventory, source_sha256=source_sha,
-                extensions={'mojolearn/' + n: packer.sha(p).hex() for n, p in files.items()})))
+                extensions={'mojolearn/' + n: packer.sha(p).hex() for n, p in files.items()},
+                # the leg's host binaries, as tools/linux_surface_qualification.sh records them
+                host_extension={f'mojolearn/{vendor}/{arch}/host/{n}.so': packer.sha(p).hex()
+                                for n, p in hosts.items()})))
             proofs.append(proof)
         return sets, proofs
 
@@ -113,6 +116,16 @@ class ReleaseInventory(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 packer.release_inventory(sets, proofs, version, root)
 
+    def test_host_binary_must_match_its_own_leg_proof(self):
+        # 0.8.6: a host binary changed after the build is refused against the
+        # proof's host_extension, even with no other change anywhere.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sets, proofs = self.fixture(root)
+            next(iter(sets[0][5].values())).write_bytes(b'changed host binary')
+            with self.assertRaises(SystemExit):
+                packer.release_inventory(sets, proofs, packer.read_version(root), root)
+
     def test_missing_or_wrong_mode_byte_lm_refused_even_with_matching_proof(self):
         for misplaced in (False, True):
             with self.subTest(misplaced=misplaced), tempfile.TemporaryDirectory() as tmp:
@@ -126,6 +139,93 @@ class ReleaseInventory(unittest.TestCase):
                 proof = json.loads(proofs[0].read_text())
                 proof['extensions'] = {'mojolearn/' + n: packer.sha(p).hex() for n, p in files.items()}
                 proofs[0].write_text(json.dumps(proof))
+                with self.assertRaises(SystemExit):
+                    packer.release_inventory(sets, proofs, packer.read_version(root), root)
+
+
+# THE POST-RECORD ALLOWLIST (0.8.6). The final wheel is packed from the
+# recorded build proofs after the record landed in the manifest's record lists;
+# python/mojolearn/host_surface.py may differ from the build in those lists and
+# nowhere else, and every other inventoried file and every binary must match.
+MANIFEST = 'python/mojolearn/host_surface.py'
+BUILT_MANIFEST = (b'"""The manifest."""\n'
+                  b'TRAINING_GPU_COLUMNS = (\n    "bench/results/identity_break/old/apple-m4.json",\n)\n'
+                  b'TRAINING_FIX_LANES = ("kmeans-sqrt",)\n\n'
+                  b'def wheel_bindings():\n    return ()\n')
+RECORDED_MANIFEST = (b'"""The manifest."""\n'
+                     b'# the 0.8.6 release record\n'
+                     b'TRAINING_GPU_COLUMNS = (\n    "bench/results/identity_break/new/apple-m4.json",\n)\n'
+                     b'TRAINING_FIX_LANES = ()\n\n'
+                     b'def wheel_bindings():\n    return ()\n')
+OUTSIDE_MANIFEST = RECORDED_MANIFEST.replace(b'return ()', b'return ("_mojolearn_extra_host",)')
+
+
+class PostRecordAllowlist(ReleaseInventory):
+    def setUp(self):
+        packer.post_record_reader = lambda root, commit, rel: BUILT_MANIFEST
+
+    def tearDown(self):
+        packer.post_record_reader = None
+
+    def manifest_fixture(self, root):
+        # the build had BUILT_MANIFEST; every proof's inventory names its digest
+        sets, proofs = self.fixture(root)
+        path = root / MANIFEST
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(BUILT_MANIFEST)
+        built = hashlib.sha256(BUILT_MANIFEST).hexdigest()
+        for proof_path in proofs:
+            proof = json.loads(proof_path.read_text())
+            inventory = sorted(proof['source_inventory'] + [[MANIFEST, built]])
+            proof['source_inventory'] = inventory
+            proof['source_sha256'] = hashlib.sha256(json.dumps(inventory, separators=(',', ':')).encode()).hexdigest()
+            proof_path.write_text(json.dumps(proof))
+        return sets, proofs
+
+    def test_unchanged_tree_records_no_post_record_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sets, proofs = self.manifest_fixture(root)
+            result = packer.release_inventory(sets, proofs, packer.read_version(root), root)
+            self.assertEqual(result['post_record_files'], [])
+
+    def test_record_lists_only_admitted_and_named(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sets, proofs = self.manifest_fixture(root)
+            (root / MANIFEST).write_bytes(RECORDED_MANIFEST)
+            result = packer.release_inventory(sets, proofs, packer.read_version(root), root)
+            self.assertEqual(result['post_record_files'], [MANIFEST])
+
+    def test_manifest_change_outside_record_lists_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sets, proofs = self.manifest_fixture(root)
+            (root / MANIFEST).write_bytes(OUTSIDE_MANIFEST)
+            with self.assertRaises(SystemExit):
+                packer.release_inventory(sets, proofs, packer.read_version(root), root)
+
+    def test_built_copy_must_hash_to_the_proof_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sets, proofs = self.manifest_fixture(root)
+            (root / MANIFEST).write_bytes(RECORDED_MANIFEST)
+            packer.post_record_reader = lambda r, c, rel: RECORDED_MANIFEST
+            with self.assertRaises(SystemExit):
+                packer.release_inventory(sets, proofs, packer.read_version(root), root)
+
+    def test_changed_binary_or_other_source_refused_beside_an_allowed_edit(self):
+        for defect in ('binary', 'source', 'host binary'):
+            with self.subTest(defect=defect), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                sets, proofs = self.manifest_fixture(root)
+                (root / MANIFEST).write_bytes(RECORDED_MANIFEST)
+                if defect == 'binary':
+                    next(iter(sets[0][2].values())).write_bytes(b'changed')
+                elif defect == 'source':
+                    (root / 'source.py').write_bytes(b'stale')
+                else:
+                    next(iter(sets[0][5].values())).write_bytes(b'changed host')
                 with self.assertRaises(SystemExit):
                     packer.release_inventory(sets, proofs, packer.read_version(root), root)
 

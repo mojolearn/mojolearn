@@ -23,6 +23,7 @@ import compare_ordered_python
 import verify_linux_surface_qualification as surface
 
 require = surface.require
+post_record_differences = surface.post_record_differences
 EXTENSION = re.compile(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
                        r'(?:(deterministic|identical)/)?(_mojolearn[^/]*)\.so')
 # DEVIATION 2680: the CPU TRAINING binding. One vendor-neutral copy per wheel,
@@ -250,16 +251,22 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
     require(surface.arch_set_ok(carried),
             version + ' requires exactly sm_89, sm_90 (or sm_90a) and gfx942')
     require(runtime_key in carried, 'Qualified architecture is not one this wheel carries')
-    inventory = native_inventory(source_root)
-    source_sha = inventory_digest(inventory)
     with zipfile.ZipFile(wheel) as archive:
         member = 'mojolearn-' + version + '.dist-info/LINUX_PAYLOAD.json'
         payload = json.loads(archive.read(member))
         require(payload.get('schema') == 'mojolearn.linux-payload.v1'
                 and payload.get('version') == version
                 and surface.is_release_profile(payload), 'Wrong payload profile')
+        # 0.8.6: the build inventory the payload carries is the one every proof
+        # names; the checkout may differ from it only in the post-record
+        # allowlist, and the payload must say which files did.
+        inventory = payload.get('source_inventory')
+        require(isinstance(inventory, list) and bool(inventory), 'Payload carries no build inventory')
+        source_sha = inventory_digest(inventory)
+        current = {rel: digest for rel, digest in native_inventory(source_root)}
+        post_record = post_record_differences(inventory, current, source_root, payload.get('source_commit', ''))
         require(payload.get('extensions') == {'mojolearn/' + n: h for n, h in extensions.items()}
-                and payload.get('source_inventory') == inventory,
+                and payload.get('post_record_files', []) == post_record,
                 'Final payload or source differs from assembly inventory')
         require(set(payload.get('sets', {})) == carried, 'Missing assembly set proofs')
         require(payload.get('optional_native', {}).get('_mojolearn_byte_lm') == dict(included=True,
@@ -319,7 +326,12 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
 def check_release061(wheel, qualification_root, source_root):
     wheel, qualification_root, source_root = map(Path, (wheel, qualification_root, source_root))
     proof_root = qualification_root / 'build-proofs'
-    inventory = native_inventory(source_root)
+    # 0.8.6: the BUILD inventory, from the wheel's payload; release_audit below
+    # admits it against this checkout (post-record allowlist only) for every
+    # architecture before check_vendor compares any proof with it.
+    with zipfile.ZipFile(wheel) as archive:
+        inventory = json.loads(archive.read(
+            'mojolearn-' + surface.release_version(source_root) + '.dist-info/LINUX_PAYLOAD.json')).get('source_inventory')
     # DEVIATION 2293: the architectures are the ones the WHEEL carries, with
     # the Hopper slot spelled however it was built. arch_set_ok still requires
     # exactly the three slots, filled once each.
