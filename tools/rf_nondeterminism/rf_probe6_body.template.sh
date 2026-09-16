@@ -94,7 +94,19 @@ DEADLINE = time.time() + float(os.environ.get("RF_PROBE_SECS", "1200")) - 90
 
 import mojolearn
 from mojolearn import RandomForestRegressor
-import mojolearn._identity_break as ib
+
+# LEG 6 FAILED HERE. `mojolearn._identity_break` is a WHEEL PACKAGING ARTIFACT (a copy of
+# tools/identity_break.py inserted at package time). Legs 1-5 installed the wheel so it was
+# present; this body runs from a SOURCE CHECKOUT, where it does not exist. The shipped
+# bundle does carry tools/identity_break.py, so load it by path when the module is absent.
+try:
+    import mojolearn._identity_break as ib
+except ModuleNotFoundError:
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location(
+        "ib", "/root/mojolearn/tools/identity_break.py")
+    ib = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(ib)
 
 fixture = ib.fixture
 _h = ib._h
