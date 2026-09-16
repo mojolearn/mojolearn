@@ -2442,7 +2442,14 @@ PUBLIC_PENDING_LANES = {
     "hdbscan-leaf": "no reference",
     "mamba2-dtlimit": "unwatched",
     "samba": "unwatched",
-    "samba-untied-dropout-accum": "unwatched",
+    # lane/shrink-floors (2026-09-16) put this lane in identity_break's
+    # LANE_REVISIONS as "steps-3-1", so its fixture has moved past the hash
+    # the shipped table carries and a run would prove nothing. The reason is
+    # "stale reference", not "unwatched", and the test that checks these
+    # reasons against the harness FAILED on main saying exactly that. Found
+    # by lane/classical-host-recordings merging main; it is not this lane's
+    # change and it leaves this dict at the next release record.
+    "samba-untied-dropout-accum": "stale reference",
     "byte-lm": "no reference",
     "byte-lm-resident": "no reference",
     "metrics-fowlkes-mallows": "unwatched",
