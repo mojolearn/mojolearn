@@ -16,9 +16,34 @@ import ast
 import os
 import re
 import sys
+import subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lane_select                                              # noqa: E402
+
+def _refuse_if_manifest_dirty():
+    """REFUSE TO RUN OVER SOMEBODY ELSE'S UNCOMMITTED WORK (2026-09-16).
+
+    Three tests in this file WRITE the manifest in the tree and restore it in
+    a `finally`. That is safe in a private worktree and unsafe in the shared
+    checkout, where several lanes edited this exact file on one afternoon: a
+    crash between the write and the restore, or a concurrent editor, loses
+    work that was never committed. This repository has already lost a lane's
+    uncommitted change that way once. A dirty manifest means somebody is
+    mid-edit, so stop rather than race.
+    """
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain", "--", lane_select.MANIFEST],
+        cwd=lane_select.ROOT, capture_output=True, text=True,
+    ).stdout.strip()
+    if dirty and not os.environ.get("MOJOLEARN_LANE_SELECT_TEST_FORCE"):
+        raise AssertionError(
+            "REFUSING: " + lane_select.MANIFEST + " has uncommitted changes (" + dirty + ").\n"
+            "  These tests rewrite that file and would race whoever is editing it.\n"
+            "  Run them in your own worktree, or commit first. "
+            "MOJOLEARN_LANE_SELECT_TEST_FORCE=1 overrides."
+        )
+
 
 #: A path every lane in the family depends on, and a lane that must NOT be
 #: selected by it. The second half is the half that catches a selector which
@@ -505,6 +530,7 @@ def test_a_path_nothing_reaches_selects_nothing():
     probe_dir = os.path.join(lane_select.ROOT, "armprobedir")
     src = "armprobedir/armprobesource.mojo"
     fixture = "armprobedir/armprobefixture.bin"
+    _refuse_if_manifest_dirty()
     manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
     before = open(manifest, encoding="utf-8").read()
     os.makedirs(probe_dir, exist_ok=True)
@@ -987,6 +1013,7 @@ def test_a_test_module_named_any_way_at_all_is_not_inert():
     a dynamic import, a `python -m` line and a bare mention all count. That
     cost 33 modules of narrowing (124 of 125 down to 91 of 125) and is the
     right trade: over-firing here costs a sweep, under-firing costs a defect."""
+    _refuse_if_manifest_dirty()
     manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
     before = open(manifest, encoding="utf-8").read()
     target = "python/mojolearn/tests/test_host_model_kmeans.py"
@@ -1012,6 +1039,7 @@ def test_a_directory_named_without_its_slash_still_counts():
     STRUCTURALLY, not as text, because the bare word `umap` is also a package
     module and a family-table entry and matching those would send every new
     file under `umap/` to a sweep."""
+    _refuse_if_manifest_dirty()
     manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
     before = open(manifest, encoding="utf-8").read()
     probe_dir = os.path.join(lane_select.ROOT, "armprobedir")
