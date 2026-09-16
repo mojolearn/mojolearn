@@ -40,7 +40,7 @@ untouched. What came down is INPUT SIZE and STEP COUNT.
 | `spectral` | 2000 rows | **512** | rows (O(n^2) eigen work) |
 | `holtwinters` | 512 obs | **128** | observations; still many periods of the seasonal 12 |
 | `byte-lm` | 3 steps | **1** | AdamW steps |
-| `byte-lm-resident` | 3 steps | **1** | AdamW steps, with its stateless replay cut to match |
+| `byte-lm-resident` | 3 steps | **1** | AdamW steps, with its stateless replay cut to match; its SHAPE came down later the same day, section A2 |
 | `samba` | 6 windows, 3 steps | **2 windows, 1 step** | steps |
 | `samba-untied-dropout-accum` | 96 rows, 3 steps | **32 rows, 1 step** | steps; 32 rows KEPT because `accumulation_is_aligned(256, 4)` is False, so fewer rows would delete the A=4 claim |
 | `mamba2-dtlimit` | `(2, 16, 32)` slab | **`(2, 8, 32)`** | sequence length |
@@ -55,6 +55,36 @@ Two sizes were set by measurement rather than taste, and are floors:
 - **samba-untied-dropout-accum.** `accumulation_is_aligned` admits A=4 only at
   32 rows (512 tokens); at 16 rows it is refused. The rows are the claim, so
   only the step count came down.
+
+## A2. MODEL SHAPE, NOT INPUT SIZE (lane/neural-shape-shrink, 2026-09-16)
+
+The shrink above moved INPUT SIZE and STEP COUNT, and on Metal it bought the
+neural lanes nothing (`byte-lm` 231.8 s to 242.0 s, `samba` worse). The reason
+is in the launch count. One byte LM training step issues
+`(64 + 23*G)*L + (32 + 5*G)` kernel launches for `L` blocks, and **no launch on
+the shipped path sits inside a loop over sequence length or d_model**. Steps
+and sequence length remove arithmetic and not one launch. DEPTH removes
+launches.
+
+| lane | before | after | lever |
+|---|---|---|---|
+| `byte-lm-resident` | 2 blocks, d_model 32, ff 64 | **1 block, d_model 16, ff 32** | depth and width; Metal 173.95 s to **77.26 s**, 2.25x; 211 launches per step to 124 |
+
+`LANE_REVISIONS` carries it at `shape-l1-d16-ff32-1`. The arm was confirmed
+DIVERGENT at the current size first and again at the new one.
+
+**Everything else in these families is a floor**, with the mechanism in
+`docs/lanes/LANE_STATUS_lane-neural-shape-shrink.md`:
+
+- `byte-lm` is the published profile's ONLY device column. `training/byte_lm.mojo`
+  pins it as a comptime and the gradient oracle is defined against two blocks.
+- `mamba1/2/3`, `mamba2-dtlimit`, `transformer`, `transformer-window` are each a
+  SINGLE block, so there is no depth axis. The Mamba d_model 32 floor was seen
+  to refuse at 16; `transformer` admits narrower shapes and was measured not to
+  pay (1.121 s to 1.090 s, and `n_heads=1` is worse).
+- `samba` and `samba-untied-dropout-accum` are a Mamba-3 layer plus an attention
+  layer, and the heterogeneous stack is the claim. d_model 32 was seen to refuse
+  at 16, and the head count and MLP width are flat.
 
 ## B. UNCHANGED
 
