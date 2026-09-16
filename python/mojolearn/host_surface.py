@@ -2375,6 +2375,15 @@ PUBLIC_PENDING_LANES = {
     "hdbscan": "stale reference",
     "hdbscan-leaf": "stale reference",
     "mamba2-dtlimit": "stale reference",
+    # 2026-09-16, lane/dead-arms: their two same-shape RMSNorm weights were
+    # both ones, so they were the SAME TENSOR and a swap of them was the
+    # identity function. `_block_weights(near_one=...)` gives each its own
+    # vector, which moves these three cells once. They were PUBLIC until
+    # today; the shipped table describes the all-ones bytes, so they are held
+    # back until the next release record regenerates it.
+    "mamba3": "stale reference",
+    "transformer": "stale reference",
+    "transformer-window": "stale reference",
     "samba": "stale reference",
     "samba-untied-dropout-accum": "stale reference",
     "byte-lm": "stale reference",

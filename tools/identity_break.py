@@ -788,7 +788,9 @@ LANE_REVISIONS = {
     "tokenizer": "synthetic-vocab-1",
     # rows: these lanes fitted the full 20,000 x 16 fixture
     "gbdt-parametric-losses": "rows-1500-1",
-    "gbdt-nan-modes": "rows-1500-1",
+    # NaN moved onto the columns the fitted trees split on; until 2026-09-16
+    # (lane/dead-arms) the two nan_mode arms hashed the SAME bytes at every size
+    "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
     "gbdt-lossguide-newtoncosine": "rows-1500-1",
     "gbdt-pair-logit": "rows-1500-1",
     # rows: O(n^2) neighbourhood work
@@ -803,7 +805,18 @@ LANE_REVISIONS = {
     "samba": "steps-1-1",
     "samba-untied-dropout-accum": "steps-1-1",
     # sequence length: the (2, 16, 32) slab -> (2, 8, 32)
-    "mamba2-dtlimit": "seqlen-8-1",
+    # dt_limit (0.01, 0.1) -> (0.5, 0.9): the old clamp saturated at its upper
+    # bound for every value, so two of its three branches were dead and a
+    # constant clamp read IDENTICAL (2026-09-16, lane/dead-arms)
+    "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+    # THE NORMS THAT WERE BITWISE EQUAL (2026-09-16, lane/dead-arms). Two
+    # same-shape RMSNorm weights initialised to ones are the same tensor, so
+    # exchanging them was the identity function and these lanes, which never
+    # train, had no step in which they could separate. `near_one` gives each
+    # its own elementwise vector within an eighth of unity.
+    "mamba3": "norms-near-one-1",
+    "transformer": "norms-near-one-1",
+    "transformer-window": "norms-near-one-1",
 }
 
 
@@ -1336,10 +1349,37 @@ def _byte_lm_shape(ml, e):
     return ml.ByteLanguageModelConfig(**moved) if moved else ml.ByteLanguageModelConfig()
 
 
-def _block_weights(lane, shapes, ones=()):
-    """A weight dict for a sequence block. `ones` names get a vector of
-    ones (the norms), the rest are hashed uniform on [-1/8, 1/8)."""
+def _block_weights(lane, shapes, ones=(), near_one=()):
+    """A weight dict for a sequence block. `ones` names get a vector of ones,
+    `near_one` names get 1 + hashed uniform on [-1/8, 1/8), and the rest are
+    hashed uniform on [-1/8, 1/8).
+
+    WHY `near_one` EXISTS (2026-09-16, lane/dead-arms). A norm weight of ones
+    is the natural initialisation and it was what every norm here got. Where a
+    block carries TWO norms OF THE SAME SHAPE, that made the two tensors
+    BITWISE EQUAL, so exchanging them on the way in was the identity function
+    and no lane could see it. Unlike the byte LM, these lanes never train, so
+    nothing separates the two afterwards either and no number of steps is a
+    remedy. Measured on the base fixture, one core:
+
+        mamba3             B_norm.weight <-> C_norm.weight
+                           63de4bf6b9f8262a -> 63de4bf6b9f8262a   BLIND
+        transformer        input_layernorm <-> post_attention_layernorm
+                           295d4e62d4c78b14 -> 295d4e62d4c78b14   BLIND
+        transformer-window the same pair
+                           49ffb2316f238e6d -> 49ffb2316f238e6d   BLIND
+
+    with each tensor READ (a +0.25 on either member moves the cell), so this
+    is a permutation the lane cannot see, not a tensor it never touches. Under
+    `near_one` the same exchange is DETECTED in all three.
+
+    The vector is elementwise, not a second constant, so it also separates a
+    norm that scales per channel from one that scales by a single value, and
+    it stays within an eighth of unity so no activation is crushed and no
+    denormal is manufactured."""
     return {name: (np.ones(shp, dtype=np.float32) if name in ones
+                   else (np.float32(1.0) + _hw(shp, f"{lane}:near_one:{name}", -0.125, 0.125)
+                         ).astype(np.float32) if name in near_one
                    else _hw(shp, f"{lane}:{name}", -0.125, 0.125))
             for name, shp in shapes.items()}
 
@@ -1635,7 +1675,10 @@ def _(ml, X, yc, yr, Xh=None):
         "block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "dt_bias": (nh,),
         "B_norm.weight": (128,), "C_norm.weight": (128,), "B_bias": (nh, 128), "C_bias": (nh, 128),
         "D": (nh,), "out_proj.weight": (dm, di)},
-        ones=("block_norm.weight", "B_norm.weight", "C_norm.weight"))
+        ones=("block_norm.weight",),
+        # B_norm and C_norm are the same shape; at ones they were bitwise
+        # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
+        near_one=("B_norm.weight", "C_norm.weight"))
     blk = ml.Mamba3Block(w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
@@ -1649,7 +1692,9 @@ def _(ml, X, yc, yr, Xh=None):
         "q_proj.weight": (nh * hd, dm), "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm),
         "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
         "down_proj.weight": (dm, it)},
-        ones=("input_layernorm.weight", "post_attention_layernorm.weight"))
+        # the two layernorms are the same shape; at ones they were bitwise
+        # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
+        near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
     blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
     return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer", e).forward(_seq(Xh, 2, 16, dm))),))
@@ -1699,11 +1744,30 @@ def _pos(y):
 
 
 def _with_nan(X):
-    """The fixture with NaN in columns 5, 6 and 7 of every eighth row, so a
-    quantizer's nan_mode has something to place. No fixture carries a NaN
-    (the other lanes would refuse it), so the GBDT nan lanes make their own."""
+    """The fixture with NaN in every eighth row, so a quantizer's nan_mode has
+    something to place. No fixture carries a NaN (the other lanes would refuse
+    it), so the GBDT nan lanes make their own.
+
+    THE NaN MUST REACH A SPLIT (2026-09-16, lane/dead-arms). Until today this
+    wrote NaN into columns 5, 6 and 7 only. `labels_for` builds `y_clf` from
+    columns 3 and 4 alone, so the fitted ensemble split on columns 3 and 4
+    alone and no NaN ever reached a split decision. `nan_mode="Min"` and
+    `nan_mode="Max"` therefore hashed the SAME bytes at 1500, 6000 and 20000
+    rows and the `gbdt-nan-modes` lane could not fail. Measured:
+
+        shipped 5:8 nan cols [5, 6, 7]       min=a21e31ec9cc7597d max=a21e31ec9cc7597d
+        this fixture, nan cols [3, 4, 5, 6, 7] min=5d7ce7cc59e261b0 max=e57525a0fb5169d2
+
+    So column 3 and column 4 carry a NaN too, STAGGERED (3 on every eighth
+    row, 4 four rows later) so that no row loses both label columns at once
+    and both split columns are placed independently. Columns 5, 6 and 7 keep
+    their NaN, which is what makes the fixture place a NaN on a column the
+    trees do NOT split on as well as on the two they do. `labels_for` is
+    applied to the CLEAN fixture, so no label moves."""
     Xn = X.copy()
     Xn[::8, 5:8] = np.float32(np.nan)
+    Xn[::8, 3] = np.float32(np.nan)
+    Xn[4::8, 4] = np.float32(np.nan)
     return Xn
 
 
@@ -2208,7 +2272,31 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("mamba2-dtlimit")
 def _(ml, X, yc, yr, Xh=None):
     """The active dt clamp (seam S9); at the default (0, inf) it cannot
-    move a bit, which is what the mamba2 lane measures."""
+    move a bit, which is what the mamba2 lane measures.
+
+    THE CLAMP MUST BITE ON BOTH SIDES AND ALSO NOT BITE (2026-09-16,
+    lane/dead-arms). Until today this lane ran `dt_limit=(0.01, 0.1)`, and
+    the dt it makes lies in [0.283, 1.110] on `base` (measured off the
+    library by bisecting each bound until the cell moves; the nine ranges
+    are in docs/lanes/LANE_STATUS_dead-arms.md). EVERY dt was therefore
+    above the upper bound, so S9 returned `hi` for every value and the lane
+    read one branch of a three-branch clamp:
+
+      - `dt_bias` shifted by +0.01, +0.1, +0.25, +1, +4, +16 and by -1 left
+        the cell UNMOVED at L=8 and at L=16; only -4 and -16 moved it;
+      - the LOWER bound was inert: walking `lo` from 0 to 0.0999 with `hi`
+        at 0.1 never moved the cell, on any of the nine fixtures;
+      - `dt_limit=(0.1, 0.1)`, a clamp that returns a CONSTANT for every
+        input, read IDENTICAL to the shipped cell. The lane exists for the
+        clamp and could not tell it from a constant.
+
+    (0.5, 0.9) sits inside that dt range, so some values clamp low, some
+    clamp high and some pass through untouched. Measured over the nine
+    fixtures: the lower bound is live on eight (not `ties`, whose dt starts
+    at 0.645), the upper bound on eight (not `negative`, whose dt stops at
+    0.589), the constant-clamp probe is DETECTED on nine, and a `dt_bias`
+    shift of +/-0.01 is DETECTED on nine. No single pair can do better:
+    `ties` starts above where `negative` ends."""
     dm, di, nh = 32, 64, 1
     cd, dip = di + 256, 2 * di + 256 + nh
     w = _block_weights("mamba2", {
@@ -2216,7 +2304,7 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
-    blk = ml.Mamba2Block(w, dt_limit=(0.01, 0.1))
+    blk = ml.Mamba2Block(w, dt_limit=(0.5, 0.9))
     parts = _block_fit(blk, _seq(X, 2, 8, dm), _seq(X, 2, 8, dm, skip=1024), {})
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 8, dm))),))
 
@@ -2231,7 +2319,9 @@ def _(ml, X, yc, yr, Xh=None):
         "q_proj.weight": (nh * hd, dm), "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm),
         "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
         "down_proj.weight": (dm, it)},
-        ones=("input_layernorm.weight", "post_attention_layernorm.weight"))
+        # the two layernorms are the same shape; at ones they were bitwise
+        # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
+        near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
     blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=8)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
     return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer-window", e).forward(_seq(Xh, 2, 16, dm))),))
