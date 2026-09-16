@@ -82,10 +82,31 @@ bits at empty, singleton, odd and multi-block lengths. The scan gate plants
 nonfinite values at multiple indices and checks the first-index result against
 a host oracle across block and grid boundaries.
 
-## Validation status
+## Measured on Apple M4, 2026-09-16
 
-The change has compiled as native Metal Transformer and Mamba bindings.
-Runtime byte comparisons and timings are required before merging it. The local
-A/B artifacts and bounded verification script are under
-`~/mojolearn-evidence/neural-metal-setup/`. Until those checks run, no measured
-latency improvement or full-suite speedup is claimed.
+Both native bindings and regression probes compiled. The pre-fix stage probe
+failed with 29 waits. Production and guarded candidate probes passed, including
+all scratch fields, transfer bits, and wait budgets. `device_scan_check` passed
+176 cases. Two A/B rounds compared all 30 named output/state arrays bytewise;
+all matched. Arm order was baseline, candidate, candidate, baseline under one
+exclusive Metal lease. Each row below gives the two run medians, with three
+warmed samples per run, in milliseconds per decode token.
+
+| Case | Baseline medians | Candidate medians |
+| --- | --- | --- |
+| Transformer B1 L16 D32 | 226.31 / 205.18 | 158.54 / 172.30 |
+| Transformer B2 L5 D64 | 243.61 / 268.54 | 226.42 / 193.66 |
+| Transformer B1 L5 D32 window 3 | 213.59 / 201.46 | 170.07 / 169.49 |
+| Mamba-1 B1 L16 D32 | 168.54 / 172.06 | 60.82 / 60.53 |
+| Mamba-1 B2 L5 D64 | 171.86 / 179.05 | 67.42 / 58.11 |
+
+These are small native-call measurements. They do not predict a nine-hour
+suite's speedup or establish large-model throughput. Per-call context creation,
+weight validation, and many compute-path synchronizations remain. The earlier
+211.67 ms Mamba report came from a different run; it is not substituted for this
+experiment's same-session baseline.
+
+Full logs, binary hashes, NPZ byte comparisons and the bounded verification
+script are under `~/mojolearn-evidence/neural-metal-setup/`. The committed
+`tools/neural_runtime_leg.sh` reproduces the narrow GPU checks and exports a
+native decode NPZ for comparison with Apple on a rented CUDA or HIP machine.
