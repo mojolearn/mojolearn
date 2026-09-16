@@ -62,7 +62,65 @@ checked for the new operation as well as the old.
 
 ## Evidence
 
-<!-- PENDING: filled from the runs before this branch is committed. -->
+Apple M4, one core, through the shared CPU slots; nine fixtures, two
+repeats; host bindings core, training, mamba and transformer built
+IDENTICAL, and a second set with `-D MOJOLEARN_HOST_SABOTAGE=1`. Committed
+under `bench/results/identity_break/2026-09-16_cpu-par-samba/`. The
+production column was taken at 78fa7b7c0, the commit carrying the change;
+the controls ran at bfb8f725a with the same two lines in place.
+
+- **Four columns, production.** `require-columns 4 over ['par-samba',
+  'par-samba-clip']: OK`, train IDENTICAL=18, infer/model IDENTICAL=36,
+  batch IDENTICAL=18: **72 cells IDENTICAL x4, zero DIVERGENT, zero short.**
+  The CPU column reproduces the recorded bytes exactly (par-samba/base
+  `359834bee4b2789a`, par-samba-clip/base `387a63aafbcce06d`).
+- **Host sabotage.** The four families rebuilt with the sabotage define:
+  DIVERGENT on all 72 cells.
+- **A dropped shard.** `ordered_sum_gradients` patched to fold only the
+  first shard: DIVERGENT on all 72 cells, and the shard probe test FAILS
+  with "gradient 0 is not shard 0 + shard 1". Run on the unfixed side first,
+  and watched to fail.
+- **The shards are real.** The probe test sees exactly
+  `samba_gradient, samba_gradient, samba_update` per step and holds the
+  published gradient to shard 0 + shard 1.
+- **Tests.** `test_cpu_training_par_classical` 5 passed,
+  `test_cpu_training_samba` 6 passed, `test_host_surface` 149 passed.
+- **Every other par lane still refuses.** The sweep over every par lane
+  whose family is in this build set: all uncovered lanes REFUSED by name,
+  six of the seven covered ones STABLE.
+
+### Two things that are NOT evidence, recorded so they are not repeated
+
+- **The reversed fold cannot fail here.** Wave 3 asked for the shards to be
+  folded in reverse order. At the two logical shards these lanes use that
+  moves nothing: IEEE addition is commutative, so `g0 + g1` and `g1 + g0`
+  are the same bytes; associativity is what breaks, and it needs three or
+  more parts. Measured: the reversed fold left all 72 cells IDENTICAL x4,
+  while a three-part reassociation differs in 63,705 of 200,000 float32
+  values. The dropped-shard arm is the control that holds these lanes.
+- **The first probe test could not fail either.** It compared
+  `export_gradients()` against `ordered_sum_gradients(...)`, which is the
+  function under test, so it passed under a fold patched to drop a shard
+  while every identity cell went DIVERGENT. It now checks against numpy and
+  fails there, as shown above.
+
+### par-mlp reads REFUSED in this build set, and it is not this change
+
+`SmallMLPTrainer` reaches `_mojolearn_linalg`, whose host binding is not one
+of the four families built here, so par-mlp fails with "no CPU
+implementation of `_mojolearn_linalg.linalg_numeric_mode`". Reproduced with
+this branch's admission present AND with those two pool lines
+scratch-reverted: the same refusal both ways. The CPU identity gate builds
+every declared family and covers par-mlp there.
+
+### A third trap, about this repository rather than these lanes
+
+A scratch sabotage that restores its file with `git checkout -- <path>`
+DELETES uncommitted work on that path: it wiped this branch's
+`_parallel_pool.py` change mid-session, and the next run then "failed" for a
+missing admission rather than for anything real. Commit before running a
+sabotage arm, or restore from a byte copy. The scripts here restore from a
+copy.
 
 ## Rules this lane ran under
 
