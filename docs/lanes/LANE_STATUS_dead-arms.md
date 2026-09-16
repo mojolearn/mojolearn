@@ -276,14 +276,29 @@ everything `ties` has. `(0.5, 0.9)` is the round pair inside the overlap.
 nine fixtures, this Mac, one core, under the Metal lock. See
 `~/mojolearn-evidence/dead-arms-2026-09-16/out_production_after.txt`.
 
+```
+cells=63 stable=63 moved=0 refused=0
+infer: stable=63      model: stable=9 n/a=54      batch: stable=63      rlpair: stable=54
+```
+
+Nothing moved between repeats, nothing refused, on any of the seven lanes.
+
 **The controls are `mamba1` and `mamba2`**, which share `_block_weights` with
 the three changed lanes and were NOT changed. Their cells must be exactly what
-the shipped reference table already holds, and they are:
+the shipped reference table already holds, and they are. The four changed
+lanes' new `train/base` cells match the standalone probes of sections 1 to 3
+exactly, which is worth stating because the probes drive the lanes through a
+patched `_block_weights` while this run drives them through the shipped one:
 
-| lane | shipped table `train/base` | this run |
-|---|---|---|
-| `mamba1` | `1609902abaf80a04` | `1609902abaf80a04` |
-| `mamba2` | `5b05a3ecbd70248e` | `5b05a3ecbd70248e` |
+| lane | shipped table `train/base` | this run | |
+|---|---|---|---|
+| `mamba1` | `1609902abaf80a04` | `1609902abaf80a04` | control, UNMOVED |
+| `mamba2` | `5b05a3ecbd70248e` | `5b05a3ecbd70248e` | control, UNMOVED |
+| `mamba3` | `63de4bf6b9f8262a` | `b282d7e1efb22e6b` | moved once, as intended |
+| `transformer` | `295d4e62d4c78b14` | `f2cb3899e9bfe21c` | moved once |
+| `transformer-window` | `49ffb2316f238e6d` | `998e7f404405725f` | moved once |
+| `mamba2-dtlimit` | `3c1d9aaeaa765468` | `dbe3d4e560695b2e` | moved once |
+| `gbdt-nan-modes` | (no cell in the table) | `78578cb9693251c7` | moved once |
 
 ## 5. THE REFERENCE CONSEQUENCE, which is real
 
@@ -336,10 +351,51 @@ E   AssertionError: these lanes' fixtures moved past the shipped reference and t
 1 failed, 154 deselected
 ```
 
-With them restored, the file passes. That was run before the merge, against
-main's older copy of the same test; the post-merge run is in section 7.
+With them restored, the file passes. Re-run AFTER the merge, against main's
+own copy of the test, both guards fire and each names its own lanes.
 
-## 6. What this does NOT claim
+Restoring main's reasons exactly (`mamba2-dtlimit` back to `unwatched`, the
+three norm lanes back to public):
+
+```
+E   AssertionError: these lanes are held back for a reason the shipped table no longer supports:
+E       mamba2-dtlimit: held back as 'unwatched', but its fixture has moved past the shipped
+E       reference ('seqlen-8-dtlimit-straddle-2'), so its reason is 'stale reference' and a run
+E       would prove nothing
+```
+
+and with only the three norm lanes left public:
+
+```
+E   AssertionError: these lanes moved past the shipped reference and they are still public:
+E       ['mamba3', 'transformer', 'transformer-window']. Add them to PUBLIC_PENDING_LANES as
+E       'stale reference' until the release regenerates the table
+```
+
+Restored, `157 passed`. `tools/fixture_floors.py` reads
+`ok: 15 fixture floor(s), none violated`, and its own `--self-test` refuses
+every mutation it makes, including an untraceable reason on this lane's
+`mamba2-dtlimit` floor.
+
+## 6. THE APPLE RULE CHANGED MID-LANE, and what this lane did about it
+
+`~/mojolearn-evidence/tools/LANE_RULES_2026-09-16.md` gained a rule on the
+afternoon of 2026-09-16: **no lane takes an Apple or Metal identity cell or
+column at all**, because the CPU host route produces the same bits at about
+1/600th of the cost and Metal is one job at a time on one machine, so every
+lane's Apple cell queues behind every other lane's. It names five lanes that
+took Apple cells that day and together made Apple the serial bottleneck.
+
+This lane's one Apple column (section 4) was started at 14:49, before that
+rule existed, and was two thirds finished when it landed. It was allowed to
+run to the end rather than cancelled, because cancelling would have spent the
+43 minutes of Apple already used and handed nothing to anybody, and the
+standing rule is that a new rule applies to the NEXT process. **No further
+Apple or Metal work was taken on this branch.** Every other measurement here
+is a data or parameter perturbation through the shipped bindings, and the
+post-merge guard runs in section 5 touch no device at all.
+
+## 7. What this does NOT claim
 
 - One repeat per probe on the base fixture for the mechanism sections; the
   fire-or-not verdicts in sections 1, 2 and 3 are on all nine.
