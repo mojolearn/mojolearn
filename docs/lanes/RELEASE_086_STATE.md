@@ -433,6 +433,51 @@ reproducible run to run, landing on a different fixture each time, while every o
 the CPU column reproduce it exactly. A third recording would be a FIFTH AMD leg, which is not
 rented without reporting the count first.
 
+### AMD leg 4: the blocker CONFIRMED from a clean column, and the AMD column cannot finish cheaply
+
+Hot Aisle MI300X 13core, VM 1c51eb34, 21:53:18 to 22:37:47, balance $37.11 to **$35.02**, so
+**$2.09**. Deleted and verified gone (HTTP 204, GET 404, `listed=no`). Evidence:
+`records/amd-leg-4/`. On the box: wheel sha256 equal to R2, vendor hip, harness copy equal,
+`identity --check` and `verify --quick` exit 0, 15 wheel bindings, and the uploader wrote
+partials throughout.
+
+**The authoritative second recording** (fetched column, not the snapshot):
+
+    rf-score-weighted/base   MOVED    d744878e7c0e31ee, eb475cefa0f32408
+    rf-score-weighted/wide   STABLE   49be8ea935a47640, 49be8ea935a47640
+
+So the rule's condition is met from a clean fetched column for the second time, on a different
+fixture and a different VM. **The pack stays stopped.**
+
+**The leg only reached 3 lanes.** `identity_break_exit=137` at its 2400 s bound after
+rf-score-weighted, par-dbscan and par-scaler: 27 cells in 41 minutes. The lanes still owed are
+almost all `par-*`, and they cost roughly **800 s each** on this hardware.
+
+| | |
+|---|---|
+| AMD coverage, legs 1 + 3 + 4 | **162 of 192 lanes** |
+| still owed | **30**, all `par-*` plus iforest, iforest-tuned, par-iforest |
+| at ~800 s a lane, 2400 s a leg | about **10 more legs**, roughly **$21**, several hours |
+| Hot Aisle balance | $35.02, which covers it but not comfortably |
+
+Per the standing rule, the count is reported and **no fifth leg has been rented**.
+
+**And the merge now refuses**, which is the blocker surfacing in the tooling:
+
+    REFUSING --merge: cell rf-score-weighted/base is in two parts with different contents
+
+Leg 3 and leg 4 both carry `rf-score-weighted` and disagree, so legs 1, 3 and 4 cannot be joined
+into one column until someone decides WHICH recording the AMD column carries. The rule forbids
+dropping the lane, marking it n/a or excluding it from the diff, so this is a decision for Andrew
+with the evidence in front of him, not a packing choice. The suggestion on the table: carry leg
+3's recording (the larger 98-lane part) and keep leg 4's beside it as the second reading, since
+the finding IS that the two disagree.
+
+**Apple, revised.** 5 of 158 lanes at one lane per process, mean 160 s, worst 705 s
+(gbdt-ordered-rmse), projecting to about **6.8 hours**, against the 1.1 h that three cheap
+scalers suggested. The remaining set is heavy with `par-*`, neural and byte-LM lanes, so 6.8 h is
+the current estimate and not a ceiling.
+
 ### What the CODE says about the moving cell (read only, nothing changed)
 
 **The path that ran**, established by reading rather than assuming. The lane builds
