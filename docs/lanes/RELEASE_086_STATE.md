@@ -342,6 +342,30 @@ Local `release/0.8.6` sat at db9047b9f while this work was pushed to `origin/rel
 from the branch `fix/release-post-record-allowlist`. The local branch is now fast-forwarded to
 7e23bc670, so the two agree again.
 
+## The record carries columns from two build commits, and that is sound
+
+The three Linux columns (AMD, NVIDIA and the CPU column) record commit **db9047b9f**, the
+commit whose wheel they installed. The Apple column records **2f53960ca**, the commit the
+macOS wheel was built at. `--diff` compares no commit, so nothing refuses on its own; that is
+exactly why the record README has to say why this is honest instead of leaving a reader to
+assume it.
+
+- 2f53960ca is an ANCESTOR of db9047b9f, so this is one line of history, not two.
+- Four commits separate them: 45fd47f2f (the wheel content audit), 9cc557e3d (the native
+  source rule gaining `tokenizer/tools/`), ef2b077e4 (the macOS smoke list) and db9047b9f
+  (`verify_wheel.sh` passing the child an explicit environment). They touch eight files.
+- Exactly ONE of the eight is on the native build inventory:
+  `tools/linux_surface_qualification.sh`, which the rule lists by name. It defines the LINUX
+  build's snapshot and takes no part in a macOS build, so it cannot move a macOS compiled
+  byte. The other seven are test and audit tooling (`packaging/macos/smoke.py`,
+  `packaging/macos/verify_wheel.sh`, `tools/check_linux_release_qualification.py`,
+  `tools/gemm_remote_leg.sh`, `tools/release_wheel_content_audit.py` and the two tests).
+- **None of the eight ships in either wheel.** Checked against both wheels' member lists
+  (216 Linux members, 157 macOS), each of the eight reads 0 and 0, while the control pair
+  `host_surface.py` and `_identity_break.py` reads 1 and 1 in each wheel. The control is there
+  because a membership grep that returns zero because it cannot match anything looks exactly
+  like a pass.
+
 ## Pending steps, in order
 
 1. DONE: byte compare of the 15 host bindings across the three Linux sets at db9047b9f
