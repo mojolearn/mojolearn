@@ -17,6 +17,14 @@ Arms, in the order they bite:
   ORDER     the same eight queries in reverse, mapped back row by row.
   COMPANY   one query held at the SAME position in two different groups, so
             the in-batch ordinal is constant and only the company changes.
+  FLOOR     a companion far enough away to move the batch mean a thousandfold.
+  FLOOR_BIND the sigma floor still binds, per row, where it should.
+
+SOLO, ORDER, COMPANY and FLOOR all reported True on the spelling lane/
+umap-batch-fix replaced, and all four RAISE if they ever report True again.
+REPEAT, ULP and FLOOR_BIND are the fail-first arms: the comparison and the
+floor must both be SEEN to fire before any of the nulls above is worth
+anything.
 
 Each arm runs twice: at the shipped default negative_sample_rate=5, and at
 negative_sample_rate=0, which never consults the RNG. The nsr=0 column
@@ -282,6 +290,26 @@ def _arms(negatives: Int) raises:
         "ulp_cross_row", ulp_other_rows,
     )
 
+    # THE GATE. Before lane/umap-batch-fix all three of these were True at the
+    # shipped default, and SOLO and COMPANY were True at nsr=0 as well. They
+    # are now the property under test, so this arm RAISES rather than
+    # reporting, and names which one broke.
+    if solo_moved:
+        raise Error(
+            "UMAP transform is batch dependent at " + suffix
+            + ": a query alone does not match the same query in a batch"
+        )
+    if order_moved:
+        raise Error(
+            "UMAP transform is batch dependent at " + suffix
+            + ": reordering the same queries moves a row"
+        )
+    if company_moved:
+        raise Error(
+            "UMAP transform is batch dependent at " + suffix
+            + ": a query at the same position with different company moves"
+        )
+
 
 def _floor_arm() raises:
     """Isolate the sigma floor from the maximum edge weight.
@@ -333,10 +361,14 @@ def _floor_arm() raises:
     var moved = _report_row(String("FLOOR"), 0, left, 0, right, 0)
     print("ARM FLOOR same maximum, different mean, moves the row:", moved)
 
-    # The floor arm's own fail-first. `sigma = max(sigma, 0.001 * mean)` binds
-    # only when the batch mean exceeds a thousand times the row's own sigma,
-    # so a companion far enough away must move the row, or this arm is a check
-    # that cannot fail and its null above means nothing.
+    # THE ARM THAT USED TO FIRE, kept as the before-and-after. `sigma =
+    # max(sigma, 0.001 * mean)` binds only when the mean behind it exceeds a
+    # thousand times the row's own sigma, so before lane/umap-batch-fix, when
+    # that mean was the whole request's, a companion at 3000 put it at 2591.9
+    # and moved query 0 by 0.023. With the mean taken per row the companion
+    # cannot reach query 0 at all and this must now be inert. That leaves the
+    # arm without a control that fires, so `_floor_still_binds` below supplies
+    # one that does.
     var absurd = duplicate.copy()
     for c in range(D):
         absurd.append(Float32(3000.0))
@@ -349,10 +381,68 @@ def _floor_arm() raises:
     if bitcast[DType.uint32](absurd_scalars[1]) != bitcast[DType.uint32](near_scalars[1]):
         raise Error("the floor control failed to hold the maximum edge weight constant")
     var extreme = host_umap_transform(training, embedding, absurd, N_TRAIN, 2, D, params)
-    var control_moved = _report_row(String("FLOOR_CONTROL"), 0, left, 0, extreme, 0)
-    if not control_moved:
-        raise Error("the sigma floor moved nothing even at a thousandfold mean; this arm cannot fail")
-    print("ARM FLOOR_CONTROL the sigma floor does bind and does move the row:", control_moved)
+    var absurd_moved = _report_row(String("FLOOR_ABSURD"), 0, left, 0, extreme, 0)
+    print("ARM FLOOR_ABSURD a thousandfold companion mean moves the row:", absurd_moved)
+    if moved or absurd_moved:
+        raise Error("the sigma floor still reads the whole request's mean")
+
+
+def _floor_still_binds() raises:
+    """The floor arm's fail-first, and the arm that catches a repair which
+    DELETED the sigma floor instead of making it per row.
+
+    Two hand-built neighbor rows differ only in their last distance, 20,000
+    against 40,000. Both are far enough that `identical_exp64(-d / sigma)` is
+    exactly zero at every sigma the 64-iteration search visits (the search
+    only ever halves from 1 here), so the two rows' UNFLOORED sigma is bit for
+    bit the same and so is every membership it would produce. Their MEANS are
+    not the same, 4000.2 against 8000.2, so `sigma = max(sigma, 0.001 * mean)`
+    binds at 4.0002 for one row and 8.0002 for the other. Any difference
+    between the two rows' memberships is therefore the floor, and nothing
+    else, which is positive attribution rather than elimination.
+
+    Two things are asserted, and they are the two ways the repair could be
+    wrong:
+
+      * the two rows must DIFFER, or the floor no longer binds anywhere and
+        every null above is the null of a dead code path;
+      * row 0 of the pair must be bitwise equal to row 0 computed ALONE,
+        which is batch invariance measured at a configuration where the floor
+        actually binds rather than one where it sleeps.
+
+    On the spelling this lane replaced both assertions fail: the pair shares
+    one mean of 6000.2, so the rows do not differ, and the single row's mean
+    is 4000.2, so it does not match the pair.
+    """
+    var pair: List[Float32] = [
+        0.0, 0.0, 0.0, 1.0, 20000.0,
+        0.0, 0.0, 0.0, 1.0, 40000.0,
+    ]
+    var alone: List[Float32] = [0.0, 0.0, 0.0, 1.0, 20000.0]
+    var both = host_transform_memberships(pair, 2, K)
+    var single = host_transform_memberships(alone, 1, K)
+    var rows_differ = False
+    var alone_differs = False
+    for j in range(K):
+        var in_pair = both[j]
+        var companion = both[K + j]
+        var solo = single[j]
+        if bitcast[DType.uint32](in_pair) != bitcast[DType.uint32](companion):
+            rows_differ = True
+        if bitcast[DType.uint32](in_pair) != bitcast[DType.uint32](solo):
+            alone_differs = True
+        print(
+            "FLOOR_BIND neighbor", j,
+            "row0_in_pair_bits", bitcast[DType.uint32](in_pair), "row0_in_pair", in_pair,
+            "row1_bits", bitcast[DType.uint32](companion), "row1", companion,
+            "row0_alone_bits", bitcast[DType.uint32](solo), "row0_alone", solo,
+        )
+    print("ARM FLOOR_BIND the floor still binds and separates the two rows:", rows_differ)
+    print("ARM FLOOR_BIND row 0 alone differs from row 0 in the pair:", alone_differs)
+    if not rows_differ:
+        raise Error("the sigma floor binds on neither row; it was deleted, not made per row")
+    if alone_differs:
+        raise Error("the sigma floor is still batch coupled where it binds")
 
 
 def main() raises:
@@ -360,4 +450,5 @@ def main() raises:
     _arms(5)
     _arms(0)
     _floor_arm()
+    _floor_still_binds()
     print("UMAP batch determinism measurement COMPLETE")
