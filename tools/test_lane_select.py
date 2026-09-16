@@ -711,6 +711,126 @@ def test_the_source_hygiene_patterns_still_fire():
 
 
 # --------------------------------------------------------------------------
+# THE INVERSION CHECKS. Everything else here asks whether the map NARROWS
+# correctly. These ask whether it can narrow WRONGLY, which is the failure
+# that reads as a pass: a lane whose map is missing a file gets a green run
+# for a change that moved its bits. They are run over the WHOLE TREE rather
+# than against a case list, because the case list is what missed
+# `neural_inference.py` for eight months.
+# --------------------------------------------------------------------------
+
+def _lane_sets():
+    sources, _ = lane_select.lane_sources()
+    return sources, lane_select.reverse_map(sources)
+
+
+def test_every_lane_that_reaches_an_importer_reaches_what_it_imports():
+    """INVERSION 1. If F imports B then a lane reaching F executes B, so
+    lanes(F) must be a subset of lanes(B). A break here means the import walk
+    stopped somewhere it should not have."""
+    sources, rev = _lane_sets()
+    sinks = lane_select.enumerator_files()
+    bad = []
+    for f in lane_select._python_files():
+        if f in sinks:
+            continue
+        for b in lane_select._python_imports(f):
+            if b in sinks:
+                continue
+            missing = rev.get(f, set()) - rev.get(b, set())
+            if missing:
+                bad.append(f"{f} imports {b}, but {len(missing)} lane(s) reach the importer and "
+                           f"not the import, e.g. {sorted(missing)[:4]}")
+    assert not bad, "\n  ".join([""] + bad[:6])
+
+
+def test_every_lane_that_reaches_a_base_reaches_what_extends_it():
+    """INVERSION 2, and the one that was broken. If F subclasses or patches a
+    class in B then a lane reaching B can run F's override, so lanes(B) must
+    be a subset of lanes(F).
+
+    `python/mojolearn/neural_inference.py` defines
+    `Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block)`. It IMPORTS
+    `_mamba_impl`, so following imports forward never reached it from a mamba
+    lane, and the map credited it with `mlp`, `transformer` and
+    `transformer-window` while it also serves four mamba and two samba lanes.
+    Deleting those wrappers' `forward` overrides is about as load-bearing as
+    an edit to that file gets. Reported by lane/stateful-cpu-decoding."""
+    sources, rev = _lane_sets()
+    bad = []
+    for f, targets in lane_select.extenders().items():
+        for b in targets:
+            missing = rev.get(b, set()) - rev.get(f, set())
+            if missing:
+                bad.append(f"{f} extends {b}, but {len(missing)} lane(s) reach the base and not "
+                           f"the extender, e.g. {sorted(missing)[:4]}")
+    assert not bad, "\n  ".join([""] + bad[:6])
+
+
+def test_the_inversion_check_fails_when_the_backward_edge_is_removed():
+    """THE ARM THAT MUST FAIL. An inversion that holds no matter what the map
+    does is not a check. With the backward edge disabled, inversion 2 must
+    report `neural_inference.py` and the six lanes it was missing."""
+    real = lane_select._extending_files
+    lane_select._extending_files = lambda closure: set()
+    lane_select.reset_caches()
+    try:
+        sources, rev = _lane_sets()
+        broken = []
+        for f, targets in lane_select.extenders().items():
+            for b in targets:
+                if rev.get(b, set()) - rev.get(f, set()):
+                    broken.append(f)
+        assert "python/mojolearn/neural_inference.py" in broken, (
+            "with the backward edge removed the inversion did NOT flag neural_inference.py, so it "
+            f"is not what is holding the map together. flagged: {sorted(set(broken))[:5]}")
+        missing = rev.get("python/mojolearn/_mamba_impl.py", set()) \
+            - rev.get("python/mojolearn/neural_inference.py", set())
+        for lane in ("mamba1", "mamba2", "mamba2-dtlimit", "mamba3"):
+            assert lane in missing, f"{lane} was expected to be missing without the edge"
+    finally:
+        lane_select._extending_files = real
+        lane_select.reset_caches()
+
+
+def test_the_six_lanes_the_report_named_are_attributed():
+    """The worked example, kept as itself. `neural_inference.py` serves the
+    mamba and samba lanes and the map must say so."""
+    sources, rev = _lane_sets()
+    got = rev.get("python/mojolearn/neural_inference.py", set())
+    for lane in ("mamba1", "mamba2", "mamba2-dtlimit", "mamba3",
+                 "samba", "samba-untied-dropout-accum",
+                 "mlp", "transformer", "transformer-window"):
+        assert lane in got, f"neural_inference.py serves {lane} and the map does not say so"
+    assert len(got) < len(sources) // 2, \
+        f"neural_inference.py now claims {len(got)} of {len(sources)} lanes; the edge is too wide"
+
+
+def test_a_base_everything_inherits_is_not_evidence():
+    """The backward edge needs the same sink rule the forward one has.
+    `python/mojolearn/_mode.py` is extended by 23 package files against 2 for
+    the next most extended, and without excluding it every lane pulled in all
+    23: the median file went from 32 lanes to 197."""
+    # Counted per EXTENDING FILE, not per base NAME. `_classical_host.py`
+    # subclasses four different neighbors classes and is still one file;
+    # counting names made this test call `neighbors.py` universal while the
+    # implementation, correctly, did not.
+    counts = {}
+    symbols = lane_select._python_symbols(lane_select._python_files())
+    for rel in lane_select._python_files():
+        targets = {other for name in lane_select._extends(rel)
+                   for other in symbols.get(name, ()) if other != rel}
+        for other in targets:
+            counts[other] = counts.get(other, 0) + 1
+    universal = sorted(r for r, n in counts.items() if n > lane_select.UNIVERSAL_BASE_MAX_EXTENDERS)
+    assert universal, "no universal base was found at all; the threshold or the walk is broken"
+    edges = lane_select.extenders()
+    for rel, targets in edges.items():
+        for u in universal:
+            assert u not in targets, f"{rel} kept an edge to the universal base {u}"
+
+
+# --------------------------------------------------------------------------
 # THE ADVERSARIAL PASS, 2026-09-16. Everything above asks whether a rule
 # narrows when it should. These ask the question that costs a defect rather
 # than an afternoon: can a rule be made to report a NARROW answer for a change

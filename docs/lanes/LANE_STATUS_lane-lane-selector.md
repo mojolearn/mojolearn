@@ -294,6 +294,58 @@ for an import statement took the tests rule from 124 of 125 inert to 91 of
 125, because 33 are named by a workflow or a script. That is the trade the
 rule is for. Over-firing costs a sweep; under-firing costs a defect.
 
+### The map narrowed WRONGLY: it followed imports only forward
+
+Reported by `lane/stateful-cpu-decoding`, and worse than every false sweep
+chased today. A false sweep prints FALLING BACK and a lane declines to run it.
+An under-attribution is silent and reads as a narrow PASS.
+
+`python/mojolearn/neural_inference.py` was credited with `mlp`, `transformer`
+and `transformer-window` while it also serves `mamba1`, `mamba2`,
+`mamba2-dtlimit`, `mamba3`, `samba` and `samba-untied-dropout-accum`. That
+lane deleted those wrappers' `forward` overrides.
+
+The shape is not one file. The file defines
+`Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block)` and IMPORTS
+`_mamba_impl`, so the edge runs BACKWARDS along the import graph and following
+imports forward never reaches it. The three lanes it did have were attributed
+only because those lane bodies happen to name the wrapper classes by hand. A
+file that subclasses a class in a lane's closure, or patches an attribute onto
+one at module level, is now in that closure, with its own imports followed.
+
+That edge needed the sink rule the forward one has: `_mode.py` is extended by
+23 package files against 2 for the next, and without excluding it the median
+file went from 32 lanes to 197. After the exclusion `neural_inference.py`
+serves 21 lanes, the median file is 33, and `kmeans_oracle.mojo`,
+`gbdt_host_predict.mojo` and `forest_host_predict.mojo` are unchanged at 20,
+23 and 7. The kmeans-save merge is still 36 of 212 and the umap/checks files
+are still unreachable.
+
+### Two inversions, over the whole tree
+
+A case list is what missed this file for as long as the map existed, so the
+check is not a case list.
+
+* if F imports B, a lane reaching F executes B, so lanes(F) subset of lanes(B);
+* if F extends B, a lane reaching B can run F's override, so lanes(B) subset
+  of lanes(F).
+
+Both hold with zero violations over every package file. Inversion 1 earned its
+place at once: the first spelling of the backward edge did not follow the
+extender's own imports, and inversion 1 caught that `mamba1` reached
+`neural_inference.py` without reaching the `_samba_impl` and
+`_transformer_impl` it imports at module level.
+
+An inversion that holds whatever the map does is not a check, so a test
+disables the backward edge and requires inversion 2 to name
+`neural_inference.py` and the four mamba lanes.
+
+`python3 tools/lane_select.py --census N` is the half a person reads: the
+files attributed to N lanes or fewer, with what each defines. A missing edge
+hides in a file credited with too few, and `neural_inference.py` at three
+lanes was exactly that shape. A census at 3 is in
+`/Users/andrewhendel/mojolearn-evidence/lane-selector-2026-09-16/census_3.txt`.
+
 ### The one path left, and why it stays
 
 `pixi.toml` pins the toolchain. A toolchain change can move bits on every
