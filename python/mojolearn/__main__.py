@@ -128,12 +128,13 @@ def build_parser():
     v.add_argument("--self-test", dest="self_test", action="store_true",
                    help="SHOW THAT THIS VERIFIER CAN FAIL. Runs one lane twice "
                         "through the ordinary comparison, once untouched and "
-                        "once with a single input value moved by one ULP, and "
-                        "requires the first to read IDENTICAL and the second "
-                        "DIVERGENT. The perturbation is real arithmetic at run "
-                        "time, not a printed verdict, and it needs no sabotage "
-                        "build. Exit 0 only if the comparison both reproduced "
-                        "the reference and caught the wrong answer")
+                        "once with every value of the input's first column "
+                        "moved up by one ULP, and requires the first to read "
+                        "IDENTICAL and the second DIVERGENT. The perturbation "
+                        "is real arithmetic at run time, not a printed verdict, "
+                        "and it needs no sabotage build. Exit 0 only if the "
+                        "comparison both reproduced the reference and caught "
+                        "the wrong answer")
     v.add_argument("--json-out", dest="json_out", metavar="PATH", default=None,
                    help="with --all: also write the full evidence document "
                         "(per-cell hashes computed here and expected, per-lane "
