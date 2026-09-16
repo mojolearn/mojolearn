@@ -13,6 +13,7 @@ selector goes quiet, not merely if it errors.
     python3 tools/test_lane_select.py          # same checks, no pytest
 """
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -21,20 +22,64 @@ import lane_select                                              # noqa: E402
 #: A path every lane in the family depends on, and a lane that must NOT be
 #: selected by it. The second half is the half that catches a selector which
 #: has quietly widened to "everything" and so looks right by accident.
+#:
+#: EVERY ENTRY MUST BE A FILE THAT EXISTS. The third case read `mamba/impl`
+#: until 2026-09-16, which is a DIRECTORY: the map could not attribute it, the
+#: selection fell back to every lane, `must in lanes` passed for that reason
+#: alone and the narrowing half was skipped. The case asserted nothing. Both
+#: guards below exist because of it: the paths are checked against the tree,
+#: and a fallback now FAILS the case instead of satisfying it.
 FAMILY_CASES = (
     ("glm/host/qn_oracle.mojo", "logistic", ("mamba1", "transformer", "tokenizer")),
     ("cluster/host/kmeans_oracle.mojo", "kmeans", ("mamba1", "transformer", "arima")),
-    ("mamba/impl", "mamba1", ("ols", "kmeans", "tokenizer")),
+    ("mamba/impl/modeling/modeling_mamba.mojo", "mamba1", ("ols", "kmeans", "tokenizer")),
 )
 
 
+def test_every_family_case_names_a_file_that_exists():
+    """A case pointed at a directory or a deleted file falls back to every
+    lane and then passes vacuously, which is the shape of a check that cannot
+    fail."""
+    for path, _, _ in FAMILY_CASES:
+        full = os.path.join(lane_select.ROOT, path)
+        assert os.path.isfile(full), f"FAMILY_CASES names {path}, which is not a file"
+
+
+#: The families whose lanes are built by a registration LOOP rather than by a
+#: `@lane(...)` decorator. They are why `grep -c '@lane('` undercounts, and
+#: naming them here is what lets the next test fail when the undercount stops
+#: being the one we think it is.
+REGISTERED_BY_CALL = ("kde-", "knn-", "radius-", "gp-", "gmm-")
+
+
 def test_registry_count_comes_from_the_import():
-    """199 lanes, read by importing the registry. `grep -c '@lane('` answers
-    176 because 23 lanes register by call; a selector built on the grep would
-    silently skip them."""
+    """THE COUNT IS NOT A NUMBER TO MAINTAIN. One afternoon produced four lane
+    totals (176, 192, 199, 210) that each claimed to be it, so this test pins
+    the PROPERTY instead: the registry read by import is strictly larger than
+    the decorator grep, and every lane in the gap belongs to a family that
+    registers by call.
+
+    A hard-coded total would rot the first time a lane landed. It already did:
+    this file was written when the answer was 199 against 176, and four
+    commits later it is 211 against 188, with the SAME 23 lanes in the gap."""
     lanes = lane_select.all_lanes()
     assert len(lanes) == len(set(lanes)), "a lane name is registered twice"
-    assert len(lanes) > 176, f"only {len(lanes)} lanes: the registry was read by grep, not by import"
+
+    harness = os.path.join(lane_select.ROOT, lane_select.HARNESS)
+    text = open(harness, encoding="utf-8").read()
+    by_decorator = set(re.findall(r'@lane\(\s*"([A-Za-z0-9_.\-]+)"', text))
+    assert by_decorator, "the decorator regex matched nothing: it, not the registry, is broken"
+
+    gap = [n for n in lanes if n not in by_decorator]
+    assert gap, ("no lane registers by call any more. If the kde/knn/radius/gp/gmm loops were "
+                 "rewritten as decorators that is fine, but this test and the docs that quote "
+                 "it must be rewritten with them.")
+    assert len(lanes) > len(by_decorator), (
+        f"the import found {len(lanes)} lanes and the grep {len(by_decorator)}: "
+        "the registry was read by grep, not by import")
+    stray = [n for n in gap if not n.startswith(REGISTERED_BY_CALL)]
+    assert not stray, (f"{len(stray)} lane(s) are missing from the decorator grep and are not in a "
+                       f"family known to register by call: {stray[:10]}")
 
 
 def test_every_lane_maps_to_real_source():
@@ -59,11 +104,12 @@ def test_a_lane_is_selected_by_its_own_dependencies():
 def test_family_path_selects_its_lane_and_not_the_others():
     for path, must, must_not in FAMILY_CASES:
         sel = lane_select.select([path])
+        assert not sel["fallback"], \
+            f"{path} fell back to every lane, so this case proves nothing: {sel['reasons'][path]}"
         assert must in sel["lanes"], f"{path} did not select {must}"
-        if not sel["fallback"]:
-            for other in must_not:
-                assert other not in sel["lanes"], \
-                    f"{path} selected the unrelated lane {other}; the map is not narrowing"
+        for other in must_not:
+            assert other not in sel["lanes"], \
+                f"{path} selected the unrelated lane {other}; the map is not narrowing"
 
 
 def test_inert_paths_select_nothing_and_do_not_pretend_otherwise():
@@ -88,7 +134,7 @@ def test_several_paths_in_one_argument_are_never_inert():
 def test_binding_edges_do_not_come_from_prose():
     """A binding named in a docstring is not a call into it. If prose counted,
     the shared doors would hand every lane the forest and byte LM host
-    bindings, and a change to one oracle would select all 199 lanes."""
+    bindings, and a change to one oracle would select every lane."""
     sources, why = lane_select.lane_sources()
     for lane in ("tokenizer", "mamba1", "ols"):
         assert "_mojolearn_forest_host" not in why[lane]["bindings"], \

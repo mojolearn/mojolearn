@@ -50,9 +50,12 @@ env PYTHONPATH=<worktree>/python MOJOLEARN_HOST_DIR=$SP/hostdir-laneselect \
 Nothing here is a list kept by hand. A hand-kept map rots silently and then
 answers "nothing is affected" long after that stopped being true.
 
-* the registry: `identity_break.LANES`, read by IMPORT. **199 lanes.**
-  `grep -c '@lane('` answers 176 and is an artifact, because 23 lanes
-  register by call (the kde, knn, radius, gp and gmm families).
+* the registry: `identity_break.LANES`, read by IMPORT. `--count` prints the
+  size and nothing writes it down: on the merged tree 2026-09-16 it is 211,
+  against the 188 `grep -c '@lane('` finds. The 23-lane gap is the kde, knn,
+  radius, gp and gmm families, which register by call. Four commits earlier
+  the same two questions answered 199 and 176, with the SAME 23 lanes in the
+  gap, which is why the test now pins the gap and not the totals.
 * the lane body: the lane function's own code object, followed through the
   module's helpers.
 * the Python door: `python/mojolearn/*.py` indexed by what each file defines,
@@ -88,7 +91,7 @@ answers "nothing is affected" long after that stopped being true.
    search matched them in docstrings and comments, which this codebase is
    full of. Every lane picked up the forest and byte LM host bindings, hit
    their whole-closure fallback, and `core/gbdt_host_predict.mojo` selected
-   all 199 lanes. Edges now come from syntax only.
+   every lane at once. Edges now come from syntax only.
    `test_binding_edges_do_not_come_from_prose` pins it.
 
 A third correction, to a claim made mid-lane: the first single-lane CPU

@@ -17,10 +17,13 @@ DERIVED, NOT HAND-WRITTEN. A hand-kept list rots silently and then answers
 shape of six failures in this repository. Every edge here comes from a
 declaration that something else already enforces:
 
-  the registry      `identity_break.LANES`, the 199 lanes themselves, read by
-                    IMPORT, not by grep. `grep -c '@lane('` answers 176 and is
-                    an artifact: 23 lanes are registered by call, not by
-                    decorator (the kde, knn, radius, gp and gmm families).
+  the registry      `identity_break.LANES` itself, read by IMPORT, not by
+                    grep. `--count` prints how many; on 2026-09-16 that was
+                    211 against the 188 `grep -c '@lane('` finds, because 23
+                    lanes register by call rather than by decorator (the kde,
+                    knn, radius, gp and gmm families). The total is never
+                    written down, here or in the docs: four of them were in
+                    circulation in one afternoon.
   the lane body     the lane function's own code object: the names it touches
                     (`ml.RandomForestClassifier`, `ml.linalg`, the module's
                     own helpers, transitively) are in `co_names`.
@@ -102,7 +105,7 @@ _MOJO_IMPORT_RE = re.compile(r"^\s*(?:from\s+([a-zA-Z0-9_.]+)\s+import|import\s+
 #: against 1 to 3 for a real estimator module.
 #:
 #: Harvesting binding names from those files gave EVERY lane EVERY binding and
-#: so made every change select all 199 lanes, which is a selector that cannot
+#: so made every change select every lane, which is a selector that cannot
 #: narrow anything. They are therefore sinks: their binding names are not
 #: evidence for any one lane and the import walk stops at them. The
 #: conservatism that buys is paid back exactly where it was taken, in
@@ -111,34 +114,84 @@ _MOJO_IMPORT_RE = re.compile(r"^\s*(?:from\s+([a-zA-Z0-9_.]+)\s+import|import\s+
 ENUMERATOR_MAX_BINDINGS = 3
 
 
+#: PER-FILE RESULTS ARE MEMOIZED, because the map asks the same question of
+#: the same file once per lane. Without this, deriving the map parsed each
+#: Python door three times for every one of the lanes that reach it: measured
+#: 2026-09-16 on this tree, 146 s for one `lane_sources()` and 24 minutes for
+#: the property tests, which is a poor look on the tool whose whole purpose is
+#: verification TIME. Every cache below is keyed by path and holds a pure
+#: function of that file's CONTENT; the tree does not change inside one run,
+#: and nothing here writes a file. Same answers, 26x less of them.
+_CACHES = []
+
+
+def _by_path(fn):
+    cache = {}
+    _CACHES.append(cache)
+
+    def wrapped(path):
+        if path not in cache:
+            cache[path] = fn(path)
+        return cache[path]
+
+    wrapped.__name__ = fn.__name__
+    wrapped.__doc__ = fn.__doc__
+    return wrapped
+
+
+def reset_caches():
+    """Drop every memo. Only a caller that edits the tree mid-process needs
+    this; no code path in this repository does."""
+    global _ENUMERATORS, _LANE_SOURCES
+    for cache in _CACHES:
+        cache.clear()
+    _ENUMERATORS = None
+    _LANE_SOURCES = None
+
+
+@_by_path
 def _read(path):
     with open(os.path.join(ROOT, path), encoding="utf-8", errors="replace") as fh:
         return fh.read()
+
+
+@_by_path
+def _parse(path):
+    """One file's AST, or None when it is unreadable or not Python."""
+    try:
+        return ast.parse(_read(path))
+    except (OSError, SyntaxError):
+        return None
+
+
+_MODULES = {}
+
+
+def _load_module(name, path):
+    if name not in _MODULES:
+        full = os.path.join(ROOT, path)
+        spec = importlib.util.spec_from_file_location(name, full)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)
+        _MODULES[name] = mod
+    return _MODULES[name]
 
 
 def identity_break():
     """The harness module, IMPORTED. `LANES` is the registry; reading it any
     other way (a grep over decorators) undercounts the lanes that register by
     call and has already produced four different lane totals in one day."""
-    path = os.path.join(ROOT, HARNESS)
-    spec = importlib.util.spec_from_file_location("mojolearn_identity_break", path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    return _load_module("mojolearn_identity_break", HARNESS)
 
 
 def host_surface():
-    path = os.path.join(ROOT, MANIFEST)
-    spec = importlib.util.spec_from_file_location("mojolearn_host_surface", path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    return _load_module("mojolearn_host_surface", MANIFEST)
 
 
 def all_lanes():
-    """Every registered lane, in registry order. THE count, 199 on main."""
+    """Every registered lane, in registry order. THE lane set; `--count`
+    prints its size and nothing in this repository writes that number down."""
     return list(identity_break().LANES)
 
 
@@ -192,9 +245,8 @@ def _python_symbols(files):
     each file's own module name, so `ml.linalg` and `ml.metrics` resolve."""
     index = {}
     for rel in files:
-        try:
-            tree = ast.parse(_read(rel))
-        except (OSError, SyntaxError):
+        tree = _parse(rel)
+        if tree is None:
             continue
         index.setdefault(os.path.basename(rel)[:-3].lstrip("_"), set()).add(rel)
         index.setdefault(os.path.basename(rel)[:-3], set()).add(rel)
@@ -208,12 +260,12 @@ def _python_symbols(files):
     return index
 
 
+@_by_path
 def _python_imports(rel):
     """The package's own imports of one file, as file paths."""
     out = set()
-    try:
-        tree = ast.parse(_read(rel))
-    except (OSError, SyntaxError):
+    tree = _parse(rel)
+    if tree is None:
         return out
     names = set()
     for node in ast.walk(tree):
@@ -269,6 +321,7 @@ def _python_closure(seeds, sinks=()):
     return out
 
 
+@_by_path
 def _mojo_imports(rel):
     """The repository's own Mojo imports of one file. `from cluster.impl.kmeans
     import x` resolves to cluster/impl/kmeans.mojo; `from max.gpu.host import
@@ -317,6 +370,14 @@ def _mojo_blocks(text):
     return out
 
 
+@_by_path
+def _mojo_blocks_for(rel):
+    """`_mojo_blocks` of one file, memoized: a binding is asked for its blocks
+    once per distinct set of exports a lane's door calls."""
+    return _mojo_blocks(_read(rel))
+
+
+@_by_path
 def _mojo_import_symbols(rel):
     """symbol -> the file it is imported from, for one Mojo source, including
     the parenthesized multi-line form the bindings use."""
@@ -342,6 +403,7 @@ def _mojo_import_symbols(rel):
     return out
 
 
+@_by_path
 def _binding_exports(rel):
     """export name -> the binding function implementing it, from the
     `module.def_function[impl]("name")` registrations a binding ends with."""
@@ -360,6 +422,7 @@ _BINDING_CALLS = frozenset({"binding", "_bind", "load_host_module", "host_module
 _BINDING_TARGETS = ("_BINDING", "_EXT_NAME", "_EXT", "_MODULE_NAME", "_EXTENSION")
 
 
+@_by_path
 def _binding_names(rel):
     """The bindings a Python file actually RESOLVES, read from its syntax.
 
@@ -368,12 +431,11 @@ def _binding_names(rel):
     length: on 2026-09-16 that gave every lane `_mojolearn_forest_host` and
     `_mojolearn_byte_lm_host` because some shared door mentions them in prose,
     every lane then hit those bindings' whole-closure fallback, and
-    core/gbdt_host_predict.mojo selected all 199 lanes. A sentence about a
+    core/gbdt_host_predict.mojo selected every lane at once. A sentence about a
     binding is not a call into it."""
     out = set()
-    try:
-        tree = ast.parse(_read(rel))
-    except (OSError, SyntaxError):
+    tree = _parse(rel)
+    if tree is None:
         return out
 
     def add(value):
@@ -399,29 +461,46 @@ def _binding_names(rel):
     return out
 
 
+@_by_path
+def _file_called_names(rel):
+    """One Python file's attribute names and identifier-shaped string
+    constants: `self._bind("_mojolearn").kmeans_fit(` leaves 'kmeans_fit',
+    and `getattr(binding, "qn_fit")` leaves 'qn_fit'."""
+    out = set()
+    tree = _parse(rel)
+    if tree is None:
+        return out
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            out.add(node.attr)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str) \
+                and node.value.isidentifier():
+            out.add(node.value)
+    return out
+
+
 def _called_names(files):
-    """Every attribute name and identifier-shaped string constant in a set of
-    Python files. Intersected with a binding's exports, this is which entry
-    points a lane's door actually calls: `self._bind("_mojolearn").kmeans_fit(`
-    leaves 'kmeans_fit', and `getattr(binding, "qn_fit")` leaves 'qn_fit'."""
+    """The same, over a set of files. Intersected with a binding's exports,
+    this is which entry points a lane's door actually calls."""
     out = set()
     for rel in files:
-        try:
-            tree = ast.parse(_read(rel))
-        except (OSError, SyntaxError):
-            continue
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute):
-                out.add(node.attr)
-            elif isinstance(node, ast.Constant) and isinstance(node.value, str) \
-                    and node.value.isidentifier():
-                out.add(node.value)
+        out |= _file_called_names(rel)
     return out
+
+
+_LANE_SOURCES = None
 
 
 def lane_sources():
     """lane -> the source files it exercises, derived. Also returns the
-    per-lane evidence (`why`) so a selection can say what it rested on."""
+    per-lane evidence (`why`) so a selection can say what it rested on.
+
+    MEMOIZED for the life of the process. `select()` and the property tests
+    each ask for the map several times, and deriving it is the expensive part
+    of every command here."""
+    global _LANE_SOURCES
+    if _LANE_SOURCES is not None:
+        return _LANE_SOURCES
     ib = identity_break()
     hs = host_surface()
     py_files = _python_files()
@@ -444,9 +523,9 @@ def lane_sources():
         A binding is a multiplexer: bindings/_mojolearn_core_host.mojo carries
         the k-means, DBSCAN, k-NN and scaler oracles at once, so following its
         whole import closure handed every lane of the family every oracle in
-        it, and a change to one oracle selected all 199 lanes (measured
-        2026-09-16: glm/host/qn_oracle.mojo selected 163, cluster/host/
-        kmeans_oracle.mojo selected 199). Each EXPORT is therefore resolved to
+        it, and a change to one oracle selected the whole registry (measured
+        2026-09-16, when it held 199: glm/host/qn_oracle.mojo selected 163 and
+        cluster/host/kmeans_oracle.mojo all 199). Each EXPORT is resolved to
         the imported symbols ITS OWN function body names, and only those
         modules are followed. The binding source itself is always included,
         because a change to it does reach the lane, but its imports are not
@@ -461,7 +540,7 @@ def lane_sources():
             if not hit:
                 seed_cache[key] = _mojo_closure([src])
             else:
-                blocks = _mojo_blocks(_read(src))
+                blocks = _mojo_blocks_for(src)
                 syms = _mojo_import_symbols(src)
                 seeds = set()
                 for export in hit:
@@ -528,7 +607,8 @@ def lane_sources():
         sources[lane] = files | extra | mojo
         why[lane] = dict(symbols=sorted(matched), python=len(files), bindings=sorted(bindings),
                          families=sorted(fams), mojo=len(mojo), exports=len(used))
-    return sources, why
+    _LANE_SOURCES = (sources, why)
+    return _LANE_SOURCES
 
 
 def reverse_map(sources=None):

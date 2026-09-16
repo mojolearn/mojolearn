@@ -14,10 +14,22 @@ All three tiers run through the same tool, `tools/verify_lanes.py`, which
 gets its lane set from `tools/lane_select.py`. There is deliberately NO
 separate full-sweep script: a second code path grows its own bugs and its own
 idea of what the lane set is, and that is how one afternoon produced four
-lane totals (176, 192, 199, 210) that each claimed to be the count. The
-registry holds **199** lanes, read by importing `identity_break.LANES`.
-`grep -c '@lane('` answers 176 and is an artifact, because 23 lanes register
-by call rather than by decorator.
+lane totals (176, 192, 199, 210) that each claimed to be the count.
+
+The count is not written down here either, for the same reason. Ask the
+registry:
+
+```sh
+python3 tools/lane_select.py --count      # imports identity_break.LANES
+```
+
+Measured on this tree 2026-09-16 it answers **211**, while `grep -c '@lane('`
+answers 188. The 23-lane gap is the kde, knn, radius, gp and gmm families,
+which register by call rather than by decorator, so a tool built on the grep
+would silently skip them. The gap is a property of how those families
+register, not a number to maintain: four commits earlier the same two
+questions answered 199 and 176, with the same 23 lanes between them.
+`tools/test_lane_select.py` asserts the property, never the totals.
 
 ```sh
 python3 tools/verify_lanes.py --lane logistic                # one lane
@@ -41,12 +53,12 @@ The selector prints the lanes it chose and WHY it chose them. Read that
 output rather than the exit code alone. Two of its lines matter most:
 
 * `FALLING BACK TO EVERY LANE` means it could not determine the blast radius
-  of some changed path, so the selection was widened to all 199. That is a
-  full sweep and must not be reported as a narrow run.
-* `0 of 199 lanes selected` happens only for prose and evidence paths. The
-  runner REFUSES an empty selection rather than exiting 0, because an empty
-  run that reads as a pass is the failure this whole mechanism exists to
-  prevent.
+  of some changed path, so the selection was widened to every registered
+  lane. That is a full sweep and must not be reported as a narrow run.
+* `0 of N lanes selected` happens only for prose and evidence paths.
+  `tools/verify_lanes.py` then REFUSES and exits 2 rather than exiting 0,
+  because an empty run that reads as a pass is the failure this whole
+  mechanism exists to prevent.
 
 ## Tier 2, OCCASIONAL: the broad sweep, on rented CPU
 
@@ -114,7 +126,11 @@ It is conservative in three specific places, and says so each time:
 * `python/mojolearn/_backend.py`, `python/mojolearn/host_surface.py` and the
   other files that enumerate the whole binding surface select EVERY lane,
   because the map deliberately drops their per-lane edges (otherwise every
-  change selected all 199);
+  change selected every lane). Those files are found by COUNTING the bindings
+  each one names, not by a list kept here, so a new registry file is caught
+  the day it lands. On this tree they are `_backend.py` (42 bindings),
+  `host_surface.py` (55), `_classical_host.py` (26), `__init__.py` (8) and
+  `_parallel_worker.py` (4);
 * `tools/identity_break.py` selects every lane unless the diff touches only
   lane function bodies, in which case it selects exactly those lanes.
 
