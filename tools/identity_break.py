@@ -1061,7 +1061,19 @@ def record_lanes():
 APPLE_RELEASE_RECORD_ENV = "MOJOLEARN_APPLE_RELEASE_RECORD"
 
 #: More lanes than this in ONE Apple process is a column, not a lane check.
-APPLE_COLUMN_LANE_LIMIT = 24
+#: 2026-09-16, Andrew: a LANE DOES NOT TAKE AN APPLE CELL AT ALL. This was 24,
+#: and the refusal below used to tell a lane to pass --lanes under that limit
+#: and take its own cells, which five lanes did in one afternoon. Each was
+#: defensible alone; together they made the one Mac the serial bottleneck for
+#: every lane, because Metal runs ONE JOB AT A TIME and cannot be rented.
+#: The CPU host route gives the SAME BITS (it is the device kernel restated as
+#: a serial host loop) at 0.37 ms against Metal's 225.71 ms per decode step,
+#: and it runs in parallel. Cross-vendor questions go to RENTED NVIDIA and AMD.
+#: 1 leaves the Metal SMOKE check, "does my change compile and run on Apple at
+#: all", which no cross-compile can answer: on this date an acquire fence
+#: generated valid AIR and then failed at PIPELINE CREATION, breaking three
+#: subsystems on main while every --emit asm check passed.
+APPLE_COLUMN_LANE_LIMIT = 1
 
 
 def _is_apple_gpu(host):
@@ -1086,8 +1098,12 @@ def refuse_routine_apple_column(lanes, host, env=None):
         f"pass measured over seven hours.\n"
         f"  FOR ROUTINE VERIFICATION, use the rented CPU column, which is bitwise equal to Metal: "
         f"tools/runpod_cpu_leg.sh (about $0.24/hour, runs in parallel). See docs/RUNPOD_CPU_LEG.md.\n"
-        f"  FOR ONE LANE's own cells, pass --lanes with at most {APPLE_COLUMN_LANE_LIMIT} lanes and "
-        f"take the Metal slot through mac_slot.sh.\n"
+        f"  A LANE DOES NOT TAKE AN APPLE CELL. Verify on the CPU host route, which returns the "
+        f"SAME BITS about 600x faster and in parallel, and send cross-vendor questions to RENTED "
+        f"NVIDIA and AMD. Apple is taken once, at the release record.\n"
+        f"  The one exception is the Metal SMOKE check, does this compile and RUN on Apple at all, "
+        f"which no cross-compile can answer: --lanes with at most {APPLE_COLUMN_LANE_LIMIT} lane, "
+        f"through mac_slot.sh.\n"
         f"  IF THIS REALLY IS THE RELEASE RECORD, name the release: "
         f"{APPLE_RELEASE_RECORD_ENV}=<version>."
     )
