@@ -40,6 +40,15 @@ python3 tools/verify_lanes.py --all --shards 16              # everything
 `--plan` prints what would run and stops. `--runner pods` prints one
 `tools/runpod_cpu_leg.sh` command per shard and rents nothing.
 
+`--changed-since REF` compares REF against YOUR WORKING TREE, which is what a
+lane wants: the change is what you have, not what is committed. It follows
+that pointing it at an old base from a much later tip measures the whole span
+between them and not the commit you had in mind. To ask what ONE landed commit
+affects, compare that commit against its own parent.
+
+Some paths still select every lane and should. `pixi.toml` pins the toolchain,
+and a toolchain change can move bits on every lane.
+
 ## Tier 1, ROUTINE: on a change, before merging
 
 Only the lanes the change can affect, on the CPU host route, small fixtures.
@@ -177,6 +186,11 @@ through a glob over its directory. See `tools/test_lane_select.py`.
   (the glob shape), and a one-word top-level directory is not searched at all
   because it is a word, not a path. The rule under-fires on a short or common
   file name, which is the safe direction.
+* a test module under `python/mojolearn/tests/`, when nothing outside that
+  directory imports it. `_python_files()` already leaves the directory out of
+  the map because a test cannot change what a lane computes; the import check
+  is what keeps that true, and it runs over the whole tracked tree, because an
+  import from a tool would still be an import.
 * a whole-surface registry whose diff only ADDS to it. Every old statement
   must be present and in order, either byte for byte or as the same assignment
   whose container grew or whose value changed under an unchanged key, and each

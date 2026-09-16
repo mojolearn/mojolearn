@@ -537,6 +537,47 @@ def test_a_path_nothing_reaches_selects_nothing():
         lane_select.reset_caches()
 
 
+def test_a_test_module_is_inert_unless_something_outside_the_tests_imports_it():
+    """A test cannot change what a lane computes, which is why
+    `_python_files()` leaves `python/mojolearn/tests/` out of the map. The
+    selector never acted on that, so every test file read NOT ATTRIBUTABLE and
+    sent its lane to the full sweep.
+
+    THE ARM THAT MUST DECLINE IS IN THE TREE, not synthesised.
+    `tools/transformer_fresh_prefill_check.py` and
+    `tools/transformer_transfer_check.py` both do
+    `from mojolearn.tests.test_transformer_surface import _weights`, so that
+    one test module is NOT inert while its neighbours are. If that import ever
+    goes away this test says so rather than quietly losing its control."""
+    tests = os.path.join(lane_select.ROOT, "python", "mojolearn", "tests")
+    names = sorted(n for n in os.listdir(tests) if n.endswith(".py"))
+    assert len(names) > 50, "the tests directory is not where this test thinks it is"
+
+    imported = "python/mojolearn/tests/test_transformer_surface.py"
+    assert lane_select.test_module_inert(imported) is None, (
+        "test_transformer_surface is imported by tools/transformer_fresh_prefill_check.py and "
+        "tools/transformer_transfer_check.py and must not be called inert. If that import is "
+        "gone, this control is gone with it and needs replacing, not deleting.")
+
+    inert = [n for n in names if lane_select.test_module_inert("python/mojolearn/tests/" + n)]
+    assert len(inert) >= len(names) - 5, \
+        f"only {len(inert)} of {len(names)} test modules read inert; the rule stopped firing"
+
+    for rel in ("python/mojolearn/cluster.py", "python/mojolearn/host_surface.py",
+                "tools/identity_break.py", "pixi.toml"):
+        assert lane_select.test_module_inert(rel) is None, \
+            f"{rel} is not a test module and this rule must not touch it"
+
+
+def test_a_registry_with_no_ref_to_diff_against_still_falls_back():
+    """The narrow answer for a registry is read out of a DIFF. With no ref
+    there is no diff, so `--lanes-for-paths` on a registry must say every lane
+    and say why, rather than looking like the rule failed."""
+    sel = lane_select.select(["python/mojolearn/host_surface.py"])
+    assert sel["fallback"] is True
+    assert "no ref was given" in sel["reasons"]["python/mojolearn/host_surface.py"]
+
+
 def test_the_things_a_lane_does_reach_are_never_called_unreachable():
     """The controls. Every one of these is in some lane's closure or is
     resolved by name at load, and calling any of them unreachable would turn a

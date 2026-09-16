@@ -831,6 +831,52 @@ def tracked_files():
     return _TRACKED
 
 
+TESTS = os.path.join(PKG, "tests") + os.sep
+
+_IMPORT_OF = r"(?:^|\n)[^\S\n]*(?:from[^\S\n]+[.\w]*\b{0}\b|import[^\S\n]+[.\w]*\b{0}\b)"
+
+
+def test_module_inert(path):
+    """Why this test module cannot move a lane's bits, or None.
+
+    `_python_files()` already leaves `python/mojolearn/tests/` out of the map,
+    on the stated ground that a test cannot change what a lane computes. The
+    selector never acted on that, so every file under it read NOT ATTRIBUTABLE
+    and sent its lane to the full sweep: lane/kmeans-save ended at 212 partly
+    because of `tests/test_host_model_kmeans.py`.
+
+    The ground is only true while nothing outside the tests directory imports
+    the module, so that is what is checked, over the whole tracked tree rather
+    than over the lane corpus: an import from a build script or a tool would
+    still be an import. A test importing another test proves nothing, because
+    both are inert by the same argument.
+
+    This is deliberately NOT routed through `unreachable`, which asks a
+    different question and answers it conservatively: `python/mojolearn/` turns
+    up inside an f-string in `_backend.py` (`' needs python/mojolearn/'`
+    followed by a computed name), which is exactly the constructed-path shape
+    that rule must refuse."""
+    if not path.startswith(TESTS) or not path.endswith(".py"):
+        return None
+    module = os.path.basename(path)[:-3]
+    if len(module) < 4:
+        return None
+    pattern = re.compile(_IMPORT_OF.format(re.escape(module)))
+    importers = []
+    for rel in sorted(tracked_files()):
+        if rel.startswith(TESTS) or _is_inert(rel) or not rel.endswith((".py", ".sh", ".toml")):
+            continue
+        try:
+            if pattern.search(_read(rel)):
+                importers.append(rel)
+        except OSError:
+            continue
+    if importers:
+        return None
+    return ("a test module: it is outside the map by construction, because a test cannot change "
+            "what a lane computes, and nothing outside python/mojolearn/tests/ imports it")
+
+
 def _reaching_corpus():
     """Every file some lane already reaches, plus the harness and the manifest.
 
@@ -1300,6 +1346,11 @@ def select(paths, ref=None, sources=None):
                 lanes |= set(touched)
                 reasons[path] = f"harness diff touches only these lane bodies: {','.join(touched) or 'none'}"
             continue
+        why_test = test_module_inert(path)
+        if why_test:
+            inert.append(path)
+            reasons[path] = why_test
+            continue
         why_unreachable = unreachable(path)
         if why_unreachable:
             inert.append(path)
@@ -1311,7 +1362,14 @@ def select(paths, ref=None, sources=None):
                              "cannot move a lane's bits (tools/test_lane_select.py covers it)")
             continue
         if path in GLOBAL_PATHS or path in enumerator_files():
-            added = registry_lanes(ref, path, sources) if ref else None
+            if not ref:
+                fallback = True
+                unattributed.append(path)
+                reasons[path] = ("a registry of the whole binding surface. Whether this change is "
+                                 "an ADDITION can only be read from a diff, and no ref was given, "
+                                 "so: every lane. Use --changed-since to get the narrow answer")
+                continue
+            added = registry_lanes(ref, path, sources)
             if added is not None:
                 lanes |= set(added)
                 reasons[path] = (f"a whole-surface registry, but the diff only ADDS to it: every "

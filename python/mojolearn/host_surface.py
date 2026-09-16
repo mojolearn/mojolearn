@@ -1040,13 +1040,17 @@ FAMILIES = (
     dict(
         # lane/inference-tokenizer-neural, 2026-09-15. The INFERENCE half of
         # the training and transformer families (which stay source reference
-        # builds): the small MLP's logits and the TransformerBlock stateless
-        # prefill, forward only, loaded by path and shipped. No optimizer,
-        # loss, backward or decode export, so none of that is compiled in.
-        # The mlp, transformer and transformer-window lanes' held-out and
-        # batch cells run through MLPInference and TransformerBlockInference
-        # on a CPU column; their training rows stay the training and
-        # transformer families' covered lanes.
+        # builds): the small MLP's logits and the Transformer and Mamba
+        # blocks' forward, forward only, loaded by path and shipped. No
+        # optimizer, loss or backward export, so none of that is compiled
+        # in. The mlp, transformer and transformer-window lanes' held-out
+        # and batch cells run through MLPInference and
+        # TransformerBlockInference on a CPU column; their training rows
+        # stay the training and transformer families' covered lanes.
+        # lane/stateful-cpu-decoding (2026-09-16) added the state-carrying
+        # entries, so a decode cache IS exported here now: the same host
+        # functions the fresh entries call, handed the caller's state, which
+        # is what makes a step-by-step decode bitwise the one-shot prefill.
         family="neural",
         binding="_mojolearn_neural_host",
         routes=None,
@@ -1061,7 +1065,7 @@ FAMILIES = (
         # source reference build.
         classes=("MLPInference", "TransformerBlockInference", "Mamba1BlockInference",
                  "Mamba2BlockInference", "Mamba3BlockInference", "SambaInference"),
-        display="the small MLP's logits, the Transformer and Mamba blocks' zero-state forward and the Samba stack's logits (inference only)",
+        display="the small MLP's logits, the Transformer and Mamba blocks' forward and decode step and the Samba stack's logits (inference only)",
         host_modules=(
             "training/host/mlp_oracle.mojo",
             "training/host/samba_ops_oracle.mojo",
@@ -1075,14 +1079,17 @@ FAMILIES = (
         exports=(
             "neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
             "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
-            "mamba1_forward_fresh", "mamba2_forward_fresh", "mamba3_forward_fresh",
+            "transformer_forward", "transformer_decode_step",
+            "mamba1_forward_fresh", "mamba1_forward", "mamba1_decode_step",
+            "mamba2_forward_fresh", "mamba2_forward", "mamba2_decode_step",
+            "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",
             "embedding_forward", "rms_norm_forward", "linear_forward",
         ),
-        gate="python/mojolearn/tests/test_neural_inference.py and tools/identity_break.py (mlp, transformer, transformer-window, mamba1, mamba2, mamba3, mamba2-dtlimit, samba, samba-untied-dropout-accum)",
+        gate="python/mojolearn/tests/test_neural_inference.py, tools/step_vs_full_check.py and tools/identity_break.py (mlp, transformer, transformer-window, transformer-decode, mamba1, mamba2, mamba3, mamba1-decode, mamba2-decode, mamba3-decode, mamba2-dtlimit, samba, samba-decode, samba-untied-dropout-accum)",
         wheel_note=(
             "Ships: forward-only. Carries the MLP, Transformer, Mamba-1/2/3 and Samba forwards of the "
-            "training-only mamba, transformer and training families, and registers no backward, "
-            "optimizer, loss or decode symbol."
+            "training-only mamba, transformer and training families, their decode steps and caches "
+            "(lane/stateful-cpu-decoding), and registers no backward, optimizer or loss symbol."
         ),
         ships_in_wheel=True,
     ),
