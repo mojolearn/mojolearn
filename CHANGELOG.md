@@ -27,6 +27,21 @@ Linux legs are OWED before this heading reads published.
   seventeen do not", each of the seventeen naming the shipping family that served its
   inference instead; lane/ship-cpu-host-families then shipped all thirty-two, so every note
   now begins "Ships:" and none of them names an exclusion.
+- **`DBSCAN.predict`, `AgglomerativeClustering.predict` and `SpectralClustering.predict` are
+  declared inference lanes now, with a GPU reference recording behind them**
+  (lane/saved-model-reference-gaps). All three shipped on 2026-09-15 and no gate covered any of
+  them: `mojolearn.host_model()` dispatched the saved files and nothing said what the answer
+  should be. The reason was not policy. `tools/classical_host_gate.py record`, the only tool that
+  can make such a recording, had been raising `AttributeError` on main since `--lane-rule-only`
+  was added, before it ran a line of work, so nobody could have produced one. The four lanes
+  (`dbscan`, `agglomerative`, `spectral`, `spectral-precomputed`) are recorded on nine fixtures
+  each at `bench/results/classical_host/2026-09-16-nvidia-predict`, taken on an NVIDIA A100
+  (sm_80), and the saved models are re-predicted from the CPU host bindings on two architectures,
+  x86-64 and arm64, both reading `gate verdict IDENTICAL (36 fixtures, exit 0)`. The
+  predict-only sabotage build is caught on all 36 cells on both, with an empty `unmoved` list.
+  Two NVIDIA identity columns and a retaken Apple Metal column are at
+  `bench/results/identity_break/2026-09-16_predict-nvidia`; the AMD recording is owed at the next
+  release record.
 - **The bootstrap, the permutation test, Monte Carlo integration and `kpss_test` now work on
   a CPU-only install.** They were unreachable: each computes a statistic from the caller's
   own data, trains no model and has nothing to save, so the saved-model inference boundary
