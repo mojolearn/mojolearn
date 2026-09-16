@@ -64,16 +64,16 @@ POD_USD_PER_HOUR = 0.48
 
 
 def _selection(args):
-    sources, why = lane_select.lane_sources()
-    if args.all:
-        return list(sources), dict(mode="all", fallback=False), sources
-    if args.lanes or args.lane:
+    if args.all or args.lanes or args.lane:
+        registry = lane_select.all_lanes()
+        if args.all:
+            return list(registry), dict(mode="all", fallback=False), None
         named = [n for n in (args.lanes or "").split(",") if n] + list(args.lane)
-        unknown = [n for n in named if n not in sources]
+        unknown = [n for n in named if n not in registry]
         if unknown:
             raise SystemExit(f"REFUSING: --lanes names no lane: {unknown}")
-        order = list(sources)
-        return [n for n in order if n in set(named)], dict(mode="named", fallback=False), sources
+        return [n for n in registry if n in set(named)], dict(mode="named", fallback=False), None
+    sources, why = lane_select.lane_sources()
     if args.lanes_for_paths:
         sel = lane_select.select(args.lanes_for_paths, sources=sources)
     elif args.changed_since:
@@ -239,16 +239,32 @@ def main(argv=None):
                     help="local processes, or print one runpod_cpu_leg.sh command per shard")
     ap.add_argument("--plan", action="store_true", help="print what would run and stop")
     ap.add_argument("--out", default="", metavar="DIR", help="where parts, logs and the column go")
-    ap.add_argument("--fixtures", default="", help="identity_break --fixtures (routine runs use base)")
+    ap.add_argument("--fixtures", default=None, help="fixtures to check; default base, even with --all")
+    ap.add_argument("--exhaustive", action="store_true", help="all nine fixtures, explicitly requested")
     ap.add_argument("--repeats", type=int, default=2)
     ap.add_argument("--vendor", default="")
     ap.add_argument("--tag", default="sweep", help="lane tag for the pod plan")
     ap.add_argument("--build", default="core,estimators", help="host families for the pod plan")
     ap.add_argument("extra", nargs="*", help="passed through to identity_break (after --)")
     args = ap.parse_args(argv)
+    import identity_break
+    if args.exhaustive and args.fixtures is not None:
+        ap.error("choose --exhaustive OR --fixtures")
+    args.fixtures = ",".join(identity_break.FIXTURES) if args.exhaustive else (args.fixtures if args.fixtures is not None else "base")
+    fixtures = args.fixtures.split(",")
+    unknown = set(fixtures) - set(identity_break.FIXTURES)
+    if unknown:
+        ap.error(f"unknown fixtures: {sorted(unknown)}")
+    if args.repeats < 2:
+        ap.error("verification needs at least two independent fits")
+    selection_modes = sum(bool(x) for x in (args.all, args.lanes or args.lane, args.changed_since, args.lanes_for_paths))
+    if selection_modes != 1:
+        ap.error("choose one of --all, named lanes, --changed-since, or --lanes-for-paths")
 
     lanes, sel, _ = _selection(args)
     print(f"# {len(lanes)} of {len(lane_select.all_lanes())} lanes selected")
+    print(f"# {len(fixtures)} fixture(s): {args.fixtures}; "
+          f"{len(lanes) * len(fixtures)} cells, {len(lanes) * len(fixtures) * args.repeats} independent fits")
     if not lanes:
         print("# REFUSING: the selection is empty. An empty run is not a pass; if the change "
               "really touches no lane, say so in the lane status file rather than running this.")

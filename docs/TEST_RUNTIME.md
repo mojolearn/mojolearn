@@ -5,6 +5,19 @@ for a release. A smaller selection is recorded as iteration coverage, never as
 full qualification. The fixture sizes, repeat count and numerical contracts are
 unchanged by this runner.
 
+For one algorithm, name its lane explicitly. The default is the base fixture,
+with two fits and the existing probes. `--exhaustive` selects all nine fixtures
+for those lanes. `verify_lanes.py` uses the same base default.
+
+```sh
+pixi run -e test test-algo --lane transformer --plan
+pixi run -e test test-algo --lane transformer --mode run --out /tmp/transformer-check
+pixi run -e test test-algo --lane transformer --exhaustive --plan
+```
+
+The execution example requires a CPU host installation. Naming a lane tests
+that algorithm only; use changed-path selection for shared source changes.
+
 ```sh
 # Inspect the affected lanes without taking the GPU.
 pixi run -e test test-identity-changed --plan --base HEAD^ cluster/host/kmeans_oracle.mojo
