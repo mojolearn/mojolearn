@@ -369,10 +369,25 @@ So of five 60-minute leases, one recorded 62 lanes, two recorded the rest up
 to lane 162, and **two produced nothing at all**. The column has been stuck at
 the `par-scaler` / `par-arima` boundary since leg 4.
 
-### PROVIDER LIMIT: par-arima cannot be recorded on Hot Aisle as written
+### PROVIDER LIMIT: par-arima is a LEASE-BUDGET WALL on one provider, not an impossibility
 
-This is a finding about the provider and the lane, **not a gap in our work**,
-and money does not solve it.
+This is a finding about the provider and the lane, **not a gap in our work**.
+
+**Say what it is not, first.** This is NOT a claim that `par-arima` cannot be
+recorded, or that it is slow on AMD in general. It **was** recorded on an AMD
+MI325X in the committed 166-lane record
+(`bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json`),
+along with 30 other `par-*` lanes. The lane is recordable and has been
+recorded. Nor is it claimed that it would fail at 90 minutes; no such lease
+was ever bought, so that is untested.
+
+What IS measured is narrower and it is about one provider's lease budget: on
+Hot Aisle, whose runner caps a lease at 60 minutes in enforced code, a 2400 s
+identity process on a healthy MI300X box, asked for this lane FIRST, emitted
+nothing at all. Within that cap the lane could not be got on to the 0.8.6
+column, and a longer single lease is not purchasable there. Money does not
+solve it on that provider; a different provider, a longer bound, or a cheaper
+driver would.
 
 AMD leg 5 was pointed at exactly the 30 owed lanes, `par-arima` first
 (`extra_body.sh`, a `--skip` of the 162 already recorded). The box was
