@@ -64,15 +64,15 @@ build_arm() {   # <label> <extra defines>
     return 0
 }
 
-run_arm() {     # <label>
-    _lab=$1
+run_arm() {     # <label> <cases>
+    _lab=$1; _cases=$2
     ( cd "$ROOT" && PYTHONPATH="$ROOT/python:$ROOT" MOJOLEARN_NUMERIC_MODE=identical \
         RF_PROBE_JSON="$JSON" RF_PROBE_ARM="$_lab" RF_PROBE_REPEATS=@REPEATS@ \
-        RF_PROBE_SECS=@PROBESECS@ \
+        RF_PROBE_SECS=@PROBESECS@ RF_PROBE_CASES="$_cases" \
         RF_PROBE_SO_SHA="$(cat "$OUT/so_$_lab.sha256")" \
         timeout -k 30 @PROBESECS@ pixi run python /root/run/rf_probe6.py ) \
         >> "$OUT/rf_probe6.log" 2>&1
-    log "run $_lab exit=$?"
+    log "run $_lab cases=$_cases exit=$?"
 }
 
 mkdir -p /root/run
@@ -112,17 +112,22 @@ fixture = ib.fixture
 _h = ib._h
 NAMES = ("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
 
-# (fixture, sampled columns wanted).
+# Cases come from RF_PROBE_CASES ("11,16") so each BUILD runs only the arms that
+# discriminate for its cap. dimy = min(cap, cols - col) per launch:
 #
-# wide/10 IS THE CONTROL THAT MATTERS NOW. odd/17 was meant to be arm B's control but
-# leg 7 measured it INSENSITIVE: 0/100 in the STOCK arm, where the launch-count reading
-# predicted it should move, so it can prove nothing in either arm and is dropped.
+#   cap  cols  dimy seq   final group   observed
+#   10   <=10  [n]        full          0 / 600
+#   16   10    [10]       partial       0 / 100
+#   16   16    [16]       FULL          0 / 100
+#   10   11    [10,1]     partial       7 / 300
+#   10   16    [10,6]     partial       8 / 300
+#   16   11    [11]       partial       5 / 177
 #
-# 10 columns is ONE launch under BOTH caps, and the stock binary is stable there across
-# 400 fits (legs 4 and 5). So cap16 @ wide/10 tests MY DEFINE, not the defect:
-#   cap16 wide/10 stable  -> the define is sound, and arm B's wide/11 move is real
-#   cap16 wide/10 MOVES   -> raising the cap is itself unsound and every cap16 arm is VOID
-CASES = (("wide", 10), ("wide", 11), ("wide", 16))
+# Every mover has >=11 columns AND a partial final group. cap 8 with 16 columns is
+# [8,8] -- two launches, BOTH FULL -- which is the arm that separates that reading
+# from "column count >= 11".
+CASES = tuple((f, int(c)) for f, c in
+              (s.split(":") for s in os.environ.get("RF_PROBE_CASES", "wide:11,wide:16").split(",")))
 
 
 def np_of(est, name):
@@ -230,26 +235,41 @@ print("ARM %s done: " % ARM + " ".join(
     for a in doc["arms"] if a["arm"] == ARM))
 PYEOF
 
-# ---- arm A: stock cap of 10 (positive control for the whole leg) --------
+# ---- the three builds -------------------------------------------------
+# stock  cap 10, 16 cols -> [10,6] partial  POSITIVE CONTROL, expect ~2.7%
+# cap8   cap  8, 16 cols -> [8,8]  BOTH FULL   <-- THE DISCRIMINATOR
+#            "partial final group" predicts STABLE; "column count >= 11" predicts MOVES
+# cap16  cap 16, 11 cols -> [11]   partial  expect moves
+#            cap 16, 16 cols -> [16]   FULL     expect stable (replicate leg 8 at higher N)
 if build_arm stock ""; then
-    run_arm stock
+    run_arm stock "wide:16"
 else
     log "STOCK BUILD FAILED - no control, nothing below is interpretable"
 fi
 
-# ---- arm B: cap raised to 16 -------------------------------------------
-if build_arm cols16cap "-D MOJOLEARN_RF_BLKS_COLS16=1"; then
-    if [ "$(cat "$OUT/so_stock.sha256" 2>/dev/null)" = "$(cat "$OUT/so_cols16cap.sha256" 2>/dev/null)" ]; then
-        log "REFUSED arm B: the .so digest did NOT change between builds, so the define never reached the compiler"
-    else
-        run_arm cols16cap
-    fi
+if build_arm cap8 "-D MOJOLEARN_RF_BLKS_COLS8=1"; then
+    run_arm cap8 "wide:16"
 else
-    log "CAP BUILD FAILED"
+    log "CAP8 BUILD FAILED"
 fi
 
-grep -c "MOJOLEARN_RF_BLKS_COLS16" "$OUT/build_cols16cap.log" > "$OUT/define_seen.txt" 2>&1 || true
-log "define_mentions_in_build_log=$(cat "$OUT/define_seen.txt")"
+if build_arm cap16 "-D MOJOLEARN_RF_BLKS_COLS16=1"; then
+    run_arm cap16 "wide:11,wide:16"
+else
+    log "CAP16 BUILD FAILED"
+fi
+
+# All three binaries must be DISTINCT or a define silently did not reach the compiler
+# and an arm would re-test another arm's binary. The digest is the authoritative guard;
+# grepping the build log is not, because build_rf.sh does not echo its command line.
+_s=$(cat "$OUT/so_stock.sha256" 2>/dev/null); _8=$(cat "$OUT/so_cap8.sha256" 2>/dev/null)
+_16=$(cat "$OUT/so_cap16.sha256" 2>/dev/null)
+if [ "$_s" = "$_8" ] || [ "$_s" = "$_16" ] || [ "$_8" = "$_16" ]; then
+    log "DIGEST COLLISION stock=${_s%%????????????????????????????????????????????????????} -- ARMS ARE NOT INDEPENDENT, results VOID"
+else
+    log "digests distinct: stock=$(echo "$_s" | cut -c1-8) cap8=$(echo "$_8" | cut -c1-8) cap16=$(echo "$_16" | cut -c1-8)"
+fi
+
 tail -6 "$OUT/rf_probe6.log" >> "$OUT/record.txt" 2>/dev/null
 
 kill "$UPLOADER" 2>/dev/null

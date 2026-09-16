@@ -97,7 +97,14 @@ comptime TPB_DEFAULT = 128
 # from THIS constant, so there is no stray 10 to miss). At 16 that is 1.6x
 # the device bytes -- about 67 MB at max_batch_size 4096, max_n_bins 128,
 # one output, `RegressionBin` -- which is why this is a probe and not a knob.
-comptime N_BLKS_FOR_COLS = 16 if is_defined["MOJOLEARN_RF_BLKS_COLS16"]() else 10
+#
+# LEG 8 UPDATE. The cap now takes 8 as well, because the surviving hypothesis is about
+# the SHAPE of the column blocking rather than the launch count, and 8 is what separates
+# them: at cap 8 a 16-column fit is [8, 8], TWO launches whose groups are both FULL.
+#   "partial final group" predicts STABLE there; "column count >= 11" predicts it moves.
+comptime N_BLKS_FOR_COLS = 8 if is_defined["MOJOLEARN_RF_BLKS_COLS8"]() else (
+    16 if is_defined["MOJOLEARN_RF_BLKS_COLS16"]() else 10
+)
 
 # `builder.cuh:205` -- "Memory alignment value"
 comptime ALIGN_VALUE = 512
