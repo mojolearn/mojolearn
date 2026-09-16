@@ -1,0 +1,104 @@
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+  ok    KERNEL     a constant, an ARD pair and a fixed white kernel give 3 entries
+  ok    KERNEL     theta is the log in leaf order
+  ok    KERNEL     the default bounds are scikit-learn's
+  ok    KERNEL     one free flag per postfix node
+  ok    KERNEL     the default kernel is fixed, as scikit-learn's
+  ok    KERNEL     Matern takes scikit-learn's (length_scale, length_scale_bounds, nu) order
+  ok    GRADIENT   rbf: the gradient matches central differences
+  ok    GRADIENT   rbf: the likelihood and gradient match scikit-learn's at the same theta
+  ok    GRADIENT   matern05: the gradient matches central differences
+  ok    GRADIENT   matern05: the likelihood and gradient match scikit-learn's at the same theta
+  ok    GRADIENT   matern15: the gradient matches central differences
+  ok    GRADIENT   matern15: the likelihood and gradient match scikit-learn's at the same theta
+  ok    GRADIENT   matern25: the gradient matches central differences
+  ok    GRADIENT   matern25: the likelihood and gradient match scikit-learn's at the same theta
+  ok    OPTIMIZE   kernel_ is a new kernel and kernel is untouched
+  ok    OPTIMIZE   one run that took steps
+  ok    OPTIMIZE   the likelihood rose from the start
+  ok    OPTIMIZE   the fit's likelihood is bit for bit the optimizer's and a re-evaluation's
+  ok    OPTIMIZE   every hyperparameter is a float32
+  ok    OPTIMIZE   a second fit gives the same bits
+  ok    OPTIMIZE   optimizer=None fits the kernel passed
+  ok    OPTIMIZE   a kernel with no free hyperparameter is not optimized
+  ok    RESTARTS   the kernel's theta plus two restarts
+  ok    RESTARTS   the best likelihood wins
+  ok    RESTARTS   the same random_state gives the same runs
+  ok    RESTARTS   the key's high word moves the restart starts
+  ok    RESTARTS   a tie goes to the earliest run
+  ok    REFERENCE  rbf-white: max |theta - sklearn theta| = 1.253e-04, |lml - sklearn lml| = 2.927e-04 (ours 3.221001)
+  ok    REFERENCE  rbf-white: the optimized likelihood agrees with scikit-learn's
+  ok    REFERENCE  ard-matern25: max |theta - sklearn theta| = 1.118e-01, |lml - sklearn lml| = 1.121e-02 (ours 28.821770)
+  ok    REFERENCE  ard-matern25: the optimized likelihood agrees with scikit-learn's
+  ok    REFERENCE  matern15-white: max |theta - sklearn theta| = 5.692e-04, |lml - sklearn lml| = 2.123e-04 (ours -16.047680)
+  ok    REFERENCE  matern15-white: the optimized likelihood agrees with scikit-learn's
+  ok    REFUSE     a callable optimizer
+  ok    REFUSE     an unknown optimizer name
+  ok    REFUSE     restarts with random_state=None
+  ok    REFUSE     a negative n_restarts_optimizer
+  ok    REFUSE     a non-positive bound
+  ok    REFUSE     a scalar bound (Matern's old positional nu)
+  ok    REFUSE     a theta of the wrong length
+  ok    REFUSE     eval_gradient without theta
+  ok    REFUSE     an extreme theta answers a number or -inf, never raises
+
+test_gp_optimizer: GREEN under numeric_mode=identical, 42 checks. One box, one vendor; no bit is claimed for any other.
+exit 0

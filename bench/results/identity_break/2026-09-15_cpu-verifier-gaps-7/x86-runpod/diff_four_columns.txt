@@ -1,0 +1,459 @@
+NOTE: column apple-m4 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column nvidia-h100-sm_90a hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: column amd-mi325x-gfx942 hashed tokenizer at an older lane revision (LANE_REVISIONS); its 9 cell(s) there are not compared and read as absent
+NOTE: --lanes scopes this diff to 7 lane(s); 165 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_forest_host', '_mojolearn_gp_host', '_mojolearn_mixture_host', '_mojolearn_preprocessing_host', '_mojolearn_tokenizer_host'] commit=11c5f2192579b8aceada93096fdfcae37a2726a7
+| lane/fixture                 | verdict    | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr-tables/base | OWED x1    | (not run)        | (not run)        | (not run)        | 9aef0c9ccfa6907c |
+| gbdt-categorical-ctr-tables/denormal | OWED x1    | (not run)        | (not run)        | (not run)        | 9aef0c9ccfa6907c |
+| gbdt-categorical-ctr-tables/denormal_ftz | OWED x1    | (not run)        | (not run)        | (not run)        | 9aef0c9ccfa6907c |
+| gbdt-categorical-ctr-tables/dupes | OWED x1    | (not run)        | (not run)        | (not run)        | 25b392f853af49bc |
+| gbdt-categorical-ctr-tables/hashed | OWED x1    | (not run)        | (not run)        | (not run)        | 3dfceb762e69749f |
+| gbdt-categorical-ctr-tables/negative | OWED x1    | (not run)        | (not run)        | (not run)        | 1bc75b82705d1b39 |
+| gbdt-categorical-ctr-tables/odd | OWED x1    | (not run)        | (not run)        | (not run)        | 2b3fac1172a1b684 |
+| gbdt-categorical-ctr-tables/ties | OWED x1    | (not run)        | (not run)        | (not run)        | 24ff7d7c24861171 |
+| gbdt-categorical-ctr-tables/wide | OWED x1    | (not run)        | (not run)        | (not run)        | 852e96ce7e62df7c |
+| gbdt-tensor-ctr-tables/base  | OWED x1    | (not run)        | (not run)        | (not run)        | 7cc167fbb56c972e |
+| gbdt-tensor-ctr-tables/denormal | OWED x1    | (not run)        | (not run)        | (not run)        | 1489a9f5968cb79d |
+| gbdt-tensor-ctr-tables/denormal_ftz | OWED x1    | (not run)        | (not run)        | (not run)        | 1489a9f5968cb79d |
+| gbdt-tensor-ctr-tables/dupes | OWED x1    | (not run)        | (not run)        | (not run)        | a972ee33b2bbafec |
+| gbdt-tensor-ctr-tables/hashed | OWED x1    | (not run)        | (not run)        | (not run)        | 1da6ad28d961ad35 |
+| gbdt-tensor-ctr-tables/negative | OWED x1    | (not run)        | (not run)        | (not run)        | 0619163e8b8f3fc5 |
+| gbdt-tensor-ctr-tables/odd   | OWED x1    | (not run)        | (not run)        | (not run)        | 7377ac4d24ab4fc7 |
+| gbdt-tensor-ctr-tables/ties  | OWED x1    | (not run)        | (not run)        | (not run)        | a57c449ae1a19b4e |
+| gbdt-tensor-ctr-tables/wide  | OWED x1    | (not run)        | (not run)        | (not run)        | 89d3d2eb687d4002 |
+| gmm-random-init-sample/base  | OWED x1    | (not run)        | (not run)        | (not run)        | e8402fa2c29319b0 |
+| gmm-random-init-sample/denormal | OWED x1    | (not run)        | (not run)        | (not run)        | 53c4c0b31627c1f7 |
+| gmm-random-init-sample/denormal_ftz | OWED x1    | (not run)        | (not run)        | (not run)        | 53c4c0b31627c1f7 |
+| gmm-random-init-sample/dupes | OWED x1    | (not run)        | (not run)        | (not run)        | e8402fa2c29319b0 |
+| gmm-random-init-sample/hashed | OWED x1    | (not run)        | (not run)        | (not run)        | 1bbe32185de06c3e |
+| gmm-random-init-sample/negative | OWED x1    | (not run)        | (not run)        | (not run)        | d97bf04817203928 |
+| gmm-random-init-sample/odd   | OWED x1    | (not run)        | (not run)        | (not run)        | 71ed1c1caf8e6874 |
+| gmm-random-init-sample/ties  | OWED x1    | (not run)        | (not run)        | (not run)        | 101197bb7831587c |
+| gmm-random-init-sample/wide  | OWED x1    | (not run)        | (not run)        | (not run)        | ff8d9198a4228ebd |
+| gmm-sample/base              | OWED x1    | (not run)        | (not run)        | (not run)        | 2995412dbe6ede62 |
+| gmm-sample/denormal          | OWED x1    | (not run)        | (not run)        | (not run)        | b0719a23f1750cd0 |
+| gmm-sample/denormal_ftz      | OWED x1    | (not run)        | (not run)        | (not run)        | b0719a23f1750cd0 |
+| gmm-sample/dupes             | OWED x1    | (not run)        | (not run)        | (not run)        | 2995412dbe6ede62 |
+| gmm-sample/hashed            | OWED x1    | (not run)        | (not run)        | (not run)        | c6652f13c1885399 |
+| gmm-sample/negative          | OWED x1    | (not run)        | (not run)        | (not run)        | eff16f2b59cea1fe |
+| gmm-sample/odd               | OWED x1    | (not run)        | (not run)        | (not run)        | 2a8e73e4b6764522 |
+| gmm-sample/ties              | OWED x1    | (not run)        | (not run)        | (not run)        | 4f5c80e0a98f2fb7 |
+| gmm-sample/wide              | OWED x1    | (not run)        | (not run)        | (not run)        | 0473d696da7318bd |
+| gp-sample-y-normalize/base   | OWED x1    | (not run)        | (not run)        | (not run)        | b5ad01b81c59fdf3 |
+| gp-sample-y-normalize/denormal | OWED x1    | (not run)        | (not run)        | (not run)        | 33512fcfac39fb55 |
+| gp-sample-y-normalize/denormal_ftz | OWED x1    | (not run)        | (not run)        | (not run)        | 33512fcfac39fb55 |
+| gp-sample-y-normalize/dupes  | OWED x1    | (not run)        | (not run)        | (not run)        | 78ae9a8195ece8f9 |
+| gp-sample-y-normalize/hashed | OWED x1    | (not run)        | (not run)        | (not run)        | 455f431e3dcb0773 |
+| gp-sample-y-normalize/negative | OWED x1    | (not run)        | (not run)        | (not run)        | 0644e14fb6f52191 |
+| gp-sample-y-normalize/odd    | OWED x1    | (not run)        | (not run)        | (not run)        | b4dd92087d7a5b3a |
+| gp-sample-y-normalize/ties   | OWED x1    | (not run)        | (not run)        | (not run)        | 43811dbad15ad2f0 |
+| gp-sample-y-normalize/wide   | OWED x1    | (not run)        | (not run)        | (not run)        | c11bb0e6d158bfe3 |
+| gp-sample-y/base             | OWED x1    | (not run)        | (not run)        | (not run)        | d698872d7e33df6e |
+| gp-sample-y/denormal         | OWED x1    | (not run)        | (not run)        | (not run)        | 37e844812b3bd076 |
+| gp-sample-y/denormal_ftz     | OWED x1    | (not run)        | (not run)        | (not run)        | 37e844812b3bd076 |
+| gp-sample-y/dupes            | OWED x1    | (not run)        | (not run)        | (not run)        | 05aaa44e678259a6 |
+| gp-sample-y/hashed           | OWED x1    | (not run)        | (not run)        | (not run)        | 1f0e45838e5c52d2 |
+| gp-sample-y/negative         | OWED x1    | (not run)        | (not run)        | (not run)        | 55e0efee90db4801 |
+| gp-sample-y/odd              | OWED x1    | (not run)        | (not run)        | (not run)        | 23fab759980d7acc |
+| gp-sample-y/ties             | OWED x1    | (not run)        | (not run)        | (not run)        | 15f827dc671917f0 |
+| gp-sample-y/wide             | OWED x1    | (not run)        | (not run)        | (not run)        | ce0c19926bcf9dbf |
+| tokenizer/base               | OWED x1    | (not run)        | (not run)        | (not run)        | 08b10bbc6f4b565b |
+| tokenizer/denormal           | OWED x1    | (not run)        | (not run)        | (not run)        | c55a5605e8de64b8 |
+| tokenizer/denormal_ftz       | OWED x1    | (not run)        | (not run)        | (not run)        | 8b9f4a27b574806e |
+| tokenizer/dupes              | OWED x1    | (not run)        | (not run)        | (not run)        | 46adf25a7982a9a6 |
+| tokenizer/hashed             | OWED x1    | (not run)        | (not run)        | (not run)        | e61f50aae6c6dbd9 |
+| tokenizer/negative           | OWED x1    | (not run)        | (not run)        | (not run)        | cd7e602ad066e3d5 |
+| tokenizer/odd                | OWED x1    | (not run)        | (not run)        | (not run)        | 08b10bbc6f4b565b |
+| tokenizer/ties               | OWED x1    | (not run)        | (not run)        | (not run)        | 94eb3bf4446a414a |
+| tokenizer/wide               | OWED x1    | (not run)        | (not run)        | (not run)        | 30fd2b8c5fdcf9e1 |
+
+summary: OWED=63
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-h100-sm_90a | amd-mi325x-gfx942 | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|
+| gbdt-categorical-ctr-tables/base | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | a624d9f200295ebd |
+| gbdt-categorical-ctr-tables/base | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/base | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | d37a90de0b078e27 |
+| gbdt-categorical-ctr-tables/denormal | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | a624d9f200295ebd |
+| gbdt-categorical-ctr-tables/denormal | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/denormal | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | d37a90de0b078e27 |
+| gbdt-categorical-ctr-tables/denormal_ftz | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | a624d9f200295ebd |
+| gbdt-categorical-ctr-tables/denormal_ftz | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/denormal_ftz | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | d37a90de0b078e27 |
+| gbdt-categorical-ctr-tables/dupes | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | ae3a773120cd3c33 |
+| gbdt-categorical-ctr-tables/dupes | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/dupes | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | a171156aa53e5e8b |
+| gbdt-categorical-ctr-tables/hashed | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | db7c89907a783122 |
+| gbdt-categorical-ctr-tables/hashed | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/hashed | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | cd07fda7956d86ab |
+| gbdt-categorical-ctr-tables/negative | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | ad6465f38360fd0c |
+| gbdt-categorical-ctr-tables/negative | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/negative | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | ca5eabccae08c416 |
+| gbdt-categorical-ctr-tables/odd | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | d0a5ab298e3f354c |
+| gbdt-categorical-ctr-tables/odd | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/odd | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 8a24ba90ab6fff7f |
+| gbdt-categorical-ctr-tables/ties | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | ba5bb1e19090253b |
+| gbdt-categorical-ctr-tables/ties | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/ties | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | da78c16224627804 |
+| gbdt-categorical-ctr-tables/wide | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | a942bfe94df4d9db |
+| gbdt-categorical-ctr-tables/wide | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/wide | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | b9b2a1559aa6e945 |
+| gbdt-tensor-ctr-tables/base  | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 18c29c1d0b000438 |
+| gbdt-tensor-ctr-tables/base  | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/base  | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | c14b5f2874153914 |
+| gbdt-tensor-ctr-tables/denormal | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 39133503b753ec5d |
+| gbdt-tensor-ctr-tables/denormal | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/denormal | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | ddf0cf2c0e19ff1d |
+| gbdt-tensor-ctr-tables/denormal_ftz | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 39133503b753ec5d |
+| gbdt-tensor-ctr-tables/denormal_ftz | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/denormal_ftz | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | ddf0cf2c0e19ff1d |
+| gbdt-tensor-ctr-tables/dupes | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 431c16487b4df475 |
+| gbdt-tensor-ctr-tables/dupes | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/dupes | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 577fb834656d49e9 |
+| gbdt-tensor-ctr-tables/hashed | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 19da48b6c3ba9d2c |
+| gbdt-tensor-ctr-tables/hashed | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/hashed | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 23554a4fe59a1961 |
+| gbdt-tensor-ctr-tables/negative | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 4fbfc6dcd6ae0bc5 |
+| gbdt-tensor-ctr-tables/negative | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/negative | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | af1429b2866dde66 |
+| gbdt-tensor-ctr-tables/odd   | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | b6a857464e3fc541 |
+| gbdt-tensor-ctr-tables/odd   | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/odd   | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 3de632fb4d411bcf |
+| gbdt-tensor-ctr-tables/ties  | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1659c6bbc45fd69d |
+| gbdt-tensor-ctr-tables/ties  | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/ties  | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | c648d9eb03bb1455 |
+| gbdt-tensor-ctr-tables/wide  | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 3073c208310a28ff |
+| gbdt-tensor-ctr-tables/wide  | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/wide  | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 1ca38d2db239a5c8 |
+| gmm-random-init-sample/base  | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | a460febf045cb5ed |
+| gmm-random-init-sample/base  | model  | OWED x1      | (not run)        | (not run)        | (not run)        | de637910417c0f6a |
+| gmm-random-init-sample/base  | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/denormal | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | aaa5ba26b5120d24 |
+| gmm-random-init-sample/denormal | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 7215e09b22afc315 |
+| gmm-random-init-sample/denormal | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/denormal_ftz | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | aaa5ba26b5120d24 |
+| gmm-random-init-sample/denormal_ftz | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 7215e09b22afc315 |
+| gmm-random-init-sample/denormal_ftz | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/dupes | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | a460febf045cb5ed |
+| gmm-random-init-sample/dupes | model  | OWED x1      | (not run)        | (not run)        | (not run)        | de637910417c0f6a |
+| gmm-random-init-sample/dupes | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/hashed | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 03db205033c0af3e |
+| gmm-random-init-sample/hashed | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 29f02d6785e39944 |
+| gmm-random-init-sample/hashed | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/negative | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 3d34dcff3bce8426 |
+| gmm-random-init-sample/negative | model  | OWED x1      | (not run)        | (not run)        | (not run)        | ac301e8ebc5eac1d |
+| gmm-random-init-sample/negative | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/odd   | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0360f4cd3fa1dc5a |
+| gmm-random-init-sample/odd   | model  | OWED x1      | (not run)        | (not run)        | (not run)        | a0ac5c07569f6749 |
+| gmm-random-init-sample/odd   | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/ties  | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | c9f89c3987186292 |
+| gmm-random-init-sample/ties  | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 4bf7497302af00ff |
+| gmm-random-init-sample/ties  | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/wide  | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 96b674083abf4f30 |
+| gmm-random-init-sample/wide  | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 3d9bbe884dc72d8c |
+| gmm-random-init-sample/wide  | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/base              | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | e3cad76ce9a060d0 |
+| gmm-sample/base              | model  | OWED x1      | (not run)        | (not run)        | (not run)        | c4a997dc3ae320a2 |
+| gmm-sample/base              | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/denormal          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | e50606c37c34da5a |
+| gmm-sample/denormal          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 8b5297c12a121af0 |
+| gmm-sample/denormal          | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/denormal_ftz      | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | e50606c37c34da5a |
+| gmm-sample/denormal_ftz      | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 8b5297c12a121af0 |
+| gmm-sample/denormal_ftz      | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/dupes             | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | e3cad76ce9a060d0 |
+| gmm-sample/dupes             | model  | OWED x1      | (not run)        | (not run)        | (not run)        | c4a997dc3ae320a2 |
+| gmm-sample/dupes             | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/hashed            | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 142ecc9ea938b11f |
+| gmm-sample/hashed            | model  | OWED x1      | (not run)        | (not run)        | (not run)        | c48e15de1d19c992 |
+| gmm-sample/hashed            | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/negative          | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 3a34ddfeecac9dc9 |
+| gmm-sample/negative          | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 089dc6043d91ad45 |
+| gmm-sample/negative          | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/odd               | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | e0258bef7ebd4e21 |
+| gmm-sample/odd               | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 3789c99cf21ba8fd |
+| gmm-sample/odd               | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/ties              | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | aa785d8205811e0f |
+| gmm-sample/ties              | model  | OWED x1      | (not run)        | (not run)        | (not run)        | fa63a34d1b2e5088 |
+| gmm-sample/ties              | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/wide              | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | db69f4fbabda0294 |
+| gmm-sample/wide              | model  | OWED x1      | (not run)        | (not run)        | (not run)        | e388ab98305cfc62 |
+| gmm-sample/wide              | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gp-sample-y-normalize/base   | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0c4beaeb3b1aeb90 |
+| gp-sample-y-normalize/base   | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 988bc1c3b51246a4 |
+| gp-sample-y-normalize/base   | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/denormal | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | d83e1344b5034607 |
+| gp-sample-y-normalize/denormal | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 7838eff1539fb489 |
+| gp-sample-y-normalize/denormal | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/denormal_ftz | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | d83e1344b5034607 |
+| gp-sample-y-normalize/denormal_ftz | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 5f20cf42422bf2e9 |
+| gp-sample-y-normalize/denormal_ftz | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/dupes  | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 64889722931adde7 |
+| gp-sample-y-normalize/dupes  | model  | OWED x1      | (not run)        | (not run)        | (not run)        | db1cd41ce6fd1b37 |
+| gp-sample-y-normalize/dupes  | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/hashed | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | c0c2a3bec4606a09 |
+| gp-sample-y-normalize/hashed | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 78eb0a3ce16ce7c5 |
+| gp-sample-y-normalize/hashed | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/negative | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | de0542b579ff2843 |
+| gp-sample-y-normalize/negative | model  | OWED x1      | (not run)        | (not run)        | (not run)        | f8b1eb8570f5e01b |
+| gp-sample-y-normalize/negative | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/odd    | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1ed38e7596ec035d |
+| gp-sample-y-normalize/odd    | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 767941378d3c368a |
+| gp-sample-y-normalize/odd    | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/ties   | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 37a77ee22082dc29 |
+| gp-sample-y-normalize/ties   | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 4af86e76b34e092c |
+| gp-sample-y-normalize/ties   | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/wide   | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 296d00db02a3dc55 |
+| gp-sample-y-normalize/wide   | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 7aaddfff81162cc0 |
+| gp-sample-y-normalize/wide   | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/base             | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | b7cef1a89e642972 |
+| gp-sample-y/base             | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 8f4a54a0bd816175 |
+| gp-sample-y/base             | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/denormal         | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 41aae3173e5800f3 |
+| gp-sample-y/denormal         | model  | OWED x1      | (not run)        | (not run)        | (not run)        | e2e8bcc686c2be72 |
+| gp-sample-y/denormal         | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/denormal_ftz     | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 41aae3173e5800f3 |
+| gp-sample-y/denormal_ftz     | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 4dbb90dfe4b757ae |
+| gp-sample-y/denormal_ftz     | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/dupes            | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1ecf65597b149dc3 |
+| gp-sample-y/dupes            | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 0eca938df7a74371 |
+| gp-sample-y/dupes            | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/hashed           | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1512a8f232028314 |
+| gp-sample-y/hashed           | model  | OWED x1      | (not run)        | (not run)        | (not run)        | e313387e268603e1 |
+| gp-sample-y/hashed           | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/negative         | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 4adb5317401462a1 |
+| gp-sample-y/negative         | model  | OWED x1      | (not run)        | (not run)        | (not run)        | adc071acad296182 |
+| gp-sample-y/negative         | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/odd              | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 88b3eef5cfb3f1e8 |
+| gp-sample-y/odd              | model  | OWED x1      | (not run)        | (not run)        | (not run)        | b5496b305f465a2e |
+| gp-sample-y/odd              | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/ties             | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0811d434a92222cc |
+| gp-sample-y/ties             | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 5a2f8a826a1aab15 |
+| gp-sample-y/ties             | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/wide             | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | eb0dc965d1fb9854 |
+| gp-sample-y/wide             | model  | OWED x1      | (not run)        | (not run)        | (not run)        | 6de1e70ad300db07 |
+| gp-sample-y/wide             | batch  | N/A          | (not run)        | (not run)        | (not run)        | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| tokenizer/base               | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1939b74da0333639 |
+| tokenizer/base               | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/base               | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 6e235476cc31241f |
+| tokenizer/denormal           | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | e881084e86e9c718 |
+| tokenizer/denormal           | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/denormal           | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 52a4b46c6638283e |
+| tokenizer/denormal_ftz       | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 0ce2094be5609967 |
+| tokenizer/denormal_ftz       | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/denormal_ftz       | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | ed742c6961610923 |
+| tokenizer/dupes              | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 5315d2de648bc57b |
+| tokenizer/dupes              | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/dupes              | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | b3db5e08a72d5afc |
+| tokenizer/hashed             | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 471b06ab4e24044f |
+| tokenizer/hashed             | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/hashed             | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 0a2474e3f79bd1c9 |
+| tokenizer/negative           | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 2188bf1646406ed2 |
+| tokenizer/negative           | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/negative           | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | b680bde5e6e8d3c8 |
+| tokenizer/odd                | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 1939b74da0333639 |
+| tokenizer/odd                | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/odd                | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 428ccb5ef4e44ab4 |
+| tokenizer/ties               | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | 3b5edfe0d355b03e |
+| tokenizer/ties               | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/ties               | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 48f42ce5bfd939ae |
+| tokenizer/wide               | infer  | OWED x1      | (not run)        | (not run)        | (not run)        | c4af8e403d8a4ff5 |
+| tokenizer/wide               | model  | N/A          | (not run)        | (not run)        | (not run)        | n/a:no-save      |
+| tokenizer/wide               | batch  | OWED x1      | (not run)        | (not run)        | (not run)        | 023683c8a469bd0b |
+
+summary (infer/model): N/A=27, OWED=99
+summary (batch): N/A=36, OWED=27
+summary (rlpair): 
+require-columns 4 over ['gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables', 'gmm-random-init-sample', 'gmm-sample', 'gp-sample-y', 'gp-sample-y-normalize', 'tokenizer']: OK (189 OWED)
+OWED gbdt-categorical-ctr-tables/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/base train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/denormal train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/denormal_ftz train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/dupes train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/hashed train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/negative train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/odd train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/ties train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/wide train: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/denormal_ftz batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/hashed batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/negative batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-categorical-ctr-tables/wide batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/denormal_ftz batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/hashed batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/negative batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gbdt-tensor-ctr-tables/wide batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-random-init-sample/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gmm-sample/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y-normalize/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/base model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/denormal model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/denormal_ftz model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/dupes model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/hashed model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/negative model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/odd model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/ties model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED gp-sample-y/wide model: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/base infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/base batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/denormal infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/denormal batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/denormal_ftz infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/denormal_ftz batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/dupes infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/dupes batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/hashed infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/hashed batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/negative infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/negative batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/odd infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/odd batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/ties infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/ties batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/wide infer: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+OWED tokenizer/wide batch: no hash in apple-m4,nvidia-h100-sm_90a,amd-mi325x-gfx942; rests on 1 (cpu-amd-epyc-9654-96-core-processor)
+summary (owed): OWED=189; the next release record owes exactly these cell parts; wrote /root/leg_out/owed_cells.json

@@ -780,6 +780,47 @@ def load_istella(size, rows_cap=None, regression=False):
     return Data("istella", x_train, x_te, y_train, y_test, "binary", 2)
 
 
+class RankData(object):
+    """Istella-S as a ranking dataset: features, grades, query ids."""
+
+    def __init__(self, x_train, r_train, qid_train, x_test, r_test, qid_test):
+        self.name = "istellarank"
+        self.x_train, self.r_train, self.qid_train = x_train, r_train, qid_train
+        self.x_test, self.r_test, self.qid_test = x_test, r_test, qid_test
+
+
+def load_istella_rank(rows_cap=None):
+    """Istella-S LETOR as the RANKING dataset it is (lane istella-ranking-bench).
+
+    Train features and grades come from `istella_speed.npz`, the same bytes
+    every tree arm reads; the query ids and the WHOLE test split (681,250
+    rows, not the binary cell's first 500,000, which would cut a query in
+    half) come from the side file `istella_rank.npz` written by
+    `tools/istella_rank_prep.py`, which refuses to write unless its train
+    grades and first 500,000 test rows equal the speed npz bit for bit. Both
+    are staged from R2 (`gbm-bench/istella/istella_speed.npz`,
+    `gbm-bench/istella/istella_rank.npz`). `rows_cap` keeps whole queries: it
+    cuts at the last query boundary at or below the cap. Grades stay 0..4,
+    the target of every ranking loss here."""
+    folder = os.path.join(data_root(), "istella")
+    speed = np.load(os.path.join(folder, "istella_speed.npz"))
+    rank = np.load(os.path.join(folder, "istella_rank.npz"))
+    x_tr, r_tr = speed["x_train"], speed["r_train"]
+    qid_tr = rank["qid_train"]
+    if qid_tr.shape[0] != r_tr.shape[0]:
+        raise RuntimeError("istella_rank.npz has %d train qids for %d rows"
+                           % (qid_tr.shape[0], r_tr.shape[0]))
+    n = x_tr.shape[0]
+    if rows_cap and rows_cap < n:
+        starts = np.flatnonzero(np.diff(qid_tr) != 0) + 1
+        cut = starts[starts <= rows_cap]
+        n = int(cut[-1]) if cut.size else rows_cap
+    return RankData(np.ascontiguousarray(x_tr[:n]),
+                    np.ascontiguousarray(r_tr[:n]),
+                    np.ascontiguousarray(qid_tr[:n]),
+                    rank["x_test"], rank["r_test"], rank["qid_test"])
+
+
 def _find_file(folder, name):
     for root, _dirs, files in os.walk(folder):
         if name in files:

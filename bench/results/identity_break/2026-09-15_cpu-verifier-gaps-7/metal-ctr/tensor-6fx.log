@@ -1,0 +1,18 @@
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+# vendor=apple-m4 commit=a76c02d27c95b8fcdbca8d29fd159ea34829c6e0 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-15 19:00:22  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | hashed           | wide             | denormal         | denormal_ftz     | dupes            | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gbdt-tensor-ctr-tables | 1da6ad28d961ad35 | 89d3d2eb687d4002 | 1489a9f5968cb79d | 1489a9f5968cb79d | a972ee33b2bbafec | 0619163e8b8f3fc5 |
+| gbdt-tensor-ctr-tables infer | 19da48b6c3ba9d2c | 3073c208310a28ff | 39133503b753ec5d | 39133503b753ec5d | 431c16487b4df475 | 4fbfc6dcd6ae0bc5 |
+| gbdt-tensor-ctr-tables model | 5c1025887f1a4112 | e768f6d7a856ca3f | 1a4382769846fc64 | 1a4382769846fc64 | f99b90a46f47a09c | d388697c55275e5f |
+| gbdt-tensor-ctr-tables batch | 23554a4fe59a1961 | 1ca38d2db239a5c8 | ddf0cf2c0e19ff1d | ddf0cf2c0e19ff1d | 577fb834656d49e9 | af1429b2866dde66 |
+
+cells=6 stable=6 moved=0 refused=0
+infer: stable=6
+model: stable=6
+batch: stable=6
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/gaps7/metal/tensor-6fx.json

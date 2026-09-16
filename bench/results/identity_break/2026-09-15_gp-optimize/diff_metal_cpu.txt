@@ -1,0 +1,265 @@
+NOTE: --lanes scopes this diff to 7 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-x86-x86_64 is a CPU column: cpu_model='AMD EPYC 9354 32-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gp_host', '_mojolearn_preprocessing_host'] commit=e87161dc8b813fb0510d95857664181c003936ae
+| lane/fixture                 | verdict    | arm64            | cpu-x86-x86_64   |
+|------------------------------|------------|------------------|------------------|
+| gp-matern12/base             | IDENTICAL x2 | a54e340b4a22147f | a54e340b4a22147f |
+| gp-matern12/denormal         | IDENTICAL x2 | 6ca669d68732c77e | 6ca669d68732c77e |
+| gp-matern12/denormal_ftz     | IDENTICAL x2 | 6ca669d68732c77e | 6ca669d68732c77e |
+| gp-matern12/dupes            | IDENTICAL x2 | dc7d705bf6b6fb42 | dc7d705bf6b6fb42 |
+| gp-matern12/hashed           | IDENTICAL x2 | ece4c902bf99f265 | ece4c902bf99f265 |
+| gp-matern12/negative         | IDENTICAL x2 | 5e78849478852ef7 | 5e78849478852ef7 |
+| gp-matern12/odd              | IDENTICAL x2 | 91b8075bebf3738a | 91b8075bebf3738a |
+| gp-matern12/ties             | IDENTICAL x2 | 2661efdd41bfdb23 | 2661efdd41bfdb23 |
+| gp-matern12/wide             | IDENTICAL x2 | 770208f9d55b9e6d | 770208f9d55b9e6d |
+| gp-matern32/base             | IDENTICAL x2 | 03066455003d7df7 | 03066455003d7df7 |
+| gp-matern32/denormal         | IDENTICAL x2 | 36a4bd5f93641a74 | 36a4bd5f93641a74 |
+| gp-matern32/denormal_ftz     | IDENTICAL x2 | 36a4bd5f93641a74 | 36a4bd5f93641a74 |
+| gp-matern32/dupes            | IDENTICAL x2 | 5346a4ac3a9fb082 | 5346a4ac3a9fb082 |
+| gp-matern32/hashed           | IDENTICAL x2 | 2a98418556cb39e1 | 2a98418556cb39e1 |
+| gp-matern32/negative         | IDENTICAL x2 | 415c32e64ea7e125 | 415c32e64ea7e125 |
+| gp-matern32/odd              | IDENTICAL x2 | 0e42009aae37b1a3 | 0e42009aae37b1a3 |
+| gp-matern32/ties             | IDENTICAL x2 | f4c49d5c4fd7edda | f4c49d5c4fd7edda |
+| gp-matern32/wide             | IDENTICAL x2 | 710809cd4f31ce7e | 710809cd4f31ce7e |
+| gp-matern52-ard/base         | IDENTICAL x2 | 68f9bac4021de057 | 68f9bac4021de057 |
+| gp-matern52-ard/denormal     | IDENTICAL x2 | 1991a044f55d7f40 | 1991a044f55d7f40 |
+| gp-matern52-ard/denormal_ftz | IDENTICAL x2 | 1991a044f55d7f40 | 1991a044f55d7f40 |
+| gp-matern52-ard/dupes        | IDENTICAL x2 | c2a1b1e411a6de85 | c2a1b1e411a6de85 |
+| gp-matern52-ard/hashed       | IDENTICAL x2 | 5a0369e0406e8d1a | 5a0369e0406e8d1a |
+| gp-matern52-ard/negative     | IDENTICAL x2 | 51fb6cf765695237 | 51fb6cf765695237 |
+| gp-matern52-ard/odd          | IDENTICAL x2 | f05b1867f7b7d159 | f05b1867f7b7d159 |
+| gp-matern52-ard/ties         | IDENTICAL x2 | e7965892a63545e5 | e7965892a63545e5 |
+| gp-matern52-ard/wide         | IDENTICAL x2 | fd640b7c289a6327 | fd640b7c289a6327 |
+| gp-normalize-y/base          | ONE-COLUMN | REFUSED          | 295a3a943bb1e6c1 |
+| gp-normalize-y/denormal      | ONE-COLUMN | REFUSED          | 563ede6c2700528e |
+| gp-normalize-y/denormal_ftz  | ONE-COLUMN | REFUSED          | 563ede6c2700528e |
+| gp-normalize-y/dupes         | ONE-COLUMN | REFUSED          | 56127db3c25510e4 |
+| gp-normalize-y/hashed        | ONE-COLUMN | REFUSED          | b3faa0b97f15bcba |
+| gp-normalize-y/negative      | ONE-COLUMN | REFUSED          | c162a835d708df60 |
+| gp-normalize-y/odd           | ONE-COLUMN | REFUSED          | c3c46d3bdd248167 |
+| gp-normalize-y/ties          | ONE-COLUMN | REFUSED          | dcd3de359f3c2074 |
+| gp-normalize-y/wide          | ONE-COLUMN | REFUSED          | 3f637d262c88b131 |
+| gp-optimize-restarts/base    | IDENTICAL x2 | 4a28559715cdc8ec | 4a28559715cdc8ec |
+| gp-optimize-restarts/denormal | IDENTICAL x2 | 241145049e69737d | 241145049e69737d |
+| gp-optimize-restarts/denormal_ftz | IDENTICAL x2 | 241145049e69737d | 241145049e69737d |
+| gp-optimize-restarts/dupes   | IDENTICAL x2 | 68ddefb051044bfb | 68ddefb051044bfb |
+| gp-optimize-restarts/hashed  | IDENTICAL x2 | bf40c4ab07b19545 | bf40c4ab07b19545 |
+| gp-optimize-restarts/negative | IDENTICAL x2 | 09a54c640ace75fe | 09a54c640ace75fe |
+| gp-optimize-restarts/odd     | IDENTICAL x2 | f395a8ef33556d7c | f395a8ef33556d7c |
+| gp-optimize-restarts/ties    | IDENTICAL x2 | 0ee3c9e45b0f7bca | 0ee3c9e45b0f7bca |
+| gp-optimize-restarts/wide    | IDENTICAL x2 | ad3c08ec3ec86cf6 | ad3c08ec3ec86cf6 |
+| gp-optimize/base             | IDENTICAL x2 | 736cdac8b4326966 | 736cdac8b4326966 |
+| gp-optimize/denormal         | IDENTICAL x2 | 5d906aa8c0935946 | 5d906aa8c0935946 |
+| gp-optimize/denormal_ftz     | IDENTICAL x2 | 5d906aa8c0935946 | 5d906aa8c0935946 |
+| gp-optimize/dupes            | IDENTICAL x2 | 17af8371cf6f988b | 17af8371cf6f988b |
+| gp-optimize/hashed           | IDENTICAL x2 | 14534fda5970325d | 14534fda5970325d |
+| gp-optimize/negative         | IDENTICAL x2 | 0e0d94dcd63ef938 | 0e0d94dcd63ef938 |
+| gp-optimize/odd              | IDENTICAL x2 | b7bae89a37bc3898 | b7bae89a37bc3898 |
+| gp-optimize/ties             | IDENTICAL x2 | 0cb6ab77605d2b6c | 0cb6ab77605d2b6c |
+| gp-optimize/wide             | IDENTICAL x2 | 469615d26070670f | 469615d26070670f |
+| gp/base                      | IDENTICAL x2 | ea70c56b99a74791 | ea70c56b99a74791 |
+| gp/denormal                  | IDENTICAL x2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 |
+| gp/denormal_ftz              | IDENTICAL x2 | f0986dd9686ae3c2 | f0986dd9686ae3c2 |
+| gp/dupes                     | IDENTICAL x2 | fba9e6f4ea05af2c | fba9e6f4ea05af2c |
+| gp/hashed                    | IDENTICAL x2 | f01c58a79fb1af27 | f01c58a79fb1af27 |
+| gp/negative                  | IDENTICAL x2 | 40fd2f479f775ec4 | 40fd2f479f775ec4 |
+| gp/odd                       | IDENTICAL x2 | cbdbd1248c92a3f8 | cbdbd1248c92a3f8 |
+| gp/ties                      | IDENTICAL x2 | c92496318cb78403 | c92496318cb78403 |
+| gp/wide                      | IDENTICAL x2 | ca779c84b786d493 | ca779c84b786d493 |
+
+summary: IDENTICAL=54, ONE-COLUMN=9
+
+| lane/fixture                 | column | verdict      | arm64            | cpu-x86-x86_64   |
+|------------------------------|--------|--------------|------------------|------------------|
+| gp-matern12/base             | infer  | IDENTICAL x2 | 4f79f8b5efa024a7 | 4f79f8b5efa024a7 |
+| gp-matern12/base             | model  | IDENTICAL x2 | ea851543bc06b7ca | ea851543bc06b7ca |
+| gp-matern12/base             | batch  | IDENTICAL x2 | 60ba7e42986f842e | 60ba7e42986f842e |
+| gp-matern12/denormal         | infer  | IDENTICAL x2 | b18535ebf335687e | b18535ebf335687e |
+| gp-matern12/denormal         | model  | IDENTICAL x2 | 48c41d7b4cb83a75 | 48c41d7b4cb83a75 |
+| gp-matern12/denormal         | batch  | IDENTICAL x2 | 6e00b6a519f68971 | 6e00b6a519f68971 |
+| gp-matern12/denormal_ftz     | infer  | IDENTICAL x2 | b18535ebf335687e | b18535ebf335687e |
+| gp-matern12/denormal_ftz     | model  | IDENTICAL x2 | dd194f8d55ac4e8b | dd194f8d55ac4e8b |
+| gp-matern12/denormal_ftz     | batch  | IDENTICAL x2 | 6e00b6a519f68971 | 6e00b6a519f68971 |
+| gp-matern12/dupes            | infer  | IDENTICAL x2 | f28fbf34f5e2f5e4 | f28fbf34f5e2f5e4 |
+| gp-matern12/dupes            | model  | IDENTICAL x2 | c5921757366a1180 | c5921757366a1180 |
+| gp-matern12/dupes            | batch  | IDENTICAL x2 | 9298e4ad500ce168 | 9298e4ad500ce168 |
+| gp-matern12/hashed           | infer  | IDENTICAL x2 | d97f7a7856e5c3cf | d97f7a7856e5c3cf |
+| gp-matern12/hashed           | model  | IDENTICAL x2 | beebaf027cfe7a70 | beebaf027cfe7a70 |
+| gp-matern12/hashed           | batch  | IDENTICAL x2 | f61dcba2448ded11 | f61dcba2448ded11 |
+| gp-matern12/negative         | infer  | IDENTICAL x2 | 7a4ce4fbf93bfe0a | 7a4ce4fbf93bfe0a |
+| gp-matern12/negative         | model  | IDENTICAL x2 | 21d23bd74606c229 | 21d23bd74606c229 |
+| gp-matern12/negative         | batch  | IDENTICAL x2 | 7d864314cdf560ff | 7d864314cdf560ff |
+| gp-matern12/odd              | infer  | IDENTICAL x2 | 70c7a448533ae162 | 70c7a448533ae162 |
+| gp-matern12/odd              | model  | IDENTICAL x2 | 57c92e7dd6dba082 | 57c92e7dd6dba082 |
+| gp-matern12/odd              | batch  | IDENTICAL x2 | e3e57f92fb8d7443 | e3e57f92fb8d7443 |
+| gp-matern12/ties             | infer  | IDENTICAL x2 | a001b7e2647b5504 | a001b7e2647b5504 |
+| gp-matern12/ties             | model  | IDENTICAL x2 | 2a12147f489372a1 | 2a12147f489372a1 |
+| gp-matern12/ties             | batch  | IDENTICAL x2 | afa881afdf169ffe | afa881afdf169ffe |
+| gp-matern12/wide             | infer  | IDENTICAL x2 | d85b3fdd5a0d4b83 | d85b3fdd5a0d4b83 |
+| gp-matern12/wide             | model  | IDENTICAL x2 | 46beb2c3302d3d68 | 46beb2c3302d3d68 |
+| gp-matern12/wide             | batch  | IDENTICAL x2 | 2a36bbb9dbe1d986 | 2a36bbb9dbe1d986 |
+| gp-matern32/base             | infer  | IDENTICAL x2 | a89afc94af5f084c | a89afc94af5f084c |
+| gp-matern32/base             | model  | IDENTICAL x2 | 2f0aa7aa6d573e8f | 2f0aa7aa6d573e8f |
+| gp-matern32/base             | batch  | IDENTICAL x2 | 4d0c75f26ce30a17 | 4d0c75f26ce30a17 |
+| gp-matern32/denormal         | infer  | IDENTICAL x2 | e6f4a9df1fb82418 | e6f4a9df1fb82418 |
+| gp-matern32/denormal         | model  | IDENTICAL x2 | 5e0b49391c46c389 | 5e0b49391c46c389 |
+| gp-matern32/denormal         | batch  | IDENTICAL x2 | 9dc26cf63aee002d | 9dc26cf63aee002d |
+| gp-matern32/denormal_ftz     | infer  | IDENTICAL x2 | e6f4a9df1fb82418 | e6f4a9df1fb82418 |
+| gp-matern32/denormal_ftz     | model  | IDENTICAL x2 | 1d3a19b8a625eff3 | 1d3a19b8a625eff3 |
+| gp-matern32/denormal_ftz     | batch  | IDENTICAL x2 | 9dc26cf63aee002d | 9dc26cf63aee002d |
+| gp-matern32/dupes            | infer  | IDENTICAL x2 | e0a8a2dff9f3e703 | e0a8a2dff9f3e703 |
+| gp-matern32/dupes            | model  | IDENTICAL x2 | 95b09e16e1e4201d | 95b09e16e1e4201d |
+| gp-matern32/dupes            | batch  | IDENTICAL x2 | 314fbd59f78d11be | 314fbd59f78d11be |
+| gp-matern32/hashed           | infer  | IDENTICAL x2 | 9b2c58c951e46aa6 | 9b2c58c951e46aa6 |
+| gp-matern32/hashed           | model  | IDENTICAL x2 | 61ee8e6b6cb8b86d | 61ee8e6b6cb8b86d |
+| gp-matern32/hashed           | batch  | IDENTICAL x2 | a696dd8895d78928 | a696dd8895d78928 |
+| gp-matern32/negative         | infer  | IDENTICAL x2 | 59c1f19475065932 | 59c1f19475065932 |
+| gp-matern32/negative         | model  | IDENTICAL x2 | 41ff5d5c846cfe7d | 41ff5d5c846cfe7d |
+| gp-matern32/negative         | batch  | IDENTICAL x2 | 07269e71c177f0e5 | 07269e71c177f0e5 |
+| gp-matern32/odd              | infer  | IDENTICAL x2 | cebcbbd1a0cf26a5 | cebcbbd1a0cf26a5 |
+| gp-matern32/odd              | model  | IDENTICAL x2 | dbc28b4a4abe1085 | dbc28b4a4abe1085 |
+| gp-matern32/odd              | batch  | IDENTICAL x2 | 6245f5a144c11e87 | 6245f5a144c11e87 |
+| gp-matern32/ties             | infer  | IDENTICAL x2 | d4ebe9e3a969d687 | d4ebe9e3a969d687 |
+| gp-matern32/ties             | model  | IDENTICAL x2 | 643600b947937792 | 643600b947937792 |
+| gp-matern32/ties             | batch  | IDENTICAL x2 | e0f8d36884ec439b | e0f8d36884ec439b |
+| gp-matern32/wide             | infer  | IDENTICAL x2 | e01432f62e53b456 | e01432f62e53b456 |
+| gp-matern32/wide             | model  | IDENTICAL x2 | 888d111afe6ab161 | 888d111afe6ab161 |
+| gp-matern32/wide             | batch  | IDENTICAL x2 | 0e1eaf22f908fce3 | 0e1eaf22f908fce3 |
+| gp-matern52-ard/base         | infer  | IDENTICAL x2 | 7ed07da2d9a2b815 | 7ed07da2d9a2b815 |
+| gp-matern52-ard/base         | model  | IDENTICAL x2 | 922c3b283f374ede | 922c3b283f374ede |
+| gp-matern52-ard/base         | batch  | IDENTICAL x2 | b67e8be0fee4333d | b67e8be0fee4333d |
+| gp-matern52-ard/denormal     | infer  | IDENTICAL x2 | 15773a44eee1c9ad | 15773a44eee1c9ad |
+| gp-matern52-ard/denormal     | model  | IDENTICAL x2 | 68633fa96ce40d4e | 68633fa96ce40d4e |
+| gp-matern52-ard/denormal     | batch  | IDENTICAL x2 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 |
+| gp-matern52-ard/denormal_ftz | infer  | IDENTICAL x2 | 15773a44eee1c9ad | 15773a44eee1c9ad |
+| gp-matern52-ard/denormal_ftz | model  | IDENTICAL x2 | 3ac95409acbe4eac | 3ac95409acbe4eac |
+| gp-matern52-ard/denormal_ftz | batch  | IDENTICAL x2 | 9701426e6a7c4fc4 | 9701426e6a7c4fc4 |
+| gp-matern52-ard/dupes        | infer  | IDENTICAL x2 | 4cb708614a14be4f | 4cb708614a14be4f |
+| gp-matern52-ard/dupes        | model  | IDENTICAL x2 | 4df8669dab247308 | 4df8669dab247308 |
+| gp-matern52-ard/dupes        | batch  | IDENTICAL x2 | 2d242b760df0c661 | 2d242b760df0c661 |
+| gp-matern52-ard/hashed       | infer  | IDENTICAL x2 | d616a8cbf56f719b | d616a8cbf56f719b |
+| gp-matern52-ard/hashed       | model  | IDENTICAL x2 | 0a7e88c40917f65f | 0a7e88c40917f65f |
+| gp-matern52-ard/hashed       | batch  | IDENTICAL x2 | de23d37649d275cd | de23d37649d275cd |
+| gp-matern52-ard/negative     | infer  | IDENTICAL x2 | 5ddd0786ba58e285 | 5ddd0786ba58e285 |
+| gp-matern52-ard/negative     | model  | IDENTICAL x2 | 02a0a5cfde095c5e | 02a0a5cfde095c5e |
+| gp-matern52-ard/negative     | batch  | IDENTICAL x2 | 7f3871eaa8cd8b17 | 7f3871eaa8cd8b17 |
+| gp-matern52-ard/odd          | infer  | IDENTICAL x2 | de417da177231058 | de417da177231058 |
+| gp-matern52-ard/odd          | model  | IDENTICAL x2 | 2b205636e6a38315 | 2b205636e6a38315 |
+| gp-matern52-ard/odd          | batch  | IDENTICAL x2 | 331b54fb97101ccd | 331b54fb97101ccd |
+| gp-matern52-ard/ties         | infer  | IDENTICAL x2 | d9e5f730b649eff6 | d9e5f730b649eff6 |
+| gp-matern52-ard/ties         | model  | IDENTICAL x2 | 8dd23a27ab3a3f3b | 8dd23a27ab3a3f3b |
+| gp-matern52-ard/ties         | batch  | IDENTICAL x2 | 8d902360cd06f9c6 | 8d902360cd06f9c6 |
+| gp-matern52-ard/wide         | infer  | IDENTICAL x2 | 74c9cc4f5bcd42f7 | 74c9cc4f5bcd42f7 |
+| gp-matern52-ard/wide         | model  | IDENTICAL x2 | 07c08e717ae5f13a | 07c08e717ae5f13a |
+| gp-matern52-ard/wide         | batch  | IDENTICAL x2 | 25546aa3974473f3 | 25546aa3974473f3 |
+| gp-normalize-y/base          | infer  | ONE-COLUMN   | REFUSED          | 7c5123dc7a512038 |
+| gp-normalize-y/base          | model  | ONE-COLUMN   | REFUSED          | 988bc1c3b51246a4 |
+| gp-normalize-y/base          | batch  | ONE-COLUMN   | REFUSED          | 10f20ff36a173c93 |
+| gp-normalize-y/denormal      | infer  | ONE-COLUMN   | REFUSED          | c9c056f09a65ff3b |
+| gp-normalize-y/denormal      | model  | ONE-COLUMN   | REFUSED          | 7838eff1539fb489 |
+| gp-normalize-y/denormal      | batch  | ONE-COLUMN   | REFUSED          | 00079f14e3f462fc |
+| gp-normalize-y/denormal_ftz  | infer  | ONE-COLUMN   | REFUSED          | c9c056f09a65ff3b |
+| gp-normalize-y/denormal_ftz  | model  | ONE-COLUMN   | REFUSED          | 5f20cf42422bf2e9 |
+| gp-normalize-y/denormal_ftz  | batch  | ONE-COLUMN   | REFUSED          | 00079f14e3f462fc |
+| gp-normalize-y/dupes         | infer  | ONE-COLUMN   | REFUSED          | 3c0b639788527068 |
+| gp-normalize-y/dupes         | model  | ONE-COLUMN   | REFUSED          | db1cd41ce6fd1b37 |
+| gp-normalize-y/dupes         | batch  | ONE-COLUMN   | REFUSED          | cd8dc4dd4d12cb25 |
+| gp-normalize-y/hashed        | infer  | ONE-COLUMN   | REFUSED          | b77bf4a2d0da8736 |
+| gp-normalize-y/hashed        | model  | ONE-COLUMN   | REFUSED          | 78eb0a3ce16ce7c5 |
+| gp-normalize-y/hashed        | batch  | ONE-COLUMN   | REFUSED          | 83463eae32c0bbe9 |
+| gp-normalize-y/negative      | infer  | ONE-COLUMN   | REFUSED          | e8c9793a64ffecd4 |
+| gp-normalize-y/negative      | model  | ONE-COLUMN   | REFUSED          | f8b1eb8570f5e01b |
+| gp-normalize-y/negative      | batch  | ONE-COLUMN   | REFUSED          | d4b37ced285cc86d |
+| gp-normalize-y/odd           | infer  | ONE-COLUMN   | REFUSED          | e8873986c9e0f24f |
+| gp-normalize-y/odd           | model  | ONE-COLUMN   | REFUSED          | 767941378d3c368a |
+| gp-normalize-y/odd           | batch  | ONE-COLUMN   | REFUSED          | 290d32315445165d |
+| gp-normalize-y/ties          | infer  | ONE-COLUMN   | REFUSED          | 0e6c262796044cb8 |
+| gp-normalize-y/ties          | model  | ONE-COLUMN   | REFUSED          | 4af86e76b34e092c |
+| gp-normalize-y/ties          | batch  | ONE-COLUMN   | REFUSED          | d3aaf331f5414e4b |
+| gp-normalize-y/wide          | infer  | ONE-COLUMN   | REFUSED          | 13332a5abc671f44 |
+| gp-normalize-y/wide          | model  | ONE-COLUMN   | REFUSED          | 7aaddfff81162cc0 |
+| gp-normalize-y/wide          | batch  | ONE-COLUMN   | REFUSED          | f83ca2d738dfbae9 |
+| gp-optimize-restarts/base    | infer  | IDENTICAL x2 | ef23636025bb9281 | ef23636025bb9281 |
+| gp-optimize-restarts/base    | model  | IDENTICAL x2 | 2d77ffc98991757b | 2d77ffc98991757b |
+| gp-optimize-restarts/base    | batch  | IDENTICAL x2 | 976899114f971572 | 976899114f971572 |
+| gp-optimize-restarts/denormal | infer  | IDENTICAL x2 | 05c7de81c15b85f5 | 05c7de81c15b85f5 |
+| gp-optimize-restarts/denormal | model  | IDENTICAL x2 | 2c5bece2a202bc91 | 2c5bece2a202bc91 |
+| gp-optimize-restarts/denormal | batch  | IDENTICAL x2 | 6d1cb55cc731fa26 | 6d1cb55cc731fa26 |
+| gp-optimize-restarts/denormal_ftz | infer  | IDENTICAL x2 | 05c7de81c15b85f5 | 05c7de81c15b85f5 |
+| gp-optimize-restarts/denormal_ftz | model  | IDENTICAL x2 | 6447706be33a6e5b | 6447706be33a6e5b |
+| gp-optimize-restarts/denormal_ftz | batch  | IDENTICAL x2 | 6d1cb55cc731fa26 | 6d1cb55cc731fa26 |
+| gp-optimize-restarts/dupes   | infer  | IDENTICAL x2 | 23b519db92b82d92 | 23b519db92b82d92 |
+| gp-optimize-restarts/dupes   | model  | IDENTICAL x2 | f283ece17dce64b8 | f283ece17dce64b8 |
+| gp-optimize-restarts/dupes   | batch  | IDENTICAL x2 | 65d7adefec71d1d8 | 65d7adefec71d1d8 |
+| gp-optimize-restarts/hashed  | infer  | IDENTICAL x2 | f5a4730d7ffec8ea | f5a4730d7ffec8ea |
+| gp-optimize-restarts/hashed  | model  | IDENTICAL x2 | eef8b34542e4f68e | eef8b34542e4f68e |
+| gp-optimize-restarts/hashed  | batch  | IDENTICAL x2 | 7d4e78559b8f0401 | 7d4e78559b8f0401 |
+| gp-optimize-restarts/negative | infer  | IDENTICAL x2 | 52cef6e4ee7965a0 | 52cef6e4ee7965a0 |
+| gp-optimize-restarts/negative | model  | IDENTICAL x2 | 52f601b888490db8 | 52f601b888490db8 |
+| gp-optimize-restarts/negative | batch  | IDENTICAL x2 | 14724065c5e38105 | 14724065c5e38105 |
+| gp-optimize-restarts/odd     | infer  | IDENTICAL x2 | e1a9df9aa4175658 | e1a9df9aa4175658 |
+| gp-optimize-restarts/odd     | model  | IDENTICAL x2 | 7134a5d923d8df90 | 7134a5d923d8df90 |
+| gp-optimize-restarts/odd     | batch  | IDENTICAL x2 | 49ae8f4f5aac8934 | 49ae8f4f5aac8934 |
+| gp-optimize-restarts/ties    | infer  | IDENTICAL x2 | 0c96bbfb72d43730 | 0c96bbfb72d43730 |
+| gp-optimize-restarts/ties    | model  | IDENTICAL x2 | 52cb879b6fdaae2c | 52cb879b6fdaae2c |
+| gp-optimize-restarts/ties    | batch  | IDENTICAL x2 | b48564acfc5cfe1f | b48564acfc5cfe1f |
+| gp-optimize-restarts/wide    | infer  | IDENTICAL x2 | 94b2bc95a417dde6 | 94b2bc95a417dde6 |
+| gp-optimize-restarts/wide    | model  | IDENTICAL x2 | 2d9e4c16b007cf42 | 2d9e4c16b007cf42 |
+| gp-optimize-restarts/wide    | batch  | IDENTICAL x2 | a0ceabc95c8821a7 | a0ceabc95c8821a7 |
+| gp-optimize/base             | infer  | IDENTICAL x2 | d9df0d407450a397 | d9df0d407450a397 |
+| gp-optimize/base             | model  | IDENTICAL x2 | e00579045e0d743e | e00579045e0d743e |
+| gp-optimize/base             | batch  | IDENTICAL x2 | f88dad7a538dcc0d | f88dad7a538dcc0d |
+| gp-optimize/denormal         | infer  | IDENTICAL x2 | 5c31f2ae1de0cb97 | 5c31f2ae1de0cb97 |
+| gp-optimize/denormal         | model  | IDENTICAL x2 | 929511aee5fa1e12 | 929511aee5fa1e12 |
+| gp-optimize/denormal         | batch  | IDENTICAL x2 | d3fb9fde77e28c98 | d3fb9fde77e28c98 |
+| gp-optimize/denormal_ftz     | infer  | IDENTICAL x2 | 5c31f2ae1de0cb97 | 5c31f2ae1de0cb97 |
+| gp-optimize/denormal_ftz     | model  | IDENTICAL x2 | 6123f761a03f525d | 6123f761a03f525d |
+| gp-optimize/denormal_ftz     | batch  | IDENTICAL x2 | d3fb9fde77e28c98 | d3fb9fde77e28c98 |
+| gp-optimize/dupes            | infer  | IDENTICAL x2 | 403661010017d617 | 403661010017d617 |
+| gp-optimize/dupes            | model  | IDENTICAL x2 | 203185b4d6421aee | 203185b4d6421aee |
+| gp-optimize/dupes            | batch  | IDENTICAL x2 | 1e8f82fb395c5277 | 1e8f82fb395c5277 |
+| gp-optimize/hashed           | infer  | IDENTICAL x2 | 44af421669b5f970 | 44af421669b5f970 |
+| gp-optimize/hashed           | model  | IDENTICAL x2 | 5e6427cc20c805ec | 5e6427cc20c805ec |
+| gp-optimize/hashed           | batch  | IDENTICAL x2 | b8ae8f0a8415946b | b8ae8f0a8415946b |
+| gp-optimize/negative         | infer  | IDENTICAL x2 | f2813f0eb449f977 | f2813f0eb449f977 |
+| gp-optimize/negative         | model  | IDENTICAL x2 | fada1bdcb706db82 | fada1bdcb706db82 |
+| gp-optimize/negative         | batch  | IDENTICAL x2 | ddf4f18278b7bd9a | ddf4f18278b7bd9a |
+| gp-optimize/odd              | infer  | IDENTICAL x2 | 0e32e08dad3251aa | 0e32e08dad3251aa |
+| gp-optimize/odd              | model  | IDENTICAL x2 | 3a1fceb79164f70c | 3a1fceb79164f70c |
+| gp-optimize/odd              | batch  | IDENTICAL x2 | 2e8147f862a30ab0 | 2e8147f862a30ab0 |
+| gp-optimize/ties             | infer  | IDENTICAL x2 | 3de76f60b0228178 | 3de76f60b0228178 |
+| gp-optimize/ties             | model  | IDENTICAL x2 | 274654e2971ebc3d | 274654e2971ebc3d |
+| gp-optimize/ties             | batch  | IDENTICAL x2 | 55f13d990596d453 | 55f13d990596d453 |
+| gp-optimize/wide             | infer  | IDENTICAL x2 | 1b08b3f50010ca5f | 1b08b3f50010ca5f |
+| gp-optimize/wide             | model  | IDENTICAL x2 | 2c0571539e0deffb | 2c0571539e0deffb |
+| gp-optimize/wide             | batch  | IDENTICAL x2 | 07fd993a7fbfc6cf | 07fd993a7fbfc6cf |
+| gp/base                      | infer  | IDENTICAL x2 | 1e032c58b3e9cd14 | 1e032c58b3e9cd14 |
+| gp/base                      | model  | IDENTICAL x2 | 8f4a54a0bd816175 | 8f4a54a0bd816175 |
+| gp/base                      | batch  | IDENTICAL x2 | 305bfd4eaf79a5fa | 305bfd4eaf79a5fa |
+| gp/denormal                  | infer  | IDENTICAL x2 | 353cd97119d0e754 | 353cd97119d0e754 |
+| gp/denormal                  | model  | IDENTICAL x2 | e2e8bcc686c2be72 | e2e8bcc686c2be72 |
+| gp/denormal                  | batch  | IDENTICAL x2 | 9305dbeb22908e4a | 9305dbeb22908e4a |
+| gp/denormal_ftz              | infer  | IDENTICAL x2 | 353cd97119d0e754 | 353cd97119d0e754 |
+| gp/denormal_ftz              | model  | IDENTICAL x2 | 4dbb90dfe4b757ae | 4dbb90dfe4b757ae |
+| gp/denormal_ftz              | batch  | IDENTICAL x2 | 9305dbeb22908e4a | 9305dbeb22908e4a |
+| gp/dupes                     | infer  | IDENTICAL x2 | 52e6b306c452f16c | 52e6b306c452f16c |
+| gp/dupes                     | model  | IDENTICAL x2 | 0eca938df7a74371 | 0eca938df7a74371 |
+| gp/dupes                     | batch  | IDENTICAL x2 | 3caf5f428c1e5112 | 3caf5f428c1e5112 |
+| gp/hashed                    | infer  | IDENTICAL x2 | 6eec04108625b28e | 6eec04108625b28e |
+| gp/hashed                    | model  | IDENTICAL x2 | e313387e268603e1 | e313387e268603e1 |
+| gp/hashed                    | batch  | IDENTICAL x2 | f18ced6112fb55e8 | f18ced6112fb55e8 |
+| gp/negative                  | infer  | IDENTICAL x2 | b2713d53a58fa4c9 | b2713d53a58fa4c9 |
+| gp/negative                  | model  | IDENTICAL x2 | adc071acad296182 | adc071acad296182 |
+| gp/negative                  | batch  | IDENTICAL x2 | 0284440d2cd65731 | 0284440d2cd65731 |
+| gp/odd                       | infer  | IDENTICAL x2 | 9e3f1cf6c455f0fa | 9e3f1cf6c455f0fa |
+| gp/odd                       | model  | IDENTICAL x2 | b5496b305f465a2e | b5496b305f465a2e |
+| gp/odd                       | batch  | IDENTICAL x2 | e3e6d237ca783492 | e3e6d237ca783492 |
+| gp/ties                      | infer  | IDENTICAL x2 | 22b0b528124de8d0 | 22b0b528124de8d0 |
+| gp/ties                      | model  | IDENTICAL x2 | 5a2f8a826a1aab15 | 5a2f8a826a1aab15 |
+| gp/ties                      | batch  | IDENTICAL x2 | 42c01186900b0c68 | 42c01186900b0c68 |
+| gp/wide                      | infer  | IDENTICAL x2 | 890cda1ff831faab | 890cda1ff831faab |
+| gp/wide                      | model  | IDENTICAL x2 | 6de1e70ad300db07 | 6de1e70ad300db07 |
+| gp/wide                      | batch  | IDENTICAL x2 | d3e6783a8a000e56 | d3e6783a8a000e56 |
+
+summary (infer/model): IDENTICAL=108, ONE-COLUMN=18
+summary (batch): IDENTICAL=54, ONE-COLUMN=9
+summary (rlpair): 

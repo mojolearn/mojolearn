@@ -25,6 +25,39 @@ Linux legs are OWED before this heading reads published.
   host binding predicts from on a CPU-only install. New lanes `arima-exog` and
   `arima-exog-seasonal`; the existing ARIMA lanes are unchanged. Evidence:
   bench/results/identity_break/2026-09-15_arima-exog.
+- Gaussian process kernel hyperparameter optimization (lane/gp-optimizer, for 0.8.7).
+  `GaussianProcessRegressor(optimizer="fmin_l_bfgs_b", n_restarts_optimizer=k, random_state=s)`
+  maximizes the log marginal likelihood as scikit-learn does, with the same bits on every
+  column rather than SciPy's bits. The kernels gain scikit-learn's `*_bounds` arguments ("fixed"
+  included), `theta`, `bounds` and `n_dims`; `log_marginal_likelihood(theta, eval_gradient)`
+  now answers at any theta. DEVIATION 2880: dK/dtheta for every node kind on the device and in
+  the CPU verifier, K^-1 by the identical Cholesky solve, one pinned float32 trace fold.
+  DEVIATION 2881: a projected L-BFGS in Python float64 (10 pairs, Armijo backtracking on the
+  projected path, pgtol, ftol and a 200 step cap), restarts from Philox keyed by `random_state`,
+  the best likelihood winning and ties going to the first run. `optimizer=None` stays the default,
+  so every recorded gp cell is unchanged; a callable optimizer is refused by name. New identity
+  lanes `gp-optimize` and `gp-optimize-restarts`. The classifier's optimizer is still refused.
+- The full CPU identity verification covers every one-device lane (lane/cpu-verifier-gaps-7,
+  for 0.8.7). Seven lanes had a CPU host function and no manifest entry, so the gate did not
+  run them: gmm-sample and gmm-random-init-sample (the mixture family), gp-sample-y and
+  gp-sample-y-normalize (gp), tokenizer, and the two CTR table lanes, whose CPU cells are the
+  forest binding's predictions from Metal-saved models because CPU training of CTR tables
+  refuses by name. The gate's sabotage host set now builds each family with the defines the
+  manifest gives it (`host_surface.sabotage_build_defines`), so the tokenizer binding carries
+  its own define and the forest binding the CTR arm, which `MOJOLEARN_HOST_SABOTAGE` does not
+  reach; the covered sabotage run names that set's forest binary. A CPU column that loads a
+  GPU-saved model reports the model part n/a (the file is the GPU column's bytes) and refuses a
+  reload that predicts differently. On one x86 CPU pod all 63 cells read STABLE, the four-column
+  diff is OK with 189 OWED parts and nothing DIVERGENT, and every one of those parts moves under
+  the sabotage set. Evidence: `bench/results/identity_break/2026-09-15_cpu-verifier-gaps-7`.
+- Sabotage value arms for the neighbor and IVF host oracles (lane/ties-sabotage, for 0.8.7).
+  A fold walked in the other order is exact on the integer `ties` fixture, so the sabotage
+  build left the ties cells of knn-cosine, knn-rbc, radius, radius-manhattan, ivf and
+  ivf-euclidean unmoved. Sabotage builds now also move every returned distance's bits;
+  production builds are unchanged (IDENTICAL to the committed records on all nine fixtures).
+  `tools/classical_host_gate.py check` gains `--every-fixture` and `--lane-rule-only LANE`,
+  and the CPU identity gate's saved-model sabotage step requires every fixture of every lane.
+  Evidence: `bench/results/identity_break/2026-09-15_ties-sabotage`.
 - Public CPU inference from a saved Holt-Winters model (lane/inference-holtwinters, for 0.8.7).
   `ExponentialSmoothing` gains `save` and `load` (format `mojolearn-holtwinters-1`) and
   `predict(start, end)`, the in-sample one-step predictions (NaN before `2 * seasonal_periods`,

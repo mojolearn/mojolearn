@@ -1,0 +1,63 @@
+commit 11c5f2192579b8aceada93096fdfcae37a2726a7 shards 4
+manifest: gmm-sample record-covered
+manifest: gmm-random-init-sample record-covered
+manifest: gp-sample-y record-covered
+manifest: gp-sample-y-normalize record-covered
+manifest: tokenizer record-covered
+manifest: gbdt-categorical-ctr-tables record-covered
+manifest: gbdt-tensor-ctr-tables record-covered
+18
+502d5fbc9a560c5fca90d955d51447dfa85c345af7365fa4ae661b54ee26f21d  python/mojolearn/host/_mojolearn_core_host.so
+d7091b30123d265611c51f4a3f0306798595728bf2ec2ed9bed918668483ba6b  python/mojolearn/host/_mojolearn_forest_host.so
+2400755ac1f2193f83f501e7ca4bc4ac86be3b7c0b231f95c393ad0d0f2238ea  python/mojolearn/host/_mojolearn_gp_host.so
+ac6d62a00b12e235829cb1ebfe8b3352286073f428a3684e6a71049aafb60e2c  python/mojolearn/host/_mojolearn_mixture_host.so
+5670458d35de0f12388f91d5f16405b1a56c8deb53edf573bea9c275323ab89a  python/mojolearn/host/_mojolearn_preprocessing_host.so
+cdcb07daceae6602ac29849207f52e3346f17b4c2051a5dddfc30aabd13c4d94  python/mojolearn/host/_mojolearn_tokenizer_host.so
+426ea62ad000274fc57ad6ff5aa49ecb37ea02308abcb1683cccc1f5fcc57132  python/mojolearn/host-sabotage/_mojolearn_core_host.so
+998abd57d49a5481feaa8d1d872d1e17543b9b10556bc4f94fffa9456141cd13  python/mojolearn/host-sabotage/_mojolearn_forest_host.so
+08b806f5a64e6852ed8eee509634e2663005fc64d54500f13574d6db8abf7d49  python/mojolearn/host-sabotage/_mojolearn_gp_host.so
+3cc9a01f4b9760c216fb4205a91d777dfdac7b979b2f052a87ab99bedfb7c7ef  python/mojolearn/host-sabotage/_mojolearn_mixture_host.so
+4343d51122c288d2d7b4f5d2aee2ef42178a93b3f2ab69262ed8901aa058c6b7  python/mojolearn/host-sabotage/_mojolearn_preprocessing_host.so
+d7b7a0b72d6f9c262b1d7f886b6033853207d5ced4ac90d1e6c33b8a0d20e943  python/mojolearn/host-sabotage/_mojolearn_tokenizer_host.so
+readback exit 0
+== production 23:09:38
+run-column exit 0
+column exit 0
+column cpu.json: vendor=cpu-amd-epyc-9654-96-core-processor commit=11c5f2192579b8aceada93096fdfcae37a2726a7 host.column=cpu cpu_model='AMD EPYC 9654 96-Core Processor' families=['_mojolearn_core_host', '_mojolearn_forest_host', '_mojolearn_gp_host', '_mojolearn_mixture_host', '_mojolearn_preprocessing_host', '_mojolearn_tokenizer_host'] cells=63 lanes=['gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables', 'gmm-random-init-sample', 'gmm-sample', 'gp-sample-y', 'gp-sample-y-normalize', 'tokenizer'] covered=['gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables', 'gmm-random-init-sample', 'gmm-sample', 'gp-sample-y', 'gp-sample-y-normalize', 'tokenizer']
+column verdict OK (0 failure(s))
+diff production exit 0 (must be 0)
+summary: OWED=63
+summary (infer/model): N/A=27, OWED=99
+summary (batch): N/A=36, OWED=27
+summary (rlpair): 
+require-columns 4 over ['gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables', 'gmm-random-init-sample', 'gmm-sample', 'gp-sample-y', 'gp-sample-y-normalize', 'tokenizer']: OK (189 OWED)
+summary (owed): OWED=189; the next release record owes exactly these cell parts; wrote /root/leg_out/owed_cells.json
+== sabotage 23:09:49
+readback sabotage exit 0
+run-column sabotage exit 0
+column sabotage exit 0
+column cpu-sab.json: vendor=cpu-amd-epyc-9654-96-core-processor commit=11c5f2192579b8aceada93096fdfcae37a2726a7 host.column=cpu cpu_model='AMD EPYC 9654 96-Core Processor' families=['_mojolearn_core_host', '_mojolearn_forest_host', '_mojolearn_gp_host', '_mojolearn_mixture_host', '_mojolearn_preprocessing_host', '_mojolearn_tokenizer_host'] cells=63 lanes=['gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables', 'gmm-random-init-sample', 'gmm-sample', 'gp-sample-y', 'gp-sample-y-normalize', 'tokenizer'] covered=['gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables', 'gmm-random-init-sample', 'gmm-sample', 'gp-sample-y', 'gp-sample-y-normalize', 'tokenizer']
+column verdict OK (0 failure(s))
+diff sabotage exit 1 (must be non-zero)
+summary: ONE-COLUMN=63
+summary (infer/model): N/A=27, ONE-COLUMN=99
+summary (batch): N/A=36, ONE-COLUMN=27
+summary (rlpair): 
+owed exit 0
+owed verdict OK (189 of 189 owed cell part(s) moved, 0 failure(s))
+hashed parts moved=189 not_moved=0 n/a=63
+== against the Metal columns 23:09:56
+diff metal exit 0
+summary: IDENTICAL=44, ONE-COLUMN=19
+summary (infer/model): IDENTICAL=44, N/A=9, ONE-COLUMN=73
+summary (batch): IDENTICAL=18, N/A=36, ONE-COLUMN=9
+summary (rlpair): 
+== spot check existing lanes, base fixture 23:09:56
+spot exit 0
+diff spot exit 1
+summary: IDENTICAL=27, OWED=1
+summary (infer/model): IDENTICAL=27, N/A=24, OWED=5
+summary (batch): IDENTICAL=27, OWED=1
+summary (rlpair): 
+summary (owed): OWED=7; the next release record owes exactly these cell parts; wrote /root/leg_out/spot_owed.json
+== done 23:09:57

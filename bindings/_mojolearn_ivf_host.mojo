@@ -55,8 +55,8 @@ def ivf_host_column_binding() raises -> PythonObject:
 
 def ivf_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary walks every candidate distance's feature axis
-    descending on purpose (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's negative
-    control)."""
+    descending and moves the bits of every returned distance on purpose
+    (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's negative control)."""
     return PythonObject(IVF_HOST_SABOTAGE)
 
 
