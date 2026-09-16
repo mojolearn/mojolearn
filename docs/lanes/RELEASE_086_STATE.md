@@ -229,6 +229,21 @@ AMD leg 2 skips the 62 lanes leg 1 recorded. NVIDIA leg 1 has all 192 owed. Hot 
 read $36.65 before AMD leg 2 (floor 500 cents) against 299 cents an hour for the VM, so the
 leg cannot exceed it.
 
+**The slowdown rerun is home, and NOTHING MOVED.** The seven lanes chunk 00 recorded while the
+Metal queue count was high (rf-clf, rf-reg, et-clf, et-reg, gbdt-symmetric, gbdt-depthwise,
+gbdt-lossguide) were rerun in a fresh process from the saved macOS wheel and compared with the
+saved JSON cell by cell: **63 cells compared on hashes, infer, model, reload and batch, none
+missing, BIT FOR BIT IDENTICAL** (`apple-record/chunk00-rerun-compare.txt`,
+`apple-m4.chunk00-rerun.json`). So the degraded state cost time and no bits, and the rerun
+stands as the column's copy of those lanes with the slowdown JSON kept beside it as evidence.
+
+One measurement to keep honest about: the rerun took **2057 s** for those seven lanes against
+**2194 s** for the same seven while degraded, 6 percent apart, and the per-lane shape is the
+same (the three gbdt lanes dominate both runs; degraded they ran 488, 657 and 923 s from
+`chunk00.rowtimes.tsv`). That says these lanes are expensive, not that the machine was or is
+in any particular state, and there is still no pre-slowdown Metal GBDT timing to compare
+against, so no healthy per-fit figure is claimed here.
+
 **The fourth column.** The diff wants a CPU column at the wheel's build commit, and the last
 record shipped only the three GPU columns, so this release takes one. It runs on a box with no
 GPU over the 159 lanes `python/mojolearn/host_surface.py --covered-lanes` names, and the four
