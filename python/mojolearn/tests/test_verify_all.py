@@ -320,8 +320,15 @@ def test_full_and_cpu_lane_sets():
     assert set(cpu) <= set(va.host_surface().public_reference_lanes())
     with pytest.raises(ValueError):
         va.select_lanes(_FakeHarness, _fake_table(), "apple", "full", ["nope"])
+    # A lane a CPU-only install does not run is refused by name rather than
+    # silently dropped. The example is `par-forest` rather than a lane that
+    # merely happens to be off the list: `par-*` is excluded by RULE
+    # (host_surface.PUBLIC_EXCLUDED_PREFIXES), so this stays a real test of
+    # the refusal as the public set grows. It used `rf-clf` until
+    # lane/ship-cpu-host-families shipped the rf binding and made that lane
+    # public, at which point the assertion had nothing left to catch.
     with pytest.raises(ValueError):
-        va.select_lanes(_FakeHarness, _fake_table(), "cpu", "full", ["rf-clf"])
+        va.select_lanes(_FakeHarness, _fake_table(), "cpu", "full", ["par-forest"])
 
 
 def test_flags_route_to_the_suite_or_the_card():
