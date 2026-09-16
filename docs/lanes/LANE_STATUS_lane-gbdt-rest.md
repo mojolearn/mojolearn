@@ -301,3 +301,27 @@ README with the measured verdicts, replacing its OWED section.
   parameters, and a YetiRank fit with its two), tests in
   `test_gbdt_query_softmax`. Rows removed from the TSV: the YetiRank loss
   parameter row, and query_softmax.cu from the ranking family row.
+
+## DROPPED 2026-09-16 (not merely held): this lane takes no Metal today
+
+The hold above stands, and the lane was additionally **dropped for this
+session on a second, independent ground: Metal is the scarcest resource we
+have.** One machine, one GPU, shared by every agent. A lane's Metal time is
+for proving that lane's OWN NEW CELLS; it is not for working through a backlog
+of owed columns lane by lane. Three lanes' owed columns were queued on it this
+morning and that was too much.
+
+**Do not resume this on the Mac as a standalone errand.** The owed GPU cells
+here ride the once-per-release GPU record, not a lane-by-lane campaign.
+
+An orphaned process from the retired chain did re-acquire the Metal lock at
+06:16:10 and began recording `gbdt-query-softmax` at PRE-SHRINK fixtures; it
+was stopped and **its partial JSON was deleted**, so no pre-shrink GBDT column
+exists to be picked up by mistake. `identity_break --diff` refuses outright
+when two columns hash different fixture sizes ("their cells are different
+questions"), so such a column could not have been compared against a
+post-shrink one anyway.
+
+**This lane is a legitimate place to sit.** Item 1 is implemented and PROVEN ON
+CPU; only the GPU half is owed. Nothing is owed on a rented box and nothing
+needs reaping.
