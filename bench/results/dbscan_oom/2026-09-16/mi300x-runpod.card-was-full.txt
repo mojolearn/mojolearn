@@ -1,0 +1,51 @@
+lane/amd-dbscan-oom. Captured BY HAND over ssh on RunPod pod o3paueazuvo87t
+(AMD Instinct MI300X OAM, gfx942, EPYC 9474F, 2267 GB host RAM), 2026-09-16,
+while the leg body was between arms and this lane held NO device memory. The
+pod was terminated and verified gone (HTTP 404) afterwards.
+
+THE POD SEES EIGHT CARDS THROUGH /sys/class/drm AND OWNS ONE OF THEM. The one
+it owns is rocm-smi's card0, PCI 0000:85:00.0, which is /sys/class/drm/card33
+and NOT /sys/class/drm/card0. That is why this lane's first probe read a
+counter that never moved and refused to report, which is the behaviour it was
+built to have.
+
+  $ for c in /sys/class/drm/card*/device/mem_info_vram_used; do \
+        d=$(dirname $c); echo "$d used=$(cat $c) total=$(cat $d/mem_info_vram_total) \
+        busid=$(basename $(readlink -f $d))"; done
+
+  /sys/class/drm/card1/device  used=297771008     total=206141652992  busid=0000:05:00.0
+  /sys/class/drm/card17/device used=187838889984  total=206141652992  busid=0000:46:00.0
+  /sys/class/drm/card25/device used=167583649792  total=206141652992  busid=0000:65:00.0
+  /sys/class/drm/card33/device used=205925318656  total=206141652992  busid=0000:85:00.0
+  /sys/class/drm/card41/device used=201007382528  total=206141652992  busid=0000:a6:00.0
+  /sys/class/drm/card49/device used=297758720     total=206141652992  busid=0000:c6:00.0
+  /sys/class/drm/card57/device used=15812837376   total=206141652992  busid=0000:e5:00.0
+  /sys/class/drm/card9/device  used=1240162304    total=206141652992  busid=0000:26:00.0
+
+  $ rocm-smi --showmeminfo vram --csv
+  device,VRAM Total Memory (B),VRAM Total Used Memory (B)
+  card0,206141652992,205925318656
+
+205925318656 of 206141652992 is 99.895%. THE CARD THIS POD OWNED HAD 206 MiB
+FREE, and this lane had allocated none of it.
+
+  $ rocm-smi --showpids
+  PID        PROCESS NAME  GPU(s)  VRAM USED      SDMA USED  CU OCCUPANCY
+  4109547    UNKNOWN       1       191781101568   0          0
+  247754     UNKNOWN       1       13500735488    0          0
+  ... plus six kfd pids holding 0
+
+191781101568 bytes is 178.6 GiB held by one process. This container's pids
+were five figures; 4109547 is a host pid from outside it, and nothing in this
+repository allocates 178 GiB for a 6000 by 4 fit.
+
+TWO INDEPENDENT CONFIRMATIONS FROM INSIDE OUR OWN PROCESS, in
+json/rocmsmi-cold.json, taken with tools/dbscan_memory_probe.py --source
+rocm-smi:
+
+  1. used_before_any_gpu_work = 196231.6 MiB of 196592.0 MiB. That figure is
+     read BEFORE `import mojolearn`, so none of it can be ours.
+  2. across our first fit the card's used memory FELL by 12031.2 MiB. A fit
+     of ours cannot free 11.7 GiB it never held; another tenant released it.
+
+And the same fit took 31.21 s here against 0.44 s on the dedicated MI325X.
