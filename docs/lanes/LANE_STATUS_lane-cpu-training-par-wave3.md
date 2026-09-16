@@ -166,11 +166,82 @@ third column too.
 
 | lane | driver | why not |
 |---|---|---|
-| par-byte-lm-model-pool | `PooledByteLanguageModelTrainer` | its claim is that decoder layers OWNED by separate devices equal a REPLICATED trainer on the first device. With one CPU worker both sides are the same host arithmetic in the same process, so the equality is true by construction and checks nothing. There is no layer ownership to restate. |
-| par-byte-lm-offload | `OffloadedByteLanguageModelTrainer` | it admits exactly one device, and its claim is that optimizer state staged in HOST memory equals resident DEVICE state. On a CPU-only install every array is already host memory, so the lane has no second side to compare. |
+| par-byte-lm-model-pool | `PooledByteLanguageModelTrainer` | the partition is a list of `DeviceContext`s, not a list of workers, and the part of the claim a host could restate is elementwise. See the permanent reason below. |
+| par-byte-lm-offload | `OffloadedByteLanguageModelTrainer` | same route, same absent host session; it admits exactly one device, so its reference side and its own side are both single-worker by construction. |
 
-These two are a result, not a gap. A CPU route for either would compare host
-arithmetic with itself under a pooled label.
+**The permanent reason, re-derived from the code on 2026-09-16
+(`lane/cpu-verifier-byte-lm-pool-offload`, head bfb8f725a). The question asked
+was whether a verifier running TWO logical CPU workers rescues these two
+lanes. It does not, and worker count is not the reason they fail.** Three
+findings, each read from the tree.
+
+1. **There are no workers on this path to give.** Neither trainer touches
+   `DevicePool`. `PooledByteLanguageModelTrainer._open` and
+   `OffloadedByteLanguageModelTrainer._open` take the byte-LM binding from
+   `SmallByteLanguageModelTrainer._binding()` / `_byte_lm_impl._load` and open
+   a NATIVE session on it (`model_pool_training.py` lines 11 to 19 and 50 to
+   73, `offload_training.py` lines 11 to 19 and 50 to 72), handing
+   `list(self.devices)` straight to `byte_lm_parallel_open`. `grep -c byte_lm
+   python/mojolearn/_parallel_worker.py` is **0**: the worker serves no
+   byte-LM operation at all. So `_parallel_pool.CPU_OPERATIONS` and
+   `CPU_SINGLE_DEVICE_COOPERATIVE`, the only knobs a worker count could move,
+   are not on this code path in either direction.
+2. **`devices` indexes device contexts, not processes.** In
+   `training/byte_lm_layer_pool.mojo` the owner of a layer is
+   `(layer + Int(reserve_head_device)) * len(devices) // (n_layers + Int(reserve_head_device))`
+   and that owner subscripts `self.contexts`, a `List[DeviceContext]` built by
+   `DeviceContext(device_id=devices[i])`. A CPU-only install has no
+   `DeviceContext` to build, so there is no second owner to create by asking
+   for one, at any worker count.
+3. **What a host could restate cannot fail, and what can fail is not host
+   arithmetic.** The pooled step folds each shard's gradient with
+   `_ordered_add_kernel` inside the owned range and then runs
+   `byte_glue_update_launch` per chunk over `len(chunk.p)`
+   (`training/byte_lm_model_pool.mojo`, `step`). That update is elementwise
+   AdamW: `training/byte_lm.mojo` documents that the glue update refuses SGD
+   and clipping, and the byte LM admits neither (`byte_validate_optimizer`;
+   `_byte_lm_impl.py` line 166 fixes `max_norm=0.0`). Cutting an elementwise
+   AdamW into contiguous chunks cannot move a bit, whatever runs it. The part
+   of the lane that CAN fail is the cross-context traffic, `transfer_bytes`
+   and `enqueue_copy_to` between contexts in `byte_lm_parallel.mojo` and
+   `byte_lm_layer_pool.mojo`, and a one-process host restatement has nothing
+   to put in its place. That is the same hazard class as
+   [[amd-mi300x-sriov-peer-copy-stale-read]], which is device transport and
+   only ever reproduces on a device.
+
+Also, the REFERENCE side of both lanes is
+`ParallelByteLanguageModelTrainer(devices=_par_devices()[:1], pool_optimizer=False)`,
+fixed at ONE device by the lane bodies themselves
+(`tools/identity_break.py`, the two lane functions). A second worker could
+never reach it, and it has no CPU route either (that is b2, par-byte-lm).
+
+**Seen, not assumed (2026-09-16).** On a genuine CPU-only install
+(`vendor()` reads `cpu`, `_backend._CPU_ONLY` set, no GPU binary loaded) all
+three byte-LM par lanes refuse BY NAME, while the plain `byte-lm` lane on the
+same install reads STABLE, which is the control that proves the CPU byte-LM
+route can produce a hash at all:
+
+    byte-lm/base                  STABLE
+    par-byte-lm-model-pool/base   REFUSED  rebuild bindings/build_byte_lm.sh for model pooling
+    par-byte-lm-offload/base      REFUSED  rebuild bindings/build_byte_lm.sh for offloaded replay
+    par-byte-lm/base              REFUSED  rebuild bindings/build_byte_lm.sh for parallel training
+
+The refusal is `_byte_lm_trainer_host._HostTrainerBinding.__getattr__`, which
+makes every `byte_lm_model_pool_*`, `byte_lm_offload_*` and
+`byte_lm_parallel_*` entry read absent to `getattr(..., None)`, so
+`_ModelPoolBinding` and `_OffloadBinding` raise at construction.
+`bindings/_mojolearn_byte_lm_host.mojo` exports eleven single-device
+`byte_lm_host_*` entries and no session of any kind. A probe that builds the
+same two adapters over a stub binding carrying those names constructs both
+without refusing, so the refusal is the absent names and not a broken probe.
+
+These two are a result, not a gap, and the result does not change with worker
+count. Covering them honestly needs a host restatement of the LAYER SCHEDULE
+(a host `ByteLayerPool` forward and backward, which is new host arithmetic and
+a lane of its own beside b2), and even then it would check the schedule and
+never the device transport the GPU columns check. The lanes stay on the GPU
+columns, where all six committed 166-lane columns carry nine STABLE cells each
+for both of them.
 
 ## Done on this branch
 
