@@ -433,6 +433,56 @@ reproducible run to run, landing on a different fixture each time, while every o
 the CPU column reproduce it exactly. A third recording would be a FIFTH AMD leg, which is not
 rented without reporting the count first.
 
+### What the CODE says about the moving cell (read only, nothing changed)
+
+**The path that ran**, established by reading rather than assuming. The lane builds
+`RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7)` with no
+`inference_engine`, and both forest classes declare `inference_engine="sequential"` as the
+default (`python/mojolearn/randomforest.py:631`, `:755`), so `_predict_forest` takes its
+sequential branch (`_forest_protocol.py:176-179`) into `rf_predict_reg`. The resident
+parallel-groves path is NOT on this lane's path: `_prepare_resident_forest` refuses unless the
+engine is `parallel_groves` (`:187-188`), and `_gpu_parallel` is only reached when the engine is
+not sequential (`:152`). `rf_predict_reg_binding` (`bindings/_mojolearn_rf.mojo:760`) rebuilds
+the forest and calls `rf.predict(...)`, which is a SERIAL HOST LOOP
+(`ensemble/randomforest.mojo:1032-1058`):
+
+    for row_id in range(n_rows):
+        var row_prediction = List[...]()        # zero initialized per row
+        for i in range(n_trees):
+            DecisionTree.predict(forest.trees[i], ..., row_prediction, ...)
+        for k in range(num_outputs):
+            row_prediction[k] = row_prediction[k] / Scalar[Self.dtype](n_trees)
+
+Tree order is `range(n_trees)`, fixed. No launch, no atomic, no concurrent partial.
+
+**The clf/reg asymmetry is explained by the output shape, and therefore locates nothing.**
+Directly after that division (`:1058-1075`) the classifier returns an ARGMAX with strict `>`,
+while the regressor returns `row_prediction[0]` itself. A last-bit perturbation ANYWHERE
+upstream leaves an argmax unchanged almost always and changes a float mean every time. So "all
+four `reg_*` parts move, all four `clf_*` parts never do" follows from argmax versus float, and
+is NOT evidence that the fault is in scoring.
+
+**Two negative results, stated plainly.** In the places the accumulation could have been loose:
+
+- Weighted R2 (`metrics/impl/weighted_scores.mojo`): `chunk_count(n)` fixes the chunk count from
+  `n` alone; `linear_block_id()` resolves a block to a chunk index "the same whichever shape
+  carried it" (`metrics/checks/pinned_sum.mojo:80-85`); `_fold` (`:150-160`) copies the partials
+  to a host buffer, synchronizes, and `host_fold_partials` (`:181-189`) sums them ascending and
+  serially through `ftz` from `+0.0`. No atomic, no device-side cross-block reduction.
+- Forest inference kernels: the grove kernel walks trees lane-strided (`tree = lane; ...; tree
+  += 32`) and reduces through a fixed halving tree with every thread reaching each `barrier()`.
+  `forest_add` is `ftz(ftz(a) + ftz(b))` (`core/forest_inference.mojo:34-35`), plain Float32, so
+  order is pinned by CONSTRUCTION, not by order-immune arithmetic. Those kernels are not on this
+  lane's path in any case.
+
+**Where the evidence points now: UPSTREAM, to the fit.** The lane hashes only score outputs, and
+each cell is two independent fits of a fresh forest. Last-bit differences in fitted leaf values
+would move every `reg_*` part and leave every `clf_*` part intact, which is exactly the observed
+fingerprint. The moving lane fits on `X[:2000]` (`tools/identity_break.py:1849`) while the STABLE
+`rf-reg` lane fits on the full `X` (`:813`), so they do not exercise the same fit shape. Nothing
+here proves the fit is the culprit. It is where the next reading starts, and unlike the predict
+path above, it is GPU work.
+
 ### The decision rule, fixed in advance (coordinator, 2026-09-15 evening)
 
 Written down before the evidence arrives so it is not decided under time pressure. The trigger
@@ -572,11 +622,33 @@ What this settles:
   order of ten minutes, which is why headroom, not overhead, decides the size.
 
 **A correction to my own instrument.** The runner originally read the queue count before and
-after each group, and the "after" reading is taken once the process has EXITED, at which point
-the queues are already released. That pair measures the machine's baseline and cannot see
-accumulation at all. The group01 and group02 figures above come from live samples taken by hand
-while the processes ran. The runner now samples every 5 s during each group and reports the
-PEAK, so every group from chunk 01 onward carries a number that means what it says.
+after each group, and the "after" reading is taken once the process has EXITED. That pair
+measures the machine at that instant and cannot see the process's own accumulation. The group01
+to group03 figures above come from live samples taken by hand while the processes ran. The
+runner now samples every 5 s during each group and reports the PEAK.
+
+### Release is LAZY, ambient count does not degrade a fresh process, and the tripwire is retired
+
+The first three prefixed groups settle both open questions:
+
+| group | lanes | seconds | queues start | PEAK | after exit |
+|---|---|---|---|---|---|
+| c16-group01 | gp, gpc | 88 | 23 | 718 | 540 |
+| c16-group02 | gpc-multiclass, umap | 524 | **288** | 1531 | 1338 |
+| c16-group03 | radius, standard-scaler | **50** | **1081** | **827** | 310 |
+
+- **Queues are released lazily, not immediately.** group02 began at 288 rather than at the
+  baseline, and group03's PEAK (827) came in BELOW its start (1081) while the count decayed
+  during the run. So the counter at any instant mixes live queues with ones pending reclaim.
+  This reconciles the two earlier readings without either being wrong: after the kill an idle
+  machine fell 4673 to 22 in three seconds because nothing was creating more, while under
+  back-to-back launches the decay lags creation.
+- **A high ambient count does NOT degrade a fresh process.** group03 ran two lanes in 50 s
+  starting from 1081 queues. What degraded the 23-lane chunk was its OWN accumulation inside one
+  long-lived process (4673 over 17 lanes), not the machine-wide number.
+- **Therefore the 400 peak tripwire is retired**: it measured the wrong quantity. Two lanes per
+  process stays, and the symptom to watch is a group's SECONDS, not the counter. One process per
+  small group remains the mitigation, and it is working.
 
 **The exit measurement, 21:37: 4673 to 22.** By the time the restart was approved the count had
 climbed further, to **4673**. The driver was terminated first (so it could not go on to launch
