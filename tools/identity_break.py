@@ -1769,8 +1769,8 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """SambaStack, one Mamba-3 layer and one attention layer at d_model 32
     over a 256-byte vocabulary, weights from the stack's own seeded
-    generator, three AdamW steps on three (2, 17) windows of the fixture
-    bytes. SUPPORT_MATRIX says cross-vendor qualification of the training
+    generator, ONE AdamW step on one (2, 17) window of the fixture bytes
+    (three before 2026-09-16, floored at one above). SUPPORT_MATRIX says cross-vendor qualification of the training
     surface is open. The checkpoint is the model column."""
     cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)

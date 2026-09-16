@@ -39,10 +39,10 @@ untouched. What came down is INPUT SIZE and STEP COUNT.
 | `hdbscan-leaf` | 6000 rows | **2000** | rows; same measurement, leaf arm holds lower |
 | `spectral` | 2000 rows | **512** | rows (O(n^2) eigen work) |
 | `holtwinters` | 512 obs | **128** | observations; still many periods of the seasonal 12 |
-| `byte-lm` | 3 steps | **1** | AdamW steps |
+| `byte-lm` | 3 steps | 1, **REVERSED to 2** 2026-09-16 | AdamW steps; one step could not see a read-side swap of `norm1_w` and `norm2_w`, see A3 |
 | `byte-lm-resident` | 3 steps | **1** | AdamW steps, with its stateless replay cut to match; its SHAPE came down later the same day, section A2 |
 | `samba` | 6 windows, 3 steps | **2 windows, 1 step** | steps |
-| `samba-untied-dropout-accum` | 96 rows, 3 steps | **32 rows, 1 step** | steps; 32 rows KEPT because `accumulation_is_aligned(256, 4)` is False, so fewer rows would delete the A=4 claim |
+| `samba-untied-dropout-accum` | 96 rows, 3 steps | 32 rows, 1 step, **REVERSED to 32 rows, 3 steps** 2026-09-16 | steps; 32 rows KEPT because `accumulation_is_aligned(256, 4)` is False, so fewer rows would delete the A=4 claim. THE STEP CUT SHOULD NOT HAVE HAPPENED: a floor of 3 was already recorded, see A3 |
 | `mamba2-dtlimit` | `(2, 16, 32)` slab | **`(2, 8, 32)`** | sequence length |
 
 Two sizes were set by measurement rather than taste, and are floors:
@@ -55,6 +55,14 @@ Two sizes were set by measurement rather than taste, and are floors:
 - **samba-untied-dropout-accum.** `accumulation_is_aligned` admits A=4 only at
   32 rows (512 tokens); at 16 rows it is refused. The rows are the claim, so
   only the step count came down.
+
+  **This sentence is where the failure happened** (2026-09-16,
+  lane/shrink-floors). The lane it came from,
+  `docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md` section 1f, recorded
+  TWO floors for this lane, 32 rows AND 3 steps, and said the step floor exists
+  because step 3 is the first that evaluates the cosine arm of the schedule.
+  Only the rows half was carried here, so "only the step count came down" reads
+  as if the steps were the free dimension. They were the floored one. See A3.
 
 ## A2. MODEL SHAPE, NOT INPUT SIZE (lane/neural-shape-shrink, 2026-09-16)
 
@@ -158,3 +166,48 @@ carrying current revisions, and it catches a single corrupted revision.
 So nothing compares against the stale references in the meantime, and the next
 person who shrinks a fixture and forgets to regenerate gets a refusal instead
 of a DIVERGENT that looks like our identity claim being false.
+
+## A3. TWO SHRINKS REVERSED, AND FLOORS MOVED INTO THE CODE (lane/shrink-floors, 2026-09-16)
+
+`docs/lanes/LANE_STATUS_shrink-blindness-audit.md` asked, per shrunk lane, the
+question the shrink validation could not ask: not "does the cell still match
+its reference" but **can this cell still be made to FAIL**. Two of the fourteen
+could not, both cut to a single training step, and both are reversed here.
+
+| lane | was | now | what one step could not see |
+|---|---|---|---|
+| `byte-lm` | 1 step | **2 steps** | a read-side exchange of `norm1_w` and `norm2_w`. `_byte_lm_params` sets both to ones, so at the input of the only hashed step they are bitwise equal and the exchange is the identity function |
+| `samba-untied-dropout-accum` | 1 step | **3 steps** | the entire cosine arm of its own `WarmupCosineLR`, and the exact rational `_cos_pi_interval` / `_decide_f32` path under it |
+
+Both bump `LANE_REVISIONS` (`steps-2-1`, `steps-3-1`) and so drop those lanes'
+references. That was sequenced deliberately: `release/0.8.7` already requires
+all four record columns to be retaken, so a dropped reference costs nothing
+extra today and would cost a whole re-record if deferred.
+
+**The other twelve are fine, and that is measured.** Every row and observation
+cut cost no detection, and where a resolution ladder was run the SMALLER
+fixture was as sharp or sharper: spectral 1e-4 at 512 rows against 1e-3 at
+2000, holtwinters 1e-7 at 128 observations against 1e-5 at 512, both hdbscan
+lanes 1e-7 before and after. The shrink programme was mostly right.
+
+**The process fix, which matters more than the two reversals.** A floor in
+prose is not a floor. Floors now live in `tools/identity_break.py`, on the
+lane, with the reason in the same expression as the number:
+
+    @lane("samba-untied-dropout-accum")
+    @floor(steps=(3, "step 3 is the FIRST step that evaluates the cosine arm
+                      at all ... (2026-09-16, ...)"),
+           batch=(32, "32 rows per step is T = 512 tokens, the smallest size
+                       at which accumulation_is_aligned admits A = 4 ..."))
+    def _(ml, X, yc, yr, Xh=None):
+        steps, batch = 3, 32          # the floored locals
+        ...
+        for k in range(steps): ...    # the site, which must READ them
+
+`tools/fixture_floors.py` enforces that from the source with `ast` alone, in
+`light-checks` (the only workflow that starts by itself) and as two tests in
+the CPU gate. Which lanes must carry a floor is DERIVED from `LANE_REVISIONS`
+rather than hand-listed, the site must read the floored local so the number
+cannot be bypassed, the reason must cite something traceable, and
+`--self-test` mutates the harness five ways and requires each to be refused by
+name. **Do not add a floor to this document.** Add it to the lane.
