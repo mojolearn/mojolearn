@@ -118,33 +118,33 @@ run diff-batch-sabotage env PYTHONPATH=/root/mojolearn/python pixi run python to
 cp "$OUT/logs/diff-batch-sabotage.log" "$OUT/diff.nvidia-vs-batch-sabotage.txt" 2>/dev/null
 grep -E 'BATCH_MOVED|summary' "$OUT/logs/diff-batch-sabotage.log" | head -20 >> "$G"
 
-# This column against the two columns that already carry these cells: the
-# Apple/Metal ones taken by lane/inference-transductive-predict and
-# lane/spectral-predict, and their x86 CPU siblings.
-T=bench/results/identity_break/2026-09-15_transductive-predict
-S=bench/results/identity_break/2026-09-15_spectral-predict
-run diff-vs-metal-transductive env PYTHONPATH=/root/mojolearn/python pixi run python tools/identity_break.py \
-    --diff "$T/apple-m4.json" "$T/cpu-x86.json" "$OUT/$LABEL.json" \
-    --lanes dbscan,dbscan-brute-l1,dbscan-weighted,agglomerative
-cp "$OUT/logs/diff-vs-metal-transductive.log" "$OUT/diff.transductive-three-columns.txt" 2>/dev/null
-run diff-vs-metal-spectral env PYTHONPATH=/root/mojolearn/python pixi run python tools/identity_break.py \
-    --diff "$S/metal/apple-m4.json" "$S/cpu-x86.json" "$OUT/$LABEL.json" \
-    --lanes spectral,spectral-precomputed
-cp "$OUT/logs/diff-vs-metal-spectral.log" "$OUT/diff.spectral-three-columns.txt" 2>/dev/null
-grep -E '^summary' "$OUT/logs/diff-vs-metal-transductive.log" "$OUT/logs/diff-vs-metal-spectral.log" >> "$G" 2>/dev/null
+# THE THREE-COLUMN DIFFS ARE NOT RUN HERE. `git archive` ships the source
+# only, so bench/results/ does not exist on the box and the reference columns
+# are not here to diff against; the 2026-09-16 leg's two diff phases died with
+# FileNotFoundError for exactly that. They cost nothing at home, against the
+# fetched column, and that is where they run.
 
 # ------------------------------------------------- the CPU host route, here
 # `check` runs the host subclasses: `_bind` answers the CPU binding and
 # everything else is the GPU class's own Python. Only two host families are
 # reachable from these four lanes, so only two are built.
-run build-estimators-host env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS="$JOBS" \
+#
+# `env -u MOJOLEARN_GPU_ARCHS` IS NOT DECORATION. This file exports that
+# variable for the GPU builds above, and bindings/build_host_family.sh refuses
+# a Linux CPU build that carries one ("a CPU build takes no
+# MOJOLEARN_GPU_ARCHS"). On 2026-09-16 all four host builds exited 2 in zero
+# seconds for exactly that reason and took the check and both sabotage arms
+# down with them.
+run build-estimators-host env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS="$JOBS" \
     sh bindings/build_estimators_host.sh
-run build-metrics-host env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS="$JOBS" \
+run build-metrics-host env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS="$JOBS" \
     sh bindings/build_metrics_host.sh
+# No --gpu-column here either, and for the same reason: those JSONs are under
+# bench/results/, which the archive does not carry. The comparison this phase
+# makes is the one that matters on this box, the GPU recording against the CPU
+# host binding beside it.
 run check env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
     pixi run python tools/classical_host_gate.py check "$REC" \
-    --gpu-column "$T/apple-m4.json" --gpu-column "$T/cpu-x86.json" \
-    --gpu-column "$S/metal/apple-m4.json" --gpu-column "$S/cpu-x86.json" \
     --report "$OUT/check.json"
 say "check_exit=$?"
 tail -60 "$OUT/logs/check.log" >> "$G" 2>/dev/null
@@ -156,11 +156,11 @@ tail -60 "$OUT/logs/check.log" >> "$G" 2>/dev/null
 # must move. A fixture that does NOT move is a finding, and its recording is
 # dropped at home rather than shipped as coverage.
 mkdir -p "$SAB"
-run build-estimators-host-sabotage env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS="$JOBS" \
+run build-estimators-host-sabotage env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS="$JOBS" \
     MOJOLEARN_HOST_OUTDIR="$SAB" \
     MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_TRANSDUCTIVE_PREDICT_SABOTAGE=1" \
     sh bindings/build_estimators_host.sh
-run build-metrics-host-sabotage env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS="$JOBS" \
+run build-metrics-host-sabotage env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS="$JOBS" \
     MOJOLEARN_HOST_OUTDIR="$SAB" \
     MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_SPECTRAL_PREDICT_SABOTAGE=1" \
     sh bindings/build_metrics_host.sh

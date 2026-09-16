@@ -772,7 +772,15 @@ def main():
     chk.add_argument('--lane-rule-only', action='append', default=[], metavar='LANE',
                      help='with --every-fixture, this lane keeps the --every-lane rule, by name (repeatable)')
     args = parser.parse_args()
-    if args.lane_rule_only and not args.every_fixture:
+    # `--lane-rule-only` belongs to the CHECK subparser only, so a `record`
+    # Namespace has no such attribute and reading it unguarded raised
+    # AttributeError before do_record ran a line. That is how the four predict
+    # lanes came to have no recording: the tool that makes one had been
+    # unusable since the flag was added (lane/ties-sabotage, 2026-09-15), and
+    # the crash is in main(), ahead of every other refusal, so it reached a
+    # rented GPU box on 2026-09-16 and cost it its recording phase
+    # (lane/saved-model-reference-gaps).
+    if getattr(args, 'lane_rule_only', None) and not args.every_fixture:
         parser.error('--lane-rule-only needs --every-fixture')
     if args.command == 'record':
         return do_record(args)
