@@ -158,10 +158,11 @@ def _by_path(fn):
 def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
-    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED
+    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED
     for cache in _CACHES:
         cache.clear()
     _GIT_SHOW.clear()
+    _TRACKED = None
     _ENUMERATORS = None
     _LANE_SOURCES = None
     _SOURCE_HASHED = None
@@ -814,6 +815,149 @@ def docstring_only(ref, path):
     return a is not None and b is not None and a == b
 
 
+_TRACKED = None
+
+
+def tracked_files():
+    """Every tracked path, once."""
+    global _TRACKED
+    if _TRACKED is None:
+        try:
+            res = subprocess.run(["git", "-C", ROOT, "ls-files"],
+                                 capture_output=True, text=True, check=True)
+            _TRACKED = set(res.stdout.split("\n")) - {""}
+        except subprocess.CalledProcessError:
+            _TRACKED = set()
+    return _TRACKED
+
+
+def _reaching_corpus():
+    """Every file some lane already reaches, plus the harness and the manifest.
+
+    THIS IS THE WHOLE POINT OF THE NEXT FUNCTION. For a lane to reach a file,
+    something IN THAT LANE'S CLOSURE has to name it, directly or through a
+    chain. So the only files whose text can extend a lane's reach are the ones
+    the map already contains. `pixi.toml` naming `umap/checks` does not put a
+    check into any lane, and neither does a build task, a CI workflow or a
+    contribution gate: none of them is in any lane's closure."""
+    return sorted(set(reverse_map()) | {HARNESS, MANIFEST})
+
+
+@_by_path
+def _searchable(rel):
+    """One corpus file with its DOCSTRINGS AND COMMENTS removed, because a
+    path written in prose is not a reference to it.
+
+    Measured 2026-09-16: `umap/` appears in `bindings/_mojolearn_metrics.mojo`
+    ("recorded in umap/README.md"), in a 1,600-line ROUTING docstring in
+    `checks/kernel_matrix.mojo`, and in a comment in `_backend.py`. All three
+    are sentences. Counting them made three new files under `umap/checks/`
+    look reachable and sent a diff that changed no product code to all 212
+    lanes.
+
+    Python goes through the same AST dump the docstring rule uses, so every
+    string that is NOT a docstring survives and a path held in a constant
+    still counts. Mojo has no parser here, so a triple-quoted block is dropped
+    only when it OPENS a line, which is the docstring shape; a triple-quoted
+    string on an assignment is left alone, because stripping too much here
+    would call a reachable file unreachable, and that is the direction that
+    costs a defect."""
+    try:
+        text = _read(rel)
+    except OSError:
+        return ""
+    if rel.endswith(".py"):
+        return code_dump(text) or text
+    if rel.endswith(".mojo"):
+        out, in_doc = [], False
+        for line in text.splitlines():
+            stripped = line.lstrip()
+            if in_doc:
+                if '"""' in line:
+                    in_doc = False
+                continue
+            if stripped.startswith('"""'):
+                if not (stripped.rstrip().endswith('"""') and len(stripped.rstrip()) > 5):
+                    in_doc = True
+                continue
+            out.append(line.split("#", 1)[0])
+        return "\n".join(out)
+    return text
+
+
+def _named_by_the_corpus(token, skip=(), whole=False):
+    """The files a lane reaches that name `token` in CODE, as PATHS, never a
+    count: a grep that prints a number cannot be told from one that failed.
+
+    `whole` is for a DIRECTORY token, where a bare substring search is the
+    wrong question. `umap/` occurs in every reference to every file under
+    `umap/`, so searching for it asks "does anything use this tree", which is
+    always yes. What matters is whether anything names the DIRECTORY ITSELF,
+    which is the shape a glob or a directory walk takes: `umap/` followed by a
+    quote, a star or a bracket rather than by another path component."""
+    pattern = re.compile(re.escape(token) + (r"(?![A-Za-z0-9_.])" if whole else ""))
+    out = []
+    for rel in _reaching_corpus():
+        if rel in skip or _is_inert(rel) or rel in SELECTION_MACHINERY:
+            continue
+        if pattern.search(_searchable(rel)):
+            out.append(rel)
+    return out
+
+
+def unreachable(path):
+    """Why NOTHING can reach `path`, or None when something might.
+
+    Two halves, and both are needed. The map alone is not proof, because the
+    map is a model and an unattributable path falls back precisely because a
+    model can be incomplete. The second half closes that: it searches the files
+    the map DOES contain for this path, for its stem, and for EVERY ANCESTOR
+    DIRECTORY in both path and dotted form. A fixture read by a glob is not
+    named by its own name, but the directory the glob walks is, and that
+    directory would have to be named by something a lane reaches.
+
+    Refused for anything in the Python package or under `bindings/`, which are
+    resolved by name at load time, and for the harness, the manifest, the
+    registries and the selection machinery, each of which has its own rule.
+
+    There is no need to exclude the rest of the same change: the corpus is the
+    files a lane ALREADY reaches, so two new files cannot make each other
+    reachable, and a MODIFIED file that a lane does reach must keep its vote.
+    An earlier spelling passed the whole changed list as a skip set, which
+    would have hidden exactly the case that matters: a new source added
+    together with the import that pulls it in."""
+    if path in (HARNESS, MANIFEST) or path in SELECTION_MACHINERY or path in enumerator_files():
+        return None
+    if path.startswith(PKG + os.sep) or path.startswith("bindings" + os.sep):
+        return None
+    if path in reverse_map():
+        return None
+    stem = os.path.basename(path)
+    tokens = [(path, False), (stem, False)]
+    if "." in stem:
+        tokens.append((stem.rsplit(".", 1)[0], False))
+    parts = path.split(os.sep)[:-1]
+    for k in range(len(parts)):
+        d = os.sep.join(parts[:k + 1])
+        tokens.append((d + os.sep, True))
+        if k:
+            # The DOTTED form only from the second level down. A one-word
+            # top-level directory is not a path, it is a word: `umap` matches
+            # `from . import umap`, the package module of the same name, and a
+            # `Constant(value='umap')` in a family table. `umap.checks` is a
+            # module path and means what it says.
+            tokens.append((d.replace(os.sep, "."), True))
+    tokens = [(t, w) for t, w in dict.fromkeys(tokens) if len(t) >= 4]
+    if (path, False) not in tokens:
+        return None                      # too short a path to search for honestly
+    for token, whole in tokens:
+        hits = _named_by_the_corpus(token, skip={path}, whole=whole)
+        if hits:
+            return None
+    return ("nothing reaches it: no lane's derived source set contains this path, and no file "
+            "that any lane DOES reach names it, its stem or any directory above it")
+
+
 def _harness_segments(text):
     """`identity_break.py` as (lane -> its dumped definition) and the dumped
     list of every OTHER top-level statement.
@@ -967,6 +1111,11 @@ def select(paths, ref=None, sources=None):
             else:
                 lanes |= set(touched)
                 reasons[path] = f"harness diff touches only these lane bodies: {','.join(touched) or 'none'}"
+            continue
+        why_unreachable = unreachable(path)
+        if why_unreachable:
+            inert.append(path)
+            reasons[path] = why_unreachable
             continue
         if path in SELECTION_MACHINERY:
             inert.append(path)
