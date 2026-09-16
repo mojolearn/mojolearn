@@ -1,7 +1,9 @@
 # lane/lane-selector: run only the lanes a change can move
 
-Branch `lane/lane-selector`, from `origin/main` at 8cc2002b0.
-Worktree `/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/e52730fc-0ee7-4bf3-8741-5fa0e0f1876f/scratchpad/wt-laneselect`.
+Branch `lane/lane-selector`, from `origin/main` at 8cc2002b0, merged with
+`origin/main` at 2dbeedec6 and verified there.
+Worktree `/Users/andrewhendel/mojolearn-wt/lane-selector`. The original
+worktree was under `/private/tmp/claude-501/` and did not survive the crash.
 
 ## The problem this answers
 
@@ -100,16 +102,94 @@ dates from Sep 14 and `_mojolearn_estimators_host` exports no `qn_fit`, so
 `logistic/base` read `REFUSED`. A refusal that returns in 2 s is not evidence
 that the tier is fast.
 
-## Measured
+## Verified 2026-09-16, on the merged tree, one core
 
-OWED in this file until the numbers are in hand. Nothing here may be quoted
-as a saving until it names the run that produced it.
+Branch merged with `origin/main` at 2dbeedec6 and re-run. Everything below is
+from a run in `/Users/andrewhendel/mojolearn-wt/lane-selector`, through
+`mac_slot.sh` at one core. Logs are in
+`/Users/andrewhendel/mojolearn-evidence/lane-selector-2026-09-16/`.
+
+| check | result |
+|---|---|
+| `--count` (registry, by import) | 211; `grep -c '@lane('` 188; the 23 in the gap are the kde, knn, radius, gp and gmm families |
+| `--selfcheck` | OK, 0 lanes with an empty side, 723 files mapped |
+| `tools/test_lane_select.py` | 16 tests, 0 failures, 2.4 s |
+| one lane end to end (`--lane knn`) | COMPLETE, exit 0, 2 s |
+
+### What was made to fail, to show each guard is the thing that holds
+
+* **The fallback.** `pixi.toml` printed `FALLING BACK TO EVERY LANE` and
+  selected 211 of 211. With the `fallback = True` line deleted from the
+  unattributable branch, the same path printed `0 of 211 lanes selected` and
+  exited 0, silently. `cluster/host/kmeans_oracle.mojo` printed no fallback
+  line at all and selected 20 lanes, so the message is conditional.
+* **The empty refusal.** `verify_lanes --lanes-for-paths CHANGELOG.md --plan`
+  printed REFUSING and exited 2. With the refusal block deleted, the same call
+  exited 0 and planned `identity_break --lanes` with an empty lane list.
+* **The merge.** `--lane knn` is COMPLETE at exit 0, so the check can pass.
+  `--lane kmeans` (REFUSED on this stale host binding set) is INCOMPLETE at
+  exit 1; `--lanes knn,kmeans` is INCOMPLETE too, so one good lane does not
+  cover for a refused one; and `--lanes knn,knn-clf --shards 2` with
+  `MOJOLEARN_NUMERIC_MODE` unset had both shards exit 1 and named both rather
+  than dropping either.
+
+The two sabotage copies were scratch files under `tools/_sab_*`, never
+committed. What they proved is now pinned by
+`test_an_unattributable_path_falls_back_to_every_lane_and_says_so` and
+`test_the_runner_refuses_an_empty_selection`, which calls `verify_lanes.main`
+and requires exit 2 for an empty selection and exit 0 for a narrow one.
+
+### Three defects this verification found
+
+1. **The lane total had already rotted.** 199 and 176 were right when written
+   and wrong four commits later. No total is written down now.
+2. **The second claimed fix was inert.** Binding edges from SYNTAX stopped
+   prose creating them; the IMPORT CLOSURE still created the same ones, since
+   `_bufcheck.py` -> `_buffer.py` is in every lane's closure and reaches
+   `_forest_host.py`, `_byte_lm_impl.py` and `_byte_lm_host.py`.
+   `core/gbdt_host_predict.mojo`, the file the docstring named as fixed,
+   still selected all 211 lanes. A binding every lane reaches now gives an
+   undeclared lane its source only.
+
+   | | before | after |
+   |---|---|---|
+   | files selecting every lane | 73 | 41 |
+   | median lanes per file | 35 | 32 |
+   | `core/forest_host_predict.mojo` | 211 | 7 |
+   | `core/gbdt_host_predict.mojo` | 211 | 23 |
+   | `mamba/impl/modeling/modeling_mamba.mojo` | 211 | 26 |
+   | files in the map | 718 | 723 |
+
+   6066 file edges dropped, 468 added, and every lane keeps its own family
+   tree.
+3. **`verdict COMPLETE` for a column of refusals.** See the commit; COMPLETE
+   now means every selected lane carries a cell that ran.
+
+Two more, smaller: a family case named a DIRECTORY and so passed vacuously,
+and the selector read its own three files as NOT ATTRIBUTABLE, so this lane's
+first real use of its own tool fell back to all 211 lanes.
+
+### Measured cost
+
+Deriving the map took 146 s per call before memoization, and the property
+tests took 11 minutes. With per-file results memoized, `lane_sources()` is
+0.9 s and the suite is 2.4 s. The tier 2 plan for all 211 lanes over 16 pods
+prints a longest shard of 120 s against a serial equivalent of 1883 s, about
+$0.26 at $0.48/h per pod.
+
+NOT MEASURED: any saving against the Metal sweep this lane exists to replace.
+No Apple column was run and none should be, so the 10.77 hour figure is the
+old record, not a before-and-after.
 
 ## Owed / not done
 
 * The three push gates (`docs_facts --check`, `packaging/wheel_ci.py pins .`,
   `packaging/wheel_ci.py inventory python/mojolearn`) run before any push.
 * No pod was rented. Tier 2 is implemented and planned, never executed.
+* The copied host binding set dates from Sep 14 and serves few lanes:
+  `kmeans`, `ols`, `pca`, `dbscan` and `tsvd` all read REFUSED against it.
+  A tier 1 run that is worth anything needs the host families rebuilt first,
+  and the new verdict says so instead of printing COMPLETE.
 * No fixture and no lane definition was edited: another lane is shrinking
   fixtures for ten expensive lanes, and this branch only adds selection
   machinery around them.

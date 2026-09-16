@@ -78,6 +78,12 @@ clock on one box. Ask before renting.
 
 The merge is where a sharded run can lie, so it is checked three ways:
 
+0. **A refused lane is never a checked lane.** A shard can exit 0, write its
+   part and merge cleanly with every cell reading REFUSED, which is what a
+   stale host binding set produced on 2026-09-16: `verdict COMPLETE` in three
+   seconds for a column that checked nothing. COMPLETE means every selected
+   lane carries a cell that RAN, and the run prints how many lanes were
+   actually checked next to how many were selected.
 1. **A failed shard is never dropped.** A shard that exits non-zero, or whose
    part file never appeared, makes the run INCOMPLETE, writes
    `<out>/column.incomplete.json` instead of `<out>/column.json`, and exits 1.
