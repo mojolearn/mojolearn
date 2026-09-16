@@ -190,6 +190,44 @@ naming the added lane; the same three files with a real `tol` change and a
 real helper edit fell back to 213 of 213; and an f-string ERROR MESSAGE
 changed alone in the same file moved it from inert to 3 lanes.
 
+### 2026-09-16 late: four more false sweeps, from four lanes
+
+Andrew's complaint that afternoon was that we are testing too much, and the
+selector's fallback had become the mechanism of it. Each of these returned
+212 of 212 and each was caught only because the lane read the reason line and
+refused to run the sweep.
+
+| lane | cause | now |
+|---|---|---|
+| `lane/kmeans-save` | an additive entry in a whole-surface registry | 36 of 212 |
+| `lane/umap-batch-determinism` | three new files under `umap/checks/` that no lane references | 0, and the runner refuses |
+| `lane/discarded-atomic-audit` | an untracked `.metadata_never_index` in the worktree | 0, and the runner refuses |
+
+The second and third are one rule: a path is unreachable when no lane's map
+contains it AND no file that any lane DOES reach names it, its stem or any
+directory above it. Four things had to be got right and each was found by
+running it: prose in a corpus file is not a reference, a directory token must
+name the directory rather than any file under it, a one-word top-level
+directory is a word and not a path, and there must be no skip set for the rest
+of the same change, which would have hidden a new source added together with
+the import that pulls it in.
+
+The first is the registry rule: additive is verified against the old
+statements, and the addition is attributed through the files that define the
+names it mentions. Registries are excluded from that resolution, because
+`_HostBound` is defined in `_classical_host.py` and every lane reaches that
+file, which attributed the addition to all 212.
+
+Also folded in, rather than opening a lane for it:
+`tools/source_hygiene_check.py` keeps `_ = Atomic.load(...)` and
+`_ = Atomic.compare_exchange(...)` at zero, in light-checks and as
+`pixi run check-source-hygiene`. THE GREP AS THE AUDIT WROTE IT DID NOT WORK:
+`git grep -E` is POSIX ERE and has no `\s`, so
+`'^\s*_ = Atomic\.(load|compare_exchange)'` matches nothing, exits 1 and reads
+exactly like a clean tree. Its self-test now runs every pattern through the
+real `git grep` and requires the probe lines to match and the near misses not
+to.
+
 ### Measured cost
 
 Deriving the map took 146 s per call before memoization, and the property

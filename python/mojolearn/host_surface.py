@@ -2509,14 +2509,24 @@ PUBLIC_REFERENCE_CANDIDATES = (
 #: than only in the reader's head.
 #:
 #: lane/saved-model-reference-gaps (2026-09-16) emptied this list of the four
-#: entries that were waiting only on a recording. `dbscan`, `agglomerative`,
-#: `spectral` and `spectral-precomputed` are declared inference lanes now,
-#: recorded under bench/results/classical_host/. What is left is the one entry
-#: that is NOT waiting on a box: KMeans has no `save`, so there is no file for
-#: a recording to be about.
+#: entries it took a GPU box for: `dbscan`, `agglomerative`, `spectral` and
+#: `spectral-precomputed` are declared inference lanes now, recorded at
+#: bench/results/classical_host/2026-09-16-nvidia-predict. That lane also
+#: found WHY none of them had a recording: `classical_host_gate.py record`
+#: had been raising AttributeError on main since `--lane-rule-only` was added,
+#: ahead of every other refusal, so the tool that makes a recording could not
+#: start. `kmeans` is left, and lane/kmeans-save gave it the `save` it was
+#: missing, so it is now waiting on the same one thing the other four were.
 SAVED_MODEL_INFERENCE_OWED = {
-    "kmeans": "KMeans.predict shipped with lane/kmeans-predict; the class has no `save`, so the "
-              "saved-model route needs a serialization format before a recording can be made.",
+    "kmeans": "KMeans.predict and KMeans.transform shipped with lane/kmeans-predict, and "
+              "lane/kmeans-save (2026-09-16) gave the class `save` and `load`: "
+              "mojolearn-kmeans-1 is in _classical_host._FORMATS and host_model returns a "
+              "HostKMeans on _mojolearn_core_host. What is left is the GPU recording under "
+              "bench/results/classical_host/, as it was for dbscan, agglomerative and "
+              "spectral until lane/saved-model-reference-gaps took theirs. The one format "
+              "carries every k-means lane (the metric and the start are members of the file, "
+              "not tags of their own), so the kmeans, kmeans-random, kmeans-array, "
+              "kmeans-weighted, kmeans-sqrt and kmeans-classic-pp lanes all load through it.",
 }
 
 

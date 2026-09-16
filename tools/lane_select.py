@@ -158,10 +158,11 @@ def _by_path(fn):
 def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
-    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED
+    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED
     for cache in _CACHES:
         cache.clear()
     _GIT_SHOW.clear()
+    _TRACKED = None
     _ENUMERATORS = None
     _LANE_SOURCES = None
     _SOURCE_HASHED = None
@@ -814,6 +815,337 @@ def docstring_only(ref, path):
     return a is not None and b is not None and a == b
 
 
+_TRACKED = None
+
+
+def tracked_files():
+    """Every tracked path, once."""
+    global _TRACKED
+    if _TRACKED is None:
+        try:
+            res = subprocess.run(["git", "-C", ROOT, "ls-files"],
+                                 capture_output=True, text=True, check=True)
+            _TRACKED = set(res.stdout.split("\n")) - {""}
+        except subprocess.CalledProcessError:
+            _TRACKED = set()
+    return _TRACKED
+
+
+def _reaching_corpus():
+    """Every file some lane already reaches, plus the harness and the manifest.
+
+    THIS IS THE WHOLE POINT OF THE NEXT FUNCTION. For a lane to reach a file,
+    something IN THAT LANE'S CLOSURE has to name it, directly or through a
+    chain. So the only files whose text can extend a lane's reach are the ones
+    the map already contains. `pixi.toml` naming `umap/checks` does not put a
+    check into any lane, and neither does a build task, a CI workflow or a
+    contribution gate: none of them is in any lane's closure."""
+    return sorted(set(reverse_map()) | {HARNESS, MANIFEST})
+
+
+@_by_path
+def _searchable(rel):
+    """One corpus file with its DOCSTRINGS AND COMMENTS removed, because a
+    path written in prose is not a reference to it.
+
+    Measured 2026-09-16: `umap/` appears in `bindings/_mojolearn_metrics.mojo`
+    ("recorded in umap/README.md"), in a 1,600-line ROUTING docstring in
+    `checks/kernel_matrix.mojo`, and in a comment in `_backend.py`. All three
+    are sentences. Counting them made three new files under `umap/checks/`
+    look reachable and sent a diff that changed no product code to all 212
+    lanes.
+
+    Python goes through the same AST dump the docstring rule uses, so every
+    string that is NOT a docstring survives and a path held in a constant
+    still counts. Mojo has no parser here, so a triple-quoted block is dropped
+    only when it OPENS a line, which is the docstring shape; a triple-quoted
+    string on an assignment is left alone, because stripping too much here
+    would call a reachable file unreachable, and that is the direction that
+    costs a defect."""
+    try:
+        text = _read(rel)
+    except OSError:
+        return ""
+    if rel.endswith(".py"):
+        return code_dump(text) or text
+    if rel.endswith(".mojo"):
+        out, in_doc = [], False
+        for line in text.splitlines():
+            stripped = line.lstrip()
+            if in_doc:
+                if '"""' in line:
+                    in_doc = False
+                continue
+            if stripped.startswith('"""'):
+                if not (stripped.rstrip().endswith('"""') and len(stripped.rstrip()) > 5):
+                    in_doc = True
+                continue
+            out.append(line.split("#", 1)[0])
+        return "\n".join(out)
+    return text
+
+
+def _named_by_the_corpus(token, skip=(), whole=False):
+    """The files a lane reaches that name `token` in CODE, as PATHS, never a
+    count: a grep that prints a number cannot be told from one that failed.
+
+    `whole` is for a DIRECTORY token, where a bare substring search is the
+    wrong question. `umap/` occurs in every reference to every file under
+    `umap/`, so searching for it asks "does anything use this tree", which is
+    always yes. What matters is whether anything names the DIRECTORY ITSELF,
+    which is the shape a glob or a directory walk takes: `umap/` followed by a
+    quote, a star or a bracket rather than by another path component."""
+    pattern = re.compile(re.escape(token) + (r"(?![A-Za-z0-9_.])" if whole else ""))
+    out = []
+    for rel in _reaching_corpus():
+        if rel in skip or _is_inert(rel) or rel in SELECTION_MACHINERY:
+            continue
+        if pattern.search(_searchable(rel)):
+            out.append(rel)
+    return out
+
+
+def unreachable(path):
+    """Why NOTHING can reach `path`, or None when something might.
+
+    Two halves, and both are needed. The map alone is not proof, because the
+    map is a model and an unattributable path falls back precisely because a
+    model can be incomplete. The second half closes that: it searches the files
+    the map DOES contain for this path, for its stem, and for EVERY ANCESTOR
+    DIRECTORY in both path and dotted form. A fixture read by a glob is not
+    named by its own name, but the directory the glob walks is, and that
+    directory would have to be named by something a lane reaches.
+
+    Refused for anything in the Python package or under `bindings/`, which are
+    resolved by name at load time, and for the harness, the manifest, the
+    registries and the selection machinery, each of which has its own rule.
+
+    There is no need to exclude the rest of the same change: the corpus is the
+    files a lane ALREADY reaches, so two new files cannot make each other
+    reachable, and a MODIFIED file that a lane does reach must keep its vote.
+    An earlier spelling passed the whole changed list as a skip set, which
+    would have hidden exactly the case that matters: a new source added
+    together with the import that pulls it in."""
+    if path in (HARNESS, MANIFEST) or path in SELECTION_MACHINERY or path in enumerator_files():
+        return None
+    if path.startswith(PKG + os.sep) or path.startswith("bindings" + os.sep):
+        return None
+    if path in reverse_map():
+        return None
+    stem = os.path.basename(path)
+    tokens = [(path, False), (stem, False)]
+    if "." in stem:
+        tokens.append((stem.rsplit(".", 1)[0], False))
+    parts = path.split(os.sep)[:-1]
+    for k in range(len(parts)):
+        d = os.sep.join(parts[:k + 1])
+        tokens.append((d + os.sep, True))
+        if k:
+            # The DOTTED form only from the second level down. A one-word
+            # top-level directory is not a path, it is a word: `umap` matches
+            # `from . import umap`, the package module of the same name, and a
+            # `Constant(value='umap')` in a family table. `umap.checks` is a
+            # module path and means what it says.
+            tokens.append((d.replace(os.sep, "."), True))
+    tokens = [(t, w) for t, w in dict.fromkeys(tokens) if len(t) >= 4]
+    if (path, False) not in tokens:
+        return None                      # too short a path to search for honestly
+    for token, whole in tokens:
+        hits = _named_by_the_corpus(token, skip={path}, whole=whole)
+        if hits:
+            return None
+    return ("nothing reaches it: no lane's derived source set contains this path, and no file "
+            "that any lane DOES reach names it, its stem or any directory above it")
+
+
+def _stmt_key(node):
+    """A statement's IDENTITY, so two revisions can be aligned without using
+    line numbers. An assignment is keyed by the name it binds, so a registry
+    table that GREW is the same statement rather than a different one."""
+    if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+            and isinstance(node.targets[0], ast.Name):
+        return ("assign", node.targets[0].id)
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return ("def", node.name)
+    return ("stmt", ast.dump(node))
+
+
+def _container_delta(old, new):
+    """The elements ADDED to, and CHANGED in, a container literal, or None when
+    the change is not of that shape.
+
+    Every old element must still be there, IN ORDER. A removal, a reorder or a
+    replaced key is not an addition and gets nothing from this."""
+    if type(old) is not type(new):
+        return None
+    if isinstance(old, ast.Dict):
+        okeys = [ast.dump(k) for k in old.keys]
+        nkeys = [ast.dump(k) for k in new.keys]
+        kept = [k for k in nkeys if k in okeys]
+        if kept != okeys or len(set(okeys)) != len(okeys):
+            return None
+        oval = dict(zip(okeys, old.values))
+        added, changed = [], []
+        for key, value in zip(nkeys, new.values):
+            if key not in oval:
+                added.append((key, value))
+            elif ast.dump(oval[key]) != ast.dump(value):
+                changed.append((key, value))
+        return added, changed
+    if isinstance(old, (ast.Tuple, ast.List, ast.Set)):
+        odumps = [ast.dump(e) for e in old.elts]
+        ndumps = [ast.dump(e) for e in new.elts]
+        kept = [d for d in ndumps if d in odumps]
+        if kept != odumps:
+            return None
+        return [(None, e) for e, d in zip(new.elts, ndumps) if d not in odumps], []
+    return None
+
+
+def _admissible_addition(node, old_keys, corpus):
+    """May this brand-new top-level statement be admitted.
+
+    An added statement at module level can mutate a registry, shadow a name or
+    run a decorator, so only three shapes are allowed: an import of a module
+    some lane ALREADY reaches, so nothing new is pulled into the process; an
+    undecorated def with a new name; and an undecorated class with a new name
+    whose body is only a docstring, defs and assignments of names. A class body
+    executes when it is defined, which is why its contents are checked rather
+    than assumed."""
+    if isinstance(node, ast.ImportFrom):
+        if not node.module:
+            return False
+        cand = os.path.join(PKG, node.module.split(".")[0] + ".py")
+        return cand in corpus
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return not node.decorator_list and ("def", node.name) not in old_keys
+    if isinstance(node, ast.ClassDef):
+        if node.decorator_list or ("def", node.name) in old_keys:
+            return False
+        for item in node.body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Pass)):
+                continue
+            if isinstance(item, ast.Assign) and all(isinstance(t, ast.Name) for t in item.targets):
+                continue
+            return False
+        return True
+    return False
+
+
+def _lanes_named_by(nodes, sources, rev):
+    """The lanes the added or changed material can reach: the lanes that reach
+    the file defining each identifier it names, plus any lane it names outright,
+    plus any lane whose name occurs inside a string it carries.
+
+    Returns None when a name cannot be placed at all, because an addition this
+    cannot attribute is an addition this must not narrow."""
+    # A NAME DEFINED IN A REGISTRY SAYS NOTHING ABOUT ONE LANE. `_HostBound` is
+    # defined in `_classical_host.py` itself, and that file is reached by every
+    # lane by construction, so resolving the new class's base through it
+    # attributed the addition to all 212. Registries are dropped from this
+    # resolution for exactly the reason their edges are dropped from the map.
+    sinks = enumerator_files() | {MANIFEST}
+    symbols = {name: files - sinks for name, files in
+               _python_symbols(_python_files()).items()}
+    every = set(sources)
+    lanes, unknown = set(), []
+    for node in nodes:
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Name) or isinstance(sub, ast.Attribute):
+                name = getattr(sub, "id", None) or getattr(sub, "attr", None)
+                if name in every:
+                    lanes.add(name)
+                    continue
+                files = symbols.get(name)
+                if files:
+                    for rel in files:
+                        lanes |= rev.get(rel, set())
+                elif name and not name.startswith("__"):
+                    unknown.append(name)
+            elif isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                text = sub.value
+                if text in every:
+                    lanes.add(text)
+                    continue
+                hit = {n for n in every if n in text}
+                if hit:
+                    lanes |= hit
+                elif os.path.isfile(os.path.join(ROOT, text)):
+                    lanes |= rev.get(text, set())
+    return sorted(lanes) if lanes else None
+
+
+def registry_lanes(ref, path, sources=None):
+    """The lanes an ADDITIVE change to a whole-surface registry can reach, or
+    None for every lane.
+
+    `host_surface.py` and `_classical_host.py` name the entire binding surface,
+    so the map drops their per-lane edges and any change to them selects
+    everything. That is right for an arbitrary edit and wrong for an addition
+    that names one estimator: lane/kmeans-save added an import, a `HostKMeans`
+    class and one `_FORMATS` entry, and got 212 of 212.
+
+    ADDITIVE IS VERIFIED. Every old top-level statement must still be present
+    and in order, either byte for byte or as the same assignment whose
+    container literal only GREW or whose value changed under an unchanged key.
+    Everything else, including a removal, a reorder, an edited function body or
+    a new bare statement, returns None."""
+    if sources is None:
+        sources, _ = lane_sources()
+    rev = reverse_map(sources)
+    old_text = _git_show(ref, path)
+    if old_text is None:
+        return None
+    try:
+        old_tree = _strip_docstrings(ast.parse(old_text))
+        new_tree = _strip_docstrings(ast.parse(_read(path)))
+    except (OSError, SyntaxError):
+        return None
+    old_keys = [_stmt_key(n) for n in old_tree.body]
+    new_keys = [_stmt_key(n) for n in new_tree.body]
+    if len(set(old_keys)) != len(old_keys) or len(set(new_keys)) != len(new_keys):
+        return None                         # a repeated key cannot be aligned honestly
+    kept = [k for k in new_keys if k in set(old_keys)]
+    if kept != old_keys:
+        return None                         # something was removed or reordered
+    old_by_key = dict(zip(old_keys, old_tree.body))
+    touched = []
+    for key, node in zip(new_keys, new_tree.body):
+        if key not in old_by_key:
+            if not _admissible_addition(node, set(old_keys), set(rev)):
+                return None
+            touched.append(node)
+            continue
+        before = old_by_key[key]
+        if ast.dump(before) == ast.dump(node):
+            continue
+        if key[0] != "assign":
+            return None                     # an edited body reaches anything
+        delta = _container_delta(before.value, node.value)
+        if delta is None:
+            return None
+        added, changed = delta
+        for element_key, value in added + changed:
+            touched.append(value)
+            if element_key is not None:
+                # THE KEY IS ATTRIBUTION TOO. A registry keyed by lane name
+                # says which lane an entry is about more directly than its
+                # value does.
+                touched.append(_key_node(before, node, element_key))
+    return _lanes_named_by([t for t in touched if t is not None], sources, rev)
+
+
+def _key_node(before, after, dumped_key):
+    """The key expression matching `dumped_key`, so the key of a changed entry
+    is attributed as well as its value. A table keyed by lane name is the
+    common case and the key is the whole of the attribution."""
+    for node in (after.value, before.value):
+        for k in getattr(node, "keys", []) or []:
+            if ast.dump(k) == dumped_key:
+                return k
+    return None
+
+
 def _harness_segments(text):
     """`identity_break.py` as (lane -> its dumped definition) and the dumped
     list of every OTHER top-level statement.
@@ -968,17 +1300,24 @@ def select(paths, ref=None, sources=None):
                 lanes |= set(touched)
                 reasons[path] = f"harness diff touches only these lane bodies: {','.join(touched) or 'none'}"
             continue
+        why_unreachable = unreachable(path)
+        if why_unreachable:
+            inert.append(path)
+            reasons[path] = why_unreachable
+            continue
         if path in SELECTION_MACHINERY:
             inert.append(path)
             reasons[path] = ("the selection machinery itself: it decides which lanes run and "
                              "cannot move a lane's bits (tools/test_lane_select.py covers it)")
             continue
-        if path in GLOBAL_PATHS:
-            fallback = True
-            unattributed.append(path)
-            reasons[path] = "declares the CPU surface itself: every lane"
-            continue
-        if path in enumerator_files():
+        if path in GLOBAL_PATHS or path in enumerator_files():
+            added = registry_lanes(ref, path, sources) if ref else None
+            if added is not None:
+                lanes |= set(added)
+                reasons[path] = (f"a whole-surface registry, but the diff only ADDS to it: every "
+                                 f"existing statement is present and in order, and what was added "
+                                 f"names {len(added)} lane(s)")
+                continue
             fallback = True
             unattributed.append(path)
             reasons[path] = ("a registry of the whole binding surface, so the map drops its "

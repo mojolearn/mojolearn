@@ -100,6 +100,9 @@ def check(shape: ByteConfig, devices: List[Int], logical: Int) raises:
             ctx.synchronize()
             same(download_f32(ctx,bw.d_x,m),download_f32(pool.contexts[pool.layers[i].owner],pool.layers[i].backward.d_x,m),"layer backward")
             _pack_block(ctx,reference.buffers,bw,i)
+            # `_pack_block` no longer waits for itself; this check reads
+            # the device below, so it waits here instead. Same behavior.
+            ctx.synchronize()
             reference.forward.insert(i,st^)
             reference.backward.insert(i,bw^)
         same(download_f32(ctx,reference.backward[0].d_x,m),download_f32(ctx,dx_pool,m),"backward transfer")

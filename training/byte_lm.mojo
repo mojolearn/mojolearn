@@ -47,6 +47,7 @@ from training.byte_lm_config import ByteConfig
 from training.checks.train_loop import (
     _zeros, _zeros_i32, _upload, _ones, _copy_into, download_f32,
 )
+from training.byte_lm_block_copy import byte_block_copy
 from gemm.checks.gemm_identical import (
     ANY_SABOTAGE as GEMM_SABOTAGE, identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -532,36 +533,50 @@ def _block_weights(ctx: DeviceContext, params: List[Float32], block: Int, config
         _param_slice(params, base + 8, config))
 
 
+def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
+    """The ten flat-buffer offsets that bound one block's nine tensors."""
+    var offs = List[Int]()
+    for j in range(10):
+        offs.append(o[base + j])
+    return offs^
+
+
 def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWeights, block: Int) raises:
+    """Flat parameters -> the block's nine tensors, in ONE launch.
+
+    Was nine `_copy_into` launches and one `ctx.synchronize()`. The nine
+    became one through `byte_block_copy` (codex/metal-block-copy-fusion,
+    commit 1895b0287, which carries its own Metal receipt); the wait
+    went because it enforced nothing. Every caller queues further work on
+    the SAME in-order context and reads no host memory in between, and each
+    one already waits after its loop over the blocks (`byte_lm.mojo`
+    forward and gradient, `byte_lm_logits.mojo`). A wait that only delays
+    the host is a Metal round trip for nothing.
+    """
     var base = 1 + 9 * block
     var o = tb.offsets.copy()
-    _copy_into(ctx, w.norm1_w, tb.param, 0, o[base], o[base + 1] - o[base])
-    _copy_into(ctx, w.w_q, tb.param, 0, o[base + 1], o[base + 2] - o[base + 1])
-    _copy_into(ctx, w.w_k, tb.param, 0, o[base + 2], o[base + 3] - o[base + 2])
-    _copy_into(ctx, w.w_v, tb.param, 0, o[base + 3], o[base + 4] - o[base + 3])
-    _copy_into(ctx, w.w_o, tb.param, 0, o[base + 4], o[base + 5] - o[base + 4])
-    _copy_into(ctx, w.norm2_w, tb.param, 0, o[base + 5], o[base + 6] - o[base + 5])
-    _copy_into(ctx, w.w_gate, tb.param, 0, o[base + 6], o[base + 7] - o[base + 6])
-    _copy_into(ctx, w.w_up, tb.param, 0, o[base + 7], o[base + 8] - o[base + 7])
-    _copy_into(ctx, w.w_down, tb.param, 0, o[base + 8], o[base + 9] - o[base + 8])
-    step_count_sync()
-    ctx.synchronize()
+    step_count_launch()
+    byte_block_copy[False](ctx, tb.param,
+        w.norm1_w, w.w_q, w.w_k, w.w_v, w.w_o,
+        w.norm2_w, w.w_gate, w.w_up, w.w_down,
+        _block_offsets(o, base))
 
 
 def _pack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut bst: LlamaBackwardStages, block: Int) raises:
+    """The block's nine gradients -> the flat `grad`, in ONE launch.
+
+    The mirror of `_unpack_block`, same order, same reasoning about the
+    removed wait. `byte_lm_layer_pool_check.mojo` was the one caller that
+    read the device right after without a wait of its own, and it now
+    carries that wait at its own call site.
+    """
     var base = 1 + 9 * block
     var o = tb.offsets.copy()
-    _copy_into(ctx, tb.grad, bst.dw_norm1, o[base], 0, o[base + 1] - o[base])
-    _copy_into(ctx, tb.grad, bst.dw_q, o[base + 1], 0, o[base + 2] - o[base + 1])
-    _copy_into(ctx, tb.grad, bst.dw_k, o[base + 2], 0, o[base + 3] - o[base + 2])
-    _copy_into(ctx, tb.grad, bst.dw_v, o[base + 3], 0, o[base + 4] - o[base + 3])
-    _copy_into(ctx, tb.grad, bst.dw_o, o[base + 4], 0, o[base + 5] - o[base + 4])
-    _copy_into(ctx, tb.grad, bst.dw_norm2, o[base + 5], 0, o[base + 6] - o[base + 5])
-    _copy_into(ctx, tb.grad, bst.dw_gate, o[base + 6], 0, o[base + 7] - o[base + 6])
-    _copy_into(ctx, tb.grad, bst.dw_up, o[base + 7], 0, o[base + 8] - o[base + 7])
-    _copy_into(ctx, tb.grad, bst.dw_down, o[base + 8], 0, o[base + 9] - o[base + 8])
-    step_count_sync()
-    ctx.synchronize()
+    step_count_launch()
+    byte_block_copy[True](ctx, tb.grad,
+        bst.dw_norm1, bst.dw_q, bst.dw_k, bst.dw_v, bst.dw_o,
+        bst.dw_norm2, bst.dw_gate, bst.dw_up, bst.dw_down,
+        _block_offsets(o, base))
 
 
 struct ByteTrainer(Movable):
@@ -877,16 +892,17 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
         _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
     _copy_into(ctx, tr.buffers.emb_w, tr.buffers.param, 0, 0, config.vocab_size * config.d_model)
     _copy_into(ctx, tr.buffers.lm_w, tr.buffers.param, 0, tr.buffers.offsets[config.n_tensors() - 1], config.vocab_size * config.d_model)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait: the embedding forward below is the next thing queued on this
+    # same in-order context and reads no host memory.
+    # A host round trip costs about a dozen kernel launches on Metal.
     # Device-to-device: every parameter byte copied once (blocks, emb, head).
     timing_tick(ctx, ton, tk, "step.unpack_weights")
     timing_bytes(ton, "step.unpack_weights_bytes", config.n_total() * 4)
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
     var ce = CeConfig.causal_lm(config.vocab_size)
     identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait: the block forward loop below queues onto this same in-order context.
+    # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.embedding_forward")
     for layer in range(config.n_layers):
         # Move the current stages out while borrowing the preceding residual.
@@ -916,8 +932,8 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     var pg = StepPhaseClock(ctx)
     identical_gemm_into(ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
         tr.buffers.lm_w, tr.buffers.head_ws, M, config.vocab_size, config.d_model, OP_NT)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait: the cross entropy forward below queues onto this same in-order context.
+    # A host round trip costs about a dozen kernel launches on Metal.
     pg.tick(ctx, "gemm.head_fwd")
     timing_tick(ctx, ton, tk, "step.head_forward")
     # `identical_ce_forward_into` prints `step.ce_refuse_download` (its
@@ -930,8 +946,8 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
         tr.buffers.ce_logp_sum, tr.buffers.ce_smooth, tr.buffers.ce_row,
         tr.buffers.ce_total, tr.buffers.ce_loss, tr.buffers.logits,
         tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait: `download_f32` below waits for the loss itself.
+    # A host round trip costs about a dozen kernel launches on Metal.
     if ton:
         tk = Int(perf_counter_ns())
     _maybe_fault(ctx, tr.buffers.ce_loss, "loss_nonfinite", 0, _FAULT_NAN)
@@ -966,8 +982,8 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     identical_ce_backward_into(ctx, tr.buffers.ce_weights, tr.buffers.ce_dlogits,
         tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logp,
         tr.buffers.targets, M, M, ce)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait: the two head backward GEMMs below queue onto this same in-order context.
+    # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.ce_backward")
     # DEVIATION 2630: the head GEMMs' call-kind lines (core/step_phase.mojo),
     # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1. Its dA tick
@@ -982,8 +998,8 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     timing_tick(ctx, ton, tk, "step.head_backward_da")
     identical_gemm_backward_b_into(ctx, tr.buffers.dw_lm, tr.buffers.ce_dlogits,
         tr.forward[config.n_layers - 1].residual2, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait: the block backward loop below queues onto this same in-order context.
+    # A host round trip costs about a dozen kernel launches on Metal.
     pg.tick(ctx, "gemm.head_dB")
     timing_tick(ctx, ton, tk, "step.head_backward_db")
     # Keep inter-layer cotangents on device, as the reference tensor graph
@@ -1019,15 +1035,15 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
         tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
         tr.buffers.emb_perm, M, emb)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait: the pack loop below queues onto this same in-order context.
+    # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.embedding_backward")
     for layer in range(config.n_layers):
         _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait: the gradient scan in `byte_update_device` waits for its own answer.
+    # A host round trip costs about a dozen kernel launches on Metal.
     # Device-to-device: every gradient byte copied once into `grad`.
     timing_tick(ctx, ton, tk, "step.pack_grads")
     timing_bytes(ton, "step.pack_grads_bytes", config.n_total() * 4)
@@ -1073,8 +1089,8 @@ def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
         _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, 0, n)
         _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
         _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
-        step_count_sync()
-        ctx.synchronize()
+        # No wait: `identical_optimizer_step` below queues onto this same in-order context.
+        # A host round trip costs about a dozen kernel launches on Metal.
         tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
         tr.shadow_step = tr.completed_steps
         tr.shadow_valid = True

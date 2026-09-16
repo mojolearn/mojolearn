@@ -216,6 +216,7 @@ clauses. See the lane file; `core/` is another lane's.
 """
 
 from std.atomic import Atomic, Ordering
+from core.device_mutex import claim_device_mutex
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from neighbors.impl.topk.logical_warp32 import queue_any, LOGICAL32_ON64
 from std.math import sqrt
@@ -613,19 +614,11 @@ def fused_l2_knn_kernel[
                 while processed < gdx - 1:  # `:249`
                     if tid == 0:
                         # `while (atomicCAS(&mutexes[...], -2, -1) != -2);`
-                        # `:251-253` + the `__threadfence()` at `:255`.
-                        while True:
-                            if Atomic.load[ordering = Ordering.ACQUIRE](
-                                mtx
-                            ) != Int32(-2):
-                                continue
-                            var expected = Int32(-2)
-                            if Atomic.compare_exchange[
-                                success_ordering = Ordering.RELAXED,
-                                failure_ordering = Ordering.RELAXED,
-                                weak=True,
-                            ](mtx, expected, Int32(-1)):
-                                break
+                        # `:251-253` + the `__threadfence()` at `:255`, as the
+                        # shared claim (core/device_mutex.mojo): the fence IS
+                        # their threadfence, in the one spelling every column
+                        # compiles.
+                        claim_device_mutex(mtx, Int32(-2), Int32(-1))
                     barrier()  # `__syncthreads()` `:256`
 
                     # `:258-276`: pull the producer's numOfNN pairs for
@@ -719,19 +712,11 @@ def fused_l2_knn_kernel[
                         heap1.reduce()
                 if tid == 0:
                     # `while (atomicCAS(&mutexes[...], 0, 1) != 0);`
-                    # `:314-316` + `__threadfence()` `:318`.
-                    while True:
-                        if Atomic.load[ordering = Ordering.ACQUIRE](
-                            mtx
-                        ) != Int32(0):
-                            continue
-                        var expected = Int32(0)
-                        if Atomic.compare_exchange[
-                            success_ordering = Ordering.RELAXED,
-                            failure_ordering = Ordering.RELAXED,
-                            weak=True,
-                        ](mtx, expected, Int32(1)):
-                            break
+                    # `:314-316` + `__threadfence()` `:318`, as the shared
+                    # claim (core/device_mutex.mojo). Multiple producers make
+                    # this the site the ordering argument applies to most
+                    # directly.
+                    claim_device_mutex(mtx, Int32(0), Int32(1))
                 barrier()  # `__syncthreads()` `:319`
                 # `:321-331`: write this block's pairs for its rows into
                 # the output buffer, which doubles as the exchange buffer

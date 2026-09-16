@@ -68,6 +68,7 @@ probe = "mojo run -I . probe_main.mojo"
 # person makes. Run it at Freeze, step 1 of docs/RELEASE_CHECKLIST.md.
 check-docs = "python3 tools/check_docs_reference_reality.py"
 check-docs-facts = "python3 tools/docs_facts.py --check"
+check-source-hygiene = "python3 tools/source_hygiene_check.py"
 write-docs-facts = "python3 tools/docs_facts.py --write"
 
 # ---------------------------------------------------------------------------
