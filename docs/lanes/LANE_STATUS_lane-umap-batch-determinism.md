@@ -7,10 +7,19 @@ so changing request batching can change a row's embedding, and asked whether
 that is a determinism defect in a shipped inference path.
 
 **It is true, and it was already true and already written down.** What this
-lane adds is not the fact but its SHAPE: the four couplings the repo declares
-are not equal, two of them behave nothing like the declaration implies, and
-the effect is structural rather than float chaos. That last contrast is the
-part that decides how seriously to take it.
+lane adds is not the fact but its SHAPE, and the shape changes the verdict.
+
+* The four couplings the repo declares as a set differ by orders of
+  magnitude. The one listed first, the sigma floor, is effectively inert.
+* The one the declaration says its own lanes never reach, the epoch count,
+  is the worst of the four: adding ONE row to a request of ten thousand
+  moves another row by `1.36` on a map whose clusters sit about 11 apart,
+  while adding one row at 9,999 moves no bit at all. That is a cliff, and
+  request sizes drift across a fixed threshold without anyone deciding to
+  change anything.
+* The effect is structural, not float chaos. 8,192 ULPs on a row's own
+  feature moved no output bit; its company moved it by `1.97`.
+* At runtime nothing refuses and nothing warns.
 
 ## The measurement
 
