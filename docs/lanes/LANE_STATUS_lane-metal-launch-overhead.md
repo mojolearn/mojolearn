@@ -272,6 +272,15 @@ no-op until a step has moved them apart. Only the multi-step
 this whole defect class, and anyone reading a green `byte-lm` cell as cover
 for a copy change is reading nothing.
 
+> **FIXED** (2026-09-16, lane/shrink-floors). `byte-lm` is back to TWO steps,
+> `LANE_REVISIONS` reads `steps-2-1`, and the floor is on the lane as
+> `@floor(steps=(2, ...))` with `tools/fixture_floors.py` refusing a cut past
+> it in the push gate. The paragraph above is the first place this blindness
+> was seen, and it was seen with a REAL sabotage build of
+> `training/byte_lm.mojo` rather than a data perturbation, which is the
+> strongest evidence there is that the one-step cell could not fail. See
+> `docs/lanes/LANE_STATUS_lane-shrink-floors.md`.
+
 ### 4.2 The wired path against the original
 
 `--diff` of the BEFORE arm against the base cells of the Codex-wired

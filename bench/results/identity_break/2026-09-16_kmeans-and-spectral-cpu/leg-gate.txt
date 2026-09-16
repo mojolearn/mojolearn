@@ -1,0 +1,284 @@
+started=2026-09-16T18:16:34Z
+commit=8511c8c518088829c86cd052a1dee0125cd1939e
+device=NVIDIA A100-SXM4-80GB, 580.126.16, 8.0 
+cpu=model name	: AMD EPYC 7742 64-Core Processor x86_64 
+gpu_archs=sm_80
+vendor_label=nvidia-nvidia-a100-sxm4-80gb-sm_80
+cpu_label=cpu-amd-epyc-7742-64-core-processor
+8bae9bec22c3f3cb5af3bb60ae386c619397a8d319a935a64f358753a91b9ce3  python/mojolearn/identical/_mojolearn.so
+vendor=cuda
+record_exit=0
+record kmeans-weighted odd KMeans identity_hash 86bea24bd326b655 predict 8962069a64da51d7e1b16d779daca407f40e31b6fa24943e4db0115b659f7989 (vendor cuda)
+record kmeans-weighted negative KMeans identity_hash 9c9857b78115542b predict 4417df6c99b99a006165a2bb53ee3996ac7c6c55123fcb294729ab6c4162eb22 (vendor cuda)
+record kmeans-sqrt base KMeans identity_hash 58a73ee6f884f892 predict efe666197a80ed81a1a87a937ee51872bd31cab056b05e64d293910d36f881d6 (vendor cuda)
+record kmeans-sqrt ties KMeans identity_hash 11403f38e806a8a7 predict 4abcf52591638af1dc332d0fef50c8c149d5a3fcc64f526db72bc75fedf01626 (vendor cuda)
+record kmeans-sqrt hashed KMeans identity_hash a06e759c2854f5c9 predict 3000eb098968a9f6975eccc272068c410721dc6723c3f27f47bd9d2c8e9f5702 (vendor cuda)
+record kmeans-sqrt wide KMeans identity_hash 37c2fbaaa28d56dc predict 0da9efb06d1cb7c59df53dcbb8f3a8e4787383341211fbc538f710c565fcd00b (vendor cuda)
+record kmeans-sqrt denormal KMeans identity_hash 5613aee8380a3878 predict 9342a2ad120d02567f655d15d05fa6814ff8e5984f427630f26a53bc5ebe8830 (vendor cuda)
+record kmeans-sqrt denormal_ftz KMeans identity_hash 5613aee8380a3878 predict 9342a2ad120d02567f655d15d05fa6814ff8e5984f427630f26a53bc5ebe8830 (vendor cuda)
+record kmeans-sqrt dupes KMeans identity_hash b92ddb041800ab7d predict ec89ed6b9ad64e3181e843cdf5f5bc3cdd77c7128c7956c19608ab22262228fb (vendor cuda)
+record kmeans-sqrt odd KMeans identity_hash d57783b77ce4e554 predict aef48b03ab0a3e490edc8c1782067733ee040230473095dedb4a7b7411a4f65b (vendor cuda)
+record kmeans-sqrt negative KMeans identity_hash 8184b15e6474cb1c predict 30380f6ecb8af029104357e3d1e26c6e59e69ed4b84fc6dc8ab4a440425fc4c3 (vendor cuda)
+record kmeans-classic-pp base KMeans identity_hash e44226a81eebb7a8 predict 2bd43baa4649eaf8b3e63c0e2cdcbdf22793a82dd42aa26290352d6cf050ab9b (vendor cuda)
+record kmeans-classic-pp ties KMeans identity_hash 83ac9df1fe7b737d predict 709b0913b5961e84d6f744ff8a0ec451c0bcf2e2544ccc2bcb5ab9849de7e321 (vendor cuda)
+record kmeans-classic-pp hashed KMeans identity_hash 8987a9c854625d1b predict 3a781ee68db4f364429a01bdd2ce2200e337e6799fad9292e6a4ca4bffeb05c7 (vendor cuda)
+record kmeans-classic-pp wide KMeans identity_hash 364ff36014fc9d74 predict 1163c397807894d674856ba2a2d49dea69deb6a26c72cbf6c52c096f9552322b (vendor cuda)
+record kmeans-classic-pp denormal KMeans identity_hash f86f206425b73e29 predict 3d690e44ba5a82ab674ae2e6b235af3f51170058112c6c792b50fdb268a768d7 (vendor cuda)
+record kmeans-classic-pp denormal_ftz KMeans identity_hash f86f206425b73e29 predict 3d690e44ba5a82ab674ae2e6b235af3f51170058112c6c792b50fdb268a768d7 (vendor cuda)
+record kmeans-classic-pp dupes KMeans identity_hash a84b8a2e9fe29bb3 predict 78d5f80c81f8f3b073d75d7a3c9d6f9ae533bcedc0cf2f707941fffaa93701a1 (vendor cuda)
+record kmeans-classic-pp odd KMeans identity_hash 3b0d31ba504ffc5b predict e9d9234481560e6c45dd74794475810ee1c5efefd1848c97d0e8a8182da10c70 (vendor cuda)
+record kmeans-classic-pp negative KMeans identity_hash 2d1704444a719d70 predict 872f6f5801c24fa763882cb2a935ab359924d25d67e3d0f82cd7686bf232144c (vendor cuda)
+/root/host-kmeans-predict-sabotage:
+total 584
+-rwxr-xr-x 1 root root 594488 Sep 16 18:20 _mojolearn_core_host.so
+
+/root/host-sabotage:
+total 1360
+-rwxr-xr-x 1 root root 594488 Sep 16 18:19 _mojolearn_core_host.so
+-rwxr-xr-x 1 root root 794488 Sep 16 18:20 _mojolearn_metrics_host.so
+ce0281461a05ec732b554523f0c0d0e146be2c1bbe8ce103d444bb207a8dcfd6  python/mojolearn/host/_mojolearn_core_host.so
+ef116006a3e09306f793d5c8085a42021a1fce49762f19c6341d166ee4bcd219  /root/host-sabotage/_mojolearn_core_host.so
+sabotage_ready=1
+check_exit=0
+check kmeans-weighted dupes predict EQUAL gpu 3734f778bd4c2ab068489e7cbe6875155379ced3b06a923f4457280afcb5f866 host 3734f778bd4c2ab068489e7cbe6875155379ced3b06a923f4457280afcb5f866
+check kmeans-weighted dupes predict_training_rows EQUAL gpu a707fd1e9447eb348ff704afafb901de9d4a74e28d31a1c87842cb4e78293e28 host a707fd1e9447eb348ff704afafb901de9d4a74e28d31a1c87842cb4e78293e28
+check kmeans-weighted dupes transform EQUAL gpu 961eabf9b36f11d321710948b31caddc41691fe47640263afa125b41a74e8273 host 961eabf9b36f11d321710948b31caddc41691fe47640263afa125b41a74e8273
+check kmeans-weighted dupes identity_hash EQUAL gpu 79cda2869bbc642b host 79cda2869bbc642b
+check kmeans-weighted hashed labels EQUAL gpu 6e5c7d31daf142527193b7f6b40dd20a91e9aa47302fa5ea19accabbad4ffc21 host 6e5c7d31daf142527193b7f6b40dd20a91e9aa47302fa5ea19accabbad4ffc21
+check kmeans-weighted hashed predict EQUAL gpu 8ab5fb10e799d8f44cedfd5ef7be57ac4ff6575df7bc92fe82d4110e4ea7161b host 8ab5fb10e799d8f44cedfd5ef7be57ac4ff6575df7bc92fe82d4110e4ea7161b
+check kmeans-weighted hashed predict_training_rows EQUAL gpu 6e5c7d31daf142527193b7f6b40dd20a91e9aa47302fa5ea19accabbad4ffc21 host 6e5c7d31daf142527193b7f6b40dd20a91e9aa47302fa5ea19accabbad4ffc21
+check kmeans-weighted hashed transform EQUAL gpu 4a928d3958f6e9cbc7fd6dcd82f575bfe3c189315bf7d0006dcae46c78344027 host 4a928d3958f6e9cbc7fd6dcd82f575bfe3c189315bf7d0006dcae46c78344027
+check kmeans-weighted hashed identity_hash EQUAL gpu 3a661e5929f5295e host 3a661e5929f5295e
+check kmeans-weighted negative labels EQUAL gpu 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a host 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a
+check kmeans-weighted negative predict EQUAL gpu 4417df6c99b99a006165a2bb53ee3996ac7c6c55123fcb294729ab6c4162eb22 host 4417df6c99b99a006165a2bb53ee3996ac7c6c55123fcb294729ab6c4162eb22
+check kmeans-weighted negative predict_training_rows EQUAL gpu 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a host 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a
+check kmeans-weighted negative transform EQUAL gpu f673996558af5650aa35587e8d1c62ad0d5a6e05dd93afcdd03aa0e5cb40b773 host f673996558af5650aa35587e8d1c62ad0d5a6e05dd93afcdd03aa0e5cb40b773
+check kmeans-weighted negative identity_hash EQUAL gpu 9c9857b78115542b host 9c9857b78115542b
+check kmeans-weighted odd labels EQUAL gpu e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4 host e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4
+check kmeans-weighted odd predict EQUAL gpu 8962069a64da51d7e1b16d779daca407f40e31b6fa24943e4db0115b659f7989 host 8962069a64da51d7e1b16d779daca407f40e31b6fa24943e4db0115b659f7989
+check kmeans-weighted odd predict_training_rows EQUAL gpu e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4 host e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4
+check kmeans-weighted odd transform EQUAL gpu 67bf6bc3635d6545eb36fd4923228071fa1604483ae905aef0433057b6264a24 host 67bf6bc3635d6545eb36fd4923228071fa1604483ae905aef0433057b6264a24
+check kmeans-weighted odd identity_hash EQUAL gpu 86bea24bd326b655 host 86bea24bd326b655
+check kmeans-weighted ties labels EQUAL gpu 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08 host 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08
+check kmeans-weighted ties predict EQUAL gpu a7ebbb84b297b7cecaf50cfd1263558851094c7f2e337434c98a02e23baab956 host a7ebbb84b297b7cecaf50cfd1263558851094c7f2e337434c98a02e23baab956
+check kmeans-weighted ties predict_training_rows EQUAL gpu 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08 host 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08
+check kmeans-weighted ties transform EQUAL gpu 97304b6ce5092fb7867390a7d90700c0a0e12d3ce2b60bea9f2b6ae966e3a6e3 host 97304b6ce5092fb7867390a7d90700c0a0e12d3ce2b60bea9f2b6ae966e3a6e3
+check kmeans-weighted ties identity_hash EQUAL gpu f1a40d6c9595a677 host f1a40d6c9595a677
+check kmeans-weighted wide labels EQUAL gpu a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5 host a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5
+check kmeans-weighted wide predict EQUAL gpu 2c2c370cb9d157d10bb38093fc9195de3e6ef14cfda8a811e7ea3aac032dc16c host 2c2c370cb9d157d10bb38093fc9195de3e6ef14cfda8a811e7ea3aac032dc16c
+check kmeans-weighted wide predict_training_rows EQUAL gpu a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5 host a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5
+check kmeans-weighted wide transform EQUAL gpu 1a6c58df1162b03a98fa21edf3bd89fc60d318324860001e907ae2e86c80af43 host 1a6c58df1162b03a98fa21edf3bd89fc60d318324860001e907ae2e86c80af43
+check kmeans-weighted wide identity_hash EQUAL gpu e6cfd7471f95f25f host e6cfd7471f95f25f
+gate verdict IDENTICAL (54 fixtures, 0 GPU columns, exit 0)
+sabotage_every_fixture_exit=0
+sabotage_every_lane_exit=0
+check kmeans-weighted denormal predict EQUAL gpu 9730288d9cda51ad3a850cd97b9b679a10926b740d61cc00553d16d22ccd664f host 9730288d9cda51ad3a850cd97b9b679a10926b740d61cc00553d16d22ccd664f
+check kmeans-weighted denormal predict_training_rows EQUAL gpu cae707d9a9e72bdf942645a9ebf71456e8e8337323acd98ee5684dad3d2cde46 host cae707d9a9e72bdf942645a9ebf71456e8e8337323acd98ee5684dad3d2cde46
+check kmeans-weighted denormal transform DIFFER gpu f95bc45189804d2b87a1c311064e8aea8f5f7ddb9ea101a258c2963bade454f4 host 3c805d33e3e857961b27349fa81c57c5c328ac306864b13ac5c07ddb963dcfb4
+check kmeans-weighted denormal identity_hash DIFFER gpu 03780e8f5ba1bb21 host bffefa2e1534ecd2
+check kmeans-weighted denormal_ftz labels EQUAL gpu cae707d9a9e72bdf942645a9ebf71456e8e8337323acd98ee5684dad3d2cde46 host cae707d9a9e72bdf942645a9ebf71456e8e8337323acd98ee5684dad3d2cde46
+check kmeans-weighted denormal_ftz predict EQUAL gpu 9730288d9cda51ad3a850cd97b9b679a10926b740d61cc00553d16d22ccd664f host 9730288d9cda51ad3a850cd97b9b679a10926b740d61cc00553d16d22ccd664f
+check kmeans-weighted denormal_ftz predict_training_rows EQUAL gpu cae707d9a9e72bdf942645a9ebf71456e8e8337323acd98ee5684dad3d2cde46 host cae707d9a9e72bdf942645a9ebf71456e8e8337323acd98ee5684dad3d2cde46
+check kmeans-weighted denormal_ftz transform DIFFER gpu f95bc45189804d2b87a1c311064e8aea8f5f7ddb9ea101a258c2963bade454f4 host 3c805d33e3e857961b27349fa81c57c5c328ac306864b13ac5c07ddb963dcfb4
+check kmeans-weighted denormal_ftz identity_hash DIFFER gpu 03780e8f5ba1bb21 host bffefa2e1534ecd2
+check kmeans-weighted dupes labels EQUAL gpu a707fd1e9447eb348ff704afafb901de9d4a74e28d31a1c87842cb4e78293e28 host a707fd1e9447eb348ff704afafb901de9d4a74e28d31a1c87842cb4e78293e28
+check kmeans-weighted dupes predict EQUAL gpu 3734f778bd4c2ab068489e7cbe6875155379ced3b06a923f4457280afcb5f866 host 3734f778bd4c2ab068489e7cbe6875155379ced3b06a923f4457280afcb5f866
+check kmeans-weighted dupes predict_training_rows EQUAL gpu a707fd1e9447eb348ff704afafb901de9d4a74e28d31a1c87842cb4e78293e28 host a707fd1e9447eb348ff704afafb901de9d4a74e28d31a1c87842cb4e78293e28
+check kmeans-weighted dupes transform DIFFER gpu 961eabf9b36f11d321710948b31caddc41691fe47640263afa125b41a74e8273 host 0eb5be2025ec0c226db0c3effa50e93f0a953979661a01be37a5e5d99bc51fc6
+check kmeans-weighted dupes identity_hash DIFFER gpu 79cda2869bbc642b host de0d339630467663
+check kmeans-weighted hashed labels EQUAL gpu 6e5c7d31daf142527193b7f6b40dd20a91e9aa47302fa5ea19accabbad4ffc21 host 6e5c7d31daf142527193b7f6b40dd20a91e9aa47302fa5ea19accabbad4ffc21
+check kmeans-weighted hashed predict EQUAL gpu 8ab5fb10e799d8f44cedfd5ef7be57ac4ff6575df7bc92fe82d4110e4ea7161b host 8ab5fb10e799d8f44cedfd5ef7be57ac4ff6575df7bc92fe82d4110e4ea7161b
+check kmeans-weighted hashed predict_training_rows EQUAL gpu 6e5c7d31daf142527193b7f6b40dd20a91e9aa47302fa5ea19accabbad4ffc21 host 6e5c7d31daf142527193b7f6b40dd20a91e9aa47302fa5ea19accabbad4ffc21
+check kmeans-weighted hashed transform DIFFER gpu 4a928d3958f6e9cbc7fd6dcd82f575bfe3c189315bf7d0006dcae46c78344027 host b3ab3ee9c1aa376335429bf49132079249f2b467aabdad6bb3acc6dbe73a599f
+check kmeans-weighted hashed identity_hash DIFFER gpu 3a661e5929f5295e host 7e78124c62266dfc
+check kmeans-weighted negative labels EQUAL gpu 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a host 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a
+check kmeans-weighted negative predict EQUAL gpu 4417df6c99b99a006165a2bb53ee3996ac7c6c55123fcb294729ab6c4162eb22 host 4417df6c99b99a006165a2bb53ee3996ac7c6c55123fcb294729ab6c4162eb22
+check kmeans-weighted negative predict_training_rows EQUAL gpu 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a host 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a
+check kmeans-weighted negative transform DIFFER gpu f673996558af5650aa35587e8d1c62ad0d5a6e05dd93afcdd03aa0e5cb40b773 host 9aba33223bd72571fb80b7d3e9f96ea1ab39904e1b0bd2fffd24f63e95d6b6c3
+check kmeans-weighted negative identity_hash DIFFER gpu 9c9857b78115542b host 65bfd15bc9ea0c62
+check kmeans-weighted odd labels EQUAL gpu e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4 host e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4
+check kmeans-weighted odd predict EQUAL gpu 8962069a64da51d7e1b16d779daca407f40e31b6fa24943e4db0115b659f7989 host 8962069a64da51d7e1b16d779daca407f40e31b6fa24943e4db0115b659f7989
+check kmeans-weighted odd predict_training_rows EQUAL gpu e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4 host e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4
+check kmeans-weighted odd transform DIFFER gpu 67bf6bc3635d6545eb36fd4923228071fa1604483ae905aef0433057b6264a24 host 40a107d2e0b7c4a686fa4d300cbc52afa7685aec73783b72882f5eaadb3711bd
+check kmeans-weighted odd identity_hash DIFFER gpu 86bea24bd326b655 host da938891f2cceefc
+check kmeans-weighted ties labels EQUAL gpu 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08 host 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08
+check kmeans-weighted ties predict EQUAL gpu a7ebbb84b297b7cecaf50cfd1263558851094c7f2e337434c98a02e23baab956 host a7ebbb84b297b7cecaf50cfd1263558851094c7f2e337434c98a02e23baab956
+check kmeans-weighted ties predict_training_rows EQUAL gpu 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08 host 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08
+check kmeans-weighted ties transform DIFFER gpu 97304b6ce5092fb7867390a7d90700c0a0e12d3ce2b60bea9f2b6ae966e3a6e3 host 227ac98449402a3ebdf6f7d3032dfdf688fb36be8cb46f4ede451fca22075261
+check kmeans-weighted ties identity_hash DIFFER gpu f1a40d6c9595a677 host d8267df885d62d06
+check kmeans-weighted wide labels EQUAL gpu a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5 host a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5
+check kmeans-weighted wide predict EQUAL gpu 2c2c370cb9d157d10bb38093fc9195de3e6ef14cfda8a811e7ea3aac032dc16c host 2c2c370cb9d157d10bb38093fc9195de3e6ef14cfda8a811e7ea3aac032dc16c
+check kmeans-weighted wide predict_training_rows EQUAL gpu a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5 host a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5
+check kmeans-weighted wide transform DIFFER gpu 1a6c58df1162b03a98fa21edf3bd89fc60d318324860001e907ae2e86c80af43 host b88363f18c5f7eb0a0ea0c89f68e2b6db3ade0c37d2c17707e9c6975b3a5f396
+check kmeans-weighted wide identity_hash DIFFER gpu e6cfd7471f95f25f host c5e105c4ce3a1b17
+gate verdict EXPECTED MISMATCH SEEN (54 fixtures, 0 GPU columns, exit 0)
+sabotage_predict_define_exit=0
+check kmeans-weighted negative predict DIFFER gpu 4417df6c99b99a006165a2bb53ee3996ac7c6c55123fcb294729ab6c4162eb22 host af20c08c110ab3a026bcc8b20ebfbd65f17714e0727e79a2fc5ef2d95ff43d9b
+check kmeans-weighted negative predict_training_rows DIFFER gpu 12f8624c2f11a7572a25ea01af555ccc7f28d5a077196fad24161f54f40cd95a host 58b852e92a13a4191192095ac405f994346eef131e7fa37643f14ebb58e4c7ca
+check kmeans-weighted negative transform DIFFER gpu f673996558af5650aa35587e8d1c62ad0d5a6e05dd93afcdd03aa0e5cb40b773 host 9aba33223bd72571fb80b7d3e9f96ea1ab39904e1b0bd2fffd24f63e95d6b6c3
+check kmeans-weighted negative identity_hash DIFFER gpu 9c9857b78115542b host 64e2fe936362f8b1
+check kmeans-weighted odd labels EQUAL gpu e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4 host e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4
+check kmeans-weighted odd predict DIFFER gpu 8962069a64da51d7e1b16d779daca407f40e31b6fa24943e4db0115b659f7989 host 3426d4ef94f436f21499f27d350a5aac62c80403cc5226b63896df391bea4054
+check kmeans-weighted odd predict_training_rows DIFFER gpu e54a82825d5acd0fdca71e1b562f76084a6166ea5b2d0323c76e1d975c6360d4 host a9c7a48621465c7bdd169b9284a91f7b4a5008eb52cbd2d437b1350e5020680d
+check kmeans-weighted odd transform DIFFER gpu 67bf6bc3635d6545eb36fd4923228071fa1604483ae905aef0433057b6264a24 host 40a107d2e0b7c4a686fa4d300cbc52afa7685aec73783b72882f5eaadb3711bd
+check kmeans-weighted odd identity_hash DIFFER gpu 86bea24bd326b655 host c78bc86829a5f48e
+check kmeans-weighted ties labels EQUAL gpu 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08 host 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08
+check kmeans-weighted ties predict DIFFER gpu a7ebbb84b297b7cecaf50cfd1263558851094c7f2e337434c98a02e23baab956 host 1b1d39f640f30c1802f9716afb4472803e0b7b6a0bb1a1d1ca0a13419ca2163f
+check kmeans-weighted ties predict_training_rows DIFFER gpu 662e9bea0a685a50d3aaaf30c858a1628f68432b85eea03d1bb250375e1b5e08 host 5ef92b072d441b5044a8997b1709c5f7729cfac9580877c97f3e419420e7cf53
+check kmeans-weighted ties transform DIFFER gpu 97304b6ce5092fb7867390a7d90700c0a0e12d3ce2b60bea9f2b6ae966e3a6e3 host 227ac98449402a3ebdf6f7d3032dfdf688fb36be8cb46f4ede451fca22075261
+check kmeans-weighted ties identity_hash DIFFER gpu f1a40d6c9595a677 host 8c9bbb02fd81834d
+check kmeans-weighted wide labels EQUAL gpu a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5 host a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5
+check kmeans-weighted wide predict DIFFER gpu 2c2c370cb9d157d10bb38093fc9195de3e6ef14cfda8a811e7ea3aac032dc16c host 98f7f2d820e552b02f06fd590a5109025eaef95a081cd8ea2276a6e3552a229f
+check kmeans-weighted wide predict_training_rows DIFFER gpu a876e2c2fd5a3b2285e9382ab91bd3fa73856dcd83eb275244604bb89b2196a5 host 40fcf0e02bf13c76a6b3d32fdc90aaa98b9a5d0577c2644b0bae92a0b23f32e9
+check kmeans-weighted wide transform DIFFER gpu 1a6c58df1162b03a98fa21edf3bd89fc60d318324860001e907ae2e86c80af43 host b88363f18c5f7eb0a0ea0c89f68e2b6db3ade0c37d2c17707e9c6975b3a5f396
+check kmeans-weighted wide identity_hash DIFFER gpu e6cfd7471f95f25f host b3f682da0b2f95c1
+gate verdict EXPECTED MISMATCH SEEN (54 fixtures, 0 GPU columns, exit 0)
+--- C (must be IDENTICAL on every cell) ---
+| kmeans-array/base            | IDENTICAL x2 | 37ab2f0355ef716a | 37ab2f0355ef716a |
+| kmeans-classic-pp/base       | IDENTICAL x2 | e6648c8209c562ac | e6648c8209c562ac |
+| kmeans-cosine/base           | IDENTICAL x2 | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-random/base           | IDENTICAL x2 | 2bab0cda9f319dbb | 2bab0cda9f319dbb |
+| kmeans-sqrt/base             | IDENTICAL x2 | 8864be3c295d6c4a | 8864be3c295d6c4a |
+| kmeans-weighted/base         | IDENTICAL x2 | 5080fbf55610f54e | 5080fbf55610f54e |
+| kmeans/base                  | IDENTICAL x2 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+summary: IDENTICAL=7
+| kmeans-array/base            | infer  | IDENTICAL x2 | ae9509c50c75d2bc | ae9509c50c75d2bc |
+| kmeans-array/base            | model  | IDENTICAL x2 | ce0dcf87ec776455 | ce0dcf87ec776455 |
+| kmeans-array/base            | batch  | IDENTICAL x2 | 4b1022a4b98908d1 | 4b1022a4b98908d1 |
+| kmeans-classic-pp/base       | infer  | IDENTICAL x2 | e44226a81eebb7a8 | e44226a81eebb7a8 |
+| kmeans-classic-pp/base       | model  | IDENTICAL x2 | 55fd7b42b82bed5a | 55fd7b42b82bed5a |
+| kmeans-classic-pp/base       | batch  | IDENTICAL x2 | a710fad38f112c1c | a710fad38f112c1c |
+| kmeans-random/base           | infer  | IDENTICAL x2 | 45d941e241fdba4f | 45d941e241fdba4f |
+| kmeans-random/base           | model  | IDENTICAL x2 | 7f934305a96d1b77 | 7f934305a96d1b77 |
+| kmeans-random/base           | batch  | IDENTICAL x2 | 41f3015cf8e0680a | 41f3015cf8e0680a |
+| kmeans-sqrt/base             | infer  | IDENTICAL x2 | 58a73ee6f884f892 | 58a73ee6f884f892 |
+| kmeans-sqrt/base             | model  | IDENTICAL x2 | 0effed928846f9bd | 0effed928846f9bd |
+| kmeans-sqrt/base             | batch  | IDENTICAL x2 | 50d831d9342c295e | 50d831d9342c295e |
+| kmeans-weighted/base         | infer  | IDENTICAL x2 | 33403bafb4259ce4 | 33403bafb4259ce4 |
+| kmeans-weighted/base         | model  | IDENTICAL x2 | e8b41924fc98f304 | e8b41924fc98f304 |
+| kmeans-weighted/base         | batch  | IDENTICAL x2 | bd21da2a20bcf33f | bd21da2a20bcf33f |
+| kmeans/base                  | infer  | IDENTICAL x2 | 3d50c4c50bf078b2 | 3d50c4c50bf078b2 |
+| kmeans/base                  | model  | IDENTICAL x2 | 355598f468300bee | 355598f468300bee |
+| kmeans/base                  | batch  | IDENTICAL x2 | ce34789a012168b5 | ce34789a012168b5 |
+summary (infer/model): IDENTICAL=12, N/A=2
+summary (batch): IDENTICAL=6, N/A=1
+summary (rlpair): 
+--- E (must be DIVERGENT: the control has to be able to fail) ---
+| kmeans-array/base            | IDENTICAL x2 | 37ab2f0355ef716a | 37ab2f0355ef716a |
+| kmeans-classic-pp/base       | IDENTICAL x2 | e6648c8209c562ac | e6648c8209c562ac |
+| kmeans-cosine/base           | IDENTICAL x2 | c9f16ec2e84f967d | c9f16ec2e84f967d |
+| kmeans-random/base           | IDENTICAL x2 | 2bab0cda9f319dbb | 2bab0cda9f319dbb |
+| kmeans-sqrt/base             | IDENTICAL x2 | 8864be3c295d6c4a | 8864be3c295d6c4a |
+| kmeans-weighted/base         | IDENTICAL x2 | 5080fbf55610f54e | 5080fbf55610f54e |
+| kmeans/base                  | IDENTICAL x2 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+summary: IDENTICAL=7
+| kmeans-array/base            | infer  | DIVERGENT    | ae9509c50c75d2bc | 2aca2ee48a5e117b |
+| kmeans-array/base            | model  | RELOAD-MOVED | ce0dcf87ec776455 | RELOAD-MOVED     |
+| kmeans-array/base            | batch  | IDENTICAL x2 | 4b1022a4b98908d1 | 4b1022a4b98908d1 |
+| kmeans-classic-pp/base       | infer  | DIVERGENT    | e44226a81eebb7a8 | c73aaa9686c1fa71 |
+| kmeans-classic-pp/base       | model  | RELOAD-MOVED | 55fd7b42b82bed5a | RELOAD-MOVED     |
+| kmeans-classic-pp/base       | batch  | IDENTICAL x2 | a710fad38f112c1c | a710fad38f112c1c |
+| kmeans-random/base           | infer  | DIVERGENT    | 45d941e241fdba4f | 8326ca13651d87b1 |
+| kmeans-random/base           | model  | RELOAD-MOVED | 7f934305a96d1b77 | RELOAD-MOVED     |
+| kmeans-random/base           | batch  | IDENTICAL x2 | 41f3015cf8e0680a | 41f3015cf8e0680a |
+| kmeans-sqrt/base             | infer  | DIVERGENT    | 58a73ee6f884f892 | e6468bdf6d4f416f |
+| kmeans-sqrt/base             | model  | RELOAD-MOVED | 0effed928846f9bd | RELOAD-MOVED     |
+| kmeans-sqrt/base             | batch  | IDENTICAL x2 | 50d831d9342c295e | 50d831d9342c295e |
+| kmeans-weighted/base         | infer  | DIVERGENT    | 33403bafb4259ce4 | 9c5f02f9c0a9de23 |
+| kmeans-weighted/base         | model  | RELOAD-MOVED | e8b41924fc98f304 | RELOAD-MOVED     |
+| kmeans-weighted/base         | batch  | IDENTICAL x2 | bd21da2a20bcf33f | bd21da2a20bcf33f |
+| kmeans/base                  | infer  | DIVERGENT    | 3d50c4c50bf078b2 | 82fa6607d3247904 |
+| kmeans/base                  | model  | RELOAD-MOVED | 355598f468300bee | RELOAD-MOVED     |
+| kmeans/base                  | batch  | IDENTICAL x2 | ce34789a012168b5 | ce34789a012168b5 |
+summary (infer/model): DIVERGENT=6, N/A=2, RELOAD-MOVED=6
+summary (batch): IDENTICAL=6, N/A=1
+summary (rlpair): 
+F_boundary_bytes exit=0
+3078 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x305400000000, nodemask=1)
+vendor=cuda  numeric_mode=identical
+host binding=/root/mojolearn/python/mojolearn/host/_mojolearn_core_host.so
+[default] fitted on cuda; loaded as HostKMeans on cpu
+    predict   <i4 (256,) sha256=be303630b87ead55362219e456934df80d7d2dac93c9f0871b6431ebb4be5992
+    transform <f4 (256, 6) sha256=64c2f464b959282bd87795f17a7d94d80d69bcf8f61df1b7802acef01e5a61ba
+    IDENTICAL: predict and transform on 256 held-out rows, and predict on the 512 training rows equals labels_
+    CONTROL FIRED: centers[0] np.float32(1.0956461) -> np.float32(1.0956463); transform(256, 6) at (np.int64(2), np.int64(0)): np.float32(7.275838) -> np.float32(7.2758384) (69 of 1536 moved); UNMOVED: predict
+[l2-sqrt] fitted on cuda; loaded as HostKMeans on cpu
+    predict   <i4 (256,) sha256=af10dbf77b647556f172c18e77dfb53f97bf9182aeecf62947b27c808e51b1ad
+    transform <f4 (256, 6) sha256=6da4866f90f528054b806942e730a994d2bd9077b806ea1f5a10ffdb7c90c24b
+    IDENTICAL: predict and transform on 256 held-out rows, and predict on the 512 training rows equals labels_
+    CONTROL FIRED: centers[0] np.float32(-0.71478313) -> np.float32(-0.7147832); transform(256, 6) at (np.int64(2), np.int64(0)): np.float32(1.3733588) -> np.float32(1.373359) (37 of 1536 moved); UNMOVED: predict
+[random-start] fitted on cuda; loaded as HostKMeans on cpu
+    predict   <i4 (256,) sha256=92c70227f456955428b4b25fca76d8837a7d9402a5fe8622d0e6472dad499a2d
+    transform <f4 (256, 5) sha256=49979c91c11cc85276babeaaa25a0a96475c3d960e8912514c94d68c2e175ce3
+    IDENTICAL: predict and transform on 256 held-out rows, and predict on the 512 training rows equals labels_
+    CONTROL FIRED: centers[0] np.float32(0.8512116) -> np.float32(0.85121167); transform(256, 5) at (np.int64(1), np.int64(0)): np.float32(7.7059345) -> np.float32(7.705935) (44 of 1280 moved); UNMOVED: predict
+[classic-pp] fitted on cuda; loaded as HostKMeans on cpu
+    predict   <i4 (256,) sha256=5ad6a0fce95f63dd7a96e0f2b7610c1ac8e913e23212be2bf7b62f401d609713
+    transform <f4 (256, 5) sha256=a7748a62e3b6eb70c1081d84d92887e83be95468b0b55f4046995ebd8d6b7fab
+    IDENTICAL: predict and transform on 256 held-out rows, and predict on the 512 training rows equals labels_
+    CONTROL FIRED: centers[0] np.float32(-0.64205885) -> np.float32(-0.6420589); transform(256, 5) at (np.int64(1), np.int64(0)): np.float32(1.2031093) -> np.float32(1.203109) (103 of 1280 moved); UNMOVED: predict
+[weighted] fitted on cuda; loaded as HostKMeans on cpu
+    predict   <i4 (256,) sha256=eb4b3dcfe829211b394766f2f69e0e3efcd40e2789948b0fc74ba4008148861e
+    transform <f4 (256, 6) sha256=c80ab765e01b5dcdf6af61247e3031bc337c78732dc39b00f6ecb747155a0dc4
+    IDENTICAL: predict and transform on 256 held-out rows, and predict on the 512 training rows equals labels_
+    CONTROL FIRED: centers[0] np.float32(1.6531765) -> np.float32(1.6531767); transform(256, 6) at (np.int64(0), np.int64(0)): np.float32(5.29176) -> np.float32(5.2917604) (146 of 1536 moved); UNMOVED: predict
+cases=5 failed=0
+cells=63 stable=63 moved=0 refused=0
+NOTE: column nvidia-nvidia-a100-sxm4-80gb-sm_80 ran with MOJOLEARN_IDENTITY_BATCH_SABOTAGE ON; its batch cells are a sabotage run and must read BATCH_MOVED, they are not evidence
+summary: IDENTICAL=7, ONE-COLUMN=56
+| kmeans-array/base            | batch  | BATCH_MOVED  | 4b1022a4b98908d1 | BATCH_MOVED      |
+| kmeans-classic-pp/base       | batch  | BATCH_MOVED  | a710fad38f112c1c | BATCH_MOVED      |
+| kmeans-random/base           | batch  | BATCH_MOVED  | 41f3015cf8e0680a | BATCH_MOVED      |
+| kmeans-sqrt/base             | batch  | BATCH_MOVED  | 50d831d9342c295e | BATCH_MOVED      |
+| kmeans-weighted/base         | batch  | BATCH_MOVED  | bd21da2a20bcf33f | BATCH_MOVED      |
+| kmeans/base                  | batch  | BATCH_MOVED  | ce34789a012168b5 | BATCH_MOVED      |
+summary (infer/model): IDENTICAL=12, N/A=18, ONE-COLUMN=96
+summary (batch): BATCH_MOVED=6, N/A=9, ONE-COLUMN=48
+summary (rlpair): 
+cpu_pkg_vendor=cpu
+cells=18 stable=18 moved=0 refused=0
+| spectral-precomputed/base    | IDENTICAL x2 | 8df6d51dbff9ddaf | 8df6d51dbff9ddaf |
+| spectral-precomputed/ties    | IDENTICAL x2 | 32ed236da838cb22 | 32ed236da838cb22 |
+| spectral/base                | IDENTICAL x2 | 112c7b0d7556a6ff | 112c7b0d7556a6ff |
+| spectral/ties                | IDENTICAL x2 | 3976be59c005d8f8 | 3976be59c005d8f8 |
+summary: IDENTICAL=4, ONE-COLUMN=14
+| spectral-precomputed/base    | infer  | DIVERGENT    | bb2835f47f32e74d | b65c4d613f0bfc8c |
+| spectral-precomputed/base    | model  | IDENTICAL x2 | 6b04b89cfa623e45 | 6b04b89cfa623e45 |
+| spectral-precomputed/base    | batch  | DIVERGENT    | 403839d9afb03ede | 08a819015c790975 |
+| spectral-precomputed/ties    | infer  | DIVERGENT    | 77b660ca4b2a42e2 | b949cadfcdd521ec |
+| spectral-precomputed/ties    | model  | IDENTICAL x2 | ea7aeb5dfe06471c | ea7aeb5dfe06471c |
+| spectral-precomputed/ties    | batch  | DIVERGENT    | eba1461e59f20122 | ac743c79f0679257 |
+| spectral/base                | infer  | DIVERGENT    | a7f3488317ff571e | 964b85920aa175cc |
+| spectral/base                | model  | IDENTICAL x2 | 3e34622ced4d3c60 | 3e34622ced4d3c60 |
+| spectral/base                | batch  | DIVERGENT    | fedcfcc1f97d1520 | e6c013490b983188 |
+| spectral/ties                | infer  | DIVERGENT    | 3a3fc8018ebcbca3 | b3f9c088c84e9a37 |
+| spectral/ties                | model  | IDENTICAL x2 | ad1e356159f986fd | ad1e356159f986fd |
+| spectral/ties                | batch  | DIVERGENT    | fa770a3b846ea54d | f6d3fa103bcde1a8 |
+summary (infer/model): DIVERGENT=4, IDENTICAL=4, ONE-COLUMN=28
+summary (batch): DIVERGENT=4, ONE-COLUMN=14
+summary (rlpair): 
+build-base	0	57
+build-metrics	0	69
+record	0	9
+build-core-host	0	18
+build-metrics-host	0	23
+build-core-host-sabotage	0	18
+build-metrics-host-sabotage	0	24
+build-core-host-predict-sabotage	0	18
+check	0	8
+sabotage-every-fixture	0	7
+sabotage-every-lane	0	8
+sabotage-predict-define	0	8
+A_gpu_infer	0	5
+B_host_infer	0	6
+C_diff_gpu_host	0	1
+D_host_sabotage	1	6
+E_diff_gpu_sabotage	1	0
+F_boundary_bytes	0	3
+kmeans-column	0	24
+kmeans-batch-sabotage	1	3
+kmeans-diff-batch-sabotage	1	1
+spectral-cpu-column	0	10
+spectral-cpu-host-sabotage	0	2
+spectral-cpu-diff-sabotage	1	1
+finished=2026-09-16T18:22:04Z

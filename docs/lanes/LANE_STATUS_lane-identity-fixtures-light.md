@@ -337,7 +337,17 @@ all**. Cutting to two steps would leave the cosine branch, and the exact
 rational path under it, completely unexercised.
 
 So: 3 steps x 32 rows is the floor, and this is the truthful "this one
-genuinely needs its size" result. The two paths only the full fixture
+genuinely needs its size" result.
+
+> **THIS FLOOR WAS OVERRIDDEN, AND IS NOW CODE** (2026-09-16,
+> lane/shrink-floors). A later lane cut this fixture to ONE step anyway. It was
+> nobody's bad faith: `docs/lanes/FIXTURE_SHRINK_SCOPE.md` carried forward only
+> the ROWS half of the paragraph above, and
+> `docs/lanes/LANE_STATUS_lane-neural-shape-shrink.md` then recorded as fact
+> that the third step was kept. The lane is back at three steps, and the floor
+> now lives on the lane as `@floor(steps=(3, ...))` in
+> `tools/identity_break.py`, enforced by `tools/fixture_floors.py` in
+> `light-checks` and in the CPU gate. A floor written only here is not a floor. The two paths only the full fixture
 reaches are **the A=4 aligned accumulation split** and **the first cosine
 step of the warmup schedule**.
 

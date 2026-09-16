@@ -1,0 +1,44 @@
+# vendor=cpu-apple-m4 commit=a8b7e6b3b46a4053b0f61701e9f24f285db1e59c (git rev-parse HEAD) host.cpu_model='Apple M4' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# MOJOLEARN_IDENTITY_BATCH_SABOTAGE is ON: every whole-batch evaluation is perturbed by one low-bit flip; every batch cell with a hash MUST read BATCH_MOVED. This JSON is not evidence.
+# identity_break  mode=identical  2026-09-16 13:31:52  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             |
+|------------------------|------------------|
+| kmeans                 | 5aa44cc11034dec9 |
+| kmeans infer           | 3d50c4c50bf078b2 |
+| kmeans model           | 355598f468300bee |
+| kmeans batch           | BATCH_MOVED      |
+| kmeans-random          | 2bab0cda9f319dbb |
+| kmeans-random infer    | 45d941e241fdba4f |
+| kmeans-random model    | 7f934305a96d1b77 |
+| kmeans-random batch    | BATCH_MOVED      |
+| kmeans-array           | 37ab2f0355ef716a |
+| kmeans-array infer     | ae9509c50c75d2bc |
+| kmeans-array model     | ce0dcf87ec776455 |
+| kmeans-array batch     | BATCH_MOVED      |
+| kmeans-weighted        | 5080fbf55610f54e |
+| kmeans-weighted infer  | 33403bafb4259ce4 |
+| kmeans-weighted model  | e8b41924fc98f304 |
+| kmeans-weighted batch  | BATCH_MOVED      |
+| kmeans-sqrt            | 8864be3c295d6c4a |
+| kmeans-sqrt infer      | 58a73ee6f884f892 |
+| kmeans-sqrt model      | 0effed928846f9bd |
+| kmeans-sqrt batch      | BATCH_MOVED      |
+| kmeans-classic-pp      | e6648c8209c562ac |
+| kmeans-classic-pp infer | e44226a81eebb7a8 |
+| kmeans-classic-pp model | 55fd7b42b82bed5a |
+| kmeans-classic-pp batch | BATCH_MOVED      |
+| kmeans-cosine          | c9f16ec2e84f967d |
+
+cells=7 stable=7 moved=0 refused=0
+infer: stable=6 n/a=1
+model: stable=6 n/a=1
+batch: batch_moved=6 n/a=1
+n/a: kmeans-cosine batch n/a:fit-refused, kmeans-cosine infer n/a:function, kmeans-cosine model n/a:no-save
+BATCH_MOVED kmeans/base: BATCH_MOVED:predict:row 0 of 20000 alone:output 0 element 0: whole 0x00000004 vs alone 0x00000005
+BATCH_MOVED kmeans-random/base: BATCH_MOVED:predict:row 0 of 20000 alone:output 0 element 0: whole 0x00000000 vs alone 0x00000001
+BATCH_MOVED kmeans-array/base: BATCH_MOVED:predict:row 0 of 20000 alone:output 0 element 0: whole 0x00000006 vs alone 0x00000007
+BATCH_MOVED kmeans-weighted/base: BATCH_MOVED:predict:row 0 of 20000 alone:output 0 element 0: whole 0x00000004 vs alone 0x00000005
+BATCH_MOVED kmeans-sqrt/base: BATCH_MOVED:predict:row 0 of 20000 alone:output 0 element 0: whole 0x00000002 vs alone 0x00000003
+BATCH_MOVED kmeans-classic-pp/base: BATCH_MOVED:predict:row 0 of 20000 alone:output 0 element 0: whole 0x00000004 vs alone 0x00000005
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/592ed9a4-9940-48ae-9cf2-819f9a08cc6c/scratchpad/kmeans_batchsab.json

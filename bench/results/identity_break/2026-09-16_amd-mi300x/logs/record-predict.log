@@ -1,0 +1,39 @@
+10091 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x719c00000000, nodemask=1)
+##(##(hip[0]:0x639d79ffe470)##: memory_manager(chunk_size: 0 ; max_cache_size: 0 ; free_list: 0x639d7989a4b0)
+hip[0])##: oom log ===== begin =====
+##(hip[0])##: oom log request=137.33MB reason="device driver memAlloc failed: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode."
+##(hip[0])##: oom log mm max_cache=0B cache_used=0B free=0B free_blocks=0 chunk_size=0B chunks=0
+##(hip[0])##: oom log freelist=[freeList]@0x639d795a0c10 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log freelist=[mm:root]@0x639d7989a4b0 primary=0
+##(hip[0])##: oom log   bucket=0 empty
+##(hip[0])##: oom log   bucket=1 empty
+##(hip[0])##: oom log ===== end =====
+record dbscan base DBSCAN identity_hash e6e720fcb54b180e predict d288a9b1293e5b4d379b87b68aa5e98e3e90253583225b35b95ab2c54a2867b5 (vendor hip)
+record dbscan ties DBSCAN identity_hash 63990f64c63d296b predict acfe749ff986473bbc9cefc8facdb9d91a1d66a8bc1516fd842fe72915b31f6f (vendor hip)
+record dbscan hashed DBSCAN identity_hash 3a6472714f51d8ab predict 5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef (vendor hip)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/classical_host_gate.py", line 842, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn/tools/classical_host_gate.py", line 837, in main
+    return do_record(args)
+  File "/root/mojolearn/tools/classical_host_gate.py", line 596, in do_record
+    fit = (ib.LANES[lane] if lane in ib.LANES else LOCAL_FITS[lane])(mojolearn, X, yc, yr, Xh_full)
+  File "/root/mojolearn/tools/identity_break.py", line 1057, in _
+    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:6000, :4])
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+    return method(self, *args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/density.py", line 325, in fit
+    self.n_iter_ = binding.dbscan_fit_core(
+                   ~~~~~~~~~~~~~~~~~~~~~~~^
+        addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        addr(core, name="core"), params,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35: HIP call failed: hipErrorOutOfMemory (out of memory)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.

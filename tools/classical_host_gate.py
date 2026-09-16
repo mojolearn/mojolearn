@@ -89,10 +89,44 @@ def _approximate_predict(e, X):
         membership_vector(e, X[:, :4]), all_points_membership_vectors(e))
 
 
+#: The k-means saved-model lanes (lane/classical-host-recordings, 2026-09-16).
+#: One format, `mojolearn-kmeans-1`, carries every metric and every start, so
+#: all six FITTED k-means lanes load through it. `kmeans-cosine` is NOT here:
+#: its fit is refused by name (cluster/impl/kmeans_params.mojo::validate), and
+#: a refusal has no model to save, so it has no saved-model cell to record.
+_KMEANS_LANES = ('kmeans', 'kmeans-random', 'kmeans-array', 'kmeans-weighted',
+                 'kmeans-sqrt', 'kmeans-classic-pp')
+
+
+def _kmeans_probe(e, X, kind):
+    """identity_break's `_km_probe` infer pair, `(predict(Xh), transform(Xh))`,
+    over the WHOLE held-out draw (LANE_PROBE_ROWS), so its hash is that
+    column's `infer` cell.
+
+    `_km_probe` also asserts, before returning, that `predict` over the
+    TRAINING rows is `labels_` bit for bit. That assertion is about the fit,
+    and a model reloaded from a file has no training rows; the saved-model
+    restatement of it is the `predict_training_rows` extra below, which
+    rebuilds those rows from the fixture and is compared against the `labels`
+    extra, the array the file carries.
+    """
+    return (e.predict(X), e.transform(X))
+
+
+#: The surfaces a loaded k-means model answers beside its identity cell. The
+#: training-row predict is the claim that matters for a saved model: a fit's
+#: own final assignment, reproduced from the file on a machine with no GPU.
+_KMEANS_EXTRAS = {
+    'transform': lambda e, X, kind: e.transform(X),
+    'labels': lambda e, X, kind: e.labels_,
+    'predict_training_rows': lambda e, X, kind: e.predict(identity_tool().fixture(kind)[0]),
+}
+
+
 #: Lanes whose probe needs the fixture KIND beside the held-out rows
 #: (lane/saved-model-reference-gaps, 2026-09-16). Every other probe is called
 #: `probe(model, Xh)`; these are called `probe(model, Xh, kind)`.
-KIND_PROBES = ('spectral-precomputed',)
+KIND_PROBES = ('spectral-precomputed',) + tuple(_KMEANS_LANES)
 
 
 def _spectral_precomputed_probe(e, X, kind):
@@ -410,6 +444,17 @@ LANES = {
     # rows, so its probe is built from the fixture as well as the held-out
     # draw; see KIND_PROBES.
     'spectral-precomputed': ('SpectralClustering', _spectral_precomputed_probe, {}),
+    # lane/classical-host-recordings (2026-09-16): the k-means saved-model
+    # route. lane/kmeans-save gave KMeans `save` and `load` and put
+    # `mojolearn-kmeans-1` in `_classical_host._FORMATS`; until this table
+    # carried the lanes there could be no recording for them, exactly as
+    # there could be none for the four predict lanes before 2026-09-16.
+    'kmeans': ('KMeans', _kmeans_probe, _KMEANS_EXTRAS),
+    'kmeans-random': ('KMeans', _kmeans_probe, _KMEANS_EXTRAS),
+    'kmeans-array': ('KMeans', _kmeans_probe, _KMEANS_EXTRAS),
+    'kmeans-weighted': ('KMeans', _kmeans_probe, _KMEANS_EXTRAS),
+    'kmeans-sqrt': ('KMeans', _kmeans_probe, _KMEANS_EXTRAS),
+    'kmeans-classic-pp': ('KMeans', _kmeans_probe, _KMEANS_EXTRAS),
 }
 PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'logistic': 'predict_proba', 'pca': 'transform',
@@ -434,7 +479,8 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'svc-linear': 'decision_function', 'svc-poly': 'decision_function',
                'svr': 'predict', 'svr-linear': 'predict',
                'dbscan': 'predict', 'agglomerative': 'predict',
-               'spectral': 'predict', 'spectral-precomputed': 'predict'}
+               'spectral': 'predict', 'spectral-precomputed': 'predict',
+               **{lane: 'predict' for lane in _KMEANS_LANES}}
 PROBE_NAMES.update({lane: {'NearestNeighbors': 'kneighbors_distances', 'KNeighborsClassifier': 'predict',
                            'KNeighborsRegressor': 'predict', 'RadiusNeighbors': 'radius_neighbors_counts',
                            'KernelDensity': 'score_samples', 'IsolationForest': 'score_samples',
@@ -479,7 +525,12 @@ def package_root(args):
 #: other lane reads its first PROBE_ROWS rows.
 LANE_PROBE_ROWS = {'iforest': None, 'iforest-tuned': None,
                    # the regressors' future values over FORECAST_HORIZON rows
-                   'arima-exog': 512, 'arima-exog-seasonal': 512}
+                   'arima-exog': 512, 'arima-exog-seasonal': 512,
+                   # `_km_probe` predicts and transforms the whole held-out
+                   # draw, not its first 256 rows; a 256-row probe here would
+                   # hash something that is not the lane's `infer` cell and
+                   # do_record would refuse it.
+                   **{lane: None for lane in _KMEANS_LANES}}
 
 
 def probe_rows(ib, lane, kind):

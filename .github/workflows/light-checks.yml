@@ -32,6 +32,14 @@ jobs:
         run: python3 packaging/wheel_ci.py inventory python/mojolearn
       - name: No source pattern that is always a bug
         run: python3 tools/source_hygiene_check.py
+      - name: No fixture shrunk below its declared floor
+        # A floor recorded in prose is not a floor: on 2026-09-16 one was
+        # written down, overridden by the next lane and then recorded as kept
+        # by a third document. --self-test runs first so a check that cannot
+        # refuse anything fails here rather than passing quietly.
+        run: |
+          python3 tools/fixture_floors.py --self-test
+          python3 tools/fixture_floors.py
       - name: Every workflow parses, and only this one starts by itself
         run: |
           python3 -m venv /tmp/yaml-venv

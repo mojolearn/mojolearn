@@ -609,6 +609,99 @@ def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
     assert va.verdict(counts)[0] == va.EXIT_MISMATCH
 
 
+# ---------------------------------------------------------------- the decode part
+
+#: the eight lanes tools/identity_break.py declares a real stepfull part for,
+#: and the hash all four recorded columns landed on
+#: (docs/lanes/LANE_STATUS_lane-decode-columns.md, 2026-09-16)
+STEPFULL_LANES = {
+    "transformer": "99e9fe5ec967e1dd",
+    "transformer-window": "a05e05cf5055c79f",
+    "mamba1": "f582474b00117f8e",
+    "mamba2": "bfd516aa93fe1b12",
+    "mamba2-dtlimit": "44421178c1c5b188",
+    "mamba3": "6a8f4924575a931d",
+    "samba": "e9c89afd1eb7f273",
+    "samba-untied-dropout-accum": "dc215181275f4d1f",
+}
+
+
+def test_stepfull_is_a_compared_part_and_the_shipped_table_carries_it():
+    """THE USER-FACING DOOR TO THE DECODE PROPERTY (lane/expose-stepfull,
+    2026-09-16). `PARTS` was the four, so `verify --all` could not compare
+    `stepfull` at all and a user could not check that step-by-step decoding
+    with a carried state gives the bits of one fresh-state forward pass,
+    although four columns had proved it. Adding the part without regenerating
+    the table would have been worse than leaving it out, because no row of the
+    old table carried a value for it, so this test holds the two together."""
+    assert "stepfull" in vref.PARTS
+    table = vref.load_table()
+    for lane, want in STEPFULL_LANES.items():
+        ent = vref.entry(table, lane, "base", "stepfull")
+        assert ent is not None, f"{lane}: the shipped table carries no stepfull reference"
+        assert ent.get("ref") == want, (lane, ent.get("ref"), want)
+        state, _ = vref.judge(want, ent)
+        assert state == vref.IDENTICAL
+
+
+def test_a_lane_with_no_decode_state_reads_na_and_one_with_it_can_read_divergent():
+    """A PART NO LANE CAN FAIL IS WORSE THAN NO PART AT ALL. Both halves:
+    a lane with no carried state declares `n/a:no-decode-state` and reads
+    N/A rather than a spurious OWED or a silent pass, and a lane that has the
+    part reads DIVERGENT when its bits differ, with BOTH values printed."""
+    assert vref.judge("n/a:no-decode-state", None)[0] == vref.NA
+    na_ent = dict(ref="n/a:no-decode-state", cols={"cpu": 0})
+    assert vref.judge("n/a:no-decode-state", na_ent)[0] == vref.NA
+
+    table = vref.load_table()
+    ent = vref.entry(table, "mamba1", "base", "stepfull")
+    state, detail = vref.judge("0000000000000000", ent)
+    assert state == vref.DIVERGENT
+    assert "0000000000000000" in detail and ent["ref"] in detail, detail
+    # the harness's own failure verdict, not a hash, is still DIVERGENT and
+    # still names the position rather than a count
+    moved = ("BATCH_MOVED:forward(x) vs allocate_state + step, L=16: FIRST DIFFERING POSITION 6 "
+             "of 16: element 0: full 0x3eb0f4dc vs 0x3eb0f4dd")
+    state, detail = vref.judge(moved, ent)
+    assert state == vref.DIVERGENT and "FIRST DIFFERING POSITION 6" in detail, detail
+
+
+def test_a_corrupted_stepfull_reference_costs_the_run_its_pass():
+    """The same shape as the train-part test above, on the new part: the
+    table's own stepfull references judge as IDENTICAL, and flipping one of
+    them turns the run into a MISMATCH with exit 1."""
+    table = vref.load_table()
+    rows = [dict(lane=lane, fixture="base", part="stepfull",
+                 value=vref.entry(table, lane, "base", "stepfull")["ref"], error=None)
+            for lane in STEPFULL_LANES]
+    counts = {s: sum(1 for r in va.judge_rows(rows, table) if r["state"] == s) for s in vref.STATES}
+    assert counts[vref.IDENTICAL] == len(STEPFULL_LANES)
+    assert va.verdict(counts)[0] == va.EXIT_VERIFIED
+    bad = copy.deepcopy(table)
+    ref = bad["cells"]["mamba1/base"]["stepfull"]["ref"]
+    bad["cells"]["mamba1/base"]["stepfull"]["ref"] = ("0" if ref[0] != "0" else "1") + ref[1:]
+    judged = va.judge_rows(rows, bad)
+    counts = {s: sum(1 for r in judged if r["state"] == s) for s in vref.STATES}
+    assert counts[vref.DIVERGENT] == 1
+    assert va.verdict(counts)[0] == va.EXIT_MISMATCH
+    line = next(r["detail"] for r in judged if r["state"] == vref.DIVERGENT)
+    assert ref in line and bad["cells"]["mamba1/base"]["stepfull"]["ref"] in line, line
+
+
+def test_a_harness_with_no_stepfull_part_refuses_rather_than_passing():
+    """AN ABSENT PART IS NOT AN `n/a`. Returning a declaration when the
+    harness cannot run the part would make stepfull read N/A on every lane on
+    every install, which is a check that cannot fail. It REFUSES, which costs
+    the run its VERIFIED, and the sentence says where the part lives."""
+    class _NoPart:
+        __file__ = "/somewhere/old_identity_break.py"
+        BATCH_ALONE = 1
+    value, error = va._probe_stepfull(_NoPart, object(), "mamba1", None, {})
+    assert value is None and "defines no stepfull part" in error, error
+    assert vref.judge(value, vref.entry(vref.load_table(), "mamba1", "base", "stepfull"), error)[0] == vref.REFUSED
+    assert va.verdict(_counts(IDENTICAL=100, REFUSED=1))[0] != va.EXIT_VERIFIED
+
+
 # ---------------------------------------------------------------- lanes and flags
 
 class _FakeHarness:
@@ -797,8 +890,13 @@ def test_shipped_verifier_hashes_like_the_harness():
         lanes = ",".join(selected)
     with tempfile.TemporaryDirectory() as tmp:
         column = os.path.join(tmp, "column.json")
+        # --step-full because `verify --all` runs the stepfull part on every
+        # cell (lane/expose-stepfull, 2026-09-16) while the harness runs it
+        # only when asked. Without it this test reads a part the column does
+        # not carry, and the parity it exists to check would not cover the
+        # part most recently added, which is exactly where drift starts.
         argv = [str(ROOT / "tools" / "identity_break.py"), "--json", column, "--fixtures", "base",
-                "--repeats", "1", "--no-rlpair"]
+                "--repeats", "1", "--no-rlpair", "--step-full"]
         if lanes != "all":
             argv += ["--lanes", lanes]
         env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical", PYTHONPATH=str(PKG.parent))
@@ -813,6 +911,7 @@ def test_shipped_verifier_hashes_like_the_harness():
         r = _run_cli(verify_argv, dict(MOJOLEARN_IDENTITY_BREAK=str(ROOT / "tools" / "identity_break.py")))
         report = json.loads(r.stdout)
     compared = 0
+    parts_seen = set()
     for row in report["cells"]:
         if row["lane"].startswith("portable:"):
             continue
@@ -828,7 +927,11 @@ def test_shipped_verifier_hashes_like_the_harness():
                 want = "RELOAD-MOVED"
         assert row["value"] == want, (row["lane"], row["part"], row["value"], want)
         compared += 1
+        parts_seen.add(row["part"])
     assert compared >= 4
+    assert "stepfull" in parts_seen, (
+        "no stepfull part was compared, so this test would not notice the verifier and the "
+        "harness drifting apart on the decode property")
 
 
 if __name__ == "__main__":

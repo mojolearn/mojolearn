@@ -226,10 +226,19 @@ one-character change to the recording's path.
 
 * The AMD recording and AMD identity cells, at the next release record. AMD
   was left alone entirely, by instruction.
-* `spectral`'s x86 CPU identity column at the 512-row size. Its Apple column
-  was retaken here; the CPU one was not, and the 2026-09-15 one is superseded.
-* `kmeans` stays the one entry in `SAVED_MODEL_INFERENCE_OWED`, and it waits
-  on a serialization format, not on a box.
+* ~~`spectral`'s x86 CPU identity column at the 512-row size.~~ TAKEN by
+  lane/inference-coverage-complete (2026-09-16) on the M4's arm64 CPU host
+  route rather than on x86:
+  `bench/results/identity_break/2026-09-16_spectral-cpu-column/`, nine
+  fixtures, all 72 cell parts equal to the NVIDIA and Apple references, with
+  both sabotage arms fired.
+* `kmeans` stays the one entry in `SAVED_MODEL_INFERENCE_OWED`. **This line
+  said it waits on a serialization format; that stopped being true the same
+  day.** `lane/kmeans-save` gave the class `save` and `load`, `_KMEANS_FORMAT`
+  is dispatched in `_classical_host._FORMATS` to `HostKMeans`, and
+  `host_surface.SAVED_MODEL_INFERENCE_OWED["kmeans"]` already says so. It
+  waits on the one thing the other four waited on: a
+  `tools/classical_host_gate.py record` run on a GPU box.
 * `tools/lane_select.py` cannot attribute `tools/classical_host_gate.py` to
   any lane, so a change there falls back to all 212. That is the selector
   lane's map, not this one's, and it is written down rather than fixed here.
