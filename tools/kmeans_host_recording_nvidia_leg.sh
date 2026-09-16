@@ -59,6 +59,12 @@ GATE_LANES=kmeans,kmeans-random,kmeans-array,kmeans-weighted,kmeans-sqrt,kmeans-
 ID_LANES=kmeans,kmeans-random,kmeans-array,kmeans-weighted,kmeans-sqrt,kmeans-classic-pp,kmeans-cosine
 SPECTRAL_LANES=spectral,spectral-precomputed
 SAB=/root/host-sabotage
+# The k-means saved-model arm has a define of its own, and it must: the family
+# define moves the TRANSFORM half only, so that identity_break's
+# `predict(X) == labels_` assertion still holds and its cells read DIVERGENT
+# rather than REFUSED. Both are run against the recording, because CI builds
+# the family one and a reader should see that it catches every cell too.
+SABP=/root/host-kmeans-predict-sabotage
 CPUPKG=/root/cpu-only-pkg
 JOBS="${MOJOLEARN_COMPILE_JOBS:-8}"
 
@@ -147,7 +153,13 @@ run build-metrics-host-sabotage env -u MOJOLEARN_GPU_ARCHS \
     MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_SPECTRAL_PREDICT_SABOTAGE=1" \
     MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS="$JOBS" \
     sh bindings/build_metrics_host.sh
-ls -l "$SAB" >> "$G" 2>&1
+mkdir -p "$SABP"
+run build-core-host-predict-sabotage env -u MOJOLEARN_GPU_ARCHS \
+    MOJOLEARN_HOST_OUTDIR="$SABP" \
+    MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_KMEANS_PREDICT_SABOTAGE=1" \
+    MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS="$JOBS" \
+    sh bindings/build_core_host.sh
+ls -l "$SAB" "$SABP" >> "$G" 2>&1
 sha256sum python/mojolearn/host/_mojolearn_core_host.so "$SAB/_mojolearn_core_host.so" >> "$G" 2>&1
 if [ ! -s "$SAB/_mojolearn_core_host.so" ]; then
     say "SABOTAGE ARM NOT TAKEN: no $SAB/_mojolearn_core_host.so."
@@ -178,6 +190,18 @@ if [ "$SABOTAGE_READY" = 1 ]; then
         --expect-mismatch --every-lane --report "$OUT/sabotage.every-lane.json"
     say "sabotage_every_lane_exit=$(awk -F'\t' '$1=="sabotage-every-lane"{print $2}' "$OUT/status.tsv")"
     tail -40 "$OUT/logs/sabotage-every-fixture.log" >> "$G" 2>/dev/null
+fi
+if [ -s "$SABP/_mojolearn_core_host.so" ]; then
+    # The stronger arm: both halves of the pair move.
+    run sabotage-predict-define env MOJOLEARN_NUMERIC_MODE=identical \
+        PYTHONPATH=/root/mojolearn/python MOJOLEARN_HOST_DIR="$SABP" \
+        MOJOLEARN_HOST_ALLOW_SABOTAGE=1 \
+        pixi run python tools/classical_host_gate.py check "$REC" \
+        --expect-mismatch --every-fixture --report "$OUT/sabotage.predict-define.json"
+    say "sabotage_predict_define_exit=$(awk -F'\t' '$1=="sabotage-predict-define"{print $2}' "$OUT/status.tsv")"
+    tail -20 "$OUT/logs/sabotage-predict-define.log" >> "$G" 2>/dev/null
+else
+    say "PREDICT-DEFINE SABOTAGE ARM NOT TAKEN: no $SABP/_mojolearn_core_host.so."
 fi
 
 # ============================ 3. THE IDENTITY ARMS THE L40S LEG LEFT UNPROVED
