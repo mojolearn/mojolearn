@@ -33,14 +33,17 @@ and this file is the thing that refuses a change that walks past it.
 THE FOUR RULES, all read from the source with `ast`, no numpy, no bindings, so
 the cheapest push gate can run it.
 
-  1. A LANE THAT WAS SHRUNK MUST CARRY A FLOOR, and that is DERIVED, not a
-     hand-kept list. `LANE_REVISIONS` is where a shrink is recorded (without
-     an entry every committed column reads DIVERGENT, which is loud), so the
-     scope is exactly its lanes. For each of them, every DIMENSION this file
-     can find a site for must carry a floor. A revised lane where no site is
-     found at all must say so in `UNFLOORED_REVISED_LANES`, and that entry is
-     itself checked: it is refused if a site IS findable, so the list cannot
-     grow into an excuse.
+  1. A REVISION THAT NAMES A SIZE MUST CARRY A FLOOR ON IT, and that is
+     DERIVED, not a hand-kept list. `LANE_REVISIONS` is where a fixture change
+     is recorded (without an entry every committed column reads DIVERGENT,
+     which is loud), and a key that changed a SIZE already says so in its first
+     token: `rows-1500-1`, `obs-128-1`, `steps-3-1`, `seqlen-8-1`. Those lanes
+     must floor that dimension, AND the number in the key must be the number
+     the lane runs at, so the key, the floor and the body cannot drift apart.
+     Any other key (`transform-row-separable-1` is arithmetic,
+     `synthetic-vocab-1` is a vocabulary) must say what it changed in
+     `NON_SIZE_REVISIONS`, and that entry is refused if the key DOES name a
+     size, so the list cannot grow into an excuse.
   2. THE FLOOR'S VALUE IS READ FROM THE LANE BODY, not from the decorator. The
      lane binds a local named for the dimension to an integer literal, and
      that literal is what the lane actually runs at. Below the floor is a
@@ -54,9 +57,9 @@ the cheapest push gate can run it.
 
 WHAT THIS DOES NOT DO. It does not judge whether a floor is the RIGHT number;
 only a measurement does that, which is why rule 4 makes the reason cite one.
-It cannot floor a dimension that is not a size in the lane body (the
-`tokenizer` lane's vocabulary is a constructor choice, not a literal), which
-is what `UNFLOORED_REVISED_LANES` is for.
+It cannot floor what is not a size: the `tokenizer` lane's vocabulary and
+`umap`'s row-separable transform moved those lanes' bytes without moving a
+number, which is what `NON_SIZE_REVISIONS` is for.
 """
 import argparse
 import ast
@@ -80,6 +83,27 @@ DIMENSIONS = {
 GROUPS = {}
 for _name, (_group, _rule) in DIMENSIONS.items():
     GROUPS.setdefault(_group, [_rule, []])[1].append(_name)
+
+#: A REVISION KEY THAT NAMES A SIZE. `LANE_REVISIONS` records every lane whose
+#: input moved, which is broader than "was shrunk": `transform-row-separable-1`
+#: is an arithmetic change and `synthetic-vocab-1` is a vocabulary swap, and
+#: neither is a size a floor can hold. The keys that DO name a size already say
+#: so in their first token, `rows-1500-1`, `obs-128-1`, `steps-3-1`,
+#: `seqlen-8-1`. Those lanes must floor that dimension, and the number in the
+#: key must be the number the lane runs at, so the key, the floor and the body
+#: cannot drift apart. Every other key must be declared in
+#: `NON_SIZE_REVISIONS`, and that entry is refused if the key does name a size.
+REVISION_DIMENSION = {"rows": "rows", "obs": "observations", "steps": "steps",
+                      "seqlen": "seqlen", "batch": "batch"}
+
+
+def revision_size(rev):
+    """(dimension, value) if a revision key names a size, else (None, None)."""
+    parts = (rev or "").split("-")
+    if len(parts) >= 2 and parts[0] in REVISION_DIMENSION and parts[1].isdigit():
+        return REVISION_DIMENSION[parts[0]], int(parts[1])
+    return None, None
+
 
 #: A `why` must be traceable back to the measurement that set the number.
 TRACEABLE = re.compile(r"20\d\d-\d\d-\d\d|docs/|lane/")
@@ -242,7 +266,7 @@ def check(src=None, path=HARNESS):
     src = open(path).read() if src is None else src
     tree = ast.parse(src)
     revisions = _dict_of_str(tree, "LANE_REVISIONS")
-    unfloored = _dict_of_str(tree, "UNFLOORED_REVISED_LANES")
+    unfloored = _dict_of_str(tree, "NON_SIZE_REVISIONS")
     lanes = _lane_functions(tree)
     bad = []
 
@@ -265,17 +289,26 @@ def check(src=None, path=HARNESS):
         sites = _sites(fn)
         local = _int_locals(fn)
 
-        # RULE 1, the derived half: a shrunk lane must floor every dimension a
-        # site rule can find in it.
+        # RULE 1, the derived half: a revision key that NAMES a size must have
+        # a floor on that dimension, and the key's number must be the number
+        # the lane runs at.
         if name in revisions:
-            for group, (rule, dims) in sorted(GROUPS.items()):
-                readable = [e for e in sites[group] if _resolve(e, local) is not None]
-                if readable and not (set(dims) & set(floors)):
+            rdim, rvalue = revision_size(revisions[name])
+            group = DIMENSIONS[rdim][0] if rdim else None
+            if rdim and not (set(GROUPS[group][1]) & set(floors)):
+                bad.append(
+                    f"{name}: LANE_REVISIONS[{name!r}] = {revisions[name]!r} names a SIZE "
+                    f"({rdim} {rvalue}), but the lane declares no floor for it. Add "
+                    f"@floor({rdim}=(<minimum>, \"why, with the measurement that set it\")) under "
+                    f"@lane({name!r}), or this lane can be cut again with nothing to walk past.")
+            elif rdim:
+                have = next(d for d in GROUPS[group][1] if d in floors)
+                ran = local.get(have, (None, 0))[0]
+                if ran is not None and ran != rvalue:
                     bad.append(
-                        f"{name}: SHRUNK (LANE_REVISIONS[{name!r}] = {revisions[name]!r}) and has {rule}, "
-                        f"but declares no floor for it. Add @floor({dims[0]}=(<minimum>, \"why, with the "
-                        f"measurement that set it\")) under @lane({name!r}), or this lane can be cut again "
-                        f"with nothing to walk past.")
+                        f"{name}: LANE_REVISIONS[{name!r}] = {revisions[name]!r} says {rdim} {rvalue}, "
+                        f"but the lane runs at {have} = {ran}. A revision key that disagrees with the "
+                        f"body is how a record ends up describing bytes nobody made.")
 
         for dim, (lo, why) in sorted(floors.items()):
             group, rule = DIMENSIONS[dim][0], DIMENSIONS[dim][1]
@@ -315,34 +348,29 @@ def check(src=None, path=HARNESS):
                     f"      If the floor is wrong, change it HERE with the measurement that says so; do not "
                     f"cut past it.")
 
-    # RULE 1, the fail-closed half: the exception list cannot excuse a lane
-    # this file could have read.
+    # RULE 1, the fail-closed half: every revision is either a size, and
+    # floored, or declared not to be one, and the declaration is checked.
     for name, why in sorted(unfloored.items()):
         if name not in revisions:
-            bad.append(f"UNFLOORED_REVISED_LANES[{name!r}]: not a shrunk lane (no LANE_REVISIONS entry), so "
-                       f"there is nothing to excuse; remove it.")
+            bad.append(f"NON_SIZE_REVISIONS[{name!r}]: no LANE_REVISIONS entry, so there is nothing to "
+                       f"declare about; remove it.")
             continue
         if name not in lanes:
-            bad.append(f"UNFLOORED_REVISED_LANES[{name!r}]: no such lane.")
+            bad.append(f"NON_SIZE_REVISIONS[{name!r}]: no such lane.")
             continue
-        loc = _int_locals(lanes[name])
-        firing = sorted(g for g, ss in _sites(lanes[name]).items()
-                        if any(_resolve(e, loc) is not None for e in ss))
-        if firing:
-            bad.append(f"UNFLOORED_REVISED_LANES[{name!r}]: REFUSED, this lane DOES have a floorable "
-                       f"dimension ({', '.join(firing)}). Declare the floor instead of the exemption.")
+        rdim, rvalue = revision_size(revisions[name])
+        if rdim:
+            bad.append(f"NON_SIZE_REVISIONS[{name!r}]: REFUSED, its revision {revisions[name]!r} DOES "
+                       f"name a size ({rdim} {rvalue}). Declare the floor instead of the exemption.")
         if not why or len(why) < WHY_MIN_CHARS or not TRACEABLE.search(why):
-            bad.append(f"UNFLOORED_REVISED_LANES[{name!r}]: the reason must be at least {WHY_MIN_CHARS} "
-                       f"characters and cite a date, a docs/ path or a lane/ name.")
-    for name in sorted(revisions):
-        if name not in lanes:
-            continue
-        loc = _int_locals(lanes[name])
-        readable = any(_resolve(e, loc) is not None
-                       for ss in _sites(lanes[name]).values() for e in ss)
-        if not readable and name not in unfloored:
-            bad.append(f"{name}: SHRUNK and this file can find no size site in its body at all. Say why in "
-                       f"UNFLOORED_REVISED_LANES so the gap is recorded rather than silent.")
+            bad.append(f"NON_SIZE_REVISIONS[{name!r}]: the reason must be at least {WHY_MIN_CHARS} "
+                       f"characters and cite a date, a docs/ path or a lane/ name, so the next person can "
+                       f"see WHAT changed if it was not a size.")
+    for name, rev in sorted(revisions.items()):
+        if name in lanes and revision_size(rev)[0] is None and name not in unfloored:
+            bad.append(f"{name}: LANE_REVISIONS[{name!r}] = {rev!r} names no size this file knows "
+                       f"({', '.join(sorted(REVISION_DIMENSION))}). Either name one, so the floor and the "
+                       f"record agree, or say in NON_SIZE_REVISIONS what changed instead.")
     return bad
 
 
@@ -395,7 +423,11 @@ MUTATIONS = (
      '@lane("mamba2-dtlimit")\n@floor(seqlen=(8, "L=8 keeps',
      '@lane("mamba2-dtlimit")\n@floor(seqlen=(8, "measured, it is fine"))\n@floor(seqlen=(8, "L=8 keeps',
      "mamba2-dtlimit"),
-    ("the exemption list used on a lane that HAS a floorable dimension",
+    ("the revision key says one size and the body runs another",
+     '"hdbscan": "rows-4000-1"', '"hdbscan": "rows-3000-1"', "hdbscan"),
+    ("a revision key that names no size at all, undeclared",
+     '"spectral": "rows-512-1"', '"spectral": "made-it-smaller-1"', "spectral"),
+    ("the non-size list used on a revision that DOES name a size",
      '    "tokenizer": (', '    "holtwinters": "an exemption this check must refuse",\n    "tokenizer": (',
      "holtwinters"),
 )
@@ -408,7 +440,7 @@ SYNTHETIC = (
     ("a @floor() that is not on a lane function",
      '''
 LANE_REVISIONS = {}
-UNFLOORED_REVISED_LANES = {}
+NON_SIZE_REVISIONS = {}
 
 @floor(rows=(10, "a perfectly good reason citing docs/lanes/SOMETHING.md and the date 2026-09-16"))
 def not_a_lane(ml, X, yc, yr, Xh=None):
@@ -418,7 +450,7 @@ def not_a_lane(ml, X, yc, yr, Xh=None):
     ("a reason copied word for word from another floor",
      '''
 LANE_REVISIONS = {}
-UNFLOORED_REVISED_LANES = {}
+NON_SIZE_REVISIONS = {}
 
 @lane("a")
 @floor(rows=(10, "measured on 2026-09-16, see docs/lanes/SOMETHING.md, this is the shared sentence"))

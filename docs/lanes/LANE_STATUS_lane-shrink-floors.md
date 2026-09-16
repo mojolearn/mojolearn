@@ -230,7 +230,7 @@ starts by itself) and again as two tests in the CPU gate
 
 | | rule | derived, or declared |
 |---|---|---|
-| 1 | A shrunk lane must carry a floor for every dimension a site rule can find in it | **DERIVED** from `LANE_REVISIONS`, the place a shrink has to be recorded |
+| 1 | A revision key that NAMES a size must carry a floor on that dimension, and the key's number must be the number the lane runs at | **DERIVED** from `LANE_REVISIONS`, the place a fixture change has to be recorded |
 | 2 | The value is read from the LANE BODY, from a local named for the dimension; below the floor is a refusal that PRINTS THE REASON | derived from the body |
 | 3 | The site must READ that local, so `steps = 3` next to `range(1)` is refused by name | derived from the body |
 | 4 | The reason must be at least 60 characters and cite a date, a `docs/` path or a `lane/` name | declared, checked |
@@ -239,17 +239,35 @@ starts by itself) and again as two tests in the CPU gate
 hand-kept lists that rot into agreeing with everything: a `stale reference`
 check that asked `lane in LANE_REVISIONS` was true forever and silently barred
 lanes from the public set permanently. So the scope here is not a list of
-lanes that need floors. It is exactly `LANE_REVISIONS`, which is where a
-shrink already has to be recorded (without an entry, every committed column
-reads DIVERGENT, which is loud). Shrink a fixture, and the lane is in scope
-for a floor the same moment.
+lanes that need floors. It is `LANE_REVISIONS`, where a fixture change already
+HAS to be recorded (without an entry, every committed column reads DIVERGENT,
+which is loud), and specifically the keys that already NAME a size in their
+first token: `rows-1500-1`, `obs-128-1`, `steps-3-1`, `seqlen-8-1`. Shrink a
+fixture, record it the way the harness already requires, and the lane is in
+scope for a floor the same moment.
 
-**The one declaration, and how it fails closed.** A revised lane in which no
-site rule finds anything must say so in `UNFLOORED_REVISED_LANES`, and that
-entry is REFUSED if a site IS findable. So the exemption list cannot be used
-to opt out of a floor; it can only record a gap that is really there. Exactly
-one lane is in it, `tokenizer`, because what changed there was the
-VOCABULARY, which is a constructor choice and not an integer in the body.
+**The key must agree with the body**, which is a tie the repository did not
+have. `LANE_REVISIONS["hdbscan"] = "rows-4000-1"` and `rows = 4000` in the
+lane are now checked against each other, so a key that says one size while the
+body runs another is refused by name. That is the shape of the failure this
+lane exists to stop, in the record rather than in a document.
+
+**The one declaration, and how it fails closed.** `LANE_REVISIONS` is broader
+than "was shrunk": it also carries arithmetic changes. Those keys name no size
+and must say what they DID change in `NON_SIZE_REVISIONS`, and an entry there
+is REFUSED if its key does name a size. Four lanes are in it: `tokenizer` (a
+vocabulary swap), `byte-lm-resident` (a model shape), and `umap` and
+`par-graph-umap` (a row-separable `transform`).
+
+**This rule was rewritten because the gate caught its first version.** The
+original scope was "every dimension a site rule can find in a shrunk lane",
+and when `lane/umap-batch-determinism` merged into this branch the check
+immediately refused `umap` and `par-graph-umap` for having no `rows` floor.
+They had not been shrunk at all; their revision records an ARITHMETIC change.
+A rule that demands a floor with no measurement behind it produces boilerplate
+reasons, which is the rot this whole mechanism is against. Keying off what the
+revision key already says is both narrower and stronger, because it added the
+key-versus-body check above.
 
 **What it deliberately does not do.** It does not judge whether a floor is the
 RIGHT number; only a measurement does that, which is why rule 4 forces every
@@ -263,7 +281,7 @@ than papered over.
 
 A floor mechanism that has not been seen to refuse anything is the prose floor
 it replaces. `tools/fixture_floors.py --self-test` mutates the REAL harness
-source five ways and requires each to be refused BY NAME, and adds two more
+source SEVEN ways and requires each to be refused BY NAME, and adds two more
 rules that cannot be reached by a one-line mutation on a source written to
 break exactly them. It runs in the gate BEFORE the check itself, so a check
 that has stopped being able to refuse fails loudly rather than passing
@@ -291,10 +309,6 @@ rather than passing as a clean mutation.
     REFUSED mamba2-dtlimit: floor(seqlen=...): the reason is not traceable. It must be at least 60
           characters and cite a date, a docs/ path or a lane/ name...
 
-# MUTATION: the exemption list used on a lane that HAS a floorable dimension
-    REFUSED UNFLOORED_REVISED_LANES['holtwinters']: REFUSED, this lane DOES have a floorable
-          dimension (row_axis). Declare the floor instead of the exemption.
-
 # SYNTHETIC: a @floor() that is not on a lane function
     REFUSED line 6: a @floor() that is not on an @lane() function. Nothing enforces it, and it
           reads as though something does.
@@ -303,6 +317,20 @@ rather than passing as a clean mutation.
     REFUSED b: the reason for rows is copied word for word from a's rows floor. A floor's reason
           is about THIS lane's fixture; if the measurement really is shared, say which lane it
           was taken on.
+
+# MUTATION: the revision key says one size and the body runs another
+    REFUSED hdbscan: LANE_REVISIONS['hdbscan'] = 'rows-3000-1' says rows 3000, but the lane runs
+          at rows = 4000. A revision key that disagrees with the body is how a record ends up
+          describing bytes nobody made.
+
+# MUTATION: a revision key that names no size at all, undeclared
+    REFUSED spectral: LANE_REVISIONS['spectral'] = 'made-it-smaller-1' names no size this file
+          knows (batch, obs, rows, seqlen, steps). Either name one, so the floor and the record
+          agree, or say in NON_SIZE_REVISIONS what changed instead.
+
+# MUTATION: the non-size list used on a revision that DOES name a size
+    REFUSED NON_SIZE_REVISIONS['holtwinters']: REFUSED, its revision 'obs-128-1' DOES name a size
+          (observations 128). Declare the floor instead of the exemption.
 
 ok: the floor check refuses every violation above
 ```
@@ -391,9 +419,9 @@ estimate, not a benchmark.
   worktree, which has no built bindings, because the module imports
   `mojolearn`. Both new test BODIES were executed standalone against this
   branch's `tools/identity_break.py` and both pass; the gate will run them.
-- Nothing floors the `byte-lm` shape or the `tokenizer` vocabulary, the two
-  dimensions this checker cannot read (sections 3c and
-  `UNFLOORED_REVISED_LANES`). `tools/fixture_floors.py --list` prints the
+- Nothing floors the `byte-lm` shape, the `tokenizer` vocabulary or `umap`'s
+  transform, because none of them is a size (sections 3c and
+  `NON_SIZE_REVISIONS`). `tools/fixture_floors.py --list` prints the
   unreadable size sites at the end so the hole is on the record:
   `byte-lm` and `byte-lm-resident` both carry `_ids(X, steps * shape.batch,
   ...)`, whose batch comes from `ByteLanguageModelConfig` rather than from a

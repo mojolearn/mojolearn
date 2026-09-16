@@ -207,7 +207,10 @@ lane, with the reason in the same expression as the number:
 `tools/fixture_floors.py` enforces that from the source with `ast` alone, in
 `light-checks` (the only workflow that starts by itself) and as two tests in
 the CPU gate. Which lanes must carry a floor is DERIVED from `LANE_REVISIONS`
-rather than hand-listed, the site must read the floored local so the number
-cannot be bypassed, the reason must cite something traceable, and
-`--self-test` mutates the harness five ways and requires each to be refused by
-name. **Do not add a floor to this document.** Add it to the lane.
+rather than hand-listed: a key that changed a SIZE already says so in its
+first token (`rows-1500-1`, `steps-3-1`), those lanes must floor that
+dimension, and the number in the key must be the number the lane runs at. The
+site must read the floored local so the number cannot be bypassed, the reason
+must cite something traceable, and `--self-test` mutates the harness seven
+ways and requires each to be refused by name. **Do not add a floor to this
+document.** Add it to the lane.

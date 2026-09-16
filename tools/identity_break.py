@@ -889,11 +889,13 @@ def lane_floors():
             for name, fn in LANES.items() if getattr(fn, "fixture_floors", None)}
 
 
-#: SHRUNK LANES WITH NO FLOORABLE DIMENSION, and why not. A lane reaches this
-#: dict only if `tools/fixture_floors.py` can find NO size site in its body at
-#: all; an entry for a lane that HAS one is refused by name, so this cannot
-#: grow into a way of opting out.
-UNFLOORED_REVISED_LANES = {
+#: REVISIONS THAT ARE NOT A SIZE, and what they changed instead. LANE_REVISIONS
+#: records every lane whose input moved, which is broader than "was shrunk". A
+#: key that changed a SIZE says so in its first token (`rows-`, `obs-`,
+#: `steps-`, `seqlen-`, `batch-`) and MUST carry a matching @floor; every other
+#: key lands here with a sentence saying what moved. An entry whose key does
+#: name a size is refused by name, so this cannot become a way of opting out.
+NON_SIZE_REVISIONS = {
     "tokenizer": (
         "what changed is the VOCABULARY, not a size: the lane swapped the GPT-2 table for a 512-rank "
         "synthetic one (2026-09-16, lane/identity-fixtures-light), and a vocabulary is a constructor "
@@ -901,6 +903,21 @@ UNFLOORED_REVISED_LANES = {
         "how thin the coverage is: docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 5f measured "
         "4088 single-byte tokens and 4 two-byte tokens over the 4096 fixture bytes, so the BPE merge "
         "loop runs four times and the endoftext branch never matches"),
+    "byte-lm-resident": (
+        "what changed is the model SHAPE, one block at d_model 16 instead of two at 32 (2026-09-16, "
+        "lane/neural-shape-shrink), which is a property of the trainer rather than a count in the "
+        "fixture. The lane's claim survives it by construction: it asserts the resident export equals "
+        "the stateless gradient BYTE FOR BYTE at whatever shape both are built at. Its step count is "
+        "floored on the lane; see docs/lanes/LANE_STATUS_lane-neural-shape-shrink.md"),
+    "umap": (
+        "arithmetic, not input: UMAP.transform became row separable (2026-09-16, "
+        "lane/umap-batch-determinism), so the cell moved without any fixture size moving. The lane "
+        "still fits 1024 rows, exactly as it did before; see "
+        "docs/lanes/LANE_STATUS_lane-umap-batch-fix.md"),
+    "par-graph-umap": (
+        "the same row-separable UMAP.transform change as the `umap` lane (2026-09-16, "
+        "lane/umap-batch-determinism); this driver's fixture size did not move either. See "
+        "docs/lanes/LANE_STATUS_lane-umap-batch-fix.md"),
 }
 
 
