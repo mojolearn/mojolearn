@@ -1,177 +1,175 @@
 # lane/rf-score-weighted-nondeterminism
 
-**Status 2026-09-16: REPRODUCED, localized to ONE NODE, and the TRIGGER is isolated with
-p = 9.2e-4. NOT root-caused to a line. NO FIX LANDED.** The 0.8.6 blocker stands. No shipped
-code is changed here.
+**Status 2026-09-16: REPRODUCED and localized to one node. The LAUNCH-COUNT reading I
+committed earlier is now COMPROMISED and may be wrong. NOT root-caused. NO FIX LANDED.**
+The 0.8.6 blocker stands. No shipped behaviour is changed (leg 6+ adds a diagnostic define
+whose default is the reference value).
 
-Five MI300X legs, $0.60 total, every box verified deleted.
+Seven MI300X legs, $0.95 total, every box verified deleted.
 
-## THE HEADLINE
+## READ THIS FIRST: a correction to my own earlier headline
 
-The defect requires a **SECOND `find_best_splits` launch** accumulating into a `split[node]`
-slot that `initSplit` initialized only once.
+Commits `ce9e4ffd9` and `061f9162b` say the trigger is a SECOND `find_best_splits` launch,
+with ONE launch 0/400 and TWO launches 10/400, Fisher p = 9.2e-4. **That statistic is real
+but the variable was probably misattributed.**
 
-| launches per round | fits | moves |
-|---|---|---|
-| **1** | 400 | **0** |
-| **2** | 400 | **10** |
+At the stock cap of 10, "<=10 sampled columns" and "1 launch" are **perfectly correlated**,
+and so are ">=11 columns" and "2 launches". Legs 4 and 5 varied column count and I read the
+effect as launch count. Leg 7 broke the correlation for the first time by raising the cap to
+16, so that 11 columns runs ONE launch -- and it **still moved, 1/77**.
 
-Fisher one-sided **p = 9.2e-4**. Arms: 1 launch = cols1, cols2, cols10 (leg 4), cols10 (leg 5);
-2 launches = cols16 (leg 4), cols11, cols12, cols16 (leg 5).
+I am NOT claiming the launch reading is falsified, because that arm is compromised (below).
+I am claiming it is **unproven and probably wrong**, and that the variable which survives
+every stock measurement is the **sampled column count**, not the launch count.
 
-10 columns and 11 columns differ by **one feature** - nearly identical tie density and
-candidate count - yet 11 moves (3/100) and 10 never does (0/200 across two legs). At 11
-columns the second launch carries a **single** column, so it is one block per node: the race
-is NOT between blocks inside the second launch, but between the second launch and state the
-first launch left behind.
-
-## What the defect is, corrected
+## The defect
 
 Two claims in the original framing are measurably wrong:
 
 1. **The clf/reg asymmetry is NOT an output-shape artifact.** Over 80 fits the classifier's
-   **model** is bit-stable in all five exported arrays; its trees never moved. The defect is
-   regressor-specific.
-2. **The weighted metric path is exonerated.** `reg_unweighted` passes no weights and moves
-   with the other three reg parts.
+   **model** is bit-stable in all five exported arrays. The defect is regressor-specific.
+2. **The weighted metric path is exonerated.** `reg_unweighted` passes no weights and moves.
 
-## Leg 1 - reproduction and stage
+~2-4% of regressor fits move. Every odd value is distinct, so this is a race. Stable values
+match NVIDIA and the CPU column.
 
-80 fits from the installed 0.8.6 release wheel. wide 39/40 stable at `49be8ea935a47640`,
-base 38/40 stable at `d744878e7c0e31ee`; ~4% move. Every odd value is **distinct**, so this is
-a race. Stable values match NVIDIA and the CPU column.
+## What the stock binary says (legs 1-5, 7 arm A)
 
-`_offsets` and `_left_child` never move and node counts are identical every run, so **tree
-SHAPE is invariant**; `_colid` and `_quesval` move, usually dragging `_leaves`; exactly ONE
-tree differs per occurrence.
+| sampled columns | fits | moves |
+|---|---|---|
+| <= 10 | 400 | **0** |
+| >= 11 | 600 | 13 |
 
-## Leg 2 - n_streams (NEGATIVE: not the pipeline)
+Fisher one-sided p is ~1e-3 either way you label the variable, because at the stock cap the
+two labels are the same partition.
 
-K=4 moves 4/80, K=1 moves 3/80. `n_streams` creates **slots, not streams** (no `create_stream`
-or second `DeviceContext` on the fit path; `randomforest.mojo:2352` pipelines K trees over "the
-one" queue). With one slot there is no shared `SplitStaging` to race, so staging is excluded.
-
-## Leg 3 - the diverging NODE
-
-3 of 59 wide repeats, 0 of 59 base. **Every divergence is one node at depth 6** with shape
-intact; the depth-7 nodes that also differ are that node's own children (106 -> 211/212,
-95 -> 189/190): a downstream cascade.
+**The diverging node** (leg 3, and leg 7 arm A agrees): exactly ONE node per occurrence, at
+depth 6, with the depth-7 nodes that also differ being that node's own children -- a
+downstream cascade. The competing splits are on different FEATURES.
 
     tree=2   node 106  depth 6  colid 15 ->  1
     tree=0   node  76  depth 6  colid 10 ->  7
     tree=12  node  95  depth 6  colid 14 -> 15
 
-**Not a tie-break bug.** `Split::update` awards an equal-gain tie to the HIGHER `colid`, so
+**Not a tie-break bug**: `Split::update` gives an equal-gain tie to the HIGHER `colid`, so
 flips in both directions cannot come from equal gain plus that rule.
 
-**DIRECTION, worth keeping.** At 16 columns launch 1 covers cols 0-9 and launch 2 covers 10-15.
-Two of the three flips lose the SECOND launch's winner (15 -> 1 and 10 -> 7, falling back to a
-launch-1 column); the third (14 -> 15) is within launch 2's own range.
-
 **Depth 6 is VISIBILITY, not location.** At ~31 bootstrap rows per node candidates are close
-enough that losing one flips the winner; shallower nodes decide decisively and depth 7-8 nodes
-go pure and never select.
+enough that losing one flips the winner; shallower nodes decide decisively and depth 7-8
+nodes go pure and never select.
 
-## Legs 4 and 5 - the launch-count discriminator
+## Leg 7, and why arm B is compromised
 
-| leg | arm | cols | launches | moves / 100 |
-|---|---|---|---|---|
-| 4 | cols16 | 16 | 2 | 3 |
-| 4 | cols10 | 10 | 1 | 0 |
-| 4 | cols2 | 2 | 1 | 0 |
-| 4 | cols1 | 1 | 1 | 0 |
-| 5 | cols10 | 10 | 1 | 0 |
-| 5 | cols11 | 11 | 2 | 3 |
-| 5 | cols12 | 12 | 2 | 3 |
-| 5 | cols16 | 16 | 2 | 1 |
+Arm A (stock, cap 10) reproduced, so a source build is a valid vehicle:
 
-`N_BLKS_FOR_COLS = 10` (`builder.mojo:78`) caps `n_blocks_dimy = min(10, n_sampled_cols - col)`
-(`:1827`) and `enqueue_best_splits` strides `c += N_BLKS_FOR_COLS` (`:2061`). DEVIATION 1916
-fuses `initSplit` and the mutex re-zero into the setup launch (`:2011`), which runs **before**
-the column loop - so every launch after the first merges into an already-populated slot.
+    stock  wide/11   2/100
+    stock  wide/16   1/100
+    stock  odd/17    0/100     <-- the intended control, INSENSITIVE
 
-Leg 4 alone could have been "something about 16"; leg 5 kills that by straddling the boundary
-at 10 vs 11. Tie density cannot explain a one-feature difference.
+Arm B (cap 16, `-D MOJOLEARN_RF_BLKS_COLS16=1`, .so digest confirmed different) ran only
+`wide/11` before crashing:
+
+    cols16cap wide/11  1/77     <-- ONE launch, and it still moved
+
+Two problems, both stated rather than smoothed over:
+
+1. **The intended control was insensitive.** `odd/17` is two launches at the stock cap and
+   should have moved under the launch reading. It read 0/100. So it can prove nothing in
+   either arm, and it also argues against launch count on its own. (`odd` is plain standard
+   normal like `base`, which also ran at a much lower rate; `wide`'s logspace column scaling
+   is probably what manufactures the near-tied gains.)
+2. **Arm B crashed on a SHAPE CHANGE**, which is a finding in itself:
+
+       ValueError: operands could not be broadcast together with shapes (6812,) (6814,)
+
+   The node count differed between fits. Legs 1-3 and arm A never saw that: `_offsets` and
+   `_left_child` were invariant across hundreds of fits. Either
+   (a) **my define is unsound** -- raising a constant the reference calls "a plain member
+       initialised to 10 and never reassigned" is untested territory, and then arm B's move
+       is MY bug and the launch reading is untested; or
+   (b) **it is the same defect with a bigger blast radius** -- a flip at a shallower node
+       changes which children go pure, so the node count changes.
+
+   By reading, the define looks sound: all five shipped uses are the definition, two SIZING
+   sites for `max_len_histograms`, `n_blocks_dimy = min(cap, cols - col)` and the loop
+   stride; the histogram INDEX uses runtime `grid_dim.y <= cap` while the SIZE uses the
+   comptime cap, so index <= size at any cap and nothing assumes 10. But "sound by reading"
+   is exactly the class of claim this lane has falsified by experiment three times.
+
+## NEXT: leg 8 settles (a) vs (b) for about $0.10
+
+Run both binaries over `wide/10`, `wide/11`, `wide/16`, 100 repeats each, with shape changes
+now RECORDED instead of crashing the arm.
+
+**`cap16 @ wide/10` is the control that matters.** 10 columns is ONE launch under both caps,
+and the stock binary is stable there across 400 fits.
+
+- **cap16 wide/10 stable** -> the define is sound, arm B's `wide/11` move is real, and the
+  launch-count reading is dead: column count is the variable.
+- **cap16 wide/10 MOVES** -> raising the cap is itself unsound, every cap16 arm is void, and
+  the launch reading remains untested.
+
+`odd/17` is dropped as measured-insensitive.
 
 ## Ruled out, each with a reason
 
 - **Weighted metrics** - `reg_unweighted` moves.
-- **Label scale** - the `mag` loop reads `yp[i]`, the caller's own numpy buffer, after
-  `ctx.synchronize()`: a serial Float64 fold over stable host memory. `choose_scale` snaps to a
-  power of two and every fixture's Sigma|y| is far from a boundary (fractional log2 0.14-0.92).
-- **Float reduction ordering** - `RegressionBin` is `label_sum: Int32` fixed point plus
-  `count: UInt32`, relaxed **integer** atomics. No dither on this path (`split.mojo:37`).
-- **Histogram zeroing extent** - the global zero is `size_of[O.BinT]() * len_histograms`, bytes
-  scaled by the real bin type, and `enqueue_zero_bytes` covers exactly `nbytes`; the shared zero
-  uses typed slot indexing. Correct at both 4 and 8 bytes.
+- **Label scale** - a serial Float64 host fold over the caller's own buffer after
+  `ctx.synchronize()`; `choose_scale` snaps to a power of two and every fixture's Sigma|y| is
+  far from a boundary.
+- **Float reduction ordering** - `RegressionBin` is Int32 fixed point plus UInt32 counts under
+  relaxed **integer** atomics. No dither on this path.
+- **Histogram zeroing extent** - global zero is `size_of[O.BinT]() * len_histograms` (bytes,
+  scaled by the real bin type); shared zero uses typed slot indexing. Correct at 4 and 8 bytes.
 - **Compare-then-skip H2D caches** - guard by CONTENT on an in-order queue; also excluded by
   leg 2's K=1 arm.
-- **Wavefront-64 grouping** - DEVIATION 404 pins the reduce to 32 lanes under IDENTICAL, which
-  the wheel ships. `eval_best_split_pinned` read end to end: barriers in uniform control flow,
-  correct write-after-read ordering, `N_SPLIT_SCRATCH = TPB`, `comptime assert TPB % 32 == 0`,
-  single-thread publish. Sound.
-- **The cross-block merge WIDTH** - equally wide at 10 columns (10 blocks per node) and stable
-  there. Width is not the variable; launch count is.
-- **Device-property launch shapes** - no `get_attribute`, occupancy or CU query on the fit path.
-- **Cross-device peer copy** (Sep 15 hazard) - single-device box.
+- **The pipeline** - K=1 moves 3/80 against K=4's 4/80; `n_streams` makes slots, not streams.
+- **Wavefront-64 grouping** - DEVIATION 404 pins the reduce to 32 lanes under IDENTICAL;
+  `eval_best_split_pinned` read end to end and is sound.
+- **Device-property launch shapes** - no `get_attribute`, occupancy or CU query on the path.
+- **Cross-device peer copy** - single-device box.
 
-## Candidate mechanisms, NOT yet distinguished
+## Underpowered and failed results, flagged
 
-Both live in the cross-launch handoff of `split[node]`:
-
-1. **Stale read.** Launch 2's `_publish_to_global` reads `split[0]` before launch 1's non-atomic
-   payload write (`split[unsafe_offset=0] = split_reg.copy()`) is visible. The mutex's
-   RELEASE/ACQUIRE pair orders this within a launch; across launches visibility rests on the
-   kernel boundary.
-2. **Lost write-back.** Launch 2 merges correctly but its write-back is dropped, leaving
-   launch 1's winner - which matches the observed direction in 2 of 3 flips.
-
-DEVIATION 2502 already records that "a merge and the kernel's direct store of the flag can land
-in any order", which is the same seam.
-
-## NEXT (leg 6, about $0.05)
-
-Run `cols11` with leg 3's node dumping. At 11 columns the second launch is exactly column 10,
-so every divergence must involve col 10 against a col 0-9 winner. **If the diverging node always
-flips between col 10 and a col 0-9 column, the cross-launch handoff is confirmed and the two
-mechanisms above can be told apart by which side wins.** Naming the line still needs an
-instrumented build (dump per-node (launch, colid, gain, update_result)), which is a larger leg.
-
-## Underpowered results, flagged
-
-- Leg 1's n-sweep (3 repeats per n) read `distinct=1` everywhere. At ~4% that expects 0.12
+- Leg 1's n-sweep (3 repeats per n) read `distinct=1` everywhere; at ~4% that expects 0.12
   moves. **Not evidence of n-independence.**
-- Leg 2's K=1 vs K=4 (3 vs 4 of 80) excludes staging as the *sole* mechanism; it could not
-  detect a 30% reduction.
-- Leg 3's base fixture moved 0/59 - an unlucky draw, not a fix.
-- A single 0/100 arm is ~5% likely by luck at a 3% rate. The strength here is the POOLED
-  0/400 vs 10/400 and the one-feature 10-vs-11 contrast, not any single zero.
+- Leg 3's base fixture 0/59 - an unlucky draw, not a fix.
+- A single 0/100 arm is ~5% likely by luck at a 3% rate. Strength comes from the pooled
+  contrast, never a lone zero.
+- **Leg 6 was a total loss ($0.05, my error):** the body imported `mojolearn._identity_break`,
+  a WHEEL packaging artifact, and died in a source checkout. Fixed by loading
+  `tools/identity_break.py` by path.
+- **`define_mentions_in_build_log=0` was a weak check** that failed for an uninteresting
+  reason (`build_rf.sh` does not echo its command line). The `.so` digest comparison is the
+  authoritative guard that a define took effect, and it worked.
 
 ## Evidence (outside the repo)
 
-    ~/mojolearn-evidence/rf-score-weighted-blocker/leg-{1,2,3,4,5}/remote/identity/rf_probe*.json
+    ~/mojolearn-evidence/rf-score-weighted-blocker/leg-{1,2,3,4,5,6,7}/remote/identity/
 
 ## Resume
 
     WT=$(mktemp -d)/wt && git worktree add --detach $WT origin/main
     S=$WT/tools/rf_nondeterminism
-    bash $S/make_rf_probe5_body.sh /tmp/body.sh 100 1500       # mints presigned GET+PUT
+    bash $S/make_rf_probe6_body.sh /tmp/body.sh 100 900     # builds from source, 28 s per build
     cd $WT && MOJOLEARN_HOTAISLE_SPEC=8core MOJOLEARN_GPU_ARCHS=gfx942 \
       MOJOLEARN_GEMM_LEG_EXTRA=/tmp/body.sh \
       MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/rf-score-weighted-blocker/leg-N \
       MOJOLEARN_HOTAISLE_LANE=rf-probe \
-      bash tools/hotaisle_leg.sh amd --rent --minutes 40 --skip-gates   # drop --rent to dry run
+      bash tools/hotaisle_leg.sh amd --rent --minutes 40 --skip-gates
 
 The tree must be CLEAN or a real leg is refused; commit before renting.
 
 ## Boxes and cost
 
-| leg | VM | deleted | cost |
-|---|---|---|---|
-| 1 | `8796a71c` | 204 then GET 404 | $0.15 |
-| 2 | `68ef24e1` | 204 then GET 404 | $0.05 |
-| 3 | `f03ec215` | 204 then GET 404 | $0.05 |
-| 4 | `bcce7c94` | 204 then GET 404 | $0.05 |
-| 5 | `3df6a953` | 204 then GET 404 | $0.05 |
+| leg | VM | deleted | cost | outcome |
+|---|---|---|---|---|
+| 1 | `8796a71c` | 204 / 404 | $0.15 | reproduced, stage localized |
+| 2 | `68ef24e1` | 204 / 404 | $0.05 | pipeline excluded |
+| 3 | `f03ec215` | 204 / 404 | $0.05 | node named |
+| 4 | `bcce7c94` | 204 / 404 | $0.05 | column/launch threshold |
+| 5 | `3df6a953` | 204 / 404 | $0.05 | boundary straddled |
+| 6 | `aa2f3ccb` | 204 / 404 | $0.05 | LOST to a wheel-only import |
+| 7 | `4b164b21` | 204 / 404 | $0.15 | arm A reproduced; arm B compromised |
 
-Balance $32.78 to $32.18, **$0.60 total**. One box at a time, partials to R2 every 60 s.
+Balance $32.78 to $31.83, **$0.95 total**. One box at a time, partials to R2 every 60 s.

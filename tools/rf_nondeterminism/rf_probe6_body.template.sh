@@ -112,8 +112,17 @@ fixture = ib.fixture
 _h = ib._h
 NAMES = ("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
 
-# (fixture, sampled columns wanted). odd has 17 features and is arm B's control.
-CASES = (("wide", 11), ("wide", 16), ("odd", 17))
+# (fixture, sampled columns wanted).
+#
+# wide/10 IS THE CONTROL THAT MATTERS NOW. odd/17 was meant to be arm B's control but
+# leg 7 measured it INSENSITIVE: 0/100 in the STOCK arm, where the launch-count reading
+# predicted it should move, so it can prove nothing in either arm and is dropped.
+#
+# 10 columns is ONE launch under BOTH caps, and the stock binary is stable there across
+# 400 fits (legs 4 and 5). So cap16 @ wide/10 tests MY DEFINE, not the defect:
+#   cap16 wide/10 stable  -> the define is sound, and arm B's wide/11 move is real
+#   cap16 wide/10 MOVES   -> raising the cap is itself unsound and every cap16 arm is VOID
+CASES = (("wide", 10), ("wide", 11), ("wide", 16))
 
 
 def np_of(est, name):
@@ -182,6 +191,22 @@ for kind, want in CASES:
             ref_arrays, ref = cur, key
         elif key != ref:
             rec["moved"] += 1
+            # LEG 7 CRASHED HERE with shapes (6812,) vs (6814,): the NODE COUNT can
+            # differ between fits, i.e. the tree SHAPE moved, which legs 1-3 never saw.
+            # A shape change is a FINDING, not an error -- record it and skip the
+            # elementwise diff, which is only defined for equal lengths.
+            if (len(cur["_colid"]) != len(ref_arrays["_colid"])
+                    or len(cur["_offsets"]) != len(ref_arrays["_offsets"])):
+                rec["shape_changes"] = rec.get("shape_changes", 0) + 1
+                rec["divergences"].append({
+                    "repeat": i, "shape_changed": True,
+                    "ref_nodes": int(len(ref_arrays["_colid"])),
+                    "cur_nodes": int(len(cur["_colid"])),
+                    "ref_trees": int(len(ref_arrays["_offsets"]) - 1),
+                    "cur_trees": int(len(cur["_offsets"]) - 1)})
+                rec["distinct"] = len(seen)
+                flush()
+                continue
             off = np.asarray(ref_arrays["_offsets"]).astype(np.int64)
             bad = np.nonzero(
                 (np.asarray(cur["_colid"]) != np.asarray(ref_arrays["_colid"]))
