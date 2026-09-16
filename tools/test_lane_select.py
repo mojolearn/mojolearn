@@ -131,14 +131,138 @@ def test_several_paths_in_one_argument_are_never_inert():
     assert "NOT A SINGLE PATH" in sel["reasons"][blob]
 
 
+#: A file that MENTIONS a binding without calling into it, in the two ways
+#: this codebase mentions things: a docstring and a comment. It is fed to
+#: `_binding_names` through the read cache, so the check does not depend on
+#: which file in the tree happens to be written this way today.
+PROSE_ONLY_SOURCE = '''"""This door explains itself at length.
+
+It talks about _mojolearn_forest_host, because the forest host binding is
+what the reader will ask about next. It does not load it.
+"""
+# _mojolearn_byte_lm_host lives next door and is not called here either.
+from ._array import Array
+
+
+def fit(x):
+    return Array(x)
+'''
+
+#: The same names, RESOLVED, in each of the four shapes the selector reads.
+RESOLVING_SOURCE = '''from . import _mojolearn_tokenizer_host
+_BINDING = "_mojolearn_forest_host"
+
+
+def go(be):
+    be.binding("_mojolearn_byte_lm_host")
+    return _backend.load_host_module("_mojolearn_core_host")
+'''
+
+
 def test_binding_edges_do_not_come_from_prose():
-    """A binding named in a docstring is not a call into it. If prose counted,
-    the shared doors would hand every lane the forest and byte LM host
-    bindings, and a change to one oracle would select every lane."""
+    """A SENTENCE ABOUT A BINDING IS NOT A CALL INTO IT.
+
+    Harvesting `_mojolearn_*` by text search matched docstrings and comments,
+    every lane picked up the forest and byte LM host bindings, hit their
+    whole-closure fallback, and one oracle selected every lane. Edges come
+    from syntax now.
+
+    Both arms run. The text search is asked the same question FIRST and must
+    FIND the names, because a check whose fixture no longer contains the thing
+    it is looking for passes for the wrong reason and is indistinguishable
+    from a real pass."""
+    lane_select._read.cache["<prose only>"] = PROSE_ONLY_SOURCE
+    lane_select._read.cache["<resolving>"] = RESOLVING_SOURCE
+    try:
+        lane_select._binding_names.cache.pop("<prose only>", None)
+        lane_select._binding_names.cache.pop("<resolving>", None)
+        lane_select._parse.cache.pop("<prose only>", None)
+        lane_select._parse.cache.pop("<resolving>", None)
+
+        # THE ARM THAT MUST FIND THEM. If this is empty the fixture is broken,
+        # not the selector.
+        by_text = sorted(set(lane_select._BINDING_RE.findall(PROSE_ONLY_SOURCE)))
+        assert by_text == ["_mojolearn_byte_lm_host", "_mojolearn_forest_host"], (
+            f"the prose fixture no longer mentions the bindings by text ({by_text}), "
+            "so the next assertion would pass for the wrong reason")
+
+        from_prose = sorted(lane_select._binding_names("<prose only>"))
+        assert from_prose == [], f"a docstring and a comment produced binding edges: {from_prose}"
+
+        resolved = sorted(lane_select._binding_names("<resolving>"))
+        assert resolved == ["_mojolearn_byte_lm_host", "_mojolearn_core_host",
+                            "_mojolearn_forest_host", "_mojolearn_tokenizer_host"], (
+            f"a binding that IS resolved was missed: {resolved}. An empty answer for every "
+            "file would satisfy the assertion above while making the whole map blind.")
+    finally:
+        for cache in (lane_select._read.cache, lane_select._parse.cache,
+                      lane_select._binding_names.cache):
+            cache.pop("<prose only>", None)
+            cache.pop("<resolving>", None)
+
+
+def test_a_binding_every_lane_reaches_does_not_hand_over_its_tree():
+    """THE SECOND ROAD INTO THE SAME DEFECT, found 2026-09-16 on the merged
+    tree. Making binding edges come from syntax stopped PROSE giving every
+    lane the forest and byte LM bindings. It did not stop the IMPORT CLOSURE
+    doing it: `_bufcheck.py` -> `_buffer.py` is in every lane's closure and
+    reaches `_forest_host.py`, `_byte_lm_impl.py` and `_byte_lm_host.py`, so
+    all three bindings landed on all 211 lanes and each handed over its whole
+    Mojo tree. `core/forest_host_predict.mojo` and the mamba modeling file
+    still selected every lane, which is the symptom the earlier fix was
+    written to remove.
+
+    A binding everything reaches is not evidence about one lane, so it now
+    contributes its SOURCE to a lane the CPU manifest does not declare for its
+    family, and the whole binding to one the manifest does. This test pins the
+    consequence, deriving who is declared from the manifest rather than
+    listing lanes here."""
     sources, why = lane_select.lane_sources()
-    for lane in ("tokenizer", "mamba1", "ols"):
-        assert "_mojolearn_forest_host" not in why[lane]["bindings"], \
-            f"{lane} picked up the forest host binding from prose"
+    hs = lane_select.host_surface()
+    declared = {f["family"]: set(f["training_lanes"]) | set(f["inference_lanes"])
+                for f in hs.FAMILIES}
+    rel, family = "training/byte_lm.mojo", "byte_lm"
+    assert family in declared, "the manifest no longer has a byte_lm family"
+    carriers = {lane for lane, files in sources.items() if rel in files}
+    assert carriers, f"{rel} is carried by no lane at all, which is the opposite failure"
+    strays = sorted(carriers - declared[family])
+    assert not strays, (f"{rel} belongs to the {family} family but {len(strays)} lane(s) the "
+                        f"manifest does not declare for it carry it: {strays[:10]}")
+
+    # The two files that still selected every lane after the syntax fix. They
+    # are shared across families (`core/forest_host_predict.mojo` serves the
+    # extratrees lanes as well as the forest ones), so the check is the one
+    # FAMILY_CASES uses: a lane with no relationship to them at all.
+    for path in ("core/forest_host_predict.mojo", "mamba/impl/modeling/modeling_mamba.mojo",
+                 "core/gbdt_host_predict.mojo"):
+        sel = lane_select.select([path])
+        assert not sel["fallback"], f"{path} is no longer attributable: {sel['reasons'][path]}"
+        for other in ("ols", "kmeans", "arima"):
+            assert other not in sel["lanes"], \
+                f"{path} still selects {other}; the whole-closure fallback is back"
+
+
+def test_a_bindings_edge_always_has_a_door_that_resolves_it():
+    """THE ROUND TRIP FOR BINDINGS. Every binding the map gives a lane must be
+    resolved, by syntax, by one of that lane's own non-registry doors. A
+    binding that appears without such a door came from somewhere this file
+    does not know about, which is how the text search got in.
+
+    This replaces an assertion that `tokenizer` never sees the forest host
+    binding. It does see it, and legitimately: `_bufcheck.py` -> `_buffer.py`,
+    whose line 807 is `from . import _forest_host`. That widens the tokenizer
+    lane, which is the safe direction, and the narrowing this file has to
+    protect is covered by FAMILY_CASES."""
+    sources, why = lane_select.lane_sources()
+    sinks = lane_select.enumerator_files()
+    for lane in sorted(sources)[::13]:
+        doors = [f for f in sources[lane] if f.endswith(".py") and f not in sinks]
+        resolved = set()
+        for rel in doors:
+            resolved |= lane_select._binding_names(rel)
+        for binding in why[lane]["bindings"]:
+            assert binding in resolved, \
+                f"{lane} carries {binding} but no door of its own resolves it"
 
 
 def test_an_unattributable_path_falls_back_to_every_lane_and_says_so():

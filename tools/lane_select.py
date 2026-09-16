@@ -136,6 +136,7 @@ def _by_path(fn):
 
     wrapped.__name__ = fn.__name__
     wrapped.__doc__ = fn.__doc__
+    wrapped.cache = cache          # tests seed this to ask about a file that is not in the tree
     return wrapped
 
 
@@ -516,7 +517,7 @@ def lane_sources():
     family_of_binding = {f["binding"]: f["family"] for f in hs.FAMILIES}
     seed_cache = {}
 
-    def binding_seeds(src, used):
+    def binding_seeds(src, used, wide=True):
         """The Mojo files ONE binding contributes to a lane whose door calls
         `used`.
 
@@ -532,7 +533,27 @@ def lane_sources():
         followed wholesale.
 
         A lane whose door calls none of this binding's exports gets the whole
-        closure back. "I could not tell" has to stay wide."""
+        closure back. "I could not tell" has to stay wide.
+
+        EXCEPT FOR A BINDING EVERY LANE REACHES (`wide` False). Three doors
+        are in EVERY lane's import closure on this tree, through the shared
+        buffer helpers: `_forest_host.py`, `_byte_lm_impl.py` and
+        `_byte_lm_host.py`. So every lane resolved the forest and byte LM
+        bindings, every lane's door called none of THEIR exports, every lane
+        took this whole-closure fallback, and `core/gbdt_host_predict.mojo`
+        and the whole mamba tree selected all 211 lanes. That is the same
+        symptom the syntax rule above was written for, arriving by a second
+        road: the prose was one source of the edge and the import closure is
+        another. Reaching a binding that everything reaches says nothing about
+        one lane, so such a binding contributes its SOURCE only, and a change
+        to the binding file still selects every lane."""
+        if wide is not True:
+            # A BINDING EVERY LANE REACHES. `wide` is False for a lane the CPU
+            # manifest does not name for this family (source only, so a change
+            # to the binding file still selects the lane) and "whole" for one
+            # it does name, which takes the binding entire because the manifest
+            # is the declaration that this lane belongs to it.
+            return _mojo_closure([src]) if wide == "whole" else {src}
         exports = _binding_exports(src)
         hit = tuple(sorted(e for e in used if e in exports))
         key = (src, hit)
@@ -553,6 +574,11 @@ def lane_sources():
 
     sources, why = {}, {}
     sinks = enumerator_files()
+
+    # PASS ONE: each lane's Python doors and the bindings they resolve. Held
+    # first because the next pass needs to know which bindings EVERY lane
+    # resolves, and that is a measurement over all the lanes, not a list.
+    reach = {}
     for lane, fn in ib.LANES.items():
         names = _code_names(fn, vars(ib))
         seeds, matched = set(), set()
@@ -567,11 +593,29 @@ def lane_sources():
             bindings |= _binding_names(rel)          # resolved by syntax, never by prose
         bindings = {b for b in bindings
                     if os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))}
+        reach[lane] = (matched, files, doors, bindings)
+    ubiquitous = set.intersection(*[b for _, _, _, b in reach.values()]) if reach else set()
+
+    def _declared(lane, binding):
+        """Does the CPU manifest name this lane for the family that owns this
+        binding? That is the one declaration in the tree which says a lane
+        really belongs to a family, and it is what keeps the byte LM lanes
+        wide while `ols` is not."""
+        for b in (binding, routed.get(binding)):
+            fam = family_of_binding.get(b)
+            if fam and lane in family_lanes.get(fam, set()):
+                return True
+        return binding in adapted and lane in family_lanes.get(adapted[binding], set())
+
+    for lane in reach:
+        matched, files, doors, bindings = reach[lane]
         used = _called_names(doors)
         mojo = set()
         for binding in bindings:
             gpu_src = os.path.join("bindings", binding + ".mojo")
-            mojo |= binding_seeds(gpu_src, used)
+            wide = True if binding not in ubiquitous else \
+                ("whole" if _declared(lane, binding) else False)
+            mojo |= binding_seeds(gpu_src, used, wide)
             host = routed.get(binding)
             if host:
                 host_src = os.path.join("bindings", host + ".mojo")
@@ -586,6 +630,10 @@ def lane_sources():
                 # which has a quasi-Newton solver anywhere near it.
                 fam = family_of_binding.get(host)
                 if fam and lane in family_lanes.get(fam, set()):
+                    # PER EXPORT, never "whole". A host binding is the
+                    # multiplexer this rule was written for: taking
+                    # _mojolearn_core_host entire hands every core lane the
+                    # k-means, DBSCAN, k-NN and scaler oracles at once.
                     mojo |= binding_seeds(host_src, used)
                 else:
                     mojo.add(host_src)
@@ -606,7 +654,8 @@ def lane_sources():
                     extra.add(door)
         sources[lane] = files | extra | mojo
         why[lane] = dict(symbols=sorted(matched), python=len(files), bindings=sorted(bindings),
-                         families=sorted(fams), mojo=len(mojo), exports=len(used))
+                         families=sorted(fams), mojo=len(mojo), exports=len(used),
+                         ubiquitous=sorted(ubiquitous))
     _LANE_SOURCES = (sources, why)
     return _LANE_SOURCES
 
