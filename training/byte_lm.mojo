@@ -45,8 +45,9 @@ from checks.vendor import COMPILED_VENDOR
 from training.checkpoint import Checkpoint
 from training.byte_lm_config import ByteConfig
 from training.checks.train_loop import (
-    _zeros, _zeros_i32, _upload, _ones, _copy_into, _copy_nine, download_f32,
+    _zeros, _zeros_i32, _upload, _ones, _copy_into, download_f32,
 )
+from training.byte_lm_block_copy import byte_block_copy
 from gemm.checks.gemm_identical import (
     ANY_SABOTAGE as GEMM_SABOTAGE, identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -532,24 +533,20 @@ def _block_weights(ctx: DeviceContext, params: List[Float32], block: Int, config
         _param_slice(params, base + 8, config))
 
 
-def _block_counts(o: List[Int], base: Int) raises -> List[Int]:
-    """The nine element counts of one block, from consecutive offsets.
-
-    Derived here and nowhere else, so the counts and the layout are ONE
-    spelling instead of two. Their sum telescopes to `o[base + 9] - o[base]`,
-    which is why `_copy_nine` may address the slab as one range.
-    """
-    var counts = List[Int]()
-    for j in range(9):
-        counts.append(o[base + j + 1] - o[base + j])
-    return counts^
+def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
+    """The ten flat-buffer offsets that bound one block's nine tensors."""
+    var offs = List[Int]()
+    for j in range(10):
+        offs.append(o[base + j])
+    return offs^
 
 
 def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWeights, block: Int) raises:
     """Flat parameters -> the block's nine tensors, in ONE launch.
 
     Was nine `_copy_into` launches and one `ctx.synchronize()`. The nine
-    became one because the ranges are consecutive (`_copy_nine`); the wait
+    became one through `byte_block_copy` (codex/metal-block-copy-fusion,
+    commit 1895b0287, which carries its own Metal receipt); the wait
     went because it enforced nothing. Every caller queues further work on
     the SAME in-order context and reads no host memory in between, and each
     one already waits after its loop over the blocks (`byte_lm.mojo`
@@ -558,10 +555,11 @@ def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWei
     """
     var base = 1 + 9 * block
     var o = tb.offsets.copy()
-    _copy_nine(ctx, tb.param,
+    step_count_launch()
+    byte_block_copy[False](ctx, tb.param,
         w.norm1_w, w.w_q, w.w_k, w.w_v, w.w_o,
         w.norm2_w, w.w_gate, w.w_up, w.w_down,
-        o[base], _block_counts(o, base), False)
+        _block_offsets(o, base))
 
 
 def _pack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut bst: LlamaBackwardStages, block: Int) raises:
@@ -574,10 +572,11 @@ def _pack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut bst: LlamaBackwardS
     """
     var base = 1 + 9 * block
     var o = tb.offsets.copy()
-    _copy_nine(ctx, tb.grad,
+    step_count_launch()
+    byte_block_copy[True](ctx, tb.grad,
         bst.dw_norm1, bst.dw_q, bst.dw_k, bst.dw_v, bst.dw_o,
         bst.dw_norm2, bst.dw_gate, bst.dw_up, bst.dw_down,
-        o[base], _block_counts(o, base), True)
+        _block_offsets(o, base))
 
 
 struct ByteTrainer(Movable):

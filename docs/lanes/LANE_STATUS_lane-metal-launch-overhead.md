@@ -1,5 +1,14 @@
 # lane/metal-launch-overhead
 
+**THE ANSWER THIS LANE OWES, FIRST.** A byte LM identity cell's cost is paid
+PER FIT, not once per process. `--repeats 2` takes 60.99 s and `--repeats 4`
+takes 148.41 s on one lane and one fixture, so doubling the fits more than
+doubles the time and there is no measurable one-time term. It is not
+compilation and it is not pipeline state setup. It is dispatch and
+synchronization, and the measured cost model below reconstructs the per-fit
+number to within its own noise. Section 5.2 has the runs. **The launch and
+wait census is the right lever.**
+
 **WHAT THIS LANE FOUND.** On the shared M4, a `ctx.synchronize()` that has
 pending work costs about **4.1 ms**, and an `enqueue_function` costs about
 **0.30 ms**. One host round trip is worth roughly a dozen kernel launches.
@@ -126,18 +135,34 @@ and `2L` waits per step moved nothing but bytes.
 
 ## 3. What changed
 
-**The nine became one.** `train_copy_nine_kernel` and `_copy_nine`
-(`training/checks/train_loop.mojo`) do one block's nine ranges in a single
-launch. The nine ranges of a block are CONSECUTIVE in the flat buffer, so
-the concatenated thread index `i` maps to `base_off + i` with no offset
-table; the kernel takes the nine element counts and walks them to find which
-tensor owns `i`. `_block_counts` derives those counts from consecutive
-offsets in one place, so their sum telescopes to the length of the slab and
-the counts cannot drift apart from the layout.
+**The nine became one, using another lane's kernel and not this lane's.**
+`_unpack_block` and `_pack_block` now call `byte_block_copy[pack]` from
+`training/byte_lm_block_copy.mojo`, merged from
+`codex/metal-block-copy-fusion` at `1895b0287`. One launch copies the nine
+disjoint tensor ranges of a block; the y grid picks the tensor, each thread
+moves one FP32 value with `unsafe_load` and `unsafe_store`, and the
+direction is a `comptime` parameter so there is no runtime branch. A copy is
+a byte move and contains no float operation, so it cannot move a bit.
 
-The fused kernel moves floats with `unsafe_load` and `unsafe_store` and
-contains no arithmetic, exactly like the `train_copy_range_kernel` it
-replaces. A copy is a byte move. It cannot move a bit.
+**This lane wrote its own fused kernel first and then threw it away, which
+is the honest outcome.** `train_copy_nine_kernel` walked nine counts per
+thread to find its tensor and assumed the nine ranges were CONSECUTIVE in
+the flat buffer. Codex's takes ten absolute offsets, so it bakes in no
+layout assumption; it bounds checks every count against its destination
+buffer, which this lane's did not; it branches at compile time rather than
+at run time; and it arrived with a receipt this lane's did not have, at
+`bench/results/byte_lm_block_copy/2026-09-16-apple-m4/receipt.json`, over
+seven shape cases including empty ranges and 255, 256 and 257 element tails,
+compared as UInt32 bit patterns so signed zeros, subnormals, infinities and
+NaN payloads all count, with 70 refusal checks and a sabotage seen to fail.
+It is better on every axis. `training/byte_lm_block_copy.mojo` is NOT edited
+here, because that receipt records its source sha256, and the two hashes
+still match after the merge.
+
+What Codex's branch deliberately left undone is what this lane did. It
+changed no production dispatch and its "18 launches to 2" was a source
+count with no measured cost. The wiring, the cost model that prices it, the
+waits, and the end to end identity and timing on the shipped path are here.
 
 **Eleven waits went.** The two inside `_unpack_block` and `_pack_block`, and
 the nine in section 2.1 marked REMOVED. Every one of them was followed by
@@ -190,7 +215,12 @@ the arms, so the only thing that moved is `_mojolearn_byte_lm.so`.
 
 Both arms ran `tools/identity_break.py --lanes byte-lm,byte-lm-resident
 --no-batch`, which is 2 lanes by 9 hostile fixtures, each cell fitted TWICE
-in one process.
+in one process. **That full sweep was too much of the one Metal GPU for an
+iteration check and is not repeated below.** What this change can break is a
+copy offset, and `base` catches a wrong offset immediately, while
+`denormal`, `ties`, `odd` and the rest exist to catch accumulation order and
+tie breaking, which a byte move does not have. Everything after this point
+is base fixture only.
 
 ```
 BEFORE   cells=18 stable=18 moved=0 refused=0
@@ -203,7 +233,58 @@ AFTER    cells=18 stable=18 moved=0 refused=0
 rlpair hash is the same in both arms, on all nine fixtures including
 `denormal`, `denormal_ftz` and `ties`.
 
-FILL_SABOTAGE
+### 4.1 The sabotage, seen to fail
+
+A check that cannot fail is not evidence, so the fused copy was broken on
+purpose in a scratch build and the lane was made to read DIVERGENT.
+
+**The first sabotage was the wrong one and that is worth recording.** It
+swapped `w_q` and `w_k` at the `_unpack_block` call site. This byte LM uses
+grouped query attention, so `w_k` is SMALLER than `w_q`, and Codex's bounds
+check refused the launch with `byte block copy: invalid tensor range` on
+both lanes. That proves his guard works. It does not prove the identity hash
+would catch wrong BITS, which is what the sabotage is for.
+
+The second swapped `norm1_w` and `norm2_w`, which are both `d_model`, so
+every guard passes and the copy stays in bounds and writes plausible, wrong
+numbers.
+
+```
+tools/identity_break.py --lanes byte-lm,byte-lm-resident --fixtures base
+  exit 1
+  MOVED  byte-lm-resident/base: model=RELOAD-MOVED
+  RLPAIR_MOVED byte-lm-resident/base: nll 0x40af00e5 vs 0x40af0123;
+               logits element 0 0xbccfaebd vs 0xbccfb5e5
+
+--diff clean sabotage
+  summary (infer/model): DIVERGENT=1, IDENTICAL=2, RELOAD-MOVED=1
+  summary (rlpair):      IDENTICAL=1, RLPAIR_MOVED=1
+```
+
+`training/byte_lm.mojo` was then restored from a byte copy taken before the
+edit, never with `git checkout`.
+
+**A FIXTURE THAT CANNOT SEE THE DEFECT.** In the same sabotaged run
+`byte-lm/base` read IDENTICAL x2. That lane is at `steps-1-1`, ONE training
+step, and RMSNorm weights start equal, so swapping two equal buffers is a
+no-op until a step has moved them apart. Only the multi-step
+`byte-lm-resident` lane diverged. The shrunken one-step cell is blind to
+this whole defect class, and anyone reading a green `byte-lm` cell as cover
+for a copy change is reading nothing.
+
+### 4.2 The wired path against the original
+
+`--diff` of the BEFORE arm against the base cells of the Codex-wired
+binding, on the cells both ran.
+
+```
+summary (infer/model): IDENTICAL=4
+summary (rlpair):      IDENTICAL=2
+```
+
+Binding sha256 first 16: BEFORE `5f8c3def3aeb081b`, Codex-wired
+`9fcfcc472dba88f2`, sabotage `f02fee9c04f00ce5`.
+
 
 **The CPU host route was not touched and could not have been.** The host
 byte LM lives in `training/byte_lm_host*.mojo` and builds into
@@ -215,33 +296,66 @@ lane's diff touches `training/byte_lm.mojo`,
 host route's bytes cannot have moved.
 
 
-## 5. Timings
+## 5. Timings, and a retraction
 
-`byte-lm-resident` on the `base` fixture, alone under the Metal lock, same
-two bindings, wall clock seconds for the whole lane.
+**THE FIRST TIMING IN THIS FILE WAS WRONG AND IS WITHDRAWN.** One pair of
+runs read 59.50 s before against 38.97 s after and was written up as a real
+reduction. It did not replicate. A second pair under the same protocol read
 
-| arm | rep 1 | rep 2 | min |
-| --- | --- | --- | --- |
-| BEFORE | 264.66 | 59.50 | **59.50** |
-| AFTER | 38.97 | 40.10 | **38.97** |
+| arm | rep 1 | rep 2 |
+| --- | --- | --- |
+| BEFORE `5f8c3def3aeb081b` | 60.77 | 67.86 |
+| AFTER `9fcfcc472dba88f2` | 66.22 | 94.28 |
 
-BEFORE rep 1 at 264.66 s is an outlier against its own rep 2 at 59.50 s, so
-it is reported and not used. Read the minima, 59.50 s against 38.97 s.
+so the "after" arm is at best equal and reads slower. **This lane's change
+is below the noise floor of this measurement, and section 5.1 shows it could
+not have been anything else.** The earlier 38.97 s was a cold binding and a
+contended box, not a saving. Reporting it as one was the error the repeated
+runs caught.
 
-**What this measurement does NOT say.** Both full eighteen cell identity
-arms took about the same wall clock, roughly 37 to 39 minutes each. That is
-not a contradiction. Those arms are mostly the `byte-lm` stateless lane and
-the infer, model and rlpair columns, which download the whole parameter
-vector per step and run forward passes this lane did not touch. The isolated
-`byte-lm-resident` number above is the honest one for the shipped resident
-step.
+### 5.1 Why it HAD to be below the noise, computed before excusing it
 
-**The strongest single number on this page is not a ratio.** The BEFORE
-identity arm reported `58.06s user 76.83s system 5% cpu 38:39.26 total`. A
-byte LM identity arm on Metal spends about **95 percent of its wall clock
-blocked**, on a box whose load average was 1.34. It is not computing. It is
-waiting for round trips.
+The change removes `16L` launches and `2L + 11` waits per step. At the
+section 1 prices and `L = 1` that is `16 * 0.295 + 11 * 4.15 = 50 ms`. Section
+5.2 measures a fit at about 43.7 SECONDS. Fifty milliseconds is one part in
+870. No two-repeat wall clock on a shared box can see that, and it was a
+mistake to look for it there rather than compute it first.
 
+### 5.2 The mechanism test, which decides the whole lever
+
+Is a cell's cost paid once per PROCESS, which would make it compilation and
+pipeline state setup, or once per FIT, which would make it dispatch and
+synchronization? `--lanes byte-lm-resident --fixtures base --no-batch`,
+Codex-wired binding, one Metal hold, after a discarded warm-up because a
+cold binding pays a one-time cost that would otherwise be read as the
+answer.
+
+| run | wall clock |
+| --- | --- |
+| warm-up, `--repeats 2`, discarded | 57.34 s |
+| `--repeats 2` | **60.99 s** |
+| `--repeats 4` | **148.41 s** |
+
+**The time MORE than doubled when the fits doubled, so the cost is PER FIT.**
+Fitting `T(r) = C + rF` gives `F = 43.7 s` per fit and `C = -26 s`, and a
+negative one-time term means there is no measurable one-time term at all;
+the box was contended during the `--repeats 4` run, which inflates it. Even
+reading the doubling as exact, `C` is zero.
+
+**The census reconstructs that number.** One step is 1324 launches and 2021
+waits by the committed H100 breakdown. At this file's measured Apple prices
+that is `1324 * 0.295 ms + 2021 * 4.15 ms = 0.4 s + 8.4 s = 8.8 s` per step,
+so a 43.7 s fit is about five steps of dispatching and waiting. The launch
+and wait census accounts for the per-fit cost, and **the eight hour Apple
+column is a dispatch and synchronization bill, not a compilation bill.**
+
+This is the result that matters on this page. It says the direction in
+section 7 item 1 is the right one and that this lane's own change, while
+correct and free, is one part in 870 of it.
+
+For completeness, the binding embeds 118 Metal libraries, counted as `MTLB`
+headers in `_mojolearn_byte_lm.so`. If pipeline state creation were the cost
+that would have shown up as a large one-time term. It did not.
 
 ## 6. The runtime offers no batching primitive
 
