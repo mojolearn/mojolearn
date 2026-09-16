@@ -25,7 +25,10 @@ TREES = int(os.environ.get("ET_TREES", "16"))
 DEPTH = int(os.environ.get("ET_DEPTH", "8"))
 SO_SHA = os.environ.get("ET_SO_SHA", "")
 REPEATS = int(os.environ.get("ET_REPEATS", "300"))
-DEADLINE = time.time() + float(os.environ.get("ET_SECS", "1800")) - 90
+_secs = float(os.environ.get("ET_SECS", "1800"))
+# The fetch reserve is PROPORTIONAL. A flat 90 s reserve turned a 200 s control
+# cell into 110 s, and a 60 s rehearsal into zero fits before the first one ran.
+DEADLINE = time.time() + _secs - max(15.0, min(90.0, 0.15 * _secs))
 
 import mojolearn
 from mojolearn import ExtraTreesRegressor
@@ -94,7 +97,7 @@ flush()
 ref = None
 seen = set()
 for i in range(REPEATS):
-    if time.time() > DEADLINE:
+    if i > 0 and time.time() > DEADLINE:
         doc["notes"].append("deadline %s cols=%d at %d" % (ARM, COLS, i))
         flush()
         break

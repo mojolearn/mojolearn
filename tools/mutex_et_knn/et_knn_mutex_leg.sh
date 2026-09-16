@@ -163,10 +163,16 @@ if [ "$TGATE" = 0 ]; then
     # The order is deliberate. The cell that has to MOVE runs FIRST, so a leg that
     # runs out of lease still carries its own control (the same binary below the
     # threshold) rather than only the arm that is expected to be quiet.
-    etrun stock 2048 300 700   # bpn = 4 on gfx942. THE ARM.
-    etrun stock  256 150 200   # bpn = 1, SAME BINARY, cannot contend. THE CONTROL.
-    etrun fixed 2048 300 700   # bpn = 4, repaired.
-    etrun fixed  256 150 200
+    # SIZED FROM A MEASUREMENT, NOT A GUESS. One fit of this configuration took
+    # about 2 s on an M4 (3 fits, 7.5 s wall including interpreter start), so 600
+    # fits fit in a 700 s cell with room. At the forest's 4.3% that arm expects 26
+    # moves and P(0) is about 5e-12; a 0/600 bounds the rate at 0.5% by the 95%
+    # rule of three. COMPUTE THIS BEFORE READING THE RESULT, which is the whole
+    # point of writing it in the body rather than in the write-up.
+    etrun stock 2048 600 700   # bpn = 4 on gfx942. THE ARM.
+    etrun stock  256 300 250   # bpn = 1, SAME BINARY, cannot contend. THE CONTROL.
+    etrun fixed 2048 600 700   # bpn = 4, repaired.
+    etrun fixed  256 300 250
 else
     echo "$TOKEN ET SKIPPED: the arms did not pass the section gate"
 fi
