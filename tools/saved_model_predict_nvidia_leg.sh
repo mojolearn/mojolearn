@@ -84,6 +84,10 @@ run record env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/pytho
     pixi run python tools/classical_host_gate.py record "$REC" --lanes "$GATE_LANES"
 say "record_exit=$?"
 tail -40 "$OUT/logs/record.log" >> "$G" 2>/dev/null
+# COPIED HERE, NOT ONLY AT THE END. The fetch takes whatever is under
+# /root/gemm_leg_out when the poll deadline is reached, and the deliverable
+# must be inside it from the moment it exists, not after every later phase.
+rm -rf "$OUT/recording"; cp -R "$REC" "$OUT/recording" 2>/dev/null
 
 # --------------------------------------------------- the NVIDIA identity column
 run identity env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
