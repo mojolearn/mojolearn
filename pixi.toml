@@ -1127,6 +1127,37 @@ check-bpe-trainer = "sh tokenizer/tools/gen_unicode_table.sh && python3 python/m
 # tie-break, so a fixture that never reaches a tie leaves it INERT and the
 # run reports that rather than passing quietly.
 check-bpe-trainer-sabotage = "sh tokenizer/tools/gen_unicode_table.sh && python3 python/mojolearn/_bpe_trainer.py build/bpe_trainer && mojo run -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1 -I . tokenizer/checks/trainer_check.mojo"
+# THE FOUR-LANE ORACLES (lane/four-lane-oracles, 2026-09-16). The oracle and
+# applicability audit (docs/lanes/LANE_STATUS_oracle-and-applicability-audit.md)
+# found four lanes a release record runs whose passing cell is a hash compared
+# only against a previous hash of the SAME CODE. These four checks give each of
+# them something that computes the answer a second way and can disagree.
+# Per lane, what the oracle is, what it can and cannot catch, and the sabotage
+# it was SEEN TO FAIL on, are in docs/lanes/LANE_STATUS_four-lane-oracles.md.
+#
+# `check-bpe-trainer` above is NOT this. It holds the Mojo trainer to the
+# Python one, and the Mojo one was written against the Python one, so a wrong
+# decision in the Python file is wrong in both and that check passes. This one
+# writes byte-level BPE from the algorithm's definition, ungrouped and with the
+# tie-break expressed as a sort rather than a scan order, and holds the
+# trainer to it on the lane's own 4,096-byte fixture corpus.
+check-bpe-trainer-oracle = "python3 tools/bpe_trainer_oracle_check.py"
+check-bpe-trainer-oracle-sabotage = "MOJOLEARN_BPE_TRAINER_SABOTAGE=1 python3 tools/bpe_trainer_oracle_check.py --sabotage-expected"
+# The fold partition: combinatorial invariants that RAISE (the lane only
+# hashes them), plus an independent recomputation of both branches. The
+# recomputation is the arm that matters: under the lane's own
+# MOJOLEARN_FOLD_ORDER_SABOTAGE every invariant still passes, 136 of 136,
+# and the recomputation fails 20 of 20.
+check-cross-val-folds-oracle = "python3 tools/cross_val_folds_oracle_check.py"
+check-cross-val-folds-oracle-sabotage = "MOJOLEARN_FOLD_ORDER_SABOTAGE=1 MOJOLEARN_HOST_ALLOW_SABOTAGE=1 python3 tools/cross_val_folds_oracle_check.py --sabotage-expected"
+# The optimized hyperparameters: a property oracle, because a value oracle
+# would mean writing a second quasi-Newton optimizer and two convergent
+# optimizers need not agree. No probe within 0.1 in log space beats the
+# answer, the projected gradient is small, and the float32 likelihood and its
+# analytic gradient agree with a float64 numpy restatement of the definition.
+# `--strict` turns the one KNOWN failure (the `wide` fixture) into a failure.
+check-gp-optimize-oracle = "python3 tools/gp_optimize_oracle_check.py --lane gp-optimize"
+check-gp-optimize-restarts-oracle = "python3 tools/gp_optimize_oracle_check.py --lane gp-optimize-restarts"
 # THE METRIC LANE, 2026-09-01. `CosineExpanded`, `LpUnexpanded` and
 # `weights='distance'`: the eight implemented DistanceType values against a
 # float32 second spelling and a float64 reference computed a third way,
