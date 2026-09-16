@@ -36,10 +36,17 @@ requires equal values.
   per constructor value that selects a different numeric path, the linalg
   and metrics functions, and the multi-GPU drivers on one device).
 - **On a CPU-only install** the public CPU reference lanes run
-  (`host_surface.public_reference_lanes()`: gemm-pinned, kde, ols, ridge,
-  knn, svc, pca, cholesky, and tokenizer, which loads the synthetic
-  vocabulary mojolearn trains itself), fitted inside the verifier's
-  reference scope.
+  (`host_surface.public_reference_lanes()`, 39 of them), fitted inside the
+  verifier's reference scope. They cover k-means and its starts, the k-NN,
+  radius and kernel-density variants, DBSCAN, the linear, ridge, logistic and
+  decomposition lanes, SVC, SVR and the isolation forest, the saved UMAP
+  embedding's transform, the pinned GEMM and the Cholesky solve, the KPSS
+  test, the bootstrap, the permutation test and Monte Carlo integration, and
+  tokenizer, which loads the synthetic vocabulary mojolearn trains itself.
+  Thirty of the 39 were added on 2026-09-16 after being measured IDENTICAL
+  against the Apple, NVIDIA and AMD columns with their sabotage arm seen to
+  move; the wheel grew by nothing, because every one is served by a binding it
+  already carried.
 - **Portable models** run on every install: small models trained on a GPU
   and saved, shipped in `mojolearn/verify_reference/models/` (a random
   forest, a symmetric boosting model, a linear regression and a PCA, 179 KB
@@ -65,10 +72,13 @@ Each part reads one state.
 | IDENTICAL | equal to the reference hash |
 | DIVERGENT | different from it, or this machine disagreed with itself between repeats, or batch invariance failed here |
 | OWED | no committed record carries this part yet, the record's own columns disagree at one commit, or the part changed after the record (a hash here against an `n/a` there, as when a lane gained a batch declaration); not a pass |
-| REFUSED | the lane or probe raised; the sentence is printed (for example a function with no CPU implementation, or a lane whose host binding this install lacks, refused by name) |
+| REFUSED | the lane or probe raised; the sentence is printed (for example a function with no CPU implementation, or a lane whose host binding this install lacks, refused by name). **A refused part did not run, so it is not a pass and it costs the whole run its pass**: any refusal makes the verdict INCOMPLETE and the exit non-zero |
 | N/A | the estimator has no such output (a transductive clusterer has no held-out answer) |
 
-The command prints a table per family and a verdict.
+The command prints a table per family and a verdict. The verdict line leads
+with how much of the run was actually checked, as in `verified 44 of 332 cell
+parts (0 divergent, 0 owed, 288 refused, 0 n/a)`, so a run that mostly refused
+cannot be misread as a run that passed.
 
 ## Flags
 
@@ -83,6 +93,49 @@ The command prints a table per family and a verdict.
 | `--no-models` | skip the portable models |
 | `--json` | one JSON report on stdout, progress on stderr |
 | `--reference-table PATH` | compare against another table |
+| `--self-test` | show that this verifier can fail (below) |
+| `--json-out PATH` | with `--all`: also write the evidence document to PATH |
+
+## Can you watch it fail?
+
+A verifier that only ever passes proves nothing. `verify --self-test` lets you
+see the comparison catch a wrong answer, on your machine, in your installation:
+
+    python -m mojolearn verify --self-test
+
+It runs one lane twice through the ordinary comparison, the same code path that
+judges every other lane. Once on the untouched fixture, which must read
+IDENTICAL, and once with every value of the input's first column moved up by
+one ULP, which must read DIVERGENT. The perturbation is real arithmetic at run
+time, not a printed verdict, so it needs no special build; the lane computes
+correctly over an input whose last bits differ, and the comparison is what
+notices. Exit 0 only if **both** arms behave, so a comparison stuck on either
+answer fails it.
+
+Two commands, then, and the passing one means something because the other one
+can fail.
+
+## The evidence document
+
+`--json` (and `--json-out PATH`) emits the run as data rather than a verdict,
+for a reader who did not run it and should not have to take a word on trust:
+
+- **every cell**, with the hash computed here, the hash expected, the verdict
+  and the wall time, so a run can be audited or two runs diffed;
+- **what produced the numbers**: the version and commit, and the sha256 and
+  size of every binding actually loaded, host bindings included;
+- **where each reference came from**: the committed column, its vendor and the
+  commit it was recorded at, as a path under `bench/results/identity_break/`
+  that you can open in this repository and re-run;
+- **the self-test result**, in the same document, so one artifact shows both
+  that the comparison caught a deliberately wrong answer and that the real
+  lanes matched;
+- **counts that cannot be misread**: lanes checked and skipped with the reason
+  for each, portable models counted separately, and cell parts compared and
+  refused.
+
+The human report and the JSON are rendered from the same object, so they cannot
+drift into describing different runs.
 
 ## How long it takes
 
@@ -92,7 +145,7 @@ fixture would hash different bytes.
 
 | install | `--quick` | `--full` |
 |---|---|---|
-| CPU-only, Apple M4, one core | 2 s | 7 s (8 lanes, 9 fixtures, 4 models) |
+| CPU-only, Apple M4, one core | 2 s | 8.7 min, measured (39 lanes, 9 fixtures, 4 models) |
 | CPU-only, x86 Linux (AMD EPYC, 8 vCPU) | 2 s | 6 to 12 s |
 | Metal, Apple M4 | 12 s (26 lanes, base fixture) | more than an hour (about 180 lanes x 9 fixtures) |
 
@@ -121,12 +174,17 @@ is a per-release question.
 
 | exit | meaning |
 |---|---|
-| 0 | `VERIFIED`: no part DIVERGENT and at least one IDENTICAL (OWED and REFUSED parts are counted, not passed) |
-| 1 | `MISMATCH`: at least one part DIVERGENT |
+| 0 | `VERIFIED`: at least one part IDENTICAL, no part DIVERGENT, and **nothing REFUSED**. OWED and N/A parts are counted, not passed |
+| 1 | `MISMATCH`: at least one part DIVERGENT. A wrong answer outranks an absent one, so this is read before INCOMPLETE |
 | 2 | invalid usage |
 | 3 | refused: the process loaded a tier other than IDENTICAL |
-| 4 | cannot run: the import raised, the fixtures differ, or every judged part refused |
+| 4 | `INCOMPLETE`, or cannot run: **any** judged part REFUSED, or the import raised, or the fixtures differ. A part that did not run is not a part that passed, and there is no number of parts that did run which makes up for one that did not |
 | 5 | no reference: no table in this install, or every part OWED |
+
+Before 2026-09-16 one IDENTICAL part outranked any number of REFUSED ones, so
+an install missing most of its host bindings printed `VERIFIED, exit 0` having
+checked 44 of 332 parts. That is fixed; a run in that state now reads
+`RESULT: INCOMPLETE (verified 44 of 332 cell parts ...)` and exits 4.
 
 ## What a local run proves, and what it does not
 

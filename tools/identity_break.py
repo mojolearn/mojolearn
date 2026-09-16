@@ -782,7 +782,7 @@ LANE_REVISIONS = {
     "holtwinters": "obs-128-1",
     # training steps: 3 AdamW steps -> 1
     "byte-lm": "steps-1-1",
-    "byte-lm-resident": "steps-1-1",
+    "byte-lm-resident": "shape-l1-d16-ff32-1",
     "samba": "steps-1-1",
     "samba-untied-dropout-accum": "steps-1-1",
     # sequence length: the (2, 16, 32) slab -> (2, 8, 32)
@@ -1296,6 +1296,27 @@ def _byte_lm_params(shape):
             named[name] = _hw(shp, "byte-lm:" + name, -0.125, 0.125)
     flat = np.ascontiguousarray(np.concatenate([named[n].reshape(-1) for n in shape.parameter_names]))
     return named, flat
+
+
+def _byte_lm_shape(ml, e):
+    """The byte LM shape a fit ACTUALLY runs, never the default.
+
+    Until 2026-09-16 every byte LM lane ran the shipped profile, so the
+    parts below could construct `ByteLanguageModelConfig()` and be right.
+    `byte-lm-resident` is now one block at d_model 16
+    (lane/neural-shape-shrink), and a part that assumes the default reads
+    REFUSED with `parameters must be float32 [34944]` instead of checking
+    anything. `LanguageModelInference` and the host trainer expose `shape`;
+    the GPU trainer carries it in `state_dict()['model_shape']`, which it
+    writes only when the shape is not the shipped profile."""
+    shape = getattr(e, "shape", None)
+    if isinstance(shape, ml.ByteLanguageModelConfig):
+        return shape
+    try:
+        moved = e.state_dict().get("model_shape")
+    except Exception:
+        moved = None
+    return ml.ByteLanguageModelConfig(**moved) if moved else ml.ByteLanguageModelConfig()
 
 
 def _block_weights(lane, shapes, ones=()):
@@ -2203,8 +2224,20 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """The device-owned session (resident=True, lean step results), the
     path the byte-lm lane's docstring says is bit-equal to the stateless
-    one and measured on one H100 only."""
-    shape = ml.ByteLanguageModelConfig()
+    one and measured on one H100 only.
+
+    SHAPE (lane/neural-shape-shrink, 2026-09-16): one block at d_model 16,
+    not the shipped two-block d_model-32 profile. THIS LANE'S CLAIM IS THE
+    SESSION, not a shape: it asserts the resident export equals the
+    stateless path's gradient BYTE FOR BYTE at whatever shape both are
+    built at (`_same_bytes` below), so the claim is shape-independent and
+    survives the cut. The shipped profile keeps its device column from the
+    `byte-lm` lane, which is floored at it on purpose. Depth is the lever
+    that removes Metal work here: cost on Metal is per-launch overhead, and
+    halving the block count halves the launches (measured 1.380 s -> 0.849 s
+    per resident step, and 0.644 s with d_model 16 and intermediate 32)."""
+    shape = ml.ByteLanguageModelConfig(n_layers=1, d_model=16, n_heads=2, n_kv=1,
+                                       head_dim=8, intermediate=32)
     named, _ = _byte_lm_params(shape)
     m = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
                                          shape=shape, resident=True, step_result="lean")
@@ -5027,7 +5060,7 @@ def _batch_byte_lm(ml, e, Xh):
     """logits `[B, L, vocab]`, each sequence alone against 16 of them, and
     every prefix length against the whole length (the model is causal and
     prefills from position 0, so position t may not read the length)."""
-    shape = ml.ByteLanguageModelConfig()
+    shape = _byte_lm_shape(ml, e)
     ids = _ids(Xh, 16, shape.length)
     return [_BatchRows("logits", ids, lambda r: (np.asarray(e.logits(r)),)),
             _BatchPrefix("logits", shape.length, lambda p: (np.asarray(e.logits(np.ascontiguousarray(ids[:, :p]))),),
@@ -5569,11 +5602,12 @@ _batchscale_decl(_batchscale_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimi
 
 
 def _long_byte_lm(ml, e):
-    """The lane's model at length SCALE_LONG_L. Every byte LM lane runs the
-    default shape, and its registry does not depend on the length (RoPE, no
-    position table), so the same flat parameters load into the default
-    config with only `length` changed."""
-    shape = ml.ByteLanguageModelConfig(length=SCALE_LONG_L)
+    """The lane's model at length SCALE_LONG_L. A byte LM registry does not
+    depend on the length (RoPE, no position table), so the same flat
+    parameters load into THE LANE'S OWN shape with only `length` changed.
+    Read the shape from the fit rather than assuming the shipped profile:
+    since 2026-09-16 byte-lm-resident runs one block at d_model 16."""
+    shape = ml.ByteLanguageModelConfig(**dict(_byte_lm_shape(ml, e).to_dict(), length=SCALE_LONG_L))
     if isinstance(e, ml.LanguageModelInference):
         return ml.LanguageModelInference(e._parameters, shape=shape, threaded=e._threaded, threads=e._threads)
     return ml.SmallByteLanguageModelTrainer(np.asarray(e.parameters_),
@@ -5582,7 +5616,7 @@ def _long_byte_lm(ml, e):
 
 
 def _batchscale_byte_lm(ml, e, Xh):
-    shape = ml.ByteLanguageModelConfig()
+    shape = _byte_lm_shape(ml, e)
     ids = _tiled_ids(Xh, SCALE_WHOLE, shape.length)
     long_m = _long_byte_lm(ml, e)
     idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L)
@@ -5723,7 +5757,7 @@ _ragged_decl(_ragged_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "tra
 
 
 def _ragged_byte_lm(ml, e, Xh):
-    shape = ml.ByteLanguageModelConfig()
+    shape = _byte_lm_shape(ml, e)
     lens = tuple(min(n * 2, shape.length) for n in RAGGED_LENGTHS)
     ids = _junk_ids(_ids(Xh, len(lens), shape.length), lens, shape.vocab_size)
     both = lambda a, ls: (np.asarray(e.logits(a, lengths=ls)), np.asarray(e.next_bytes(a, lengths=ls), dtype=np.int64))
@@ -6199,7 +6233,7 @@ def _rlpair_byte_lm(ml, e, Xh):
     through that same entry; sampler 2 is the CPU inference class on the
     trainer's parameters (threaded, two threads), when this install has the
     host binding: sample on the CPU, train on the GPU, in one process."""
-    shape = ml.ByteLanguageModelConfig()
+    shape = _byte_lm_shape(ml, e)
     samplers = [_rl_prefix_sampler("trainer.logits prefix recompute", e.logits)]
     notes = []
     try:
