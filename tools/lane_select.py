@@ -158,11 +158,13 @@ def _by_path(fn):
 def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
-    global _ENUMERATORS, _LANE_SOURCES
+    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED
     for cache in _CACHES:
         cache.clear()
+    _GIT_SHOW.clear()
     _ENUMERATORS = None
     _LANE_SOURCES = None
+    _SOURCE_HASHED = None
 
 
 @_by_path
@@ -694,55 +696,212 @@ def _is_inert(path):
     return path.startswith(INERT_PREFIXES)
 
 
+def _strip_docstrings(tree):
+    """The same tree with every module, class and function docstring removed.
+
+    Comments never reach an AST at all, and `ast.dump` without attributes
+    carries no line numbers, so comparing two stripped dumps compares the CODE
+    and nothing else. A body left empty becomes `pass`, which is what a
+    function whose only statement was a docstring already did."""
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = node.body
+            if (body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant)
+                    and isinstance(body[0].value.value, str)):
+                node.body = body[1:] or [ast.Pass()]
+    return tree
+
+
+def code_dump(text):
+    """One Python source as code alone, or None when it does not parse.
+
+    ONLY DOCSTRINGS ARE DROPPED. A string literal that is not the first
+    statement of a module, class or function is an ordinary value, appears in
+    the dump, and a change to it is a change to the code. That is the line
+    between "this edit cannot move a bit" and a diff heuristic on `#` and
+    `\"\"\"`, which would call an edited error message inert."""
+    try:
+        return ast.dump(_strip_docstrings(ast.parse(text)))
+    except SyntaxError:
+        return None
+
+
+def _git_show(ref, path):
+    key = f"{ref}:{path}"
+    if key not in _GIT_SHOW:
+        try:
+            _GIT_SHOW[key] = subprocess.run(["git", "-C", ROOT, "show", key],
+                                            capture_output=True, text=True, check=True).stdout
+        except subprocess.CalledProcessError:
+            _GIT_SHOW[key] = None
+    return _GIT_SHOW[key]
+
+
+_GIT_SHOW = {}
+
+
+@_by_path
+def _hashes_a_file(rel):
+    """True when this module builds a hashlib digest out of a file it opens in
+    binary mode. Its own bytes, and the repository paths it names, are then
+    hashed at run time."""
+    if "hashlib" not in _read(rel):
+        return False
+    tree = _parse(rel)
+    if tree is None:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+            if name == "open" and any(isinstance(a, ast.Constant) and a.value == "rb"
+                                      for a in node.args):
+                return True
+    return False
+
+
+_SOURCE_HASHED = None
+
+
+def source_hashed_files():
+    """Files whose BYTES are read back and hashed while the library runs, so a
+    change to a COMMENT in them moves a recorded value even though it moves no
+    arithmetic. `python/mojolearn/_byte_lm_impl.py` publishes `source_sha256`
+    over six named sources and over itself.
+
+    These are the one exception to the docstring rule below, and they are
+    DERIVED: the modules that hash a file are found by syntax, and the paths
+    each one names by string literal are what it hashes. A hand-kept list here
+    would rot exactly like the lane total did."""
+    global _SOURCE_HASHED
+    if _SOURCE_HASHED is None:
+        out = set()
+        for rel in _python_files():
+            if not _hashes_a_file(rel):
+                continue
+            out.add(rel)
+            tree = _parse(rel)
+            for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+                if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                        and node.value.endswith((".py", ".mojo", ".sh"))
+                        and os.path.isfile(os.path.join(ROOT, node.value))):
+                    out.add(node.value)
+        _SOURCE_HASHED = out
+    return _SOURCE_HASHED
+
+
+def docstring_only(ref, path):
+    """Does this path differ from `ref` in docstrings and comments ALONE.
+
+    False for anything this cannot prove: a file that is not Python, one that
+    is new or deleted, one that does not parse on either side, and one whose
+    bytes are hashed at run time. A Mojo docstring edit is not covered, because
+    there is no parser for it here and guessing would be the whole point of the
+    failure this avoids.
+
+    THIS WIDENS WHAT RETURNS A NARROW ANSWER, which is the dangerous
+    direction. Being wrong here turns a real code change into "nothing
+    affected"; being wrong the other way only costs a sweep."""
+    if not path.endswith(".py") or path in source_hashed_files():
+        return False
+    old = _git_show(ref, path)
+    if old is None:
+        return False
+    try:
+        new = _read(path)
+    except OSError:
+        return False
+    a, b = code_dump(old), code_dump(new)
+    return a is not None and b is not None and a == b
+
+
+def _harness_segments(text):
+    """`identity_break.py` as (lane -> its dumped definition) and the dumped
+    list of every OTHER top-level statement.
+
+    Positions are out by construction, and that is the point. The first
+    spelling of this keyed a bare statement by its LINE NUMBER, so inserting
+    one new lane renumbered every statement below it, every key changed, and a
+    diff that touched no existing lane body answered "every lane". Measured
+    2026-09-16 by lane/data-ordering-determinism: one additive hunk, true blast
+    radius three lanes, selector said 212.
+
+    Every `@lane(...)` name on a definition is recorded, not just the last, so
+    a stacked registration cannot hide one."""
+    tree = _strip_docstrings(ast.parse(text))
+    lanes, others = {}, []
+    for node in tree.body:
+        names = [dec.args[0].value for dec in getattr(node, "decorator_list", [])
+                 if (isinstance(dec, ast.Call) and getattr(dec.func, "id", None) == "lane"
+                     and dec.args and isinstance(dec.args[0], ast.Constant))]
+        dump = ast.dump(node)
+        if names:
+            for name in names:
+                lanes[name] = dump
+        else:
+            others.append((getattr(node, "name", None), node, dump))
+    return lanes, others
+
+
+def _only_new_functions(old_others, new_others, old_lanes):
+    """Is `new_others` `old_others` plus definitions that cannot touch what was
+    already there.
+
+    ADDITIVE IS NOT "THE DIFF HAS NO MINUS LINES". An added statement at module
+    level can mutate a registry, shadow a name an existing lane resolves, or
+    run a decorator. So the old statements must be present UNCHANGED and IN
+    ORDER, and each addition must be an undecorated `def` whose name is new,
+    whose defaults are constants (defaults are evaluated at definition time)
+    and which no existing lane's code names. A class body executes when it is
+    defined, so a class is not admitted."""
+    old_dumps = [d for _, _, d in old_others]
+    new_dumps = [d for _, _, d in new_others]
+    kept = [d for d in new_dumps if d in old_dumps]
+    if kept != old_dumps:
+        return False
+    seen = set()
+    extra = []
+    for name, node, dump in new_others:
+        if dump in old_dumps and dump not in seen:
+            seen.add(dump)
+            continue
+        extra.append((name, node))
+    old_names = {n for n, _, _ in old_others if n}
+    for name, node in extra:
+        if not isinstance(node, ast.FunctionDef) or node.decorator_list or not name:
+            return False
+        if name in old_names or name in old_lanes:
+            return False
+        defaults = list(node.args.defaults) + [d for d in node.args.kw_defaults if d is not None]
+        if any(not isinstance(d, ast.Constant) for d in defaults):
+            return False
+        if any(re.search(r"'%s'" % re.escape(name), dump) for dump in old_lanes.values()):
+            return False
+    return True
+
+
 def harness_lanes(ref, path=HARNESS):
     """The lanes a diff of `tools/identity_break.py` can reach, or None when
     it can reach all of them.
 
-    A lane commit usually edits ONE lane body in this file. Taking that at
-    face value would be a guess, so this compares the top-level statements of
-    the two revisions: a changed statement that IS a `@lane`-decorated
-    function attributes to that lane, and ANY other changed top-level
-    statement (a helper, a fixture, a constant, one of the registration
-    loops that build the kde, knn, radius, gp and gmm lanes) returns None,
-    which the caller reads as every lane."""
-    try:
-        old = subprocess.run(["git", "-C", ROOT, "show", f"{ref}:{path}"],
-                             capture_output=True, text=True, check=True).stdout
-    except subprocess.CalledProcessError:
+    A lane commit usually edits ONE lane body in this file, or adds one. Both
+    are narrowed here, and everything else returns None, which the caller reads
+    as every lane: a helper, a fixture, a constant or one of the registration
+    loops that build the kde, knn, radius, gp and gmm lanes can reach any
+    lane at all."""
+    old = _git_show(ref, path)
+    if old is None:
         return None
     try:
         new = _read(path)
-        old_tree, new_tree = ast.parse(old), ast.parse(new)
+        old_lanes, old_others = _harness_segments(old)
+        new_lanes, new_others = _harness_segments(new)
     except (OSError, SyntaxError):
         return None
-
-    def segments(tree, text):
-        out = []
-        lines = text.splitlines()
-        for node in tree.body:
-            start = min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])])
-            body = "\n".join(lines[start - 1:node.end_lineno])
-            lane = None
-            for dec in getattr(node, "decorator_list", []):
-                if (isinstance(dec, ast.Call) and getattr(dec.func, "id", None) == "lane"
-                        and dec.args and isinstance(dec.args[0], ast.Constant)):
-                    lane = dec.args[0].value
-            key = lane or (getattr(node, "name", None) or f"stmt@{start}:{ast.dump(node)[:80]}")
-            out.append((key, lane, body))
-        return out
-
-    old_seg = {k: (lane, body) for k, lane, body in segments(old_tree, old)}
-    new_seg = {k: (lane, body) for k, lane, body in segments(new_tree, new)}
-    touched = set()
-    for key in set(old_seg) | set(new_seg):
-        o, n = old_seg.get(key), new_seg.get(key)
-        if o == n:
-            continue
-        lane = (n or o)[0]
-        if lane is None:
-            return None                     # a shared statement moved: every lane
-        touched.add(lane)
-    return sorted(touched)
+    if [d for _, _, d in old_others] != [d for _, _, d in new_others] \
+            and not _only_new_functions(old_others, new_others, old_lanes):
+        return None                         # a shared statement moved: every lane
+    return sorted(n for n in set(old_lanes) | set(new_lanes)
+                  if old_lanes.get(n) != new_lanes.get(n))
 
 
 def changed_paths(ref):
@@ -792,6 +951,11 @@ def select(paths, ref=None, sources=None):
         if _is_inert(path):
             inert.append(path)
             reasons[path] = "inert (prose or evidence)"
+            continue
+        if ref and docstring_only(ref, path):
+            inert.append(path)
+            reasons[path] = ("docstrings and comments only: the module's code is IDENTICAL to "
+                             f"{ref} once docstrings are stripped, so it cannot move a lane body")
             continue
         if path == HARNESS:
             touched = harness_lanes(ref) if ref else None
