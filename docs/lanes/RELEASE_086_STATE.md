@@ -282,9 +282,28 @@ from the branch `fix/release-post-record-allowlist`. The local branch is now fas
 7. Apple chunk 00's rerun and remaining lanes, then chunks 01 to 06 (command below), one chunk
    per process under the Metal lock.
 8. Diff: three GPU columns plus a CPU column, `identity_break.py --diff ... --require-columns 4`
-   and the batch summaries; every OWED cell must now be recorded (565 distinct owed parts over
-   56 lanes in the 2026-09-15 owed files, plus the 27 tokenizer cells); a DIVERGENT cell is a
-   finding: print its hash from every column before naming a vendor.
+   and the batch summaries; every OWED cell must now be recorded; a DIVERGENT cell is a
+   finding: print its hash from every column before naming a vendor. The driver is
+   `scripts/release_diff.sh` (four column diff scoped to the 154 record-covered lanes with
+   `--owed-json`, the three column diff over every lane, the batch rows, the DIVERGENT report
+   and the owed check).
+   - **The owed arithmetic.** The 33 owed files under
+     `bench/results/identity_break/2026-09-15_*` name 583 distinct cell parts over 56 lanes
+     (259 model, 126 infer, 109 batch, 89 train), aggregated to
+     `scratchpad/rel086/owed_parts_2026-09-15.json`. Of those, 18 are already hashed by the
+     166-lane record, which leaves the 565 this file has been quoting. The new record must
+     fill all 583; the check prints filled and still empty counts and lists every part left.
+   - **The DIVERGENT report reads the column JSONs, never the diff's rows.** A DIVERGENT row
+     overwrites the FIRST column's hash with its "parts differ" note (`shown[0]` in
+     `identity_break.py`), so parsing that row names the wrong column. Watched failing first on
+     the 166-lane record: reading the rows named all three columns as standing alone, while
+     reading the JSONs gives one DIVERGENT cell, kmeans-sqrt/wide, with centers, labels and
+     scales agreeing on every column and `inertia` ALONE on nvidia (apple, amd and the fourth
+     column 52ea06cbbcc24144, nvidia 1a7e4ac5b8c0caaf), which is the known answer.
+   - The owed check also had to be watched failing: a cell's `infer`, `model` and `batch` are
+     LISTS (whose first entry may be an `n/a:` sentinel) and train hashes live in
+     `cell["hashes"]`, so an earlier version read every part as empty and would have reported
+     583 of 583 owed however good the record was.
 9. Record commit on `release/0.8.6` under `bench/results/identity_break/<release dir>`:
    `TRAINING_GPU_COLUMNS` and the other record lists, `verify --all --emit-reference`,
    CHANGELOG, docs_facts. Merge the record back to main (cherry-pick, not a main merge).
