@@ -19,12 +19,45 @@ header timestamp) against each group's JSON mtime, joined with the same
 group's `.queues` file (`ioclasscount AGXCommandQueue`, sampled through the
 run).
 
-**The queue column is the point.** `docs/lanes/LANE_STATUS_lane-metal-queue-leak.md`
-established that one long-lived Mojo process accumulates Metal command queues
-against a kernel limit of 512, and that GBDT Metal fits ran 2.2x to 2.7x slow
-in the degraded state (about 20x at the worst). So a lane's wall time is only
-its own cost when the queue count stayed flat. Sorting the 107 completed
-groups by queue count splits them cleanly in two.
+**WITHDRAWN: the queue column is not a signal about our lanes.** The two
+tables below sort lanes by the Metal command-queue count sampled during their
+group, and an earlier revision of this file treated the high-count groups as
+"contaminated" and discounted their times. **That classification is wrong and
+is withdrawn.** It is kept below only as a record of what was observed, with
+its conclusion removed.
+
+Three explanations were tried and all three are dead, in order:
+
+1. *A leak in our bindings.* No. lane/metal-queue-leak could not reproduce
+   accumulation: eleven GBDT fits flat at 34, four later workloads flat at 22
+   to 34.
+2. *Per-call `DeviceContext` creation.* No. Ruled out by the same health check.
+3. *Contexts held as fields on model objects*, so that many live models mean
+   many queues. This fitted my data and I believed it. **Also no.**
+
+What was actually measured on 2026-09-16: the queue count climbed 2105 to 4663
+in front of the leak lane, and the holder was **pid 37288, `DockHelper`, an
+Apple XPC service under launchd**, gaining 12 to 18 queues a second, while a
+seven-lane `identity_break.py` run holding the Metal slot at that moment held
+**zero to one queue**. The queues were never ours.
+
+And the pressure is harmless anyway: at 4663 queues, nine times the stated 512
+limit, with a real identity run in flight, there were **zero kernel failure
+lines, zero refusals, zero NaNs, and normal progress**. So queue count does not
+degrade a run, which removes the mechanism by which it could ever have
+explained a slow lane.
+
+So the split below classified our lanes by **an unrelated Apple system
+service's activity that happened to overlap parts of the record**. That is a
+confound, not a weak signal. Any number derived from it, including the
+retracted queue-leak share in 1b-i, is derived from nothing. The GBDT lanes'
+cost is therefore UNATTRIBUTED, and it is being re-measured rather than
+re-attributed (`docs/lanes/FIXTURE_SHRINK_SCOPE.md` bucket C).
+
+(Unrelated, since it appears throughout our Metal logs and reads alarmingly:
+the `Context leak detected, CoreAnalytics returned false` lines are an Apple
+diagnostic, present in committed evidence since 2026-09-10, and nothing to do
+with any of this.)
 
 ### 1a. Clean-queue lanes: the time is really theirs
 
@@ -195,6 +228,22 @@ recorded hash: `_eval_batch_rows` folds only the whole-batch bytes into the
 digest (`digest.update(f"rows:{label}:{n}")` plus `whole`), and `n` is the
 held-out row count, not `alone`. The CLI says the same. So lowering it cuts
 ~16 of 24 calls per cell with no record invalidation.
+
+**CORRECTION (measured, 2026-09-16). It is NOT the biggest cost lever, and an
+earlier revision of this file said it was.** Counting calls is not measuring
+them. Run on Metal, one fixture, two repeats:
+
+| lane | full | `--no-batch` | the batch part |
+|---|---:|---:|---:|
+| byte-lm | 231.8 s | 204.8 s | **27 s, about 12%** |
+
+So the batch probe is roughly an eighth of byte-lm, not the bulk of it, and
+removing it entirely would not make the lane cheap. The ~16 of 24 calls it
+accounts for are evidently much cheaper per call than the train, infer and
+model work around them. The conclusion in the next paragraph is unchanged and
+now rests on a measurement rather than a call count: **this knob is not worth
+touching**, because it buys about 12% at the cost of a check whose negative
+control cannot judge the change.
 
 **But the shipped negative control cannot judge that change.**
 `MOJOLEARN_IDENTITY_BATCH_SABOTAGE` perturbs the FIRST element of the
