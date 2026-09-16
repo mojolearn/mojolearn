@@ -34,6 +34,59 @@ being paid for. This is why the 2026-09-16 fixture shrink bought the neural
 lanes nothing on Metal, and section 2 argues it will not have bought the GBDT,
 hdbscan or holtwinters lanes anything either.
 
+### 0.1 The control: the per-operation cost is FLAT in the batch size
+
+Multiplying a count by a constant is only legitimate if the constant is a
+constant. `PROBE_N` was swept while holding everything else fixed, one binary
+built once and run five times under the Metal lock, three repeats each.
+Minimum microseconds per operation:
+
+| `PROBE_N` | `launch_only` | `launch_sync` | `sync_only` | `d2h_only` | `launch_4096` |
+|---:|---:|---:|---:|---:|---:|
+| 32 | 478.6 | 3844.6 | 29.5 | 4473.8 | 530.4 |
+| 128 | 279.9 | 4249.7 | 38.8 | 4382.9 | 625.3 |
+| 256 | 290.8 | 4592.2 | 39.8 | 4861.5 | 574.0 |
+| 480 | 163.7 | 2814.8 | 35.9 | 3058.2 | 150.7 |
+| 1024 | 209.6 | 3024.6 | 32.0 | 3332.4 | 211.7 |
+
+**There is no trend in `PROBE_N` and no cliff.** Enqueuing 1024 kernels before
+draining costs the same per kernel as enqueuing 32, so there is no queue-depth
+backpressure to worry about and `launches * constant` is a valid model. The
+spread across the rows tracks the machine's load average, which fell from about
+16 to about 10 during the sweep, and not the batch size: the two cheapest rows
+are the two largest `PROBE_N`.
+
+Two readings to avoid. This is **not** a test of the 512 Metal command-QUEUE
+limit: all 1024 launches go to one `DeviceContext` and therefore one queue, so
+that limit is not reached and nothing here speaks to it. And `launch_4096`
+tracks `launch_only` across the sweep (150.7 against 163.7 at the cleanest row),
+so the 4096x larger grid is worth at most a few hundred microseconds against a
+wait's 4.15 ms. Grid is free. That is the claim section 0 rests on and it is
+measured, not assumed.
+
+Raw logs: `~/mojolearn-evidence/metal-launch-overhead-2026-09-16/probe/`, five
+runs of mine plus three taken independently in another session, all consistent.
+
+### 0.2 The model predicts the byte LM step, and the alternative misses by 20x
+
+`a7b3b0393` traced `(64 + 23*G)*L + (32 + 5*G)` launches per byte LM training
+step, which at `G = 1` is 211 at two blocks and 124 at one, and measured the
+step on Metal. Those two numbers have never been multiplied together. Doing it
+discriminates the two candidate cost models sharply:
+
+| shape | launches | measured resident step | at 4.15 ms per ROUND TRIP | at 0.30 ms per ENQUEUE |
+|---|---:|---:|---:|---:|
+| 2 blocks, d32, ff64 | 211 | **1.380 s** | 0.88 s | 0.063 s |
+| 1 block, d32, ff64 | 124 | **0.849 s** | 0.51 s | 0.037 s |
+| 1 block, d16, ff32 | 124 | **0.644 s** | 0.51 s | 0.037 s |
+
+The round-trip model lands within 1.3x to 1.6x and under-predicts, which is the
+right direction: real kernels are not one-thread stores, and the composed
+operations wait more than once per launch. The enqueue-only model is **20x to
+22x low** and is refuted. So a launch on the shipped path is being paid for as a
+host round trip, not as a queued enqueue, which is exactly what makes the wait
+count and not the launch count the thing to attack.
+
 ## 1. GBDT, the largest non-neural block of the Apple column
 
 Ten GBDT lanes total roughly **7,500 s**, about a quarter of the column
