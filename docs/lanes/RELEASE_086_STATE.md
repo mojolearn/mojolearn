@@ -216,6 +216,26 @@ $37.14), VM 34c731dc deleted and verified gone (HTTP 204 then GET 404). Evidence
   explicit environment, so only callers that do not are affected
   (`bench/results/releases/2026-09-16-macos-0.8.6/runtime-environment-finding.md`).
 
+**NVIDIA leg 1**, DigitalOcean H100 `gpu-h100x1-80gb` nyc2, droplet 600855289, created
+2026-09-15 20:00:40 and deleted 20:43:56, about 43 minutes at $4.41 an hour, so roughly $3.18.
+Deleted and verified gone (HTTP 204, then GET 404 after two 200s). Evidence:
+`~/mojolearn-evidence/release-0.8.6/records/nvidia-leg-1/` (column
+`remote/identity/identity_break.nvidia-h100-sm_90a.json`, sha256 starts 339fc03c527ccd58).
+
+- On the box, from the R2 wheel (sha256 checked on arrival): `pip` exit 0, import reads
+  0.8.6 vendor cuda, harness copy equal to the checkout's `tools/identity_break.py`,
+  `identity --check` exit 0, `verify --quick` exit 0, `host_surface.py` imports and declares
+  15 wheel bindings.
+- Column: vendor nvidia-h100-sm_90a, commit db9047b9f, 1674 cells, **186 of 192 lanes**, no
+  partial lane. Verdicts: train 1674 STABLE; infer 1476 STABLE, 198 N/A; model 1251 STABLE,
+  423 N/A; batch 1503 STABLE, 171 N/A. No MOVED, DIVERGENT or REFUSED cell.
+- It stopped at its 2400 s bound (`identity_break_exit=124`), a clean partial. The six lanes
+  still owed on NVIDIA are par-resample, par-hdbscan, par-cholesky, par-kernel-ridge,
+  par-nystroem and par-rbf-sampler; leg 2 rents for exactly those by passing leg 1's column as
+  the done-json, which is what makes the leg skip what is already recorded.
+- The `sys.executable` probe reads `changed False child BASE` here too, the same Linux finding
+  the AMD leg reported.
+
 Legs rent only from a CLEAN checkout: both runners refuse a dirty tree, so commit state-file
 edits before renting.
 
