@@ -183,8 +183,8 @@ def _report_row(label: String, query: Int, a: List[Float32], ai: Int, b: List[Fl
 
 def _arms(negatives: Int) raises:
     var tr = _training()
-    var training = tr[0]
-    var embedding = tr[1]
+    var training = tr[0].copy()
+    var embedding = tr[1].copy()
     var queries = _queries()
     var suffix = String("nsr") + String(negatives)
 
@@ -208,28 +208,42 @@ def _arms(negatives: Int) raises:
         raise Error("the same batch twice was not bitwise equal; the comparison is unusable")
     print("ARM REPEAT", suffix, "bitwise equal on all", NQ, "queries")
 
-    # ULP. One feature of query 0 moved by a single ULP. This is the fail-first
-    # arm: the comparison must be seen to fire before any "no difference"
-    # result below is worth anything.
-    var nudged = queries.copy()
-    nudged[0] = bitcast[DType.float32](bitcast[DType.uint32](queries[0]) + UInt32(1))
-    print(
-        "ULP_INPUT", suffix, "query0.feature0",
-        "before_bits", bitcast[DType.uint32](queries[0]), "before", queries[0],
-        "after_bits", bitcast[DType.uint32](nudged[0]), "after", nudged[0],
-    )
-    var perturbed = _run(training, embedding, nudged, full, negatives, String("ulp.") + suffix)
+    # ULP LADDER. Query 0's first feature is moved by 1, 2, 4, ... ULPs until
+    # the comparison fires. This is the fail-first arm: the comparison must be
+    # SEEN to report a difference before any "no difference" result below is
+    # worth anything. The ladder also measures how sensitive the path is, and
+    # names every OTHER row that moved, which is cross-row coupling shown
+    # directly rather than inferred.
     var ulp_fired = False
     var ulp_other_rows = False
-    for i in range(NQ):
-        if _row_differs(whole, i, perturbed, i):
-            ulp_fired = True
-            if i > 0:
-                ulp_other_rows = True
-            _ = _report_row(String("ULP.") + suffix, i, whole, i, perturbed, i)
+    var steps = UInt32(1)
+    while steps <= UInt32(1048576):
+        var nudged = queries.copy()
+        nudged[0] = bitcast[DType.float32](bitcast[DType.uint32](queries[0]) + steps)
+        print(
+            "ULP_INPUT", suffix, "query0.feature0", "ulps", steps,
+            "before_bits", bitcast[DType.uint32](queries[0]), "before", queries[0],
+            "after_bits", bitcast[DType.uint32](nudged[0]), "after", nudged[0],
+        )
+        var perturbed = _run(
+            training, embedding, nudged, full, negatives,
+            String("ulp") + String(steps) + "." + suffix,
+        )
+        for i in range(NQ):
+            if _row_differs(whole, i, perturbed, i):
+                ulp_fired = True
+                if i > 0:
+                    ulp_other_rows = True
+                _ = _report_row(
+                    String("ULP") + String(steps) + "." + suffix, i, whole, i, perturbed, i
+                )
+        if ulp_fired:
+            print("ARM ULP", suffix, "fired at", steps, "ulps; other rows moved:", ulp_other_rows)
+            break
+        print("ARM ULP", suffix, "inert at", steps, "ulps")
+        steps = steps * UInt32(2)
     if not ulp_fired:
-        raise Error("a one-ULP input change moved nothing; this comparison cannot fail")
-    print("ARM ULP", suffix, "fired; other rows moved:", ulp_other_rows)
+        raise Error("no input perturbation moved the output; this comparison cannot fail")
 
     # SOLO. Each query alone against the same query inside the full batch.
     var solo_moved = False
@@ -269,8 +283,60 @@ def _arms(negatives: Int) raises:
     )
 
 
+def _floor_arm() raises:
+    """Isolate the sigma floor from the maximum edge weight.
+
+    Both batches put a query that is an exact copy of training row 0 at
+    position 0. Its nearest neighbor is at distance zero, so its first
+    membership is exactly 1 and the batch maximum is 1 in BOTH batches. Only
+    the mean neighbor distance behind `sigma = max(sigma, 0.001 * mean)`
+    differs, because the companion is a near query in one batch and the far
+    outlier in the other. negative_sample_rate is 0, so the RNG is never
+    consulted. Anything that moves here is the sigma floor and nothing else.
+    """
+    var tr = _training()
+    var training = tr[0].copy()
+    var embedding = tr[1].copy()
+    var queries = _queries()
+
+    var duplicate = List[Float32]()
+    for c in range(D):
+        duplicate.append(training[c])
+
+    var near = duplicate.copy()
+    for c in range(D):
+        near.append(queries[c])
+    var far = duplicate.copy()
+    for c in range(D):
+        far.append(queries[7 * D + c])
+
+    var params = UMAPParams(
+        n_neighbors=K, n_components=C, n_epochs=0, random_seed=UInt64(7),
+        negative_sample_rate=0,
+    )
+    var near_scalars = _scalars(training, near, 2)
+    var far_scalars = _scalars(training, far, 2)
+    print(
+        "FLOOR_SCALARS near rows 2 mean", near_scalars[0],
+        "max_weight_bits", bitcast[DType.uint32](near_scalars[1]),
+        "max_weight", near_scalars[1],
+    )
+    print(
+        "FLOOR_SCALARS far rows 2 mean", far_scalars[0],
+        "max_weight_bits", bitcast[DType.uint32](far_scalars[1]),
+        "max_weight", far_scalars[1],
+    )
+    if bitcast[DType.uint32](near_scalars[1]) != bitcast[DType.uint32](far_scalars[1]):
+        raise Error("the floor arm failed to hold the maximum edge weight constant")
+    var left = host_umap_transform(training, embedding, near, N_TRAIN, 2, D, params)
+    var right = host_umap_transform(training, embedding, far, N_TRAIN, 2, D, params)
+    var moved = _report_row(String("FLOOR"), 0, left, 0, right, 0)
+    print("ARM FLOOR same maximum, different mean, moves the row:", moved)
+
+
 def main() raises:
     print("UMAP transform batch-determinism measurement, CPU host route")
     _arms(5)
     _arms(0)
+    _floor_arm()
     print("UMAP batch determinism measurement COMPLETE")
