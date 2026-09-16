@@ -550,10 +550,26 @@ CANNOT complete on Hot Aisle at any price. `par-arima` looks like such a lane, a
 column cannot reach 192 of 192 on this provider**, and the choice is a different provider, a
 longer-lease runner, or a recorded and explained gap in the AMD column.
 
-**The cheaper shape available now.** `identity_break.py` takes `--lanes`, so a leg can name an
-explicit subset instead of taking the owed list in order. Running the 29 lanes other than
-`par-arima` would bank the cheap ones several per lease instead of spending a whole lease on one
-lane that cannot finish, and would measure which of the four suspects really exceed a lease.
+**The cheaper shape available now, and it is WIRED, not hypothetical.** `identity_break.py` takes
+`--lanes`, so a leg can name an explicit subset instead of taking the owed list in order. Running
+the 29 lanes other than `par-arima` would bank the cheap ones several per lease instead of
+spending a whole lease on one lane that cannot finish, and would measure which of the four
+suspects really exceed a lease.
+
+The body template only ever passed `--skip`, so this path did not exist until now.
+`scripts/record_body_uploading.template.sh` gained an `@LANESARG@` slot and
+`scripts/make_record_body_uploading.sh` an optional 8th argument, the lane subset. Both halves
+landed together, because adding the placeholder alone would have made the maker's own
+"no `@UPPER@` survives" guard refuse every future body, which is the same half-applied-fix trap
+that the `PREFIX` change nearly hit earlier tonight.
+
+Verified in both directions before being offered as an option:
+
+    A. no subset  -> no placeholder survives, body carries NO --lanes, sh -n passes
+    B. subset     -> no placeholder survives, body carries --lanes 'iforest,iforest-tuned', sh -n passes
+
+So whichever way Andrew decides, the next leg can be rendered immediately: with no subset for the
+old behavior, or with an explicit list to skip a lane that cannot finish inside a 60 minute lease.
 
 ### The Apple overnight estimate, lane aware: about 10.6 hours
 
