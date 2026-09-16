@@ -360,6 +360,26 @@ def table(src=None, path=HARNESS):
     return rows
 
 
+def unreadable_sites(src=None, path=HARNESS):
+    """Sites in a SHRUNK lane that carry a size this file cannot resolve to an
+    integer, so they require no floor. This is the mechanism's hole, printed
+    rather than left implicit: a future lane could dodge a floor by making its
+    size expression unreadable, and the list is where that would show up."""
+    src = open(path).read() if src is None else src
+    tree = ast.parse(src)
+    revisions = _dict_of_str(tree, "LANE_REVISIONS")
+    out = []
+    for name, fn in sorted(_lane_functions(tree).items()):
+        if name not in revisions:
+            continue
+        local = _int_locals(fn)
+        for group, exprs in sorted(_sites(fn).items()):
+            for e in exprs:
+                if _resolve(e, local) is None:
+                    out.append((name, group, ast.unparse(e)))
+    return out
+
+
 # ---------------------------------------------------------------- the self-test
 #: A check that has not been seen to refuse anything is the prose floor it
 #: replaces. Each entry mutates the REAL harness source one way and must be
@@ -461,6 +481,13 @@ def main(argv=None):
     if a.list:
         for name, dim, value, lo, why in table(path=a.harness):
             print(f"{name:34s} {dim:13s} runs at {value:<6} floor {lo:<6} {why}")
+        gaps = unreadable_sites(path=a.harness)
+        print(f"\n# SIZE SITES IN A SHRUNK LANE THIS FILE CANNOT READ, so no floor is required for them.")
+        print(f"# They are the mechanism's hole; see the module docstring.")
+        for name, group, expr in gaps:
+            print(f"#   {name:32s} {group:10s} {expr}")
+        if not gaps:
+            print("#   (none)")
         return 0
     if a.self_test:
         good = self_test(a.harness)
