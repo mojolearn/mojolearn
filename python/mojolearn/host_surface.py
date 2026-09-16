@@ -1248,11 +1248,13 @@ FAMILIES = (
         training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
                         "metrics-fowlkes-mallows"),
         # UMAP.transform from a saved embedding (lane/inference-forecast-
-        # umap-pca, 2026-09-15). Its answer depends on the query batch by the
-        # transform's contract, so the claim is the GPU's bytes for the same
-        # batch; `inference_display` says so in the README sentence.
+        # umap-pca, 2026-09-15). Its answer depended on the query batch by the
+        # transform's contract until lane/umap-batch-fix (2026-09-16) made all
+        # four couplings per row, so the claim is now the GPU's bytes for a
+        # row whatever else is asked with it; `inference_display` says so in
+        # the README sentence.
         inference_lanes=("umap",),
-        inference_display="UMAP transform of a saved embedding (the GPU's bytes for the same query batch; a row's embedding depends on the batch it is asked in)",
+        inference_display="UMAP transform of a saved embedding (the GPU's bytes for a row, whatever else is asked in the same batch)",
         forest_kinds=(),
         classes=(
             "SpectralClustering", "UMAP",

@@ -31,11 +31,14 @@ reads published.
   count. All four are per row now, so a batch of N returns the same bytes as N calls of one row,
   measured bitwise on the CPU host route and on Metal with the two routes agreeing to the last
   bit. This is a deliberate divergence from cuML and umap-learn, whose transforms couple a batch
-  the same four ways. IT MOVES EVERY RECORDED UMAP CELL: `umap` and `par-graph-umap` carry
+  the same four ways. IT MOVES EVERY RECORDED UMAP TRANSFORM CELL and no fit cell: measured on
+  all nine fixtures, the `train` and `model` hashes are bit for bit what they were and `infer`
+  and `batch` both move, because the fit is untouched. `umap` and `par-graph-umap` carry
   `LANE_REVISIONS` entries so their committed cells read OWED rather than DIVERGENT, `umap` is
   held out of the public reference set as `stale reference`, and both lanes' batch EXEMPTION in
-  the harness becomes a real batch part. It costs a measured 3.07x on a request above ten
-  thousand queries and 1.43x below it (lane/umap-batch-fix, 2026-09-16).
+  the harness becomes a real batch part, which reads BATCH_MOVED on the old code and STABLE on
+  this one. It costs a measured 3.07x on a request above ten thousand queries and 1.43x below
+  it (lane/umap-batch-fix, 2026-09-16).
 
 - Every host family now says in `python/mojolearn/host_surface.py` why it does or does not
   ship in the wheels (`wheel_note`, `--wheel-notes`), so an exclusion is never silent
