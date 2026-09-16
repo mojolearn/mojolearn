@@ -43,6 +43,19 @@ run() {
     return "$_e"
 }
 say "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# THE COMMIT WITNESS, OR identity_break REFUSES. The box has no `.git`, and
+# the gemm payload does not write /root/mojolearn/commit.txt for this
+# payload: the 2026-09-16 run reached the identity phase with an empty
+# witness and it had to be written by hand over ssh mid-build. The runner
+# DOES record the commit in /root/gemm_leg_out/leg.txt, so take it from
+# there, and never guess.
+if [ ! -s /root/mojolearn/commit.txt ]; then
+    _c=$(sed -n 's/^commit=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -1)
+    case "$_c" in
+        [0-9a-f][0-9a-f]*) printf '%s\n' "$_c" > /root/mojolearn/commit.txt ;;
+        *) say "NO COMMIT WITNESS: leg.txt gave '$_c'; the identity phase will refuse" ;;
+    esac
+fi
 say "commit=$(head -1 /root/mojolearn/commit.txt 2>/dev/null)"
 nvidia-smi --query-gpu=name,driver_version,compute_cap --format=csv,noheader > "$OUT/logs/device.txt" 2>&1
 say "device=$(tr '\n' ' ' < "$OUT/logs/device.txt")"
