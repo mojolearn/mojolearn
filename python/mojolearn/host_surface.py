@@ -1111,16 +1111,24 @@ FAMILIES = (
         # The neighbors and density inference lane (2026-09-15) adds every
         # k-NN metric, the ball cover, the distance-weighted vote and mean
         # and RadiusNeighbors on its four metrics, all from a saved model.
+        # lane/classical-host-recordings (2026-09-16): the six FITTED k-means
+        # lanes, from a saved `mojolearn-kmeans-1` file through `HostKMeans`
+        # on this binding (`kmeans_predict` and `kmeans_transform`, the
+        # arithmetic of cluster/host/kmeans_oracle.mojo). One format carries
+        # every metric and every start. `kmeans-cosine` is NOT an inference
+        # lane: its fit is refused by name, so there is no model to save.
         inference_lanes=("knn", "knn-clf", "knn-reg", "knn-sqeuclidean", "knn-manhattan",
                          "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
                          "knn-clf-distance", "knn-reg-distance", "radius", "radius-manhattan",
-                         "radius-chebyshev", "radius-minkowski-p3"),
+                         "radius-chebyshev", "radius-minkowski-p3",
+                         "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
+                         "kmeans-sqrt", "kmeans-classic-pp"),
         forest_kinds=(),
         classes=(
             "NearestNeighbors", "KNeighborsClassifier", "KNeighborsRegressor", "KMeans",
             "RadiusNeighbors",
         ),
-        display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting and radius neighbors",
+        display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting, radius neighbors and k-means assignment and distances",
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
             "cluster/host/kmeans_oracle.mojo",
@@ -1138,8 +1146,8 @@ FAMILIES = (
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Ships: k-NN, radius-neighbor and k-means inference from a saved model, fifteen inference "
-            "lanes."
+            "Ships: k-NN, radius-neighbor and k-means inference from a saved model, twenty-one "
+            "inference lanes."
         ),
         ships_in_wheel=True,
     ),
@@ -2522,19 +2530,17 @@ PUBLIC_REFERENCE_CANDIDATES = (
 #: found WHY none of them had a recording: `classical_host_gate.py record`
 #: had been raising AttributeError on main since `--lane-rule-only` was added,
 #: ahead of every other refusal, so the tool that makes a recording could not
-#: start. `kmeans` is left, and lane/kmeans-save gave it the `save` it was
-#: missing, so it is now waiting on the same one thing the other four were.
-SAVED_MODEL_INFERENCE_OWED = {
-    "kmeans": "KMeans.predict and KMeans.transform shipped with lane/kmeans-predict, and "
-              "lane/kmeans-save (2026-09-16) gave the class `save` and `load`: "
-              "mojolearn-kmeans-1 is in _classical_host._FORMATS and host_model returns a "
-              "HostKMeans on _mojolearn_core_host. What is left is the GPU recording under "
-              "bench/results/classical_host/, as it was for dbscan, agglomerative and "
-              "spectral until lane/saved-model-reference-gaps took theirs. The one format "
-              "carries every k-means lane (the metric and the start are members of the file, "
-              "not tags of their own), so the kmeans, kmeans-random, kmeans-array, "
-              "kmeans-weighted, kmeans-sqrt and kmeans-classic-pp lanes all load through it.",
-}
+#: start.
+#:
+#: lane/classical-host-recordings (2026-09-16) took the last one. `kmeans`,
+#: `kmeans-random`, `kmeans-array`, `kmeans-weighted`, `kmeans-sqrt` and
+#: `kmeans-classic-pp` are declared inference lanes now, recorded at
+#: bench/results/classical_host/2026-09-16-nvidia-kmeans, so THE LIST IS
+#: EMPTY. Empty means every saved-model inference the classical host door
+#: dispatches is also a declared, gated and recorded inference lane; it does
+#: NOT mean nothing is left to implement. A new `save` that ships without a
+#: recording belongs here, with the reason, rather than nowhere.
+SAVED_MODEL_INFERENCE_OWED = {}
 
 
 def public_reference_candidates():
