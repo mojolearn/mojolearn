@@ -232,9 +232,12 @@ than papered over.
 
 A floor mechanism that has not been seen to refuse anything is the prose floor
 it replaces. `tools/fixture_floors.py --self-test` mutates the REAL harness
-source five ways and requires each to be refused BY NAME; it runs in the gate
-before the check itself, so a check that has stopped being able to refuse
-fails loudly rather than passing quietly.
+source five ways and requires each to be refused BY NAME, and adds two more
+rules that cannot be reached by a one-line mutation on a source written to
+break exactly them. It runs in the gate BEFORE the check itself, so a check
+that has stopped being able to refuse fails loudly rather than passing
+quietly, and an anchor that stops matching is reported as REFUSE-TEST BROKEN
+rather than passing as a clean mutation.
 
 ```
 # unmutated tools/identity_break.py: 0 violation(s)
@@ -260,6 +263,15 @@ fails loudly rather than passing quietly.
 # MUTATION: the exemption list used on a lane that HAS a floorable dimension
     REFUSED UNFLOORED_REVISED_LANES['holtwinters']: REFUSED, this lane DOES have a floorable
           dimension (row_axis). Declare the floor instead of the exemption.
+
+# SYNTHETIC: a @floor() that is not on a lane function
+    REFUSED line 6: a @floor() that is not on an @lane() function. Nothing enforces it, and it
+          reads as though something does.
+
+# SYNTHETIC: a reason copied word for word from another floor
+    REFUSED b: the reason for rows is copied word for word from a's rows floor. A floor's reason
+          is about THIS lane's fixture; if the measurement really is shared, say which lane it
+          was taken on.
 
 ok: the floor check refuses every violation above
 ```
@@ -350,7 +362,11 @@ estimate, not a benchmark.
   branch's `tools/identity_break.py` and both pass; the gate will run them.
 - Nothing floors the `byte-lm` shape or the `tokenizer` vocabulary, the two
   dimensions this checker cannot read (sections 3c and
-  `UNFLOORED_REVISED_LANES`).
+  `UNFLOORED_REVISED_LANES`). `tools/fixture_floors.py --list` prints the
+  unreadable size sites at the end so the hole is on the record:
+  `byte-lm` and `byte-lm-resident` both carry `_ids(X, steps * shape.batch,
+  ...)`, whose batch comes from `ByteLanguageModelConfig` rather than from a
+  fixture size.
 
 ## Rules this lane ran under
 
