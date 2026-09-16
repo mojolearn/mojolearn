@@ -1,5 +1,79 @@
 # Lane status: lane/gbdt-rest (2026-09-15)
 
+## HELD 2026-09-16: THE FIXTURE SHRINK REACHES THIS LANE. RECORD NOTHING YET.
+
+**Do not take this lane's Metal column, and do not reuse ANY GBDT column or
+sabotage verdict taken before the shrink lands.** A sabotage arm proven live at
+one fixture size can be INERT at another, so a pre-shrink verdict is not
+evidence for the post-shrink lane.
+
+WHY, and why the earlier "safe to record" answer was withdrawn. On the morning
+of 2026-09-16 `docs/lanes/FIXTURE_SHRINK_SCOPE.md` (branch
+`lane/identity-fixtures-light`) put the GBDT family in bucket B, "leave big",
+on the reasoning that the family's cost was the Metal command-queue leak rather
+than fixture size. **That reasoning was measured and found wrong, and the
+bucket B decision is CANCELLED.** The queues were an Apple SYSTEM SERVICE, not
+our processes: measured directly, one of our lanes held a single queue while
+DockHelper held thousands. (Corroborated here independently: with our own gp
+lane holding the GPU, `ioreg -l | grep -c AGXCommandQueue` read 1.)
+
+With the leak explanation gone, the finished Apple column was read directly and
+four GBDT lanes are among the TEN MOST EXPENSIVE IN THE WHOLE RECORD:
+
+| lane | Apple column |
+|---|---|
+| `gbdt-parametric-losses` | 1701 s |
+| `gbdt-nan-modes` | 969 s |
+| `gbdt-lossguide-newtoncosine` | 838 s |
+| `gbdt-pair-logit` | 794 s |
+
+The fixture-shrink lane is now cutting all four, with authority to choose the
+sizes, targeting under 30 s each.
+
+**WHAT THIS HOLD COSTS IF IGNORED:** those four lanes alone are over an hour on
+Apple, and a column recorded now is a column for fixtures that no longer exist.
+
+### This lane's specific exposure
+
+- Item 1's own lane is `gbdt-query-softmax`, which is NOT in the cut list, but
+  the lane's owed evidence includes a BASE-FIXTURE SPOT CHECK of ten existing
+  GBDT lanes, and **two of those ten, `gbdt-pair-logit` and
+  `gbdt-parametric-losses`, are being cut.** That spot check must be retaken
+  after the shrink, against a post-shrink committed column.
+- `bench/results/identity_break/2026-09-15_gbdt-query-softmax/cpu-apple-m4.json`
+  (the committed CPU column, cells=3 stable=3) was taken at PRE-SHRINK
+  fixtures. Re-read the fixtures before trusting it as the CPU half of a diff.
+
+### State on 2026-09-16: NOTHING WAS RECORDED
+
+The Metal column was **not** taken. The evidence chain was launched at 05:47,
+was starved of the shared Metal lock for about ten minutes by another agent's
+jobs, and was retired having written **zero JSON** (only lock-wait messages in
+`metal-new.log`). No sabotage build was produced. So there is no partial or
+tainted GBDT evidence anywhere from that attempt, and nothing is owed to a box.
+
+### What survives the hold and does NOT need redoing (fixture independent)
+
+- The Metal identical GBDT binding built from this tree, sha256
+  `88055dbf6d34c0bbdd112a5654ed0a3a628fc6b6accc2298e476cefbb2bc5362`, and the
+  GBDT host binding `26b6a71ee3390be2f5982b0d80365be06f9670b7d38bd6c01c487afb2274b2c5`,
+  both cached under the session scratchpad `bins/softmax2/`.
+- **The refusal trap is cleared.** The worktree now carries a COMPLETE
+  `python/mojolearn/identical/` set (17 bindings), verified by IMPORT (not
+  `nm`): `transpose_f32` is present. That is what made the first attempt read
+  REFUSED on every cell.
+- The host sabotage build is still OWED; it must be built and SEEN to diverge
+  **at the post-shrink sizes**.
+
+### Resume, after the shrink lands
+
+1. Re-read this lane's fixtures in `tools/identity_break.py` (do not assume the
+   sizes in the commands below still hold).
+2. Re-run the whole evidence chain with a FRESH tag, so no pre-shrink artifact
+   is mixed in: `bash <scratchpad>/rest_evidence.sh <fresh-tag>`.
+3. All seven owed items below are still owed, in full.
+
+
 Andrew, Sep 15 2026: "gbdt as a lane". Work through `gbdt/NOT_IMPLEMENTED.tsv`
 (28 rows on origin/main at a76c02d27) for the CatBoost-reference GBDT:
 implement the user-facing items, each bitwise identical on the GPU and the
