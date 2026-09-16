@@ -24,7 +24,7 @@ two sentences are both true and the merge does not soften the second one.**
 | The fix stops the forest moving on MI300X | **AN EFFECT, REPLICATED TWICE**, control 7/300 then 6/300 against 0/300, for the acquire compare-exchange spelling (section 0.2) |
 | **WHY the forest moves, at the primitive** | **NOT DEMONSTRATED.** The primitive check has returned a NULL TWICE, at 4096 claims with a widened critical section. It is the wrong instrument |
 | No bit moves on any column with the repair in | **UNPROVEN.** Both Apple builds skipped the build gate and compared nothing |
-| ExtraTrees and fused kNN | **ENTIRELY UNMEASURED.** They carry the same protocol and are repaired by the same argument, not by any measurement of them |
+| ExtraTrees and fused kNN | **MEASURED on gfx942 2026-09-16, both NULL, and they do NOT carry the same exposure.** The fused kNN claim is unreachable in every shipped build; ExtraTrees needs more than 512 sampled columns on a 64-lane wavefront and did not move in 545 fits of the stock claim, which bounds its rate at 0.55%. Section 5 item 4 |
 
 **Why it merged without the mechanism.** The repair is formally correct, provably emits,
 and collapses six copies to one. The mechanism hunt needs a new probe and is open-ended.
