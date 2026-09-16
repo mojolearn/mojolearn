@@ -1,0 +1,37 @@
+# vendor=cpu-apple-m4 commit=a8b7e6b3b46a4053b0f61701e9f24f285db1e59c (git rev-parse HEAD) host.cpu_model='Apple M4' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-16 13:30:56  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             |
+|------------------------|------------------|
+| kmeans                 | 1169ffe8848d53a0 |
+| kmeans infer           | d19b76a657c233ee |
+| kmeans model           | 34d39f0948113d27 |
+| kmeans batch           | 667a4f46a420714b |
+| kmeans-random          | a8cb6990c11eca35 |
+| kmeans-random infer    | 6001e830632042a5 |
+| kmeans-random model    | 9e67f3decf17badf |
+| kmeans-random batch    | c31fbdf4c691122e |
+| kmeans-array           | 0adde259eb5ba361 |
+| kmeans-array infer     | bb2f91173604b369 |
+| kmeans-array model     | 2c83398483b42bda |
+| kmeans-array batch     | 4d408631a0556a56 |
+| kmeans-weighted        | f8d4e6ec1791620a |
+| kmeans-weighted infer  | d0c446c1686e1961 |
+| kmeans-weighted model  | a01048767c01b23a |
+| kmeans-weighted batch  | 1d6966ef60f01234 |
+| kmeans-sqrt            | 1bebc62831e1be3c |
+| kmeans-sqrt infer      | 9624cbf11a7d7e73 |
+| kmeans-sqrt model      | 12e75a8ad0a586b3 |
+| kmeans-sqrt batch      | 8ee5aad8a6467af2 |
+| kmeans-classic-pp      | 0acc47d1fbdfa538 |
+| kmeans-classic-pp infer | 3507b2a992672278 |
+| kmeans-classic-pp model | 725c5765eca179fb |
+| kmeans-classic-pp batch | 3621b58bc69991b3 |
+| kmeans-cosine          | c9f16ec2e84f967d |
+
+cells=7 stable=7 moved=0 refused=0
+infer: stable=6 n/a=1
+model: stable=6 n/a=1
+batch: stable=6 n/a=1
+n/a: kmeans-cosine batch n/a:fit-refused, kmeans-cosine infer n/a:function, kmeans-cosine model n/a:no-save
+wrote /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/592ed9a4-9940-48ae-9cf2-819f9a08cc6c/scratchpad/kmeans_hostsab.json
