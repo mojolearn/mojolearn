@@ -77,6 +77,7 @@ in-envelope protocol.
 """
 
 from std.atomic import Atomic, Ordering
+from core.device_mutex import claim_device_mutex
 from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.sync import barrier
@@ -145,18 +146,7 @@ def mutex_probe_kernel(
                 # `while (atomicCAS(mutex, -2, -1) != -2);` + the
                 # `__threadfence()` acquire that follows, `:251-255`, as
                 # acquire-load spin + weak relaxed claim (module docstring).
-                while True:
-                    if Atomic.load[ordering = Ordering.ACQUIRE](
-                        mtx
-                    ) != Int32(-2):
-                        continue
-                    var expected = Int32(-2)
-                    if Atomic.compare_exchange[
-                        success_ordering = Ordering.RELAXED,
-                        failure_ordering = Ordering.RELAXED,
-                        weak=True,
-                    ](mtx, expected, Int32(-1)):
-                        break
+                claim_device_mutex(mtx, Int32(-2), Int32(-1))
             barrier()  # their `__syncthreads()`, `:256`
             var w = tid
             while w < w_count:
@@ -176,16 +166,7 @@ def mutex_probe_kernel(
         if tid == 0:
             # `while (atomicCAS(mutex, 0, 1) != 0);` + acquire, `:314-318`,
             # same acquire-load spin + weak relaxed claim.
-            while True:
-                if Atomic.load[ordering = Ordering.ACQUIRE](mtx) != Int32(0):
-                    continue
-                var expected = Int32(0)
-                if Atomic.compare_exchange[
-                    success_ordering = Ordering.RELAXED,
-                    failure_ordering = Ordering.RELAXED,
-                    weak=True,
-                ](mtx, expected, Int32(1)):
-                    break
+            claim_device_mutex(mtx, Int32(0), Int32(1))
         barrier()
         if sabotage == SABOTAGE_EARLY_RELEASE and tid == 0:
             # The bug arm: hand the buffer over BEFORE filling it, then
