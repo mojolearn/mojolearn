@@ -556,7 +556,10 @@ class KernelDensity(NumericModeMixin):
                                  BINDING SLOT and not the arithmetic:
                                  `kde_score_samples_binding` length-checks
                                  its params list at exactly 5 entries
-                                 (bindings/_mojolearn_estimators.mojo:392)
+                                 (bindings/_mojolearn_estimators.mojo:647,
+                                 and the same check in the host twin
+                                 bindings/_mojolearn_estimators_host.mojo
+                                 :213, which must change with it)
                                  and has no room for a sixth.
                                  `kde/estimator.mojo::kde_score_samples_
                                  host` already takes `metric_arg` and the
@@ -634,7 +637,9 @@ class KernelDensity(NumericModeMixin):
                     "`metric_arg`; what is missing is a SLOT IN THE "
                     "BINDING -- kde_score_samples_binding length-checks "
                     "its params list at exactly 5 entries "
-                    "(bindings/_mojolearn_estimators.mojo:392). Pass p=2, "
+                    "(bindings/_mojolearn_estimators.mojo:647, and the same "
+                    "check in bindings/_mojolearn_estimators_host.mojo:213). "
+                    "Pass p=2, "
                     "or apply the two-line binding change in "
                     "kde/README.md's HAND-OFF." % (metric_params, p)
                 )
