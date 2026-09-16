@@ -306,6 +306,44 @@ cannot pass. The authoritative signals are the ones the leg script maintains its
 directories `/tmp/mojolearn-hotaisle-slot.*` (released on exit, even after a kill) and the VM
 count from the API, and those are what the guard tests now.
 
+## FINDING: a MOVED cell on the MI300X, rf-score-weighted/wide
+
+Seen at 21:16 in AMD leg 3's PARTIAL column, pulled from R2 while the leg was still running.
+That pull is also the first end to end proof that the new uploader works: 77,745 bytes, valid
+JSON, 8 lanes, 72 cells, parsed and counted on the Mac.
+
+- The cell is `rf-score-weighted/wide`, and its **two fits on the same box disagree**:
+  `49be8ea935a47640` then `50ce4a9f62cddf8e`. MOVED is the box failing to reproduce itself,
+  which is a narrower and stronger statement than two vendors disagreeing.
+- The split inside the cell is clean. All four classifier parts (`clf_unit`, `clf_unweighted`,
+  `clf_weighted`, `clf_zeroed`) are byte identical across both fits; all four regressor parts
+  (`reg_unit`, `reg_unweighted`, `reg_weighted`, `reg_zeroed`) differ. The instability is in
+  the **weighted regressor score**, not the classifier.
+- Every other column that carries the cell reads it STABLE at `49be8ea935a47640`: the complete
+  NVIDIA column and the CPU column both agree, and that value equals the AMD box's FIRST fit.
+  The second fit is the value nothing else produced.
+- `par_devices=0`, so this is a single GPU run and the MI300X SR-IOV peer copy stale read is
+  not involved.
+- **Only the `wide` fixture moved.** The lane's other eight fixtures on this box are STABLE, and
+  a second pull at 21:18 (10 lanes, 90 cells) still shows exactly one MOVED cell.
+- **The sibling lane is stable here.** `gbdt-adapter-score-weighted`, added in the same commit
+  and exercising the same weighted score metrics, is in the same partial and reads STABLE on
+  this box. So this is not simply "the new weighted score code is unstable on AMD"; it is one
+  lane, one fixture, on the rf regressor's route to it. What the two lanes share is not enough
+  to explain it, and nothing here identifies the cause.
+- **The lane is NEW in 0.8.6** (77a8f7d5f, added with gbdt-adapter-score-weighted). The
+  166-lane record carries ZERO cells for it on all three columns, and that commit's own
+  message says the NVIDIA and AMD columns for both new lanes are owed to this record. So this
+  is the lane's first AMD recording, not a regression against a committed hash.
+- The authoritative copy is leg 3's FETCHED column at its bound, not this snapshot. Apple
+  records the lane in chunk 02, which supplies the fourth column for the cell.
+
+**What to do about it, at no extra cost.** A fourth AMD leg is already owed for the lanes leg 3
+cannot reach. When its skip list is built, `rf-score-weighted` must NOT be skipped, so the lane
+is recorded a second time on AMD. Two recordings separate a reproducible instability from a
+one-off, and the rerun is the evidence either way. A cell that moves is not eligible for the
+shipped record until that question is settled.
+
 Legs rent only from a CLEAN checkout: both runners refuse a dirty tree, so commit state-file
 edits before renting.
 
