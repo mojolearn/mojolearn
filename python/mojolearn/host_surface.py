@@ -77,8 +77,8 @@ BUILDER = "bindings/build_host_family.sh"
 #: (cpu-identity-gate.yml, --require-columns 4 on the covered lanes). The
 #: record must not lag the surface: the 2026-09-13 three-column record
 #: predates the kde and svc model cells and the holtwinters infer cells the
-#: CPU column now carries, so gate run 34832840859 at 7bf4f4cc9 failed on
-#: all seven runners with "require-columns 4 ... 27 short". The 47-lane
+#: CPU column now carries, so the gate at 7bf4f4cc9 failed on all seven
+#: runners with "require-columns 4 ... 27 short". The 47-lane
 #: record taken at 7bf4f4cc9 (pca-whiten included) was the one this surface
 #: was diffed against until 2026-09-14 afternoon; the 136-lane record at
 #: 4048e1b51 (the 2712/2713 fix, the sixteen one-device par-* lanes) is the
@@ -249,7 +249,7 @@ TRAINING_LANE_NAMES = {
     # inference lane already serves; pca, pca-whiten, tsvd, ols and ridge
     # train through decomposition/host/pca_oracle.mojo and
     # glm/host/glm_oracle.mojo. The seven-runner gate read the four-column
-    # diff IDENTICAL on every covered cell at 2b7f991b6 (run 34871479957).
+    # diff IDENTICAL on every covered cell at 2b7f991b6.
     "knn": "nearest neighbors",
     "knn-clf": "the k-NN classifier",
     "knn-reg": "the k-NN regressor",
@@ -262,7 +262,7 @@ TRAINING_LANE_NAMES = {
     # Workstream E batch 2 (lane/cpu-training-e2, 2026-09-14): k-means trains
     # through cluster/host/kmeans_oracle.mojo, exported as kmeans_fit from
     # the core host binding. The seven-runner gate read all nine fixtures
-    # IDENTICAL x4 (run 34884487749).
+    # IDENTICAL x4.
     "kmeans": "k-means",
     # Workstream E batch 2: the five metrics of the lane (accuracy, ARI,
     # v-measure, r2, silhouette) through metrics/host/metrics_oracle.mojo,
@@ -285,9 +285,11 @@ TRAINING_LANE_NAMES = {
     # Workstream E batch 3 (2026-09-14): the random forests train through
     # ensemble/host/rf_oracle.mojo, the device trainer restated on the host,
     # exported under the GPU binding's names from the rf family's own host
-    # binding. Gate run 34884487749 at ed6c06526: all nine fixtures
-    # IDENTICAL x4 (train, infer and model), the sabotage build DIVERGENT on
-    # every one.
+    # binding. The sabotage arm of these two lanes is DECLARED and has not
+    # been observed to fire in any committed column.
+    # .github/workflows/cpu-identity-gate.yml builds the sabotage host set and
+    # runs them under it on every run, and uploads the result as an artifact
+    # that no step commits.
     "rf-clf": "the random forest classifier",
     "rf-reg": "the random forest regressor",
     # CPU training batch 2 declared (lane/cpu-training-batch2-declare,
@@ -318,8 +320,10 @@ TRAINING_LANE_NAMES = {
     # binding's names from the gp family's own host binding. There is no
     # optimizer on any column (DEVIATION 1761), so the fit is the kernel
     # matrix, the ridge, the factorization, the solve and three scalars.
-    # Gate run 34895158657 at bafab59ef: all nine training and infer cells of
-    # each lane IDENTICAL x4, the sabotage build DIVERGENT on every one.
+    # At bafab59ef all nine training and infer cells of each lane read
+    # IDENTICAL x4, and the sabotage build moves every one. That move is
+    # carried by committed columns under bench/results/identity_break, so it
+    # can be re-checked here rather than in a CI log.
     "gp": "the Gaussian process with an RBF kernel",
     "gp-matern12": "the Gaussian process with a Matern kernel at nu 0.5",
     "gp-matern32": "the Gaussian process with a Matern kernel at nu 1.5",
@@ -434,19 +438,21 @@ TRAINING_LANE_NAMES = {
     # symmetric tree with the Logloss loss trains through
     # gbdt/host/gbdt_oracle.mojo, the device trainer restated on the host,
     # exported under the GPU binding's names from the gbdt family's own host
-    # binding. The other GBDT lanes refused by name until 2026-09-15. Gate run 34900811380 at
-    # e767b829b read the four GBDT lanes' 108 train, infer and model cells
-    # IDENTICAL x4 and the sabotage build DIVERGENT on all 108.
+    # binding. The other GBDT lanes refused by name until 2026-09-15. The
+    # sabotage arm of the four GBDT lanes is DECLARED and has not been
+    # observed to fire in any committed column. The CPU identity gate builds
+    # the sabotage host set and runs them under it on every run, and uploads
+    # the result as an artifact that no step commits.
     "gbdt-symmetric": "gradient boosting on symmetric trees with the Logloss loss",
     # Workstream E batch 3 (2026-09-14): the same tree with the RMSE loss
     # trains through gbdt/host/gbdt_oracle_rmse.mojo (the seeded cursor and
-    # the searcher's own leaves, DEVIATION 64) from the same binding. Gate
-    # run 34900811380, as above.
+    # the searcher's own leaves, DEVIATION 64) from the same binding. Its
+    # sabotage arm is declared and unobserved, as above.
     "gbdt-rmse": "gradient boosting on symmetric trees with the RMSE loss",
     # Same batch: the Depthwise and Lossguide policies with the Logloss loss
     # train through gbdt/host/gbdt_oracle_depthwise.mojo (the non-symmetric
     # driver) and gbdt/host/gbdt_oracle_lossguide.mojo, in the same binding.
-    # Gate run 34900811380, as above.
+    # Their sabotage arms are declared and unobserved, as above.
     "gbdt-depthwise": "gradient boosting on depthwise trees with the Logloss loss",
     "gbdt-lossguide": "gradient boosting on lossguide trees with the Logloss loss",
     # CPU training for more GBDT lanes (lane/cpu-training-gbdt-losses,
@@ -539,10 +545,10 @@ TRAINING_LANE_NAMES = {
     # trains and forecasts through arima/host/arima_oracle.mojo, the device
     # lane restated on the host, exported under the GPU binding's names from
     # the arima family's own host binding. par-arima was not declared until
-    # lane/cpu-training-par-classical (2026-09-15, below). Gate
-    # run 34895909493 at 422a1b9e5: all 27 training and 27 infer cells
-    # IDENTICAL x4; under the sabotage build 26 of 27 of each DIVERGENT
-    # (arima-011/wide keeps its hash).
+    # lane/cpu-training-par-classical (2026-09-15, below). At 422a1b9e5 all 27
+    # training and 27 infer cells read IDENTICAL x4, and under the sabotage
+    # build 26 of 27 of each move (arima-011/wide keeps its hash). That move
+    # is carried by committed columns, not by a CI log.
     "arima": "ARIMA",
     "arima-011": "differenced ARIMA",
     "arima-seasonal-c": "seasonal ARIMA",
@@ -555,10 +561,10 @@ TRAINING_LANE_NAMES = {
     # GPU binding's names from the metrics host binding. The fit's optimizer
     # is the IDENTICAL DEVICE epoch fold (kernel-matrix row
     # umap_device_optimizer_for) restated vertex by vertex, not the serial
-    # host loop, which produces different bits. Gate run 34914545371 at
-    # 5988700d9 (136-lane record): all nine train and nine infer cells
-    # IDENTICAL x4 on the seven runners, the sabotage build DIVERGENT on all
-    # eighteen; the 166-lane record carries the same umap hashes.
+    # host loop, which produces different bits. At 5988700d9 (the 136-lane
+    # record) all nine train and nine infer cells read IDENTICAL x4, and the
+    # sabotage build moves all eighteen; the 166-lane record carries the same
+    # umap hashes. That move is carried by committed columns, not by a CI log.
     "umap": "UMAP",
     # lane/cpu-training-misc batch 1 (2026-09-15): the two k-means option
     # lanes the core family's kmeans_fit already serves through
